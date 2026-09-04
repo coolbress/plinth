@@ -8,7 +8,8 @@ from stay in the lab.
   turn it off. Check names: `ci / pr-title`, `lint`, `typecheck`, `test`,
   `build`, `secrets`, `deps`, `diff-size`, `floor-check`, plus `CodeQL`.
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
-  the wall, and deletes the repository if any wall step fails.
+  the wall, opens the first pull request, and deletes the repository if any
+  step after creation fails.
 - **box**: the project template (`plinth-template`, rendered with copier). The
   files a new repository starts with.
 - **floor**: the minimum a repository must have to be considered set up: the
