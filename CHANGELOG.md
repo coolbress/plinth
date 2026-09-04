@@ -13,3 +13,4 @@ All notable changes to plinth. The format follows
 - Placeholder skills `new-project` and `floor-check`; the `arsenal` catalog skill.
 - CI: `ci / install` (real install on a clean runner) and `ci / docs`
   (markdownlint, link check, vocabulary gate, README vs tutorial).
+- Dependabot for GitHub Actions, so commit-SHA pins get reviewed bumps.
