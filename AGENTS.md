@@ -29,6 +29,9 @@ claude plugin validate --strict skills                      # skill frontmatter
   check name.
 - Product text is English. `.ko.md` translations are optional and never
   canonical.
+- A commit made with AI carries `Assisted-by: <agent>:<model>` (the Linux kernel's
+  form, e.g. `Assisted-by: Claude:claude-fable-5-1`). AI is never a `Co-Authored-By`
+  and adds no session trailer or link; the person who merges answers for every line.
 
 ## Ask first
 
