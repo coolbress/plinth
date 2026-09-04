@@ -1,7 +1,7 @@
 {
   "name": "plinth",
   "displayName": "plinth",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A base for vibe-coded projects: required checks on GitHub, a curated set of agent skills, and a generator for new repositories.",
   "author": {
     "name": "coolbress"

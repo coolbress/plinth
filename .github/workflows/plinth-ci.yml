@@ -48,6 +48,12 @@ jobs:
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
 
+      - name: The door creates nothing before preflight passes and deletes on any failure after
+        run: ./tests/new-project-failpath.sh
+
+      - name: The admin token is read from the terminal, not from a pasted stdin
+        run: ./tests/token-prompt-not-from-stdin.sh
+
       - name: Install plinth the way the README says
         run: ./tests/install-smoke.sh
 

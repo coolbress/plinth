@@ -55,13 +55,17 @@ plugin with hooks. Run
 `/plinth:arsenal` for the catalog; licenses are in [NOTICE](NOTICE).
 
 Nothing in the plugin enforces anything. Enforcement is the ruleset on GitHub,
-which `/plinth:new-project` raises and which owners cannot bypass.
+which `/plinth:new-project` raises and which owners cannot bypass. When `gh`
+holds a restricted fine-grained token, the generator asks you to rerun it
+through `scripts/with-admin-token.sh`, which prompts for an admin token at the
+terminal and keeps it off every command line.
 
 ## Status
 
-This first version is the skeleton: the install works end to end and CI proves it on
-a clean runner, but `new-project` and `floor-check` are placeholders that say
-so and stop. The [CHANGELOG](CHANGELOG.md) lists what each version adds.
+The install works end to end and CI proves it on a clean runner. `new-project`
+creates a repository with the wall up, or creates nothing (its failure paths
+run in CI against a mocked `gh`). `floor-check` is still a placeholder that
+says so and stops. The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 
 ## Further reading
 
