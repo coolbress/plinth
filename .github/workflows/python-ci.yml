@@ -12,6 +12,11 @@ name: python-ci
 #
 # Actions are pinned to commit SHAs; tags move and are a supply-chain vector.
 # The version in the inline comment is the tag the pinned SHA pointed at.
+# Only GitHub-owned actions are used (actions/checkout, actions/dependency-
+# review-action); uv and gitleaks come from their official releases with
+# checksums, so a repository that restricts actions needs exactly one
+# allowlist entry, `coolbress/plinth/*`, for this call itself. Without it the
+# run dies at startup and no check name ever reports.
 #
 # Check names are `{caller job} / {job here}`. The caller job is named `ci`,
 # so rulesets require `ci / lint` and so on. Renaming a job here is a MAJOR
@@ -94,9 +99,19 @@ jobs:
           # workspace as an artifact would ship it (zizmor `artipacked`).
           # Nothing here pushes, so it is turned off.
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: true
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
       # --locked fails when the lockfile is missing or disagrees with
       # pyproject. A committed lockfile is a precondition, not a check.
       - run: uv sync --locked
@@ -123,9 +138,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: true
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
       - run: uv sync --locked
       - run: uv run mypy .
 
@@ -139,9 +164,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: true
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
       - run: uv sync --locked
       - run: uv run pytest
 
@@ -397,9 +432,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: true
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
       - run: uv sync --locked
       - run: uv build
 
@@ -425,10 +470,12 @@ jobs:
             echo "  OK $art"
           done
 
-  # The floor: does this repository still have what the door gave it, and
-  # does its wall still stand? The same checker the floor-check skill runs
-  # read-only, fetched from plinth at the commit this workflow file comes from
-  # (`job.workflow_sha`), so CI and skill can never disagree.
+  # The floor: does this repository still have what /plinth:new-project gave
+  # it, and does its wall still stand? The same checker the floor-check skill
+  # runs read-only, fetched from plinth at the commit this workflow file comes
+  # from (`job.workflow_sha`), so CI and skill can never disagree. One blind
+  # spot: bypass actors are visible only to an admin-read token, which the
+  # Actions token never is; CI reports INFO there and the skill sees them.
   floor-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
