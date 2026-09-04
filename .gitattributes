@@ -1,0 +1,8 @@
+# Line endings are normalised to LF inside the repository. Enforced by git from
+# the committed file alone; no editor setting or local git config needed.
+* text=auto eol=lf
+
+# Lockfiles are written by machines. `linguist-generated` makes GitHub fold them
+# in diffs so review reads the changed line in pyproject.toml, not hundreds of
+# lockfile lines. They still count in `ci / diff-size`; that is a separate meter.
+uv.lock linguist-generated

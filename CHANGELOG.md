@@ -14,3 +14,12 @@ All notable changes to plinth. The format follows
 - CI: `ci / install` (real install on a clean runner) and `ci / docs`
   (markdownlint, link check, vocabulary gate, README vs tutorial).
 - Dependabot for GitHub Actions, so commit-SHA pins get reviewed bumps.
+- Reusable CI `python-ci.yml` with the ten required checks (`ci / pr-title`,
+  `lint`, `typecheck`, `test`, `build`, `secrets`, `deps`, `diff-size`,
+  `floor-check` + `CodeQL`), the `ruleset.json` the door applies, the canary
+  project that runs the workflow in this repository's own CI, and the shared
+  floor checker `scripts/floor-check.py` (files, agent settings, and live
+  ruleset drift).
+- This repository's own floor: `CONTRIBUTING.md`, `.gitattributes` (LF line
+  endings, `uv.lock` folded in diffs) and `.claude/settings.json` (denies force
+  push, `rm -rf`, `.env` reads and `gh` token reads for agent sessions).

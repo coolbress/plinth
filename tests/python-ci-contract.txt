@@ -1,0 +1,3 @@
+jobs: build deps diff-size floor-check lint pr-title secrets test typecheck
+inputs: deps-fail-on-severity diff-size-exclude extra-python-versions floor-check-required-checks max-diff-lines working-directory
+secrets: (none)

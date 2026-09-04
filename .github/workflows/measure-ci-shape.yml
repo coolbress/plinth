@@ -1,0 +1,159 @@
+name: measure-ci-shape
+#
+# Measures four jobs (lint, typecheck, test, build) against one job (verify).
+# "Separate required checks per tool" is a project choice, not something the
+# census found universal, so the only honest answer is to measure it on a
+# representative task. Both shapes run in the same workflow run so runner
+# state, cache and network are the same conditions; measured on different
+# days it is an anecdote, not a measurement.
+#
+# Target: canary/, the real Python project this repository already has. It is
+# small; do not carry the result to a large project unchanged.
+
+on:
+  workflow_dispatch:
+    inputs:
+      round:
+        description: Repetition number (for the record)
+        required: false
+        default: "1"
+
+permissions:
+  contents: read
+
+env:
+  WD: canary
+
+jobs:
+  # Shape A: the four jobs in use today. Setup (checkout, uv, sync) runs four times.
+  a_lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+        working-directory: ${{ env.WD }}
+      - run: uv run ruff check . && uv run ruff format --check .
+        working-directory: ${{ env.WD }}
+
+  a_typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+        working-directory: ${{ env.WD }}
+      - run: uv run mypy .
+        working-directory: ${{ env.WD }}
+
+  a_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+        working-directory: ${{ env.WD }}
+      - run: uv run pytest
+        working-directory: ${{ env.WD }}
+
+  a_build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+        working-directory: ${{ env.WD }}
+      - run: uv build
+        working-directory: ${{ env.WD }}
+
+  # Shape B: one job, in sequence. Setup runs once.
+  b_verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+        working-directory: ${{ env.WD }}
+      - run: uv run ruff check . && uv run ruff format --check .
+        working-directory: ${{ env.WD }}
+      - run: uv run mypy .
+        working-directory: ${{ env.WD }}
+      - run: uv run pytest
+        working-directory: ${{ env.WD }}
+      - run: uv build
+        working-directory: ${{ env.WD }}

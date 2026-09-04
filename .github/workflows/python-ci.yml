@@ -1,0 +1,515 @@
+name: python-ci
+#
+# Reusable workflow. A consumer repository calls it in five lines:
+#
+#   jobs:
+#     ci:
+#       uses: coolbress/plinth/.github/workflows/python-ci.yml@<commit-sha>
+#
+# Why separate jobs: the floor requires lint, typecheck, test and build as
+# separate required checks. Four steps in one job stop at the first failure,
+# hide the other three, and cannot be required individually by a ruleset.
+#
+# Actions are pinned to commit SHAs; tags move and are a supply-chain vector.
+# The version in the inline comment is the tag the pinned SHA pointed at.
+# Only GitHub-owned actions are used (actions/checkout, actions/dependency-
+# review-action); uv and gitleaks come from their official releases with
+# checksums, so a repository that restricts actions needs exactly one
+# allowlist entry, `coolbress/plinth/*`, for this call itself. Without it the
+# run dies at startup and no check name ever reports.
+#
+# Check names are `{caller job} / {job here}`. The caller job is named `ci`,
+# so rulesets require `ci / lint` and so on. Renaming a job here is a MAJOR
+# change: every consumer ruleset requires the old name forever.
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: |
+          Project root. Defaults to the repository root. This repository's
+          canary job passes `canary/` to call the workflow for real; a
+          workflow that parses is not the same as a workflow that runs.
+        type: string
+        default: "."
+
+      max-diff-lines:
+        description: |
+          Upper bound on the lines one pull request may change for review
+          (added + removed). `0` measures without blocking.
+        type: number
+        default: 400
+
+      deps-fail-on-severity:
+        description: |
+          Lowest vulnerability severity `ci / deps` blocks on:
+          `critical|high|moderate|low`. Not the same thing as Dependabot:
+          Dependabot alerts and opens update PRs after the fact; this check
+          stops a vulnerable dependency from entering through a PR.
+        type: string
+        default: high
+
+      diff-size-exclude:
+        description: |
+          Path patterns left out of the diff count, space separated, passed
+          as git pathspecs. Docs and lockfiles are the default because a line
+          of prose and a line that must pass `mypy --strict` are not the same
+          review burden.
+        type: string
+        default: "*.md *.lock *lock.json *lock.yaml *lock.yml LICENSE"
+
+      extra-python-versions:
+        description: |
+          Python versions to test in addition to `.python-version`, space
+          separated (for example "3.13 3.14"). A library that declares
+          `>=3.12` and tests only 3.12 claims support it never exercised.
+
+          No `strategy.matrix`: a matrix splits the check name into
+          `ci / test (3.13)` and every consumer would have to edit its
+          ruleset. Running in one job keeps the name `ci / test`.
+        required: false
+        type: string
+        default: ""
+
+      floor-check-required-checks:
+        description: |
+          Check names the repository's ruleset must require, comma separated.
+          Empty means the ten names in plinth's ruleset.json, the ruleset
+          `/plinth:new-project` applies. Only a repository whose ruleset is
+          deliberately different passes its own list; plinth's canary does.
+        required: false
+        type: string
+        default: ""
+
+# The default token is write-broad. Lower it to the minimum.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Checkout leaves the token in .git/config by default; uploading the
+          # workspace as an artifact would ship it (zizmor `artipacked`).
+          # Nothing here pushes, so it is turned off.
+          persist-credentials: false
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      # --locked fails when the lockfile is missing or disagrees with
+      # pyproject. A committed lockfile is a precondition, not a check.
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+      # Workflow security static analysis. actionlint checks correctness,
+      # zizmor checks security: template injection, credential leaks, cache
+      # poisoning, impostor commits. Pinned, so a new audit rule does not turn
+      # consumer CI red on an unrelated day. Only medium and above blocks here:
+      # this runs in other people's repositories and low findings have low
+      # confidence.
+      - name: Workflow security (zizmor, medium and above)
+        run: uvx zizmor@1.29.0 --no-progress --min-severity medium .github/workflows/
+        working-directory: ${{ github.workspace }}
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+      - run: uv run mypy .
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+      - run: uv run pytest
+
+      # Exercise the declared range for real. Empty input: this step does
+      # nothing. uv downloads the interpreter, so the runner needs no preinstall.
+      - name: Also on the extra Python versions
+        if: inputs.extra-python-versions != ''
+        env:
+          VERSIONS: ${{ inputs.extra-python-versions }}
+        run: |
+          set -euo pipefail
+          for v in $VERSIONS; do
+            echo "── python $v"
+            uv run --isolated --python "$v" --with pytest pytest -q
+          done
+
+  # Secret detection. Not a duplicate of push protection: push protection
+  # blocks provider-format tokens only and lets private-key PEMs and generic
+  # secrets through; gitleaks catches those. This is a check, not a wall: by
+  # the time it runs the secret is already on GitHub. Push protection blocks,
+  # this blocks the merge and tells you. Separate job so a hit reads as
+  # "secret", not "lint failed".
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # full history; `gitleaks git` below needs it
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+      # Official release binary, checksum verified: no third-party action to
+      # allowlist. Bump the version and the checksum together.
+      - name: Install gitleaks (official release, SHA256 verified)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/gitleaks"; mkdir -p "$d"
+          f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$f"
+          echo "${GITLEAKS_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" gitleaks
+          echo "$d" >> "$GITHUB_PATH"
+      # `git`, not `dir`: `dir` scans the current files only. Fetching history
+      # and then scanning `dir` would look at nothing that was deleted, and a
+      # deleted secret is still in history.
+      - name: Secret detection, history included
+        working-directory: ${{ inputs.working-directory }}
+        run: gitleaks git . --no-banner --redact
+
+  # PR title is Conventional Commits with the standard eleven types only.
+  #
+  # Why the title: merges are squash-only, so the PR title is the landing
+  # commit; branch commits are flattened and carry no weight.
+  #
+  # Why only the standard vocabulary: an extended list kept in a document did
+  # not survive a day. With the list in front of it an agent still coined new
+  # types on the spot, and both were really `docs:`. A model reaches for the
+  # list it was trained on. The spec mandates only feat and fix, and scope is
+  # free-form, so local meaning goes into the scope (`docs(research):`).
+  pr-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          # Not a PR: report a pass instead of skipping the job. A job skipped
+          # with `if:` has no check name, and the day a ruleset requires that
+          # name the repository quietly locks.
+          if [ -z "${TITLE:-}" ]; then
+            echo "Not a pull request: no title to check."
+            echo "### PR title: not a pull request, nothing checked" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+          if printf '%s' "$TITLE" | grep -qE "^($types)(\([a-zA-Z0-9_.,/ -]+\))?!?: .+"; then
+            echo "OK: $TITLE"
+            echo "### PR title follows the convention" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::error::PR title is not Conventional Commits: ${TITLE}"
+          {
+            echo "### PR title does not follow the convention"
+            echo
+            echo "\`\`\`"
+            echo "$TITLE"
+            echo "\`\`\`"
+            echo
+            echo "**Format**: \`type(scope): summary\`, or \`type(scope)!: summary\` for a breaking change"
+            echo
+            echo "**Types are these eleven only** (\`@commitlint/config-conventional\`):"
+            echo "\`feat\` \`fix\` \`docs\` \`style\` \`refactor\` \`perf\` \`test\` \`build\` \`ci\` \`chore\` \`revert\`"
+            echo
+            echo "Local meaning goes into the scope. Do not invent a type:"
+            echo "| you wanted | write |"
+            echo "|---|---|"
+            echo "| \`research:\` \`record:\` \`anchor:\` | \`docs(research):\` \`docs:\` |"
+            echo "| \`decide:\` \`decision:\` \`audit:\` | \`docs(decision):\` \`docs(audit):\` |"
+            echo "| \`move:\` | \`refactor(layout):\` |"
+            echo "| \`deps:\` \`security:\` | \`build(deps):\` \`fix(security):\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  # A wall, not a net. Dependabot reports what already got in; this job
+  # blocks what a PR is bringing in. The dependency graph must be enabled
+  # (it is by default on public repositories).
+  deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+
+      - name: Dependency review, blocks vulnerable versions a PR introduces
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: ${{ inputs.deps-fail-on-severity }}
+          comment-summary-in-pr: on-failure
+          # No `deny-licenses` here: outbound licences differ per project and a
+          # wrong list blocks legitimate dependencies. A project sets it in its
+          # own call if it needs one.
+
+      # Not a PR: report a pass instead of skipping the job (see pr-title).
+      - name: Not a pull request, no diff to review
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Not a pull request: no base to compare dependencies against."
+          echo "### Dependency review: not a pull request, nothing checked" >> "$GITHUB_STEP_SUMMARY"
+
+  # Diff size is a reviewability gate, not a correctness one: can a person
+  # read this? A rule that lives only in an issue body never fires; a 400-line
+  # limit written in prose was exceeded by 436 lines and nothing stopped it.
+  #
+  # Why now (measured 2026): AI-assisted PRs are 2.6x the size of human ones
+  # (p75 408 vs 157 lines) and agent-opened PRs wait 5.3x longer for a
+  # reviewer. What predicts review effort is diff size, not the PR text
+  # (arXiv 2601.00753: body text AUC 0.57, no signal).
+  #
+  # The meter matters as much as the rule: the same PR counted 452 lines with
+  # everything and 385 without docs and lockfiles. The rule was right; the
+  # meter was wrong. Hence the default exclusions.
+  diff-size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # base...head needs both histories
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+
+      - name: Measure the reviewable diff
+        env:
+          MAX_LINES: ${{ inputs.max-diff-lines }}
+          EXCLUDE: ${{ inputs.diff-size-exclude }}
+          WORKDIR: ${{ inputs.working-directory }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Not a PR: report a pass instead of skipping the job. The condition
+          # lives inside the step, not on the job, so the check name always
+          # reports (see pr-title).
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "Not a pull request: no diff to measure."
+            echo "### Diff size: not a pull request, nothing measured" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          root="${WORKDIR%/}"
+          if [ -z "$root" ] || [ "$root" = "." ]; then
+            prefix=""
+            spec=(".")
+          else
+            prefix="$root/"
+            spec=("$root")
+          fi
+
+          patterns=()
+          if [ -n "$EXCLUDE" ]; then
+            read -r -a patterns <<< "$EXCLUDE"
+          fi
+          for p in ${patterns+"${patterns[@]}"}; do
+            spec+=(":(exclude)${prefix}${p}")
+          done
+
+          # Three dots (base...head): changes since the merge base, which is
+          # what GitHub shows on the PR.
+          if ! numstat="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "${spec[@]}")"; then
+            echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA})."
+            exit 1
+          fi
+
+          added=0
+          removed=0
+          while read -r a d _; do
+            if [ -z "$a" ] || [ "$a" = "-" ]; then   # blank line or binary
+              continue
+            fi
+            added=$((added + a))
+            removed=$((removed + d))
+          done <<< "$numstat"
+          total=$((added + removed))
+
+          {
+            echo "### Diff size"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Reviewable change | **${total} lines** (+${added} / -${removed}) |"
+            echo "| Limit | ${MAX_LINES} lines |"
+            echo "| Excluded from the count | \`${EXCLUDE}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$MAX_LINES" -le 0 ]; then
+            echo "Limit is 0: measured, not enforced: ${total} lines"
+            exit 0
+          fi
+
+          if [ "$total" -gt "$MAX_LINES" ]; then
+            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it."
+            {
+              echo
+              echo "**Over the limit.** Docs and lockfiles are already excluded from this number."
+              echo
+              echo "How to split: cut the change along its dependency chain into a stack"
+              echo "(data, then API, then wiring, then UX). Each layer can have a different reviewer."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "OK: ${total} lines / limit ${MAX_LINES}"
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - run: uv sync --locked
+      - run: uv build
+
+      # `uv build` proves the files were produced. Whether they install and
+      # import in a clean environment is a different sentence: missing package
+      # data, a wrong package name, broken metadata only show up here.
+      - name: Install smoke, wheel and sdist into a clean venv
+        run: |
+          set -euo pipefail
+          name="$(uv run python -c 'import tomllib,pathlib;print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["name"])')"
+          for art in dist/*.whl dist/*.tar.gz; do
+            rm -rf .smoke
+            uv venv --quiet .smoke
+            uv pip install --quiet --python .smoke/bin/python "$art"
+            .smoke/bin/python -c 'import importlib.metadata as md,sys; print(sys.argv[1], md.version(sys.argv[1]))' "$name"
+            if [ -d src ]; then
+              for m in src/*/; do
+                m="$(basename "$m")"
+                .smoke/bin/python -c 'import importlib,sys; importlib.import_module(sys.argv[1])' "$m"
+                echo "  import $m ok"
+              done
+            fi
+            echo "  OK $art"
+          done
+
+  # The floor: does this repository still have what /plinth:new-project gave
+  # it, and does its wall still stand? The same checker the floor-check skill
+  # runs read-only, fetched from plinth at the commit this workflow file comes
+  # from (`job.workflow_sha`), so CI and skill can never disagree. One blind
+  # spot: bypass actors are visible only to an admin-read token, which the
+  # Actions token never is; CI reports INFO there and the skill sees them.
+  floor-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+
+      # `job.workflow_sha` is documented (contexts reference, job context) but
+      # actionlint's schema does not know it yet; lint with
+      # -ignore 'property "workflow_sha" is not defined'.
+      - name: Fetch the checker from the same plinth commit as this workflow
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth"; mkdir -p "$d"
+          for f in scripts/floor-check.py ruleset.json; do
+            curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
+              "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
+          done
+          echo "plinth ${PLINTH_SHA}"
+
+      - name: Floor check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKDIR: ${{ inputs.working-directory }}
+          EXPECT: ${{ inputs.floor-check-required-checks }}
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/plinth/floor-check.py" \
+            --root . --project "$WORKDIR" --repo "$GITHUB_REPOSITORY" \
+            --ruleset "$RUNNER_TEMP/plinth/ruleset.json" \
+            ${EXPECT:+--expect-checks "$EXPECT"} \
+            | tee -a "$GITHUB_STEP_SUMMARY"

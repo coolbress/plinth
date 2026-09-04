@@ -10,11 +10,8 @@ machine. `CLAUDE.md` is a symlink to this file.
 claude plugin validate --strict .                           # marketplace
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
-./tests/marketplace-manifest.sh          # pins, dependencies, skill frontmatter
-./tests/de-jargon.sh                     # no internal vocabulary in public text
-./tests/readme-install-block.sh          # README install block == tutorial block
-./tests/all-tests-are-wired.sh           # every tests/*.sh runs in CI
-./tests/install-smoke.sh                 # real install into a temp config dir (network)
+./scripts/check-ruleset.sh                                  # is the wall a wall
+for t in tests/*.sh; do "./$t"; done                        # all tests (install-smoke needs network)
 ```
 
 ## Always
@@ -24,7 +21,8 @@ claude plugin validate --strict skills                      # skill frontmatter
 - Pin every third-party marketplace entry to a full commit SHA. Raising a pin
   is a pull request.
 - Keep the caller job named `ci` in `.github/workflows/ci.yml`. Check names are
-  `ci / <job>` and rulesets require them by name.
+  `ci / <job>` and rulesets require them by name. Renaming a `python-ci.yml`
+  job is a MAJOR change: every consumer ruleset requires the old name forever.
 - Never skip a job with `if:`. Report a pass instead; a skipped job has no
   check name.
 - Product text is English. `.ko.md` translations are optional and never

@@ -1,3 +1,8 @@
 .DS_Store
+__pycache__/
+*.py[cod]
+canary/.venv/
+canary/dist/
+canary/.smoke/
 # Personal Claude Code settings never get committed; only .claude/settings.json does.
 .claude/settings.local.json
