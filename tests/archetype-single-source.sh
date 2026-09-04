@@ -18,7 +18,8 @@ then bad "floor-check.py hardcodes the archetype choices; the template owns that
 else ok "floor-check.py does not hardcode the archetype choices"; fi
 
 # 2. The conditional set equals what copier.yml's `_exclude` conditions name.
-copier="$(gh api "repos/$template/contents/copier.yml" --jq .content 2>/dev/null | base64 -d 2>/dev/null)"
+# raw.githubusercontent.com needs no token for a public repository (CI runners have none in this job).
+copier="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/$template/main/copier.yml" 2>/dev/null)"
 if [ -z "$copier" ]; then
   bad "could not read $template copier.yml; cannot verify the vocabulary"
 else
