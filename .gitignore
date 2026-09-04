@@ -1,0 +1,3 @@
+.DS_Store
+# Personal Claude Code settings never get committed; only .claude/settings.json does.
+.claude/settings.local.json

@@ -1,0 +1,27 @@
+{
+  "name": "plinth",
+  "displayName": "plinth",
+  "version": "0.1.0",
+  "description": "A base for vibe-coded projects: required checks on GitHub, a curated set of agent skills, and a generator for new repositories.",
+  "author": {
+    "name": "coolbress"
+  },
+  "homepage": "https://github.com/coolbress/plinth",
+  "repository": "https://github.com/coolbress/plinth",
+  "license": "MIT",
+  "keywords": [
+    "governance",
+    "required-checks",
+    "scaffold",
+    "skills"
+  ],
+  "dependencies": [
+    {
+      "name": "mattpocock-skills",
+      "marketplace": "claude-plugins-official"
+    },
+    "frontend-design",
+    "last30days",
+    "ponytail-skills"
+  ]
+}

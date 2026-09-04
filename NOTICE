@@ -1,0 +1,20 @@
+plinth is MIT licensed (see LICENSE).
+
+The marketplace in .claude-plugin/marketplace.json lists third-party plugins.
+Entries mounted from a subdirectory (git-subdir) do not carry the upstream
+LICENSE file, so the licenses are recorded here, with the pinned commit.
+
+frontend-design
+  https://github.com/anthropics/claude-plugins-official  (plugins/frontend-design)
+  Apache-2.0  ·  commit 0120fb83da5d7cdaa52dd11979690f2dc5f76052
+
+last30days
+  https://github.com/mvanhorn/last30days-skill
+  MIT  ·  commit 56ba5ace27e4697aedc60aa0b1e1bfdcd592ff20
+
+ponytail-skills and ponytail
+  https://github.com/DietrichGebert/ponytail  (skills/ for ponytail-skills; whole repository for ponytail)
+  MIT  ·  commit 2ed6c52c9d7e5e56942508591085fd45dea277d3
+
+mattpocock-skills is installed from the claude-plugins-official marketplace and
+keeps its own LICENSE (MIT).

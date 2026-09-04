@@ -1,0 +1,72 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "plinth",
+  "description": "plinth and the third-party plugins it depends on, each pinned to a commit.",
+  "owner": {
+    "name": "coolbress"
+  },
+  "allowCrossMarketplaceDependenciesOn": [
+    "claude-plugins-official"
+  ],
+  "plugins": [
+    {
+      "name": "plinth",
+      "description": "Skills: new-project, floor-check, arsenal. Installs the default plugin set as dependencies. No hooks.",
+      "category": "workflow",
+      "source": "./"
+    },
+    {
+      "name": "frontend-design",
+      "description": "Design direction for landing pages and app screens. Anthropic's first-party plugin, pinned here to a commit.",
+      "category": "design",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/anthropics/claude-plugins-official.git",
+        "path": "plugins/frontend-design",
+        "ref": "main",
+        "sha": "0120fb83da5d7cdaa52dd11979690f2dc5f76052"
+      }
+    },
+    {
+      "name": "last30days",
+      "description": "What people said about a topic in the last 30 days. For discovery, not for decisions. About 90k tokens per call.",
+      "category": "workflow",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/mvanhorn/last30days-skill.git",
+        "sha": "56ba5ace27e4697aedc60aa0b1e1bfdcd592ff20"
+      }
+    },
+    {
+      "name": "ponytail-skills",
+      "description": "Write the least code that works. Skills only; the hooks stay in the full ponytail plugin below.",
+      "category": "workflow",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/DietrichGebert/ponytail.git",
+        "path": "skills",
+        "ref": "main",
+        "sha": "2ed6c52c9d7e5e56942508591085fd45dea277d3"
+      },
+      "strict": false,
+      "skills": [
+        "./ponytail",
+        "./ponytail-review",
+        "./ponytail-audit",
+        "./ponytail-debt",
+        "./ponytail-help",
+        "./ponytail-gain"
+      ]
+    },
+    {
+      "name": "ponytail",
+      "description": "The full ponytail plugin, hooks included. Not installed by default; for the opt-in hooks profile.",
+      "category": "workflow",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/DietrichGebert/ponytail.git",
+        "sha": "2ed6c52c9d7e5e56942508591085fd45dea277d3"
+      }
+    }
+  ]
+}
