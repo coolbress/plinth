@@ -48,6 +48,7 @@ jobs:
 
       # Official release binary, checksum verified: no third-party action to allowlist.
       # Bump the version and the checksum together (checksum: the release's .sha256 asset).
+      # Since 0.24 the tarball nests the binary under a directory named like the archive.
       - name: Link check (lychee)
         env:
           LYCHEE_VERSION: "0.24.2"
@@ -60,7 +61,7 @@ jobs:
           curl -fsSL --retry 3 -o "$d/$f" \
             "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/$f"
           echo "${LYCHEE_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" lychee
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/lychee"
           "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" -- './**/*.md'
 
       - name: No internal vocabulary in public text
