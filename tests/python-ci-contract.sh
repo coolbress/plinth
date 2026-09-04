@@ -16,7 +16,7 @@ jobs = re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", body, re.M)
 call = head.split("workflow_call:", 1)[1]
 inputs = re.findall(r"^      ([a-z][a-z0-9-]*):\s*$", call.split("\n    secrets:", 1)[0], re.M) if "inputs:" in call else []
 secrets = re.findall(r"^      ([a-z][a-z0-9-]*):\s*$", call.split("\n    secrets:", 1)[1], re.M) if "\n    secrets:" in call else []
-actual = f"jobs: {' '.join(jobs)}\ninputs: {' '.join(inputs)}\nsecrets: {' '.join(secrets) or '(none)'}\n"
+actual = f"jobs: {' '.join(sorted(jobs))}\ninputs: {' '.join(sorted(inputs))}\nsecrets: {' '.join(sorted(secrets)) or '(none)'}\n"
 expected = (root / "tests/python-ci-contract.txt").read_text(encoding="utf-8")
 fails = 0
 if actual == expected:

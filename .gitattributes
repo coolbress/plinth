@@ -1,5 +1,5 @@
-# Line endings are normalised to LF inside the repository. `.editorconfig` asks
-# editors; this line is enforced by git and works from the committed file alone.
+# Line endings are normalised to LF inside the repository. Enforced by git from
+# the committed file alone; no editor setting or local git config needed.
 * text=auto eol=lf
 
 # Lockfiles are written by machines. `linguist-generated` makes GitHub fold them

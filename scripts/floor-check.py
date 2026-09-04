@@ -2,8 +2,10 @@
 """Floor check: does a repository still have what the door gave it, and does
 its wall still stand? Read-only. Exit 1 on any FAIL.
 
-Run by `ci / floor-check` in python-ci.yml and by the floor-check skill, from
-the same file, so the two can never disagree. Standard library only.
+Run by `ci / floor-check` in python-ci.yml, and by the floor-check skill once
+that skill is implemented, from this same file so the two can never disagree.
+Standard library only. Set FLOOR_CHECK_API_DIR to a directory of JSON files
+laid out like api.github.com paths to run the network checks against fixtures.
 
     floor-check.py --root . --project . --repo owner/name --ruleset ruleset.json
                    [--expect-checks "ci / a, ci / b"] [--archetype backend] [--no-network]
@@ -57,10 +59,19 @@ def read(path: Path) -> str:
 # ── network ──────────────────────────────────────────────────────────────
 
 
+ABSENT = object()   # 404: the resource does not exist
+ERROR = object()    # anything else went wrong: do not conclude
+
+
 def api(path: str, network: bool):
-    """GET api.github.com/<path>. None when offline or when the call fails."""
+    """GET api.github.com/<path>. Returns the JSON, ABSENT on 404, ERROR when
+    offline or on any other failure. FLOOR_CHECK_API_DIR serves fixtures."""
+    fixture_dir = os.environ.get("FLOOR_CHECK_API_DIR")
+    if fixture_dir:
+        f = Path(fixture_dir) / (path + ".json")
+        return json.loads(read(f)) if f.is_file() else ABSENT
     if not network:
-        return None
+        return ERROR
     req = urllib.request.Request(f"https://api.github.com/{path}")
     req.add_header("Accept", "application/vnd.github+json")
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -69,8 +80,21 @@ def api(path: str, network: bool):
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310
             return json.loads(resp.read().decode())
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-        return None
+    except urllib.error.HTTPError as e:
+        return ABSENT if e.code == 404 else ERROR
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        return ERROR
+
+
+def inherited_file(owner: str | None, path: str, network: bool):
+    """A file from the owner's .github repository: its text, ABSENT or ERROR."""
+    if owner is None:
+        return ERROR
+    data = api(f"repos/{owner}/.github/contents/{path}", network)
+    if data in (ABSENT, ERROR) or not isinstance(data, dict):
+        return data if data in (ABSENT, ERROR) else ERROR
+    import base64
+    return base64.b64decode(data.get("content", "")).decode("utf-8", errors="replace")
 
 
 # ── repository-level floor ────────────────────────────────────────────────
@@ -96,26 +120,35 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
         ok(len(body) >= 10, f"CONTRIBUTING.md is not a stub ({len(body)} lines)",
            f"CONTRIBUTING.md looks like a stub ({len(body)} lines)")
 
-    inherited = lambda file: (  # noqa: E731
-        owner is not None and api(f"repos/{owner}/.github/contents/{file}", network) is not None
-    )
-
     if (root / "SECURITY.md").is_file():
         result("PASS", "SECURITY.md present")
-    elif not network or owner is None:
-        result("INFO", "SECURITY.md not local; inheritance not checked (offline)")
     else:
-        ok(inherited("SECURITY.md"), "SECURITY.md inherited from the owner's .github repository",
-           "SECURITY.md neither local nor in the owner's .github repository")
+        got = inherited_file(owner, "SECURITY.md", network)
+        if got is ERROR:
+            result("INFO", "SECURITY.md not local; inheritance not verified (offline or API error)")
+        else:
+            ok(got is not ABSENT, "SECURITY.md inherited from the owner's .github repository",
+               "SECURITY.md neither local nor in the owner's .github repository")
 
     forms = root / ".github" / "ISSUE_TEMPLATE"
     if forms.is_dir():
-        check_issue_forms(forms)
-    elif not network or owner is None:
-        result("INFO", "issue forms not local; inheritance not checked (offline)")
+        files = {p.name: read(p) for p in sorted(forms.glob("*.yml"))}
+        check_issue_forms(files, ("bug.yml", "feature.yml", "task.yml"), "local")
     else:
-        ok(inherited(".github/ISSUE_TEMPLATE"), "issue forms inherited from the owner's .github repository",
-           "issue forms neither local nor in the owner's .github repository")
+        listing = api(f"repos/{owner}/.github/contents/.github/ISSUE_TEMPLATE", network) if owner else ERROR
+        if listing is ERROR or (listing is not ABSENT and not isinstance(listing, list)):
+            result("INFO", "issue forms not local; inheritance not verified (offline or API error)")
+        elif listing is ABSENT:
+            result("FAIL", "issue forms neither local nor in the owner's .github repository")
+        else:
+            files = {}
+            for entry in listing:
+                if entry.get("name", "").endswith(".yml"):
+                    text = inherited_file(owner, f".github/ISSUE_TEMPLATE/{entry['name']}", network)
+                    files[entry["name"]] = text if isinstance(text, str) else ""
+            # The shared .github repository carries bug and feature; task is the
+            # template's own add-on and lives in the instance.
+            check_issue_forms(files, ("bug.yml", "feature.yml"), "inherited")
 
     ok((root / ".github" / "dependabot.yml").is_file(), ".github/dependabot.yml present",
        ".github/dependabot.yml missing: pins age silently")
@@ -125,22 +158,21 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     check_doc_links(root)
 
 
-def check_issue_forms(forms: Path) -> None:
-    have = {p.name for p in forms.glob("*.yml")}
-    missing = [f for f in ("bug.yml", "feature.yml", "task.yml") if f not in have]
-    ok(not missing, "issue forms bug, feature, task present", f"issue forms missing: {missing}")
+def check_issue_forms(files: dict[str, str], expected: tuple[str, ...], where: str) -> None:
+    missing = [f for f in expected if f not in files]
+    ok(not missing, f"issue forms {', '.join(e[:-4] for e in expected)} present ({where})",
+       f"issue forms missing ({where}): {missing}")
     alias_trap = re.compile(r"^\s*[\w-]+:\s+[*&]")
-    for p in sorted(forms.glob("*.yml")):
-        if p.name == "config.yml":
+    for name, text in sorted(files.items()):
+        if name == "config.yml":
             continue
-        text = read(p)
         keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.M)]
-        ok(not keys, f"{p.name} has name, description, body", f"{p.name} lacks {keys}")
+        ok(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")
         # A value starting with `*` or `&` is read as a YAML alias and breaks the whole form.
         trap = [n for n, ln in enumerate(text.splitlines(), 1) if alias_trap.match(ln)]
-        ok(not trap, f"{p.name} has no unquoted YAML alias", f"{p.name} line {trap}: value starts with * or &")
-        ok(re.search(r"^labels:\s*\[.+\]", text, re.M) is not None,
-           f"{p.name} labels its issues", f"{p.name} has no labels: those issues never sort in a list")
+        ok(not trap, f"{name} has no unquoted YAML alias", f"{name} line {trap}: value starts with * or &")
+        labelled = re.search(r"^labels:\s*\[.+\]", text, re.M) or re.search(r"^labels:\s*\n\s+- ", text, re.M)
+        ok(labelled is not None, f"{name} labels its issues", f"{name} has no labels: those issues never sort in a list")
 
 
 def check_gitattributes(root: Path) -> None:
@@ -162,9 +194,15 @@ def check_gitattributes(root: Path) -> None:
            "uv.lock is not marked linguist-generated: review reads machine-written lines")
     # diff=/merge=/filter= drivers need each user's local git config; a committed
     # rule that only works with local setup makes people think it is working.
+    builtin = {
+        "merge": {"", "true", "false", "binary", "text", "union"},
+        "diff": {"", "true", "false", "ada", "bash", "bibtex", "cpp", "csharp", "css", "dts", "elixir",
+                 "fortran", "fountain", "golang", "html", "java", "kotlin", "markdown", "matlab", "objc",
+                 "pascal", "perl", "php", "python", "ruby", "rust", "scheme", "tex"},
+        "filter": {"", "true", "false"},
+    }
     local_only = [f"{pat}: {a}" for pat, attrs in rules for a in attrs
-                  if a.partition("=")[0] in {"diff", "merge", "filter"}
-                  and a.partition("=")[2] not in {"", "true", "false"}]
+                  if a.partition("=")[0] in builtin and a.partition("=")[2] not in builtin[a.partition("=")[0]]]
     ok(not local_only, ".gitattributes has no rule that needs local git config",
        f".gitattributes rules need local git config: {local_only}")
 
@@ -191,14 +229,17 @@ def check_agent_settings(root: Path) -> None:
 
 
 def check_doc_links(root: Path) -> None:
-    link = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+    link = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+    fenced = re.compile(r"```.*?```", re.S)
+    inline = re.compile(r"`[^`\n]*`")
     docs = [p for p in root.rglob("*.md") if not (set(p.relative_to(root).parts) & SKIP_DIRS)]
     if not docs:
         result("FAIL", "no markdown document found at all")
         return
     broken: dict[str, list[str]] = {}
     for doc in docs:
-        for target in link.findall(read(doc)):
+        text = inline.sub("", fenced.sub("", read(doc)))
+        for target in link.findall(text):
             if target.startswith(("http://", "https://", "mailto:", "#")):
                 continue
             path = (doc.parent / target.split("#", 1)[0]).resolve()
@@ -225,6 +266,8 @@ def archetype_of(project: Path, given: str | None) -> str | None:
 
 
 def package_name(project: Path) -> str | None:
+    if not (project / "pyproject.toml").is_file():
+        return None
     m = re.search(r'^name\s*=\s*"([^"]+)"', read(project / "pyproject.toml"), re.M)
     return m.group(1).replace("-", "_") if m else None
 
@@ -249,12 +292,14 @@ def check_dockerfile(project: Path) -> None:
     if not ok(d.is_file(), "Dockerfile present", "Dockerfile missing"):
         return
     text = read(d)
-    bases = re.findall(r"^FROM\s+(\S+)", text, re.M)
+    froms = [re.sub(r"^--\S+\s+", "", f).split() for f in re.findall(r"^FROM\s+(.+)$", text, re.M)]
+    aliases = {parts[2] for parts in froms if len(parts) >= 3 and parts[1].upper() == "AS"}
+    bases = [parts[0] for parts in froms if parts and parts[0] not in aliases and parts[0] != "scratch"]
     unpinned = [b for b in bases if "@sha256:" not in b]
-    ok(bool(bases) and not unpinned, "every base image is pinned by digest",
+    ok(bool(froms) and not unpinned, "every base image is pinned by digest",
        f"base images not pinned by digest: {unpinned or 'no FROM at all'}")
     users = re.findall(r"^USER\s+(\S+)", text, re.M)
-    ok(bool(users) and users[-1] != "root", "the image does not run as root",
+    ok(bool(users) and users[-1].split(":")[0] not in {"root", "0"}, "the image does not run as root",
        "the image runs as root (no USER, or the last USER is root)")
     ok("uv sync --locked" in text, "the image installs from the lockfile (uv sync --locked)",
        "the image does not use `uv sync --locked`: it can drift from the repository")
@@ -287,17 +332,20 @@ def check_env_example(project: Path) -> None:
 # ── the wall ──────────────────────────────────────────────────────────────
 
 
-def check_wall(repo: str, expected: list[str], network: bool) -> None:
-    if not network:
+def check_wall(repo: str, expected: list[str], merge_methods: set[str], network: bool) -> None:
+    if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("INFO", "wall not checked (offline)")
         return
     meta = api(f"repos/{repo}", network)
-    if meta is None:
-        result("FAIL", f"could not read repos/{repo}")
+    if meta in (ABSENT, ERROR) or not isinstance(meta, dict):
+        result("FAIL" if meta is ABSENT else "INFO", f"could not read repos/{repo}")
         return
     branch = meta.get("default_branch", "main")
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
-    if not rules:
+    if rules is ERROR:
+        result("INFO", f"could not read the rules of {branch} (API error)")
+        return
+    if rules is ABSENT or not rules:
         result("FAIL", f"no rules govern {branch}: the wall is down")
         return
     by_type = {r["type"]: r for r in rules}
@@ -306,7 +354,8 @@ def check_wall(repo: str, expected: list[str], network: bool) -> None:
 
     pr = by_type.get("pull_request", {}).get("parameters", {})
     methods = set(pr.get("allowed_merge_methods", []))
-    ok(bool(methods) and methods <= {"squash"}, f"{branch}: squash is the only merge method",
+    ok(bool(methods) and methods <= merge_methods,
+       f"{branch}: merge methods within {sorted(merge_methods)}",
        f"{branch}: merge methods widened to {sorted(methods) or 'unknown'}")
 
     rsc = by_type.get("required_status_checks", {}).get("parameters", {})
@@ -320,10 +369,12 @@ def check_wall(repo: str, expected: list[str], network: bool) -> None:
 
     ids = {r.get("ruleset_id") for r in rules if r.get("ruleset_source_type") == "Repository"}
     for rid in sorted(i for i in ids if i):
-        rs = api(f"repos/{repo}/rulesets/{rid}", network) or {}
-        actors = rs.get("bypass_actors")
+        rs = api(f"repos/{repo}/rulesets/{rid}", network)
+        actors = rs.get("bypass_actors") if isinstance(rs, dict) else None
         if actors is None:
-            result("INFO", f"ruleset {rid}: bypass actors not visible with this token")
+            # Only visible with repository-administration read, which the
+            # Actions token never has. The skill, run by the owner, sees it.
+            result("INFO", f"ruleset {rid}: bypass actors not visible with this token (an admin-read token sees them)")
         else:
             ok(actors == [], f"ruleset {rid}: no bypass actors", f"ruleset {rid}: bypass actors present: {actors}")
 
@@ -358,13 +409,17 @@ def main() -> int:
 
     if a.repo:
         expected: list[str] = []
-        if a.expect_checks:
-            expected = [c.strip() for c in a.expect_checks.split(",") if c.strip()]
-        elif a.ruleset:
+        merge_methods = {"squash"}
+        if a.ruleset:
             data = json.loads(read(Path(a.ruleset)))
             expected = [c["context"] for r in data["rules"] if r["type"] == "required_status_checks"
                         for c in r["parameters"]["required_status_checks"]]
-        check_wall(a.repo, expected, network)
+            merge_methods = {m for r in data["rules"] if r["type"] == "pull_request"
+                             for m in r["parameters"].get("allowed_merge_methods", [])} or merge_methods
+        if a.expect_checks:
+            expected = [c.strip() for c in a.expect_checks.split(",") if c.strip()]
+        result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
+        check_wall(a.repo, expected, merge_methods, network)
     else:
         result("INFO", "no --repo: wall not checked")
 

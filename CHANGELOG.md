@@ -20,3 +20,6 @@ All notable changes to plinth. The format follows
   project that runs the workflow in this repository's own CI, and the shared
   floor checker `scripts/floor-check.py` (files, agent settings, and live
   ruleset drift).
+- This repository's own floor: `CONTRIBUTING.md`, `.gitattributes` (LF line
+  endings, `uv.lock` folded in diffs) and `.claude/settings.json` (denies force
+  push, `rm -rf`, `.env` reads and `gh` token reads for agent sessions).

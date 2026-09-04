@@ -69,8 +69,9 @@ on:
       floor-check-required-checks:
         description: |
           Check names the repository's ruleset must require, comma separated.
-          Empty means the names in plinth's ruleset.json, which is what the
-          door applies. This repository's canary passes its own names.
+          Empty means the ten names in plinth's ruleset.json, the ruleset
+          `/plinth:new-project` applies. Only a repository whose ruleset is
+          deliberately different passes its own list; plinth's canary does.
         required: false
         type: string
         default: ""

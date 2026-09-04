@@ -8,7 +8,10 @@ wf="$root/.github/workflows/python-ci.yml"
 
 types="$(sed -nE "s/^[[:space:]]*types='([^']+)'.*/\1/p" "$wf" | head -1)"
 [ -n "$types" ] || { echo "  FAIL  types= not found in python-ci.yml"; exit 1; }
-re="^($types)(\([a-zA-Z0-9_.,/ -]+\))?!?: .+"
+# The whole pattern, not just the type list: grep -qE "<pattern>" in the workflow.
+shape="$(sed -nE 's/^.*grep -qE "([^"]+)".*$/\1/p' "$wf" | head -1)"
+[ -n "$shape" ] || { echo "  FAIL  the grep pattern was not found in python-ci.yml"; exit 1; }
+re="${shape//\$types/$types}"
 
 pass=0; fail=0
 check() { # <ok|no> <title>
