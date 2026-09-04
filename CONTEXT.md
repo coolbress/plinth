@@ -11,7 +11,8 @@ from stay in the lab.
   the wall, opens the first pull request, and deletes the repository if any
   step after creation fails.
 - **box**: the project template (`plinth-template`, rendered with copier). The
-  files a new repository starts with.
+  files a new repository starts with. Until `plinth-template` ships, the door
+  renders `coolbress/project-template` at the tag pinned in `scripts/new-project.sh`.
 - **floor**: the minimum a repository must have to be considered set up: the
   wall, secret scanning, dependency updates, the document set. `/plinth:floor-check`
   reads an existing repository against it and changes nothing.

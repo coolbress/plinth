@@ -19,7 +19,7 @@ All notable changes to plinth. The format follows
   the first pull request, whose workflow must start. Any failure after creation
   deletes the repository (best effort: a failed deletion prints the URL loudly).
   `scripts/with-admin-token.sh` for machines whose `gh` token is fine-grained.
-  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 44 cases) and
+  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 51 cases) and
   `tests/token-prompt-not-from-stdin.sh`.
 - CI: `ci / install` (real install on a clean runner) and `ci / docs`
   (markdownlint, link check, vocabulary gate, README vs tutorial).

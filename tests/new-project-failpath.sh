@@ -90,6 +90,7 @@ MOCK
 cat > "$work/bin/git" <<'MOCK'
 #!/usr/bin/env bash
 set -u
+[ "$1" = --version ] && { echo "git version ${MOCK_GIT_VERSION:-2.45.0}"; exit 0; }
 for a in "$@"; do
   if [ "$a" = push ]; then
     printf 'git %s\n' "$*" >> "$GH_LOG"
@@ -112,7 +113,11 @@ export CLAUDE_CONFIG_DIR="$work/claude"
 unset GH_TOKEN GITHUB_TOKEN PLINTH_TOKEN_SOURCE
 
 pass=0; fail=0
-run() { # <case> <want exit: ok|err> <want create: yes|no> <want delete: yes|no> <expected output substring> -- <script args...>
+ok()  { pass=$((pass+1)); printf '  PASS  %-16s %s\n' "$1" "$2"; }
+bad() { fail=$((fail+1)); printf '  FAIL  %-16s %s\n' "$1" "$2"; }
+# run <case> <want exit: ok|err> <want create: yes|no> <want delete: yes|no> <expected output substring> -- <script args...>
+# E="VAR=x ..." sets environment for the run; P=<dir> replaces the mock bin directory. Both reset after.
+run() {
   local case="$1" want_exit="$2" want_create="$3" want_del="$4" want_text="$5"; shift 5; [ "$1" = -- ] && shift
   local home="$work/home-$case" rc created=no del=no ok=1
   mkdir -p "$home"; export HOME="$home" GH_LOG="$home/calls.log"; : > "$GH_LOG"
@@ -125,11 +130,10 @@ run() { # <case> <want exit: ok|err> <want create: yes|no> <want delete: yes|no>
   [ "$del" = "$want_del" ] || ok=0
   [ -z "$want_text" ] || grep -qF -- "$want_text" "$home/out" || ok=0
   if [ "$ok" = 1 ]; then
-    printf '  PASS  %-16s exit=%s created=%s deleted=%s\n' "$case" "$rc" "$created" "$del"; pass=$((pass+1))
+    ok "$case" "exit=$rc created=$created deleted=$del"
   else
-    printf '  FAIL  %-16s exit=%s (want %s) created=%s (want %s) deleted=%s (want %s) text=%s\n' \
-      "$case" "$rc" "$want_exit" "$created" "$want_create" "$del" "$want_del" "${want_text:-any}"
-    sed 's/^/        /' "$home/out"; fail=$((fail+1))
+    bad "$case" "exit=$rc (want $want_exit) created=$created (want $want_create) deleted=$del (want $want_del) text=${want_text:-any}"
+    sed 's/^/        /' "$home/out"
   fi
   E=""; P=""
 }
@@ -137,6 +141,8 @@ run() { # <case> <want exit: ok|err> <want create: yes|no> <want delete: yes|no>
 echo "preflight: nothing is created, and the message names the fix"
 P="$work/bin-nouv" run no-uv          err no no "uv is not installed"                       -- probe
 E="MOCK_CLAUDE_OLD=1" run claude-old    err no no "below the supported floor"                -- probe
+E="MOCK_GIT_VERSION=2.27.0" run git-old  err no no "git 2.27.0 is too old"                    -- probe
+E="FAIL_AT=headers"   run token-unread   err no no "cannot read api.github.com/user"          -- probe
 E="MOCK_NOAUTH=1"     run gh-logged-out err no no "gh auth login"                            -- probe
 E="MOCK_SCOPES=repo"  run scope-missing err no no "lacks the scope(s) workflow"              -- probe
 E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"                      -- probe
@@ -144,6 +150,9 @@ run owner-unknown  err no no "does not exist on GitHub"                         
 run owner-other    err no no "user account other than yours"                                -- alice/probe
 E="MOCK_MEMBER=0"     run org-nonmember err no no "not a member of the organization"         -- someorg/probe
 run private        err no no "private repositories are not supported yet"                   -- probe --private
+run private-first  err no no "private repositories are not supported yet"                   -- --private probe
+run two-names      err no no "one name only"                                                -- probe other
+run bad-option     err no no "unknown option: --nope"                                       -- probe --nope
 E="MOCK_EXISTS=1"     run repo-exists   err no no "already exists; the door creates new"     -- probe
 run license-typo   err no no "unknown license: bogus"                                       -- probe --license=bogus
 run archetype-typo err no no "the template accepts: cli library backend data-ml"            -- probe --archetype=service
@@ -152,15 +161,19 @@ run dir-exists     err no no "already exists"                                   
 mkdir -p "$work/home-nested" && ( cd "$work/home-nested" && "$real_git" init -q -b main )
 run nested         err no no "inside the repository"                                        -- probe
 # --private is refused before any gh call at all.
-if [ ! -s "$work/home-private/calls.log" ]; then printf '  PASS  %-16s no gh call before the refusal\n' private; pass=$((pass+1))
-else printf '  FAIL  %-16s gh was called before refusing --private\n' private; fail=$((fail+1)); fi
+if [ ! -s "$work/home-private/calls.log" ]; then ok private-no-call "no gh call before the refusal"
+else bad private-no-call "gh was called before refusing --private"; fi
 
 echo "warnings: continue, and say so"
 E="GH_TOKEN=x"        run env-token     ok yes no "warning: GH_TOKEN is set in the environment" -- probe
 E="GH_TOKEN=x PLINTH_TOKEN_SOURCE=prompt" run env-token-admin ok yes no "" -- probe
-if grep -q "warning: GH_TOKEN" "$work/home-env-token-admin/out"; then printf '  FAIL  %-16s the admin path warned about its own GH_TOKEN\n' env-token-admin; fail=$((fail+1))
-else printf '  PASS  %-16s the admin path does not warn about its own GH_TOKEN\n' env-token-admin; pass=$((pass+1)); fi
+if grep -q "warning: GH_TOKEN" "$work/home-env-token-admin/out"; then bad env-token-admin "the admin path warned about its own GH_TOKEN"
+else ok env-token-admin "the admin path does not warn about its own GH_TOKEN"; fi
 E="CLAUDE_CONFIG_DIR=$work/nowhere" run sandbox-off ok yes no "warning: sandbox is off" -- probe
+mkdir -p "$work/claude-local"; printf '{}' > "$work/claude-local/settings.json"; printf '{"sandbox":{"enabled":true}}' > "$work/claude-local/settings.local.json"
+E="CLAUDE_CONFIG_DIR=$work/claude-local" run sandbox-local ok yes no "" -- probe
+if grep -q "warning: sandbox" "$work/home-sandbox-local/out"; then bad sandbox-local "sandbox on in settings.local.json still warned"
+else ok sandbox-local "sandbox on in settings.local.json is seen"; fi
 E="MOCK_SCOPES=repo,workflow" run rollback-off ok yes no "rollback: off (no delete_repo scope" -- probe
 E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: best effort" -- probe
 run org-member     ok yes no "as member"                                                    -- someorg/probe
@@ -176,7 +189,7 @@ E="FAIL_AT=ruleset MOCK_DELETE_FAILS=1" run delete-fails err yes yes "ROLLBACK F
 echo "success: nothing is deleted, and the order is baseline, wall, first pull request"
 run none ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
 log="$work/home-none/calls.log"; proj="$work/home-none/probe"
-check() { if eval "$2"; then printf '  PASS  %-16s %s\n' none "$1"; pass=$((pass+1)); else printf '  FAIL  %-16s %s\n' none "$1"; fail=$((fail+1)); fi; }
+check() { if eval "$2"; then ok none "$1"; else bad none "$1"; fi; }
 check "main is pushed before the ruleset, the pull request after it" \
   '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset pr " ]'
 check "CodeQL default setup precedes the ruleset" 'grep -E "code-scanning|/rulesets" "$log" | head -1 | grep -q code-scanning'

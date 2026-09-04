@@ -45,12 +45,14 @@ GH_TOKEN="${GH_TOKEN%"${GH_TOKEN##*[![:space:]]}"}"
 
 [ -n "$GH_TOKEN" ] || { echo "empty token, stopping." >&2; exit 2; }
 
-# Show the shape, never the value, so a paste accident is visible.
-printf '  token: prefix %s_ length %s\n' "${GH_TOKEN%%_*}" "${#GH_TOKEN}" >&2
+# Show the shape, never the value, so a paste accident is visible: the known
+# prefix, or the first four characters of whatever came in.
 case "$GH_TOKEN" in
-  ghp_*|github_pat_*|gho_*|ghs_*|ghu_*) ;;
-  *) echo "  warning: unfamiliar prefix; expected ghp_ (classic) or github_pat_ (fine-grained)" >&2 ;;
+  ghp_*|gho_*|ghs_*|ghu_*) prefix="${GH_TOKEN:0:4}" ;;
+  github_pat_*)            prefix="github_pat_" ;;
+  *) prefix="${GH_TOKEN:0:4}"; echo "  warning: unfamiliar prefix; expected ghp_ (classic) or github_pat_ (fine-grained)" >&2 ;;
 esac
+printf '  token: prefix %s length %s\n' "$prefix" "${#GH_TOKEN}" >&2
 
 export GH_TOKEN
 # Tells the command the token was typed here, not found in the environment.

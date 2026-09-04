@@ -100,5 +100,13 @@ case "$out" in
   *) bad "the stdin fallback did not work"; printf '%s\n' "$out" | sed 's/^/        /' ;;
 esac
 
+# 4. A pasted value without an underscore (the paste-accident shape) shows four characters, never the whole.
+out="$(drive notty "" "$(printf 'z%.0s' $(seq 40))"$'\n' /bin/sh -c 'exit 0')"
+case "$out" in
+  *zzzzzzzz*) bad "a token without an underscore was printed in full" ;;
+  *"prefix zzzz length 40"*) ok "an unfamiliar token shows four characters and its length" ;;
+  *) bad "unexpected shape line"; printf '%s\n' "$out" | sed 's/^/        /' ;;
+esac
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
