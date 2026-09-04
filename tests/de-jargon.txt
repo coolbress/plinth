@@ -1,0 +1,16 @@
+# Vocabulary that must not appear in public text. One extended regex per line.
+# Korean metaphors: product text uses the English terms in CONTEXT.md.
+벽
+문
+안내
+상자
+바닥
+근거
+# Codenames of experiment and evidence repositories.
+goppi
+gingoa
+claudeck
+codex-native
+divcal
+# Paths into the archived Korean evidence repository.
+direction/[0-9]{2}

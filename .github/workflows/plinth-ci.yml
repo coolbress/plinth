@@ -1,0 +1,70 @@
+name: plinth-ci
+# plinth's own checks. Called from ci.yml so the names come out as `ci / <job>`.
+# No job is skipped with `if:`; a skipped job has no check name.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  # Tier 1, the installer's journey: what the README says, typed on a clean runner.
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Claude Code (stable channel, official installer)
+        run: |
+          set -euo pipefail
+          curl -fsSL https://claude.ai/install.sh | bash -s stable
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Manifests, pins, skill frontmatter
+        run: ./tests/marketplace-manifest.sh
+
+      - name: Every test file is wired
+        run: ./tests/all-tests-are-wired.sh
+
+      - name: Install plinth the way the README says
+        run: ./tests/install-smoke.sh
+
+  # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
+  # and the README install block is the one the tutorial shows.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: markdownlint
+        run: npx --yes markdownlint-cli2@0.23.2 "**/*.md"
+
+      # Official release binary, checksum verified: no third-party action to allowlist.
+      # Bump the version and the checksum together (checksum: the release's .sha256 asset).
+      - name: Link check (lychee)
+        env:
+          LYCHEE_VERSION: "0.24.2"
+          LYCHEE_SHA256: "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/lychee"; mkdir -p "$d"
+          f="lychee-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/$f"
+          echo "${LYCHEE_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" lychee
+          "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" -- './**/*.md'
+
+      - name: No internal vocabulary in public text
+        run: ./tests/de-jargon.sh
+
+      - name: README install block equals the tutorial's
+        run: ./tests/readme-install-block.sh
