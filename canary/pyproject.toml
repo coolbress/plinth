@@ -1,0 +1,40 @@
+# canary: the smallest real Python project, so this repository can call its own
+# reusable workflow and see it run. actionlint only proves the YAML parses;
+# whether the jobs work is a different sentence, and answering it needs a
+# project with a lockfile, a lint config, a type checker and a test.
+# Strictness matches what the template renders; a looser canary proves nothing.
+[project]
+name = "canary"
+version = "0.0.0"
+description = "Exercises the reusable CI workflow"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["mypy>=1.14", "pytest>=8.3", "ruff>=0.9"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "S", "A", "C4", "PT", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error"]

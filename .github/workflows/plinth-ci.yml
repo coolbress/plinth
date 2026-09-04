@@ -30,6 +30,24 @@ jobs:
       - name: Every test file is wired
         run: ./tests/all-tests-are-wired.sh
 
+      - name: The wall the door applies is a wall
+        run: ./scripts/check-ruleset.sh
+
+      - name: python-ci contract (job names, inputs, secrets, ruleset contexts)
+        run: ./tests/python-ci-contract.sh
+
+      - name: ci / pr-title verdicts
+        run: ./tests/pr-title-cases.sh
+
+      - name: Every if-gated workflow input is passed by a caller
+        run: ./tests/inputs-are-exercised.sh
+
+      - name: Archetype vocabulary has one source
+        run: ./tests/archetype-single-source.sh
+
+      - name: Floor checker verdicts on fixtures
+        run: ./tests/floor-check-cases.sh
+
       - name: Install plinth the way the README says
         run: ./tests/install-smoke.sh
 

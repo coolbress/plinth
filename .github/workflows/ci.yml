@@ -20,3 +20,13 @@ concurrency:
 jobs:
   ci:
     uses: ./.github/workflows/plinth-ci.yml
+
+  # The canary calls the reusable workflow for real: a workflow that parses is
+  # not a workflow that runs. Consumers break here first. Inputs are passed on
+  # purpose; an input nobody passes is a code path nobody runs.
+  canary:
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      working-directory: canary
+      extra-python-versions: "3.13"
+      floor-check-required-checks: "ci / install, ci / docs, CodeQL"
