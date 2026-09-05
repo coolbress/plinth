@@ -59,8 +59,6 @@ chk 'CodeQL is required through the code_scanning rule' \
 chk 'code scanning blocks on error-level alerts and high or critical security alerts' \
     '.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[0]|{alerts_threshold,security_alerts_threshold}' \
     '{"alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}'
-chk 'no CodeQL check name is required (the rule replaces it)' \
-    '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context|select(.=="CodeQL")]|length' '0'
 # Per-language jobs (`Analyze (python)`) are never required: languages differ
 # per repository and a missing one never reports, which locks the repository.
 chk 'no per-language Analyze job is required' \

@@ -70,6 +70,11 @@ command -v claude >/dev/null || stop "claude (Claude Code) is not installed" "  
 claude_v="$(claude --version 2>/dev/null | awk '{print $1}')" || claude_v=""
 below "$claude_floor" "${claude_v:-0}" && stop "claude ${claude_v:-?} is below the supported floor $claude_floor" "  fix: claude update"
 gh auth status >/dev/null 2>&1 || stop "gh is not logged in" "  fix: gh auth login   (browser login; the token stays in the keychain)"
+# How long the first pull request may take to be picked up by CI and CodeQL
+# (each wait, so twice this at worst). Tests shorten it; a typo must stop here,
+# not after the repository exists.
+first_pr_wait="${PLINTH_FIRST_PR_WAIT:-180}"
+case "$first_pr_wait" in ''|*[!0-9]*) stop "PLINTH_FIRST_PR_WAIT must be a whole number of seconds (got: $first_pr_wait)" "  fix: unset PLINTH_FIRST_PR_WAIT" ;; esac
 
 if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
   for v in GH_TOKEN GITHUB_TOKEN; do
@@ -247,13 +252,18 @@ gh api "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=
 # One line, the one the tutorial names. Its workflow must start: a run that
 # ends in startup_failure (allowlist, workflow file) reports no check name,
 # so the wall would never open. That is a wall failure, and it rolls back.
-# CodeQL must pick the pull request up for the same reason: without an
-# analysis the code_scanning rule never opens.
-codeql_wait="${PLINTH_CODEQL_WAIT:-180}"
-deadline=$((SECONDS + codeql_wait))
-until gh api "repos/$repo/actions/workflows" --jq '.workflows[].path' 2>/dev/null | grep -qx 'dynamic/github-code-scanning/codeql'; do
+# CodeQL must pick the pull request up as well: without an analysis the
+# code_scanning rule never opens. A push made seconds after default setup was
+# enabled is never analysed; one made minutes later is (workflows#109). The
+# listed `dynamic/github-code-scanning/codeql` workflow is the readiness signal
+# used here; it exists once setup is registered, though its timing against the
+# first analysis is inferred, not measured. Missing it only costs the wait.
+deadline=$((SECONDS + first_pr_wait))
+while :; do
+  paths="$(gh api "repos/$repo/actions/workflows" --jq '.workflows[].path' 2>/dev/null || true)"
+  grep -qx 'dynamic/github-code-scanning/codeql' <<<"$paths" && break
   if [ "$SECONDS" -ge "$deadline" ]; then
-    echo "warning: CodeQL default setup has not registered its workflow after $codeql_wait s; pushing the first pull request anyway" >&2
+    echo "warning: CodeQL default setup has not registered its workflow after $first_pr_wait s; pushing the first pull request anyway" >&2
     break
   fi
   sleep 5
@@ -266,7 +276,7 @@ git -C "$dir" push -q -u origin "$branch"
 head_sha="$(git -C "$dir" rev-parse HEAD)"
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
   --body "Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial")"
-deadline=$((SECONDS + codeql_wait)); seen=0; codeql=0
+deadline=$((SECONDS + first_pr_wait)); seen=0; codeql=0; repush=""
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
     --jq '.workflow_runs[] | "\(.path) \(.status) \(.conclusion)"' 2>/dev/null || true)"
@@ -279,12 +289,19 @@ while :; do
   # without startup_failure), seen on two polls in a row.
   if grep -qE "^$template_ci (queued|in_progress|completed) " <<<"$runs"; then seen=$((seen + 1)); else seen=0; fi
   # CodeQL's runs do not list under the branch; its check runs on the head do.
-  if [ "$codeql" = 0 ] && gh api "repos/$repo/commits/$head_sha/check-runs" --jq '.check_runs[].name' 2>/dev/null | grep -qE '^(CodeQL|Analyze \()'; then codeql=1; fi
+  if [ "$codeql" = 0 ]; then
+    names="$(gh api "repos/$repo/commits/$head_sha/check-runs" --jq '.check_runs[].name' 2>/dev/null || true)"
+    grep -qE '^(CodeQL|Analyze \()' <<<"$names" && codeql=1
+  fi
   [ "$seen" -ge 2 ] && [ "$codeql" = 1 ] && break
   if [ "$SECONDS" -ge "$deadline" ]; then
-    if [ "$seen" -lt 2 ]; then echo "no run of $template_ci appeared within $codeql_wait s for $branch; its checks would never report" >&2
-    else echo "CodeQL did not pick up the first pull request within $codeql_wait s (no check run on $head_sha); the code_scanning rule would never open" >&2; fi
-    exit 1
+    # No CI run is a misconfiguration (allowlist, workflow file): a wall failure.
+    [ "$seen" -ge 2 ] || { echo "no run of $template_ci appeared within $first_pr_wait s for $branch; its checks would never report" >&2; exit 1; }
+    # No CodeQL run is timing on GitHub's side: the wall stands, and the next
+    # push is analysed within a minute. Say so instead of deleting the repository.
+    echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s; the merge stays blocked until it does" >&2
+    repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
+    break
   fi
   sleep 5
 done
@@ -295,7 +312,8 @@ done: $url (public, $spdx, $arch, $template_repo@$template_ref)
   local: $dir
   first pull request: $pr_url
     wait for every check to turn green, then merge (squash). A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
-  next: cd $dir && claude
+${repush:+$repush
+}  next: cd $dir && claude
 EOF
 [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ] || \
   echo "  if your everyday gh token is fine-grained with selected repositories, add $name to it: https://github.com/settings/personal-access-tokens"

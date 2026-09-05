@@ -16,11 +16,12 @@ All notable changes to plinth. The format follows
   render the template at the tested tag (`coolbress/project-template@v2.18.0`),
   push `main`, labels, CodeQL, the ruleset, secret scanning, Dependabot,
   Actions allowlist (`coolbress/plinth/*`, SHA pins required), squash only, and
-  the first pull request, whose workflow must start and which CodeQL must pick
-  up (it waits for default setup to register its workflow first). Any failure after creation
+  the first pull request, whose workflow must start; CodeQL is waited for too
+  (default setup must register its workflow before the push, and if CodeQL
+  still misses the pull request the summary names the re-push). Any failure after creation
   deletes the repository (best effort: a failed deletion prints the URL loudly).
   `scripts/with-admin-token.sh` for machines whose `gh` token is fine-grained.
-  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 55 cases) and
+  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 57 cases) and
   `tests/token-prompt-not-from-stdin.sh`.
 - CI: `ci / install` (real install on a clean runner) and `ci / docs`
   (markdownlint, link check, vocabulary gate, README vs tutorial).
