@@ -213,8 +213,12 @@ git -C "$dir" push -q -u origin main
 done
 
 # ── the wall ─────────────────────────────────────────────────────────────
-# CodeQL first: the ruleset requires the `CodeQL` check, and with default setup
-# off that name never reports and the repository is locked from its first PR.
+# CodeQL first: the ruleset requires CodeQL results through a code_scanning
+# rule, so nothing merges until CodeQL has analysed the pull request. Default
+# setup registers its workflow a minute or so after it is enabled, and a push
+# before that is never analysed (measured on coolbress/plinth#5, workflows#109);
+# enabling it here, before the rest of the wall, spends that minute usefully.
+# The first pull request below waits for the registration before it pushes.
 gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default >/dev/null
 if ! err="$(gh api "repos/$repo/rulesets" -X POST --input "$here/../ruleset.json" 2>&1 >/dev/null)"; then
   printf 'could not apply the ruleset:\n%s\n' "$err" >&2
@@ -243,14 +247,26 @@ gh api "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=
 # One line, the one the tutorial names. Its workflow must start: a run that
 # ends in startup_failure (allowlist, workflow file) reports no check name,
 # so the wall would never open. That is a wall failure, and it rolls back.
+# CodeQL must pick the pull request up for the same reason: without an
+# analysis the code_scanning rule never opens.
+codeql_wait="${PLINTH_CODEQL_WAIT:-180}"
+deadline=$((SECONDS + codeql_wait))
+until gh api "repos/$repo/actions/workflows" --jq '.workflows[].path' 2>/dev/null | grep -qx 'dynamic/github-code-scanning/codeql'; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    echo "warning: CodeQL default setup has not registered its workflow after $codeql_wait s; pushing the first pull request anyway" >&2
+    break
+  fi
+  sleep 5
+done
 branch="docs/first-pr"
 git -C "$dir" switch -q -c "$branch"
 echo 'Made with [plinth](https://github.com/coolbress/plinth).' >> "$dir/README.md"
 git -C "$dir" commit -q -am "docs: first pull request through the wall"
 git -C "$dir" push -q -u origin "$branch"
+head_sha="$(git -C "$dir" rev-parse HEAD)"
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
   --body "Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial")"
-deadline=$((SECONDS + 120)); seen=0
+deadline=$((SECONDS + codeql_wait)); seen=0; codeql=0
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
     --jq '.workflow_runs[] | "\(.path) \(.status) \(.conclusion)"' 2>/dev/null || true)"
@@ -261,8 +277,15 @@ while :; do
   fi
   # Accept once the run is past startup (queued for a runner, running, or done
   # without startup_failure), seen on two polls in a row.
-  if grep -qE "^$template_ci (queued|in_progress|completed) " <<<"$runs"; then seen=$((seen + 1)); [ "$seen" -ge 2 ] && break; else seen=0; fi
-  [ "$SECONDS" -lt "$deadline" ] || { echo "no run of $template_ci appeared within 120 s for $branch; its checks would never report" >&2; exit 1; }
+  if grep -qE "^$template_ci (queued|in_progress|completed) " <<<"$runs"; then seen=$((seen + 1)); else seen=0; fi
+  # CodeQL's runs do not list under the branch; its check runs on the head do.
+  if [ "$codeql" = 0 ] && gh api "repos/$repo/commits/$head_sha/check-runs" --jq '.check_runs[].name' 2>/dev/null | grep -qE '^(CodeQL|Analyze \()'; then codeql=1; fi
+  [ "$seen" -ge 2 ] && [ "$codeql" = 1 ] && break
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    if [ "$seen" -lt 2 ]; then echo "no run of $template_ci appeared within $codeql_wait s for $branch; its checks would never report" >&2
+    else echo "CodeQL did not pick up the first pull request within $codeql_wait s (no check run on $head_sha); the code_scanning rule would never open" >&2; fi
+    exit 1
+  fi
   sleep 5
 done
 

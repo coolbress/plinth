@@ -43,17 +43,24 @@ chk 'squash is the only merge method' \
 # named `ci`, the called jobs live in python-ci.yml. Three files must agree
 # (this one, python-ci.yml, the instance's ci.yml); rename one and every
 # repository locks itself out of merging.
-chk 'required checks are the python-ci jobs plus CodeQL' \
+chk 'required checks are exactly the python-ci jobs' \
     '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context]' \
-    '["ci / pr-title","ci / lint","ci / typecheck","ci / test","ci / build","ci / secrets","ci / deps","ci / diff-size","ci / floor-check","CodeQL"]'
+    '["ci / pr-title","ci / lint","ci / typecheck","ci / test","ci / build","ci / secrets","ci / deps","ci / diff-size","ci / floor-check"]'
 # A name alone lets anyone post a green check under it; the source app pins it.
-# Two sources: `ci / *` is GitHub Actions (15368), `CodeQL` is code scanning (57789).
-chk 'Actions checks come from the GitHub Actions app (15368)' \
-    '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|select(.context|startswith("ci / ")).integration_id]|unique' \
+chk 'every required check comes from the GitHub Actions app (15368)' \
+    '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].integration_id]|unique' \
     '[15368]'
-chk 'CodeQL comes from the code scanning app (57789)' \
-    '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|select(.context=="CodeQL").integration_id]|unique' \
-    '[57789]'
+# CodeQL is required as a rule, not as a check name. A required name that never
+# reports (default setup off, or enabled after the first push) locks the
+# repository with no reason shown; the rule blocks with one, and it also blocks
+# on the alerts themselves. Measured on coolbress/plinth#5 (workflows#109).
+chk 'CodeQL is required through the code_scanning rule' \
+    '[.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[].tool]' '["CodeQL"]'
+chk 'code scanning blocks on error-level alerts and high or critical security alerts' \
+    '.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[0]|{alerts_threshold,security_alerts_threshold}' \
+    '{"alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}'
+chk 'no CodeQL check name is required (the rule replaces it)' \
+    '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context|select(.=="CodeQL")]|length' '0'
 # Per-language jobs (`Analyze (python)`) are never required: languages differ
 # per repository and a missing one never reports, which locks the repository.
 chk 'no per-language Analyze job is required' \
