@@ -91,8 +91,9 @@ jobs:
       - name: Workflow syntax and usage (actionlint)
         run: actionlint -color -ignore 'property "workflow_sha" is not defined'
 
+      # One file per call: `bash -n a.sh b.sh` parses a.sh only, b.sh is $1.
       - name: Shell syntax (bash -n)
-        run: bash -n scripts/*.sh tests/*.sh
+        run: for f in scripts/*.sh tests/*.sh; do bash -n "$f"; done
 
       - name: Shell static analysis (shellcheck)
         run: shellcheck -S warning scripts/*.sh tests/*.sh

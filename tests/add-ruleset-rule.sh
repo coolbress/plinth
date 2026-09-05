@@ -17,7 +17,9 @@ cat > "$work/bin/gh" <<'MOCK'
 set -u
 case "$*" in
   *"/rulesets/1"*) echo '{"id":1,"created_at":"x","_links":{},"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"pull_request","parameters":{"required_approving_review_count":0}}]}' ;;
-  *"/rulesets"*)   echo 1 ;;
+  # Branch ruleset id 1, tag ruleset id 7 created first: `.[0].id` would land on 7.
+  *"/rulesets"*'select(.target == "branch")'*) echo 1 ;;
+  *"/rulesets"*)   echo 7 ;;
 esac
 exit 0
 MOCK

@@ -37,14 +37,14 @@ BOT='chatgpt-codex-connector[bot]'
 
 # The completion comment that arrives when nothing was found; wording as
 # measured. The comment names the commit itself: `**Reviewed commit:** \`db8c8772fd\``.
-done_cmt() {  # author, (unused), text, [commit named]
+done_cmt() {  # author, text, [commit named]
   # shellcheck disable=SC2016  # single quotes are right: Python code, not shell expansion
   python3 -c 'import json,sys
-who, _when, text = sys.argv[1:4]
-sha = sys.argv[4] if len(sys.argv) > 4 else ""
+who, text = sys.argv[1:3]
+sha = sys.argv[3] if len(sys.argv) > 3 else ""
 body = text + ("\n\n**Reviewed commit:** `" + sha + "`" if sha else "")
 print(json.dumps([{"user": {"login": who}, "created_at": "2026-09-01T06:08:51Z",
-                   "body": body}], ensure_ascii=False))' "$1" "$2" "$3" "${4:-}"
+                   "body": body}], ensure_ascii=False))' "$1" "$2" "${3:-}"
 }
 
 # One issue comment: author, marker sha, marker status.
@@ -130,11 +130,11 @@ runrc "a comment without original_commit_id does not count" '[{"user":{"login":"
 echo "-- completion comment signal (measured: zero findings create no review object)"
 D1="Codex Review: Didn't find any major issues. Keep it up!"   # wording as measured
 D2="Security review completed. No security issues were found in this pull request."
-run "completion comment names this commit"          "$(done_cmt "$BOT" x "$D1" "${HEAD:0:10}")" 0
-run "security review completion counts too"         "$(done_cmt "$BOT" x "$D2" "$HEAD")" 0
-run "completion naming another commit does not count" "$(done_cmt "$BOT" x "$D1" "${OLD:0:10}")" 1
-run "completion naming no commit does not count"    "$(done_cmt "$BOT" x "$D1")" 1
-run "the same wording from someone else does not count" "$(done_cmt someone x "$D1" "$HEAD")" 1
+run "completion comment names this commit"          "$(done_cmt "$BOT" "$D1" "${HEAD:0:10}")" 0
+run "security review completion counts too"         "$(done_cmt "$BOT" "$D2" "$HEAD")" 0
+run "completion naming another commit does not count" "$(done_cmt "$BOT" "$D1" "${OLD:0:10}")" 1
+run "completion naming no commit does not count"    "$(done_cmt "$BOT" "$D1")" 1
+run "the same wording from someone else does not count" "$(done_cmt someone "$D1" "$HEAD")" 1
 # The reviewer's P1 scenario, head moved back to an older commit: bound by
 # commit, there is no time heuristic at all, and the old completion simply does not match.
 

@@ -38,8 +38,8 @@ jobs:
 ```
 
 Keep the job name `third-party`; the check name comes from it. To accept a
-different reviewer, or to change what is posted to summon it, pass
-`reviewer-logins` and `ask-comment` under `with:`. The reviewer reads its
+different reviewer, change what is posted to summon it, or wait longer than
+15 minutes, pass `reviewer-logins`, `ask-comment` or `wait-seconds` under `with:`. The reviewer reads its
 instructions from `## Code Review Rules` in the repository's `AGENTS.md`; that
 section can only change in a pull request that changes nothing else.
 
@@ -55,7 +55,45 @@ scripts/with-admin-token.sh scripts/upgrade-ruleset.sh <owner/name> 'third-party
 
 `15368` is the GitHub Actions app. The tool refuses a name that has never
 reported on the repository, because a required check that never arrives means
-nothing merges.
+nothing merges. It looks at the five most recent pull requests and the three
+most recent commits on the default branch; run it while the pull request that
+reported the check is still among them.
+
+## Optional: a security review by Claude Code
+
+A second opt-in check in the same slot, with an API key instead of a
+subscription: [anthropics/claude-code-security-review](https://github.com/anthropics/claude-code-security-review)
+reads the diff and comments on security findings. Add it as its own workflow,
+put the key in the `CLAUDE_API_KEY` secret, and add
+`anthropics/claude-code-security-review@*` to the repository's Actions allowlist
+(`/plinth:new-project` allows GitHub-owned actions and plinth only). The action
+is not hardened against prompt injection; use it on trusted pull requests only,
+and keep "require approval for all external contributors" on.
+
+```yaml
+name: security-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  security-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda # main, 2026-02-11
+        with:
+          comment-pr: true
+          claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
+```
+
+Like the third-party review, it is a filter, not a gate: read what it says,
+and do not add it to the required checks.
 
 ## Review before the pull request
 

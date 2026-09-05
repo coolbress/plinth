@@ -49,8 +49,9 @@ for p in "$@"; do
   fi
 done
 
-id="$(gh api "repos/$repo/rulesets" --jq '.[0].id')"
-[ -n "$id" ] || { echo "no ruleset on $repo" >&2; exit 1; }
+# The branch ruleset by target, not the first ruleset: a tag ruleset can have the lower id.
+id="$(gh api "repos/$repo/rulesets" --jq '[.[] | select(.target == "branch")][0].id')"
+[ -n "$id" ] && [ "$id" != null ] || { echo "no branch ruleset on $repo" >&2; exit 1; }
 cur="$(gh api "repos/$repo/rulesets/$id")"
 
 add="["

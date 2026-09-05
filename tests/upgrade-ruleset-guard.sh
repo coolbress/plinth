@@ -18,8 +18,12 @@ cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -u
 case "$*" in
-  *"/rulesets/1"*)      echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"canary / test","integration_id":15368}]}}]}' ;;
-  *"/rulesets"*)        echo 1 ;;   # the value after `--jq '.[0].id'`
+  *"/rulesets/1"*)      if [ "${NO_RSC:-0}" = 1 ]; then echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"deletion"}]}'
+                        else echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"canary / test","integration_id":15368}]}}]}'; fi ;;
+  # The branch ruleset is id 1; the tag ruleset, id 7, was created first. A
+  # regression to `.[0].id` lands on 7 and gets no usable ruleset back.
+  *"/rulesets"*'select(.target == "branch")'*) echo 1 ;;
+  *"/rulesets"*)        echo 7 ;;
   *"/commits?per_page"*) echo "sha1" ;;
   *"/pulls?state"*)      echo "sha1" ;;
   *"check-runs"*)        printf 'canary / deps\ncanary / test\n' ;;
@@ -58,6 +62,14 @@ check "--force skips the guard" ok $?
 
 run --dry-run r/r 'canary / deps:15368' 'ci / deps:15368'
 check "one wrong name among several is enough to refuse" no $?
+
+NO_RSC=1 run --dry-run r/r 'canary / deps:15368'
+check "a branch ruleset without a required_status_checks rule is refused, not 'applied'" no $?
+if grep -q "canary / test" "$work/out"; then
+  fail=$((fail+1)); echo "  FAIL  the guard read the ruleset even though the mock claims the tag ruleset is first"
+else
+  pass=$((pass+1)); echo "  PASS  the branch ruleset is selected by target, not by position"
+fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

@@ -32,7 +32,8 @@ name: pr-review
 # subscription, posts to the pull request, and this workflow only verifies,
 # mechanically, that it did. No key, no verdict, and the narrowing lives in the
 # reviewed repository's `AGENTS.md` under `## Code Review Rules`, which the
-# vendor reads.
+# vendor reads. Inputs are the two the caller may want to change plus the wait;
+# the policy file and heading are the contract with `AGENTS.md`, not knobs.
 
 on:
   workflow_call:
@@ -49,7 +50,7 @@ on:
         type: string
         default: "@codex review"
       wait-seconds:
-        description: "How long to wait for the review; reviews are asynchronous."
+        description: "How long to wait for the review; reviews are asynchronous. The security review has taken over 30 minutes."
         type: number
         default: 900
       policy-file:
@@ -98,8 +99,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           MERGED: ${{ github.event.pull_request.merged }}
           PR_STATE: ${{ github.event.pull_request.state }}
-          POLICY_FILE: ${{ inputs.policy-file }}
-          POLICY_HEADING: ${{ inputs.policy-heading }}
+          POLICY_FILE: AGENTS.md              # where the reviewer reads its instructions
+          POLICY_HEADING: "## Code Review Rules"
         run: |
           set -euo pipefail
 
@@ -167,7 +168,7 @@ jobs:
           LOGINS: ${{ inputs.reviewer-logins }}
           ASK: ${{ inputs.ask-comment }}
           WAIT: ${{ inputs.wait-seconds }}
-          POLL: ${{ inputs.poll-seconds }}
+          POLL: 20
         run: |
           set -euo pipefail
 
@@ -234,7 +235,7 @@ jobs:
           DONE = re.compile(
               # No apostrophe: the vendor writes "Didn't" and the character varies.
               r"find any major issues|Security review completed"
-              r"|No security issues were found",
+              r"|No security issues were found|리뷰를 마쳤",   # the same completion in Korean, measured
               re.I,
           )
           logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}

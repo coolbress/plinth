@@ -33,9 +33,12 @@ done
 repo="${1:?$usage}"; shift
 [ $# -gt 0 ] || { echo "name at least one check, e.g. 'third-party / review:15368' (15368 is the GitHub Actions app)" >&2; exit 2; }
 
-id="$(gh api "repos/$repo/rulesets" --jq '.[0].id')"
-[ -n "$id" ] || { echo "no ruleset on $repo" >&2; exit 1; }
+# The branch ruleset by target, not the first ruleset: a tag ruleset can have the lower id.
+id="$(gh api "repos/$repo/rulesets" --jq '[.[] | select(.target == "branch")][0].id')"
+[ -n "$id" ] && [ "$id" != null ] || { echo "no branch ruleset on $repo" >&2; exit 1; }
 cur="$(gh api "repos/$repo/rulesets/$id")"
+printf '%s' "$cur" | jq -e '.rules[] | select(.type == "required_status_checks")' >/dev/null \
+  || { echo "ruleset $id on $repo has no required_status_checks rule; nothing to add to" >&2; exit 1; }
 
 # fail-closed: has every requested name actually been reported? Some checks
 # report on pull requests only (CodeQL did), so recent commits and pull

@@ -45,4 +45,5 @@ Everything else runs offline in seconds.
   and zizmor (`ci / tools`). Anything they catch is not for a reviewer to report;
   see `## Code Review Rules` in `AGENTS.md`.
 - `## Code Review Rules` in `AGENTS.md` changes only in a pull request that
-  changes nothing else; `third-party / review` fails the combination.
+  changes nothing else; `third-party / review` fails the combination. Creating
+  the section is exempt: there was nothing to weaken.
