@@ -42,7 +42,7 @@ Three skills, prefixed `/plinth:`:
 | Skill | Does | Who can call it |
 | --- | --- | --- |
 | `new-project <owner>/<name>` | Creates a repository with the required checks enforced; deletes it if a check cannot be raised | You only |
-| `floor-check [owner/name]` | Reads an existing repository against the same floor and reports; changes nothing | You or the agent |
+| `floor-check [owner/name]` | Reads an existing repository against the same floor the CI job checks, plus the live ruleset and this machine's sandbox; lists each miss with one fix; changes nothing | You or the agent |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 
 Installed with plinth as dependencies, each pinned to a commit:
@@ -64,8 +64,11 @@ terminal and keeps it off every command line.
 
 The install works end to end and CI proves it on a clean runner. `new-project`
 creates a repository with the wall up, or creates nothing (its failure paths
-run in CI against a mocked `gh`). `floor-check` is still a placeholder that
-says so and stops. The [CHANGELOG](CHANGELOG.md) lists what each version adds.
+run in CI against a mocked `gh`). `floor-check` runs the checker `ci / floor-check`
+runs, read-only. A third-party review check (`third-party / review`, Codex) is
+available as an optional check; see
+[docs/how-to/configure-the-third-party-reviewer.md](docs/how-to/configure-the-third-party-reviewer.md).
+The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 
 ## Further reading
 

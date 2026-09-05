@@ -11,6 +11,30 @@ All notable changes to plinth. The format follows
   (`mattpocock-skills`, `frontend-design`, `last30days`, `ponytail-skills`)
   and a catalog entry (`ponytail`, hooks included).
 - Placeholder skills `new-project` and `floor-check`; the `arsenal` catalog skill.
+- `/plinth:floor-check [owner/name]` (0.4.0): runs `scripts/floor-check.py`,
+  the checker `ci / floor-check` runs, read-only, with `--sandbox` for this
+  machine's Claude Code sandbox state (WARN when off). The checker reads the
+  GitHub API through `gh` when it is installed, so the owner's login sees
+  bypass actors. The skill relays the output whole and adds one fix line per
+  FAIL or WARN.
+- Optional third-party review check: reusable `pr-review.yml` (check name
+  `third-party / review`; passes when an accepted reviewer account left a
+  review signal on the current commit; drafts are not summoned; the verdict
+  never blocks; a change to the `## Code Review Rules` section cannot be mixed
+  with other changes in one pull request) and this repository's caller
+  `third-party.yml`. Not in `ruleset.json`; a repository adds it with
+  `scripts/upgrade-ruleset.sh`. `AGENTS.md` gains the `## Code Review Rules`
+  section the reviewer reads.
+- Reusable `pr-label.yml` and the caller `label.yml`: the pull request title's
+  type becomes a label (not a check).
+- Ruleset and security tools for existing repositories, all through
+  `scripts/with-admin-token.sh`: `upgrade-ruleset.sh` (adds required checks;
+  refuses names that never reported), `add-ruleset-rule.sh` (adds a rule kind;
+  presets `linear-history`, `code-scanning`, `signed-commits`),
+  `create-tag-ruleset.sh` (tags cannot be deleted or moved) and
+  `set-security-setting.sh` (writes, then reads back). Tests for each.
+- CI: `ci / tools` (actionlint with a checksum-verified binary, `bash -n`,
+  `shellcheck -S warning`, zizmor over every workflow, and the tool tests).
 - `/plinth:new-project [<owner>/]<name>`: preflight (tools, token kind and
   scopes, owner and membership, public only), one summary line, then create,
   render the template at the tested tag (`coolbress/project-template@v2.18.0`),

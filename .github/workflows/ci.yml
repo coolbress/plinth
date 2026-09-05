@@ -1,8 +1,8 @@
 name: CI
 #
-# The caller job is named `ci` on purpose: the checks report as `ci / install`
-# and `ci / docs`, and rulesets require those names. Rename it and the required
-# checks never report again.
+# The caller job is named `ci` on purpose: the checks report as `ci / install`,
+# `ci / tools` and `ci / docs`, and rulesets require those names. Rename it and
+# the required checks never report again.
 
 on:
   push:

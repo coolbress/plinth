@@ -1,0 +1,41 @@
+# Did an accepted reviewer account leave a review signal on this commit? This
+# repository's own call of the reusable pr-review.yml; the check is
+# `third-party / review`. It is evidence of participation, not a verdict and
+# not proof that the findings were handled; see the how-to for that.
+#
+# It is an optional check: not in this repository's required checks until it
+# has reported once and an admin adds it (scripts/upgrade-ruleset.sh).
+#
+# Why its own file and not ci.yml: this check must also run on
+# `pull_request_review`, because the review arrives asynchronously and the
+# check has to turn green the moment it does. Putting that trigger in ci.yml
+# would re-run the whole CI on every review.
+#
+# No `branches:` filter: stacked pull requests pass through this too.
+name: third-party
+
+on:
+  pull_request:
+    # `ready_for_review`: a draft is never sent for review; the first review
+    # happens the moment the pull request is marked ready. (The instruction-pin
+    # step still runs on drafts, so a draft can be red for that reason alone.)
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write   # only to post the summoning comment
+
+# One run at a time per pull request; a waiting job that overlaps only burns
+# minutes. Never cancel (measured 2026-09-01): a review arriving started a
+# `pull_request_review` run that cancelled the waiting one, and a cancelled
+# run reads as red. When two overlap, the second finishes in seconds once the
+# first has seen the review.
+concurrency:
+  group: third-party-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  third-party:
+    uses: ./.github/workflows/pr-review.yml

@@ -1,0 +1,71 @@
+# Copies the type from the pull request title onto a label. Reusable workflow.
+#
+# Why: GitHub's generated release notes (`.github/release.yml`) group by label,
+# not by title. Categorised notes need the label.
+#
+# The title is the only source. `actions/labeler` labels by path or branch,
+# which puts the rule in two places (title convention plus labeler config) that
+# drift apart in silence. `ci / pr-title` already enforces the type in the
+# title, so that type is used as is.
+#
+# This is not a check. It never blocks a merge and is not in any ruleset:
+# without the label the release notes come out in one block, which is not
+# worth blocking over.
+name: PR label
+
+on:
+  workflow_call:
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Label the pull request with the type from its title
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ github.event.pull_request.title }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TITLE:-}" ] || [ -z "${NUMBER:-}" ]; then
+            echo "not a pull request: nothing to label."
+            exit 0
+          fi
+
+          # The `pull_request` token of a fork is read-only and cannot label.
+          # Say so and pass: a label is a convenience, not a check.
+          if [ "${IS_FORK:-false}" = "true" ]; then
+            echo "pull request from a fork: the token is read-only, label skipped."
+            exit 0
+          fi
+
+          type="$(printf '%s' "$TITLE" | sed -nE 's/^([a-z]+)(\([^)]*\))?!?:.*/\1/p')"
+          if [ -z "$type" ]; then
+            echo "no type in the title; ci / pr-title reports that."
+            exit 0
+          fi
+
+          case "$type" in
+            feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert) ;;
+            *) echo "not a standard type: $type; skipped"; exit 0 ;;
+          esac
+
+          # Already labelled: nothing to do (the `edited` event fires repeatedly).
+          if gh pr view "$NUMBER" --repo "$REPO" --json labels \
+               --jq '.labels[].name' | grep -qx "$type"; then
+            echo "already labelled: $type"
+            exit 0
+          fi
+
+          # `gh pr edit` fails when the label does not exist. Labels are created
+          # once, by /plinth:new-project; creating them here would need more
+          # permissions, and this workflow is not a check, so it keeps the least.
+          if ! gh pr edit "$NUMBER" --repo "$REPO" --add-label "$type"; then
+            echo "::warning::could not add the label '$type'; check that the repository has it"
+            exit 0
+          fi
+          echo "labelled: $type"
