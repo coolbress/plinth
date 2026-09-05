@@ -1,5 +1,7 @@
-# Did a third party look at this commit? This repository's own call of the
-# reusable pr-review.yml; the check is `third-party / review`.
+# Did an accepted reviewer account leave a review signal on this commit? This
+# repository's own call of the reusable pr-review.yml; the check is
+# `third-party / review`. It is evidence of participation, not a verdict and
+# not proof that the findings were handled; see the how-to for that.
 #
 # It is an optional check: not in this repository's required checks until it
 # has reported once and an admin adds it (scripts/upgrade-ruleset.sh).

@@ -17,15 +17,26 @@ name: pr-review
 # (see docs/how-to/configure-the-third-party-reviewer.md). Keep the job name
 # `third-party`: the check name is what rulesets require.
 #
-# What it guarantees and what it does not:
-#   yes  a reviewer that is not the author's session looked at THIS commit.
-#        A review of an older commit does not count.
-#   yes  the reviewer's instructions were not softened inside this pull request.
-#   no   "the code is good": the review's verdict never blocks. Twelve of
-#        thirteen review agents measured in MSR '26 had a signal ratio under
-#        60%; blocking on findings would block on noise.
-#   no   "someone read it": looking is not reading. Reading is the job of the
-#        person who presses merge, and no check reaches that far.
+# What it checks, exactly:
+#   yes  an accepted reviewer account (`reviewer-logins`) left a review signal
+#        tied to THIS commit: a review, a review comment made on it, or a
+#        completion comment naming it. Evidence of participation. A signal on
+#        an older commit does not count.
+#   yes  a change to the designated rules section is not mixed with other
+#        changes in the same pull request.
+# What it does not check:
+#   no   that the whole change was reviewed, or requirements and security both.
+#   no   the review's verdict. It never blocks on findings: model reviews can be
+#        noisy (MSR '26 measured a signal ratio under 60% for twelve of thirteen
+#        agents on closed pull requests), so an unverified verdict is not a
+#        merge condition. Findings are still handled: reproduce, then fix or
+#        say why not (docs/how-to/configure-the-third-party-reviewer.md).
+#   no   that anyone read the review. Reading is the job of the person who
+#        presses merge.
+#   no   that the reviewer is independent of the author: `reviewer-logins` is a
+#        trust setting, not an independence check.
+#   no   that the instructions cannot be weakened: only the designated section
+#        is compared, and only within one pull request.
 #
 # Why the model does not run inside CI: it did once and stopped at the API key
 # (metered billing). Now the reviewer runs in the vendor's cloud on a
@@ -176,12 +187,12 @@ jobs:
             echo "::error::not a pull request: nothing to check."
             exit 1
           fi
-          # One review per ready head, none on drafts. This check asks "was
-          # this commit reviewed", so it used to re-run on every push: 29 runs
-          # on one pull request, 76 in a day, new heads queueing behind old
-          # 900-second waits. Fix locally while draft, verify here once ready;
-          # a push after ready is reviewed again, which is what "the final
-          # commit was reviewed" means. GitHub blocks merging a draft anyway.
+          # Drafts are never summoned; a ready head must show its own evidence,
+          # and summonses per commit are limited (two, below). This check asks
+          # "was this commit reviewed", so it used to re-run on every push: 29
+          # runs on one pull request, 76 in a day, new heads queueing behind old
+          # 900-second waits. Fix locally while draft, verify here once ready.
+          # GitHub blocks merging a draft anyway.
           if [ "${DRAFT:-false}" = "true" ]; then
             echo "draft pull request: not reviewed until it is marked ready for review."
             exit 0
@@ -198,7 +209,8 @@ jobs:
           # workflow alone, the first run would be the test, with a red pull
           # request as the result.
           cat > "$RUNNER_TEMP/attest.py" <<'PY'
-          """Did a third party look at THIS commit? No verdict, only presence.
+          """Did an accepted reviewer account leave a signal on THIS commit?
+          Participation evidence, no verdict.
 
           Three signals, all accepted; the first to arrive wins (measured 2026-09-01):
 

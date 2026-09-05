@@ -18,9 +18,10 @@ All notable changes to plinth. The format follows
   bypass actors. The skill relays the output whole and adds one fix line per
   FAIL or WARN.
 - Optional third-party review check: reusable `pr-review.yml` (check name
-  `third-party / review`; one review per ready head, none on drafts, the
-  verdict never blocks; a pull request cannot soften the reviewer's
-  instructions while changing anything else) and this repository's caller
+  `third-party / review`; passes when an accepted reviewer account left a
+  review signal on the current commit; drafts are not summoned; the verdict
+  never blocks; a change to the `## Code Review Rules` section cannot be mixed
+  with other changes in one pull request) and this repository's caller
   `third-party.yml`. Not in `ruleset.json`; a repository adds it with
   `scripts/upgrade-ruleset.sh`. `AGENTS.md` gains the `## Code Review Rules`
   section the reviewer reads.

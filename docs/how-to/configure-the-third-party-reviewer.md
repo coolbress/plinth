@@ -1,13 +1,16 @@
 # Configure the third-party reviewer
 
-Make a review by a reviewer that is not the author's own agent session part of
-the checks on a repository, and optionally part of its wall.
+Add a review signal from a reviewer other than the author's own agent session
+to the checks on a repository, and optionally to its wall.
 
 The check is `third-party / review`. It passes when the Codex code reviewer
-(`chatgpt-codex-connector[bot]`) has looked at the pull request's current
-commit; it never blocks on what the reviewer said. Drafts are not reviewed;
-the first review happens when the pull request is marked ready, and every push
-after that is reviewed again.
+(`chatgpt-codex-connector[bot]`) has left a review, a review comment or a
+completion comment on the pull request's current commit. That is evidence of
+participation: it does not say the whole change was reviewed, that the
+findings were handled, or anything about the code's quality. It never blocks
+on what the reviewer said. Drafts are not summoned; a ready pull request must
+show a signal on its current head, and the check summons the reviewer at most
+twice per commit.
 
 ## 1. Enable the reviewer on the repository
 
@@ -39,9 +42,29 @@ jobs:
 
 Keep the job name `third-party`; the check name comes from it. To accept a
 different reviewer, change what is posted to summon it, or wait longer than
-15 minutes, pass `reviewer-logins`, `ask-comment` or `wait-seconds` under `with:`. The reviewer reads its
-instructions from `## Code Review Rules` in the repository's `AGENTS.md`; that
-section can only change in a pull request that changes nothing else.
+15 minutes, pass `reviewer-logins`, `ask-comment` or `wait-seconds` under `with:`.
+`reviewer-logins` says whose signal counts; it does not check that the
+reviewer is independent of the author. The reviewer reads its instructions
+from `## Code Review Rules` in the repository's `AGENTS.md`. The check fails a
+pull request that changes that section together with other files, so a rule
+change arrives on its own and is visible; it compares only that section and
+only within one pull request, so it is not a guarantee that the instructions
+cannot be weakened.
+
+## What to do with the findings
+
+The check turns green when the reviewer has posted, whatever it found. The
+findings still have to be handled, in the pull request, before merging:
+
+| The reviewer said | Do |
+| --- | --- |
+| A defect you can reproduce or confirm from the code | Fix it, add or run the check that would have caught it, push |
+| A false positive, or something that does not apply here | Reply on the thread with the reason, pointing at the code or the requirement |
+| An important risk you cannot judge | Leave it open and say so in the pull request; ask for another look (`/security-review`, a second reviewer) rather than merging past it |
+
+An agent handling the findings does the same, and does not close the matter
+by asking "merge anyway?": the person merging should see what was found, what
+was fixed, and what is still open.
 
 ## 3. Make it part of the wall (optional)
 

@@ -23,8 +23,8 @@ The commands are in [CONTRIBUTING.md](CONTRIBUTING.md#run-the-checks): three
 - A commit made with AI carries `Assisted-by: <agent>:<model>` (the Linux kernel's
   form, e.g. `Assisted-by: Claude:claude-fable-5-1`). AI is never a `Co-Authored-By`
   and adds no session trailer or link; the person who merges answers for every line.
-- A review by the session that wrote the change is not a third-party review;
-  say so when `/code-review` runs in the same session. `third-party / review` is.
+- A same-session `/code-review` helps but is not independent; say so when it
+  runs. `third-party / review` only records an accepted reviewer's signal on the commit.
 
 ## Ask first
 
