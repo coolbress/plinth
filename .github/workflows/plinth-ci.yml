@@ -57,6 +57,72 @@ jobs:
       - name: Install plinth the way the README says
         run: ./tests/install-smoke.sh
 
+  # Tools: everything in this repository that is not prose is executable, and
+  # most of it runs in other people's repositories (the reusable workflows, the
+  # ruleset tools, the door). Lint it as such, then run the tests of the tools.
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Official release binary, checksum verified: rhysd/actionlint has no
+      # action of its own, and a third-party wrapper would need allowlisting.
+      # Bump the version and the checksum together (the release's checksums.txt).
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/actionlint"; mkdir -p "$d"
+          f="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$f"
+          echo "${ACTIONLINT_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" actionlint
+          echo "$d" >> "$GITHUB_PATH"
+
+      # actionlint also runs shellcheck over every `run:` block. `job.workflow_sha`
+      # is real (python-ci.yml fetches the checker with it, measured) but not in
+      # actionlint's schema yet; that one message is ignored.
+      - name: Workflow syntax and usage (actionlint)
+        run: actionlint -color -ignore 'property "workflow_sha" is not defined'
+
+      - name: Shell syntax (bash -n)
+        run: bash -n scripts/*.sh tests/*.sh
+
+      - name: Shell static analysis (shellcheck)
+        run: shellcheck -S warning scripts/*.sh tests/*.sh
+
+      # Security audit of the workflows, every severity: these files run in
+      # consumers' repositories, the widest blast radius here. Not an action
+      # (allowlist discipline); pipx is on the runner. 1.30.0 adds a low
+      # finding that asks for the `$/` self-repository syntax, which actionlint
+      # 1.7.12 does not know yet; raise both together.
+      - name: Workflow security (zizmor)
+        run: pipx run zizmor==1.29.0 --no-progress .github/workflows/
+
+      - name: Ruleset upgrade refuses names that never reported
+        run: ./tests/upgrade-ruleset-guard.sh
+
+      - name: Adding a rule kind only adds
+        run: ./tests/add-ruleset-rule.sh
+
+      - name: Tag ruleset blocks deletion and moving, never creation
+        run: ./tests/tag-ruleset.sh
+
+      - name: Security settings are read back after the write
+        run: ./tests/security-setting.sh
+
+      - name: Third-party review check blocks on presence, never on the verdict
+        run: ./tests/pr-review-attest.sh
+
+      - name: The reviewer's instructions cannot be softened inside a reviewed pull request
+        run: ./tests/pr-review-policy-pin.sh
+
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
   # and the README install block is the one the tutorial shows.
   docs:

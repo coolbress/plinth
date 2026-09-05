@@ -1,0 +1,374 @@
+name: pr-review
+#
+# Did a third party look at this commit? Reusable workflow; the check is
+# `third-party / review` in every repository that calls it like this:
+#
+#   on:
+#     pull_request:        { types: [opened, synchronize, reopened, ready_for_review] }
+#     pull_request_review: { types: [submitted] }
+#   permissions: { contents: read, pull-requests: write }
+#   jobs:
+#     third-party:
+#       uses: coolbress/plinth/.github/workflows/pr-review.yml@<commit-sha>
+#
+# This is an optional check. `ruleset.json` does not require it; a repository
+# that wants it as part of its wall adds the name with
+# `scripts/upgrade-ruleset.sh <owner/name> 'third-party / review:15368'`
+# (see docs/how-to/configure-the-third-party-reviewer.md). Keep the job name
+# `third-party`: the check name is what rulesets require.
+#
+# What it guarantees and what it does not:
+#   yes  a reviewer that is not the author's session looked at THIS commit.
+#        A review of an older commit does not count.
+#   yes  the reviewer's instructions were not softened inside this pull request.
+#   no   "the code is good": the review's verdict never blocks. Twelve of
+#        thirteen review agents measured in MSR '26 had a signal ratio under
+#        60%; blocking on findings would block on noise.
+#   no   "someone read it": looking is not reading. Reading is the job of the
+#        person who presses merge, and no check reaches that far.
+#
+# Why the model does not run inside CI: it did once and stopped at the API key
+# (metered billing). Now the reviewer runs in the vendor's cloud on a
+# subscription, posts to the pull request, and this workflow only verifies,
+# mechanically, that it did. No key, no verdict, and the narrowing lives in the
+# reviewed repository's `AGENTS.md` under `## Code Review Rules`, which the
+# vendor reads.
+
+on:
+  workflow_call:
+    inputs:
+      reviewer-logins:
+        description: |
+          GitHub logins accepted as the third-party reviewer, comma separated.
+          When none matches, the check fails and prints every author it did
+          see, so a wrong name is fixed in one go.
+        type: string
+        default: "chatgpt-codex-connector[bot]"
+      ask-comment:
+        description: "Comment posted to summon the reviewer when no review is attached. Empty: never summon."
+        type: string
+        default: "@codex review"
+      wait-seconds:
+        description: "How long to wait for the review; reviews are asynchronous."
+        type: number
+        default: 900
+      policy-file:
+        description: |
+          The file the reviewer reads its instructions from. It lives inside the
+          reviewed repository, so a pull request could rewrite its own reviewer;
+          this workflow blocks the combination of an instruction change with any
+          other change.
+        type: string
+        default: "AGENTS.md"
+      policy-heading:
+        description: "Heading of the instruction section, as the reviewer reads it."
+        type: string
+        default: "## Code Review Rules"
+      poll-seconds:
+        description: "Interval between looks."
+        type: number
+        default: 20
+
+jobs:
+  review:
+    # No `if:` here: a skipped job has no check name. Drafts are handled in
+    # the step below, which passes without summoning a review.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write   # only to post the summoning comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0            # the base is needed for the comparison
+          persist-credentials: false
+
+      # The reviewer reads its instructions from the head of the pull request,
+      # and that cannot be changed. The third-party reviewer itself raised this
+      # (2026-09-01): "When a PR changes this section to say 'do not report
+      # workflow bugs', Codex consumes the policy from the reviewed head, omits
+      # those findings, and the check still turns green." What can be blocked
+      # is the combination: a pull request that changes the instructions AND
+      # anything else fails. One that changes only the instructions passes;
+      # it carries nothing to smuggle in.
+      - name: The reviewer's instructions did not change in this pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          PR_STATE: ${{ github.event.pull_request.state }}
+          POLICY_FILE: ${{ inputs.policy-file }}
+          POLICY_HEADING: ${{ inputs.policy-heading }}
+        run: |
+          set -euo pipefail
+
+          # Nothing to guard on a merged or closed pull request. Measured
+          # 2026-09-01: a review submitted after the merge re-ran this workflow,
+          # base and head were gone, and git exited 128. The check exists to
+          # block merges; it has no reason to turn red after one.
+          if [ "${MERGED:-false}" = "true" ] || [ "${PR_STATE:-open}" != "open" ]; then
+            echo "pull request already merged or closed: nothing to guard."
+            exit 0
+          fi
+
+          # Both commits must exist. A missing one does not pass in silence.
+          for sha in "$BASE_SHA" "$HEAD_SHA"; do
+            if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+              echo "::error::commit not found: $sha; cannot tell whether the instructions changed."
+              echo "the checkout is shallow or the branch is gone. Re-run the job."
+              exit 1
+            fi
+          done
+
+          section() {  # <sha>: the instruction section at that commit, or nothing
+            git show "$1:$POLICY_FILE" 2>/dev/null \
+              | awk -v h="$POLICY_HEADING" '
+                  $0 == h {inside=1; next}
+                  inside && /^## / {inside=0}
+                  inside {print}
+                ' || true
+          }
+          before="$(section "$BASE_SHA")"
+          after="$(section "$HEAD_SHA")"
+
+          if [ "$before" = "$after" ]; then
+            echo "the reviewer's instructions are unchanged."
+            exit 0
+          fi
+
+          if [ -z "$before" ]; then
+            # A section that did not exist before cannot be weakened: until now
+            # the reviewer looked with no instructions at all.
+            echo "::notice::the reviewer's instructions are new in this pull request (absent on the base). Not blocked."
+            exit 0
+          fi
+          echo "::notice::the reviewer's instructions changed in this pull request."
+
+          others="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- . ":(exclude)$POLICY_FILE")"
+          if [ -n "$others" ]; then
+            echo "::error::the reviewer's instructions ($POLICY_FILE $POLICY_HEADING) changed together with other files."
+            echo "the third party reviews this pull request under the changed instructions; it could weaken its own review."
+            echo "change the instructions in a pull request that changes only that file. Changed together:"
+            echo "$others" | sed 's/^/  /' | head -40
+            exit 1
+          fi
+          echo "this pull request changes only the instructions; nothing to smuggle in, so it passes."
+
+      - name: A third-party review is attached to this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          PR_STATE: ${{ github.event.pull_request.state }}
+          LOGINS: ${{ inputs.reviewer-logins }}
+          ASK: ${{ inputs.ask-comment }}
+          WAIT: ${{ inputs.wait-seconds }}
+          POLL: ${{ inputs.poll-seconds }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${NUMBER:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
+            echo "::error::not a pull request: nothing to check."
+            exit 1
+          fi
+          # One review per ready head, none on drafts. This check asks "was
+          # this commit reviewed", so it used to re-run on every push: 29 runs
+          # on one pull request, 76 in a day, new heads queueing behind old
+          # 900-second waits. Fix locally while draft, verify here once ready;
+          # a push after ready is reviewed again, which is what "the final
+          # commit was reviewed" means. GitHub blocks merging a draft anyway.
+          if [ "${DRAFT:-false}" = "true" ]; then
+            echo "draft pull request: not reviewed until it is marked ready for review."
+            exit 0
+          fi
+          if [ "${MERGED:-false}" = "true" ] || [ "${PR_STATE:-open}" != "open" ]; then
+            echo "pull request already merged or closed: not waiting."
+            exit 0
+          fi
+          echo "pull request #$NUMBER, head $HEAD_SHA"
+          echo "accepted reviewers: $LOGINS"
+
+          # The judgement is a pure function, so tests/pr-review-attest.sh can
+          # lift it out of this file and run it against fixtures. Inside the
+          # workflow alone, the first run would be the test, with a red pull
+          # request as the result.
+          cat > "$RUNNER_TEMP/attest.py" <<'PY'
+          """Did a third party look at THIS commit? No verdict, only presence.
+
+          Three signals, all accepted; the first to arrive wins (measured 2026-09-01):
+
+            1 review object: a code review ends as a review with state
+              COMMENTED, even with zero findings. Fast, about four minutes.
+            2 marker: `<!-- codex-security-review:v1 {"headSha":..,"status":"completed"} -->`
+              inside the summary issue comment. `completed` needs the security
+              review to finish too, which has taken over 30 minutes, and has
+              stayed at `running` after the review was done. Not trusted alone.
+            3 completion comment: with zero findings no review object may
+              appear at all, only a plain issue comment ("Codex Review: Didn't
+              find any major issues", "Security review completed..."). It names
+              the commit (`**Reviewed commit:** \`db8c8772fd\``), so it is bound
+              by commit, never by time. Two earlier versions bound by time and
+              both were guesses. String matching is brittle; that is why all
+              three signals are read.
+
+          Author alone cannot tell a code review from a security review; the
+          same bot posts both. So the sentence guaranteed is exactly "the
+          reviewer looked at this commit". The security review is not
+          available on every plan and this check stands without it; the
+          deterministic security checks (CodeQL, zizmor, bandit, secrets,
+          dependencies) already block in CI.
+          """
+          import json, re, sys, pathlib
+
+          head, logins_csv = sys.argv[1:3]
+          reviews_p, rcomments_p, icomments_p = sys.argv[3:6]
+
+          #: The commit a completion comment names. Bound here; no time heuristic.
+          REVIEWED = re.compile(r"Reviewed commit:\*{0,2}\s*`([0-9a-f]{7,40})`", re.I)
+
+          #: Completion wording with zero findings. Vendor text: brittle by nature.
+          DONE = re.compile(
+              # No apostrophe: the vendor writes "Didn't" and the character varies.
+              r"find any major issues|Security review completed"
+              r"|No security issues were found",
+              re.I,
+          )
+          logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}
+          MARK = re.compile(r"<!--\s*codex-security-review:v1\s*(\{.*?\})\s*-->", re.S)
+
+          def load(p):
+              try:
+                  d = json.loads(pathlib.Path(p).read_text() or "[]")
+              except json.JSONDecodeError:
+                  return []
+              return d if isinstance(d, list) else []
+
+          def ours(it):
+              return ((it.get("user") or {}).get("login") or "").lower() in logins
+
+          seen = set()
+          for path in (reviews_p, rcomments_p, icomments_p):
+              for it in load(path):
+                  seen.add(((it.get("user") or {}).get("login") or ""))
+
+          # 1 review objects and review comments: the commit must match.
+          #
+          # Two different fields, and mixing them opens the check (measured
+          # 2026-09-01): the `commit_id` of a review comment (`pulls/N/comments`)
+          # is rewritten by GitHub to the current head whenever a new commit
+          # lands, as long as the line is still alive. One comment from an old
+          # review turned every later push green within 20 seconds, 140 seconds
+          # before the real review arrived. `original_commit_id` is the commit
+          # the comment was made on and never moves; that is the one read.
+          # Review objects (`pulls/N/reviews`) have no such field and their
+          # `commit_id` does not move.
+          for kind, path, field in (("review", reviews_p, "commit_id"),
+                                    ("review-comment", rcomments_p, "original_commit_id")):
+              for it in load(path):
+                  if ours(it) and it.get(field) == head:
+                      print(f"third party looked at this commit: {kind} ({it.get('state') or 'comment'})")
+                      sys.exit(0)
+
+          # 2 marker: `completed` only. `running` is looking, not looked.
+          states = []
+          for it in load(icomments_p):
+              if not ours(it):
+                  continue
+              for raw in MARK.findall(it.get("body") or ""):
+                  try:
+                      d = json.loads(raw)
+                  except json.JSONDecodeError:
+                      continue
+                  states.append((d.get("headSha") or "", d.get("status") or "?"))
+                  if d.get("headSha") == head and d.get("status") == "completed":
+                      print("third party looked at this commit: marker status=completed")
+                      sys.exit(0)
+
+          # 3 completion comment, bound by the commit it names.
+          for it in load(icomments_p):
+              body = it.get("body") or ""
+              if not ours(it) or not DONE.search(body):
+                  continue
+              m = REVIEWED.search(body)
+              if not m:
+                  # A completion that names no commit belongs to an unknown commit.
+                  continue
+              sha = m.group(1)
+              if head.startswith(sha) or sha.startswith(head):
+                  print(f"third party looked at this commit: completion comment (Reviewed commit: {sha})")
+                  print(f"   {body.splitlines()[0][:90]}")
+                  sys.exit(0)
+
+          print("not yet.")
+          for sha, status in states[-3:]:
+              print(f"   marker {sha[:8]} status={status} {'<- this commit' if sha == head else ''}")
+          if seen:
+              print("  authors seen on this pull request: " + ", ".join(sorted(x for x in seen if x)))
+          sys.exit(1)
+          PY
+
+          # The three signals live in three APIs; one alone misses (see the docstring).
+          get() { gh api "repos/$REPO/$1" --paginate > "$RUNNER_TEMP/$2" 2>/dev/null || echo '[]' > "$RUNNER_TEMP/$2"; }
+          fetch() {
+            get "pulls/$NUMBER/reviews"   reviews.json
+            get "pulls/$NUMBER/comments"  rcomments.json
+            get "issues/$NUMBER/comments" icomments.json
+          }
+          judge() {
+            python3 "$RUNNER_TEMP/attest.py" "$HEAD_SHA" "$LOGINS" \
+              "$RUNNER_TEMP/reviews.json" "$RUNNER_TEMP/rcomments.json" "$RUNNER_TEMP/icomments.json"
+          }
+
+          fetch
+          if judge; then exit 0; fi
+
+          # Summon at most twice per commit, counted through a marker hidden in
+          # the comment. Why not once (measured 2026-09-01): a summons posted
+          # before the reviewer app was installed left its marker and was
+          # ignored, and "already asked" then blocked every later attempt. A
+          # summons the reviewer never saw is as good as none, so one retry.
+          # Not more: an unbounded loop papers the pull request with summonses.
+          marker="<!-- third-party-review: $HEAD_SHA -->"
+          asked() {
+            gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq '.[].body' 2>/dev/null \
+              | grep -cF "$marker" || true
+          }
+          ask() {
+            [ -n "${ASK:-}" ] || return 0
+            n="$(asked)"
+            if [ "${n:-0}" -ge 2 ]; then
+              echo "asked twice already; not asking again."
+              return 0
+            fi
+            printf '%s\n\n%s\n' "$ASK" "$marker" > "$RUNNER_TEMP/ask.md"
+            gh pr comment "$NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/ask.md" \
+              && echo "asked ($(( ${n:-0} + 1 ))/2): $ASK" \
+              || echo "::warning::could not post the summons; comment '$ASK' on the pull request yourself"
+          }
+          ask
+
+          deadline=$(( $(date +%s) + WAIT ))
+          halfway=$(( $(date +%s) + WAIT / 2 ))
+          retried=0
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            sleep "$POLL"
+            fetch
+            if judge; then exit 0; fi
+            # Halfway through with nothing attached: ask once more (see above).
+            if [ "$retried" -eq 0 ] && [ "$(date +%s)" -ge "$halfway" ]; then
+              retried=1
+              ask
+            fi
+            echo "   ... $(( deadline - $(date +%s) ))s left"
+          done
+
+          echo "::error::no third-party review is attached to this commit ($HEAD_SHA)."
+          echo "  - is the reviewer enabled for this repository? https://chatgpt.com/codex/settings/code-review"
+          echo "  - you can comment '$ASK' on the pull request yourself and re-run this job."
+          echo "  - if an author listed above is the reviewer under another name,"
+          echo "    set reviewer-logins in the caller to that name."
+          exit 1

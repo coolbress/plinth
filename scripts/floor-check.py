@@ -25,6 +25,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -35,7 +37,7 @@ from pathlib import Path
 # tests/archetype-single-source.sh checks that.
 CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
 
-SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", "dist"}
+SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", ".scratch", "dist"}
 
 fails = 0
 
@@ -65,13 +67,30 @@ ERROR = object()    # anything else went wrong: do not conclude
 
 def api(path: str, network: bool):
     """GET api.github.com/<path>. Returns the JSON, ABSENT on 404, ERROR when
-    offline or on any other failure. FLOOR_CHECK_API_DIR serves fixtures."""
+    offline or on any other failure. FLOOR_CHECK_API_DIR serves fixtures.
+
+    Through `gh api` when gh is installed: the skill runs on the owner's
+    machine, where the token lives in gh's keychain and never in the
+    environment, and bypass actors are visible only to that token. Anything
+    but a 404 from gh (not logged in, offline) falls back to a plain request."""
     fixture_dir = os.environ.get("FLOOR_CHECK_API_DIR")
     if fixture_dir:
         f = Path(fixture_dir) / (path + ".json")
         return json.loads(read(f)) if f.is_file() else ABSENT
     if not network:
         return ERROR
+    if shutil.which("gh"):
+        try:
+            r = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            r = None
+        if r is not None and r.returncode == 0:
+            try:
+                return json.loads(r.stdout)
+            except ValueError:
+                return ERROR
+        if r is not None and "HTTP 404" in r.stderr:
+            return ABSENT
     req = urllib.request.Request(f"https://api.github.com/{path}")
     req.add_header("Accept", "application/vnd.github+json")
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -390,6 +409,26 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
             ok(actors == [], f"ruleset {rid}: no bypass actors", f"ruleset {rid}: bypass actors present: {actors}")
 
 
+# ── this machine ──────────────────────────────────────────────────────────
+
+
+def check_sandbox() -> None:
+    """The sandbox is a setting of the machine, not of the repository, so CI
+    never asks for it; the skill does. Off is a WARN, not a FAIL: the floor
+    of the repository is intact either way."""
+    conf = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    on = False
+    for name in ("settings.json", "settings.local.json"):
+        try:
+            on = on or json.loads(read(conf / name)).get("sandbox", {}).get("enabled") is True
+        except (OSError, ValueError, AttributeError):
+            pass
+    result("PASS" if on else "WARN",
+           f"sandbox on in {conf}" if on else
+           f"sandbox off in {conf}/settings.json: run /sandbox once in Claude Code "
+           "(macOS as is; Linux and WSL2 need bubblewrap and socat; native Windows is not supported)")
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 
 
@@ -402,6 +441,7 @@ def main() -> int:
     ap.add_argument("--expect-checks", help="required check names, comma separated; overrides --ruleset")
     ap.add_argument("--archetype", help="override the archetype in .copier-answers.yml")
     ap.add_argument("--no-network", action="store_true", help="skip everything that needs api.github.com")
+    ap.add_argument("--sandbox", action="store_true", help="also report whether Claude Code's sandbox is on for this machine")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
 
@@ -433,6 +473,9 @@ def main() -> int:
         check_wall(a.repo, expected, merge_methods, network)
     else:
         result("INFO", "no --repo: wall not checked")
+
+    if a.sandbox:
+        check_sandbox()
 
     print(f"-- {fails} failed")
     return 1 if fails else 0

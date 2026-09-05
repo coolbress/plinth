@@ -2,6 +2,7 @@
 # The floor checker's verdicts on fixtures, offline: a complete backend
 # instance passes, and each planted defect is named. A checker that cannot
 # fail is not a check.
+# shellcheck disable=SC2034  # the rules_* fixtures are used inside wall() command strings
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 checker="$root/scripts/floor-check.py"
@@ -94,6 +95,31 @@ wall "CodeQL as a rule, not a name, passes" "CodeQL enforced (rule)" "printf '%s
 wall "CodeQL as a legacy check name passes" "CodeQL enforced (check name)"
 wall "CodeQL neither rule nor name is caught" "CodeQL not enforced" "printf '%s' \"\$rules_neither\" > \"$api/repos/o/r/rules/branches/main.json\""
 wall "a code_scanning rule for another tool is caught" "CodeQL not enforced" "printf '%s' \"\$rules_other_tool\" > \"$api/repos/o/r/rules/branches/main.json\""
+
+# Through gh: on the owner's machine the token is in gh's keychain, not the
+# environment, and only that token sees bypass actors. A mock gh serves the
+# fixture (404 for what is not there); no FLOOR_CHECK_API_DIR, so the checker
+# has to go through it.
+mkdir -p "$work/bin"
+cat > "$work/bin/gh" <<MOCK
+#!/usr/bin/env bash
+f="$api/\$2.json"
+[ -f "\$f" ] && cat "\$f" || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+MOCK
+chmod +x "$work/bin/gh"
+printf '{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole"}]}' > "$api/repos/o/r/rulesets/1.json"
+out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
+if grep -q "FAIL.*bypass actors present" <<<"$out" && ! grep -q "not verified" <<<"$out"; then ok "the API is read through gh when it is installed (bypass actors seen, 404 is absent)"
+else bad "gh path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
+
+# --sandbox reads this machine's Claude Code settings; off is WARN, never FAIL.
+mkdir -p "$work/conf"; printf '{"sandbox":{"enabled":false}}' > "$work/conf/settings.json"
+out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "WARN.*sandbox off" <<<"$out"; then ok "--sandbox: off is a WARN and the floor still passes"; else bad "--sandbox off"; printf '%s\n' "$out" | grep -E 'sandbox|failed' | sed 's/^/        /'; fi
+printf '{"sandbox":{"enabled":true}}' > "$work/conf/settings.local.json"
+out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"
+if grep -q "PASS.*sandbox on" <<<"$out"; then ok "--sandbox: settings.local.json can turn it on"; else bad "--sandbox on"; printf '%s\n' "$out" | grep sandbox | sed 's/^/        /'; fi
 
 # --project separate from --root, expectations from --ruleset
 sub="$work/sub"; rm -rf "$sub"; cp -R "$good" "$sub"; mkdir -p "$sub/app"; mv "$sub/pyproject.toml" "$sub/uv.lock" "$sub/.copier-answers.yml" "$sub/Dockerfile" "$sub/.dockerignore" "$sub/.env.example" "$sub/app/"; mv "$sub/src" "$sub/app/src"

@@ -24,9 +24,12 @@ Everything else runs offline in seconds.
 2. Commit with a Conventional Commits title, `type(scope): summary`, using one
    of the eleven standard types. A commit made with AI carries the trailer
    `Assisted-by: <agent>:<model>` (see `AGENTS.md`).
-3. Open a pull request. The template asks what changed, how it was verified,
-   and how AI was involved. CI runs `ci / install`, `ci / docs` and `CodeQL`;
-   the canary job runs the reusable workflow against `canary/`.
+3. Open a pull request as a draft; mark it ready when it is. The template
+   asks what changed, how it was verified, and how AI was involved. CI runs
+   `ci / install`, `ci / tools`, `ci / docs` and `CodeQL`; the canary job runs
+   the reusable workflow against `canary/`. `third-party / review` waits for a
+   review by the Codex reviewer once the pull request is ready; it is optional
+   and does not block the merge.
 4. Merge when green. Squash is the only merge method and the branch is deleted
    on merge.
 
@@ -38,3 +41,8 @@ Everything else runs offline in seconds.
 - Every third-party marketplace entry is pinned to a full commit SHA.
 - Every `tests/*.sh` is a `run:` step in a workflow; `tests/all-tests-are-wired.sh`
   fails otherwise.
+- Shell and workflow files pass `bash -n`, `shellcheck -S warning`, actionlint
+  and zizmor (`ci / tools`). Anything they catch is not for a reviewer to report;
+  see `## Code Review Rules` in `AGENTS.md`.
+- `## Code Review Rules` in `AGENTS.md` changes only in a pull request that
+  changes nothing else; `third-party / review` fails the combination.
