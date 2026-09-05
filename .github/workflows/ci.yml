@@ -29,4 +29,4 @@ jobs:
     with:
       working-directory: canary
       extra-python-versions: "3.13"
-      floor-check-required-checks: "ci / install, ci / docs"   # CodeQL is a code_scanning rule; floor-check sees it either way
+      floor-check-required-checks: "ci / install, ci / tools, ci / docs"   # CodeQL is a code_scanning rule; floor-check sees it either way
