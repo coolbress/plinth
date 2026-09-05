@@ -30,9 +30,9 @@ else:
 ruleset = json.loads((root / "ruleset.json").read_text(encoding="utf-8"))
 contexts = [c["context"] for r in ruleset["rules"] if r["type"] == "required_status_checks"
             for c in r["parameters"]["required_status_checks"]]
-want = [f"ci / {j}" for j in jobs] + ["CodeQL"]
+want = [f"ci / {j}" for j in jobs]
 if sorted(contexts) == sorted(want):
-    print(f"  PASS  ruleset.json requires exactly the {len(jobs)} jobs plus CodeQL")
+    print(f"  PASS  ruleset.json requires exactly the {len(jobs)} jobs by name (CodeQL is a rule)")
 else:
     fails += 1
     print(f"  FAIL  ruleset.json contexts {sorted(contexts)} != jobs {sorted(want)}")

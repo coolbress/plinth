@@ -72,7 +72,7 @@ printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
   local out; [ -n "${3:-}" ] && eval "$3"
-  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b, CodeQL" 2>&1)"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
   if grep -q -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected '$2')"; printf '%s\n' "$out" | grep -E 'FAIL|INFO|failed' | sed 's/^/        /'; fi
   printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 }
@@ -82,11 +82,23 @@ wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\
 wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
 wall "no rules at all is caught" "the wall is down" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
 wall "invisible bypass actors are INFO, not a pass" "bypass actors not visible" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
+# CodeQL: enforced by the code_scanning rule (the door since workflows#109) or by
+# a `CodeQL` check name (repositories the door created before that). Either
+# passes; neither is the wall missing a stone.
+strip_name='map(if .type=="required_status_checks" then .parameters.required_status_checks |= map(select(.context!="CodeQL")) else . end)'
+rule_for() { printf '{"type":"code_scanning","parameters":{"code_scanning_tools":[{"tool":"%s","alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}]},"ruleset_source_type":"Repository","ruleset_id":1}' "$1"; }
+rules_rule_only="$(jq -c "$strip_name + [\$r]" --argjson r "$(rule_for CodeQL)" <<<"$good_rules")"
+rules_neither="$(jq -c "$strip_name" <<<"$good_rules")"
+rules_other_tool="$(jq -c "$strip_name + [\$r]" --argjson r "$(rule_for Semgrep)" <<<"$good_rules")"
+wall "CodeQL as a rule, not a name, passes" "CodeQL enforced (rule)" "printf '%s' \"\$rules_rule_only\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "CodeQL as a legacy check name passes" "CodeQL enforced (check name)"
+wall "CodeQL neither rule nor name is caught" "CodeQL not enforced" "printf '%s' \"\$rules_neither\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "a code_scanning rule for another tool is caught" "CodeQL not enforced" "printf '%s' \"\$rules_other_tool\" > \"$api/repos/o/r/rules/branches/main.json\""
 
 # --project separate from --root, expectations from --ruleset
 sub="$work/sub"; rm -rf "$sub"; cp -R "$good" "$sub"; mkdir -p "$sub/app"; mv "$sub/pyproject.toml" "$sub/uv.lock" "$sub/.copier-answers.yml" "$sub/Dockerfile" "$sub/.dockerignore" "$sub/.env.example" "$sub/app/"; mv "$sub/src" "$sub/app/src"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$sub" --project app --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
-if grep -q "required checks dropped" <<<"$out" && grep -q "uv.lock committed" <<<"$out"; then ok "--project and --ruleset are honoured (ruleset's ten checks expected, project files found under app/)"
+if grep -q "required checks dropped" <<<"$out" && grep -q "uv.lock committed" <<<"$out"; then ok "--project and --ruleset are honoured (ruleset's nine checks expected, project files found under app/)"
 else bad "--project/--ruleset path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"

@@ -16,20 +16,25 @@ All notable changes to plinth. The format follows
   render the template at the tested tag (`coolbress/project-template@v2.18.0`),
   push `main`, labels, CodeQL, the ruleset, secret scanning, Dependabot,
   Actions allowlist (`coolbress/plinth/*`, SHA pins required), squash only, and
-  the first pull request, whose workflow must start. Any failure after creation
+  the first pull request, whose workflow must start; CodeQL is waited for too
+  (default setup must register its workflow before the push, and if CodeQL
+  still misses the pull request the summary names the re-push). Any failure after creation
   deletes the repository (best effort: a failed deletion prints the URL loudly).
   `scripts/with-admin-token.sh` for machines whose `gh` token is fine-grained.
-  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 51 cases) and
+  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 57 cases) and
   `tests/token-prompt-not-from-stdin.sh`.
 - CI: `ci / install` (real install on a clean runner) and `ci / docs`
   (markdownlint, link check, vocabulary gate, README vs tutorial).
 - Dependabot for GitHub Actions, so commit-SHA pins get reviewed bumps.
-- Reusable CI `python-ci.yml` with the ten required checks (`ci / pr-title`,
+- Reusable CI `python-ci.yml` with the nine required checks (`ci / pr-title`,
   `lint`, `typecheck`, `test`, `build`, `secrets`, `deps`, `diff-size`,
-  `floor-check` + `CodeQL`), the `ruleset.json` the door applies, the canary
-  project that runs the workflow in this repository's own CI, and the shared
-  floor checker `scripts/floor-check.py` (files, agent settings, and live
-  ruleset drift).
+  `floor-check`), the `ruleset.json` the door applies, which also requires
+  CodeQL through a code scanning rule rather than a check name (a name that
+  never reports locks the repository silently; the rule blocks with a reason
+  and on the alerts themselves; measured on plinth#5), the canary project that
+  runs the workflow in this repository's own CI, and the shared floor checker
+  `scripts/floor-check.py` (files, agent settings, live ruleset drift, and
+  CodeQL enforced as a rule or, for older repositories, as a check name).
 - This repository's own floor: `CONTRIBUTING.md`, `.gitattributes` (LF line
   endings, `uv.lock` folded in diffs) and `.claude/settings.json` (denies force
   push, `rm -rf`, `.env` reads and `gh` token reads for agent sessions).

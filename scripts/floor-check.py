@@ -367,6 +367,17 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
     ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
        f"{branch}: required checks dropped: {missing}")
 
+    # CodeQL is part of the floor whatever the ruleset names: the door requires
+    # it through a code_scanning rule (blocks with a reason, and on the alerts
+    # themselves); repositories created before workflows#109 require the
+    # `CodeQL` check name instead. Either holds the wall; neither does not.
+    tools = by_type.get("code_scanning", {}).get("parameters", {}).get("code_scanning_tools", [])
+    by_rule = any(t.get("tool") == "CodeQL" for t in tools)
+    by_name = "CodeQL" in have
+    ok(by_rule or by_name,
+       f"{branch}: CodeQL enforced ({'rule' if by_rule else 'check name'})",
+       f"{branch}: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name")
+
     ids = {r.get("ruleset_id") for r in rules if r.get("ruleset_source_type") == "Repository"}
     for rid in sorted(i for i in ids if i):
         rs = api(f"repos/{repo}/rulesets/{rid}", network)

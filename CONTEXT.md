@@ -7,7 +7,9 @@ from stay in the lab.
   enforces on `main`. An automated check, not a review: green means the
   asserted properties hold. Raised on GitHub, not in the plugin, so an agent cannot
   turn it off. Check names: `ci / pr-title`, `lint`, `typecheck`, `test`,
-  `build`, `secrets`, `deps`, `diff-size`, `floor-check`, plus `CodeQL`.
+  `build`, `secrets`, `deps`, `diff-size`, `floor-check`; CodeQL is required
+  as a code scanning rule, not as a check name, so a missing analysis blocks
+  with a reason instead of a check that never reports.
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
   the wall, opens the first pull request, and deletes the repository if any
   step after creation fails.
