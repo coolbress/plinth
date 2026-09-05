@@ -4,7 +4,8 @@ One meaning per term, in code, docs and issues. The Korean metaphors these came
 from stay in the lab.
 
 - **wall**: the required status checks and branch rules a repository's ruleset
-  enforces on `main`. Raised on GitHub, not in the plugin, so an agent cannot
+  enforces on `main`. An automated check, not a review: green means the
+  asserted properties hold. Raised on GitHub, not in the plugin, so an agent cannot
   turn it off. Check names: `ci / pr-title`, `lint`, `typecheck`, `test`,
   `build`, `secrets`, `deps`, `diff-size`, `floor-check`; CodeQL is required
   as a code scanning rule, not as a check name, so a missing analysis blocks
@@ -24,3 +25,8 @@ from stay in the lab.
   product is written to be understood without it.
 - **profile**: an opt-in plugin that adds hooks on top of the default install
   (`plinth-hooks`, not part of this version). The default install has no hooks.
+
+Terms not defined here (agent, harness, session, context window, automated
+check, automated review, human review, skill) follow the
+[AI Coding Dictionary](https://github.com/mattpocock/dictionary-of-ai-coding).
+plinth is not a harness; Claude Code is.
