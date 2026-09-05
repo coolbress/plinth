@@ -73,10 +73,18 @@
           {
             "context": "ci / floor-check",
             "integration_id": 15368
-          },
+          }
+        ]
+      }
+    },
+    {
+      "type": "code_scanning",
+      "parameters": {
+        "code_scanning_tools": [
           {
-            "context": "CodeQL",
-            "integration_id": 57789
+            "tool": "CodeQL",
+            "alerts_threshold": "errors",
+            "security_alerts_threshold": "high_or_higher"
           }
         ]
       }

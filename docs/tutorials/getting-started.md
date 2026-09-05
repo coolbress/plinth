@@ -11,7 +11,7 @@ and merge the pull request the generator opens for you.
 - Log in to GitHub with `gh auth login` (browser login). Do not export
   `GH_TOKEN`; an agent session can read the environment.
 - The repository will be **public**. Private repositories are not supported
-  yet: the required CodeQL check needs a GitHub Code Security license there.
+  yet: the wall requires CodeQL, which needs a GitHub Code Security license there.
 - The generated project is **Python (uv)**. Other languages are not produced
   by this version.
 - Optional but recommended: run `/sandbox` once in Claude Code. The generator

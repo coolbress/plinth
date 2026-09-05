@@ -28,6 +28,8 @@ case "$all" in
   "api /licenses/"*)                             step=license ;;
   *"/contents/copier.yml"*)                      step=choices ;;
   "api -X GET repos/"*"/actions/runs "*)          step=runs ;;
+  "api repos/"*"/actions/workflows"*)            step=workflows ;;
+  "api repos/"*"/commits/"*"/check-runs"*)       step=checkruns ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "repo create"*)                                step=create ;;
   "repo delete"*)                                step=delete ;;
@@ -60,6 +62,8 @@ case "$step" in
                    ok)      printf '.github/workflows/label.yml completed success\n.github/workflows/ci.yml queued null\n' ;;
                    startup) printf '.github/workflows/ci.yml completed startup_failure\n' ;;
                  esac ;;
+  workflows)     [ "${MOCK_CODEQL_WORKFLOW:-present}" = present ] && printf '.github/workflows/ci.yml\ndynamic/github-code-scanning/codeql\n' || printf '.github/workflows/ci.yml\n' ;;
+  checkruns)     printf 'ci / lint\nci / test\n'; [ "${MOCK_CODEQL:-present}" = present ] && printf 'CodeQL\nAnalyze (python)\n' ;;
 esac
 exit 0
 MOCK
@@ -184,6 +188,15 @@ for at in copier push codeql ruleset secret dependabot actions allowlist merge p
 done
 E="FAIL_AT=license" run license err yes yes "" -- probe --license=apache-2.0
 E="MOCK_RUNS=startup" run startup-failure err yes yes "failed at startup" -- probe
+# CodeQL default setup registers its workflow a minute or so after it is enabled;
+# a push before that is never analysed (measured: workflows#109). The wall still
+# stands, so no analysis on the first pull request warns and names the re-push;
+# it does not delete the repository.
+E="MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=1" run codeql-absent ok yes no "warning: CodeQL has not picked up the first pull request" -- probe
+if grep -q "git commit --allow-empty" "$work/home-codeql-absent/out"; then ok codeql-absent "the summary names the re-push"
+else bad codeql-absent "the summary does not name the re-push"; fi
+E="MOCK_CODEQL_WORKFLOW=missing PLINTH_FIRST_PR_WAIT=1" run codeql-late ok yes no "warning: CodeQL default setup has not registered its workflow" -- probe
+E="PLINTH_FIRST_PR_WAIT=soon" run wait-typo err no no "PLINTH_FIRST_PR_WAIT must be a whole number" -- probe
 E="FAIL_AT=ruleset MOCK_DELETE_FAILS=1" run delete-fails err yes yes "ROLLBACK FAILED: https://github.com/tester/probe EXISTS WITHOUT A WALL" -- probe
 
 echo "success: nothing is deleted, and the order is baseline, wall, first pull request"
@@ -193,6 +206,9 @@ check() { if eval "$2"; then ok none "$1"; else bad none "$1"; fi; }
 check "main is pushed before the ruleset, the pull request after it" \
   '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset pr " ]'
 check "CodeQL default setup precedes the ruleset" 'grep -E "code-scanning|/rulesets" "$log" | head -1 | grep -q code-scanning'
+check "the CodeQL workflow is awaited before the first pull request is pushed" \
+  '[ "$(grep -E "actions/workflows|^gh pr create" "$log" | sed -E "s/.*actions\/workflows.*/wf/; s/^gh pr create.*/pr/" | head -2 | tr "\n" " ")" = "wf pr " ]'
+check "the first pull request head is checked for a CodeQL check run" 'grep -q "/check-runs" "$log"'
 check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowed\[\]=coolbress/plinth/\*" "$log"'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the default branch is main" '[ "$("$REAL_GIT" -C "$proj" rev-parse --verify -q main)" != "" ]'
