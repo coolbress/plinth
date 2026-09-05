@@ -1,0 +1,27 @@
+# How GitHub groups the generated part of a release's notes. It groups by
+# label only, never by title; `label.yml` derives the label from the type in
+# the pull-request title, so nobody applies these by hand except `breaking`.
+#
+# This orders the index under the notes `scripts/make-release.sh` publishes.
+# The *why* above it is still written by a person: what a consumer has to do
+# is not in the commit log.
+changelog:
+  categories:
+    - title: Changes callers must act on
+      labels: [breaking]
+    - title: Features
+      labels: [feat]
+    - title: Fixes
+      labels: [fix]
+    - title: Documentation and decisions
+      labels: [docs]
+    - title: CI, build and dependencies
+      labels: [ci, build]
+    - title: Refactoring, performance and tests
+      labels: [refactor, perf, test, style]
+    - title: Chores
+      labels: [chore, revert]
+    # Without a catch-all an unlabelled pull request vanishes from the notes.
+    # Labelling is a convenience, not a check, so it can fail.
+    - title: Other
+      labels: ["*"]

@@ -1,6 +1,8 @@
 {
   "config": {
-    "MD013": false
+    "MD013": false,
+    // Keep a Changelog repeats "### Added" under every version; siblings must still differ.
+    "MD024": { "siblings_only": true }
   },
   "ignores": [
     ".scratch/**"

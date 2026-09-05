@@ -124,6 +124,9 @@ jobs:
       - name: The reviewer's instructions cannot be softened inside a reviewed pull request
         run: ./tests/pr-review-policy-pin.sh
 
+      - name: No release without a why and the tested template tag; both manifests move together
+        run: ./tests/make-release-guards.sh
+
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
   # and the README install block is the one the tutorial shows.
   docs:
