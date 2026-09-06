@@ -41,7 +41,7 @@ Three skills, prefixed `/plinth:`:
 
 | Skill | Does | Who can call it |
 | --- | --- | --- |
-| `new-project <owner>/<name>` | Creates a repository with the required checks enforced; deletes it if a check cannot be raised | You only |
+| `new-project <owner>/<name>` | Creates a repository with the required checks enforced; if a wall step fails it deletes the repository when the token allows and prints the URL when it cannot | You only |
 | `floor-check [owner/name]` | Reads an existing repository against the same floor the CI job checks, plus the live ruleset and this machine's sandbox; lists each miss with one fix; changes nothing | You or the agent |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 
@@ -64,7 +64,10 @@ terminal and keeps it off every command line.
 
 The install works end to end and CI proves it on a clean runner. `new-project`
 creates a repository with the wall up, or creates nothing (its failure paths
-run in CI against a mocked `gh`). `floor-check` runs the checker `ci / floor-check`
+run in CI against a mocked `gh`). Until `plinth-template` v1.0.0 ships, that
+repository's first pull request cannot merge: its wall requires
+`ci / floor-check`, which the interim template's CI does not report (see
+issues #46 and #47). `floor-check` runs the checker `ci / floor-check`
 runs, read-only. A third-party review check (`third-party / review`, Codex) is
 available as an optional check; see
 [docs/how-to/configure-the-third-party-reviewer.md](docs/how-to/configure-the-third-party-reviewer.md).

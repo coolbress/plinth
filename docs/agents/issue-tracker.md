@@ -55,4 +55,4 @@ Used by `/wayfinder`. A **map** is one issue; tickets are its **child** issues.
 - **Blocking**: GitHub native issue dependencies. `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`), not `#number` or `node_id`. Fallback: start the child body with `Blocked by: #<n>, #<n>`. Unblocked once every blocker is closed.
 - **Frontier query**: open children of the map with no open blocker and no assignee, first in map order.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
-- **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then one line (gist + link) under the map's Decisions-so-far.
+- **Resolve**: put the answer in the body (`## Findings`, `## Decision`, `## Outcome`; the body is the record, a comment is not), then `gh issue close <n>`, then one line (gist + link) under the map's Decisions-so-far.

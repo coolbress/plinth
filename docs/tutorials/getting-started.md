@@ -69,6 +69,11 @@ the wall`. Its change is one line appended to `README.md`:
 Made with [plinth](https://github.com/coolbress/plinth).
 ```
 
+> Interim (until `plinth-template` v1.0.0, #47): the wall requires
+> `ci / floor-check`, which the current template's CI does not report, so the
+> merge button stays blocked on this pull request. The rest of the journey is
+> unchanged.
+
 Open the pull request. The checks run for a few minutes. The merge button
 enables only when every required check is green; that is the wall, and nobody
 can push past it, including you.

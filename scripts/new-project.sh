@@ -58,6 +58,10 @@ fi
 
 stop() { printf '%s\n' "$@" >&2; exit 2; }
 warn() { printf 'warning: %s\n' "$1" >&2; }
+# Interim, tied to template_ref: the wall requires `ci / floor-check`, which
+# the template's CI at this tag does not report, so the first pull request
+# cannot merge until the template ships it (T2). Said up front, not after.
+warn "interim: the first pull request will not merge until plinth-template v1.0.0 (the wall requires ci / floor-check, which template $template_ref does not report)"
 below() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" != "$1" ]; }   # below <floor> <version>
 
 # ── 1 tools ──────────────────────────────────────────────────────────────
