@@ -81,9 +81,10 @@ what is left, not by the reviewer's severity label:
 | Only the maintainer can cause it, or hypothetical | Reply with the reason; no change |
 
 Budget: after the first review, two rounds of fixes. From the third round on,
-fix only the first row; everything else becomes an issue, answered on the
-thread with the link, and the pull request merges. Say on the thread what was
-not changed and why, so the next reader does not reopen it.
+fix only the first row; the second row becomes an issue, answered on the
+thread with the link; the third row still gets its reply and nothing else; and
+the pull request merges. Say on the thread what was not changed and why, so
+the next reader does not reopen it.
 
 The same rule bounds the code: a script guards outcomes that cannot be undone
 and documents the states that can. A reviewer asking for a guard on a
