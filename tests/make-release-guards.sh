@@ -123,7 +123,13 @@ is "no release yet"                not grep -q "release create" "$GH_LOG"
 echo "-- tag and release, after the merge"
 g switch -q main; g merge -q --ff-only "release/v$next"; g push -q origin main
 release_commit="$(g rev-parse HEAD)"
-g commit -q --allow-empty -m "feat: landed after the release pull request"; g push -q origin main
+g commit -q --allow-empty -m "feat: landed after the release pull request"
+python3 - "$repo/.claude-plugin/plugin.json" <<'PY'   # reorders the file: the version line is deleted and re-added unchanged
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1]); d = json.loads(p.read_text()); v = d.pop("version"); d["version"] = v
+p.write_text(json.dumps(d, indent=2) + "\n")
+PY
+g commit -q -am "chore: reorder plugin.json after the release"; g push -q origin main
 export VIEW_RC=0
 run "v$next" "$work/why.md";       check "an existing release is refused"                 no $?
 is "no second release"             not grep -q "release create" "$GH_LOG"

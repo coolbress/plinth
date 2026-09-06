@@ -72,8 +72,12 @@ current="$(version_in "$plugin")"
 if [ "$current" = "$ver" ] && [ "$(version_in "$market")" = "$ver" ] && grep -q "^## \[$ver\]" "$changelog"; then
   # The tag goes on the commit that set this version, not on HEAD: a pull
   # request merged after the release one is unreleased and must stay so.
-  release_commit="$(git log -1 --format=%H -G"\"version\": \"${ver//./\\.}\"" -- "$plugin")"
+  # -S (not -G): a later commit that reorders the file deletes and re-adds
+  # the unchanged line; only a change in the number of occurrences counts.
+  release_commit="$(git log -1 --format=%H -S"\"version\": \"$ver\"" -- "$plugin")"
   [ -n "$release_commit" ] || stop "no commit on main sets version $ver in plugin.json"
+  [ "$(git show "$release_commit:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')" = "$ver" ] \
+    || stop "the last commit touching version $ver removed it; nothing on main sets it"
   if tag_on_origin; then
     # A push that succeeded before a release that did not: pick up from here.
     # Read the remote tag without creating a local one.
