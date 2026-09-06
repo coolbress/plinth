@@ -22,6 +22,7 @@ The body is the record and stays canonical; comments are conversation, and
 a decision made in a comment is moved into the body. Add one triage label
 from [triage-labels.md](triage-labels.md): `needs-triage` by default,
 `ready-for-agent` when the issue is fully specified.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Multi-line bodies via heredoc.
