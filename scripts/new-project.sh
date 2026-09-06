@@ -210,10 +210,16 @@ git -C "$dir" push -q -u origin main
 
 # Labels: the PR-type labels the template's label workflow applies, `task` for
 # the issue form, and the five triage labels mattpocock-skills expects.
-{ for lbl in feat fix docs style refactor perf test build ci chore revert breaking; do echo "$lbl:ededed:PR title type"; done
-  echo "task:0052cc:One thing to build"
-  for lbl in needs-triage needs-info ready-for-agent ready-for-human wontfix; do echo "$lbl:c5def5:Triage (mattpocock-skills)"; done
-} | while IFS=: read -r lbl color desc; do
+# Fields are separated by `|`, not `:`: the wayfinder labels contain a colon.
+{ for lbl in feat fix docs style refactor perf test build ci chore revert breaking; do echo "$lbl|ededed|PR title type"; done
+  echo "task|0052cc|One thing to build"
+  for lbl in needs-triage needs-info ready-for-agent ready-for-human wontfix; do echo "$lbl|c5def5|Triage (mattpocock-skills)"; done
+  # The kinds of record the planning flow leaves behind (wayfinder maps and children, the spec).
+  echo "wayfinder:map|5319e7|A wayfinder map, the decision set for one goal"
+  echo "wayfinder:research|5319e7|A wayfinder child, facts gathered against sources"
+  echo "wayfinder:grilling|5319e7|A wayfinder child, a decision taken by questioning"
+  echo "spec|0e8a16|A spec the tickets are cut from"
+} | while IFS='|' read -r lbl color desc; do
   gh label create "$lbl" --repo "$repo" --color "$color" --description "$desc" >/dev/null 2>&1 || true
 done
 
