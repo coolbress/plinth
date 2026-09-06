@@ -63,6 +63,7 @@ run() { export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"; (cd "$repo" && "$repo/
 
 printf '## Why\n\nA reason a person wrote.\n\ntested with %s\n' "$template" > "$work/why.md"
 printf 'tested with %s\n' "$template" > "$work/only-tested.md"
+printf '## Why\n\ntested with %s\n' "$template" > "$work/heading-only.md"
 printf '## Why\n\nA reason.\n' > "$work/no-tested.md"
 printf '## Why\n\nA reason.\n\ntested with %s v0.0.0-not-the-pin\n' "${template%% *}" > "$work/wrong-tested.md"
 printf '## Why\n\nA reason.\n\nnot tested with %s (failed)\n' "$template" > "$work/padded-tested.md"
@@ -80,6 +81,7 @@ run "v$next" "$work/no-tested.md";    check "notes without the tested-template l
 run "v$next" "$work/wrong-tested.md"; check "a tested-template line naming another tag is refused"  no $?
 run "v$next" "$work/padded-tested.md"; check "the tested-template line must be the whole line"  no $?
 run "v$next" "$work/only-tested.md";  check "the tested-template line alone is not a why"           no $?
+run "v$next" "$work/heading-only.md"; check "a heading over the tested line is not a why either"     no $?
 is "nothing changed" untouched
 is "gh release create was never called" not grep -q "release create" "$work"/log.*
 
@@ -124,12 +126,13 @@ echo "-- tag and release, after the merge"
 g switch -q main; g merge -q --ff-only "release/v$next"; g push -q origin main
 release_commit="$(g rev-parse HEAD)"
 g commit -q --allow-empty -m "feat: landed after the release pull request"
-python3 - "$repo/.claude-plugin/plugin.json" <<'PY'   # reorders the file: the version line is deleted and re-added unchanged
+python3 - "$repo/.claude-plugin/plugin.json" <<'PY'   # reorders the file (the version line is deleted and re-added unchanged) and puts the same string in a dependency
 import json, pathlib, sys
 p = pathlib.Path(sys.argv[1]); d = json.loads(p.read_text()); v = d.pop("version"); d["version"] = v
+d["dependencies"].append({"name": "unrelated", "marketplace": "elsewhere", "version": v})
 p.write_text(json.dumps(d, indent=2) + "\n")
 PY
-g commit -q -am "chore: reorder plugin.json after the release"; g push -q origin main
+g commit -q -am "chore: reorder plugin.json and add a dependency after the release"; g push -q origin main
 export VIEW_RC=0
 run "v$next" "$work/why.md";       check "an existing release is refused"                 no $?
 is "no second release"             not grep -q "release create" "$GH_LOG"

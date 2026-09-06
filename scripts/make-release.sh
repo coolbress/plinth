@@ -40,8 +40,9 @@ tested="tested with ${template_repo##*/} ${template_ref}"
 grep -qxF -- "$tested" "$notes" \
   || stop "the notes must say what this release was tested with, on one line, exactly:" "  $tested" \
           "(the tag the door pins in scripts/new-project.sh; change the pin first if it is not the one you tested)"
-[ -n "$(grep -vF -- "$tested" "$notes" | tr -d '[:space:]')" ] \
-  || stop "the notes say nothing but the tested line: write why this release exists"
+# Prose, not structure: a heading alone is not a why.
+[ -n "$(grep -vF -- "$tested" "$notes" | grep -vE '^[[:space:]]*#' | tr -d '[:space:]')" ] \
+  || stop "the notes say nothing but the tested line and headings: write why this release exists"
 
 # -- where we are: a clean main that equals origin/main ----------------------
 cd "$root"
@@ -71,13 +72,18 @@ current="$(version_in "$plugin")"
 # -- run 2: the files already say this version; tag and publish -------------
 if [ "$current" = "$ver" ] && [ "$(version_in "$market")" = "$ver" ] && grep -q "^## \[$ver\]" "$changelog"; then
   # The tag goes on the commit that set this version, not on HEAD: a pull
-  # request merged after the release one is unreleased and must stay so.
-  # -S (not -G): a later commit that reorders the file deletes and re-adds
-  # the unchanged line; only a change in the number of occurrences counts.
-  release_commit="$(git log -1 --format=%H -S"\"version\": \"$ver\"" -- "$plugin")"
+  # request merged after the release one is unreleased and must stay so. The
+  # release commit is the newest one whose top-level version is this one while
+  # its parent's is not; neither -G (a reorder re-adds the line) nor -S (the
+  # string may appear in a dependency) says that.
+  version_at() { git show "$1:.claude-plugin/plugin.json" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null || true; }
+  release_commit=""
+  for c in $(git log --format=%H -- "$plugin"); do
+    [ "$(version_at "$c")" = "$ver" ] || continue
+    [ "$(version_at "$c^")" != "$ver" ] || continue
+    release_commit="$c"; break
+  done
   [ -n "$release_commit" ] || stop "no commit on main sets version $ver in plugin.json"
-  [ "$(git show "$release_commit:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')" = "$ver" ] \
-    || stop "the last commit touching version $ver removed it; nothing on main sets it"
   if tag_on_origin; then
     # A push that succeeded before a release that did not: pick up from here.
     # Read the remote tag without creating a local one.
