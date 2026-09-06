@@ -170,6 +170,11 @@ run "v$next" "$work/why.md";       check "a local tag on the release commit is p
 is "the tag reached origin"        [ "$(git -C "$origin" rev-parse "v$next^{commit}")" = "$release_commit" ]
 is "the release was created"       grep -q "release create" "$GH_LOG"
 
+echo "-- a shallow clone"
+git clone -q --depth 1 "file://$origin" "$work/shallow"
+(cd "$work/shallow" && GH_LOG="$work/log.shallow" "$work/shallow/scripts/make-release.sh" "v${next%.*}.1" "$work/why.md") >/dev/null 2>&1
+check "a shallow clone is refused before anything is read" no $?
+
 echo "-- a tag that already exists elsewhere"
 git -C "$origin" tag "v${next%.*}.9" "main~1"
 run "v${next%.*}.9" "$work/why.md"; check "a number whose tag exists on origin is not bumped to" no $?

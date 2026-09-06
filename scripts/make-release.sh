@@ -50,6 +50,8 @@ cd "$root"
 # and nothing here commits or tags an untracked file.
 [ -z "$(git status --porcelain --untracked-files=no)" ] || stop "the working tree has uncommitted changes"
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || stop "run this from main (a release starts and ends there)"
+# Run 2 reads parents to find the release commit; a shallow boundary would pass for one.
+[ "$(git rev-parse --is-shallow-repository)" = false ] || stop "shallow clone; 'git fetch --unshallow' first"
 git fetch -q origin main
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || stop "main is not at origin/main; pull or push first"
 # gh exits 1 for "not found" and for a failed query alike; only the former is "no release".
