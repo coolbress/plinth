@@ -40,9 +40,9 @@ tested="tested with ${template_repo##*/} ${template_ref}"
 grep -qxF -- "$tested" "$notes" \
   || stop "the notes must say what this release was tested with, on one line, exactly:" "  $tested" \
           "(the tag the door pins in scripts/new-project.sh; change the pin first if it is not the one you tested)"
-# Prose, not structure: a heading alone is not a why.
-[ -n "$(grep -vF -- "$tested" "$notes" | grep -vE '^[[:space:]]*#' | tr -d '[:space:]')" ] \
-  || stop "the notes say nothing but the tested line and headings: write why this release exists"
+# Prose, not structure: headings and rules are not a why; letters are.
+[ -n "$(grep -vF -- "$tested" "$notes" | grep -vE '^[[:space:]]*#' | tr -cd '[:alpha:]')" ] \
+  || stop "the notes say nothing but the tested line and markup: write why this release exists"
 
 # -- where we are: a clean main that equals origin/main ----------------------
 cd "$root"
@@ -91,7 +91,13 @@ if [ "$current" = "$ver" ] && [ "$(version_in "$market")" = "$ver" ] && grep -q 
     [ "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$release_commit" ] \
       || stop "$tag already exists on origin and points elsewhere; tags are not moved"
   else
-    git tag -a -m "$tag" "$tag" "$release_commit"
+    if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+      # Left behind by a push that failed: reuse it if it is the right one.
+      [ "$(git rev-parse "$tag^{commit}")" = "$release_commit" ] \
+        || stop "a local $tag points elsewhere; 'git tag -d $tag', then run again"
+    else
+      git tag -a -m "$tag" "$tag" "$release_commit"
+    fi
     git push -q origin "refs/tags/$tag"
   fi
   # --verify-tag: without it gh creates a missing tag silently, and a typo ships.

@@ -64,6 +64,7 @@ run() { export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"; (cd "$repo" && "$repo/
 printf '## Why\n\nA reason a person wrote.\n\ntested with %s\n' "$template" > "$work/why.md"
 printf 'tested with %s\n' "$template" > "$work/only-tested.md"
 printf '## Why\n\ntested with %s\n' "$template" > "$work/heading-only.md"
+printf '## Why\n\n---\n\ntested with %s\n' "$template" > "$work/markup-only.md"
 printf '## Why\n\nA reason.\n' > "$work/no-tested.md"
 printf '## Why\n\nA reason.\n\ntested with %s v0.0.0-not-the-pin\n' "${template%% *}" > "$work/wrong-tested.md"
 printf '## Why\n\nA reason.\n\nnot tested with %s (failed)\n' "$template" > "$work/padded-tested.md"
@@ -82,6 +83,7 @@ run "v$next" "$work/wrong-tested.md"; check "a tested-template line naming anoth
 run "v$next" "$work/padded-tested.md"; check "the tested-template line must be the whole line"  no $?
 run "v$next" "$work/only-tested.md";  check "the tested-template line alone is not a why"           no $?
 run "v$next" "$work/heading-only.md"; check "a heading over the tested line is not a why either"     no $?
+run "v$next" "$work/markup-only.md";  check "a heading and a rule are not a why either"              no $?
 is "nothing changed" untouched
 is "gh release create was never called" not grep -q "release create" "$work"/log.*
 
@@ -156,6 +158,16 @@ is "no release on a misplaced tag" not grep -q "release create" "$GH_LOG"
 git -C "$origin" tag -d "v$next" >/dev/null
 g tag -a -m "v$next" "v$next" "$release_commit"; g push -q origin "v$next"; g tag -d "v$next" >/dev/null   # pushed from another machine
 run "v$next" "$work/why.md";       check "an existing tag on the release commit is reused" ok $?
+is "the release was created"       grep -q "release create" "$GH_LOG"
+
+echo "-- a local tag left by a failed push"
+git -C "$origin" tag -d "v$next" >/dev/null
+g tag -a -m "v$next" "v$next" main                     # wrong commit
+run "v$next" "$work/why.md";       check "a local tag that points elsewhere is refused"    no $?
+is "nothing pushed"                not git -C "$origin" show-ref --quiet "refs/tags/v$next"
+g tag -d "v$next" >/dev/null; g tag -a -m "v$next" "v$next" "$release_commit"   # the push failed last time
+run "v$next" "$work/why.md";       check "a local tag on the release commit is pushed and reused" ok $?
+is "the tag reached origin"        [ "$(git -C "$origin" rev-parse "v$next^{commit}")" = "$release_commit" ]
 is "the release was created"       grep -q "release create" "$GH_LOG"
 
 echo "-- a tag that already exists elsewhere"
