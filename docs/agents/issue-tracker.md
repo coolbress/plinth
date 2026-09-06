@@ -16,7 +16,7 @@ form's label yourself.
 | --- | --- | --- |
 | A request from anyone | Bug (`bug`), Feature request (`enhancement`) | The form's fields: what happened, steps, expected, environment, logs; or what you are blocked on, how you would like it, what you tried |
 | A task, one thing to build | Task (`task`) | `## Parent`, `## What to build`, `## Acceptance criteria`, `## Not building`, `## Blocked by`; while open, decisions go under `## Decisions` (dated) and the result under `## Outcome` |
-| A record: research, a decision, a map, a spec | blank issue, no label | `## Question`, `## Findings`, `## Decision`, `## Used by` for research; the map and the spec keep their own shape |
+| A record: research, a decision, a map, a spec | blank issue, no form label (the wayfinder labels below and the triage label still apply) | `## Question`, `## Findings`, `## Decision`, `## Used by` for research; the map and the spec keep their own shape |
 
 The body is the record and stays canonical; comments are conversation, and
 a decision made in a comment is moved into the body. Add one triage label
