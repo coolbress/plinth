@@ -360,6 +360,16 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
         result("FAIL" if meta is ABSENT else "INFO", f"could not read repos/{repo}")
         return
     branch = meta.get("default_branch", "main")
+    # The squash commit is the pull request (title and description), not a
+    # list of the branch's commits. The door sets it; a button merge in the
+    # web UI uses it. The fields are visible to a token with push access.
+    title, msg = meta.get("squash_merge_commit_title"), meta.get("squash_merge_commit_message")
+    if title is None and msg is None:
+        result("INFO", "squash commit settings not visible with this token (a push-access token sees them)")
+    else:
+        ok(title == "PR_TITLE" and msg == "PR_BODY",
+           "squash commits carry the pull request title and description",
+           f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
     if rules is ERROR:
         result("INFO", f"could not read the rules of {branch} (API error)")
