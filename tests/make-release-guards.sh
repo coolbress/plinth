@@ -95,6 +95,12 @@ g branch -q "release/v$next"
 run "v$next" "$work/why.md";       check "a leftover release/v$next branch is refused"  no $?
 is "the manifests were not rewritten first" [ "$(version_in plugin.json)" = "$current" ]
 g branch -q -D "release/v$next"
+# The same leftover on origin only (a fresh clone): caught before the files change, not at the push.
+git -C "$origin" branch -q "release/v$next" main
+run "v$next" "$work/why.md";       check "a release/v$next branch on origin only is refused"  no $?
+is "the manifests were not rewritten first (origin-only leftover)" [ "$(version_in plugin.json)" = "$current" ]
+is "still on main (origin-only leftover)" [ "$(g rev-parse --abbrev-ref HEAD)" = main ]
+git -C "$origin" branch -q -D "release/v$next"
 g remote set-url origin "$work/nowhere.git"
 run "v$next" "$work/why.md";       check "an origin that cannot be reached stops it (the fetch), nothing is read as 'no tag'" no $?
 g remote set-url origin "$origin"
