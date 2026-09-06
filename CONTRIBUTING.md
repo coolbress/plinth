@@ -27,7 +27,8 @@ Everything else runs offline in seconds.
 3. Open a pull request as a draft; mark it ready when it is. The description
    becomes the body of the squash commit, so write it as one: what changed and
    why, how it was verified, and, when AI wrote or assisted, the
-   `Assisted-by:` trailer as the last line. CI runs `ci / install`,
+   `Assisted-by:` trailer as the last line. Delete the template's comment
+   line: GitHub keeps HTML comments in the squash message. CI runs `ci / install`,
    `ci / tools`, `ci / docs` and `CodeQL`; the canary job runs the reusable
    workflow against `canary/`. `third-party / review` waits for a review by
    the Codex reviewer once the pull request is ready; it is optional and does
