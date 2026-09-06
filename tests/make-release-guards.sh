@@ -18,7 +18,8 @@ cat > "$work/bin/gh" <<'MOCK'
 set -u
 printf 'gh %s\n' "$*" >> "$GH_LOG"
 case "$*" in
-  "release view"*)   exit "${VIEW_RC:-1}" ;;   # default: no release yet
+  "release view"*)   case "${VIEW_RC:-1}" in 0) ;; 1) echo "release not found" >&2 ;; *) echo "error connecting to api.github.com" >&2 ;; esac
+                     exit "${VIEW_RC:-1}" ;;   # default: no release yet, as gh reports it
   "release create"*) exit 0 ;;
 esac
 exit 0
@@ -56,7 +57,7 @@ is() { # <name> <condition...>
 }
 not() { ! "$@"; }
 version_in() { python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("version"))' "$repo/.claude-plugin/$1"; }
-untouched() { [ -z "$(g status --porcelain)" ] && [ "$(g rev-parse --abbrev-ref HEAD)" = main ]; }
+untouched() { [ -z "$(g status --porcelain --untracked-files=no)" ] && [ "$(g rev-parse --abbrev-ref HEAD)" = main ]; }
 
 run() { export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"; (cd "$repo" && "$repo/scripts/make-release.sh" "$@") >"$work/out" 2>&1; }
 
@@ -83,9 +84,16 @@ is "nothing changed" untouched
 is "gh release create was never called" not grep -q "release create" "$work"/log.*
 
 echo "-- where it runs"
-echo x > "$repo/dirty"
-run "v$next" "$work/why.md";       check "a dirty tree is refused"                    no $?
-rm "$repo/dirty"
+echo x >> "$repo/CHANGELOG.md"
+run "v$next" "$work/why.md";       check "an uncommitted change to a tracked file is refused" no $?
+g checkout -q -- CHANGELOG.md
+g branch -q "release/v$next"
+run "v$next" "$work/why.md";       check "a leftover release/v$next branch is refused"  no $?
+is "the manifests were not rewritten first" [ "$(version_in plugin.json)" = "$current" ]
+g branch -q -D "release/v$next"
+g remote set-url origin "$work/nowhere.git"
+run "v$next" "$work/why.md";       check "an origin that cannot be reached stops it (the fetch), nothing is read as 'no tag'" no $?
+g remote set-url origin "$origin"
 g switch -q -c other
 run "v$next" "$work/why.md";       check "a branch other than main is refused"        no $?
 g switch -q main; g branch -q -D other
@@ -100,13 +108,14 @@ is "nothing changed" untouched
 echo "-- bump"
 run "v${current%%.*}.0.0" "$work/why.md"; check "a version not above the current one is refused" no $?
 is "nothing changed" untouched
-run "v$next" "$work/why.md";       check "a higher version bumps"                         ok $?
+cp "$work/why.md" "$repo/notes.md"   # untracked, inside the checkout, as CONTRIBUTING shows
+run "v$next" "$repo/notes.md";     check "a higher version bumps (notes untracked in the checkout)" ok $?
 is "plugin.json moved"             [ "$(version_in plugin.json)" = "$next" ]
 is "marketplace.json moved with it" [ "$(version_in marketplace.json)" = "$next" ]
 is "CHANGELOG got the section"     grep -q "^## \[$next\] - $(date +%Y-%m-%d)$" "$repo/CHANGELOG.md"
 is "CHANGELOG keeps Unreleased above it" bash -c 'grep -n "^## \[" "$1" | head -2 | tr "\n" " " | grep -q "Unreleased.*\[$2\]"' _ "$repo/CHANGELOG.md" "$next"
 is "committed on release/v$next"   [ "$(g rev-parse --abbrev-ref HEAD)" = "release/v$next" ]
-is "the tree is clean after the commit" [ -z "$(g status --porcelain)" ]
+is "the tree is clean after the commit" [ -z "$(g status --porcelain --untracked-files=no)" ]
 is "the commit title is chore(release): v$next" [ "$(g log -1 --format=%s)" = "chore(release): v$next" ]
 is "no tag yet"                    [ -z "$(g tag -l)" ]
 is "no release yet"                not grep -q "release create" "$GH_LOG"
@@ -116,6 +125,10 @@ g switch -q main; g merge -q --ff-only "release/v$next"; g push -q origin main
 export VIEW_RC=0
 run "v$next" "$work/why.md";       check "an existing release is refused"                 no $?
 is "no second release"             not grep -q "release create" "$GH_LOG"
+export VIEW_RC=4
+run "v$next" "$work/why.md";       check "a failed release query is refused, not read as 'no release'" no $?
+is "no release on a failed query"  not grep -q "release create" "$GH_LOG"
+is "no tag on a failed query"      [ -z "$(git -C "$origin" tag -l)" ]
 unset VIEW_RC
 run "v$next" "$work/why.md";       check "from the merged main it tags and releases"      ok $?
 is "the tag is on origin"          git -C "$origin" show-ref --verify --quiet "refs/tags/v$next"

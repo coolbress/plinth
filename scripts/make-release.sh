@@ -45,20 +45,32 @@ grep -qxF -- "$tested" "$notes" \
 
 # -- where we are: a clean main that equals origin/main ----------------------
 cd "$root"
-[ -z "$(git status --porcelain)" ] || stop "the working tree is not clean"
+# Tracked files only: the notes file usually sits in the checkout, untracked,
+# and nothing here commits or tags an untracked file.
+[ -z "$(git status --porcelain --untracked-files=no)" ] || stop "the working tree has uncommitted changes"
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || stop "run this from main (a release starts and ends there)"
 git fetch -q origin main
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || stop "main is not at origin/main; pull or push first"
-if gh release view "$tag" >/dev/null 2>&1; then
+# gh exits 1 for "not found" and for a failed query alike; only the former is "no release".
+if out="$(gh release view "$tag" 2>&1)"; then
   stop "release $tag already exists; 'gh release edit $tag' changes it"
+elif ! grep -qi 'not found' <<<"$out"; then
+  stop "cannot query releases: $out"
 fi
 
 version_in() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version", ""))' "$1"; }
+# `--exit-code` is 2 when the ref is absent; a transport or auth failure is
+# another status and must not read as "absent".
+tag_on_origin() {
+  local rc=0
+  git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1 || rc=$?
+  case "$rc" in 0) return 0 ;; 2) return 1 ;; *) stop "cannot list origin's tags (git ls-remote exit $rc); nothing changed" ;; esac
+}
 current="$(version_in "$plugin")"
 
 # -- run 2: the files already say this version; tag and publish -------------
 if [ "$current" = "$ver" ] && [ "$(version_in "$market")" = "$ver" ] && grep -q "^## \[$ver\]" "$changelog"; then
-  if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+  if tag_on_origin; then
     # A push that succeeded before a release that did not: pick up from here.
     # The fetch fails on a local tag of the same name that differs; good.
     git fetch -q origin "refs/tags/$tag:refs/tags/$tag"
@@ -77,10 +89,13 @@ fi
 # -- run 1: bump both manifests and the changelog, commit on a branch --------
 [ "$(printf '%s\n%s\n' "$current" "$ver" | sort -V | tail -1)" = "$ver" ] && [ "$current" != "$ver" ] \
   || stop "$ver is not above the current version $current"
-if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+if tag_on_origin; then
   stop "$tag already exists on origin; a number is used once"
 fi
 grep -q '^## \[Unreleased\]$' "$changelog" || stop "CHANGELOG.md has no '## [Unreleased]' section to release from"
+# The branch first: a leftover release/vX.Y.Z from an abandoned attempt stops
+# here, before any file changes.
+git switch -q -c "release/$tag"
 
 python3 - "$plugin" "$market" "$changelog" "$ver" "$(date +%Y-%m-%d)" <<'PY'
 import json, pathlib, sys
@@ -93,7 +108,6 @@ p = pathlib.Path(changelog)
 p.write_text(p.read_text().replace("## [Unreleased]\n", f"## [Unreleased]\n\n## [{ver}] - {today}\n", 1))
 PY
 
-git switch -q -c "release/$tag"
 git add "$plugin" "$market" "$changelog"
 git commit -q -m "chore(release): $tag"
 cat <<MSG

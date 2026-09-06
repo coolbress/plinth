@@ -47,9 +47,11 @@ scripts/make-release.sh v0.5.0 notes.md   # 2: pushes the tag and creates the Gi
 ```
 
 The script refuses an empty notes file, a notes file without the tested line,
-a version that is not above the current one, a tag that already exists, and
-anything that is not a clean `main` equal to `origin/main`. Installers get the
-release with `claude plugin update plinth`; third-party marketplaces do not
+a version that is not above the current one, a tag or release that already
+exists, a leftover `release/vX.Y.Z` branch, and any `main` that has
+uncommitted changes to tracked files or differs from `origin/main` (the
+untracked notes file in the checkout is fine). Installers get the release
+with `claude plugin update plinth`; third-party marketplaces do not
 auto-update by default.
 
 ## What a change must keep true
