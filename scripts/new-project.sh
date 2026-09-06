@@ -221,7 +221,7 @@ done
 # CodeQL first: the ruleset requires CodeQL results through a code_scanning
 # rule, so nothing merges until CodeQL has analysed the pull request. Default
 # setup registers its workflow a minute or so after it is enabled, and a push
-# before that is never analysed (measured on coolbress/plinth#5, workflows#109);
+# before that is never analysed (measured on coolbress/plinth#5, #41);
 # enabling it here, before the rest of the wall, spends that minute usefully.
 # The first pull request below waits for the registration before it pushes.
 gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default >/dev/null
@@ -237,8 +237,8 @@ gh api -X PUT "repos/$repo/automated-security-fixes" >/dev/null
 # Actions: SHA pins required, and only GitHub-owned actions plus plinth's own
 # reusable workflow may run. Without `coolbress/plinth/*` the first CI run dies
 # with startup_failure, no check name ever reports, and the repository is locked.
-# Interim, tied to template_ref: v2.18.0's ci.yml and label.yml still call
-# coolbress/workflows, which uses setup-uv. Both patterns go with the next tag.
+# Interim, tied to template_ref: v2.18.0's ci.yml and label.yml still call the
+# earlier CI repository, which uses setup-uv. Both patterns go with the next tag.
 gh api -X PUT "repos/$repo/actions/permissions" -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true >/dev/null
 gh api -X PUT "repos/$repo/actions/permissions/selected-actions" \
   -F github_owned_allowed=true -F verified_allowed=false \
@@ -254,7 +254,7 @@ gh api "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=
 # so the wall would never open. That is a wall failure, and it rolls back.
 # CodeQL must pick the pull request up as well: without an analysis the
 # code_scanning rule never opens. A push made seconds after default setup was
-# enabled is never analysed; one made minutes later is (workflows#109). The
+# enabled is never analysed; one made minutes later is (#41). The
 # listed `dynamic/github-code-scanning/codeql` workflow is the readiness signal
 # used here; it exists once setup is registered, though its timing against the
 # first analysis is inferred, not measured. Missing it only costs the wait.

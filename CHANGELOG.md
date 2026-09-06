@@ -9,6 +9,14 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Issues #14 to #70 (the productisation map, its research and decision
+  issues, the spec and its tickets) were moved into this repository on
+  2026-09-06 with their comments. Commit messages from before that date cite
+  them by their old numbers in the earlier repository; for #84 and up the new
+  number is the old one minus 68, and the full table is pinned on #31.
+
 ### Added
 
 - `scripts/make-release.sh`: one command, run twice. From an up-to-date `main`

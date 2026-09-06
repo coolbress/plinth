@@ -75,4 +75,5 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 - [CONTEXT.md](CONTEXT.md): the vocabulary (wall, door, box, floor, arsenal, lab, profile).
 - [plinth-lab](https://github.com/coolbress/plinth-lab): the evidence behind the rules. Optional.
 
-Rebuilt from `coolbress/workflows@0313cd9`, to be archived.
+Rebuilt in September 2026 from an earlier internal repository; its issues and
+decisions moved here (the map is #15, the spec #31).
