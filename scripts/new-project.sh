@@ -246,7 +246,10 @@ gh api -X PUT "repos/$repo/actions/permissions/selected-actions" \
   -f 'patterns_allowed[]=coolbress/workflows/*' \
   -f 'patterns_allowed[]=astral-sh/setup-uv@*' >/dev/null
 # Merge settings agree with the ruleset, or there is no merge button at all.
-gh api "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=false -F delete_branch_on_merge=true >/dev/null
+# The squash commit is the pull request: its title (checked by ci / pr-title)
+# and its description, not a list of the branch's commits (#72).
+gh api "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=false -F delete_branch_on_merge=true \
+  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY >/dev/null
 
 # ── the first pull request ───────────────────────────────────────────────
 # One line, the one the tutorial names. Its workflow must start: a run that

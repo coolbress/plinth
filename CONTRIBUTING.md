@@ -24,14 +24,16 @@ Everything else runs offline in seconds.
 2. Commit with a Conventional Commits title, `type(scope): summary`, using one
    of the eleven standard types. A commit made with AI carries the trailer
    `Assisted-by: <agent>:<model>` (see `AGENTS.md`).
-3. Open a pull request as a draft; mark it ready when it is. The template
-   asks what changed, how it was verified, and how AI was involved. CI runs
-   `ci / install`, `ci / tools`, `ci / docs` and `CodeQL`; the canary job runs
-   the reusable workflow against `canary/`. `third-party / review` waits for a
-   review by the Codex reviewer once the pull request is ready; it is optional
-   and does not block the merge.
-4. Merge when green. Squash is the only merge method and the branch is deleted
-   on merge.
+3. Open a pull request as a draft; mark it ready when it is. The description
+   becomes the body of the squash commit, so write it as one: what changed and
+   why, how it was verified, and, when AI wrote or assisted, the
+   `Assisted-by:` trailer as the last line. CI runs `ci / install`,
+   `ci / tools`, `ci / docs` and `CodeQL`; the canary job runs the reusable
+   workflow against `canary/`. `third-party / review` waits for a review by
+   the Codex reviewer once the pull request is ready; it is optional and does
+   not block the merge.
+4. Merge when green. Squash is the only merge method, the commit is the pull
+   request title and description, and the branch is deleted on merge.
 
 ## Cut a release
 

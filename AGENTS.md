@@ -20,10 +20,10 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 - Never skip a job with `if:`. Report a pass instead; a skipped job has no check name.
 - Product text is English. `.ko.md` translations are optional and never canonical.
 - A commit made with AI carries `Assisted-by: <agent>:<model>` (the Linux kernel's
-  form, e.g. `Assisted-by: Claude:claude-fable-5-1`). AI is never a `Co-Authored-By`
-  and adds no session trailer or link; the person who merges answers for every line.
-- A same-session `/code-review` helps but is not independent; say so when it
-  runs. `third-party / review` only records an accepted reviewer's signal on the commit.
+  form, e.g. `Assisted-by: Claude:claude-fable-5-1`), and so does the last line of the
+  pull request description, which becomes the squash commit. AI is never a
+  `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
+- A same-session `/code-review` helps but is not independent; say so. `third-party / review` only records an accepted reviewer's signal on the commit.
 
 ## Ask first
 

@@ -212,6 +212,7 @@ check "the CodeQL workflow is awaited before the first pull request is pushed" \
 check "the first pull request head is checked for a CodeQL check run" 'grep -q "/check-runs" "$log"'
 check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowed\[\]=coolbress/plinth/\*" "$log"'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
+check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
 check "the default branch is main" '[ "$("$REAL_GIT" -C "$proj" rev-parse --verify -q main)" != "" ]'
 check "the first pull request is one README line on docs/first-pr" \
   '[ "$("$REAL_GIT" -C "$proj" rev-parse --abbrev-ref HEAD)" = docs/first-pr ] && [ "$("$REAL_GIT" -C "$proj" diff --stat main docs/first-pr | tail -1 | grep -o "[0-9]* insertion")" = "1 insertion" ]'
