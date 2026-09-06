@@ -37,7 +37,7 @@ template_repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$root/scripts/new-p
 template_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 [ -n "$template_repo" ] && [ -n "$template_ref" ] || stop "cannot read template_repo/template_ref from scripts/new-project.sh"
 tested="tested with ${template_repo##*/} ${template_ref}"
-grep -qF -- "$tested" "$notes" \
+grep -qxF -- "$tested" "$notes" \
   || stop "the notes must say what this release was tested with, on one line, exactly:" "  $tested" \
           "(the tag the door pins in scripts/new-project.sh; change the pin first if it is not the one you tested)"
 [ -n "$(grep -vF -- "$tested" "$notes" | tr -d '[:space:]')" ] \

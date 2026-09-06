@@ -54,7 +54,7 @@ is() { # <name> <condition...>
   if "$@"; then pass=$((pass+1)); echo "  PASS  $name"
   else fail=$((fail+1)); echo "  FAIL  $name"; fi
 }
-gh_log_has() { grep -q -- "$1" "$GH_LOG" 2>/dev/null; }
+not() { ! "$@"; }
 version_in() { python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("version"))' "$repo/.claude-plugin/$1"; }
 untouched() { [ -z "$(g status --porcelain)" ] && [ "$(g rev-parse --abbrev-ref HEAD)" = main ]; }
 
@@ -64,6 +64,7 @@ printf '## Why\n\nA reason a person wrote.\n\ntested with %s\n' "$template" > "$
 printf 'tested with %s\n' "$template" > "$work/only-tested.md"
 printf '## Why\n\nA reason.\n' > "$work/no-tested.md"
 printf '## Why\n\nA reason.\n\ntested with %s v0.0.0-not-the-pin\n' "${template%% *}" > "$work/wrong-tested.md"
+printf '## Why\n\nA reason.\n\nnot tested with %s (failed)\n' "$template" > "$work/padded-tested.md"
 : > "$work/empty.md"
 
 echo "-- tag format"
@@ -76,9 +77,10 @@ run "v$next" "$work/missing.md";      check "a missing notes file is refused"   
 run "v$next" "$work/empty.md";        check "an empty notes file is refused"                        no $?
 run "v$next" "$work/no-tested.md";    check "notes without the tested-template line are refused"    no $?
 run "v$next" "$work/wrong-tested.md"; check "a tested-template line naming another tag is refused"  no $?
+run "v$next" "$work/padded-tested.md"; check "the tested-template line must be the whole line"  no $?
 run "v$next" "$work/only-tested.md";  check "the tested-template line alone is not a why"           no $?
 is "nothing changed" untouched
-is "gh release create was never called" bash -c '! grep -q "release create" "$work"/log.* 2>/dev/null'
+is "gh release create was never called" not grep -q "release create" "$work"/log.*
 
 echo "-- where it runs"
 echo x > "$repo/dirty"
@@ -107,13 +109,13 @@ is "committed on release/v$next"   [ "$(g rev-parse --abbrev-ref HEAD)" = "relea
 is "the tree is clean after the commit" [ -z "$(g status --porcelain)" ]
 is "the commit title is chore(release): v$next" [ "$(g log -1 --format=%s)" = "chore(release): v$next" ]
 is "no tag yet"                    [ -z "$(g tag -l)" ]
-is "no release yet"                bash -c '! grep -q "release create" "$GH_LOG"'
+is "no release yet"                not grep -q "release create" "$GH_LOG"
 
 echo "-- tag and release, after the merge"
 g switch -q main; g merge -q --ff-only "release/v$next"; g push -q origin main
 export VIEW_RC=0
 run "v$next" "$work/why.md";       check "an existing release is refused"                 no $?
-is "no second release"             bash -c '! grep -q "release create" "$GH_LOG"'
+is "no second release"             not grep -q "release create" "$GH_LOG"
 unset VIEW_RC
 run "v$next" "$work/why.md";       check "from the merged main it tags and releases"      ok $?
 is "the tag is on origin"          git -C "$origin" show-ref --verify --quiet "refs/tags/v$next"
@@ -125,7 +127,7 @@ echo "-- a pushed tag without a release resumes"
 g tag -d "v$next" >/dev/null; git -C "$origin" tag -d "v$next" >/dev/null
 g tag -a -m "v$next" "v$next"; g push -q origin "v$next"; g tag -d "v$next" >/dev/null   # pushed from another machine
 run "v$next" "$work/why.md";       check "an existing tag at HEAD is reused"              ok $?
-is "the release was created"       bash -c 'grep -q "release create" "$GH_LOG"'
+is "the release was created"       grep -q "release create" "$GH_LOG"
 
 echo "-- a tag that already exists elsewhere"
 git -C "$origin" tag "v${next%.*}.9" "main~1"
