@@ -70,19 +70,25 @@ current="$(version_in "$plugin")"
 
 # -- run 2: the files already say this version; tag and publish -------------
 if [ "$current" = "$ver" ] && [ "$(version_in "$market")" = "$ver" ] && grep -q "^## \[$ver\]" "$changelog"; then
+  # The tag goes on the commit that set this version, not on HEAD: a pull
+  # request merged after the release one is unreleased and must stay so.
+  release_commit="$(git log -1 --format=%H -G"\"version\": \"${ver//./\\.}\"" -- "$plugin")"
+  [ -n "$release_commit" ] || stop "no commit on main sets version $ver in plugin.json"
   if tag_on_origin; then
     # A push that succeeded before a release that did not: pick up from here.
-    # The fetch fails on a local tag of the same name that differs; good.
-    git fetch -q origin "refs/tags/$tag:refs/tags/$tag"
-    [ "$(git rev-parse "$tag^{commit}")" = "$(git rev-parse HEAD)" ] \
+    # Read the remote tag without creating a local one.
+    git fetch -q origin "refs/tags/$tag"
+    [ "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$release_commit" ] \
       || stop "$tag already exists on origin and points elsewhere; tags are not moved"
   else
-    git tag -a -m "$tag" "$tag"
+    git tag -a -m "$tag" "$tag" "$release_commit"
     git push -q origin "refs/tags/$tag"
   fi
   # --verify-tag: without it gh creates a missing tag silently, and a typo ships.
   gh release create "$tag" --verify-tag --notes-file "$notes" --generate-notes
-  echo "released $tag: the notes on top, the generated index under them"
+  echo "released $tag at ${release_commit:0:12}: the notes on top, the generated index under them"
+  [ "$release_commit" = "$(git rev-parse HEAD)" ] \
+    || echo "main has $(git rev-list --count "$release_commit..HEAD") later commit(s); they stay unreleased"
   exit 0
 fi
 

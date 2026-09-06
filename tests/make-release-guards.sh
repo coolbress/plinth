@@ -122,6 +122,8 @@ is "no release yet"                not grep -q "release create" "$GH_LOG"
 
 echo "-- tag and release, after the merge"
 g switch -q main; g merge -q --ff-only "release/v$next"; g push -q origin main
+release_commit="$(g rev-parse HEAD)"
+g commit -q --allow-empty -m "feat: landed after the release pull request"; g push -q origin main
 export VIEW_RC=0
 run "v$next" "$work/why.md";       check "an existing release is refused"                 no $?
 is "no second release"             not grep -q "release create" "$GH_LOG"
@@ -132,14 +134,19 @@ is "no tag on a failed query"      [ -z "$(git -C "$origin" tag -l)" ]
 unset VIEW_RC
 run "v$next" "$work/why.md";       check "from the merged main it tags and releases"      ok $?
 is "the tag is on origin"          git -C "$origin" show-ref --verify --quiet "refs/tags/v$next"
-is "the tag points at main"        [ "$(git -C "$origin" rev-parse "v$next^{commit}")" = "$(git -C "$origin" rev-parse main)" ]
+is "the tag points at the release commit" [ "$(git -C "$origin" rev-parse "v$next^{commit}")" = "$release_commit" ]
+is "not at the later main"         [ "$(git -C "$origin" rev-parse "v$next^{commit}")" != "$(git -C "$origin" rev-parse main)" ]
 is "gh release create --verify-tag --notes-file --generate-notes" bash -c 'grep -q -- "release create v$1 --verify-tag --notes-file .* --generate-notes" "$GH_LOG"' _ "$next"
 is "the tree is still clean"       untouched
 
 echo "-- a pushed tag without a release resumes"
 g tag -d "v$next" >/dev/null; git -C "$origin" tag -d "v$next" >/dev/null
-g tag -a -m "v$next" "v$next"; g push -q origin "v$next"; g tag -d "v$next" >/dev/null   # pushed from another machine
-run "v$next" "$work/why.md";       check "an existing tag at HEAD is reused"              ok $?
+g tag -a -m "v$next" "v$next" main; g push -q origin "v$next"; g tag -d "v$next" >/dev/null
+run "v$next" "$work/why.md";       check "a tag on origin that is not on the release commit is refused" no $?
+is "no release on a misplaced tag" not grep -q "release create" "$GH_LOG"
+git -C "$origin" tag -d "v$next" >/dev/null
+g tag -a -m "v$next" "v$next" "$release_commit"; g push -q origin "v$next"; g tag -d "v$next" >/dev/null   # pushed from another machine
+run "v$next" "$work/why.md";       check "an existing tag on the release commit is reused" ok $?
 is "the release was created"       grep -q "release create" "$GH_LOG"
 
 echo "-- a tag that already exists elsewhere"
