@@ -388,7 +388,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
 
     # CodeQL is part of the floor whatever the ruleset names: the door requires
     # it through a code_scanning rule (blocks with a reason, and on the alerts
-    # themselves); repositories created before workflows#109 require the
+    # themselves); repositories created before #41 require the
     # `CodeQL` check name instead. Either holds the wall; neither does not.
     tools = by_type.get("code_scanning", {}).get("parameters", {}).get("code_scanning_tools", [])
     by_rule = any(t.get("tool") == "CodeQL" for t in tools)

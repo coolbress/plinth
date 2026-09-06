@@ -53,7 +53,7 @@ chk 'every required check comes from the GitHub Actions app (15368)' \
 # CodeQL is required as a rule, not as a check name. A required name that never
 # reports (default setup off, or enabled after the first push) locks the
 # repository with no reason shown; the rule blocks with one, and it also blocks
-# on the alerts themselves. Measured on coolbress/plinth#5 (workflows#109).
+# on the alerts themselves. Measured on coolbress/plinth#5 (#41).
 chk 'CodeQL is required through the code_scanning rule' \
     '[.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[].tool]' '["CodeQL"]'
 chk 'code scanning blocks on error-level alerts and high or critical security alerts' \

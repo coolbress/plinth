@@ -83,7 +83,7 @@ wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\
 wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
 wall "no rules at all is caught" "the wall is down" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
 wall "invisible bypass actors are INFO, not a pass" "bypass actors not visible" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
-# CodeQL: enforced by the code_scanning rule (the door since workflows#109) or by
+# CodeQL: enforced by the code_scanning rule (the door since #41) or by
 # a `CodeQL` check name (repositories the door created before that). Either
 # passes; neither is the wall missing a stone.
 strip_name='map(if .type=="required_status_checks" then .parameters.required_status_checks |= map(select(.context!="CodeQL")) else . end)'

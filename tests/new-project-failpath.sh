@@ -190,7 +190,7 @@ done
 E="FAIL_AT=license" run license err yes yes "" -- probe --license=apache-2.0
 E="MOCK_RUNS=startup" run startup-failure err yes yes "failed at startup" -- probe
 # CodeQL default setup registers its workflow a minute or so after it is enabled;
-# a push before that is never analysed (measured: workflows#109). The wall still
+# a push before that is never analysed (measured: #41). The wall still
 # stands, so no analysis on the first pull request warns and names the re-push;
 # it does not delete the repository.
 E="MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=1" run codeql-absent ok yes no "warning: CodeQL has not picked up the first pull request" -- probe

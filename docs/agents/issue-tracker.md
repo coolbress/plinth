@@ -5,6 +5,16 @@ Issues, specs and tickets for plinth live in GitHub Issues on
 `setup-matt-pocock-skills` would create; it is pre-filled, so do not run that
 skill unless you change trackers. Original: mattpocock/skills, MIT.)
 
+## Issue forms
+
+Bug and feature forms are inherited from `coolbress/.github`. The CLI does not
+render a form, so write the body under the form's field labels as headings
+(feature: *What are you blocked on*, *How you would like it to work*, *What
+you tried instead*, *Anything else*; bug: the bug form's labels), add the
+form's label (`bug` or `enhancement`) and one triage label from
+[triage-labels.md](triage-labels.md): `needs-triage` by default,
+`ready-for-agent` when the issue is fully specified.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Multi-line bodies via heredoc.
@@ -18,7 +28,7 @@ skill unless you change trackers. Original: mattpocock/skills, MIT.)
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Change to `yes` to treat external PRs as feature requests; `/triage` reads this line.)_
+**PRs as a request surface: no.** *(Change to `yes` to treat external PRs as feature requests; `/triage` reads this line.))*
 
 ## When a skill says "publish to the issue tracker"
 
