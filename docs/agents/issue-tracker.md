@@ -5,14 +5,22 @@ Issues, specs and tickets for plinth live in GitHub Issues on
 `setup-matt-pocock-skills` would create; it is pre-filled, so do not run that
 skill unless you change trackers. Original: mattpocock/skills, MIT.)
 
-## Issue forms
+## Three kinds of issue
 
-Bug and feature forms are inherited from `coolbress/.github`. The CLI does not
-render a form, so write the body under the form's field labels as headings
-(feature: *What are you blocked on*, *How you would like it to work*, *What
-you tried instead*, *Anything else*; bug: the bug form's labels), add the
-form's label (`bug` or `enhancement`) and one triage label from
-[triage-labels.md](triage-labels.md): `needs-triage` by default,
+Forms are inherited from `coolbress/.github` (this repository has no local
+`ISSUE_TEMPLATE`, so all of them apply). The CLI does not render a form, so
+from `gh` write the body under the form's field labels as headings and add the
+form's label yourself.
+
+| Kind | Form and label | Shape |
+| --- | --- | --- |
+| A request from anyone | Bug (`bug`), Feature request (`enhancement`) | The form's fields: what happened, steps, expected, environment, logs; or what you are blocked on, how you would like it, what you tried |
+| A task, one thing to build | Task (`task`) | `## Parent`, `## What to build`, `## Acceptance criteria`, `## Not building`, `## Blocked by`; while open, decisions go under `## Decisions` (dated) and the result under `## Outcome` |
+| A record: research, a decision, a map, a spec | blank issue, no form label (the wayfinder labels below and the triage label still apply) | `## Question`, `## Findings`, `## Decision`, `## Used by` for research; the map and the spec keep their own shape |
+
+The body is the record and stays canonical; comments are conversation, and
+a decision made in a comment is moved into the body. Add one triage label
+from [triage-labels.md](triage-labels.md): `needs-triage` by default,
 `ready-for-agent` when the issue is fully specified.
 
 ## Conventions
