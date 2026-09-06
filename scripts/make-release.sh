@@ -69,6 +69,11 @@ tag_on_origin() {
   git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1 || rc=$?
   case "$rc" in 0) return 0 ;; 2) return 1 ;; *) stop "cannot list origin's tags (git ls-remote exit $rc); nothing changed" ;; esac
 }
+branch_on_origin() {
+  local rc=0
+  git ls-remote --exit-code --heads origin "refs/heads/release/$tag" >/dev/null 2>&1 || rc=$?
+  case "$rc" in 0) return 0 ;; 2) return 1 ;; *) stop "cannot list origin's branches (git ls-remote exit $rc); nothing changed" ;; esac
+}
 current="$(version_in "$plugin")"
 
 # -- run 2: the files already say this version; tag and publish -------------
@@ -118,7 +123,11 @@ if tag_on_origin; then
 fi
 grep -q '^## \[Unreleased\]$' "$changelog" || stop "CHANGELOG.md has no '## [Unreleased]' section to release from"
 # The branch first: a leftover release/vX.Y.Z from an abandoned attempt stops
-# here, before any file changes.
+# here, before any file changes. On origin too: a local `switch -c` would
+# succeed and the push would fail non-fast-forward after the files changed.
+if branch_on_origin; then
+  stop "release/$tag already exists on origin; finish that release or delete the branch first"
+fi
 git switch -q -c "release/$tag"
 
 python3 - "$plugin" "$market" "$changelog" "$ver" "$(date +%Y-%m-%d)" <<'PY'
