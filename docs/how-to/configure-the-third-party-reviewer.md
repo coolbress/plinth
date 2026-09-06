@@ -78,7 +78,12 @@ what is left, not by the reviewer's severity label:
 | --- | --- |
 | Irreversible, or reaches other people: a wrong tag or release, `main` polluted, a check name consumers require, a security hole | Fix before merging, whatever round it is |
 | Recoverable locally with one command (a leftover branch, a retry that fails) | Fix if it is a few lines and one test case; otherwise open an issue and merge |
-| Only the maintainer can cause it, or hypothetical | Reply with the reason; no change |
+| Only the maintainer can cause it, or hypothetical, and the consequence is not in the first row | Reply with the reason; no change |
+
+The first row wins whenever it applies: who can trigger a defect is independent
+of how far its consequence reaches. An important risk that cannot be judged
+yet is in no row: it stays open until another look classifies it, as the table
+above says, and the budget below does not merge past it.
 
 Budget: after the first review, two rounds of fixes. From the third round on,
 fix only the first row; the second row becomes an issue, answered on the
