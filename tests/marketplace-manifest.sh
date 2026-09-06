@@ -24,6 +24,9 @@ check("claude-plugins-official" in market.get("allowCrossMarketplaceDependencies
 check("userConfig" not in plugin, "plugin.json has no userConfig")
 check(entries["plinth"]["source"] == "./", "plinth entry mounts the repository root")
 check("version" not in entries["plinth"], "plinth entry carries no version; plugin.json is the single source")
+# The marketplace manifest's own version and the plugin's move together, in a
+# release only (scripts/make-release.sh, which also opens the CHANGELOG section).
+check(market.get("version") == plugin["version"], f"marketplace.json version equals plugin.json version ({plugin['version']})")
 
 deps = plugin["dependencies"]
 names = [d["name"] if isinstance(d, dict) else d for d in deps]

@@ -12,8 +12,8 @@ The commands are in [CONTRIBUTING.md](CONTRIBUTING.md#run-the-checks): three
 
 ## Always
 
-- Bump `version` in `.claude-plugin/plugin.json` when the plugin changes.
-  Installed copies are cached by version; a stale number ships nothing.
+- `version` moves only in a release: `scripts/make-release.sh vX.Y.Z <notes>` bumps both manifests,
+  then tags from the merged `main`; never bump it elsewhere. `tests/make-release-guards.sh` checks it.
 - Pin every third-party marketplace entry to a full commit SHA. Raising a pin is a pull request.
 - Keep the caller job named `ci` in `.github/workflows/ci.yml`. Check names are
   `ci / <job>` and rulesets require them by name. Renaming a `python-ci.yml`

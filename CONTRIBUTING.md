@@ -33,6 +33,28 @@ Everything else runs offline in seconds.
 4. Merge when green. Squash is the only merge method and the branch is deleted
    on merge.
 
+## Cut a release
+
+Write the notes first: why this release exists, in a file, plus one line
+`tested with <template> <tag>` naming the template tag `scripts/new-project.sh`
+pins (the script prints the exact line). Then, from an up-to-date `main`, run
+the same command twice:
+
+```bash
+scripts/make-release.sh v0.5.0 notes.md   # 1: bumps both manifests and CHANGELOG.md on release/v0.5.0
+# push the branch, open the pull request, merge it, pull main
+scripts/make-release.sh v0.5.0 notes.md   # 2: tags the merged release commit, creates the GitHub Release
+```
+
+The script refuses an empty notes file, a notes file without the tested line,
+a version that is not above the current one, a tag or release that already
+exists, a leftover `release/vX.Y.Z` branch, and any `main` that has
+uncommitted changes to tracked files or differs from `origin/main` (the
+untracked notes file in the checkout is fine). The tag goes on the commit
+that set the version, so a pull request merged after the release one stays
+unreleased. Installers get the release with `claude plugin update plinth`;
+third-party marketplaces do not auto-update by default.
+
 ## What a change must keep true
 
 - Check names are the contract with every consumer. `ci / <job>` in

@@ -1,11 +1,28 @@
 # Changelog
 
 All notable changes to plinth. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). A version is a
+`vX.Y.Z` tag on `main` plus a GitHub Release whose notes say why it exists and
+which template tag it was tested with; `scripts/make-release.sh` cuts one, and
+the version number moves only there. Numbers before the first tag were bumped
+inside pull requests and have no tag.
 
 ## [Unreleased]
 
 ### Added
+
+- `scripts/make-release.sh`: one command, run twice. From an up-to-date `main`
+  it bumps `plugin.json` and `marketplace.json` together and opens this file's
+  next section on a `release/vX.Y.Z` branch; from the merged `main` it pushes
+  the tag and creates the GitHub Release (notes on top, generated index under
+  them). It refuses an empty notes file, one without the
+  `tested with <template> <tag>` line naming the tag the door pins, a version
+  not above the current one, and an existing tag or release.
+  `tests/make-release-guards.sh` holds the guards.
+- `.github/release.yml`: the generated part of the release notes grouped by
+  pull-request type label.
+- `marketplace.json` carries the marketplace version, equal to the plugin's;
+  `tests/marketplace-manifest.sh` fails when they differ.
 
 - Plugin and marketplace manifests; the default plugin set as dependencies
   (`mattpocock-skills`, `frontend-design`, `last30days`, `ponytail-skills`)
@@ -62,3 +79,8 @@ All notable changes to plinth. The format follows
 - This repository's own floor: `CONTRIBUTING.md`, `.gitattributes` (LF line
   endings, `uv.lock` folded in diffs) and `.claude/settings.json` (denies force
   push, `rm -rf`, `.env` reads and `gh` token reads for agent sessions).
+
+### Changed
+
+- The plugin version moves in a release, not in every pull request that
+  touches the plugin (`AGENTS.md`).
