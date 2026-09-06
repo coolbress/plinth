@@ -66,6 +66,35 @@ An agent handling the findings does the same, and does not close the matter
 by asking "merge anyway?": the person merging should see what was found, what
 was fixed, and what is still open.
 
+## When to stop
+
+A model reviewer samples; it does not enumerate. Every fix is new surface, and
+a new head is a new review, so "until it finds nothing" is not a stopping
+rule. On one release script here it took seven rounds and thirteen findings,
+and the last four came from the fixes themselves. Stop by the consequence of
+what is left, not by the reviewer's severity label:
+
+| What is left | Do |
+| --- | --- |
+| Irreversible, or reaches other people: a wrong tag or release, `main` polluted, a check name consumers require, a security hole | Fix before merging, whatever round it is |
+| Recoverable locally with one command (a leftover branch, a retry that fails) | Fix if it is a few lines and one test case; otherwise open an issue and merge |
+| Only the maintainer can cause it, or hypothetical, and the consequence is not in the first row | Reply with the reason; no change |
+
+The first row wins whenever it applies: who can trigger a defect is independent
+of how far its consequence reaches. An important risk that cannot be judged
+yet is in no row: it stays open until another look classifies it, as the table
+above says, and the budget below does not merge past it.
+
+Budget: after the first review, two rounds of fixes. From the third round on,
+fix only the first row; the second row becomes an issue, answered on the
+thread with the link; the third row still gets its reply and nothing else; and
+the pull request merges. Say on the thread what was not changed and why, so
+the next reader does not reopen it.
+
+The same rule bounds the code: a script guards outcomes that cannot be undone
+and documents the states that can. A reviewer asking for a guard on a
+recoverable state gets the documentation, not the guard.
+
 ## 3. Make it part of the wall (optional)
 
 Once the check has reported on at least one pull request, add it to the
