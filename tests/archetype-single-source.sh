@@ -6,7 +6,11 @@
 # pass (a check that cannot fail is not a check).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-template="${TEMPLATE_REPO:-coolbress/project-template}"   # becomes coolbress/plinth-template with T1
+template="${TEMPLATE_REPO:-coolbress/plinth-template}"
+# The tag the door pins, not `main`: the checker must agree with what the door
+# actually renders. A template that moves ahead of the pin is not a failure here;
+# raising the pin brings its vocabulary into this check.
+ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$root/scripts/new-project.sh")}"
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
@@ -19,15 +23,15 @@ else ok "floor-check.py does not hardcode the archetype choices"; fi
 
 # 2. The conditional set equals what copier.yml's `_exclude` conditions name.
 # raw.githubusercontent.com needs no token for a public repository (CI runners have none in this job).
-copier="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/$template/main/copier.yml" 2>/dev/null)"
+copier="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/$template/$ref/copier.yml" 2>/dev/null)"
 if [ -z "$copier" ]; then
-  bad "could not read $template copier.yml; cannot verify the vocabulary"
+  bad "could not read $template@$ref copier.yml; cannot verify the vocabulary"
 else
   from_template="$(grep -o "archetype not in \[[^]]*\]" <<<"$copier" | head -1 | grep -o "'[a-z-]*'" | tr -d "'" | sort | tr '\n' ' ')"
   from_checker="$(python3 "$root/scripts/floor-check.py" --print-conditional-archetypes | tr ' ' '\n' | sort | tr '\n' ' ')"
   if [ -n "$from_template" ] && [ "$from_template" = "$from_checker" ]
-  then ok "conditional archetypes agree with $template copier.yml: $from_checker"
-  else bad "conditional archetypes differ: checker '$from_checker' vs template '$from_template'"; fi
+  then ok "conditional archetypes agree with $template@$ref copier.yml: $from_checker"
+  else bad "conditional archetypes differ: checker '$from_checker' vs $template@$ref '$from_template'"; fi
 fi
 
 echo "-- $pass passed, $fail failed"
