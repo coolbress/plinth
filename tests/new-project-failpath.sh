@@ -26,7 +26,6 @@ case "$all" in
   "api users/"*)                                 step=owner ;;
   "api orgs/"*"/memberships/"*)                  step=membership ;;
   "api /licenses/"*".spdx_id"*)                  step=license-check ;;
-  "api /licenses/"*)                             step=license ;;
   *"/contents/copier.yml"*)                      step=choices ;;
   "api -X GET repos/"*"/actions/runs "*)          step=runs ;;
   "api repos/"*"/actions/workflows"*)            step=workflows ;;
@@ -53,9 +52,8 @@ case "$step" in
   login)         echo tester ;;
   owner)         case "$all" in *users/nobody*) exit 1 ;; *users/someorg*) echo Organization ;; *) echo User ;; esac ;;
   membership)    [ "${MOCK_MEMBER:-1}" = 1 ] || exit 1; echo member ;;
-  license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *) exit 1 ;; esac ;;
-  license)       echo "MOCK LICENSE BODY" ;;
-  choices)       printf 'archetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nlicense:\n' | base64 ;;
+  license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *licenses/gpl-3.0*) echo GPL-3.0 ;; *) exit 1 ;; esac ;;
+  choices)       printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nplinth_sha:\n' | base64 ;;
   exists)        [ "${MOCK_EXISTS:-0}" = 1 ] || exit 1; echo "https://github.com/x/y" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
@@ -76,15 +74,16 @@ set -u
 printf 'uvx %s\n' "$*" >> "$GH_LOG"
 case "$*" in *copier*copy*) ;; *) exit 0 ;; esac
 if [ "${FAIL_AT:-}" = copier ]; then echo "mock copier: refusing on purpose" >&2; exit 1; fi
-dst="${!#}"; pname=""; plic=""
-for a in "$@"; do case "$a" in project_name=*) pname="${a#*=}" ;; license=*) plic="${a#*=}" ;; esac; done
+dst="${!#}"; pname=""; plic=""; powner=""
+for a in "$@"; do case "$a" in project_name=*) pname="${a#*=}" ;; license=*) plic="${a#*=}" ;; owner=*) powner="${a#*=}" ;; esac; done
 : "${pname:?mock copier: no --data project_name}"; : "${plic:?mock copier: no --data license}"
+: "${powner:?mock copier: no --data owner}"
 # `-` last inside the brackets: GNU tr reads '.- ' as a range (a CI-only failure, 2026-08-28).
 pkg="$(printf '%s' "$pname" | sed 's/[.[:space:]-]/_/g' | tr '[:upper:]' '[:lower:]')"
 mkdir -p "$dst/tests" "$dst/src/$pkg" "$dst/.github/workflows"
-printf 'MIT\n' > "$dst/LICENSE"
+printf '%s\n' "$plic" > "$dst/LICENSE"
 printf '# %s\n' "$pname" > "$dst/README.md"
-printf 'name = "%s"\nlicense = "%s"\n' "$pkg" "$plic" > "$dst/pyproject.toml"
+printf 'name = "%s"\nlicense = "%s"\nauthors = [{ name = "%s" }]\n' "$pkg" "$plic" "$powner" > "$dst/pyproject.toml"
 printf 'name = "%s"\n' "$pkg" > "$dst/uv.lock"
 : > "$dst/src/$pkg/__init__.py"; printf 'name: CI\n' > "$dst/.github/workflows/ci.yml"
 printf '_commit: mock\n' > "$dst/.copier-answers.yml"
@@ -160,6 +159,9 @@ run two-names      err no no "one name only"                                    
 run bad-option     err no no "unknown option: --nope"                                       -- probe --nope
 E="MOCK_EXISTS=1"     run repo-exists   err no no "already exists; the door creates new"     -- probe
 run license-typo   err no no "unknown license: bogus"                                       -- probe --license=bogus
+# copier refuses a license outside its choices only after the repository exists;
+# the door reads the template's own list and stops before creating anything.
+run license-unsupported err no no "the template does not carry the license GPL-3.0"          -- probe --license=gpl-3.0
 run archetype-typo err no no "the template accepts: cli library backend data-ml"            -- probe --archetype=service
 mkdir -p "$work/home-dir-exists/probe"
 run dir-exists     err no no "already exists"                                               -- probe
@@ -182,12 +184,17 @@ else ok sandbox-local "sandbox on in settings.local.json is seen"; fi
 E="MOCK_SCOPES=repo,workflow" run rollback-off ok yes no "rollback: off (no delete_repo scope" -- probe
 E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: best effort" -- probe
 run org-member     ok yes no "as member"                                                    -- someorg/probe
+run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
+# The spdx id is still looked up (`mit` -> `MIT`); the license *text* is not:
+# the template renders LICENSE from the choice, so a fetch would write over it.
+if grep -q 'license=Apache-2.0' "$work/home-apache/calls.log" && ! grep -q -- '--jq .body' "$work/home-apache/calls.log"
+then ok apache "the chosen license reaches copier, and no license text is fetched over the render"
+else bad apache "the license did not reach copier, or its text was fetched over the render"; fi
 
 echo "after creation: any failure deletes"
 for at in copier push codeql ruleset secret dependabot actions allowlist merge pr; do
   E="FAIL_AT=$at" run "$at" err yes yes "" -- probe
 done
-E="FAIL_AT=license" run license err yes yes "" -- probe --license=apache-2.0
 E="MOCK_RUNS=startup" run startup-failure err yes yes "failed at startup" -- probe
 # CodeQL default setup registers its workflow a minute or so after it is enabled;
 # a push before that is never analysed (measured: #41). The wall still
@@ -211,16 +218,17 @@ check "the CodeQL workflow is awaited before the first pull request is pushed" \
   '[ "$(grep -E "actions/workflows|^gh pr create" "$log" | sed -E "s/.*actions\/workflows.*/wf/; s/^gh pr create.*/pr/" | head -2 | tr "\n" " ")" = "wf pr " ]'
 check "the first pull request head is checked for a CodeQL check run" 'grep -q "/check-runs" "$log"'
 check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowed\[\]=coolbress/plinth/\*" "$log"'
+check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
 check "the default branch is main" '[ "$("$REAL_GIT" -C "$proj" rev-parse --verify -q main)" != "" ]'
 check "the first pull request is one README line on docs/first-pr" \
   '[ "$("$REAL_GIT" -C "$proj" rev-parse --abbrev-ref HEAD)" = docs/first-pr ] && [ "$("$REAL_GIT" -C "$proj" diff --stat main docs/first-pr | tail -1 | grep -o "[0-9]* insertion")" = "1 insertion" ]'
-check "render is final: real name and license in pyproject.toml and uv.lock, src/probe/, no bootstrap.sh" \
-  'grep -q probe "$proj/pyproject.toml" && grep -q MIT "$proj/pyproject.toml" && grep -q probe "$proj/uv.lock" && [ -d "$proj/src/probe" ] && [ ! -e "$proj/bootstrap.sh" ]'
+check "render is final: real name, owner and license in pyproject.toml and uv.lock, src/probe/, no bootstrap.sh" \
+  'grep -q probe "$proj/pyproject.toml" && grep -q MIT "$proj/pyproject.toml" && grep -q tester "$proj/pyproject.toml" && grep -q probe "$proj/uv.lock" && [ -d "$proj/src/probe" ] && [ ! -e "$proj/bootstrap.sh" ]'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/project-template@v2.18.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.0.0 in " "$work/home-none/out"'
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

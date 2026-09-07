@@ -54,15 +54,20 @@ inside pull requests and have no tag.
   `shellcheck -S warning`, zizmor over every workflow, and the tool tests).
 - `/plinth:new-project [<owner>/]<name>`: preflight (tools, token kind and
   scopes, owner and membership, public only), one summary line, then create,
-  render the template at the tested tag (`coolbress/project-template@v2.18.0`),
-  push `main`, labels, CodeQL, the ruleset, secret scanning, Dependabot,
+  render the template at the tested tag
+  ([`coolbress/plinth-template@v1.0.0`](https://github.com/coolbress/plinth-template/releases/tag/v1.0.0))
+  with the owner and the license, so pyproject's author and URLs and the
+  LICENSE file follow the choice; the archetype and the license are both
+  checked against the template's own `copier.yml` before anything is created,
+  because copier refuses a value outside its choices only after the repository
+  exists. Then push `main`, labels, CodeQL, the ruleset, secret scanning, Dependabot,
   Actions allowlist (`coolbress/plinth/*`, SHA pins required), squash only, and
   the first pull request, whose workflow must start; CodeQL is waited for too
   (default setup must register its workflow before the push, and if CodeQL
   still misses the pull request the summary names the re-push). Any failure after creation
   deletes the repository (best effort: a failed deletion prints the URL loudly).
   `scripts/with-admin-token.sh` for machines whose `gh` token is fine-grained.
-  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 57 cases) and
+  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 62 cases) and
   `tests/token-prompt-not-from-stdin.sh`.
 - CI: `ci / install` (real install on a clean runner) and `ci / docs`
   (markdownlint, link check, vocabulary gate, README vs tutorial).

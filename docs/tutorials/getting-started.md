@@ -44,7 +44,7 @@ organization you belong to. Before creating anything the generator prints one
 line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/project-template@v2.18.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.0.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
 If a check fails it stops there and prints the one fix. Two you may meet:
@@ -68,13 +68,6 @@ the wall`. Its change is one line appended to `README.md`:
 ```text
 Made with [plinth](https://github.com/coolbress/plinth).
 ```
-
-> Interim (until `plinth-template` v1.0.0, #47): the wall requires
-> `ci / floor-check`, which the current template's CI does not report, so the
-> merge button stays blocked on this pull request. To unblock it, point
-> `.github/workflows/ci.yml`'s `uses:` at
-> `coolbress/plinth/.github/workflows/python-ci.yml@<commit sha>` and push.
-> The rest of the journey is unchanged.
 
 Open the pull request. The checks run for a few minutes. The merge button
 enables only when every required check is green; that is the wall, and nobody

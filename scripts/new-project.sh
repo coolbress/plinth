@@ -23,10 +23,9 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The box, at the one tag this version of plinth is tested with, and the
 # workflow file it ships (the first pull request's run is looked up by it).
-# Raising the tag is the only edit here; when the box becomes
-# coolbress/plinth-template the two interim allowlist patterns below go too.
-template_repo="coolbress/project-template"
-template_ref="v2.18.0"
+# Raising the tag is the only edit here.
+template_repo="coolbress/plinth-template"
+template_ref="v1.0.0"
 template_ci=".github/workflows/ci.yml"
 claude_floor="2.1.234"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
@@ -58,10 +57,6 @@ fi
 
 stop() { printf '%s\n' "$@" >&2; exit 2; }
 warn() { printf 'warning: %s\n' "$1" >&2; }
-# Interim, tied to template_ref: the wall requires `ci / floor-check`, which
-# the template's CI at this tag does not report, so the first pull request
-# cannot merge until the template ships it (T2). Said up front, not after.
-warn "interim: the first pull request will not merge: the wall requires ci / floor-check and template $template_ref's CI does not report it. To unblock the repository, point .github/workflows/ci.yml's uses: at coolbress/plinth/.github/workflows/python-ci.yml@<commit sha> (docs/how-to/migrate-from-workflows.md); plinth-template v1.0.0 will do that for repositories created after it"
 below() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" != "$1" ]; }   # below <floor> <version>
 
 # ── 1 tools ──────────────────────────────────────────────────────────────
@@ -158,14 +153,20 @@ fi
 # The license is checked before creating, so a typo does not create and delete.
 spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
   || stop "unknown license: $lic (mit, apache-2.0, gpl-3.0, ... : https://api.github.com/licenses)"
-# The archetype list lives in the template's copier.yml; a copy here would drift.
-# Unreadable is not a stop: copier is the judge, and a refusal rolls back.
-choices="$(gh api "repos/$template_repo/contents/copier.yml?ref=$template_ref" --jq .content 2>/dev/null \
-  | base64 -d 2>/dev/null | sed -n '/^archetype:/,/^[a-z_]/p' | sed -n 's/^    [^:]*: \([a-z][a-z0-9-]*\)$/\1/p')" || choices=""
-if [ -n "$choices" ]; then
-  grep -qxF "$arch" <<<"$choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$choices")"
+# The archetype and license vocabularies live in the template's copier.yml; a
+# copy here would drift. Both are read from it, because copier refuses a value
+# outside its own choices (measured: `Invalid choice for 'license': 'GPL-3.0'
+# is not in ['MIT', 'Apache-2.0']`) and that refusal lands after the repository
+# exists, so an unsupported license would create and delete. Unreadable is not
+# a stop: copier is the judge, and a refusal rolls back.
+copier_yml="$(gh api "repos/$template_repo/contents/copier.yml?ref=$template_ref" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || copier_yml=""
+choices_of() { sed -n "/^$1:/,/^[a-z_]/p" <<<"$copier_yml" | sed -n 's/^    [^:]*: \([A-Za-z0-9][A-Za-z0-9.-]*\)$/\1/p'; }
+arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
+if [ -n "$arch_choices" ] && [ -n "$lic_choices" ]; then
+  grep -qxF "$arch" <<<"$arch_choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$arch_choices")"
+  grep -qxF "$spdx" <<<"$lic_choices" || stop "the template does not carry the license $spdx" "  it accepts: $(tr '\n' ' ' <<<"$lic_choices")"
 else
-  warn "could not read the template's archetype list; copier decides (a refusal rolls back)"
+  warn "could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
 fi
 
 echo "create $repo (public, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: ruleset + CodeQL; then the first pull request. rollback: $rollback"
@@ -191,13 +192,13 @@ created=1
 git init -q -b main "$dir"
 git -C "$dir" remote add origin "$url.git"
 
-# Render. Name, license and package directory are settled here (copier.yml's
-# validator refuses names that make no Python package, before writing a file).
+# Render. Name, owner, license and package directory are settled here: the
+# owner renders pyproject's author and URLs, the license renders LICENSE, and
+# copier.yml's validator refuses a name that makes no Python package before
+# writing a file.
 uvx --quiet copier copy --defaults --quiet \
-  --data "project_name=$name" --data "license=$spdx" --data "archetype=$arch" \
+  --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --vcs-ref "$template_ref" "gh:$template_repo" "$dir" < /dev/null
-# The box ships MIT; another choice gets GitHub's official text.
-[ "$spdx" = MIT ] || gh api "/licenses/$lic" --jq .body > "$dir/LICENSE"
 git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $spdx)"
 
@@ -247,14 +248,10 @@ gh api -X PUT "repos/$repo/automated-security-fixes" >/dev/null
 # Actions: SHA pins required, and only GitHub-owned actions plus plinth's own
 # reusable workflow may run. Without `coolbress/plinth/*` the first CI run dies
 # with startup_failure, no check name ever reports, and the repository is locked.
-# Interim, tied to template_ref: v2.18.0's ci.yml and label.yml still call the
-# earlier CI repository, which uses setup-uv. Both patterns go with the next tag.
 gh api -X PUT "repos/$repo/actions/permissions" -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true >/dev/null
 gh api -X PUT "repos/$repo/actions/permissions/selected-actions" \
   -F github_owned_allowed=true -F verified_allowed=false \
-  -f 'patterns_allowed[]=coolbress/plinth/*' \
-  -f 'patterns_allowed[]=coolbress/workflows/*' \
-  -f 'patterns_allowed[]=astral-sh/setup-uv@*' >/dev/null
+  -f 'patterns_allowed[]=coolbress/plinth/*' >/dev/null
 # Merge settings agree with the ruleset, or there is no merge button at all.
 # The squash commit is the pull request: its title (checked by ci / pr-title)
 # and its description, not a list of the branch's commits (#72).
