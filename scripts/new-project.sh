@@ -61,7 +61,7 @@ warn() { printf 'warning: %s\n' "$1" >&2; }
 # Interim, tied to template_ref: the wall requires `ci / floor-check`, which
 # the template's CI at this tag does not report, so the first pull request
 # cannot merge until the template ships it (T2). Said up front, not after.
-warn "interim: the first pull request will not merge until plinth-template v1.0.0 (the wall requires ci / floor-check, which template $template_ref does not report)"
+warn "interim: the first pull request will not merge: the wall requires ci / floor-check and template $template_ref's CI does not report it. To unblock the repository, point .github/workflows/ci.yml's uses: at coolbress/plinth/.github/workflows/python-ci.yml@<commit sha> (docs/how-to/migrate-from-workflows.md); plinth-template v1.0.0 will do that for repositories created after it"
 below() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" != "$1" ]; }   # below <floor> <version>
 
 # ── 1 tools ──────────────────────────────────────────────────────────────

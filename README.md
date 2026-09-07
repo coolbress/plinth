@@ -67,7 +67,8 @@ creates a repository with the wall up, or creates nothing (its failure paths
 run in CI against a mocked `gh`). Until `plinth-template` v1.0.0 ships, that
 repository's first pull request cannot merge: its wall requires
 `ci / floor-check`, which the interim template's CI does not report (see
-issues #46 and #47). `floor-check` runs the checker `ci / floor-check`
+issues #46 and #47). A repository created before then is unblocked by
+pointing its `ci.yml` at `coolbress/plinth/.github/workflows/python-ci.yml@<sha>`. `floor-check` runs the checker `ci / floor-check`
 runs, read-only. A third-party review check (`third-party / review`, Codex) is
 available as an optional check; see
 [docs/how-to/configure-the-third-party-reviewer.md](docs/how-to/configure-the-third-party-reviewer.md).
