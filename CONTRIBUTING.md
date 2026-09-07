@@ -33,7 +33,11 @@ Everything else runs offline in seconds.
    workflow against `canary/`. `third-party / review` waits for a review by
    the Codex reviewer once the pull request is ready; it is optional and does
    not block the merge.
-4. Merge when green. Squash is the only merge method, the commit is the pull
+4. Before merging, read the description against the final diff: what changed
+   and why, what was verified and what was not, as of the last commit. A
+   review fix that changed the scope changes the description too, because
+   the description is what lands on `main`.
+5. Merge when green. Squash is the only merge method, the commit is the pull
    request title and description, and the branch is deleted on merge.
 
 ## Cut a release
