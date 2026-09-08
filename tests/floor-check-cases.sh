@@ -54,6 +54,18 @@ plant() { # <description> <shell to break the copy> <expected FAIL substring>
   fi
   if grep -q "FAIL.*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a FAIL mentioning '$3')"; printf '%s\n' "$out" | grep FAIL | sed 's/^/        /'; fi
 }
+infos() { # <description> <shell to break the copy> <expected INFO substring>
+  local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
+  ( cd "$copy" && eval "$2" )
+  local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
+  if grep -q "INFO.*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected an INFO mentioning '$3')"; printf '%s\n' "$out" | grep -E 'INFO|FAIL' | sed 's/^/        /'; fi
+}
+warns() { # <description> <shell to break the copy> <expected WARN substring>
+  local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
+  ( cd "$copy" && eval "$2" )
+  local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
+  if grep -q "WARN.*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a WARN mentioning '$3')"; printf '%s\n' "$out" | grep -E 'WARN|FAIL' | sed 's/^/        /'; fi
+}
 plant "stub CONTRIBUTING is caught" "printf '# Contributing\nSee the wiki.\n' > CONTRIBUTING.md" "no build or test command"
 plant "unpinned base image is caught" "sed -i.bak 's/@sha256:[0-9a-f]*//' Dockerfile" "not pinned by digest"
 plant "root user is caught" "sed -i.bak 's/^USER app/USER root/' Dockerfile" "runs as root"
@@ -73,11 +85,52 @@ plant "a legacy Markdown template counts as a form and is not read as a broken o
   "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname: Bug\nabout: x\n---\nWhat happened?\n' > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
 plant "config.yml is configuration, not a form" \
   "rm .github/ISSUE_TEMPLATE/*.yml && printf 'blank_issues_enabled: false\n' > .github/ISSUE_TEMPLATE/config.yml" "no issue form"
-plant "a folder with no form at all is still caught" "rm .github/ISSUE_TEMPLATE/*.yml" "no issue form"
+# An empty folder is not a local template set: GitHub falls back to the owner's
+# shared forms, and offline that cannot be checked. Absence is not concluded here.
+infos "an empty folder falls through to inheritance, not to a verdict" \
+  "rm .github/ISSUE_TEMPLATE/*.yml" "inheritance not verified"
+plant "an empty folder alone is not called a missing form" "rm .github/ISSUE_TEMPLATE/*.yml" "__none__" || true
 plant "a defect inside a renamed form is still caught" \
   "cd .github/ISSUE_TEMPLATE && mv task.yml work_item.yml && printf 'name: t\ndescription: \"x\"\nbody: []\n' > work_item.yml" "no labels"
+# Widening the net must not fail a repository that passed yesterday: `.yml` keeps
+# its severity, and a defect found only because `.yaml` and `.md` are now read is
+# a WARN. `labels:` is plinth policy, not GitHub's syntax (#85).
+plant "an unlabelled .yaml next to good forms warns, it does not fail" \
+  "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "__none__" || true
+plant "an unlabelled .yml still fails" \
+  "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "no labels"
+plant "an empty Markdown template does not pass as a form" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
+warns "an empty Markdown template is named" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
 plant "block-list labels are accepted" "printf 'name: t\ndescription: \"x\"\nlabels:\n  - task\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "__none__" || true
 plant "multi-stage and --platform FROM are understood" "printf 'FROM --platform=linux/amd64 python:3.12-slim@sha256:%064d AS base\nFROM base\nRUN uv sync --locked\nUSER app\nCMD [\"python\", \"-m\", \"app\"]\n' 0 > Dockerfile" "__none__" || true
+
+# Inheritance, against a fixture API. The claim "the shared set is read when the
+# repository has none" needs a fixture; without one it is an assertion (#85).
+inh="$work/inh-api"; mkdir -p "$inh/repos/o/.github/contents/.github/ISSUE_TEMPLATE"
+form_b64() { printf 'name: %s\ndescription: "x"\nlabels: ["%s"]\nbody: []\n' "$1" "$1" | base64 | tr -d '\n'; }
+printf '[{"name":"bug.yml"},{"name":"feature.yml"}]' > "$inh/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
+for f in bug feature; do printf '{"content":"%s"}' "$(form_b64 $f)" > "$inh/repos/o/.github/contents/.github/ISSUE_TEMPLATE/$f.yml.json"; done
+inherit() { # <description> <expected substring> <local ISSUE_TEMPLATE shell, or ""> [api dir]
+  local copy="$work/inh"; rm -rf "$copy"; cp -R "$good" "$copy"
+  rm -rf "$copy/.github/ISSUE_TEMPLATE"; [ -n "$3" ] && ( cd "$copy" && eval "$3" )
+  local out; out="$(FLOOR_CHECK_API_DIR="${4:-$inh}" python3 "$checker" --root "$copy" --repo o/r 2>&1)"
+  if grep -q -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected '$2')"; printf '%s\n' "$out" | grep -E 'issue form|inherited' | sed 's/^/        /'; fi
+}
+inherit "the owner's shared forms are read when the repository has none" "PASS  issue forms present (inherited): bug.yml, feature.yml" ""
+inherit "a local .gitkeep is not a template: the shared set still applies" "PASS  issue forms present (inherited)" "mkdir -p .github/ISSUE_TEMPLATE && : > .github/ISSUE_TEMPLATE/.gitkeep"
+inherit "a local form suppresses the shared set, and says so" "INFO  a local ISSUE_TEMPLATE replaces the owner" "mkdir -p .github/ISSUE_TEMPLATE && printf 'name: t\ndescription: \"x\"\nlabels: [\"t\"]\nbody: []\n' > .github/ISSUE_TEMPLATE/t.yml"
+# A file listed but unreadable is an API failure, not an absent template.
+bad_api="$work/inh-bad"; mkdir -p "$bad_api/repos/o/.github/contents/.github"
+printf '[{"name":"bug.md"}]' > "$bad_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
+inherit "an unreadable inherited file is not verified, not absent" "INFO  inherited forms not verified" "" "$bad_api"
+out_bad="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.github/ISSUE_TEMPLATE"; FLOOR_CHECK_API_DIR="$bad_api" python3 "$checker" --root "$work/inh" --repo o/r 2>&1)"
+if grep -qE "FAIL.*(issue form|neither local)" <<<"$out_bad"; then bad "an unreadable inherited file was called absent"
+else ok "an unreadable inherited file yields no absence verdict"; fi
+# Nothing local and nothing shared: a 404 on the listing is a real absence.
+none_api="$work/inh-none"; mkdir -p "$none_api/repos/o"
+inherit "no templates anywhere is still caught" "FAIL  issue forms neither local nor in the owner" "" "$none_api"
 
 # The wall, against a fixture API laid out like api.github.com paths.
 api="$work/api"; mkdir -p "$api/repos/o/r/rules/branches" "$api/repos/o/r/rulesets"

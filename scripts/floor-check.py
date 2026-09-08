@@ -155,13 +155,15 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
                "SECURITY.md neither local nor in the owner's .github repository")
 
     forms = root / ".github" / "ISSUE_TEMPLATE"
-    if forms.is_dir():
-        files = {p.name: read(p) for p in sorted(forms.iterdir())
-                 if p.is_file() and p.suffix in FORM_SUFFIXES}
-        check_issue_forms(files, "local")
-        # GitHub does not merge the two sets. A local ISSUE_TEMPLATE directory
-        # holding any form, or a config, replaces the owner's shared set
-        # entirely; there is no per-file inheritance to fall back on.
+    local = {p.name: read(p) for p in sorted(forms.iterdir())
+             if p.is_file() and p.suffix in FORM_SUFFIXES} if forms.is_dir() else {}
+    # A directory is not a template. `.gitkeep` alone leaves the owner's shared
+    # set in force, so the question is whether a template or a config is there,
+    # not whether the folder exists.
+    if local:
+        check_issue_forms(local, "local")
+        # GitHub does not merge the two sets: any local template or config
+        # replaces the owner's shared set entirely, per folder, not per file.
         result("INFO", "a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them")
     else:
         listing = api(f"repos/{owner}/.github/contents/.github/ISSUE_TEMPLATE", network) if owner else ERROR
@@ -170,13 +172,24 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
         elif listing is ABSENT:
             result("FAIL", "issue forms neither local nor in the owner's .github repository")
         else:
-            files = {}
+            files, unread = {}, []
             for entry in listing:
                 name = entry.get("name", "")
                 if Path(name).suffix in FORM_SUFFIXES:
                     text = inherited_file(owner, f".github/ISSUE_TEMPLATE/{name}", network)
-                    files[name] = text if isinstance(text, str) else ""
-            check_issue_forms(files, "inherited")
+                    # A listing entry is not a template. Counting a file whose
+                    # content never arrived would turn an API failure into a pass.
+                    if isinstance(text, str):
+                        files[name] = text
+                    else:
+                        unread.append(name)
+            if unread:
+                result("INFO", f"inherited forms not verified (content unreadable): {', '.join(sorted(unread))}")
+            # Nothing readable and something unread: the shared set may be
+            # perfectly good and the API simply failed. Absence is not concluded
+            # from a failed read.
+            if files or not unread:
+                check_issue_forms(files, "inherited")
 
     ok((root / ".github" / "dependabot.yml").is_file(), ".github/dependabot.yml present",
        ".github/dependabot.yml missing: pins age silently")
@@ -195,17 +208,33 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
        f"no issue form ({where}): every issue arrives in whatever shape its writer chose")
     alias_trap = re.compile(r"^\s*[\w-]+:\s+[*&]")
     for name, text in sorted(forms.items()):
-        # A legacy Markdown template is front matter and prose, not a form; the
-        # three checks below are about the form schema and do not apply to it.
+        # `.yml` was already checked before this file started reading `.yaml`
+        # and `.md`; those two are new ground. A defect found only because the
+        # net widened is reported, not made to fail a build that passed
+        # yesterday. Promoting one is a later decision, taken once consumers
+        # have had a release to see it.
+        known = name.endswith(".yml")
+        say = (lambda cond, good, bad: ok(cond, good, bad)) if known else \
+              (lambda cond, good, bad: result("PASS" if cond else "WARN", good if cond else bad))
         if name.endswith(".md"):
+            # A legacy Markdown template is front matter and prose. GitHub reads
+            # its `name:` from that front matter; without it the file is not a
+            # template at all, so an empty one must not pass as a form.
+            fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
+            say(bool(fm) and re.search(r"^name:", fm.group(1), re.M) is not None,
+                f"{name} has Markdown front matter with a name",
+                f"{name} has no front matter `name:`: GitHub does not offer it as a template")
             continue
         keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.M)]
-        ok(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")
+        say(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")
         # A value starting with `*` or `&` is read as a YAML alias and breaks the whole form.
         trap = [n for n, ln in enumerate(text.splitlines(), 1) if alias_trap.match(ln)]
-        ok(not trap, f"{name} has no unquoted YAML alias", f"{name} line {trap}: value starts with * or &")
+        say(not trap, f"{name} has no unquoted YAML alias", f"{name} line {trap}: value starts with * or &")
+        # `labels:` is plinth's policy, not GitHub's syntax: forms are valid
+        # without it. It stays a FAIL where it already was, and no more.
         labelled = re.search(r"^labels:\s*\[.+\]", text, re.M) or re.search(r"^labels:\s*\n\s+- ", text, re.M)
-        ok(labelled is not None, f"{name} labels its issues", f"{name} has no labels: those issues never sort in a list")
+        say(labelled is not None, f"{name} labels its issues",
+            f"{name} has no labels: those issues never sort in a list")
 
 
 def check_gitattributes(root: Path) -> None:
