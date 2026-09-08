@@ -16,8 +16,12 @@
 # before the wall), labels, CodeQL, ruleset, secret scanning, Dependabot, Actions
 # allowlist, squash only, and the first pull request, whose workflow must start.
 #
-# fail-closed: any failure after creation deletes the repository. Deletion is
-# best effort; when it fails the URL is printed loudly. The local clone stays.
+# fail-closed: after the repository is created, a fatal exit before setup
+# completes attempts a best-effort deletion -- the trap fires on `created=1`
+# alone and does not inspect the wall, so a failure after the ruleset is applied
+# deletes too. The local clone stays; a failed deletion prints the URL loudly.
+# Two steps are not fatal and warn instead: a label that cannot be created, and
+# a CodeQL default setup slow to register or to pick the first pull request up.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
