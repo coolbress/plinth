@@ -70,7 +70,7 @@ ABSENT = object()   # 404: the resource does not exist
 ERROR = object()    # anything else went wrong: do not conclude
 
 
-def api(path: str, network: bool):
+def api(path: str, network: bool, paginate: bool = False):
     """GET api.github.com/<path>. Returns the JSON, ABSENT on 404, ERROR when
     offline or on any other failure. FLOOR_CHECK_API_DIR serves fixtures.
 
@@ -86,7 +86,12 @@ def api(path: str, network: bool):
         return ERROR
     if shutil.which("gh"):
         try:
-            r = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=30)
+            # --paginate: GitHub returns 30 per page by default, and a repository
+            # with the door's labels plus GitHub's own defaults is over that
+            # (33 measured on plinth-template). One page would report labels
+            # missing that are there.
+            cmd = ["gh", "api", path] + (["--paginate"] if paginate else [])
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         except (OSError, subprocess.TimeoutExpired):
             r = None
         if r is not None and r.returncode == 0:
@@ -443,6 +448,49 @@ def check_env_example(project: Path) -> None:
 # ── the wall ──────────────────────────────────────────────────────────────
 
 
+def labels_file() -> Path | None:
+    """`labels.txt`, the list the door creates from. Beside this file in CI,
+    where python-ci.yml downloads both from the same plinth commit; one level up
+    in a checkout, where it sits at the repository root."""
+    here = Path(__file__).resolve().parent
+    for c in (here / "labels.txt", here.parent / "labels.txt"):
+        if c.is_file():
+            return c
+    return None
+
+
+def check_labels(repo: str, network: bool) -> None:
+    """Which labels the door creates does this repository not have?
+
+    Names only: a colour or description that drifted is not worth a line, and
+    the door's `--force` fixes it on the next run anyway. Never a FAIL --
+    `ci / floor-check` passes `--repo` in every consumer's CI, so a FAIL here
+    would block merges over a label, and a label is a convenience, not a wall
+    stone (#78)."""
+    f = labels_file()
+    if f is None:
+        result("INFO", "labels.txt not found next to the checker; labels not checked")
+        return
+    want = [ln.split("|")[0] for ln in read(f).splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")]
+    colour = {ln.split("|")[0]: ln.split("|")[1] for ln in read(f).splitlines()
+              if ln.strip() and not ln.lstrip().startswith("#")}
+    data = api(f"repos/{repo}/labels?per_page=100", network, paginate=True)
+    if data is ERROR or not isinstance(data, list):
+        # Unreadable is not empty. Reporting every label missing because the API
+        # failed is the fail-open case in reverse, and just as useless.
+        result("INFO", "labels not verified (offline, not logged in, or API error)")
+        return
+    have = {e.get("name") for e in data if isinstance(e, dict)}
+    missing = [n for n in want if n not in have]
+    if not missing:
+        result("PASS", f"every label the door creates is present ({len(want)})")
+        return
+    result("WARN", f"labels the door creates that are missing: {', '.join(missing)}")
+    for n in missing:
+        result("INFO", f"  gh label create {n} --repo {repo} --color {colour[n]}")
+
+
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], network: bool) -> None:
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("INFO", "wall not checked (offline)")
@@ -573,6 +621,7 @@ def main() -> int:
             expected = [c.strip() for c in a.expect_checks.split(",") if c.strip()]
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
         check_wall(a.repo, expected, merge_methods, network)
+        check_labels(a.repo, network)
     else:
         result("INFO", "no --repo: wall not checked")
 

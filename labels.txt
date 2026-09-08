@@ -1,0 +1,44 @@
+# The labels /plinth:new-project creates, and the set scripts/floor-check.py
+# looks for. One source, because the door and the checker drifted once already
+# (#78: two wayfinder child types the tracker doc names were never created).
+#
+# name|colour|description. `|` and not `:`, because the wayfinder names contain
+# a colon. Read by the door with `while IFS='|' read` and by the checker with
+# `str.split('|')`: no jq, no yaml, nothing either side has to install.
+#
+# Adding a line here reaches consumers only when they raise their pinned
+# plinth SHA; .github/workflows/python-ci.yml downloads this file at
+# job.workflow_sha alongside the checker.
+
+# The PR-type labels the template's label workflow applies.
+feat|ededed|PR title type
+fix|ededed|PR title type
+docs|ededed|PR title type
+style|ededed|PR title type
+refactor|ededed|PR title type
+perf|ededed|PR title type
+test|ededed|PR title type
+build|ededed|PR title type
+ci|ededed|PR title type
+chore|ededed|PR title type
+revert|ededed|PR title type
+breaking|ededed|PR title type
+
+# The issue form's own label.
+task|0052cc|One thing to build
+
+# The five triage labels mattpocock-skills expects.
+needs-triage|c5def5|Triage (mattpocock-skills)
+needs-info|c5def5|Triage (mattpocock-skills)
+ready-for-agent|c5def5|Triage (mattpocock-skills)
+ready-for-human|c5def5|Triage (mattpocock-skills)
+wontfix|c5def5|Triage (mattpocock-skills)
+
+# The kinds of record the planning flow leaves behind: a wayfinder map, its
+# four child types, and the spec. docs/agents/issue-tracker.md names them.
+wayfinder:map|5319e7|A wayfinder map, the decision set for one goal
+wayfinder:research|5319e7|A wayfinder child, facts gathered against sources
+wayfinder:grilling|5319e7|A wayfinder child, a decision taken by questioning
+wayfinder:prototype|5319e7|A wayfinder child, a throwaway build that answers a question
+wayfinder:task|5319e7|A wayfinder child, one thing to build
+spec|0e8a16|A spec the tickets are cut from

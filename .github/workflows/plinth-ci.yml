@@ -45,6 +45,9 @@ jobs:
       - name: Archetype vocabulary has one source
         run: ./tests/archetype-single-source.sh
 
+      - name: The label list has one source, read by the door and the checker
+        run: ./tests/labels-single-source.sh
+
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
 
