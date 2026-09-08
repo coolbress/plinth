@@ -196,6 +196,12 @@ E="MOCK_MEMBER=0"     run org-nonmember err no no "not a member of the organizat
 # is not an answer: writing ours could replace theirs, skipping ours could leave
 # none, so it stops before the repository exists (#88).
 E="MOCK_SHARED_PR=error"    run shared-unreadable  err no no "cannot read whether tester/.github publishes" -- probe
+# "A failed lookup is not an answer" is only actionable if the reader is told
+# what failed. The functions run in command substitutions, which are subshells,
+# so the reason travels on stdout beside the verdict.
+if grep -qE "the API said: .*PULL_REQUEST_TEMPLATE.md: .+" "$work/home-shared-unreadable/out"
+then ok shared-unreadable "the stop names the path and what the API said"
+else bad shared-unreadable "the stop does not say what failed"; grep -A2 "cannot read" "$work/home-shared-unreadable/out" | sed 's/^/        /'; fi
 E="MOCK_SHARED_FORMS=error" run shared-forms-error err no no "--force-defaults"                             -- probe
 run private        err no no "private repositories are not supported yet"                   -- probe --private
 run private-first  err no no "private repositories are not supported yet"                   -- --private probe
