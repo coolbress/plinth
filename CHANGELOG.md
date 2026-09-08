@@ -67,12 +67,11 @@ inside pull requests and have no tag.
   Actions allowlist (`coolbress/plinth/*`, SHA pins required), squash only, and
   the first pull request, whose workflow must start; CodeQL is waited for too
   (default setup must register its workflow before the push, and if CodeQL
-  still misses the pull request the summary names the re-push). A failure that
-  leaves the wall down after creation deletes the repository, as far as the
-  token's permissions allow: a failed deletion prints the URL loudly. Not every
-  failure is one of those — a label that cannot be created and a CodeQL setup
-  that is slow to register both warn and carry on, because neither leaves the
-  repository unprotected.
+  still misses the pull request the summary names the re-push). After the
+  repository is created, a fatal exit before setup completes attempts a
+  best-effort deletion; the local clone stays, and a failed deletion prints the
+  URL loudly. A label that cannot be created, and CodeQL readiness delays, warn
+  and carry on.
   `scripts/with-admin-token.sh` for machines whose `gh` token is fine-grained.
   Tests: `tests/new-project-failpath.sh` (mocked `gh`, 65 cases) and
   `tests/token-prompt-not-from-stdin.sh`.
