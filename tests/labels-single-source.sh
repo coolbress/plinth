@@ -34,6 +34,13 @@ grep -qE 'for f in .*labels\.txt' "$root/.github/workflows/python-ci.yml" \
   && ok "python-ci.yml downloads labels.txt with the checker" \
   || bad "python-ci.yml does not download labels.txt: the checker would die in every consumer's CI"
 
+# Labels belong to issues. `contents: read` alone makes the label read an API
+# error, which the checker reports as "not verified" -- so the check would never
+# run in the one place it matters, and nothing would say so.
+awk '/^  floor-check:/,/steps:/' "$root/.github/workflows/python-ci.yml" | grep -q 'issues: read' \
+  && ok "the floor-check job can read labels (issues: read)" \
+  || bad "the floor-check job lacks issues: read; the label check would always report 'not verified' in consumer CI"
+
 # Neither reader may carry its own copy of the names.
 for n in wayfinder:prototype ready-for-agent; do
   if grep -q "$n" "$root/scripts/new-project.sh" || grep -q "$n" "$root/scripts/floor-check.py"; then

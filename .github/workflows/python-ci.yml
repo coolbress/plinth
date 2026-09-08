@@ -481,6 +481,10 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      # Labels belong to issues: without this the label check reads an API
+      # error and reports "not verified" in every consumer's CI, so the one
+      # place it matters most is the one place it would never run (#84).
+      issues: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
