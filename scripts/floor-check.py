@@ -38,6 +38,11 @@ from pathlib import Path
 CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
 
 SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", ".scratch", "dist"}
+# What GitHub accepts under .github/ISSUE_TEMPLATE: forms in either YAML
+# spelling, and the legacy Markdown templates it still renders. `config.yml`
+# is the folder's configuration, not a form.
+FORM_SUFFIXES = {".yml", ".yaml", ".md"}
+CONFIG_NAMES = {"config.yml", "config.yaml"}
 
 fails = 0
 
@@ -151,8 +156,13 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
 
     forms = root / ".github" / "ISSUE_TEMPLATE"
     if forms.is_dir():
-        files = {p.name: read(p) for p in sorted(forms.glob("*.yml"))}
-        check_issue_forms(files, ("bug.yml", "feature.yml", "task.yml"), "local")
+        files = {p.name: read(p) for p in sorted(forms.iterdir())
+                 if p.is_file() and p.suffix in FORM_SUFFIXES}
+        check_issue_forms(files, "local")
+        # GitHub does not merge the two sets. A local ISSUE_TEMPLATE directory
+        # holding any form, or a config, replaces the owner's shared set
+        # entirely; there is no per-file inheritance to fall back on.
+        result("INFO", "a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them")
     else:
         listing = api(f"repos/{owner}/.github/contents/.github/ISSUE_TEMPLATE", network) if owner else ERROR
         if listing is ERROR or (listing is not ABSENT and not isinstance(listing, list)):
@@ -162,12 +172,11 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
         else:
             files = {}
             for entry in listing:
-                if entry.get("name", "").endswith(".yml"):
-                    text = inherited_file(owner, f".github/ISSUE_TEMPLATE/{entry['name']}", network)
-                    files[entry["name"]] = text if isinstance(text, str) else ""
-            # The shared .github repository carries bug and feature; task is the
-            # template's own add-on and lives in the instance.
-            check_issue_forms(files, ("bug.yml", "feature.yml"), "inherited")
+                name = entry.get("name", "")
+                if Path(name).suffix in FORM_SUFFIXES:
+                    text = inherited_file(owner, f".github/ISSUE_TEMPLATE/{name}", network)
+                    files[name] = text if isinstance(text, str) else ""
+            check_issue_forms(files, "inherited")
 
     ok((root / ".github" / "dependabot.yml").is_file(), ".github/dependabot.yml present",
        ".github/dependabot.yml missing: pins age silently")
@@ -177,13 +186,18 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     check_doc_links(root)
 
 
-def check_issue_forms(files: dict[str, str], expected: tuple[str, ...], where: str) -> None:
-    missing = [f for f in expected if f not in files]
-    ok(not missing, f"issue forms {', '.join(e[:-4] for e in expected)} present ({where})",
-       f"issue forms missing ({where}): {missing}")
+def check_issue_forms(files: dict[str, str], where: str) -> None:
+    # Presence is judged by what is there, not by filename: GitHub reads every
+    # form in the folder whatever it is called, so a name this checker did not
+    # expect is not a missing form.
+    forms = {n: t for n, t in files.items() if n not in CONFIG_NAMES}
+    ok(bool(forms), f"issue forms present ({where}): {', '.join(sorted(forms))}",
+       f"no issue form ({where}): every issue arrives in whatever shape its writer chose")
     alias_trap = re.compile(r"^\s*[\w-]+:\s+[*&]")
-    for name, text in sorted(files.items()):
-        if name == "config.yml":
+    for name, text in sorted(forms.items()):
+        # A legacy Markdown template is front matter and prose, not a form; the
+        # three checks below are about the form schema and do not apply to it.
+        if name.endswith(".md"):
             continue
         keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.M)]
         ok(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")

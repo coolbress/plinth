@@ -62,6 +62,20 @@ plant "missing token deny is caught" "printf '{\"permissions\":{\"deny\":[]}}' >
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
 plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"
+# Issue forms: GitHub reads every form in the folder whatever it is called, in
+# either YAML spelling, plus the legacy Markdown templates. A name this checker
+# did not expect is not a missing form (#85).
+plant "forms under other filenames are accepted" \
+  "cd .github/ISSUE_TEMPLATE && mv bug.yml bug_report.yml && mv feature.yml feature_request.yml && mv task.yml work_item.yml" "__none__" || true
+plant "forms spelled .yaml are accepted" \
+  "cd .github/ISSUE_TEMPLATE && for f in *.yml; do mv \"\$f\" \"\${f%.yml}.yaml\"; done" "__none__" || true
+plant "a legacy Markdown template counts as a form and is not read as a broken one" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname: Bug\nabout: x\n---\nWhat happened?\n' > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
+plant "config.yml is configuration, not a form" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'blank_issues_enabled: false\n' > .github/ISSUE_TEMPLATE/config.yml" "no issue form"
+plant "a folder with no form at all is still caught" "rm .github/ISSUE_TEMPLATE/*.yml" "no issue form"
+plant "a defect inside a renamed form is still caught" \
+  "cd .github/ISSUE_TEMPLATE && mv task.yml work_item.yml && printf 'name: t\ndescription: \"x\"\nbody: []\n' > work_item.yml" "no labels"
 plant "block-list labels are accepted" "printf 'name: t\ndescription: \"x\"\nlabels:\n  - task\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "__none__" || true
 plant "multi-stage and --platform FROM are understood" "printf 'FROM --platform=linux/amd64 python:3.12-slim@sha256:%064d AS base\nFROM base\nRUN uv sync --locked\nUSER app\nCMD [\"python\", \"-m\", \"app\"]\n' 0 > Dockerfile" "__none__" || true
 
