@@ -40,6 +40,12 @@ grep -qE 'for f in .*labels\.txt' "$root/.github/workflows/python-ci.yml" \
 awk '/^  floor-check:/,/steps:/' "$root/.github/workflows/python-ci.yml" | grep -q 'issues: read' \
   && ok "the floor-check job can read labels (issues: read)" \
   || bad "the floor-check job lacks issues: read; the label check would always report 'not verified' in consumer CI"
+# A called workflow cannot widen what its caller grants, so the grant above is
+# capped unless the caller makes it too. This repository's canary is the caller
+# that proves the check runs at all.
+awk '/^  canary:/,/with:/' "$root/.github/workflows/ci.yml" | grep -q 'issues: read' \
+  && ok "the canary caller grants issues: read, so the job's grant is not capped" \
+  || bad "the canary caller caps the grant; the label check would never run even here"
 
 # Neither reader may carry its own copy of the names.
 for n in wayfinder:prototype ready-for-agent; do

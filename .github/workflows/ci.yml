@@ -26,6 +26,14 @@ jobs:
   # purpose; an input nobody passes is a code path nobody runs.
   canary:
     uses: ./.github/workflows/python-ci.yml
+    # A called workflow cannot widen what its caller grants, so the job-level
+    # `issues: read` in python-ci.yml is capped by the `contents: read` above.
+    # Labels belong to issues; without this the canary would never exercise the
+    # label check, and neither would any consumer whose caller does not do the
+    # same. Scoped to this job, not raised for the whole file.
+    permissions:
+      contents: read
+      issues: read
     with:
       working-directory: canary
       extra-python-versions: "3.13"
