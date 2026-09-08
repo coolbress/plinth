@@ -191,9 +191,22 @@ wall "invisible squash settings are INFO, not a pass" "squash commit settings no
 # Following the default branch reports it as a wall standing -- the checker
 # telling someone `main` is guarded while anyone can force-push it (#107).
 damaged="mv \"$api/repos/o/r/rules/branches/main.json\" \"$api/repos/o/r/rules/branches/__push-probe.json\"; printf '{\"default_branch\":\"__push-probe\",\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
-wall "a default branch that is not main is a FAIL, not a wall standing on it" "FAIL  the default branch is __push-probe, not main" "$damaged"
-wall "the finding says main is the branch left unprotected" "and main is unprotected" "$damaged"
+wall "a default branch that is not main is reported, not passed over" "WARN  the default branch is __push-probe, not main" "$damaged"
+wall "the finding says main is the branch left unprotected" "main is unprotected" "$damaged"
 wall "the fix carries the one command that repairs it" "gh api repos/o/r -X PATCH -f default_branch=main" "$damaged"
+# Never a FAIL. `ci / floor-check` runs with --repo in every consumer's CI, so a
+# FAIL blocks their merges -- and a repository whose default is deliberately
+# `master` or `trunk` is not broken, it just is not what the door builds (#106).
+eval "$damaged"
+out_db="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; rc_db=$?
+if [ "$rc_db" = 0 ] && ! grep -q "FAIL.*default branch" <<<"$out_db"; then ok "a default branch that is not main never fails the floor (consumer CI keeps merging)"
+else bad "a wrong default branch changed the exit code (rc=$rc_db) or produced a FAIL"; printf '%s
+' "$out_db" | grep -E 'FAIL' | sed 's/^/        /'; fi
+# Said once and plainly, not only as the prefix on each rule line.
+if grep -q "the wall is checked on __push-probe, the repository's default branch" <<<"$out_db"; then ok "the branch the wall was checked on is stated once, not only as a prefix"
+else bad "the output never states which branch the wall was checked on"; fi
+printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
 rm -f "$api/repos/o/r/rules/branches/__push-probe.json"
 # The default branch is read from the repository, so a token or an API that does
 # not report it must not be read as "main, fine": not verified, like every other
@@ -201,7 +214,8 @@ rm -f "$api/repos/o/r/rules/branches/__push-probe.json"
 wall "a default branch the API does not report is not verified rather than passed" \
   "INFO  default branch not verified" \
   "printf '{\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
-wall "a repository whose default branch is main says so and adds nothing else" "PASS  the default branch is main"
+wall "a repository whose default branch is main is unchanged: no warning, no new noise" "-- 0 failed"
+wall "a healthy repository still says which branch the wall was checked on" "the wall is checked on main, the repository's default branch"
 wall "dropped required check is caught" "required checks dropped: \['ci / b'\]" "sed -i.bak 's/,{\"context\":\"ci \/ b\"}//' \"$api/repos/o/r/rules/branches/main.json\""
 wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\[\"squash\"\]/[\"squash\",\"merge\"]/' \"$api/repos/o/r/rules/branches/main.json\""
 wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
