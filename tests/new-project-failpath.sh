@@ -37,6 +37,8 @@ case "$all" in
   *"/contents/.github/ISSUE_TEMPLATE/"*)         step=shared-form-body ;;
   *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
+  "api repos/"*" --jq .default_branch"*)         step=default-branch ;;
+  *"default_branch=main"*)                       step=set-default ;;
   "repo create"*)                                step=create ;;
   "repo delete"*)                                step=delete ;;
   "label create"*)                               step=label ;;
@@ -94,6 +96,14 @@ case "$step" in
                    *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
                  esac ;;
   exists)        [ "${MOCK_EXISTS:-0}" = 1 ] || exit 1; echo "https://github.com/x/y" ;;
+  # GitHub adopts the first branch pushed to an empty repository as the default.
+  # The mock answers what the door pushed first, so a run that pushes anything
+  # before main is a run whose default branch is not main (#105). Once the door
+  # has repaired it, the answer is main -- unless the repair itself failed, so
+  # `FAIL_AT=set-default` is a repair that does not take.
+  default-branch) if [ -e "$FIRST_PUSHED_FILE.patched" ]; then echo main
+                  else echo "${MOCK_DEFAULT_BRANCH:-$(cat "$FIRST_PUSHED_FILE" 2>/dev/null)}"; fi ;;
+  set-default)   : > "$FIRST_PUSHED_FILE.patched" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
   runs)          case "${MOCK_RUNS:-ok}" in
@@ -138,6 +148,12 @@ for a in "$@"; do
   if [ "$a" = push ]; then
     printf 'git %s\n' "$*" >> "$GH_LOG"
     [ "${FAIL_AT:-}" = push ] && { echo "mock git: push refused on purpose" >&2; exit 1; }
+    # An empty repository takes the first branch pushed as its default branch,
+    # and the gh mock reads this file back. Last argument, minus any refspec
+    # prefix: `HEAD:refs/heads/x` pushes `x`, `-u origin main` pushes `main`.
+    if [ ! -e "$FIRST_PUSHED_FILE" ]; then
+      last="${*: -1}"; printf '%s' "${last##*[:/]}" > "$FIRST_PUSHED_FILE"
+    fi
     exit 0
   fi
 done
@@ -163,7 +179,8 @@ bad() { fail=$((fail+1)); printf '  FAIL  %-16s %s\n' "$1" "$2"; }
 run() {
   local case="$1" want_exit="$2" want_create="$3" want_del="$4" want_text="$5"; shift 5; [ "$1" = -- ] && shift
   local home="$work/home-$case" rc created=no del=no ok=1
-  mkdir -p "$home"; export HOME="$home" GH_LOG="$home/calls.log"; : > "$GH_LOG"
+  mkdir -p "$home"; export HOME="$home" GH_LOG="$home/calls.log" FIRST_PUSHED_FILE="$home/first-pushed"
+  : > "$GH_LOG"; rm -f "$FIRST_PUSHED_FILE" "$FIRST_PUSHED_FILE.patched"
   ( cd "$home" && env ${E:-} PATH="${P:-$work/bin}:/usr/bin:/bin" "$root/scripts/new-project.sh" "$@" ) >"$home/out" 2>&1; rc=$?
   grep -q '^gh repo create' "$GH_LOG" && created=yes
   grep -q '^gh repo delete' "$GH_LOG" && del=yes
@@ -271,7 +288,7 @@ then ok apache "the chosen license reaches copier, and no license text is fetche
 else bad apache "the license did not reach copier, or its text was fetched over the render"; fi
 
 echo "after creation: any failure deletes"
-for at in copier push codeql ruleset secret dependabot actions allowlist merge pr; do
+for at in copier push default-branch codeql ruleset secret dependabot actions allowlist merge pr; do
   E="FAIL_AT=$at" run "$at" err yes yes "" -- probe
 done
 E="MOCK_RUNS=startup" run startup-failure err yes yes "failed at startup" -- probe
@@ -284,6 +301,21 @@ if grep -q "git commit --allow-empty" "$work/home-codeql-absent/out"; then ok co
 else bad codeql-absent "the summary does not name the re-push"; fi
 E="MOCK_CODEQL_WORKFLOW=missing PLINTH_FIRST_PR_WAIT=1" run codeql-late ok yes no "warning: CodeQL default setup has not registered its workflow" -- probe
 E="PLINTH_FIRST_PR_WAIT=soon" run wait-typo err no no "PLINTH_FIRST_PR_WAIT must be a whole number" -- probe
+# The defect #105 was: a throwaway probe branch was pushed first, GitHub adopted
+# it as the default branch of the empty repository and then refused to delete
+# it, and the ruleset (~DEFAULT_BRANCH) went up on the probe while main was left
+# open. A default branch that is not main is repaired, not rolled back: main was
+# just pushed, so pointing HEAD at it costs one call, and deleting a repository
+# over which branch HEAD names is worse than the fault.
+E="MOCK_DEFAULT_BRANCH=__push-probe" run default-branch-repaired ok yes no "was __push-probe, not main" -- probe
+if grep -q -- "-X PATCH -f default_branch=main" "$work/home-default-branch-repaired/calls.log" &&
+   [ "$(grep -n "default_branch=main" "$work/home-default-branch-repaired/calls.log" | head -1 | cut -d: -f1)" \
+     -lt "$(grep -n "/rulesets" "$work/home-default-branch-repaired/calls.log" | head -1 | cut -d: -f1)" ]
+then ok default-branch-repaired "the default branch is pointed at main before the ruleset is applied"
+else bad default-branch-repaired "the ruleset was applied without the default branch being repaired"; fi
+# A repair that does not take is the one thing that rolls back: the wall would
+# otherwise go up on the wrong branch and leave main open.
+E="MOCK_DEFAULT_BRANCH=__push-probe FAIL_AT=set-default" run default-branch-stuck err yes yes "could not be changed" -- probe
 E="FAIL_AT=ruleset MOCK_DELETE_FAILS=1" run delete-fails err yes yes "ROLLBACK FAILED: https://github.com/tester/probe EXISTS WITHOUT A WALL" -- probe
 
 echo "success: nothing is deleted, and the order is baseline, wall, first pull request"
@@ -292,6 +324,13 @@ log="$work/home-none/calls.log"; proj="$work/home-none/probe"
 check() { if eval "$2"; then ok none "$1"; else bad none "$1"; fi; }
 check "main is pushed before the ruleset, the pull request after it" \
   '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset pr " ]'
+# main must be the *first* push: an empty repository adopts the first branch
+# pushed as its default, and the ruleset targets ~DEFAULT_BRANCH (#105).
+check "main is the first branch pushed" \
+  'grep -E "^git .*push" "$log" | head -1 | grep -q -- "push -q -u origin main"'
+check "no throwaway probe branch is pushed" '! grep -q "push-probe" "$log"'
+check "the default branch is read back from the API before the ruleset is applied" \
+  'grep -E "jq .default_branch|/rulesets" "$log" | head -1 | grep -q default_branch'
 check "CodeQL default setup precedes the ruleset" 'grep -E "code-scanning|/rulesets" "$log" | head -1 | grep -q code-scanning'
 check "the CodeQL workflow is awaited before the first pull request is pushed" \
   '[ "$(grep -E "actions/workflows|^gh pr create" "$log" | sed -E "s/.*actions\/workflows.*/wf/; s/^gh pr create.*/pr/" | head -2 | tr "\n" " ")" = "wf pr " ]'
