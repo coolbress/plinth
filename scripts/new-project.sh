@@ -2,6 +2,7 @@
 # The door: create a repository with the wall already up, or create nothing.
 #
 #   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
+#                  [--force-defaults]
 #
 # Preflight, in order; the first miss stops with the one line that fixes it,
 # before anything exists:
@@ -34,10 +35,11 @@ template_ci=".github/workflows/ci.yml"
 claude_floor="2.1.234"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]"
-target=""; lic=mit; arch=cli; dir=""; private=0
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--force-defaults]"
+target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0
 for a in "$@"; do case "$a" in
   --private)     private=1 ;;
+  --force-defaults) force_defaults=1 ;;
   --license=*)   lic="${a#*=}" ;;
   --archetype=*) arch="${a#*=}" ;;
   --dir=*)       dir="${a#*=}" ;;
@@ -173,6 +175,95 @@ else
   warn "could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
 fi
 
+# The owner's shared community-health files. GitHub applies `<owner>/.github`'s
+# copy to a repository that carries none of its own, so writing ours would
+# replace the owner's convention without saying so. Asked here, before anything
+# exists: a lookup that fails is not an answer, and the fix is to retry or to
+# choose, not to guess. `--force-defaults` skips the question and renders ours.
+#
+# Two answers, not one. GitHub decides the pull-request template per file and
+# the issue templates per folder: one local form -- or just a `config.yml` --
+# stops the whole shared folder being inherited, and the two are never merged.
+shared_of() { # <path>... -> yes (any present) | no (all absent) | unknown (any unreadable)
+  local out seen_unknown=0
+  for path in "$@"; do
+    out="$(gh api "repos/$owner/.github/contents/$path" 2>&1 >/dev/null)" && { echo yes; return; }
+    case "$out" in *"Not Found"*|*"404"*) ;; *) seen_unknown=1 ;; esac
+  done
+  [ "$seen_unknown" = 1 ] && echo unknown || echo no
+}
+# One template GitHub can actually offer, in the owner's shared folder.
+# `.github/ISSUE_TEMPLATE` only: unlike a pull-request template, a default issue
+# form is inherited from that path alone, and scripts/floor-check.py queries the
+# same one. A name is not enough either -- an empty `bug.md` has the right
+# suffix and GitHub offers nothing -- so a candidate is read before it counts.
+usable_form() { # <text> <name> -> 0 when GitHub would offer it
+  case "$2" in
+    *.md) grep -qE '^name:[[:space:]]*[^[:space:]"'"'"']' <<<"$1" ;;
+    *)    grep -q '^name:' <<<"$1" && grep -q '^description:' <<<"$1" && grep -q '^body:' <<<"$1" ;;
+  esac
+}
+shared_config_only() { # -> yes when the shared folder holds a config and no form
+  gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>/dev/null |
+    grep -qiE '^config\.(yml|yaml)$' && echo yes || echo no
+}
+shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
+  local listing name body
+  listing="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>&1)" || {
+    case "$listing" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac; return; }
+  while read -r name; do
+    case "$name" in ""|config.yml|config.yaml) continue ;; *.yml|*.yaml|*.md) ;; *) continue ;; esac
+    body="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE/$name" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || { echo unknown; return; }
+    [ -n "$body" ] || continue
+    usable_form "$body" "$name" && { echo yes; return; }
+  done <<<"$listing"
+  echo no
+}
+# GitHub applies default community-health files only from a *public* `.github`
+# repository. A private one is readable through the API by whoever can see it,
+# so believing that read would suppress our copies for something the new public
+# repository never inherits.
+shared_repo_public() { # -> yes | no | unknown
+  local out
+  out="$(gh api "repos/$owner/.github" --jq .visibility 2>&1)" || {
+    case "$out" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac; return; }
+  [ "$out" = public ] && echo yes || echo no
+}
+# Three ways to end up rendering our own copies: the caller asked for them, the
+# owner publishes no `.github`, or that repository is private and therefore
+# never inherited from. Only a lookup that *failed* stops the run.
+has_pr=no; has_forms=no
+if [ "$force_defaults" = 0 ]; then
+  case "$(shared_repo_public)" in
+    unknown) stop "cannot read whether $owner/.github is public" \
+               "  a failed lookup is not an answer: only a public .github repository is inherited from" \
+               "  fix: run it again, or pass --force-defaults to render the template's own copies" ;;
+    yes)
+      # GitHub reads a community-health file from the root, `.github/` or
+      # `docs/`. Checking only the root would miss an owner who used either of
+      # the other two and write over the template this exists to protect.
+      has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md)"
+      # A directory is not a template, and neither is a filename: the repository
+      # would end up with no form anywhere and fail the floor check the box installs.
+      has_forms="$(shared_forms)"
+      if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
+        stop "cannot read whether $owner/.github publishes shared templates" \
+          "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
+          "  fix: run it again, or pass --force-defaults to render the template's own copies"
+      fi
+      # A shared folder holding only a config is not forms, and rendering ours
+      # replaces it: GitHub swaps the folder whole. Say so rather than let the
+      # owner's contact links and blank-issue setting disappear quietly.
+      [ "$has_forms" = no ] && [ "$(shared_config_only)" = yes ] &&
+        warn "$owner/.github publishes an issue-template config but no form; the box renders its own forms and config, and yours will not apply to $repo"
+      ;;
+  esac
+fi
+own_note=""
+[ "$has_pr" = yes ] && own_note="${own_note} pull-request template"
+[ "$has_forms" = yes ] && own_note="${own_note} issue forms"
+[ -n "$own_note" ] && echo "$owner/.github already publishes:${own_note}; the box will not write over them"
+
 echo "create $repo (public, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: ruleset + CodeQL; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
@@ -202,6 +293,8 @@ git -C "$dir" remote add origin "$url.git"
 # writing a file.
 uvx --quiet copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
+  --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
+  --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
   --vcs-ref "$template_ref" "gh:$template_repo" "$dir" < /dev/null
 git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $spdx)"
@@ -287,8 +380,31 @@ echo 'Made with [plinth](https://github.com/coolbress/plinth).' >> "$dir/README.
 git -C "$dir" commit -q -am "docs: first pull request through the wall"
 git -C "$dir" push -q -u origin "$branch"
 head_sha="$(git -C "$dir" rev-parse HEAD)"
+# The body follows the shape the new repository actually ends up with, rather
+# than one sentence: the door would otherwise honour the convention it just
+# installed for every pull request except the one it writes itself. Where the
+# owner publishes their own template the two headings are dropped, because
+# theirs is the convention and this is not the place to impose ours.
+if [ "$has_pr" = yes ]; then
+  # Your template's own fields are not filled in here, and cannot be: the box
+  # does not know what your headings ask for. It says so instead of pretending,
+  # and this pull request exists to be merged in a minute, not to be a record.
+  first_pr_body="Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. It adds one line to README.md and nothing else.
+
+Not verified yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+
+This body does not follow $owner/.github's pull-request template, which this repository inherits: the box cannot answer fields it has not read. Rewrite it with \`gh pr edit $repo --body-file -\` if you want the record to match, or merge it as it is."
+else
+  first_pr_body="## What and why
+
+Opened by /plinth:new-project to prove the wall. Every required check must be green before the merge button enables, so merging this is the proof that the wall stands and can be opened. It adds one line to README.md and changes nothing else.
+
+## How it was verified
+
+Nothing yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial"
+fi
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
-  --body "Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial")"
+  --body "$first_pr_body")"
 deadline=$((SECONDS + first_pr_wait)); seen=0; codeql=0; repush=""
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \

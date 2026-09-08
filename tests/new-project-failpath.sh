@@ -30,6 +30,12 @@ case "$all" in
   "api -X GET repos/"*"/actions/runs "*)          step=runs ;;
   "api repos/"*"/actions/workflows"*)            step=workflows ;;
   "api repos/"*"/commits/"*"/check-runs"*)       step=checkruns ;;
+  # GitHub reads a community-health file from the root, `.github/` or `docs/`,
+  # and the door asks about all of them: match the name, not one path.
+  *"/contents/"*"PULL_REQUEST_TEMPLATE.md"*)     step=shared-pr ;;
+  "api repos/"*"/.github --jq .visibility"*)     step=shared-visibility ;;
+  *"/contents/.github/ISSUE_TEMPLATE/"*)         step=shared-form-body ;;
+  *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "repo create"*)                                step=create ;;
   "repo delete"*)                                step=delete ;;
@@ -54,6 +60,39 @@ case "$step" in
   membership)    [ "${MOCK_MEMBER:-1}" = 1 ] || exit 1; echo member ;;
   license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *licenses/gpl-3.0*) echo GPL-3.0 ;; *) exit 1 ;; esac ;;
   choices)       printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nplinth_sha:\n' | base64 ;;
+  # The owner's shared community-health files: present, absent (404) or
+  # unreadable (any other failure). `gh` prints "Not Found" on a 404.
+  shared-pr)     case "${MOCK_SHARED_PR:-absent}" in
+                   present) echo '{"path":"PULL_REQUEST_TEMPLATE.md"}' ;;
+                   error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
+                   *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                 esac ;;
+  # The door asks for `--jq .[].name`, so the mock answers names, one per line.
+  # `gitkeep` and `config` are folders that exist and hold no template.
+  # Only a public `.github` repository is inherited from; a private one is
+  # readable through the API and applies to nothing.
+  shared-visibility)
+                 case "${MOCK_SHARED_VISIBILITY:-public}" in
+                   private) echo private ;;
+                   error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
+                   missing) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                   *)       echo public ;;
+                 esac ;;
+  # The listing (names, one per line) and then each candidate's content, which
+  # the door reads before believing the name.
+  shared-forms)  case "${MOCK_SHARED_FORMS:-absent}" in
+                   present|empty) printf 'bug.yml\n' ;;
+                   gitkeep) printf '.gitkeep\n' ;;
+                   config)  printf 'config.yml\n' ;;
+                   error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
+                   *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                 esac ;;
+  shared-form-body)
+                 case "${MOCK_SHARED_FORMS:-absent}" in
+                   present) printf 'name: Bug\ndescription: x\nlabels: [bug]\nbody: []\n' | base64 ;;
+                   empty)   printf '' | base64 ;;
+                   *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                 esac ;;
   exists)        [ "${MOCK_EXISTS:-0}" = 1 ] || exit 1; echo "https://github.com/x/y" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
@@ -153,6 +192,11 @@ E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"         
 run owner-unknown  err no no "does not exist on GitHub"                                      -- nobody/probe
 run owner-other    err no no "user account other than yours"                                -- alice/probe
 E="MOCK_MEMBER=0"     run org-nonmember err no no "not a member of the organization"         -- someorg/probe
+# The owner's shared templates decide what the box writes. A lookup that failed
+# is not an answer: writing ours could replace theirs, skipping ours could leave
+# none, so it stops before the repository exists (#88).
+E="MOCK_SHARED_PR=error"    run shared-unreadable  err no no "cannot read whether tester/.github publishes" -- probe
+E="MOCK_SHARED_FORMS=error" run shared-forms-error err no no "--force-defaults"                             -- probe
 run private        err no no "private repositories are not supported yet"                   -- probe --private
 run private-first  err no no "private repositories are not supported yet"                   -- --private probe
 run two-names      err no no "one name only"                                                -- probe other
@@ -186,6 +230,32 @@ E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: b
 # Labels are a convenience, not a wall stone: a failed create names the label and
 # the run carries on. A rollback over a label would delete a repository whose wall is up.
 E="FAIL_AT=label"     run label-fails   ok yes no "warning: could not create the label task" -- probe
+E="MOCK_SHARED_PR=present MOCK_SHARED_FORMS=present" run shared-both ok yes no "already publishes: pull-request template issue forms" -- probe
+E="MOCK_SHARED_PR=present" run shared-pr-only ok yes no "already publishes: pull-request template" -- probe
+# Only a public `.github` is inherited from. A private one reads fine through the
+# API and applies to nothing, so believing it would leave the new repository with
+# neither the owner's templates nor ours.
+E="MOCK_SHARED_VISIBILITY=private MOCK_SHARED_PR=present MOCK_SHARED_FORMS=present" run shared-private ok yes no "" -- probe
+if grep -q -- "owner_has_pr_template=false" "$work/home-shared-private/calls.log" \
+  && ! grep -q "contents/PULL_REQUEST_TEMPLATE" "$work/home-shared-private/calls.log"
+then ok shared-private "a private .github is not inherited from, and is not even asked for its files"
+else bad shared-private "a private .github was treated as shared"; fi
+E="MOCK_SHARED_VISIBILITY=missing" run shared-no-repo ok yes no "" -- probe
+E="MOCK_SHARED_VISIBILITY=error"   run shared-vis-error err no no "cannot read whether tester/.github is public" -- probe
+# A folder is not a template. floor-check.py reads a `.gitkeep`-only folder as
+# "no local forms, the shared set applies"; the box must read the owner's folder
+# the same way, or the repository ends up with no forms anywhere (#88).
+for empty in gitkeep config empty; do
+  E="MOCK_SHARED_FORMS=$empty" run "shared-forms-$empty" ok yes no "" -- probe
+  if grep -q -- "owner_has_issue_forms=false" "$work/home-shared-forms-$empty/calls.log"
+  then ok "shared-forms-$empty" "a shared folder holding only $empty is not forms; the box renders its own"
+  else bad "shared-forms-$empty" "the box suppressed its forms for a folder with no usable template"; fi
+done
+if grep -q "does not follow tester/.github's pull-request template" "$work/home-shared-pr-only/calls.log"; then ok shared-pr-only "the first pull request says it does not follow the inherited template"
+else bad shared-pr-only "the first pull request is silent about the inherited template"; fi
+if grep -q "^gh pr create.*## What and why" "$work/home-shared-pr-only/calls.log"; then bad shared-pr-only "plinth's headings were imposed over the owner's template"
+else ok shared-pr-only "plinth's headings are not imposed over the owner's template"; fi
+E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "" -- probe --force-defaults
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
 # The spdx id is still looked up (`mit` -> `MIT`); the license *text* is not:
@@ -224,6 +294,25 @@ check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowe
 check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
+# Issue forms are inherited from `.github/ISSUE_TEMPLATE` alone, and that is the
+# only path floor-check.py reads: asking anywhere else would suppress our forms
+# for something GitHub never offers.
+check "issue forms are looked for in .github/ISSUE_TEMPLATE and nowhere else" \
+  'grep -q "contents/.github/ISSUE_TEMPLATE --jq" "$log" && ! grep -q "docs/ISSUE_TEMPLATE" "$log"'
+check "all three locations GitHub reads a shared pull-request template from are asked about" \
+  '[ "$(grep -c "contents/.*PULL_REQUEST_TEMPLATE.md" "$log")" = 3 ]'
+# Order, not shape: every question about the owner is answered before anything
+# exists, so a wrong answer costs nothing.
+check "the owner's shared templates are asked about before anything is created" \
+  '[ "$(grep -n "^gh repo create" "$log" | cut -d: -f1)" -gt "$(grep -nE "contents/(.github/)?(PULL_REQUEST_TEMPLATE.md|ISSUE_TEMPLATE)|/.github --jq .visibility" "$log" | tail -1 | cut -d: -f1)" ]'
+check "an owner with no shared templates gets the box's own copies" \
+  'grep -q -- "owner_has_pr_template=false" "$log" && grep -q -- "owner_has_issue_forms=false" "$log"'
+# The body is multi-line and the mock logs `gh $*`, so its first line lands on
+# the `gh pr create` line and the rest follows: look for the pieces, not a shape.
+check "the first pull request body carries the two sections, not one sentence" \
+  'grep -q "^gh pr create.*## What and why" "$log" && grep -q "^## How it was verified$" "$log"'
+check "the first pull request says what has not been verified yet" \
+  'grep -q "the checks have not run" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
 check "every wayfinder label docs/agents/issue-tracker.md names is created (the map, and its 4 child types)" \
   '[ "$(grep -cE "label create wayfinder:(map|research|grilling|prototype|task) " "$log")" = 5 ]'
