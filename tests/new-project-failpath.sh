@@ -30,6 +30,8 @@ case "$all" in
   "api -X GET repos/"*"/actions/runs "*)          step=runs ;;
   "api repos/"*"/actions/workflows"*)            step=workflows ;;
   "api repos/"*"/commits/"*"/check-runs"*)       step=checkruns ;;
+  "api repos/"*"/.github/contents/PULL_REQUEST_TEMPLATE.md"*) step=shared-pr ;;
+  "api repos/"*"/.github/contents/.github/ISSUE_TEMPLATE"*)   step=shared-forms ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "repo create"*)                                step=create ;;
   "repo delete"*)                                step=delete ;;
@@ -54,6 +56,18 @@ case "$step" in
   membership)    [ "${MOCK_MEMBER:-1}" = 1 ] || exit 1; echo member ;;
   license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *licenses/gpl-3.0*) echo GPL-3.0 ;; *) exit 1 ;; esac ;;
   choices)       printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nplinth_sha:\n' | base64 ;;
+  # The owner's shared community-health files: present, absent (404) or
+  # unreadable (any other failure). `gh` prints "Not Found" on a 404.
+  shared-pr)     case "${MOCK_SHARED_PR:-absent}" in
+                   present) echo '{"path":"PULL_REQUEST_TEMPLATE.md"}' ;;
+                   error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
+                   *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                 esac ;;
+  shared-forms)  case "${MOCK_SHARED_FORMS:-absent}" in
+                   present) echo '[{"name":"bug.yml"}]' ;;
+                   error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
+                   *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                 esac ;;
   exists)        [ "${MOCK_EXISTS:-0}" = 1 ] || exit 1; echo "https://github.com/x/y" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
@@ -153,6 +167,11 @@ E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"         
 run owner-unknown  err no no "does not exist on GitHub"                                      -- nobody/probe
 run owner-other    err no no "user account other than yours"                                -- alice/probe
 E="MOCK_MEMBER=0"     run org-nonmember err no no "not a member of the organization"         -- someorg/probe
+# The owner's shared templates decide what the box writes. A lookup that failed
+# is not an answer: writing ours could replace theirs, skipping ours could leave
+# none, so it stops before the repository exists (#88).
+E="MOCK_SHARED_PR=error"    run shared-unreadable  err no no "cannot read whether tester/.github publishes" -- probe
+E="MOCK_SHARED_FORMS=error" run shared-forms-error err no no "--force-defaults"                             -- probe
 run private        err no no "private repositories are not supported yet"                   -- probe --private
 run private-first  err no no "private repositories are not supported yet"                   -- --private probe
 run two-names      err no no "one name only"                                                -- probe other
@@ -186,6 +205,8 @@ E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: b
 # Labels are a convenience, not a wall stone: a failed create names the label and
 # the run carries on. A rollback over a label would delete a repository whose wall is up.
 E="FAIL_AT=label"     run label-fails   ok yes no "warning: could not create the label task" -- probe
+E="MOCK_SHARED_PR=present MOCK_SHARED_FORMS=present" run shared-both ok yes no "already publishes: pull-request template issue forms" -- probe
+E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "" -- probe --force-defaults
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
 # The spdx id is still looked up (`mit` -> `MIT`); the license *text* is not:
@@ -224,6 +245,16 @@ check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowe
 check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
+check "the owner's shared templates are asked about before anything is created" \
+  '[ "$(grep -nE "contents/PULL_REQUEST_TEMPLATE.md|contents/.github/ISSUE_TEMPLATE|^gh repo create" "$log" | head -3 | sed -E "s/.*PULL_REQUEST.*/pr/; s/.*ISSUE_TEMPLATE.*/forms/; s/.*repo create.*/create/" | tr "\n" " ")" = "pr forms create " ]'
+check "an owner with no shared templates gets the box's own copies" \
+  'grep -q -- "owner_has_pr_template=false" "$log" && grep -q -- "owner_has_issue_forms=false" "$log"'
+# The body is multi-line and the mock logs `gh $*`, so its first line lands on
+# the `gh pr create` line and the rest follows: look for the pieces, not a shape.
+check "the first pull request body carries the two sections, not one sentence" \
+  'grep -q "^gh pr create.*## What and why" "$log" && grep -q "^## How it was verified$" "$log"'
+check "the first pull request says what has not been verified yet" \
+  'grep -q "the checks have not run" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
 check "every wayfinder label docs/agents/issue-tracker.md names is created (the map, and its 4 child types)" \
   '[ "$(grep -cE "label create wayfinder:(map|research|grilling|prototype|task) " "$log")" = 5 ]'

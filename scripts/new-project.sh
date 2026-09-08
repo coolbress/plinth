@@ -2,6 +2,7 @@
 # The door: create a repository with the wall already up, or create nothing.
 #
 #   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
+#                  [--force-defaults]
 #
 # Preflight, in order; the first miss stops with the one line that fixes it,
 # before anything exists:
@@ -34,10 +35,11 @@ template_ci=".github/workflows/ci.yml"
 claude_floor="2.1.234"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]"
-target=""; lic=mit; arch=cli; dir=""; private=0
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--force-defaults]"
+target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0
 for a in "$@"; do case "$a" in
   --private)     private=1 ;;
+  --force-defaults) force_defaults=1 ;;
   --license=*)   lic="${a#*=}" ;;
   --archetype=*) arch="${a#*=}" ;;
   --dir=*)       dir="${a#*=}" ;;
@@ -173,6 +175,35 @@ else
   warn "could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
 fi
 
+# The owner's shared community-health files. GitHub applies `<owner>/.github`'s
+# copy to a repository that carries none of its own, so writing ours would
+# replace the owner's convention without saying so. Asked here, before anything
+# exists: a lookup that fails is not an answer, and the fix is to retry or to
+# choose, not to guess. `--force-defaults` skips the question and renders ours.
+#
+# Two answers, not one. GitHub decides the pull-request template per file and
+# the issue templates per folder: one local form -- or just a `config.yml` --
+# stops the whole shared folder being inherited, and the two are never merged.
+shared_of() { # <path> -> yes | no | unknown
+  local out; out="$(gh api "repos/$owner/.github/contents/$1" 2>&1 >/dev/null)" && { echo yes; return; }
+  case "$out" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac
+}
+if [ "$force_defaults" = 1 ]; then
+  has_pr=no; has_forms=no
+else
+  has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md)"
+  has_forms="$(shared_of .github/ISSUE_TEMPLATE)"
+  if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
+    stop "cannot read whether $owner/.github publishes shared templates" \
+      "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
+      "  fix: run it again, or pass --force-defaults to render the template's own copies"
+  fi
+fi
+own_note=""
+[ "$has_pr" = yes ] && own_note="${own_note} pull-request template"
+[ "$has_forms" = yes ] && own_note="${own_note} issue forms"
+[ -n "$own_note" ] && echo "$owner/.github already publishes:${own_note}; the box will not write over them"
+
 echo "create $repo (public, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: ruleset + CodeQL; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
@@ -202,6 +233,8 @@ git -C "$dir" remote add origin "$url.git"
 # writing a file.
 uvx --quiet copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
+  --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
+  --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
   --vcs-ref "$template_ref" "gh:$template_repo" "$dir" < /dev/null
 git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $spdx)"
@@ -296,8 +329,28 @@ echo 'Made with [plinth](https://github.com/coolbress/plinth).' >> "$dir/README.
 git -C "$dir" commit -q -am "docs: first pull request through the wall"
 git -C "$dir" push -q -u origin "$branch"
 head_sha="$(git -C "$dir" rev-parse HEAD)"
+# The body follows the shape the new repository actually ends up with, rather
+# than one sentence: the door would otherwise honour the convention it just
+# installed for every pull request except the one it writes itself. Where the
+# owner publishes their own template the two headings are dropped, because
+# theirs is the convention and this is not the place to impose ours.
+if [ "$has_pr" = yes ]; then
+  first_pr_body="Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. It adds one line to README.md and nothing else.
+
+Not verified yet: the checks have not run at the moment this is written. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+
+Written to $owner/.github's pull-request template, which this repository inherits."
+else
+  first_pr_body="## What and why
+
+Opened by /plinth:new-project to prove the wall. Every required check must be green before the merge button enables, so merging this is the proof that the wall stands and can be opened. It adds one line to README.md and changes nothing else.
+
+## How it was verified
+
+Nothing yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial"
+fi
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
-  --body "Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial")"
+  --body "$first_pr_body")"
 deadline=$((SECONDS + first_pr_wait)); seen=0; codeql=0; repush=""
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
