@@ -184,13 +184,18 @@ fi
 # Two answers, not one. GitHub decides the pull-request template per file and
 # the issue templates per folder: one local form -- or just a `config.yml` --
 # stops the whole shared folder being inherited, and the two are never merged.
+# `unknown: <why>` rather than a variable: these run in command substitutions,
+# which are subshells, so an assignment inside would never reach the caller.
+# "A failed lookup is not an answer" is only actionable if the reader learns
+# what failed, and `why_unknown` peels the reason back off.
+why_unknown() { case "$1" in unknown:*) printf '%s' "${1#unknown: }" ;; *) printf '(no message)' ;; esac; }
 shared_of() { # <path>... -> yes (any present) | no (all absent) | unknown (any unreadable)
-  local out seen_unknown=0
+  local out seen_unknown=""
   for path in "$@"; do
     out="$(gh api "repos/$owner/.github/contents/$path" 2>&1 >/dev/null)" && { echo yes; return; }
-    case "$out" in *"Not Found"*|*"404"*) ;; *) seen_unknown=1 ;; esac
+    case "$out" in *"Not Found"*|*"404"*) ;; *) seen_unknown="$path: $out" ;; esac
   done
-  [ "$seen_unknown" = 1 ] && echo unknown || echo no
+  [ -n "$seen_unknown" ] && echo "unknown: $seen_unknown" || echo no
 }
 # One template GitHub can actually offer, in the owner's shared folder.
 # `.github/ISSUE_TEMPLATE` only: unlike a pull-request template, a default issue
@@ -208,12 +213,16 @@ shared_config_only() { # -> yes when the shared folder holds a config and no for
     grep -qiE '^config\.(yml|yaml)$' && echo yes || echo no
 }
 shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
-  local listing name body
+  local listing name body enc
   listing="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>&1)" || {
-    case "$listing" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac; return; }
+    case "$listing" in *"Not Found"*|*"404"*) echo no ;;
+      *) echo "unknown: .github/ISSUE_TEMPLATE: $listing" ;; esac; return; }
   while read -r name; do
     case "$name" in ""|config.yml|config.yaml) continue ;; *.yml|*.yaml|*.md) ;; *) continue ;; esac
-    body="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE/$name" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || { echo unknown; return; }
+    enc="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE/$name" --jq .content 2>&1)" || {
+      echo "unknown: .github/ISSUE_TEMPLATE/$name: $enc"; return; }
+    body="$(base64 -d <<<"$enc" 2>&1)" || {
+      echo "unknown: .github/ISSUE_TEMPLATE/$name: content could not be decoded ($body)"; return; }
     [ -n "$body" ] || continue
     usable_form "$body" "$name" && { echo yes; return; }
   done <<<"$listing"
@@ -226,7 +235,7 @@ shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
 shared_repo_public() { # -> yes | no | unknown
   local out
   out="$(gh api "repos/$owner/.github" --jq .visibility 2>&1)" || {
-    case "$out" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac; return; }
+    case "$out" in *"Not Found"*|*"404"*) echo no ;; *) echo "unknown: $out" ;; esac; return; }
   [ "$out" = public ] && echo yes || echo no
 }
 # Three ways to end up rendering our own copies: the caller asked for them, the
@@ -234,8 +243,10 @@ shared_repo_public() { # -> yes | no | unknown
 # never inherited from. Only a lookup that *failed* stops the run.
 has_pr=no; has_forms=no
 if [ "$force_defaults" = 0 ]; then
-  case "$(shared_repo_public)" in
-    unknown) stop "cannot read whether $owner/.github is public" \
+  vis="$(shared_repo_public)"
+  case "$vis" in
+    unknown*) stop "cannot read whether $owner/.github is public" \
+               "  the API said: $(why_unknown "$vis")" \
                "  a failed lookup is not an answer: only a public .github repository is inherited from" \
                "  fix: run it again, or pass --force-defaults to render the template's own copies" ;;
     yes)
@@ -246,11 +257,17 @@ if [ "$force_defaults" = 0 ]; then
       # A directory is not a template, and neither is a filename: the repository
       # would end up with no form anywhere and fail the floor check the box installs.
       has_forms="$(shared_forms)"
-      if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
+      # Computed first, because a `case` nested inside a command substitution is
+      # hard to read and was written wrong once. `bash -n` on this machine's
+      # bash 3.2 did not report that error; CI's bash 5 may well have. Do not
+      # read that as a hole in the check -- read it as a reason not to nest.
+      case "$has_pr" in unknown*) bad_lookup="$has_pr" ;; *) bad_lookup="$has_forms" ;; esac
+      case "$has_pr$has_forms" in *unknown*)
         stop "cannot read whether $owner/.github publishes shared templates" \
+          "  the API said: $(why_unknown "$bad_lookup")" \
           "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
-          "  fix: run it again, or pass --force-defaults to render the template's own copies"
-      fi
+          "  fix: run it again, or pass --force-defaults to render the template's own copies" ;;
+      esac
       # A shared folder holding only a config is not forms, and rendering ours
       # replaces it: GitHub swaps the folder whole. Say so rather than let the
       # owner's contact links and blank-issue setting disappear quietly.
