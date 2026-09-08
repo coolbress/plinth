@@ -203,6 +203,10 @@ usable_form() { # <text> <name> -> 0 when GitHub would offer it
     *)    grep -q '^name:' <<<"$1" && grep -q '^description:' <<<"$1" && grep -q '^body:' <<<"$1" ;;
   esac
 }
+shared_config_only() { # -> yes when the shared folder holds a config and no form
+  gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>/dev/null |
+    grep -qiE '^config\.(yml|yaml)$' && echo yes || echo no
+}
 shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
   local listing name body
   listing="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>&1)" || {
@@ -215,21 +219,45 @@ shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
   done <<<"$listing"
   echo no
 }
-if [ "$force_defaults" = 1 ]; then
-  has_pr=no; has_forms=no
-else
-  # GitHub reads a community-health file from the root, `.github/` or `docs/`.
-  # Checking only the root would miss an owner who used either of the other two
-  # and write over the template this change exists to protect.
-  has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md)"
-  # A directory is not a template, and neither is a filename: the repository
-  # would end up with no form anywhere and fail the floor check the box installs.
-  has_forms="$(shared_forms)"
-  if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
-    stop "cannot read whether $owner/.github publishes shared templates" \
-      "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
-      "  fix: run it again, or pass --force-defaults to render the template's own copies"
-  fi
+# GitHub applies default community-health files only from a *public* `.github`
+# repository. A private one is readable through the API by whoever can see it,
+# so believing that read would suppress our copies for something the new public
+# repository never inherits.
+shared_repo_public() { # -> yes | no | unknown
+  local out
+  out="$(gh api "repos/$owner/.github" --jq .visibility 2>&1)" || {
+    case "$out" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac; return; }
+  [ "$out" = public ] && echo yes || echo no
+}
+# Three ways to end up rendering our own copies: the caller asked for them, the
+# owner publishes no `.github`, or that repository is private and therefore
+# never inherited from. Only a lookup that *failed* stops the run.
+has_pr=no; has_forms=no
+if [ "$force_defaults" = 0 ]; then
+  case "$(shared_repo_public)" in
+    unknown) stop "cannot read whether $owner/.github is public" \
+               "  a failed lookup is not an answer: only a public .github repository is inherited from" \
+               "  fix: run it again, or pass --force-defaults to render the template's own copies" ;;
+    yes)
+      # GitHub reads a community-health file from the root, `.github/` or
+      # `docs/`. Checking only the root would miss an owner who used either of
+      # the other two and write over the template this exists to protect.
+      has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md)"
+      # A directory is not a template, and neither is a filename: the repository
+      # would end up with no form anywhere and fail the floor check the box installs.
+      has_forms="$(shared_forms)"
+      if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
+        stop "cannot read whether $owner/.github publishes shared templates" \
+          "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
+          "  fix: run it again, or pass --force-defaults to render the template's own copies"
+      fi
+      # A shared folder holding only a config is not forms, and rendering ours
+      # replaces it: GitHub swaps the folder whole. Say so rather than let the
+      # owner's contact links and blank-issue setting disappear quietly.
+      [ "$has_forms" = no ] && [ "$(shared_config_only)" = yes ] &&
+        warn "$owner/.github publishes an issue-template config but no form; the box renders its own forms and config, and yours will not apply to $repo"
+      ;;
+  esac
 fi
 own_note=""
 [ "$has_pr" = yes ] && own_note="${own_note} pull-request template"
