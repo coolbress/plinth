@@ -90,8 +90,8 @@ plant "config.yml is configuration, not a form" \
 infos "an empty folder falls through to inheritance, not to a verdict" \
   "rm .github/ISSUE_TEMPLATE/*.yml" "inheritance not verified"
 plant "an empty folder alone is not called a missing form" "rm .github/ISSUE_TEMPLATE/*.yml" "__none__" || true
-warns "front matter with an empty name is not a template" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
+warns "front matter with an empty name is named as unusable" \
+  "printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
 plant "a defect inside a renamed form is still caught" \
   "cd .github/ISSUE_TEMPLATE && mv task.yml work_item.yml && printf 'name: t\ndescription: \"x\"\nbody: []\n' > work_item.yml" "no labels"
 # Widening the net must not fail a repository that passed yesterday: `.yml` keeps
@@ -101,10 +101,17 @@ plant "an unlabelled .yaml next to good forms warns, it does not fail" \
   "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "__none__" || true
 plant "an unlabelled .yml still fails" \
   "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "no labels"
-plant "an empty Markdown template does not pass as a form" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
-warns "an empty Markdown template is named" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
+# An invalid extra warns, because the repository passed without that file being
+# read. A repository whose *every* template is invalid never passed the old
+# filename check either, so it fails: leaving it green would be a loosening.
+warns "an empty Markdown template beside good forms only warns" \
+  ": > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
+plant "an empty Markdown template beside good forms does not fail" \
+  ": > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
+plant "an empty Markdown template as the only one fails" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
+plant "a bare name: as the only template fails" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
 plant "block-list labels are accepted" "printf 'name: t\ndescription: \"x\"\nlabels:\n  - task\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "__none__" || true
 plant "multi-stage and --platform FROM are understood" "printf 'FROM --platform=linux/amd64 python:3.12-slim@sha256:%064d AS base\nFROM base\nRUN uv sync --locked\nUSER app\nCMD [\"python\", \"-m\", \"app\"]\n' 0 > Dockerfile" "__none__" || true
 
@@ -140,6 +147,12 @@ out_mix="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.git
 if grep -qE "FAIL.*(issue template|neither local)" <<<"$out_mix"; then bad "a readable config was taken as proof the forms are absent"
 else ok "a readable config next to an unreadable form yields no absence verdict"; fi
 grep -q "INFO  inherited forms not verified" <<<"$out_mix" && ok "the unreadable form is named" || bad "the unreadable form is not named"
+
+# A listing holding only a config proves no form is there: configuration is never
+# fetched, so a failed read of it cannot hide that.
+cfg_api="$work/inh-cfg"; mkdir -p "$cfg_api/repos/o/.github/contents/.github"
+printf '[{"name":"config.yml"}]' > "$cfg_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
+inherit "a shared listing of only a config is a real absence, not an unread file" "FAIL  no issue template (inherited)" "" "$cfg_api"
 
 # Nothing local and nothing shared: a 404 on the listing is a real absence.
 none_api="$work/inh-none"; mkdir -p "$none_api/repos/o"

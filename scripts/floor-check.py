@@ -175,6 +175,11 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
             files, unread = {}, []
             for entry in listing:
                 name = entry.get("name", "")
+                # Configuration is not a candidate template. Fetching it would
+                # let a failed read of `config.yml` alone hide a listing that
+                # already proves no form is there.
+                if name in CONFIG_NAMES:
+                    continue
                 if Path(name).suffix in FORM_SUFFIXES:
                     text = inherited_file(owner, f".github/ISSUE_TEMPLATE/{name}", network)
                     # A listing entry is not a template. Counting a file whose
@@ -185,10 +190,8 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
                         unread.append(name)
             if unread:
                 result("INFO", f"inherited forms not verified (content unreadable): {', '.join(sorted(unread))}")
-            # A readable config is not a readable form: it says nothing about
-            # whether the forms are there. Absence is concluded only when every
-            # candidate was actually read.
-            if [n for n in files if n not in CONFIG_NAMES] or not unread:
+            # Absence is concluded only when every candidate was actually read.
+            if files or not unread:
                 check_issue_forms(files, "inherited")
 
     ok((root / ".github" / "dependabot.yml").is_file(), ".github/dependabot.yml present",
@@ -209,6 +212,7 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
     ok(bool(forms), f"issue templates found ({where}): {', '.join(sorted(forms))}",
        f"no issue template ({where}): every issue arrives in whatever shape its writer chose")
     alias_trap = re.compile(r"^\s*[\w-]+:\s+[*&]")
+    usable = 0
     for name, text in sorted(forms.items()):
         # `.yml` was already checked before this file started reading `.yaml`
         # and `.md`; those two are new ground. A defect found only because the
@@ -220,14 +224,13 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
               (lambda cond, good, bad: result("PASS" if cond else "WARN", good if cond else bad))
         if name.endswith(".md"):
             # A legacy Markdown template is front matter and prose. GitHub reads
-            # its `name:` from that front matter; without it the file is not a
-            # template at all, so an empty one must not pass as a form.
-            # The key alone is not a name: `name:` with nothing after it leaves
-            # GitHub without a title to list the template under.
+            # its `name:` from that front matter; the key alone is not a name,
+            # and without a value there is no title to list the template under.
             fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
-            say(bool(fm) and re.search(r"^name:[ \t]*\S", fm.group(1), re.M) is not None,
-                f"{name} has Markdown front matter with a name",
+            good = bool(fm) and re.search(r"^name:[ \t]*\S", fm.group(1), re.M) is not None
+            say(good, f"{name} has Markdown front matter with a name",
                 f"{name} has no front matter `name:` with a value: GitHub does not offer it as a template")
+            usable += good
             continue
         keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.M)]
         say(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")
@@ -235,10 +238,18 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
         trap = [n for n, ln in enumerate(text.splitlines(), 1) if alias_trap.match(ln)]
         say(not trap, f"{name} has no unquoted YAML alias", f"{name} line {trap}: value starts with * or &")
         # `labels:` is plinth's policy, not GitHub's syntax: forms are valid
-        # without it. It stays a FAIL where it already was, and no more.
+        # without it, so it does not decide whether GitHub can offer the file.
         labelled = re.search(r"^labels:\s*\[.+\]", text, re.M) or re.search(r"^labels:\s*\n\s+- ", text, re.M)
         say(labelled is not None, f"{name} labels its issues",
             f"{name} has no labels: those issues never sort in a list")
+        usable += not keys and not trap
+    # An invalid extra is a WARN because the repository passed without it being
+    # read. A repository whose every template is invalid never passed: it failed
+    # the old filename check too, so leaving it green would be a loosening, not
+    # compatibility.
+    if forms:
+        ok(usable > 0, f"at least one template GitHub can offer ({where})",
+           f"no usable issue template ({where}): every file found is missing what GitHub needs to offer it")
 
 
 def check_gitattributes(root: Path) -> None:
