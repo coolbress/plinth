@@ -257,8 +257,10 @@ if [ "$force_defaults" = 0 ]; then
       # A directory is not a template, and neither is a filename: the repository
       # would end up with no form anywhere and fail the floor check the box installs.
       has_forms="$(shared_forms)"
-      # Computed first: a `case` nested inside a command substitution parses only
-      # when it runs, so `bash -n` would not have caught a mistake in it.
+      # Computed first, because a `case` nested inside a command substitution is
+      # hard to read and was written wrong once. `bash -n` on this machine's
+      # bash 3.2 did not report that error; CI's bash 5 may well have. Do not
+      # read that as a hole in the check -- read it as a reason not to nest.
       case "$has_pr" in unknown*) bad_lookup="$has_pr" ;; *) bad_lookup="$has_forms" ;; esac
       case "$has_pr$has_forms" in *unknown*)
         stop "cannot read whether $owner/.github publishes shared templates" \
