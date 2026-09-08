@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # The door's failure paths, offline. The one property scripts/new-project.sh
-# must keep: nothing is created until preflight passes, and once created,
-# any failure deletes the repository. The success path is visible by eye; the
-# failure paths only by failing them, which needs a repository, so `gh` is a
-# mock. It records every call and fails at the step FAIL_AT names. The
-# verdicts: was `gh repo create` called, was `gh repo delete` called.
+# must keep: nothing is created until preflight passes, and once created, a
+# failure that leaves the wall down deletes the repository.
+#
+# "Any failure deletes" is not the contract and has not been for a while: a
+# label that cannot be created, a CodeQL default setup slow to register or to
+# pick the first pull request up, a CI run seen but not seen twice, and a
+# default branch repaired before the wall went up all warn and carry on. Each
+# of those has a case here asserting `deleted=no`, because a rollback over one
+# of them would delete a repository whose wall is standing (#97).
+#
+# The success path is visible by eye; the failure paths only by failing them,
+# which needs a repository, so `gh` is a mock. It records every call and fails
+# at the step FAIL_AT names. The verdicts: was `gh repo create` called, was
+# `gh repo delete` called.
 # shellcheck disable=SC2034  # log and proj are used inside the check() command strings
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
