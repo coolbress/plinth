@@ -24,6 +24,15 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   pull request description, which becomes the squash commit. AI is never a
   `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
 - A same-session `/code-review` helps but is not independent; say so. `third-party / review` only records an accepted reviewer's signal on the commit.
+- Issues and pull requests follow [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change)
+  (the pull-request shape) and [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)
+  (what a record has to carry). Read the templates that actually apply first,
+  the owner's `.github` defaults included; `gh --body` bypasses them. In a
+  consumer repository their conventions win, and plinth's are the default only
+  where they have none.
+- Changing behaviour: verify the boundaries and partial failures of the inputs
+  and states it touches, record which paths you exercised and which you did
+  not, and do not widen a few cases into a guarantee about all of them.
 
 ## Ask first
 
@@ -40,6 +49,9 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 - New repository: `/plinth:new-project <owner>/<name>`. Existing one:
   `/plinth:floor-check`. Choosing a tool: `/plinth:arsenal`; planning to review: `/ask-matt`.
 - Next ticket: `gh issue list --label ready-for-agent`, then `/implement #N`.
+  `/implement` ends at a commit on the current branch: the pull-request rules
+  above are not applied by it, and a skill carrying its own example format does
+  not override this repository's. Whoever opens the pull request applies them.
 - Issue tracker, triage labels, domain docs: [docs/agents/](docs/agents/issue-tracker.md)
   (`issue-tracker.md`, `triage-labels.md`, `domain.md`); glossary in `CONTEXT.md`.
 

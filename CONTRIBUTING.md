@@ -25,18 +25,55 @@ Everything else runs offline in seconds.
    of the eleven standard types. A commit made with AI carries the trailer
    `Assisted-by: <agent>:<model>` (see `AGENTS.md`).
 3. Open a pull request as a draft; mark it ready when it is. The description
-   becomes the body of the squash commit, so write it as one: what changed and
-   why, how it was verified, and, when AI wrote or assisted, the
-   `Assisted-by:` trailer as the last line. Delete the template's comment
-   line: GitHub keeps HTML comments in the squash message. CI runs `ci / install`,
-   `ci / tools`, `ci / docs` and `CodeQL`; the canary job runs the reusable
-   workflow against `canary/`. `third-party / review` waits for a review by
-   the Codex reviewer once the pull request is ready; it is optional and does
-   not block the merge.
+   becomes the body of the squash commit, so write it as one, in this shape:
+
+   ```text
+   ## What and why
+
+   The problem, what actually changed, the result, and why this approach.
+
+   ## How it was verified
+
+   What was run and what it showed; important unverified items and follow-ups.
+
+   Closes #N
+
+   Assisted-by: <agent>:<model>
+   ```
+
+   The issue link goes after the verification section, directly above the
+   attribution. `Closes #N` only when the pull request completes that issue;
+   partial work links with `Part of #N`, related work with `Related to #N`.
+   `Closes` drives GitHub's auto-close, so the wrong verb closes an unfinished
+   issue. With no issue to link, omit the line. Existing attribution is
+   preserved: several trailers form one contiguous block at the end. From
+   another repository, include this one: `Closes coolbress/plinth#N`.
+
+   Check the template that actually applies before you write. This repository
+   has no local `PULL_REQUEST_TEMPLATE.md` and **inherits** `coolbress/.github`'s;
+   `gh pr create --body`/`--body-file` bypasses it entirely, so read it
+   yourself. Remove its guidance comments — GitHub keeps HTML comments in the
+   squash message.
+
+   CI runs `ci / install`, `ci / tools`, `ci / docs` and `CodeQL`; the canary
+   job runs the reusable workflow against `canary/`. `third-party / review`
+   waits for a review by the Codex reviewer once the pull request is ready; it
+   is optional and does not block the merge.
 4. Before merging, read the description against the final diff: what changed
    and why, what was verified and what was not, as of the last commit. A
    review fix that changed the scope changes the description too, because
    the description is what lands on `main`.
+
+   Say what was actually run, and name what was not. A review you ran in the
+   same session that wrote the change is not an independent review, and must
+   not be described as one. When you change behaviour, verify the boundaries
+   and partial failures of the inputs and states it touches; record which paths
+   you exercised and which you did not, and do not widen the result of a few
+   cases into a guarantee about all of them.
+
+   Put user-facing explanation and history where it belongs — `README.md`,
+   `CHANGELOG.md`, or the page under `docs/` that covers it. Not every change
+   needs a README edit.
 5. Merge when green. Squash is the only merge method, the commit is the pull
    request title and description, and the branch is deleted on merge.
 
