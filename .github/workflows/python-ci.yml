@@ -495,7 +495,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/plinth"; mkdir -p "$d"
-          for f in scripts/floor-check.py ruleset.json; do
+          for f in scripts/floor-check.py ruleset.json labels.txt; do
             curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
               "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
           done

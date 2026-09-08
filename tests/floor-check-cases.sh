@@ -211,15 +211,55 @@ wall "a code_scanning rule for another tool is caught" "CodeQL not enforced" "pr
 mkdir -p "$work/bin"
 cat > "$work/bin/gh" <<MOCK
 #!/usr/bin/env bash
-f="$api/\$2.json"
+printf 'gh %s\n' "\$*" >> "$work/gh-calls.log"
+f="$api/\$(printf '%s' "\$2" | sed 's/?.*//').json"
 [ -f "\$f" ] && cat "\$f" || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
 MOCK
 chmod +x "$work/bin/gh"
 printf '{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole"}]}' > "$api/repos/o/r/rulesets/1.json"
 out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
-if grep -q "FAIL.*bypass actors present" <<<"$out" && ! grep -q "not verified" <<<"$out"; then ok "the API is read through gh when it is installed (bypass actors seen, 404 is absent)"
+# The negative half is about the ruleset read, not about every INFO in the run:
+# other checks legitimately say "not verified" when their fixture is absent.
+if grep -q "FAIL.*bypass actors present" <<<"$out" && ! grep -q "bypass actors not visible" <<<"$out"; then ok "the API is read through gh when it is installed (bypass actors seen, 404 is absent)"
 else bad "gh path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
+
+# Labels: names only, never a FAIL, paginated, and silent about what it could
+# not read. `ci / floor-check` passes --repo in every consumer's CI, so a FAIL
+# here would block merges over a label (#84).
+mkdir -p "$api/repos/o/r"
+# One page of the door's own list, minus two, plus GitHub's defaults: the reply
+# is deliberately larger than one API page would hold.
+python3 - "$root/labels.txt" > "$api/repos/o/r/labels.json" <<'PYEOF'
+import json, sys, pathlib
+want = [l.split("|")[0] for l in pathlib.Path(sys.argv[1]).read_text().splitlines()
+        if l.strip() and not l.lstrip().startswith("#")]
+have = [n for n in want if n not in ("spec", "wayfinder:task")]
+have += ["bug", "documentation", "duplicate", "enhancement", "good first issue",
+         "help wanted", "invalid", "question", "accessibility"]
+print(json.dumps([{"name": n} for n in have]))
+PYEOF
+: > "$work/gh-calls.log"
+out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+if grep -q "WARN  labels the door creates that are missing: spec, wayfinder:task" <<<"$out" \
+  || grep -q "WARN  labels the door creates that are missing: wayfinder:task, spec" <<<"$out"
+then ok "the two missing labels are named, and only those"
+else bad "missing labels"; printf '%s\n' "$out" | grep -i label | sed 's/^/        /'; fi
+if grep -q "INFO    gh label create spec --repo o/r --color 0e8a16" <<<"$out"
+then ok "each missing label carries the one command that creates it"
+else bad "no fix line"; printf '%s\n' "$out" | grep -i "label create" | sed 's/^/        /'; fi
+if ! grep -q "FAIL.*label" <<<"$out"; then ok "a missing label is never a FAIL"
+else bad "a missing label produced a FAIL"; fi
+if grep -q -- "--paginate" "$work/gh-calls.log"; then ok "the label read is paginated (30 per page would report labels missing that are there)"
+else bad "the label read is not paginated"; sed 's/^/        /' "$work/gh-calls.log"; fi
+# The exit code is the property that keeps consumers merging; lock it.
+rm -f "$api/repos/o/r/labels.json"
+out2="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --no-network 2>&1)"; rc2=$?
+if grep -q "INFO.*labels not verified" <<<"$out2" || ! grep -qi "label the door\|labels the door" <<<"$out2"
+then ok "offline, labels are not verified rather than reported missing"
+else bad "offline labels"; printf '%s\n' "$out2" | grep -i label | sed 's/^/        /'; fi
+[ "$rc2" = 0 ] || bad "the offline floor stopped passing"
+[ "$rc" = 0 ] && ok "a repository missing labels still exits 0" || bad "missing labels changed the exit code (rc=$rc)"
 
 # --sandbox reads this machine's Claude Code settings; off is WARN, never FAIL.
 mkdir -p "$work/conf"; printf '{"sandbox":{"enabled":false}}' > "$work/conf/settings.json"

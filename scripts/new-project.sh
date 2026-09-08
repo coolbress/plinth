@@ -217,24 +217,15 @@ git -C "$dir" push -q origin --delete "$probe" || true
 # The baseline goes straight to main, before the wall: after it nothing does.
 git -C "$dir" push -q -u origin main
 
-# Labels: the PR-type labels the template's label workflow applies, `task` for
-# the issue form, and the five triage labels mattpocock-skills expects.
-# Fields are separated by `|`, not `:`: the wayfinder labels contain a colon.
-{ for lbl in feat fix docs style refactor perf test build ci chore revert breaking; do echo "$lbl|ededed|PR title type"; done
-  echo "task|0052cc|One thing to build"
-  for lbl in needs-triage needs-info ready-for-agent ready-for-human wontfix; do echo "$lbl|c5def5|Triage (mattpocock-skills)"; done
-  # The kinds of record the planning flow leaves behind (wayfinder maps and children, the spec).
-  echo "wayfinder:map|5319e7|A wayfinder map, the decision set for one goal"
-  echo "wayfinder:research|5319e7|A wayfinder child, facts gathered against sources"
-  echo "wayfinder:grilling|5319e7|A wayfinder child, a decision taken by questioning"
-  echo "wayfinder:prototype|5319e7|A wayfinder child, a throwaway build that answers a question"
-  echo "wayfinder:task|5319e7|A wayfinder child, one thing to build"
-  echo "spec|0e8a16|A spec the tickets are cut from"
-} | while IFS='|' read -r lbl color desc; do
-  # --force: a new repository already carries GitHub's default set, and `wontfix`
-  # is in both lists. Without it that collision warns on every single run.
-  # A label that still fails is named and left: labels are a convenience, not a
-  # wall stone, and rolling a repository back over one would delete a good wall.
+# Labels. The list is `labels.txt` beside this script, shared with
+# scripts/floor-check.py so the two cannot drift (#84); the door creates them
+# and the checker reports what a repository is missing.
+#
+# --force: a new repository already carries GitHub's default set, and `wontfix`
+# is in both lists. Without it that collision warns on every single run.
+# A label that still fails is named and left: labels are a convenience, not a
+# wall stone, and rolling a repository back over one would delete a good wall.
+grep -vE '^[[:space:]]*(#|$)' "$here/../labels.txt" | while IFS='|' read -r lbl color desc; do
   gh label create "$lbl" --repo "$repo" --color "$color" --description "$desc" --force >/dev/null 2>&1 ||
     warn "could not create the label $lbl; create it by hand:
   gh label create $lbl --repo $repo --color $color"
