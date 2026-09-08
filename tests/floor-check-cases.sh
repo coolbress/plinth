@@ -112,6 +112,17 @@ plant "an empty Markdown template as the only one fails" \
   "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
 plant "a bare name: as the only template fails" \
   "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
+plant "a quoted empty name as the only template fails" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname: \"\"\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
+# GitHub rejects a form whose `body` is not a sequence. The check is new ground,
+# so it never fails on its own; it decides usability only for the extensions this
+# checker did not read before.
+plant "a .yaml whose body is not a list is not a usable template" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'name: x\ndescription: x\nlabels: [x]\nbody: nope\n' > .github/ISSUE_TEMPLATE/custom.yaml" "no usable issue template"
+plant "the same defect in .yml, which passed before, only warns" \
+  "cd .github/ISSUE_TEMPLATE && for f in bug feature task; do printf 'name: %s\ndescription: x\nlabels: [\"%s\"]\nbody: nope\n' \$f \$f > \$f.yml; done" "__none__" || true
+warns "the .yml body defect is still named" \
+  "printf 'name: bug\ndescription: x\nlabels: [\"bug\"]\nbody: nope\n' > .github/ISSUE_TEMPLATE/bug.yml" "body is not a list"
 plant "block-list labels are accepted" "printf 'name: t\ndescription: \"x\"\nlabels:\n  - task\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "__none__" || true
 plant "multi-stage and --platform FROM are understood" "printf 'FROM --platform=linux/amd64 python:3.12-slim@sha256:%064d AS base\nFROM base\nRUN uv sync --locked\nUSER app\nCMD [\"python\", \"-m\", \"app\"]\n' 0 > Dockerfile" "__none__" || true
 

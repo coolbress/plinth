@@ -202,6 +202,32 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     check_doc_links(root)
 
 
+def md_front_matter_name(text: str) -> str:
+    """The value of `name:` in a Markdown template's front matter, or ""."""
+    fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
+    if not fm:
+        return ""
+    m = re.search(r"^name:[ \t]*(.*)$", fm.group(1), re.M)
+    # Quotes are syntax, not a name: `name: ""` has no title behind it.
+    return m.group(1).strip().strip("'\"").strip() if m else ""
+
+
+def yaml_body_is_list(text: str) -> bool:
+    """Does `body:` hold a sequence? GitHub rejects a form whose body is not one.
+
+    Regex, not a parser: this file is standard library only."""
+    m = re.search(r"^body:[ \t]*(.*)$", text, re.M)
+    if not m:
+        return False
+    inline = m.group(1).strip()
+    if inline:
+        return inline.startswith("[")
+    for line in text[m.end():].splitlines():
+        if line.strip():
+            return re.match(r"^\s*-\s", line) is not None
+    return False
+
+
 def check_issue_forms(files: dict[str, str], where: str) -> None:
     # Presence is judged by what is there, not by filename: GitHub reads every
     # form in the folder whatever it is called, so a name this checker did not
@@ -226,8 +252,7 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
             # A legacy Markdown template is front matter and prose. GitHub reads
             # its `name:` from that front matter; the key alone is not a name,
             # and without a value there is no title to list the template under.
-            fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
-            good = bool(fm) and re.search(r"^name:[ \t]*\S", fm.group(1), re.M) is not None
+            good = bool(md_front_matter_name(text))
             say(good, f"{name} has Markdown front matter with a name",
                 f"{name} has no front matter `name:` with a value: GitHub does not offer it as a template")
             usable += good
@@ -242,7 +267,16 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
         labelled = re.search(r"^labels:\s*\[.+\]", text, re.M) or re.search(r"^labels:\s*\n\s+- ", text, re.M)
         say(labelled is not None, f"{name} labels its issues",
             f"{name} has no labels: those issues never sort in a list")
-        usable += not keys and not trap
+        # `body:` holding a scalar is a form GitHub rejects. This check is new
+        # ground for every extension, so it never fails on its own; it decides
+        # `usable` only for the extensions this file did not read before, where
+        # no repository can have been passing on the strength of it.
+        listed = yaml_body_is_list(text)
+        if not keys:
+            result("PASS" if listed else "WARN",
+                   f"{name} body is a list" if listed else
+                   f"{name} body is not a list: GitHub rejects a form whose body is not a sequence")
+        usable += not keys and not trap and (listed or known)
     # An invalid extra is a WARN because the repository passed without it being
     # read. A repository whose every template is invalid never passed: it failed
     # the old filename check too, so leaving it green would be a loosening, not
