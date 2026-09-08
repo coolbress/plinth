@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-09
+
 ## [0.5.0] - 2026-09-08
 
 ### Added
