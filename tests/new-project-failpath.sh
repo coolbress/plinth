@@ -109,6 +109,12 @@ case "$step" in
   runs)          case "${MOCK_RUNS:-ok}" in
                    ok)      printf '.github/workflows/label.yml completed success\n.github/workflows/ci.yml queued null\n' ;;
                    startup) printf '.github/workflows/ci.yml completed startup_failure\n' ;;
+                   # Listed once, then gone: the run exists, but the door never
+                   # sees it on two polls in a row (#108).
+                   once)    if [ -e "$FIRST_PUSHED_FILE.run-seen" ]; then printf '.github/workflows/label.yml completed success\n'
+                            else : > "$FIRST_PUSHED_FILE.run-seen"; printf '.github/workflows/label.yml completed success\n.github/workflows/ci.yml queued null\n'; fi ;;
+                   # No run at all: a real misconfiguration, and still fatal.
+                   none)    printf '.github/workflows/label.yml completed success\n' ;;
                  esac ;;
   workflows)     [ "${MOCK_CODEQL_WORKFLOW:-present}" = present ] && printf '.github/workflows/ci.yml\ndynamic/github-code-scanning/codeql\n' || printf '.github/workflows/ci.yml\n' ;;
   checkruns)     printf 'ci / lint\nci / test\n'; [ "${MOCK_CODEQL:-present}" = present ] && printf 'CodeQL\nAnalyze (python)\n' ;;
@@ -180,7 +186,7 @@ run() {
   local case="$1" want_exit="$2" want_create="$3" want_del="$4" want_text="$5"; shift 5; [ "$1" = -- ] && shift
   local home="$work/home-$case" rc created=no del=no ok=1
   mkdir -p "$home"; export HOME="$home" GH_LOG="$home/calls.log" FIRST_PUSHED_FILE="$home/first-pushed"
-  : > "$GH_LOG"; rm -f "$FIRST_PUSHED_FILE" "$FIRST_PUSHED_FILE.patched"
+  : > "$GH_LOG"; rm -f "$FIRST_PUSHED_FILE" "$FIRST_PUSHED_FILE.patched" "$FIRST_PUSHED_FILE.run-seen"
   ( cd "$home" && env ${E:-} PATH="${P:-$work/bin}:/usr/bin:/bin" "$root/scripts/new-project.sh" "$@" ) >"$home/out" 2>&1; rc=$?
   grep -q '^gh repo create' "$GH_LOG" && created=yes
   grep -q '^gh repo delete' "$GH_LOG" && del=yes
@@ -300,6 +306,17 @@ E="MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=1" run codeql-absent ok yes no "warni
 if grep -q "git commit --allow-empty" "$work/home-codeql-absent/out"; then ok codeql-absent "the summary names the re-push"
 else bad codeql-absent "the summary does not name the re-push"; fi
 E="MOCK_CODEQL_WORKFLOW=missing PLINTH_FIRST_PR_WAIT=1" run codeql-late ok yes no "warning: CodeQL default setup has not registered its workflow" -- probe
+# "Seen twice in a row" is about stability; "did it ever appear" is about
+# existence. One counter answered both, so a run listed on the poll that ran out
+# of time was reported as never appearing and the repository was deleted (#108).
+# A run seen once: the wall stands, it warns, it does not delete.
+E="MOCK_RUNS=once PLINTH_FIRST_PR_WAIT=1" run run-seen-once ok yes no "was not listed on two polls in a row" -- probe
+# No run at all is still a misconfiguration, and still fatal.
+E="MOCK_RUNS=none PLINTH_FIRST_PR_WAIT=1" run run-never err yes yes "its checks would never report" -- probe
+# The race the same bug produced in this suite: with the budget spent before the
+# first poll returns, the door must still not delete a repository whose run it
+# just listed. `=0` is `=1` with the timing taken out.
+E="MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=0" run deadline-zero ok yes no "warning: CodeQL has not picked up the first pull request" -- probe
 E="PLINTH_FIRST_PR_WAIT=soon" run wait-typo err no no "PLINTH_FIRST_PR_WAIT must be a whole number" -- probe
 # The defect #105 was: a throwaway probe branch was pushed first, GitHub adopted
 # it as the default branch of the empty repository and then refused to delete

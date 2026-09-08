@@ -448,7 +448,12 @@ Nothing yet: at the moment this is written the checks have not run. That is what
 fi
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
   --body "$first_pr_body")"
-deadline=$((SECONDS + first_pr_wait)); seen=0; codeql=0; repush=""
+# `seen` counts consecutive sightings and resets; `ever_seen` records that the
+# run existed at all. Two questions, two variables: "is it stable" wants the
+# streak, "did it ever appear" wants the flag, and answering the second with the
+# first deletes a repository whose run was listed on the very poll that gave up
+# (#108).
+deadline=$((SECONDS + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
     --jq '.workflow_runs[] | "\(.path) \(.status) \(.conclusion)"' 2>/dev/null || true)"
@@ -459,7 +464,7 @@ while :; do
   fi
   # Accept once the run is past startup (queued for a runner, running, or done
   # without startup_failure), seen on two polls in a row.
-  if grep -qE "^$template_ci (queued|in_progress|completed) " <<<"$runs"; then seen=$((seen + 1)); else seen=0; fi
+  if grep -qE "^$template_ci (queued|in_progress|completed) " <<<"$runs"; then seen=$((seen + 1)); ever_seen=1; else seen=0; fi
   # CodeQL's runs do not list under the branch; its check runs on the head do.
   if [ "$codeql" = 0 ]; then
     names="$(gh api "repos/$repo/commits/$head_sha/check-runs" --jq '.check_runs[].name' 2>/dev/null || true)"
@@ -467,12 +472,20 @@ while :; do
   fi
   [ "$seen" -ge 2 ] && [ "$codeql" = 1 ] && break
   if [ "$SECONDS" -ge "$deadline" ]; then
-    # No CI run is a misconfiguration (allowlist, workflow file): a wall failure.
-    [ "$seen" -ge 2 ] || { echo "no run of $template_ci appeared within $first_pr_wait s for $branch; its checks would never report" >&2; exit 1; }
+    # No CI run at all is a misconfiguration (allowlist, workflow file): a wall
+    # failure. A run that appeared but was never seen twice running is not --
+    # it exists, so its checks will report, and deleting the repository over a
+    # streak that did not close is the wrong direction to be wrong in.
+    [ "$ever_seen" = 1 ] || { echo "no run of $template_ci appeared within $first_pr_wait s for $branch; its checks would never report" >&2; exit 1; }
+    [ "$seen" -ge 2 ] || echo "warning: a run of $template_ci appeared but was not listed on two polls in a row within $first_pr_wait s; the wall stands and its checks will report" >&2
     # No CodeQL run is timing on GitHub's side: the wall stands, and the next
     # push is analysed within a minute. Say so instead of deleting the repository.
-    echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s; the merge stays blocked until it does" >&2
-    repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
+    # Guarded on `codeql`, not implied by reaching here: a short streak now
+    # arrives at this line too, and CodeQL may well have been found already.
+    if [ "$codeql" = 0 ]; then
+      echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s; the merge stays blocked until it does" >&2
+      repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
+    fi
     break
   fi
   sleep 5
