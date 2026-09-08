@@ -184,15 +184,22 @@ fi
 # Two answers, not one. GitHub decides the pull-request template per file and
 # the issue templates per folder: one local form -- or just a `config.yml` --
 # stops the whole shared folder being inherited, and the two are never merged.
-shared_of() { # <path> -> yes | no | unknown
-  local out; out="$(gh api "repos/$owner/.github/contents/$1" 2>&1 >/dev/null)" && { echo yes; return; }
-  case "$out" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac
+shared_of() { # <path>... -> yes (any present) | no (all absent) | unknown (any unreadable)
+  local out seen_unknown=0
+  for path in "$@"; do
+    out="$(gh api "repos/$owner/.github/contents/$path" 2>&1 >/dev/null)" && { echo yes; return; }
+    case "$out" in *"Not Found"*|*"404"*) ;; *) seen_unknown=1 ;; esac
+  done
+  [ "$seen_unknown" = 1 ] && echo unknown || echo no
 }
 if [ "$force_defaults" = 1 ]; then
   has_pr=no; has_forms=no
 else
-  has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md)"
-  has_forms="$(shared_of .github/ISSUE_TEMPLATE)"
+  # GitHub reads a community-health file from the root, `.github/` or `docs/`.
+  # Checking only the root would miss an owner who used either of the other two
+  # and write over the template this change exists to protect.
+  has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md)"
+  has_forms="$(shared_of .github/ISSUE_TEMPLATE docs/ISSUE_TEMPLATE)"
   if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
     stop "cannot read whether $owner/.github publishes shared templates" \
       "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
@@ -335,11 +342,14 @@ head_sha="$(git -C "$dir" rev-parse HEAD)"
 # owner publishes their own template the two headings are dropped, because
 # theirs is the convention and this is not the place to impose ours.
 if [ "$has_pr" = yes ]; then
+  # Your template's own fields are not filled in here, and cannot be: the box
+  # does not know what your headings ask for. It says so instead of pretending,
+  # and this pull request exists to be merged in a minute, not to be a record.
   first_pr_body="Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. It adds one line to README.md and nothing else.
 
-Not verified yet: the checks have not run at the moment this is written. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+Not verified yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
 
-Written to $owner/.github's pull-request template, which this repository inherits."
+This body does not follow $owner/.github's pull-request template, which this repository inherits: the box cannot answer fields it has not read. Rewrite it with \`gh pr edit $repo --body-file -\` if you want the record to match, or merge it as it is."
 else
   first_pr_body="## What and why
 

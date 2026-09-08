@@ -30,8 +30,10 @@ case "$all" in
   "api -X GET repos/"*"/actions/runs "*)          step=runs ;;
   "api repos/"*"/actions/workflows"*)            step=workflows ;;
   "api repos/"*"/commits/"*"/check-runs"*)       step=checkruns ;;
-  "api repos/"*"/.github/contents/PULL_REQUEST_TEMPLATE.md"*) step=shared-pr ;;
-  "api repos/"*"/.github/contents/.github/ISSUE_TEMPLATE"*)   step=shared-forms ;;
+  # GitHub reads a community-health file from the root, `.github/` or `docs/`,
+  # and the door asks about all of them: match the name, not one path.
+  *"/contents/"*"PULL_REQUEST_TEMPLATE.md"*)     step=shared-pr ;;
+  *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "repo create"*)                                step=create ;;
   "repo delete"*)                                step=delete ;;
@@ -206,6 +208,11 @@ E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: b
 # the run carries on. A rollback over a label would delete a repository whose wall is up.
 E="FAIL_AT=label"     run label-fails   ok yes no "warning: could not create the label task" -- probe
 E="MOCK_SHARED_PR=present MOCK_SHARED_FORMS=present" run shared-both ok yes no "already publishes: pull-request template issue forms" -- probe
+E="MOCK_SHARED_PR=present" run shared-pr-only ok yes no "already publishes: pull-request template" -- probe
+if grep -q "does not follow tester/.github's pull-request template" "$work/home-shared-pr-only/calls.log"; then ok shared-pr-only "the first pull request says it does not follow the inherited template"
+else bad shared-pr-only "the first pull request is silent about the inherited template"; fi
+if grep -q "^gh pr create.*## What and why" "$work/home-shared-pr-only/calls.log"; then bad shared-pr-only "plinth's headings were imposed over the owner's template"
+else ok shared-pr-only "plinth's headings are not imposed over the owner's template"; fi
 E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "" -- probe --force-defaults
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
@@ -245,6 +252,8 @@ check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowe
 check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
+check "all three locations GitHub reads a shared pull-request template from are asked about" \
+  '[ "$(grep -c "contents/.*PULL_REQUEST_TEMPLATE.md" "$log")" = 3 ]'
 check "the owner's shared templates are asked about before anything is created" \
   '[ "$(grep -nE "contents/PULL_REQUEST_TEMPLATE.md|contents/.github/ISSUE_TEMPLATE|^gh repo create" "$log" | head -3 | sed -E "s/.*PULL_REQUEST.*/pr/; s/.*ISSUE_TEMPLATE.*/forms/; s/.*repo create.*/create/" | tr "\n" " ")" = "pr forms create " ]'
 check "an owner with no shared templates gets the box's own copies" \
