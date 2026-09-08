@@ -65,7 +65,7 @@ terminal and keeps it off every command line.
 The install works end to end and CI proves it on a clean runner. `new-project`
 creates a repository with the wall up, or creates nothing (its failure paths
 run in CI against a mocked `gh`). It renders
-[plinth-template v1.0.0](https://github.com/coolbress/plinth-template/releases/tag/v1.0.0),
+[plinth-template v1.1.0](https://github.com/coolbress/plinth-template/releases/tag/v1.1.0),
 whose CI reports every check the wall requires, so the first pull request goes
 green and merges. `floor-check` runs the checker `ci / floor-check`
 runs, read-only. A third-party review check (`third-party / review`, Codex) is
