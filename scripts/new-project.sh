@@ -29,7 +29,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # workflow file it ships (the first pull request's run is looked up by it).
 # Raising the tag is the only edit here.
 template_repo="coolbress/plinth-template"
-template_ref="v1.0.0"
+template_ref="v1.1.0"
 template_ci=".github/workflows/ci.yml"
 claude_floor="2.1.234"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
