@@ -14,8 +14,10 @@
 #   3 owner       exists; your own login or an organization you belong to
 #   4 visibility  public only; the repository must not exist yet
 # Then: create, render the box (copier, one tested tag), push main (the baseline,
-# before the wall), labels, CodeQL, ruleset, secret scanning, Dependabot, Actions
-# allowlist, squash only, and the first pull request, whose workflow must start.
+# before the wall, and the proof the token can push), confirm main is the
+# default branch the ruleset will target, labels, CodeQL, ruleset, secret
+# scanning, Dependabot, Actions allowlist, squash only, and the first pull
+# request, whose workflow must start.
 #
 # fail-closed: after the repository is created, a fatal exit before setup
 # completes attempts a best-effort deletion -- the trap fires on `created=1`
@@ -316,16 +318,40 @@ uvx --quiet copier copy --defaults --quiet \
 git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $spdx)"
 
-# Prove push works before doing the rest (a pasted token with a trailing space
-# passes the API, whose headers are trimmed, and fails git's HTTP Basic).
-probe="__push-probe"
-if ! err="$(git -C "$dir" push -q origin "HEAD:refs/heads/$probe" 2>&1)"; then
+# The baseline goes straight to main, before the wall: after it nothing does.
+# It is also the proof that the token can push (a pasted token with a trailing
+# space passes the API, whose headers are trimmed, and fails git's HTTP Basic).
+# A throwaway `__push-probe` branch used to carry that proof and went first;
+# GitHub adopts the first branch pushed to an empty repository as the default,
+# then refuses to delete it, and the wall went up on the probe while main was
+# left open (#105). main goes first, and nothing is pushed before it.
+if ! err="$(git -C "$dir" push -q -u origin main 2>&1)"; then
   printf 'cannot push to %s:\n%s\n  check: the token has the repo scope (or Contents: write), and no whitespace came along with a paste\n' "$url" "$err" >&2
   exit 1
 fi
-git -C "$dir" push -q origin --delete "$probe" || true
-# The baseline goes straight to main, before the wall: after it nothing does.
-git -C "$dir" push -q -u origin main
+# Read the default branch back rather than assume the push set it: the ruleset
+# below targets ~DEFAULT_BRANCH, so applying it while anything else is default
+# leaves main unprotected -- the one thing the door promises.
+#
+# stdout only. `2>&1` here would fold anything gh writes to stderr into the
+# value being compared, and the comparison decides whether a just-created
+# repository is deleted; the reason is re-read on the failure path alone.
+read_default() { gh api "repos/$repo" --jq .default_branch 2>/dev/null; }
+default_branch="$(read_default)" || {
+  printf 'could not read the default branch of %s:\n%s\n' "$url" "$(gh api "repos/$repo" 2>&1 >/dev/null)" >&2
+  exit 1; }
+# Not main: point it at main rather than roll back. main exists -- it was just
+# pushed -- so this is one call, and deleting a repository whose only fault is
+# which branch HEAD names is worse than the fault. Only a repair that does not
+# take rolls back, which is what #105 asks for: the wall goes up on main or the
+# repository does not survive.
+if [ "$default_branch" != main ]; then
+  warn "the default branch of $url was $default_branch, not main; pointing it at main before the wall goes up"
+  gh api "repos/$repo" -X PATCH -f default_branch=main >/dev/null 2>&1 || true
+  default_branch="$(read_default)" || default_branch="unreadable"
+  [ "$default_branch" = main ] ||
+    { printf 'the default branch of %s is %s, not main, and could not be changed; the ruleset guards ~DEFAULT_BRANCH, so the wall would go up on the wrong branch\n' "$url" "$default_branch" >&2; exit 1; }
+fi
 
 # Labels. The list is `labels.txt` beside this script, shared with
 # scripts/floor-check.py so the two cannot drift (#84); the door creates them
@@ -422,7 +448,12 @@ Nothing yet: at the moment this is written the checks have not run. That is what
 fi
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
   --body "$first_pr_body")"
-deadline=$((SECONDS + first_pr_wait)); seen=0; codeql=0; repush=""
+# `seen` counts consecutive sightings and resets; `ever_seen` records that the
+# run existed at all. Two questions, two variables: "is it stable" wants the
+# streak, "did it ever appear" wants the flag, and answering the second with the
+# first deletes a repository whose run was listed on the very poll that gave up
+# (#108).
+deadline=$((SECONDS + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
     --jq '.workflow_runs[] | "\(.path) \(.status) \(.conclusion)"' 2>/dev/null || true)"
@@ -433,7 +464,7 @@ while :; do
   fi
   # Accept once the run is past startup (queued for a runner, running, or done
   # without startup_failure), seen on two polls in a row.
-  if grep -qE "^$template_ci (queued|in_progress|completed) " <<<"$runs"; then seen=$((seen + 1)); else seen=0; fi
+  if grep -qE "^$template_ci (queued|in_progress|completed) " <<<"$runs"; then seen=$((seen + 1)); ever_seen=1; else seen=0; fi
   # CodeQL's runs do not list under the branch; its check runs on the head do.
   if [ "$codeql" = 0 ]; then
     names="$(gh api "repos/$repo/commits/$head_sha/check-runs" --jq '.check_runs[].name' 2>/dev/null || true)"
@@ -441,12 +472,20 @@ while :; do
   fi
   [ "$seen" -ge 2 ] && [ "$codeql" = 1 ] && break
   if [ "$SECONDS" -ge "$deadline" ]; then
-    # No CI run is a misconfiguration (allowlist, workflow file): a wall failure.
-    [ "$seen" -ge 2 ] || { echo "no run of $template_ci appeared within $first_pr_wait s for $branch; its checks would never report" >&2; exit 1; }
+    # No CI run at all is a misconfiguration (allowlist, workflow file): a wall
+    # failure. A run that appeared but was never seen twice running is not --
+    # it exists, so its checks will report, and deleting the repository over a
+    # streak that did not close is the wrong direction to be wrong in.
+    [ "$ever_seen" = 1 ] || { echo "no run of $template_ci appeared within $first_pr_wait s for $branch; its checks would never report" >&2; exit 1; }
+    [ "$seen" -ge 2 ] || echo "warning: a run of $template_ci appeared but was not listed on two polls in a row within $first_pr_wait s; the wall stands and its checks will report" >&2
     # No CodeQL run is timing on GitHub's side: the wall stands, and the next
     # push is analysed within a minute. Say so instead of deleting the repository.
-    echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s; the merge stays blocked until it does" >&2
-    repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
+    # Guarded on `codeql`, not implied by reaching here: a short streak now
+    # arrives at this line too, and CodeQL may well have been found already.
+    if [ "$codeql" = 0 ]; then
+      echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s; the merge stays blocked until it does" >&2
+      repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
+    fi
     break
   fi
   sleep 5
