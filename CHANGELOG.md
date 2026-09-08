@@ -9,6 +9,32 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-09
+
+### Fixed
+
+- **The door builds a repository whose `main` is the default branch and carries
+  the wall.** It proved a token could push by pushing a throwaway
+  `__push-probe` branch first; GitHub adopts the first branch pushed to an empty
+  repository as its default and then refuses to delete it, so the ruleset
+  (which targets `~DEFAULT_BRANCH`) went up on the probe and `main` was left
+  with no rules at all. `main` is now pushed first and nothing before it — that
+  push is itself the proof the token works — and the default branch is read back
+  from the API before the ruleset is applied, repaired if it is not `main`, and
+  the run rolls back if it cannot be. **A repository created by v0.5.0 is
+  affected and does not repair itself; the release notes carry the two
+  commands.**
+- The floor checker states the branch it checked the wall on and warns when that
+  is not `main`. It followed the default branch in silence, so it reported an
+  intact wall on a repository whose `main` had no rules — the one signal an
+  already-created repository has, saying the opposite of the truth. A warning,
+  never a failure: `ci / floor-check` runs in every consumer's CI, and a
+  repository whose default is deliberately `master` or `trunk` is not broken.
+- The door no longer deletes a repository whose CI run it saw. It required the
+  first pull request's run on two consecutive polls and then used that same
+  counter to decide whether a run had ever appeared, so a run seen once was
+  reported as never appearing and the rollback deleted the repository.
+
 ## [0.5.0] - 2026-09-08
 
 ### Added
