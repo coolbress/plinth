@@ -186,6 +186,22 @@ wall "intact wall passes" "-- 0 failed"
 wall "squash commits are the pull request title and description" "PASS  squash commits carry"
 wall "drifted squash settings are caught" "squash commit settings drifted: title=COMMIT_OR_PR_TITLE" "printf '{\"default_branch\":\"main\",\"squash_merge_commit_title\":\"COMMIT_OR_PR_TITLE\",\"squash_merge_commit_message\":\"COMMIT_MESSAGES\"}' > \"$api/repos/o/r.json\""
 wall "invisible squash settings are INFO, not a pass" "squash commit settings not visible" "printf '{\"default_branch\":\"main\"}' > \"$api/repos/o/r.json\""
+# A repository the door damaged before #105: the default branch is the throwaway
+# probe, the whole wall stands on that branch, and `main` has no rules at all.
+# Following the default branch reports it as a wall standing -- the checker
+# telling someone `main` is guarded while anyone can force-push it (#107).
+damaged="mv \"$api/repos/o/r/rules/branches/main.json\" \"$api/repos/o/r/rules/branches/__push-probe.json\"; printf '{\"default_branch\":\"__push-probe\",\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
+wall "a default branch that is not main is a FAIL, not a wall standing on it" "FAIL  the default branch is __push-probe, not main" "$damaged"
+wall "the finding says main is the branch left unprotected" "and main is unprotected" "$damaged"
+wall "the fix carries the one command that repairs it" "gh api repos/o/r -X PATCH -f default_branch=main" "$damaged"
+rm -f "$api/repos/o/r/rules/branches/__push-probe.json"
+# The default branch is read from the repository, so a token or an API that does
+# not report it must not be read as "main, fine": not verified, like every other
+# API-backed check here.
+wall "a default branch the API does not report is not verified rather than passed" \
+  "INFO  default branch not verified" \
+  "printf '{\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
+wall "a repository whose default branch is main says so and adds nothing else" "PASS  the default branch is main"
 wall "dropped required check is caught" "required checks dropped: \['ci / b'\]" "sed -i.bak 's/,{\"context\":\"ci \/ b\"}//' \"$api/repos/o/r/rules/branches/main.json\""
 wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\[\"squash\"\]/[\"squash\",\"merge\"]/' \"$api/repos/o/r/rules/branches/main.json\""
 wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
