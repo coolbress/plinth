@@ -60,14 +60,17 @@ inside pull requests and have no tag.
   LICENSE file follow the choice; the archetype and the license are both
   checked against the template's own `copier.yml` before anything is created,
   because copier refuses a value outside its choices only after the repository
-  exists. Then push `main`, labels, CodeQL, the ruleset, secret scanning, Dependabot,
+  exists. Then push `main`, the labels (every kind of record and child ticket
+  `docs/agents/issue-tracker.md` names; a label that cannot be created warns
+  and names itself, and the run carries on, because a label is not a wall
+  stone), CodeQL, the ruleset, secret scanning, Dependabot,
   Actions allowlist (`coolbress/plinth/*`, SHA pins required), squash only, and
   the first pull request, whose workflow must start; CodeQL is waited for too
   (default setup must register its workflow before the push, and if CodeQL
   still misses the pull request the summary names the re-push). Any failure after creation
   deletes the repository (best effort: a failed deletion prints the URL loudly).
   `scripts/with-admin-token.sh` for machines whose `gh` token is fine-grained.
-  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 62 cases) and
+  Tests: `tests/new-project-failpath.sh` (mocked `gh`, 65 cases) and
   `tests/token-prompt-not-from-stdin.sh`.
 - CI: `ci / install` (real install on a clean runner) and `ci / docs`
   (markdownlint, link check, vocabulary gate, README vs tutorial).
