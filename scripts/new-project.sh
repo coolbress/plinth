@@ -223,9 +223,17 @@ git -C "$dir" push -q -u origin main
   echo "wayfinder:map|5319e7|A wayfinder map, the decision set for one goal"
   echo "wayfinder:research|5319e7|A wayfinder child, facts gathered against sources"
   echo "wayfinder:grilling|5319e7|A wayfinder child, a decision taken by questioning"
+  echo "wayfinder:prototype|5319e7|A wayfinder child, a throwaway build that answers a question"
+  echo "wayfinder:task|5319e7|A wayfinder child, one thing to build"
   echo "spec|0e8a16|A spec the tickets are cut from"
 } | while IFS='|' read -r lbl color desc; do
-  gh label create "$lbl" --repo "$repo" --color "$color" --description "$desc" >/dev/null 2>&1 || true
+  # --force: a new repository already carries GitHub's default set, and `wontfix`
+  # is in both lists. Without it that collision warns on every single run.
+  # A label that still fails is named and left: labels are a convenience, not a
+  # wall stone, and rolling a repository back over one would delete a good wall.
+  gh label create "$lbl" --repo "$repo" --color "$color" --description "$desc" --force >/dev/null 2>&1 ||
+    warn "could not create the label $lbl; create it by hand:
+  gh label create $lbl --repo $repo --color $color"
 done
 
 # ── the wall ─────────────────────────────────────────────────────────────

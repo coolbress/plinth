@@ -183,6 +183,9 @@ if grep -q "warning: sandbox" "$work/home-sandbox-local/out"; then bad sandbox-l
 else ok sandbox-local "sandbox on in settings.local.json is seen"; fi
 E="MOCK_SCOPES=repo,workflow" run rollback-off ok yes no "rollback: off (no delete_repo scope" -- probe
 E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: best effort" -- probe
+# Labels are a convenience, not a wall stone: a failed create names the label and
+# the run carries on. A rollback over a label would delete a repository whose wall is up.
+E="FAIL_AT=label"     run label-fails   ok yes no "warning: could not create the label task" -- probe
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
 # The spdx id is still looked up (`mit` -> `MIT`); the license *text* is not:
@@ -222,6 +225,10 @@ check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
+check "every wayfinder label docs/agents/issue-tracker.md names is created (the map, and its 4 child types)" \
+  '[ "$(grep -cE "label create wayfinder:(map|research|grilling|prototype|task) " "$log")" = 5 ]'
+check "every label is created with --force, so GitHub's default set (wontfix) does not warn on every run" \
+  'grep -q "^gh label create.* --force$" "$log" && [ "$(grep -c "^gh label create" "$log")" = "$(grep -c "^gh label create.* --force$" "$log")" ]'
 check "the default branch is main" '[ "$("$REAL_GIT" -C "$proj" rev-parse --verify -q main)" != "" ]'
 check "the first pull request is one README line on docs/first-pr" \
   '[ "$("$REAL_GIT" -C "$proj" rev-parse --abbrev-ref HEAD)" = docs/first-pr ] && [ "$("$REAL_GIT" -C "$proj" diff --stat main docs/first-pr | tail -1 | grep -o "[0-9]* insertion")" = "1 insertion" ]'
