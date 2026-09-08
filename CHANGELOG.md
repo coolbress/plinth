@@ -35,7 +35,6 @@ inside pull requests and have no tag.
   counter to decide whether a run had ever appeared, so a run seen once was
   reported as never appearing and the rollback deleted the repository.
 
-
 ## [0.5.0] - 2026-09-08
 
 ### Added
