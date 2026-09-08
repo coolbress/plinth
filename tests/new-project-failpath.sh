@@ -65,8 +65,12 @@ case "$step" in
                    error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
                    *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
                  esac ;;
+  # The door asks for `--jq .[].name`, so the mock answers names, one per line.
+  # `gitkeep` and `config` are folders that exist and hold no template.
   shared-forms)  case "${MOCK_SHARED_FORMS:-absent}" in
-                   present) echo '[{"name":"bug.yml"}]' ;;
+                   present) printf 'bug.yml\nfeature.yml\n' ;;
+                   gitkeep) printf '.gitkeep\n' ;;
+                   config)  printf 'config.yml\n' ;;
                    error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
                    *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
                  esac ;;
@@ -209,6 +213,15 @@ E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: b
 E="FAIL_AT=label"     run label-fails   ok yes no "warning: could not create the label task" -- probe
 E="MOCK_SHARED_PR=present MOCK_SHARED_FORMS=present" run shared-both ok yes no "already publishes: pull-request template issue forms" -- probe
 E="MOCK_SHARED_PR=present" run shared-pr-only ok yes no "already publishes: pull-request template" -- probe
+# A folder is not a template. floor-check.py reads a `.gitkeep`-only folder as
+# "no local forms, the shared set applies"; the box must read the owner's folder
+# the same way, or the repository ends up with no forms anywhere (#88).
+for empty in gitkeep config; do
+  E="MOCK_SHARED_FORMS=$empty" run "shared-forms-$empty" ok yes no "" -- probe
+  if grep -q -- "owner_has_issue_forms=false" "$work/home-shared-forms-$empty/calls.log"
+  then ok "shared-forms-$empty" "a shared folder holding only $empty is not forms; the box renders its own"
+  else bad "shared-forms-$empty" "the box suppressed its forms for a folder with no template"; fi
+done
 if grep -q "does not follow tester/.github's pull-request template" "$work/home-shared-pr-only/calls.log"; then ok shared-pr-only "the first pull request says it does not follow the inherited template"
 else bad shared-pr-only "the first pull request is silent about the inherited template"; fi
 if grep -q "^gh pr create.*## What and why" "$work/home-shared-pr-only/calls.log"; then bad shared-pr-only "plinth's headings were imposed over the owner's template"

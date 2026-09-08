@@ -192,6 +192,18 @@ shared_of() { # <path>... -> yes (any present) | no (all absent) | unknown (any 
   done
   [ "$seen_unknown" = 1 ] && echo unknown || echo no
 }
+shared_forms() { # <dir>... -> yes (a real template) | no | unknown
+  local out seen_unknown=0 names
+  for path in "$@"; do
+    if out="$(gh api "repos/$owner/.github/contents/$path" --jq '.[].name' 2>&1)"; then
+      names="$(grep -viE '^config\.(yml|yaml)$' <<<"$out" | grep -cE '\.(yml|yaml|md)$' || true)"
+      [ "${names:-0}" -gt 0 ] && { echo yes; return; }
+    else
+      case "$out" in *"Not Found"*|*"404"*) ;; *) seen_unknown=1 ;; esac
+    fi
+  done
+  [ "$seen_unknown" = 1 ] && echo unknown || echo no
+}
 if [ "$force_defaults" = 1 ]; then
   has_pr=no; has_forms=no
 else
@@ -199,7 +211,13 @@ else
   # Checking only the root would miss an owner who used either of the other two
   # and write over the template this change exists to protect.
   has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md)"
-  has_forms="$(shared_of .github/ISSUE_TEMPLATE docs/ISSUE_TEMPLATE)"
+  # A directory is not a template. `scripts/floor-check.py` reads a folder
+  # holding only `.gitkeep` as "no local forms, the shared set applies"; if the
+  # box read the owner's folder as "they have forms" on its existence alone,
+  # the repository would end up with none anywhere and fail its own floor check.
+  # A `config.yml` on its own is not a form either: it configures a set that is
+  # not there.
+  has_forms="$(shared_forms .github/ISSUE_TEMPLATE docs/ISSUE_TEMPLATE)"
   if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
     stop "cannot read whether $owner/.github publishes shared templates" \
       "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
