@@ -499,7 +499,29 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
     if meta in (ABSENT, ERROR) or not isinstance(meta, dict):
         result("FAIL" if meta is ABSENT else "INFO", f"could not read repos/{repo}")
         return
-    branch = meta.get("default_branch", "main")
+    branch = meta.get("default_branch")
+    # The ruleset the door applies targets ~DEFAULT_BRANCH, so every rule below
+    # governs whatever this says -- and the rules of a branch nobody works on
+    # protect nobody. A repository the door damaged before #105 has the probe
+    # branch here, a complete wall on it, and no rules on main at all, and
+    # reading only the default branch reported that as a wall standing (#106).
+    #
+    # Said once and plainly, not only as the prefix on each rule line: a check
+    # that passes should not depend on someone noticing a prefix.
+    if branch is None:
+        result("INFO", "default branch not verified (the API did not report one); reading the wall on main")
+        branch = "main"
+    else:
+        result("INFO", f"the wall is checked on {branch}, the repository's default branch")
+    # WARN, never FAIL. `ci / floor-check` runs with --repo in every consumer's
+    # CI, so a FAIL here blocks their merges -- and a repository whose default
+    # is deliberately `master` or `trunk` is not broken, it just is not what the
+    # door builds. Naming it is the whole job; deciding for them is not (#106,
+    # the same reasoning that keeps a missing label a WARN in #84).
+    if branch is not None and branch != "main":
+        result("WARN", f"the default branch is {branch}, not main: the rules below govern {branch}. "
+                       f"If main is where the work happens, main is unprotected")
+        result("INFO", f"  gh api repos/{repo} -X PATCH -f default_branch=main   (then run this again)")
     # The squash commit is the pull request (title and description), not a
     # list of the branch's commits. The door sets it; a button merge in the
     # web UI uses it. The fields are visible to a token with push access.
