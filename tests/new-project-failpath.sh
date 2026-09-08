@@ -33,6 +33,7 @@ case "$all" in
   # GitHub reads a community-health file from the root, `.github/` or `docs/`,
   # and the door asks about all of them: match the name, not one path.
   *"/contents/"*"PULL_REQUEST_TEMPLATE.md"*)     step=shared-pr ;;
+  *"/contents/.github/ISSUE_TEMPLATE/"*)         step=shared-form-body ;;
   *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "repo create"*)                                step=create ;;
@@ -67,11 +68,19 @@ case "$step" in
                  esac ;;
   # The door asks for `--jq .[].name`, so the mock answers names, one per line.
   # `gitkeep` and `config` are folders that exist and hold no template.
+  # The listing (names, one per line) and then each candidate's content, which
+  # the door reads before believing the name.
   shared-forms)  case "${MOCK_SHARED_FORMS:-absent}" in
-                   present) printf 'bug.yml\nfeature.yml\n' ;;
+                   present|empty) printf 'bug.yml\n' ;;
                    gitkeep) printf '.gitkeep\n' ;;
                    config)  printf 'config.yml\n' ;;
                    error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
+                   *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                 esac ;;
+  shared-form-body)
+                 case "${MOCK_SHARED_FORMS:-absent}" in
+                   present) printf 'name: Bug\ndescription: x\nlabels: [bug]\nbody: []\n' | base64 ;;
+                   empty)   printf '' | base64 ;;
                    *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
                  esac ;;
   exists)        [ "${MOCK_EXISTS:-0}" = 1 ] || exit 1; echo "https://github.com/x/y" ;;
@@ -216,11 +225,11 @@ E="MOCK_SHARED_PR=present" run shared-pr-only ok yes no "already publishes: pull
 # A folder is not a template. floor-check.py reads a `.gitkeep`-only folder as
 # "no local forms, the shared set applies"; the box must read the owner's folder
 # the same way, or the repository ends up with no forms anywhere (#88).
-for empty in gitkeep config; do
+for empty in gitkeep config empty; do
   E="MOCK_SHARED_FORMS=$empty" run "shared-forms-$empty" ok yes no "" -- probe
   if grep -q -- "owner_has_issue_forms=false" "$work/home-shared-forms-$empty/calls.log"
   then ok "shared-forms-$empty" "a shared folder holding only $empty is not forms; the box renders its own"
-  else bad "shared-forms-$empty" "the box suppressed its forms for a folder with no template"; fi
+  else bad "shared-forms-$empty" "the box suppressed its forms for a folder with no usable template"; fi
 done
 if grep -q "does not follow tester/.github's pull-request template" "$work/home-shared-pr-only/calls.log"; then ok shared-pr-only "the first pull request says it does not follow the inherited template"
 else bad shared-pr-only "the first pull request is silent about the inherited template"; fi
@@ -265,6 +274,11 @@ check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowe
 check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
+# Issue forms are inherited from `.github/ISSUE_TEMPLATE` alone, and that is the
+# only path floor-check.py reads: asking anywhere else would suppress our forms
+# for something GitHub never offers.
+check "issue forms are looked for in .github/ISSUE_TEMPLATE and nowhere else" \
+  'grep -q "contents/.github/ISSUE_TEMPLATE --jq" "$log" && ! grep -q "docs/ISSUE_TEMPLATE" "$log"'
 check "all three locations GitHub reads a shared pull-request template from are asked about" \
   '[ "$(grep -c "contents/.*PULL_REQUEST_TEMPLATE.md" "$log")" = 3 ]'
 check "the owner's shared templates are asked about before anything is created" \

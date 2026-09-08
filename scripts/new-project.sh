@@ -192,17 +192,28 @@ shared_of() { # <path>... -> yes (any present) | no (all absent) | unknown (any 
   done
   [ "$seen_unknown" = 1 ] && echo unknown || echo no
 }
-shared_forms() { # <dir>... -> yes (a real template) | no | unknown
-  local out seen_unknown=0 names
-  for path in "$@"; do
-    if out="$(gh api "repos/$owner/.github/contents/$path" --jq '.[].name' 2>&1)"; then
-      names="$(grep -viE '^config\.(yml|yaml)$' <<<"$out" | grep -cE '\.(yml|yaml|md)$' || true)"
-      [ "${names:-0}" -gt 0 ] && { echo yes; return; }
-    else
-      case "$out" in *"Not Found"*|*"404"*) ;; *) seen_unknown=1 ;; esac
-    fi
-  done
-  [ "$seen_unknown" = 1 ] && echo unknown || echo no
+# One template GitHub can actually offer, in the owner's shared folder.
+# `.github/ISSUE_TEMPLATE` only: unlike a pull-request template, a default issue
+# form is inherited from that path alone, and scripts/floor-check.py queries the
+# same one. A name is not enough either -- an empty `bug.md` has the right
+# suffix and GitHub offers nothing -- so a candidate is read before it counts.
+usable_form() { # <text> <name> -> 0 when GitHub would offer it
+  case "$2" in
+    *.md) grep -qE '^name:[[:space:]]*[^[:space:]"'"'"']' <<<"$1" ;;
+    *)    grep -q '^name:' <<<"$1" && grep -q '^description:' <<<"$1" && grep -q '^body:' <<<"$1" ;;
+  esac
+}
+shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
+  local listing name body
+  listing="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>&1)" || {
+    case "$listing" in *"Not Found"*|*"404"*) echo no ;; *) echo unknown ;; esac; return; }
+  while read -r name; do
+    case "$name" in ""|config.yml|config.yaml) continue ;; *.yml|*.yaml|*.md) ;; *) continue ;; esac
+    body="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE/$name" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || { echo unknown; return; }
+    [ -n "$body" ] || continue
+    usable_form "$body" "$name" && { echo yes; return; }
+  done <<<"$listing"
+  echo no
 }
 if [ "$force_defaults" = 1 ]; then
   has_pr=no; has_forms=no
@@ -211,13 +222,9 @@ else
   # Checking only the root would miss an owner who used either of the other two
   # and write over the template this change exists to protect.
   has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md)"
-  # A directory is not a template. `scripts/floor-check.py` reads a folder
-  # holding only `.gitkeep` as "no local forms, the shared set applies"; if the
-  # box read the owner's folder as "they have forms" on its existence alone,
-  # the repository would end up with none anywhere and fail its own floor check.
-  # A `config.yml` on its own is not a form either: it configures a set that is
-  # not there.
-  has_forms="$(shared_forms .github/ISSUE_TEMPLATE docs/ISSUE_TEMPLATE)"
+  # A directory is not a template, and neither is a filename: the repository
+  # would end up with no form anywhere and fail the floor check the box installs.
+  has_forms="$(shared_forms)"
   if [ "$has_pr" = unknown ] || [ "$has_forms" = unknown ]; then
     stop "cannot read whether $owner/.github publishes shared templates" \
       "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
