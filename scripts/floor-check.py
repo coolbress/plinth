@@ -185,10 +185,10 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
                         unread.append(name)
             if unread:
                 result("INFO", f"inherited forms not verified (content unreadable): {', '.join(sorted(unread))}")
-            # Nothing readable and something unread: the shared set may be
-            # perfectly good and the API simply failed. Absence is not concluded
-            # from a failed read.
-            if files or not unread:
+            # A readable config is not a readable form: it says nothing about
+            # whether the forms are there. Absence is concluded only when every
+            # candidate was actually read.
+            if [n for n in files if n not in CONFIG_NAMES] or not unread:
                 check_issue_forms(files, "inherited")
 
     ok((root / ".github" / "dependabot.yml").is_file(), ".github/dependabot.yml present",
@@ -204,8 +204,10 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
     # form in the folder whatever it is called, so a name this checker did not
     # expect is not a missing form.
     forms = {n: t for n, t in files.items() if n not in CONFIG_NAMES}
-    ok(bool(forms), f"issue forms present ({where}): {', '.join(sorted(forms))}",
-       f"no issue form ({where}): every issue arrives in whatever shape its writer chose")
+    # Found, not valid: this line says which files are there. Whether each is a
+    # template GitHub will actually offer is the per-file verdict below.
+    ok(bool(forms), f"issue templates found ({where}): {', '.join(sorted(forms))}",
+       f"no issue template ({where}): every issue arrives in whatever shape its writer chose")
     alias_trap = re.compile(r"^\s*[\w-]+:\s+[*&]")
     for name, text in sorted(forms.items()):
         # `.yml` was already checked before this file started reading `.yaml`
@@ -220,10 +222,12 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
             # A legacy Markdown template is front matter and prose. GitHub reads
             # its `name:` from that front matter; without it the file is not a
             # template at all, so an empty one must not pass as a form.
+            # The key alone is not a name: `name:` with nothing after it leaves
+            # GitHub without a title to list the template under.
             fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
-            say(bool(fm) and re.search(r"^name:", fm.group(1), re.M) is not None,
+            say(bool(fm) and re.search(r"^name:[ \t]*\S", fm.group(1), re.M) is not None,
                 f"{name} has Markdown front matter with a name",
-                f"{name} has no front matter `name:`: GitHub does not offer it as a template")
+                f"{name} has no front matter `name:` with a value: GitHub does not offer it as a template")
             continue
         keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.M)]
         say(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")

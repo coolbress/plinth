@@ -84,12 +84,14 @@ plant "forms spelled .yaml are accepted" \
 plant "a legacy Markdown template counts as a form and is not read as a broken one" \
   "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname: Bug\nabout: x\n---\nWhat happened?\n' > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
 plant "config.yml is configuration, not a form" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'blank_issues_enabled: false\n' > .github/ISSUE_TEMPLATE/config.yml" "no issue form"
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'blank_issues_enabled: false\n' > .github/ISSUE_TEMPLATE/config.yml" "no issue template"
 # An empty folder is not a local template set: GitHub falls back to the owner's
 # shared forms, and offline that cannot be checked. Absence is not concluded here.
 infos "an empty folder falls through to inheritance, not to a verdict" \
   "rm .github/ISSUE_TEMPLATE/*.yml" "inheritance not verified"
 plant "an empty folder alone is not called a missing form" "rm .github/ISSUE_TEMPLATE/*.yml" "__none__" || true
+warns "front matter with an empty name is not a template" \
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
 plant "a defect inside a renamed form is still caught" \
   "cd .github/ISSUE_TEMPLATE && mv task.yml work_item.yml && printf 'name: t\ndescription: \"x\"\nbody: []\n' > work_item.yml" "no labels"
 # Widening the net must not fail a repository that passed yesterday: `.yml` keeps
@@ -118,8 +120,8 @@ inherit() { # <description> <expected substring> <local ISSUE_TEMPLATE shell, or
   local out; out="$(FLOOR_CHECK_API_DIR="${4:-$inh}" python3 "$checker" --root "$copy" --repo o/r 2>&1)"
   if grep -q -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected '$2')"; printf '%s\n' "$out" | grep -E 'issue form|inherited' | sed 's/^/        /'; fi
 }
-inherit "the owner's shared forms are read when the repository has none" "PASS  issue forms present (inherited): bug.yml, feature.yml" ""
-inherit "a local .gitkeep is not a template: the shared set still applies" "PASS  issue forms present (inherited)" "mkdir -p .github/ISSUE_TEMPLATE && : > .github/ISSUE_TEMPLATE/.gitkeep"
+inherit "the owner's shared forms are read when the repository has none" "PASS  issue templates found (inherited): bug.yml, feature.yml" ""
+inherit "a local .gitkeep is not a template: the shared set still applies" "PASS  issue templates found (inherited)" "mkdir -p .github/ISSUE_TEMPLATE && : > .github/ISSUE_TEMPLATE/.gitkeep"
 inherit "a local form suppresses the shared set, and says so" "INFO  a local ISSUE_TEMPLATE replaces the owner" "mkdir -p .github/ISSUE_TEMPLATE && printf 'name: t\ndescription: \"x\"\nlabels: [\"t\"]\nbody: []\n' > .github/ISSUE_TEMPLATE/t.yml"
 # A file listed but unreadable is an API failure, not an absent template.
 bad_api="$work/inh-bad"; mkdir -p "$bad_api/repos/o/.github/contents/.github"
@@ -128,6 +130,17 @@ inherit "an unreadable inherited file is not verified, not absent" "INFO  inheri
 out_bad="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.github/ISSUE_TEMPLATE"; FLOOR_CHECK_API_DIR="$bad_api" python3 "$checker" --root "$work/inh" --repo o/r 2>&1)"
 if grep -qE "FAIL.*(issue form|neither local)" <<<"$out_bad"; then bad "an unreadable inherited file was called absent"
 else ok "an unreadable inherited file yields no absence verdict"; fi
+# A readable config next to an unreadable form: reading the config says nothing
+# about whether the forms are there, so absence must still not be concluded.
+mixed_api="$work/inh-mixed"; mkdir -p "$mixed_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE"
+printf '[{"name":"config.yml"},{"name":"bug.md"}]' > "$mixed_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
+printf '{"content":"%s"}' "$(printf 'blank_issues_enabled: false\n' | base64 | tr -d '\n')" \
+  > "$mixed_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE/config.yml.json"
+out_mix="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.github/ISSUE_TEMPLATE"; FLOOR_CHECK_API_DIR="$mixed_api" python3 "$checker" --root "$work/inh" --repo o/r 2>&1)"
+if grep -qE "FAIL.*(issue template|neither local)" <<<"$out_mix"; then bad "a readable config was taken as proof the forms are absent"
+else ok "a readable config next to an unreadable form yields no absence verdict"; fi
+grep -q "INFO  inherited forms not verified" <<<"$out_mix" && ok "the unreadable form is named" || bad "the unreadable form is not named"
+
 # Nothing local and nothing shared: a 404 on the listing is a real absence.
 none_api="$work/inh-none"; mkdir -p "$none_api/repos/o"
 inherit "no templates anywhere is still caught" "FAIL  issue forms neither local nor in the owner" "" "$none_api"
