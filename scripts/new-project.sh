@@ -30,10 +30,15 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The box, at the one tag this version of plinth is tested with, and the
 # workflow file it ships (the first pull request's run is looked up by it).
-# Raising the tag is the only edit here.
+# Then the renderer, at one version, with its dependencies as they were on
+# one date: copier runs as you, with your git configuration in reach, and
+# an unpinned resolution would let any package published later run there.
+# Raising the tag, the version or the date is the only edit here.
 template_repo="coolbress/plinth-template"
 template_ref="v1.1.0"
 template_ci=".github/workflows/ci.yml"
+copier_version="9.18.2"
+copier_newer="2026-09-09"
 claude_floor="2.1.234"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
@@ -307,13 +312,14 @@ created=1
 # Render. Name, owner, license and package directory are settled here: the
 # owner renders pyproject's author and URLs, the license renders LICENSE, and
 # copier.yml's validator refuses a name that makes no Python package before
-# writing a file. Without the token, and before the repository exists on
-# disk: copier and its dependencies resolve from PyPI at whatever version is
-# current, so nothing it writes may be a hook or a config line that a git
-# command below, run with the token, would execute. Rendering into a plain
-# directory and removing whatever `.git` it left, then initialising, leaves
-# it nothing but content (Codex review on #118).
-env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet copier copy --defaults --quiet \
+# writing a file. Copier at its pinned version with nothing published after
+# the pinned date, without the token, and before the repository exists on
+# disk: nothing it writes may be a hook or a config line that a git command
+# below, run with the token, would execute. Rendering into a plain directory
+# and removing whatever `.git` it left, then initialising, leaves it nothing
+# but content (Codex review on #118).
+env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+  copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
