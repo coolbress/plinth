@@ -25,6 +25,10 @@ cat > "$work/scripts/new-project.sh" <<'DOOR'
 template_repo="coolbress/plinth-template"
 template_ref="v0.0.0-stub"
 echo "door $*" >> "$GH_LOG"
+# Preflight refuses before creating (DOOR_PREFLIGHT=1); otherwise the door
+# announces the creation the way the real one does, then fails or goes on.
+[ "${DOOR_PREFLIGHT:-0}" = 0 ] || { echo "https://github.com/$1 already exists; the door creates new repositories only" >&2; exit 2; }
+echo "create $1 (public, MIT, cli, as owner) from coolbress/plinth-template@v0.0.0-stub in $2; wall: ruleset + CodeQL; then the first pull request. rollback: on"
 [ "${DOOR_RC:-0}" = 0 ] || { echo "the wall did not go up" >&2; exit "$DOOR_RC"; }
 all="$*"; dir="${all##*--dir=}"; dir="${dir%% *}"; mkdir -p "$dir/.github/workflows"
 echo "    uses: coolbress/plinth/.github/workflows/python-ci.yml@stub-sha" > "$dir/.github/workflows/ci.yml"
@@ -87,7 +91,7 @@ said() { grep -q -- "$1" "$work/out"; }
 deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
 run() { # <env assignments...>
   export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"
-  unset CREATE_RC DELETE_RC1 DELETE_RC2 DOOR_RC EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
+  unset CREATE_RC DELETE_RC1 DELETE_RC2 DOOR_RC DOOR_PREFLIGHT EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
   env "$@" PLINTH_E2E_WAIT=1 "$work/scripts/e2e.sh" >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -102,7 +106,10 @@ is "the repository it left is named" said "plinth-e2e-42-probe EXISTS"
 is "the probe is a sibling name, not the door's" saw "^gh repo create tester/plinth-e2e-42-probe "
 
 echo "-- the door"
-run DOOR_RC=1;             check "a door that fails fails the journey" no $?
+run DOOR_PREFLIGHT=1;      check "a door that refuses in preflight (the name exists) fails the journey" no $?
+is "nothing is deleted: this run created nothing" deletes 1
+is "and it says so"        said "before anything was created; nothing to delete"
+run DOOR_RC=1;             check "a door that fails after creating fails the journey" no $?
 is "the repository the door left was deleted" deletes 2
 is "no merge"              not saw "^gh pr merge"
 run DOOR_RC=1 EXISTS_RC=1; check "a door that failed and rolled back itself" no $?

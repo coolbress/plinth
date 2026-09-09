@@ -90,4 +90,6 @@ jobs:
           GIT_CONFIG_VALUE_0: "!gh auth git-credential"
         run: |
           set -euo pipefail
-          printf '%s\n' "$PLINTH_E2E_TOKEN" | ./scripts/with-admin-token.sh ./scripts/e2e.sh
+          # env -u: the secret reaches the driver through the prompt only, not
+          # also under its own name, which copier's environment would inherit.
+          printf '%s\n' "$PLINTH_E2E_TOKEN" | env -u PLINTH_E2E_TOKEN ./scripts/with-admin-token.sh ./scripts/e2e.sh

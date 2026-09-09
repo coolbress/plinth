@@ -67,6 +67,14 @@ cleanup() {
   local rc=$? out
   trap - EXIT
   [ "$rc" != 0 ] || exit 0
+  # Only what this run created is deleted: the door announces `create <repo>`
+  # just before it creates, and refuses in preflight a name that already
+  # exists (a rerun after a deletion that failed), which must not be deleted
+  # here as if it were ours.
+  if ! grep -q "^create $repo (" "$work/door.log" 2>/dev/null; then
+    echo "the journey failed before anything was created; nothing to delete (the local copy $work stays)" >&2
+    exit "$rc"
+  fi
   # The door deletes on its own failures; whatever is still there goes now.
   # Deletion is attempted rather than existence asked first: an answer that
   # is not 404 is not "absent", and a probe that failed on a bad minute would
