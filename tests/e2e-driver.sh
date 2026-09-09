@@ -29,7 +29,11 @@ echo "door $*" >> "$GH_LOG"
 # announces the creation the way the real one does, then fails or goes on.
 [ "${DOOR_PREFLIGHT:-0}" = 0 ] || { echo "https://github.com/$1 already exists; the door creates new repositories only" >&2; exit 2; }
 echo "create $1 (public, MIT, cli, as owner) from coolbress/plinth-template@v0.0.0-stub in $2; wall: ruleset + CodeQL; then the first pull request. rollback: on"
-[ "${DOOR_RC:-0}" = 0 ] || { echo "the wall did not go up" >&2; exit "$DOOR_RC"; }
+# The create itself failed (the name existed after a preflight read that missed): no rollback line.
+[ "${DOOR_CREATE_FAILED:-0}" = 0 ] || { echo "GraphQL: Name already exists on this account (createRepository)" >&2; exit 1; }
+# Failed after creating: the real door's rollback lines, which the driver reads as proof of creation.
+[ "${DOOR_RC:-0}" = 0 ] || { echo "the wall did not go up; deleting https://github.com/$1 (the local copy stays)" >&2
+  if [ "${EXISTS_RC:-0}" != 0 ]; then echo "deleted https://github.com/$1" >&2; else echo "!! ROLLBACK FAILED: https://github.com/$1 EXISTS WITHOUT A WALL" >&2; fi; exit "$DOOR_RC"; }
 all="$*"; dir="${all##*--dir=}"; dir="${dir%% *}"; mkdir -p "$dir/.github/workflows"
 echo "    uses: coolbress/plinth/.github/workflows/python-ci.yml@stub-sha" > "$dir/.github/workflows/ci.yml"
 printf 'done: https://github.com/%s\n  first pull request: https://github.com/%s/pull/1\n' "$1" "$1"
@@ -51,6 +55,8 @@ case "$*" in
   "api user --jq "*)                  echo "7 tester" ;;
   "repo create "*)                    [ "${CREATE_RC:-0}" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$CREATE_RC"; } ;;
   "repo delete "*)                    n="$(count delete)"; rc="DELETE_RC$n"
+                                      # The probe after a create that failed: absent (404) unless its answer was merely lost.
+                                      [ "$n" = 1 ] && [ "${CREATE_RC:-0}" != 0 ] && [ "${PROBE_LOST:-0}" = 0 ] && { echo "HTTP 404: Not Found (https://api.github.com/repos/tester/x-probe)" >&2; exit 1; }
                                       [ "$n" = 2 ] && [ "${EXISTS_RC:-0}" != 0 ] && { echo "HTTP 404: Not Found (https://api.github.com/repos/tester/x)" >&2; exit 1; }
                                       [ "${!rc:-0}" = 0 ] || { echo "HTTP 403: Must have admin rights" >&2; exit "${!rc}"; } ;;
   "api repos/"*"/commits/main --jq "*) echo "${MAIN_TIP:-0123456789ab docs: first pull request through the wall (#1)}" ;;   # GitHub appends the number (measured)
@@ -91,7 +97,7 @@ said() { grep -q -- "$1" "$work/out"; }
 deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
 run() { # <env assignments...>
   export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"
-  unset CREATE_RC DELETE_RC1 DELETE_RC2 DOOR_RC DOOR_PREFLIGHT EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
+  unset CREATE_RC PROBE_LOST DELETE_RC1 DELETE_RC2 DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
   env "$@" PLINTH_E2E_WAIT=1 "$work/scripts/e2e.sh" >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -99,7 +105,10 @@ export GITHUB_RUN_ID=42
 echo "-- the first assert: create and delete, before the door"
 run CREATE_RC=1;           check "a token that cannot create stops before the door" no $?
 is "the door never ran"    not saw "^door "
-is "nothing to delete"     deletes 0
+is "the deletion was still asked, and 404 is the proof nothing exists" deletes 1
+run CREATE_RC=1 PROBE_LOST=1; check "a create whose answer was lost, but the probe exists: deleted, and the journey goes on" ok $?
+is "it says the answer was lost" said "the create's answer was lost"
+is "the door ran"          saw "^door "
 run DELETE_RC1=1;          check "a token that cannot delete stops before the door" no $?
 is "the door never ran"    not saw "^door "
 is "the repository it left is named" said "plinth-e2e-42-probe EXISTS"
@@ -108,6 +117,9 @@ is "the probe is a sibling name, not the door's" saw "^gh repo create tester/pli
 echo "-- the door"
 run DOOR_PREFLIGHT=1;      check "a door that refuses in preflight (the name exists) fails the journey" no $?
 is "nothing is deleted: this run created nothing" deletes 1
+is "and it says so"        said "before anything was created; nothing to delete"
+run DOOR_CREATE_FAILED=1;  check "a door whose create failed (the name existed) fails the journey" no $?
+is "nothing is deleted: not ours" deletes 1
 is "and it says so"        said "before anything was created; nothing to delete"
 run DOOR_RC=1;             check "a door that fails after creating fails the journey" no $?
 is "the repository the door left was deleted" deletes 2

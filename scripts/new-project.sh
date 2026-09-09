@@ -289,6 +289,8 @@ echo "create $repo (public, $spdx, $arch, as $role) from $template_repo@$templat
 created=0
 cleanup() {
   [ "$created" = 1 ] || return 0
+  # scripts/e2e.sh reads the start of this line, and of `done:` below, as the
+  # proof that this run created the repository; keep both as they are.
   echo "the wall did not go up; deleting $url (the local copy $dir stays)" >&2
   if gh repo delete "$repo" --yes >/dev/null 2>&1; then
     echo "deleted $url" >&2
@@ -301,23 +303,26 @@ trap cleanup EXIT
 
 gh repo create "$repo" --public >/dev/null
 created=1
-# init -b main: an empty clone would follow init.defaultBranch, and a `master`
-# there leaves the ruleset (~DEFAULT_BRANCH = main) guarding an empty branch.
-git init -q -b main "$dir"
-git -C "$dir" remote add origin "$url.git"
 
 # Render. Name, owner, license and package directory are settled here: the
 # owner renders pyproject's author and URLs, the license renders LICENSE, and
 # copier.yml's validator refuses a name that makes no Python package before
-# writing a file. Without the token: copier and its dependencies resolve
-# from PyPI at whatever version is current, the template is public, and the
-# one thing in this script that is not pinned should not hold the one thing
-# that reaches every repository of the owner (Codex review on #118).
+# writing a file. Without the token, and before the repository exists on
+# disk: copier and its dependencies resolve from PyPI at whatever version is
+# current, so nothing it writes may be a hook or a config line that a git
+# command below, run with the token, would execute. Rendering into a plain
+# directory and removing whatever `.git` it left, then initialising, leaves
+# it nothing but content (Codex review on #118).
 env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
   --vcs-ref "$template_ref" "gh:$template_repo" "$dir" < /dev/null
+rm -rf "$dir/.git"
+# init -b main: an empty clone would follow init.defaultBranch, and a `master`
+# there leaves the ruleset (~DEFAULT_BRANCH = main) guarding an empty branch.
+git init -q -b main "$dir"
+git -C "$dir" remote add origin "$url.git"
 git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $spdx)"
 

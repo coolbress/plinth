@@ -28,9 +28,12 @@ inside pull requests and have no tag.
 ### Fixed
 
 - The door renders the template with the token removed from copier's
-  environment: copier and its dependencies come from PyPI at whatever version
-  is current, and the template is public, so nothing there needs the one
-  credential that reaches every repository of the owner.
+  environment, and before the repository exists on disk: copier and its
+  dependencies come from PyPI at whatever version is current, and the
+  template is public, so nothing there needs the one credential that reaches
+  every repository of the owner, and nothing it writes can be a hook or a
+  config line that a later git command, run with the token, would execute
+  (whatever `.git` it leaves is removed before `git init`).
 - `tests/install-smoke.sh` removes the fresh config directory it made (about
   200 MB of pinned plugins per run) instead of leaving it under the temp
   directory; `CLAUDE_CONFIG_DIR` keeps one.

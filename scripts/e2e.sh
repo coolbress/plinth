@@ -44,13 +44,20 @@ loud() { # a repository that outlives this run is said twice: the log and the su
 fail() { printf '%s\n' "$@" >&2; exit 1; }
 
 # ── first assert: this token can create and delete a repository ──────────
-probe="$repo-probe"
-echo "first assert: create and delete https://github.com/$probe"
-gh repo create "$probe" --public >/dev/null \
-  || fail "the token cannot create https://github.com/$probe (classic: the repo scope; fine-grained: Administration: write on $owner's repositories)"
-gh repo delete "$probe" --yes >/dev/null 2>&1 \
-  || { loud "https://github.com/$probe EXISTS and the token cannot delete it (classic: delete_repo; fine-grained: Administration: write); delete it: https://github.com/$probe/settings"; exit 1; }
-echo "  ok"
+probe="$repo-probe"; purl="https://github.com/$probe"
+echo "first assert: create and delete $purl"
+created_probe=0
+gh repo create "$probe" --public >/dev/null 2>&1 && created_probe=1
+# Deleted whether or not the create answered: a create whose answer was lost
+# still created, and a 404 here is the only proof that nothing exists.
+if out="$(gh repo delete "$probe" --yes 2>&1)"; then
+  [ "$created_probe" = 1 ] || echo "  the create's answer was lost, but $purl existed and is deleted"
+  echo "  ok"
+elif [ "$created_probe" = 0 ] && grep -qE 'HTTP 404|Not Found' <<<"$out"; then
+  fail "the token cannot create $purl (classic: the repo scope; fine-grained: Administration: write on $owner's repositories)"
+else
+  loud "$purl EXISTS and the token cannot delete it ($out; classic: delete_repo; fine-grained: Administration: write); delete it: $purl/settings"; exit 1
+fi
 
 # ── the door ─────────────────────────────────────────────────────────────
 work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-e2e.XXXXXX")"; dir="$work/$name"
@@ -67,11 +74,13 @@ cleanup() {
   local rc=$? out
   trap - EXIT
   [ "$rc" != 0 ] || exit 0
-  # Only what this run created is deleted: the door announces `create <repo>`
-  # just before it creates, and refuses in preflight a name that already
-  # exists (a rerun after a deletion that failed), which must not be deleted
-  # here as if it were ours.
-  if ! grep -q "^create $repo (" "$work/door.log" 2>/dev/null; then
+  # Only what this run created is deleted. The door prints `done: <url>` when
+  # it finished and `the wall did not go up; deleting <url>` when it failed
+  # after creating; both come after its create succeeded, and it keeps them
+  # for this. A door that refused in preflight, or whose create failed because
+  # the name already existed (a rerun after a deletion that failed, a
+  # preflight read that missed), prints neither: not ours to delete.
+  if ! grep -qE "^(done: |the wall did not go up; deleting )$url( |\$)" "$work/door.log" 2>/dev/null; then
     echo "the journey failed before anything was created; nothing to delete (the local copy $work stays)" >&2
     exit "$rc"
   fi
