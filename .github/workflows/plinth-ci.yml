@@ -127,8 +127,11 @@ jobs:
       - name: The reviewer's instructions cannot be softened inside a reviewed pull request
         run: ./tests/pr-review-policy-pin.sh
 
-      - name: No release without a why and the tested template tag; both manifests move together
+      - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit
         run: ./tests/make-release-guards.sh
+
+      - name: The e2e driver deletes what it made on every failure, and names what it could not
+        run: ./tests/e2e-driver.sh
 
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
   # and the README install block is the one the tutorial shows.

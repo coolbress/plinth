@@ -1,0 +1,95 @@
+name: e2e
+#
+# Tier 2: the door's journey on real GitHub (scripts/e2e.sh). Nightly, and on
+# demand for a release candidate: scripts/make-release.sh run 2 accepts a
+# green run of this workflow on the very commit it tags, so the candidate is
+# `gh workflow run e2e.yml --ref main` once the release pull request has
+# merged. Not a merge condition on pull requests: it creates and deletes a
+# public repository under the owner, which a pull request from anyone must
+# not be able to trigger.
+#
+# One secret, PLINTH_E2E_TOKEN: a fine-grained personal access token with
+# Administration, Contents, Pull requests and Workflows: write on all of the
+# owner's repositories (a repository that does not exist yet is not
+# selectable), or a classic one with repo, workflow and delete_repo. Without
+# it the job fails at the token prompt: an empty token is refused, so a
+# missing secret is red, never a pass. No job is skipped with `if:`.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # nightly, 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One journey at a time: two runs would race on the owner's rate limit and
+# on CodeQL's registration; a queued one waits. Never cancel a run that may
+# be holding a repository to delete.
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The door's preflight asks for claude (>= its floor) and uv. The door
+      # runs claude with the admin token in its environment, so this is one
+      # fixed release verified against a checksum recorded here, not the
+      # mutable stable channel the install job deliberately exercises (there,
+      # no token is in reach). The door only asks it for --version, which the
+      # bare binary answers without the installer's launcher. Bump the version
+      # and the checksum together, from
+      # https://downloads.claude.ai/claude-code-releases/<version>/manifest.json
+      # (platforms.linux-x64.checksum).
+      - name: Install Claude Code (one release, SHA256 verified)
+        env:
+          CLAUDE_VERSION: "2.1.236"
+          CLAUDE_SHA256: "6c8818fa22187aa555c242be4abbacc44d6b71a32ac9631ee7b2b5d12f51f752"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/claude"; mkdir -p "$d"
+          curl -fsSL --retry 3 -o "$d/claude" \
+            "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/linux-x64/claude"
+          echo "${CLAUDE_SHA256}  $d/claude" | sha256sum -c -
+          chmod +x "$d/claude"
+          echo "$d" >> "$GITHUB_PATH"
+
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+
+      # The token goes in through the same prompt a person uses, fed from
+      # stdin: it never appears on a command line, and the door learns it was
+      # typed, not found in the environment. The door pushes with git, and a
+      # runner has no credential helper (checkout kept none), so git is told
+      # through its environment to ask gh, which answers with that token; no
+      # file on the runner changes. A repository the run could not delete is
+      # named in the job summary.
+      - name: "Create, wall, first pull request, checks green, merge, delete"
+        env:
+          PLINTH_E2E_TOKEN: ${{ secrets.PLINTH_E2E_TOKEN }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: "!gh auth git-credential"
+        run: |
+          set -euo pipefail
+          # env -u: the secret reaches the driver through the prompt only, not
+          # also under its own name, which copier's environment would inherit.
+          printf '%s\n' "$PLINTH_E2E_TOKEN" | env -u PLINTH_E2E_TOKEN ./scripts/with-admin-token.sh ./scripts/e2e.sh

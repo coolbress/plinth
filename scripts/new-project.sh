@@ -30,10 +30,15 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The box, at the one tag this version of plinth is tested with, and the
 # workflow file it ships (the first pull request's run is looked up by it).
-# Raising the tag is the only edit here.
+# Then the renderer, at one version, with its dependencies as they were on
+# one date: copier runs as you, with your git configuration in reach, and
+# an unpinned resolution would let any package published later run there.
+# Raising the tag, the version or the date is the only edit here.
 template_repo="coolbress/plinth-template"
 template_ref="v1.1.0"
 template_ci=".github/workflows/ci.yml"
+copier_version="9.18.2"
+copier_newer="2026-09-09"
 claude_floor="2.1.234"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
@@ -289,6 +294,8 @@ echo "create $repo (public, $spdx, $arch, as $role) from $template_repo@$templat
 created=0
 cleanup() {
   [ "$created" = 1 ] || return 0
+  # scripts/e2e.sh reads the start of this line, and of `done:` below, as the
+  # proof that this run created the repository; keep both as they are.
   echo "the wall did not go up; deleting $url (the local copy $dir stays)" >&2
   if gh repo delete "$repo" --yes >/dev/null 2>&1; then
     echo "deleted $url" >&2
@@ -301,20 +308,27 @@ trap cleanup EXIT
 
 gh repo create "$repo" --public >/dev/null
 created=1
-# init -b main: an empty clone would follow init.defaultBranch, and a `master`
-# there leaves the ruleset (~DEFAULT_BRANCH = main) guarding an empty branch.
-git init -q -b main "$dir"
-git -C "$dir" remote add origin "$url.git"
 
 # Render. Name, owner, license and package directory are settled here: the
 # owner renders pyproject's author and URLs, the license renders LICENSE, and
 # copier.yml's validator refuses a name that makes no Python package before
-# writing a file.
-uvx --quiet copier copy --defaults --quiet \
+# writing a file. Copier at its pinned version with nothing published after
+# the pinned date, without the token, and before the repository exists on
+# disk: nothing it writes may be a hook or a config line that a git command
+# below, run with the token, would execute. Rendering into a plain directory
+# and removing whatever `.git` it left, then initialising, leaves it nothing
+# but content (Codex review on #118).
+env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+  copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
   --vcs-ref "$template_ref" "gh:$template_repo" "$dir" < /dev/null
+rm -rf "$dir/.git"
+# init -b main: an empty clone would follow init.defaultBranch, and a `master`
+# there leaves the ruleset (~DEFAULT_BRANCH = main) guarding an empty branch.
+git init -q -b main "$dir"
+git -C "$dir" remote add origin "$url.git"
 git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $spdx)"
 

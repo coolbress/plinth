@@ -10,6 +10,11 @@
 # tag cannot be made before that.
 # Run 2, from the merged `main`: pushes the annotated tag `vX.Y.Z` and creates
 # the GitHub Release. Which run this is follows from the files, not a flag.
+# Run 2 first asks for a green `e2e` run (.github/workflows/e2e.yml: the real
+# repository journey, deletion included) on the very commit it is about to tag.
+# The nightly run or `gh workflow run e2e.yml --ref main` provides it. Not the
+# latest green run, not one on a later main, not a failed, skipped or running
+# one: the query is by head_sha and the conclusion is read.
 #
 # The notes file is the *why*, written by a person, and it must say which
 # template tag this release was tested with (`tested with <template> <tag>`,
@@ -91,6 +96,18 @@ if [ "$current" = "$ver" ] && [ "$(version_in "$market")" = "$ver" ] && grep -q 
     release_commit="$c"; break
   done
   [ -n "$release_commit" ] || stop "no commit on main sets version $ver in plugin.json"
+  # Tier 2 on this exact commit, green, or no tag. GitHub filters on head_sha;
+  # the select repeats it so a mock or a lenient server cannot widen the
+  # answer. `conclusion // status` names a running run as such.
+  runs="$(gh api -X GET "repos/{owner}/{repo}/actions/workflows/e2e.yml/runs" -f "head_sha=$release_commit" -F per_page=100 \
+            --jq ".workflow_runs[] | select(.head_sha == \"$release_commit\") | \"\(.conclusion // .status) \(.html_url)\"" 2>&1)" \
+    || stop "cannot query the e2e runs on ${release_commit:0:12}: $runs"
+  grep -q '^success ' <<<"$runs" \
+    || stop "no green e2e run on ${release_commit:0:12}, the commit being tagged; a release needs one (the real repository journey, deletion included):" \
+            "${runs:-  (no run on that commit)}" \
+            "  run it: gh workflow run e2e.yml --ref main   (while main is at that commit; if main has moved on, a branch at it)" \
+            "  then, once it is green, run this again"
+  echo "e2e green on ${release_commit:0:12}: $(grep -m1 '^success ' <<<"$runs" | cut -d' ' -f2)"
   if tag_on_origin; then
     # A push that succeeded before a release that did not: pick up from here.
     # Read the remote tag without creating a local one.
