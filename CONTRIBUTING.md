@@ -31,8 +31,9 @@ deletes the repository; ten to twenty minutes, with the token the generator
 asks for. A classic token (`repo`, `workflow`, `delete_repo`) is the one
 measured to work; a fine-grained one without Administration: write is
 refused before anything exists. Its
-first act is to create and delete the name it is about to use, so a token
-that cannot delete stops before anything is left behind. The `e2e` workflow
+first act is to create and delete a sibling name, `<name>-probe`, so a
+token that cannot delete stops before anything is left behind and the real
+name never collides with a deletion GitHub is still finishing. The `e2e` workflow
 runs it nightly and on demand from the secret `PLINTH_E2E_TOKEN` (a
 fine-grained token: Administration, Contents, Pull requests, Workflows: write
 on all of the owner's repositories; registered by a person, once). A run that

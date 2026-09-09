@@ -15,8 +15,8 @@ inside pull requests and have no tag.
   GitHub (create, render, `main`, labels, CodeQL, ruleset, the first pull
   request), reads the wall back with the floor checker, waits for every check
   to be green, squash-merges, reads `main` back, and deletes the repository.
-  Its first act is to create and delete the name it is about to use, so a
-  token that can create but not delete stops before anything is left behind;
+  Its first act is to create and delete a sibling name, `<name>-probe`, so
+  a token that can create but not delete stops before anything is left behind;
   a repository it could not delete is named on stderr and in the job summary,
   and the exit is 1. When CodeQL has not picked the first pull request up
   after a fifth of the wait, it pushes the door's recovery commit once (the
@@ -27,6 +27,10 @@ inside pull requests and have no tag.
 
 ### Fixed
 
+- The door renders the template with the token removed from copier's
+  environment: copier and its dependencies come from PyPI at whatever version
+  is current, and the template is public, so nothing there needs the one
+  credential that reaches every repository of the owner.
 - `tests/install-smoke.sh` removes the fresh config directory it made (about
   200 MB of pinned plugins per run) instead of leaving it under the temp
   directory; `CLAUDE_CONFIG_DIR` keeps one.

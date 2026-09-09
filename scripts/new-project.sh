@@ -309,8 +309,11 @@ git -C "$dir" remote add origin "$url.git"
 # Render. Name, owner, license and package directory are settled here: the
 # owner renders pyproject's author and URLs, the license renders LICENSE, and
 # copier.yml's validator refuses a name that makes no Python package before
-# writing a file.
-uvx --quiet copier copy --defaults --quiet \
+# writing a file. Without the token: copier and its dependencies resolve
+# from PyPI at whatever version is current, the template is public, and the
+# one thing in this script that is not pinned should not hold the one thing
+# that reaches every repository of the owner (Codex review on #118).
+env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
