@@ -3,9 +3,10 @@
 # throwaway clone of this repository's release files with a bare `origin`,
 # and `gh` is mocked; the verdict is what changed and what `gh` was asked.
 #
-# One property: no release goes out without its *why* and the template tag it
-# was tested with. Everything else (tag format, both manifests moving together,
-# main only, no duplicate) is a wall around that property.
+# One property: no release goes out without its *why*, the template tag it
+# was tested with, and a green `e2e` run on the very commit being tagged.
+# Everything else (tag format, both manifests moving together, main only, no
+# duplicate) is a wall around that property.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,6 +22,13 @@ case "$*" in
   "release view"*)   case "${VIEW_RC:-1}" in 0) ;; 1) echo "release not found" >&2 ;; *) echo "error connecting to api.github.com" >&2 ;; esac
                      exit "${VIEW_RC:-1}" ;;   # default: no release yet, as gh reports it
   "release create"*) exit 0 ;;
+  # The e2e runs on one commit. GitHub filters on head_sha server-side; the
+  # mock does the same, so a green run on another commit is simply not listed.
+  "api -X GET repos/"*"/actions/workflows/e2e.yml/runs "*)
+    [ "${E2E_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$E2E_RC"; }
+    all="$*"; sha="${all#*head_sha=}"; sha="${sha%% *}"
+    [ "$sha" = "${E2E_SHA:-}" ] && [ -n "${E2E_RUNS:-}" ] && printf '%s\n' "$E2E_RUNS"
+    exit 0 ;;
 esac
 exit 0
 MOCK
@@ -149,7 +157,28 @@ run "v$next" "$work/why.md";       check "a failed release query is refused, not
 is "no release on a failed query"  not grep -q "release create" "$GH_LOG"
 is "no tag on a failed query"      [ -z "$(git -C "$origin" tag -l)" ]
 unset VIEW_RC
-run "v$next" "$work/why.md";       check "from the merged main it tags and releases"      ok $?
+echo "-- the e2e gate: a green run on the commit being tagged, nothing else"
+e2e_url="https://github.com/o/r/actions/runs/1"
+run "v$next" "$work/why.md";       check "no e2e run on the release commit is refused"  no $?
+is "no tag without an e2e run"     [ -z "$(git -C "$origin" tag -l)" ]
+is "no release without an e2e run" not grep -q "release create" "$GH_LOG"
+E2E_SHA="$(g rev-parse HEAD)"; export E2E_SHA E2E_RUNS="success $e2e_url"   # green, but on the later main
+run "v$next" "$work/why.md";       check "a green run on another commit is refused"     no $?
+is "no tag on another commit's run" [ -z "$(git -C "$origin" tag -l)" ]
+export E2E_SHA="$release_commit"
+for verdict in failure cancelled skipped in_progress; do
+  export E2E_RUNS="$verdict $e2e_url"
+  run "v$next" "$work/why.md";     check "a run on the commit that is $verdict is refused" no $?
+done
+is "no tag on a run that is not green" [ -z "$(git -C "$origin" tag -l)" ]
+is "no release on a run that is not green" not grep -q "release create" "$GH_LOG"
+export E2E_RUNS="success $e2e_url" E2E_RC=4
+run "v$next" "$work/why.md";       check "a failed e2e query is refused, not read as 'no run'" no $?
+is "no tag on a failed e2e query"  [ -z "$(git -C "$origin" tag -l)" ]
+unset E2E_RC
+export E2E_RUNS="failure $e2e_url"$'\n'"success $e2e_url"
+run "v$next" "$work/why.md";       check "from the merged main, with a green e2e run on its commit, it tags and releases" ok $?
+is "the green run is named"        grep -q "$e2e_url" "$work/out"
 is "the tag is on origin"          git -C "$origin" show-ref --verify --quiet "refs/tags/v$next"
 is "the tag points at the release commit" [ "$(git -C "$origin" rev-parse "v$next^{commit}")" = "$release_commit" ]
 is "not at the later main"         [ "$(git -C "$origin" rev-parse "v$next^{commit}")" != "$(git -C "$origin" rev-parse main)" ]

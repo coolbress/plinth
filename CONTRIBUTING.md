@@ -18,6 +18,27 @@ for t in tests/*.sh; do "./$t"; done                        # every test; instal
 directory exactly as the README says, so it needs network and a few minutes.
 Everything else runs offline in seconds.
 
+Tier 2 is the same journey on real GitHub, and no pull request runs it:
+
+```bash
+scripts/with-admin-token.sh scripts/e2e.sh   # creates plinth-e2e-<run> under you, merges its first pull request, deletes it
+```
+
+It runs the generator, reads the wall back with the floor checker, waits for
+every check on the first pull request (pushing the generator's recovery
+commit once if CodeQL has not picked it up, #117), squash-merges it and
+deletes the repository; ten to twenty minutes, with the token the generator
+asks for. A classic token (`repo`, `workflow`, `delete_repo`) is the one
+measured to work; a fine-grained one without Administration: write is
+refused before anything exists. Its
+first act is to create and delete the name it is about to use, so a token
+that cannot delete stops before anything is left behind. The `e2e` workflow
+runs it nightly and on demand from the secret `PLINTH_E2E_TOKEN` (a
+fine-grained token: Administration, Contents, Pull requests, Workflows: write
+on all of the owner's repositories; registered by a person, once). A run that
+could not delete its repository names it in the job summary and is red. A
+release needs a green run on the commit it tags (below).
+
 ## Land a change
 
 1. Branch from `main`: `git switch -c <type>/<slug>`.
@@ -87,6 +108,7 @@ the same command twice:
 ```bash
 scripts/make-release.sh v0.5.0 notes.md   # 1: bumps both manifests and CHANGELOG.md on release/v0.5.0
 # push the branch, open the pull request, merge it, pull main
+gh workflow run e2e.yml --ref main        # tier 2 on the release commit; the nightly run counts too
 scripts/make-release.sh v0.5.0 notes.md   # 2: tags the merged release commit, creates the GitHub Release
 ```
 
@@ -94,9 +116,13 @@ The script refuses an empty notes file, a notes file without the tested line,
 a version that is not above the current one, a tag or release that already
 exists, a leftover `release/vX.Y.Z` branch, and any `main` that has
 uncommitted changes to tracked files or differs from `origin/main` (the
-untracked notes file in the checkout is fine). The tag goes on the commit
-that set the version, so a pull request merged after the release one stays
-unreleased. Installers get the release with `claude plugin update plinth`;
+untracked notes file in the checkout is fine). Run 2 also refuses a release
+commit without a green `e2e` run on that exact commit: the latest green run
+on another commit does not count, and neither does a failed, cancelled,
+skipped or still-running one, or a query that failed. If `main` has moved past
+the release commit, dispatch the workflow from a branch at that commit. The
+tag goes on the commit that set the version, so a pull request merged after
+the release one stays unreleased. Installers get the release with `claude plugin update plinth`;
 third-party marketplaces do not auto-update by default.
 
 ## What a change must keep true
@@ -107,6 +133,9 @@ third-party marketplaces do not auto-update by default.
 - Every third-party marketplace entry is pinned to a full commit SHA.
 - Every `tests/*.sh` is a `run:` step in a workflow; `tests/all-tests-are-wired.sh`
   fails otherwise.
+- `.github/workflows/e2e.yml` keeps its file name: `scripts/make-release.sh`
+  asks GitHub for that workflow's runs by it, and refuses to release when the
+  query fails.
 - Shell and workflow files pass `bash -n`, `shellcheck -S warning`, actionlint
   and zizmor (`ci / tools`). Anything they catch is not for a reviewer to report;
   see `## Code Review Rules` in `AGENTS.md`.

@@ -9,6 +9,31 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- Tier 2, the real repository journey: `scripts/e2e.sh` runs the door against
+  GitHub (create, render, `main`, labels, CodeQL, ruleset, the first pull
+  request), reads the wall back with the floor checker, waits for every check
+  to be green, squash-merges, reads `main` back, and deletes the repository.
+  Its first act is to create and delete the name it is about to use, so a
+  token that can create but not delete stops before anything is left behind;
+  a repository it could not delete is named on stderr and in the job summary,
+  and the exit is 1. When CodeQL has not picked the first pull request up
+  after a fifth of the wait, it pushes the door's recovery commit once (the
+  door's own advice; measured necessary on 2026-09-09, #117).
+  `.github/workflows/e2e.yml` runs it nightly and on demand from the secret
+  `PLINTH_E2E_TOKEN`; an absent secret is red, not a pass.
+  `tests/e2e-driver.sh` holds its failure paths against a mocked `gh`.
+
+### Changed
+
+- `scripts/make-release.sh` run 2 tags nothing without a green `e2e` run on
+  the very commit it is about to tag: not the latest green run, not one on a
+  later `main`, not a failed, cancelled, skipped or running one, and a query
+  that fails is refused rather than read as "no run". The nightly run counts;
+  so does `gh workflow run e2e.yml --ref main` once the release pull request
+  has merged. `tests/make-release-guards.sh` grew from 59 to 73 cases.
+
 ## [0.5.1] - 2026-09-09
 
 ### Fixed
