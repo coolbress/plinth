@@ -47,9 +47,14 @@ fail() { printf '%s\n' "$@" >&2; exit 1; }
 probe="$repo-probe"; purl="https://github.com/$probe"
 echo "first assert: create and delete $purl"
 created_probe=0
-gh repo create "$probe" --public >/dev/null 2>&1 && created_probe=1
-# Deleted whether or not the create answered: a create whose answer was lost
-# still created, and a 404 here is the only proof that nothing exists.
+if out="$(gh repo create "$probe" --public 2>&1)"; then created_probe=1
+elif grep -qi 'already exists' <<<"$out"; then
+  # Not this run's (a rerun with the same run id after a deletion that
+  # failed, or anyone's repository of that name): never deleted from here.
+  fail "$purl already exists and this run did not create it; delete or rename it, then run again"
+fi
+# Otherwise deleted whether or not the create answered: a create whose answer
+# was lost still created, and a 404 here is the only proof that nothing exists.
 if out="$(gh repo delete "$probe" --yes 2>&1)"; then
   [ "$created_probe" = 1 ] || echo "  the create's answer was lost, but $purl existed and is deleted"
   echo "  ok"

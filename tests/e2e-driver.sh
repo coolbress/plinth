@@ -53,7 +53,8 @@ printf 'gh %s\n' "$*" >> "$GH_LOG"
 count() { local n; n="$(cat "$GH_LOG.$1" 2>/dev/null || echo 0)"; n=$((n + 1)); echo "$n" > "$GH_LOG.$1"; echo "$n"; }
 case "$*" in
   "api user --jq "*)                  echo "7 tester" ;;
-  "repo create "*)                    [ "${CREATE_RC:-0}" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$CREATE_RC"; } ;;
+  "repo create "*)                    [ "${CREATE_EXISTS:-0}" = 0 ] || { echo "GraphQL: Name already exists on this account (createRepository)" >&2; exit 1; }
+                                      [ "${CREATE_RC:-0}" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$CREATE_RC"; } ;;
   "repo delete "*)                    n="$(count delete)"; rc="DELETE_RC$n"
                                       # The probe after a create that failed: absent (404) unless its answer was merely lost.
                                       [ "$n" = 1 ] && [ "${CREATE_RC:-0}" != 0 ] && [ "${PROBE_LOST:-0}" = 0 ] && { echo "HTTP 404: Not Found (https://api.github.com/repos/tester/x-probe)" >&2; exit 1; }
@@ -97,7 +98,7 @@ said() { grep -q -- "$1" "$work/out"; }
 deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
 run() { # <env assignments...>
   export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"
-  unset CREATE_RC PROBE_LOST DELETE_RC1 DELETE_RC2 DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
+  unset CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
   env "$@" PLINTH_E2E_WAIT=1 "$work/scripts/e2e.sh" >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -106,6 +107,9 @@ echo "-- the first assert: create and delete, before the door"
 run CREATE_RC=1;           check "a token that cannot create stops before the door" no $?
 is "the door never ran"    not saw "^door "
 is "the deletion was still asked, and 404 is the proof nothing exists" deletes 1
+run CREATE_EXISTS=1;       check "a probe name that already exists is not this run's: refused" no $?
+is "nothing deleted"       deletes 0
+is "it says whose it is not" said "already exists and this run did not create it"
 run CREATE_RC=1 PROBE_LOST=1; check "a create whose answer was lost, but the probe exists: deleted, and the journey goes on" ok $?
 is "it says the answer was lost" said "the create's answer was lost"
 is "the door ran"          saw "^door "
