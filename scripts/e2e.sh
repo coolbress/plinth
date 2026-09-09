@@ -37,12 +37,6 @@ read -r id login < <(gh api user --jq '"\(.id) \(.login)"') \
 owner="${1:-$login}"
 name="plinth-e2e-${GITHUB_RUN_ID:-$(date -u +%Y%m%d%H%M%S)}"
 repo="$owner/$name"; url="https://github.com/$repo"
-# A runner has no git identity, and the door commits. The noreply address
-# attributes the commit to the token's user; a made-up one would not.
-git config user.email >/dev/null 2>&1 || {
-  export GIT_AUTHOR_NAME="$login" GIT_AUTHOR_EMAIL="$id+$login@users.noreply.github.com"
-  export GIT_COMMITTER_NAME="$login" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
-}
 loud() { # a repository that outlives this run is said twice: the log and the summary
   printf '!! %s\n' "$1" >&2
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
@@ -60,16 +54,27 @@ echo "  ok"
 
 # ── the door ─────────────────────────────────────────────────────────────
 work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-e2e.XXXXXX")"; dir="$work/$name"
+# A runner has no git identity, and the door commits. Read from a directory
+# that is not a repository, which is what the door's fresh clone inherits: a
+# user.email set only in this checkout's own config would pass here and be
+# absent there. The noreply address attributes the commit to the token's
+# user; a made-up one would not.
+git -C "$work" config user.email >/dev/null 2>&1 || {
+  export GIT_AUTHOR_NAME="$login" GIT_AUTHOR_EMAIL="$id+$login@users.noreply.github.com"
+  export GIT_COMMITTER_NAME="$login" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+}
 cleanup() {
-  local rc=$?
+  local rc=$? out
   trap - EXIT
   [ "$rc" != 0 ] || exit 0
   # The door deletes on its own failures; whatever is still there goes now.
-  if gh api "repos/$repo" >/dev/null 2>&1; then
-    echo "the journey failed; deleting $url (the local copy $dir stays)" >&2
-    if gh repo delete "$repo" --yes >/dev/null 2>&1; then echo "deleted $url" >&2
-    else loud "ROLLBACK FAILED: $url EXISTS; delete it: $url/settings (or: gh repo delete $repo --yes)"; fi
-  fi
+  # Deletion is attempted rather than existence asked first: an answer that
+  # is not 404 is not "absent", and a probe that failed on a bad minute would
+  # have read that way and left a public repository behind unreported.
+  echo "the journey failed; deleting $url if it is still there (the local copy $dir stays)" >&2
+  if out="$(gh repo delete "$repo" --yes 2>&1)"; then echo "deleted $url" >&2
+  elif grep -qE 'HTTP 404|Not Found' <<<"$out"; then echo "$url is already gone" >&2
+  else loud "ROLLBACK FAILED: $url may EXIST ($out); delete it: $url/settings (or: gh repo delete $repo --yes)"; fi
   exit "$rc"
 }
 trap cleanup EXIT

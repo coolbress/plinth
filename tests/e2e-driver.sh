@@ -46,11 +46,12 @@ count() { local n; n="$(cat "$GH_LOG.$1" 2>/dev/null || echo 0)"; n=$((n + 1)); 
 case "$*" in
   "api user --jq "*)                  echo "7 tester" ;;
   "repo create "*)                    [ "${CREATE_RC:-0}" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$CREATE_RC"; } ;;
-  "repo delete "*)                    n="$(count delete)"; rc="DELETE_RC$n"; [ "${!rc:-0}" = 0 ] || { echo "HTTP 403: Must have admin rights" >&2; exit "${!rc}"; } ;;
+  "repo delete "*)                    n="$(count delete)"; rc="DELETE_RC$n"
+                                      [ "$n" = 2 ] && [ "${EXISTS_RC:-0}" != 0 ] && { echo "HTTP 404: Not Found (https://api.github.com/repos/tester/x)" >&2; exit 1; }
+                                      [ "${!rc:-0}" = 0 ] || { echo "HTTP 403: Must have admin rights" >&2; exit "${!rc}"; } ;;
   "api repos/"*"/commits/main --jq "*) echo "${MAIN_TIP:-0123456789ab docs: first pull request through the wall (#1)}" ;;   # GitHub appends the number (measured)
   "api repos/"*"/commits/"*)          echo "feedfacefeedfacefeedfacefeedfacefeedface" ;;
   "api repos/"*" --jq .default_branch") echo "${DEFAULT_BRANCH:-main}" ;;
-  "api repos/"*)                      exit "${EXISTS_RC:-0}" ;;   # after the door: does the repository exist
   "pr checks "*"select(.bucket == \"fail\")"*) printf '%s' "${FAILED_CHECKS:-}" ;;
   # The names on the head: CodeQL is there unless CODEQL=0, and appears once the recovery push happened.
   "pr checks "*".[].name")            [ "${CODEQL:-1}" = 1 ] || [ -e "$GH_LOG.pushed" ] && printf 'ci / test\nCodeQL\n' || printf 'ci / test\n' ;;
@@ -105,9 +106,11 @@ run DOOR_RC=1;             check "a door that fails fails the journey" no $?
 is "the repository the door left was deleted" deletes 2
 is "no merge"              not saw "^gh pr merge"
 run DOOR_RC=1 EXISTS_RC=1; check "a door that failed and rolled back itself" no $?
-is "nothing left to delete" deletes 1
-run DOOR_RC=1 DELETE_RC2=1; check "a door that fails and a deletion that fails" no $?
-is "the repository is named loudly" said "ROLLBACK FAILED"
+is "the deletion was still attempted (404 is the only 'absent')" deletes 2
+is "and read as already gone" said "is already gone"
+is "not as a rollback failure" not said "ROLLBACK FAILED"
+run DOOR_RC=1 DELETE_RC2=1; check "a door that fails and a deletion that fails (403, not 404)" no $?
+is "the repository is named loudly, with gh's words" said "ROLLBACK FAILED: https://github.com/tester/plinth-e2e-42 may EXIST (HTTP 403"
 
 echo "-- the wall, read back"
 run DEFAULT_BRANCH=probe;  check "a default branch other than main fails the journey" no $?

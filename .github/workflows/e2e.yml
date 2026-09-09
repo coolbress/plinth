@@ -39,13 +39,27 @@ jobs:
         with:
           persist-credentials: false
 
-      # The door's preflight asks for claude (>= its floor) and uv; both
-      # installed the way the other workflows here do it.
-      - name: Install Claude Code (stable channel, official installer)
+      # The door's preflight asks for claude (>= its floor) and uv. The door
+      # runs claude with the admin token in its environment, so this is one
+      # fixed release verified against a checksum recorded here, not the
+      # mutable stable channel the install job deliberately exercises (there,
+      # no token is in reach). The door only asks it for --version, which the
+      # bare binary answers without the installer's launcher. Bump the version
+      # and the checksum together, from
+      # https://downloads.claude.ai/claude-code-releases/<version>/manifest.json
+      # (platforms.linux-x64.checksum).
+      - name: Install Claude Code (one release, SHA256 verified)
+        env:
+          CLAUDE_VERSION: "2.1.236"
+          CLAUDE_SHA256: "6c8818fa22187aa555c242be4abbacc44d6b71a32ac9631ee7b2b5d12f51f752"
         run: |
           set -euo pipefail
-          curl -fsSL https://claude.ai/install.sh | bash -s stable
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          d="$RUNNER_TEMP/claude"; mkdir -p "$d"
+          curl -fsSL --retry 3 -o "$d/claude" \
+            "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/linux-x64/claude"
+          echo "${CLAUDE_SHA256}  $d/claude" | sha256sum -c -
+          chmod +x "$d/claude"
+          echo "$d" >> "$GITHUB_PATH"
 
       - name: Install uv (official release, SHA256 verified)
         env:
