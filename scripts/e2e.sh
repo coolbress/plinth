@@ -75,10 +75,15 @@ git -C "$work" config user.email >/dev/null 2>&1 || {
   export GIT_AUTHOR_NAME="$login" GIT_AUTHOR_EMAIL="$id+$login@users.noreply.github.com"
   export GIT_COMMITTER_NAME="$login" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
 }
+merged=0 # what the summary says when the deletion is what failed
 cleanup() {
-  local rc=$? out
+  local rc=$? out why
   trap - EXIT
-  [ "$rc" != 0 ] || exit 0
+  # The trap is cleared once the final deletion succeeded, so this runs only
+  # on a failure or on a signal (a cancellation, a workflow timeout). On a
+  # signal that landed while gh ran, bash gives $? as 0 and exits by the
+  # signal after this returns (measured, bash 3.2): 0 here is not "done".
+  [ "$rc" != 0 ] || rc=1
   # Only what this run created is deleted. The door prints `done: <url>` when
   # it finished and `the wall did not go up; deleting <url>` when it failed
   # after creating; both come after its create succeeded, and it keeps them
@@ -93,10 +98,11 @@ cleanup() {
   # Deletion is attempted rather than existence asked first: an answer that
   # is not 404 is not "absent", and a probe that failed on a bad minute would
   # have read that way and left a public repository behind unreported.
-  echo "the journey failed; deleting $url if it is still there (the local copy $dir stays)" >&2
+  echo "the journey did not finish (exit $rc); deleting $url if it is still there (the local copy $dir stays)" >&2
   if out="$(gh repo delete "$repo" --yes 2>&1)"; then echo "deleted $url" >&2
   elif grep -qE 'HTTP 404|Not Found' <<<"$out"; then echo "$url is already gone" >&2
-  else loud "ROLLBACK FAILED: $url may EXIST ($out); delete it: $url/settings (or: gh repo delete $repo --yes)"; fi
+  else why="ROLLBACK FAILED"; [ "$merged" = 0 ] || why="MERGED, NOT DELETED"
+    loud "$why: $url may EXIST ($out); delete it: $url/settings (or: gh repo delete $repo --yes)"; fi
   exit "$rc"
 }
 trap cleanup EXIT
@@ -138,11 +144,21 @@ while :; do
   # enabled (measured 2026-09-09, #117). The door prints the recovery, an
   # empty commit pushed once more, and a runner has nobody to type it: done
   # here, once, after a fifth of the wait with no CodeQL check on the head.
-  if [ "$repushed" = 0 ] && [ "$SECONDS" -ge "$repush_at" ] \
-     && ! gh pr checks "$pr_url" --json name --jq '.[].name' 2>/dev/null | grep -qE '^(CodeQL|Analyze \()'; then
-    echo "CodeQL has not picked up the first pull request after $((wait_s / 5)) s; pushing the door's recovery commit once (#117)" >&2
-    git -C "$dir" commit -q --allow-empty -m 'ci: trigger code scanning' && git -C "$dir" push -q
-    repushed=1
+  if [ "$repushed" = 0 ] && [ "$SECONDS" -ge "$repush_at" ]; then
+    # Only a read of the names can say CodeQL is absent: exit 0, or 8, the
+    # exit `pr checks` gives a pending check without --json (with it, gh
+    # 2.79.0 exits 0 whatever the buckets: checks.go returns from the
+    # exporter first). Any other exit (network, auth, the API) is not an
+    # answer, and never the reason for a push: asked again next poll. The
+    # exit is read apart from grep's, which pipefail would fold into one.
+    rc=0; names="$(gh pr checks "$pr_url" --json name --jq '.[].name' 2>&1)" || rc=$?
+    if [ "$rc" != 0 ] && [ "$rc" != 8 ]; then
+      echo "could not read the checks on $pr_url (gh exited $rc: ${names//$'\n'/ }); the recovery push waits for a readable answer" >&2
+    elif ! grep -qE '^(CodeQL|Analyze \()' <<<"$names"; then
+      echo "CodeQL has not picked up the first pull request after $((wait_s / 5)) s; pushing the door's recovery commit once (#117)" >&2
+      git -C "$dir" commit -q --allow-empty -m 'ci: trigger code scanning' && git -C "$dir" push -q
+      repushed=1
+    fi
   fi
   [ "$SECONDS" -lt "$deadline" ] \
     || fail "the first pull request was not merged within $wait_s s (merge state: $state):" "$(gh pr checks "$pr_url" 2>&1 || true)"
@@ -155,11 +171,14 @@ done
 # not merged), so the title is looked for anywhere in the subject.
 tip="$(gh api "repos/$repo/commits/main" --jq '"\(.sha[0:12]) \(.commit.message | split("\n")[0])"')"
 case "$tip" in *"docs: first pull request through the wall"*) ;; *) fail "main does not carry the squash commit; its tip is: $tip" ;; esac
-echo "merged: $tip"
+echo "merged: $tip"; merged=1
 
 # ── gone ─────────────────────────────────────────────────────────────────
+# The trap stays armed until the deletion returned: a cancellation or a
+# timeout landing on it, like a deletion that failed on its own, goes to
+# cleanup, which tries once more and names what is left. Not a public
+# repository nobody was told about.
+gh repo delete "$repo" --yes >/dev/null 2>&1 || fail "the journey succeeded but the deletion of $url did not"
 trap - EXIT
-gh repo delete "$repo" --yes >/dev/null 2>&1 \
-  || { loud "$url EXISTS: the journey succeeded but the deletion did not; delete it: $url/settings (or: gh repo delete $repo --yes)"; exit 1; }
 echo "deleted $url"
 rm -rf "$work"
