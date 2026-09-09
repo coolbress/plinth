@@ -25,6 +25,12 @@ inside pull requests and have no tag.
   `PLINTH_E2E_TOKEN`; an absent secret is red, not a pass.
   `tests/e2e-driver.sh` holds its failure paths against a mocked `gh`.
 
+### Fixed
+
+- `tests/install-smoke.sh` removes the fresh config directory it made (about
+  200 MB of pinned plugins per run) instead of leaving it under the temp
+  directory; `CLAUDE_CONFIG_DIR` keeps one.
+
 ### Changed
 
 - `scripts/make-release.sh` run 2 tags nothing without a green `e2e` run on

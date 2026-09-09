@@ -2,14 +2,19 @@
 # Installs plinth the way the README says and checks what arrived.
 #
 # Runs against a fresh Claude Code config dir unless CLAUDE_CONFIG_DIR is set, so
-# it can run on a laptop without touching the real installation. Needs network:
+# it can run on a laptop without touching the real installation; the fresh one
+# is removed at exit (it holds every pinned plugin, ~200 MB, and a laptop that
+# ran this daily filled its disk). Set CLAUDE_CONFIG_DIR to keep one. Needs network:
 # it clones the official marketplace and the pinned plugins. Two substitutions
 # make the README's lines runnable in CI: the marketplace source is this checkout
 # instead of GitHub (so a pull request tests itself), and `install` gets `-y`
 # because there is no TTY.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$(mktemp -d)}"
+if [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
+  CLAUDE_CONFIG_DIR="$(mktemp -d)"; trap 'rm -rf "$CLAUDE_CONFIG_DIR"' EXIT
+fi
+export CLAUDE_CONFIG_DIR
 echo "config dir: $CLAUDE_CONFIG_DIR"
 
 # The mattpocock-skills range plinth is tested against. It cannot live in plugin.json:
