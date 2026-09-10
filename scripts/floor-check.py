@@ -2,8 +2,11 @@
 """Floor check: does a repository still have what the door gave it, and does
 its wall still stand? Read-only. Exit 1 on any FAIL.
 
-Run by `ci / floor-check` in python-ci.yml, and by the floor-check skill once
-that skill is implemented, from this same file so the two can never disagree.
+Run by `ci / floor-check` in python-ci.yml and by the floor-check skill, from
+this same file; token, network and inputs can still make their results differ.
+An item the run could not read (offline, no --repo, an API error, a token that
+does not see it) is a SKIP, counted in the summary and never a PASS: exit 0
+says no FAIL in what was checked, and `N not verified` says what was not (#119).
 Standard library only. Set FLOOR_CHECK_API_DIR to a directory of JSON files
 laid out like api.github.com paths to run the network checks against fixtures.
 
@@ -45,13 +48,16 @@ FORM_SUFFIXES = {".yml", ".yaml", ".md"}
 CONFIG_NAMES = {"config.yml", "config.yaml"}
 
 fails = 0
+skips = 0
 
 
 def result(kind: str, msg: str) -> None:
-    global fails
+    global fails, skips
     print(f"  {kind:5} {msg}")
     if kind == "FAIL":
         fails += 1
+    elif kind == "SKIP":
+        skips += 1
 
 
 def ok(cond: bool, good: str, bad: str) -> bool:
@@ -154,7 +160,7 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     else:
         got = inherited_file(owner, "SECURITY.md", network)
         if got is ERROR:
-            result("INFO", "SECURITY.md not local; inheritance not verified (offline or API error)")
+            result("SKIP", "SECURITY.md not local; inheritance not verified (offline or API error)")
         else:
             ok(got is not ABSENT, "SECURITY.md inherited from the owner's .github repository",
                "SECURITY.md neither local nor in the owner's .github repository")
@@ -173,7 +179,7 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     else:
         listing = api(f"repos/{owner}/.github/contents/.github/ISSUE_TEMPLATE", network) if owner else ERROR
         if listing is ERROR or (listing is not ABSENT and not isinstance(listing, list)):
-            result("INFO", "issue forms not local; inheritance not verified (offline or API error)")
+            result("SKIP", "issue forms not local; inheritance not verified (offline or API error)")
         elif listing is ABSENT:
             result("FAIL", "issue forms neither local nor in the owner's .github repository")
         else:
@@ -194,7 +200,7 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
                     else:
                         unread.append(name)
             if unread:
-                result("INFO", f"inherited forms not verified (content unreadable): {', '.join(sorted(unread))}")
+                result("SKIP", f"inherited forms not verified (content unreadable): {', '.join(sorted(unread))}")
             # Absence is concluded only when every candidate was actually read.
             if files or not unread:
                 check_issue_forms(files, "inherited")
@@ -393,7 +399,7 @@ def check_project(project: Path, archetype: str | None) -> None:
     ok((project / "uv.lock").is_file(), "uv.lock committed", "uv.lock missing: CI runs `uv sync --locked`")
 
     if archetype is None:
-        result("INFO", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")
+        result("SKIP", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")
         return
     if archetype not in CONDITIONAL_ARCHETYPES:
         result("INFO", f"archetype {archetype}: no container image or .env.example required")
@@ -469,7 +475,7 @@ def check_labels(repo: str, network: bool) -> None:
     stone (#78)."""
     f = labels_file()
     if f is None:
-        result("INFO", "labels.txt not found next to the checker; labels not checked")
+        result("SKIP", "labels.txt not found next to the checker; labels not checked")
         return
     want = [ln.split("|")[0] for ln in read(f).splitlines()
             if ln.strip() and not ln.lstrip().startswith("#")]
@@ -479,7 +485,7 @@ def check_labels(repo: str, network: bool) -> None:
     if data is ERROR or not isinstance(data, list):
         # Unreadable is not empty. Reporting every label missing because the API
         # failed is the fail-open case in reverse, and just as useless.
-        result("INFO", "labels not verified (offline, not logged in, or API error)")
+        result("SKIP", "labels not verified (offline, not logged in, or API error)")
         return
     have = {e.get("name") for e in data if isinstance(e, dict)}
     missing = [n for n in want if n not in have]
@@ -493,11 +499,14 @@ def check_labels(repo: str, network: bool) -> None:
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], network: bool) -> None:
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
-        result("INFO", "wall not checked (offline)")
+        result("SKIP", "wall not checked (offline)")
         return
     meta = api(f"repos/{repo}", network)
     if meta in (ABSENT, ERROR) or not isinstance(meta, dict):
-        result("FAIL" if meta is ABSENT else "INFO", f"could not read repos/{repo}")
+        if meta is ABSENT:
+            result("FAIL", f"repos/{repo} does not exist, or the token cannot see it (404)")
+        else:
+            result("SKIP", f"could not read repos/{repo} (API error)")
         return
     branch = meta.get("default_branch")
     # The ruleset the door applies targets ~DEFAULT_BRANCH, so every rule below
@@ -509,7 +518,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
     # Said once and plainly, not only as the prefix on each rule line: a check
     # that passes should not depend on someone noticing a prefix.
     if branch is None:
-        result("INFO", "default branch not verified (the API did not report one); reading the wall on main")
+        result("SKIP", "default branch not verified (the API did not report one); reading the wall on main")
         branch = "main"
     else:
         result("INFO", f"the wall is checked on {branch}, the repository's default branch")
@@ -527,14 +536,14 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
     # web UI uses it. The fields are visible to a token with push access.
     title, msg = meta.get("squash_merge_commit_title"), meta.get("squash_merge_commit_message")
     if title is None and msg is None:
-        result("INFO", "squash commit settings not visible with this token (a push-access token sees them)")
+        result("SKIP", "squash commit settings not visible with this token (a push-access token sees them)")
     else:
         ok(title == "PR_TITLE" and msg == "PR_BODY",
            "squash commits carry the pull request title and description",
            f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
     if rules is ERROR:
-        result("INFO", f"could not read the rules of {branch} (API error)")
+        result("SKIP", f"could not read the rules of {branch} (API error)")
         return
     if rules is ABSENT or not rules:
         result("FAIL", f"no rules govern {branch}: the wall is down")
@@ -576,7 +585,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
         if actors is None:
             # Only visible with repository-administration read, which the
             # Actions token never has. The skill, run by the owner, sees it.
-            result("INFO", f"ruleset {rid}: bypass actors not visible with this token (an admin-read token sees them)")
+            result("SKIP", f"ruleset {rid}: bypass actors not visible with this token (an admin-read token sees them)")
         else:
             ok(actors == [], f"ruleset {rid}: no bypass actors", f"ruleset {rid}: bypass actors present: {actors}")
 
@@ -645,12 +654,12 @@ def main() -> int:
         check_wall(a.repo, expected, merge_methods, network)
         check_labels(a.repo, network)
     else:
-        result("INFO", "no --repo: wall not checked")
+        result("SKIP", "no --repo: wall not checked")
 
     if a.sandbox:
         check_sandbox()
 
-    print(f"-- {fails} failed")
+    print(f"-- {fails} failed, {skips} not verified")
     return 1 if fails else 0
 
 

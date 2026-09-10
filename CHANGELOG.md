@@ -32,6 +32,13 @@ inside pull requests and have no tag.
 
 ### Fixed
 
+- `floor-check.py` counts what it could not verify. An item the run could not
+  read (offline, no `--repo`, an API error, a token that does not see it) is a
+  `SKIP` line, and the summary reads `-- N failed, M not verified`; exit codes
+  are unchanged, so a consumer CI that treats 0 as pass keeps working. Before,
+  an offline run of a valid instance ended `-- 0 failed` with the wall
+  unchecked, and the skill read that as "the floor is intact" (#119). The skill
+  and README § Status now say what 0 means and what the live baseline showed.
 - The door renders the template with copier at one pinned version and no
   dependency published after one pinned date (both constants beside the
   template tag), with the token removed from copier's environment, and
