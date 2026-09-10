@@ -30,7 +30,7 @@ printf 'version: 2\n' > "$good/.github/dependabot.yml"
 for f in bug feature task; do printf 'name: %s\ndescription: "x"\nlabels: ["%s"]\nbody: []\n' "$f" "$f" > "$good/.github/ISSUE_TEMPLATE/$f.yml"; done
 printf '* text=auto eol=lf\nuv.lock linguist-generated\n' > "$good/.gitattributes"
 cat > "$good/.claude/settings.json" <<'JSON'
-{"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(gh auth token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Read(~/.config/gh/**)"]}}
+{"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(gh auth token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Bash(cat *.env)","Bash(grep *.env)","Read(~/.config/gh/**)"]}}
 JSON
 printf '[project]\nname = "app"\n' > "$good/pyproject.toml"; : > "$good/uv.lock"
 printf 'archetype: backend\n' > "$good/.copier-answers.yml"
@@ -92,6 +92,8 @@ plant "missing token deny is caught" "printf '{\"permissions\":{\"deny\":[]}}' >
 plant "a Read-only .env deny is caught" "sed -i.bak 's/\"Bash(\. \*\.env\*)\",\"Bash(source \*\.env\*)\",//' .claude/settings.json" "does not deny \`. ./.env\`"
 plant "a sourcing deny without its closing parenthesis is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source .env*\"/' .claude/settings.json" "does not deny \`source .env\`"
 plant "a sourcing deny spelt with a ? is caught: only * is a wildcard" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source .en?)\"/' .claude/settings.json" "does not deny \`source .env\`"
+plant "a settings without the cat rule is caught" "sed -i.bak 's/\"Bash(cat \*\.env)\",//' .claude/settings.json" "does not deny \`cat .env\`"
+plant "a grep rule that names only .env.example is caught" "sed -i.bak 's/\"Bash(grep \*\.env)\"/\"Bash(grep *.env.example)\"/' .claude/settings.json" "does not deny \`grep KEY .env\`"
 plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source *.env.local*)\"/' .claude/settings.json" "does not deny \`source .env\`"
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"

@@ -12,11 +12,23 @@ inside pull requests and have no tag.
 ### Changed
 
 - The door renders
-  [`coolbress/plinth-template@v1.2.0`](https://github.com/coolbress/plinth-template/releases/tag/v1.2.0):
-  its settings also deny `. ./.env` and `source .env`, and its README and
-  AGENTS.md say what the deny reaches and what only the sandbox does (#128).
+  [`coolbress/plinth-template@v1.3.0`](https://github.com/coolbress/plinth-template/releases/tag/v1.3.0):
+  its settings also deny `. ./.env` and `source .env` (#128), and a `cat` or
+  `grep` of `.env` inside `$(...)` or a subshell (#136); its README and
+  AGENTS.md say what the deny reaches and what only the sandbox does.
 
 ### Fixed
+
+- `floor-check` also asks the agent settings for `Bash(cat *.env)` and
+  `Bash(grep *.env)`, and this repository's settings carry them. The Read
+  deny's Bash check sees only a top-level command: measured on Claude Code
+  2.1.267 with `Read(./.env)` denied in every spelling, `echo "$(cat .env)"`,
+  `x=$(cat .env)`, `export $(cat .env | xargs)`, `(cat .env)` and
+  `{ cat .env; }` ran (anthropics/claude-code#89055). A Bash rule reaches
+  those; with the two rules each is refused, and `cat .env.example`,
+  `grep KEY .env.example`, `grep -rn "os.environ" .` still run. The
+  sandbox-off warning now names what stays open: `bash -c`, another reader
+  inside `$(...)`, a `grep -r` that names no file, an interpreter (#136).
 
 - `floor-check` also asks the agent settings to deny `. ./.env` and
   `source .env` (`Bash(. *.env*)`, `Bash(source *.env*)`), and this
