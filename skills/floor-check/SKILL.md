@@ -52,8 +52,9 @@ as is.
 ```
 
 Ruleset fixes need repository administration, so they go through
-`with-admin-token.sh` (spell out the plugin root path); tell the user to type
-that line themselves, prefixed with `!`. Never run it.
+`with-admin-token.sh` (spell out the plugin root path); tell the user to run
+that line in a separate terminal window, not with `!`: `!` runs it without a
+terminal, so the token prompt gets nothing. Never run it.
 
 INFO lines are facts, not defects; leave them where they are. SKIP lines are
 what the run could not check (offline, no `--repo`, an API error, a token

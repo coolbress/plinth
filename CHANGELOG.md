@@ -32,6 +32,14 @@ inside pull requests and have no tag.
 
 ### Fixed
 
+- The door's admin path as a new user meets it (#125, observed in #120). The
+  fine-grained-token fix is printed as two short lines, `P=<scripts dir>` and
+  the call through it, so a copy split by wrapping still runs; the skills and
+  the tutorial say to run it in a separate terminal window, not with `!`, and
+  `with-admin-token.sh` says so itself when it has no terminal to prompt at.
+  An existing target directory that is empty is accepted (a non-empty one, a
+  file or an unreadable directory is still refused before anything exists),
+  and the name refusal says a bare `<name>` is valid.
 - `floor-check.py` counts what it could not verify. An item the run could not
   read (offline, no `--repo`, an API error, a token that does not see it) is a
   `SKIP` line, and the summary reads `-- N failed, M not verified`; exit codes

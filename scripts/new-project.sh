@@ -113,7 +113,7 @@ case "$target" in
   *)   owner="$login"; name="$target" ;;
 esac
 [[ "$owner" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ && "$name" =~ ^[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] \
-  || stop "'$target' is not <owner>/<name> (letters, digits, . _ -)"
+  || stop "'$target' is not <name> or <owner>/<name> (letters, digits, . _ -; a bare name goes under $login)"
 repo="$owner/$name"
 url="https://github.com/$repo"
 dir="${dir:-$HOME/$name}"
@@ -134,8 +134,10 @@ elif [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   rollback="best effort (fine-grained token: needs Administration: write on $owner's repositories)"
 else
   stop "gh is using a fine-grained token; whether it reaches a repository that does not exist yet cannot be read" \
-    "  fix: run the door with an admin token, typed at a prompt (never on the command line):" \
-    "    $here/with-admin-token.sh $here/new-project.sh $*" \
+    "  fix: run the door with an admin token, typed at a prompt (never on the command line)," \
+    "  in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
+    "    P=$(printf '%q' "$here")" \
+    "    \"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" $*" \
     "  the token, classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)" \
     "  or fine-grained (https://github.com/settings/personal-access-tokens): Repository permissions Administration," \
     "  Contents, Workflows, Pull requests: write on all repositories of $owner (a repository that does not exist" \
@@ -159,7 +161,11 @@ fi
 if gh api "repos/$repo" --jq .html_url >/dev/null 2>&1; then
   stop "$url already exists; the door creates new repositories only" "  fix: /plinth:floor-check $repo reads what it has"
 fi
-[ ! -e "$dir" ] || stop "$dir already exists" "  fix: --dir=<another path>"
+# An empty directory is where the user wants the project (`mkdir ~/x; cd ~/x;
+# claude`, then the door), not a collision; anything in it is (#125). A listing
+# that fails (a file, an unreadable directory) is not an empty one.
+[ ! -e "$dir" ] || { entries="$(ls -A "$dir" 2>/dev/null)" && [ -z "$entries" ]; } \
+  || stop "$dir already exists and is not an empty directory" "  fix: --dir=<another path>   (the door creates ~/<name> itself; an empty directory is fine)"
 if git -C "$(dirname "$dir")" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   stop "$dir would be a repository inside the repository $(git -C "$(dirname "$dir")" rev-parse --show-toplevel)" "  fix: --dir=<a path outside it>"
 fi
