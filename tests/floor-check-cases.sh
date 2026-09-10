@@ -90,6 +90,7 @@ plant "root user is caught" "sed -i.bak 's/^USER app/USER root/' Dockerfile" "ru
 plant "undocumented env var is caught" "printf 'x\n' > .env.example" "missing variables"
 plant "missing token deny is caught" "printf '{\"permissions\":{\"deny\":[]}}' > .claude/settings.json" "does not deny gh auth token"
 plant "a Read-only .env deny is caught" "sed -i.bak 's/\"Bash(\. \*\.env\*)\",\"Bash(source \*\.env\*)\",//' .claude/settings.json" "does not deny \`. ./.env\`"
+plant "a sourcing deny without its closing parenthesis is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source .env*\"/' .claude/settings.json" "does not deny \`source .env\`"
 plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source *.env.local*)\"/' .claude/settings.json" "does not deny \`source .env\`"
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"

@@ -339,6 +339,9 @@ def check_agent_settings(root: Path) -> None:
     except json.JSONDecodeError:
         result("FAIL", ".claude/settings.json is not valid JSON")
         return
+    def bash_rule(d: str) -> bool:  # `Bash(source .env*` is not a rule; `d[5:-1]` would drop the `*`
+        return d.startswith("Bash(") and d.endswith(")")
+
     wants = {
         "force push": lambda d: d.startswith("Bash(git push --force") or d.startswith("Bash(git push -f"),
         "rm -rf": lambda d: d.startswith("Bash(rm -rf"),
@@ -347,8 +350,8 @@ def check_agent_settings(root: Path) -> None:
         # `Read(./.env)` also stops `cat`, `head`, `tail`, `sed`, `grep` and `<`
         # in Bash; `. ./.env` and `source .env` go through it (#128). A `*` in a
         # Bash rule matches any text, so fnmatch stands in for the harness.
-        "`. ./.env`": lambda d: d.startswith("Bash(") and fnmatchcase(". ./.env", d[5:-1]),
-        "`source .env`": lambda d: d.startswith("Bash(") and fnmatchcase("source .env", d[5:-1]),
+        "`. ./.env`": lambda d: bash_rule(d) and fnmatchcase(". ./.env", d[5:-1]),
+        "`source .env`": lambda d: bash_rule(d) and fnmatchcase("source .env", d[5:-1]),
         "gh config reads": lambda d: d.startswith("Read(~/.config/gh"),
     }
     for what, match in wants.items():
