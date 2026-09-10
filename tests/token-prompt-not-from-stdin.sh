@@ -100,6 +100,16 @@ case "$out" in
   *) bad "the stdin fallback did not work"; printf '%s\n' "$out" | sed 's/^/        /' ;;
 esac
 
+# 3b. No terminal and nothing on stdin: this is `! with-admin-token.sh ...` in
+# Claude Code, which runs the line without a terminal (#125). The refusal must
+# say where to run it instead, in one line, before running anything.
+out="$(drive notty "" "" /bin/sh -c 'echo RAN')"
+case "$out" in
+  *RAN*) bad "the command ran with no token at all" ;;
+  *"no terminal to prompt at"*"separate terminal"*"exit=2"*) ok "without a terminal and with an empty stdin, the refusal names the separate terminal" ;;
+  *) bad "no-terminal, empty-stdin did not say where to run"; printf '%s\n' "$out" | sed 's/^/        /' ;;
+esac
+
 # 4. A pasted value without an underscore (the paste-accident shape) shows four characters, never the whole.
 out="$(drive notty "" "$(printf 'z%.0s' $(seq 40))"$'\n' /bin/sh -c 'exit 0')"
 case "$out" in

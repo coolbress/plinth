@@ -7,8 +7,8 @@ disable-model-invocation: true
 
 # New project
 
-Creates `<owner>/<name>` on GitHub with the wall already up, or creates
-nothing. One script does all of it; this skill runs it and relays what it says.
+Creates `[<owner>/]<name>` on GitHub with the wall already up, or creates
+nothing. The owner is optional: a bare name goes under the user's login. One script does all of it; this skill runs it and relays what it says.
 
 Run, with the user's arguments exactly as typed:
 
@@ -27,11 +27,13 @@ What to do with the output:
 - **It stopped before creating anything** (exit 2): show the user the message
   verbatim. It names the one fix. Do not work around it; do not run
   `gh repo create`, `gh auth`, or the script with different arguments.
-- **It asks for the admin path**: the message contains one command line
-  starting with `with-admin-token.sh`. Show it verbatim and tell the user to
-  type it themselves, prefixed with `!` so it runs in this session. It prompts
-  for a token at the terminal; never put a token on a command line or in a
-  file, and never ask the user to paste one into the chat.
+- **It asks for the admin path**: the message contains two short lines, a
+  `P=` assignment and a call through it to `with-admin-token.sh`. Show both
+  verbatim and tell the user to run them in a separate terminal window, not
+  with `!`: `!` runs a line without a terminal, so the token prompt gets
+  nothing. It prompts for a token at that terminal; never put a token on a
+  command line or in a file, and never ask the user to paste one into the
+  chat.
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
 - **It finished** (exit 0): show the final lines. The next step for the user is

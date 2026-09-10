@@ -40,8 +40,10 @@ Then start Claude Code and type `/plinth:arsenal` to see what was installed.
 ```
 
 `my-app` is created under your GitHub login; `someorg/my-app` creates it in an
-organization you belong to. Before creating anything the generator prints one
-line with what it is about to do, for example:
+organization you belong to. Run it from anywhere: the generator creates
+`~/my-app` itself (`--dir=<path>` puts it elsewhere), and an existing directory
+is fine as long as it is empty. Before creating anything the generator prints
+one line with what it is about to do, for example:
 
 ```text
 create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.1.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
@@ -49,9 +51,10 @@ create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1
 
 If a check fails it stops there and prints the one fix. Two you may meet:
 
-- `gh is using a fine-grained token`: type the printed `with-admin-token.sh`
-  line yourself, prefixed with `!`. It asks for an admin token at the
-  terminal and never puts it on a command line.
+- `gh is using a fine-grained token`: run the two printed lines (`P=...`,
+  then `with-admin-token.sh` through it) in a separate terminal window, not
+  with `!` in Claude Code, which runs a line without a terminal. It asks for
+  an admin token at that terminal and never puts it on a command line.
 - `rollback: off`: your token has no `delete_repo` scope. The generator
   continues; if it fails later the repository stays and it prints the URL to
   delete it by hand. `gh auth refresh -h github.com -s delete_repo` turns

@@ -221,6 +221,17 @@ E="FAIL_AT=headers"   run token-unread   err no no "cannot read api.github.com/u
 E="MOCK_NOAUTH=1"     run gh-logged-out err no no "gh auth login"                            -- probe
 E="MOCK_SCOPES=repo"  run scope-missing err no no "lacks the scope(s) workflow"              -- probe
 E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"                      -- probe
+# The fix line is copied out of wrapped chat output. One ~250-character line
+# with two absolute plugin paths arrived as three commands, three times (#125):
+# so it is printed as two short lines, a directory assignment and a call
+# through it, and each runs on its own if the paste splits them.
+if grep -qxF "    P=$root/scripts" "$work/home-fine-grained/out" \
+   && grep -qxF '    "$P/with-admin-token.sh" "$P/new-project.sh" probe' "$work/home-fine-grained/out"
+then ok fine-grained "the fix is two short lines: P=<scripts dir>, then the call through \$P"
+else bad fine-grained "the fix line is not in the copy-safe two-line shape"; grep -A3 "fix:" "$work/home-fine-grained/out" | sed 's/^/        /'; fi
+# A user typed the hint's placeholder literally; the refusal must name the
+# bare form as valid, or an agent "corrects" it to owner/name (#125).
+run angle-brackets err no no "is not <name> or <owner>/<name>"                                 -- '<probe>'
 run owner-unknown  err no no "does not exist on GitHub"                                      -- nobody/probe
 run owner-other    err no no "user account other than yours"                                -- alice/probe
 E="MOCK_MEMBER=0"     run org-nonmember err no no "not a member of the organization"         -- someorg/probe
@@ -245,8 +256,17 @@ run license-typo   err no no "unknown license: bogus"                           
 # the door reads the template's own list and stops before creating anything.
 run license-unsupported err no no "the template does not carry the license GPL-3.0"          -- probe --license=gpl-3.0
 run archetype-typo err no no "the template accepts: cli library backend data-ml"            -- probe --archetype=service
-mkdir -p "$work/home-dir-exists/probe"
-run dir-exists     err no no "already exists"                                               -- probe
+# `mkdir ~/x; cd ~/x; claude` then the door: an empty directory is where the
+# user wants the project, not a collision (#125). A non-empty one still is.
+mkdir -p "$work/home-dir-exists/probe"; : > "$work/home-dir-exists/probe/notes.txt"
+run dir-exists     err no no "already exists and is not an empty directory"                 -- probe
+mkdir -p "$work/home-dir-empty/probe"
+run dir-empty      ok yes no "" -- probe
+# A listing that fails is not an empty directory: refused here, not after the
+# repository exists (a Sonnet review of this change).
+mkdir -p "$work/home-dir-unreadable/probe"; chmod 000 "$work/home-dir-unreadable/probe"
+run dir-unreadable err no no "already exists and is not an empty directory"                 -- probe
+chmod 755 "$work/home-dir-unreadable/probe"
 mkdir -p "$work/home-nested" && ( cd "$work/home-nested" && "$real_git" init -q -b main )
 run nested         err no no "inside the repository"                                        -- probe
 # --private is refused before any gh call at all.

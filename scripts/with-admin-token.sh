@@ -25,9 +25,11 @@ set -euo pipefail
 # pasted stdin it is not, so echo is switched off explicitly (and back on,
 # also on Ctrl-C).
 if { exec 3</dev/tty; } 2>/dev/null; then
+  tty=1
   trap 'stty echo <&3' EXIT   # Ctrl-C at the prompt must not leave echo off
   stty -echo <&3
 else
+  tty=0
   exec 3<&0
 fi
 printf 'admin token (input is hidden): ' >&2
@@ -43,7 +45,14 @@ printf '\n' >&2
 GH_TOKEN="${GH_TOKEN#"${GH_TOKEN%%[![:space:]]*}"}"
 GH_TOKEN="${GH_TOKEN%"${GH_TOKEN##*[![:space:]]}"}"
 
-[ -n "$GH_TOKEN" ] || { echo "empty token, stopping." >&2; exit 2; }
+# Empty with no terminal: `! with-admin-token.sh ...` in Claude Code runs the
+# line without a terminal and with nothing on stdin (#125). Say where to run
+# it, not just that nothing came.
+if [ -z "$GH_TOKEN" ]; then
+  echo "empty token, stopping." >&2
+  [ "$tty" = 1 ] || echo "  no terminal to prompt at: run this line in a separate terminal window, not through ! in Claude Code" >&2
+  exit 2
+fi
 
 # Show the shape, never the value, so a paste accident is visible: the known
 # prefix, or the first four characters of whatever came in.
