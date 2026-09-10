@@ -7,8 +7,10 @@ disallowed-tools: Edit, Write, NotebookEdit
 
 # Floor check
 
-Runs the same checker that `ci / floor-check` runs in CI, from the same file,
-so the two can never disagree. Read-only: it changes no file and no setting.
+Runs the same checker that `ci / floor-check` runs in CI, from the same file.
+Token, network and inputs can still make the two results differ: an item the
+run could not read is a SKIP line, never a PASS. Read-only: it changes no
+file and no setting.
 
 ## Run
 
@@ -23,7 +25,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox \
 
 Without a repository name the checker says `no --repo: wall not checked` and
 checks only the files. It reads the GitHub API through `gh` with the user's
-own login, so bypass actors are visible; without a login they show as INFO.
+own login, so bypass actors are visible; without a login they show as SKIP.
 `--sandbox` adds the one item that belongs to this machine, not the
 repository: whether Claude Code's sandbox is on. `--ruleset` expects the wall
 `/plinth:new-project` raises; for a repository with a different wall (plinth
@@ -53,7 +55,13 @@ Ruleset fixes need repository administration, so they go through
 `with-admin-token.sh` (spell out the plugin root path); tell the user to type
 that line themselves, prefixed with `!`. Never run it.
 
-INFO lines are facts, not defects; leave them where they are. An exit code of
-1 means at least one FAIL; 0 means the floor is intact.
+INFO lines are facts, not defects; leave them where they are. SKIP lines are
+what the run could not check (offline, no `--repo`, an API error, a token
+that does not see the item); the summary counts them as `N not verified`.
+After the FAIL and WARN list, name what was not verified in one line, and
+what would verify it (a network, a login, an admin-read token). An exit code
+of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
+not-verified count says what was not. In consumer CI that count is not 0:
+the bypass-actor read needs an admin-read token the Actions token never is.
 
 Do not fix anything in this session, and do not run anything that writes.

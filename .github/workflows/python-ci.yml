@@ -473,9 +473,11 @@ jobs:
   # The floor: does this repository still have what /plinth:new-project gave
   # it, and does its wall still stand? The same checker the floor-check skill
   # runs read-only, fetched from plinth at the commit this workflow file comes
-  # from (`job.workflow_sha`), so CI and skill can never disagree. One blind
-  # spot: bypass actors are visible only to an admin-read token, which the
-  # Actions token never is; CI reports INFO there and the skill sees them.
+  # from (`job.workflow_sha`). Token, network and inputs can still make the
+  # two results differ, and the checker counts what it could not read as
+  # `not verified`. One blind spot: bypass actors are visible only to an
+  # admin-read token, which the Actions token never is; CI reports SKIP there
+  # and the skill sees them.
   floor-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5

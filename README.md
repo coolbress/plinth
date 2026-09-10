@@ -66,9 +66,13 @@ The install works end to end and CI proves it on a clean runner. `new-project`
 creates a repository with the wall up, or creates nothing (its failure paths
 run in CI against a mocked `gh`). It renders
 [plinth-template v1.1.0](https://github.com/coolbress/plinth-template/releases/tag/v1.1.0),
-whose CI reports every check the wall requires, so the first pull request goes
-green and merges. `floor-check` runs the checker `ci / floor-check`
-runs, read-only. A third-party review check (`third-party / review`, Codex) is
+whose CI reports every check the wall requires. In both live journeys so far
+(the v0.5.1 baseline by hand and one green `e2e` run on a runner, #62,
+2026-09-09) the first pull request merged, but only after the recovery commit
+the door prints: CodeQL did not analyse the pull request on its first push
+(#117). `floor-check` runs the checker `ci / floor-check` runs, read-only;
+exit 0 means no FAIL in what it could read, and its summary counts what it
+could not. A third-party review check (`third-party / review`, Codex) is
 available as an optional check; see
 [docs/how-to/configure-the-third-party-reviewer.md](docs/how-to/configure-the-third-party-reviewer.md).
 The [CHANGELOG](CHANGELOG.md) lists what each version adds.

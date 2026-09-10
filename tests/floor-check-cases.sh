@@ -43,6 +43,24 @@ out="$(python3 "$checker" --root "$good" --no-network 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out"; then ok "complete backend instance passes offline"
 else bad "complete backend instance should pass:"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
 
+# Exit 0 with the wall unchecked is not "the floor is intact". The summary
+# counts what was not verified, as SKIP lines, and the exit code stays 0 so a
+# consumer CI that treats 0 as pass keeps working (#119).
+skips() { # <description> <expected summary tail> <checker args...>
+  local desc="$1" want="$2"; shift 2
+  local out; out="$(python3 "$checker" "$@" 2>&1)"; local rc=$?
+  local n; n="$(grep -c '^  SKIP ' <<<"$out")"
+  if [ "$rc" = 0 ] && grep -q -- "-- 0 failed, $want" <<<"$out" && [ "$n" = "${want%% *}" ]; then ok "$desc"
+  else bad "$desc (rc=$rc, SKIP lines=$n, expected '-- 0 failed, $want')"; printf '%s\n' "$out" | grep -E 'SKIP|INFO|failed' | sed 's/^/        /'; fi
+}
+skips "offline with --repo: the wall and the labels are counted as not verified, exit stays 0" \
+  "2 not verified" --root "$good" --repo o/r --no-network
+skips "offline without --repo: the unchecked wall is counted once" \
+  "1 not verified" --root "$good" --no-network
+noarch="$work/noarch"; rm -rf "$noarch"; cp -R "$good" "$noarch"; rm "$noarch/.copier-answers.yml"
+skips "no archetype: the skipped conditional items are counted" \
+  "2 not verified" --root "$noarch" --no-network
+
 # Planted defects, each must be named.
 plant() { # <description> <shell to break the copy> <expected FAIL substring>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
@@ -54,11 +72,11 @@ plant() { # <description> <shell to break the copy> <expected FAIL substring>
   fi
   if grep -q "FAIL.*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a FAIL mentioning '$3')"; printf '%s\n' "$out" | grep FAIL | sed 's/^/        /'; fi
 }
-infos() { # <description> <shell to break the copy> <expected INFO substring>
+infos() { # <description> <shell to break the copy> <expected INFO or SKIP substring>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
   ( cd "$copy" && eval "$2" )
   local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
-  if grep -q "INFO.*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected an INFO mentioning '$3')"; printf '%s\n' "$out" | grep -E 'INFO|FAIL' | sed 's/^/        /'; fi
+  if grep -qE "(INFO|SKIP).*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected an INFO or SKIP mentioning '$3')"; printf '%s\n' "$out" | grep -E 'INFO|SKIP|FAIL' | sed 's/^/        /'; fi
 }
 warns() { # <description> <shell to break the copy> <expected WARN substring>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
@@ -144,7 +162,7 @@ inherit "a local form suppresses the shared set, and says so" "INFO  a local ISS
 # A file listed but unreadable is an API failure, not an absent template.
 bad_api="$work/inh-bad"; mkdir -p "$bad_api/repos/o/.github/contents/.github"
 printf '[{"name":"bug.md"}]' > "$bad_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
-inherit "an unreadable inherited file is not verified, not absent" "INFO  inherited forms not verified" "" "$bad_api"
+inherit "an unreadable inherited file is not verified, not absent" "SKIP  inherited forms not verified" "" "$bad_api"
 out_bad="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.github/ISSUE_TEMPLATE"; FLOOR_CHECK_API_DIR="$bad_api" python3 "$checker" --root "$work/inh" --repo o/r 2>&1)"
 if grep -qE "FAIL.*(issue form|neither local)" <<<"$out_bad"; then bad "an unreadable inherited file was called absent"
 else ok "an unreadable inherited file yields no absence verdict"; fi
@@ -157,7 +175,7 @@ printf '{"content":"%s"}' "$(printf 'blank_issues_enabled: false\n' | base64 | t
 out_mix="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.github/ISSUE_TEMPLATE"; FLOOR_CHECK_API_DIR="$mixed_api" python3 "$checker" --root "$work/inh" --repo o/r 2>&1)"
 if grep -qE "FAIL.*(issue template|neither local)" <<<"$out_mix"; then bad "a readable config was taken as proof the forms are absent"
 else ok "a readable config next to an unreadable form yields no absence verdict"; fi
-grep -q "INFO  inherited forms not verified" <<<"$out_mix" && ok "the unreadable form is named" || bad "the unreadable form is not named"
+grep -q "SKIP  inherited forms not verified" <<<"$out_mix" && ok "the unreadable form is named" || bad "the unreadable form is not named"
 
 # A listing holding only a config proves no form is there: configuration is never
 # fetched, so a failed read of it cannot hide that.
@@ -178,14 +196,17 @@ printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
   local out; [ -n "${3:-}" ] && eval "$3"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
-  if grep -q -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected '$2')"; printf '%s\n' "$out" | grep -E 'FAIL|INFO|failed' | sed 's/^/        /'; fi
+  # A summary naming N not verified must sit above exactly N SKIP lines.
+  local n want; n="$(grep -c '^  SKIP ' <<<"$out")"; want="${2##*failed, }"; want="${want%% *}"
+  if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
+  else bad "$1 (expected '$2', SKIP lines=$n)"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP|failed' | sed 's/^/        /'; fi
   printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
   printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
 }
 wall "intact wall passes" "-- 0 failed"
 wall "squash commits are the pull request title and description" "PASS  squash commits carry"
 wall "drifted squash settings are caught" "squash commit settings drifted: title=COMMIT_OR_PR_TITLE" "printf '{\"default_branch\":\"main\",\"squash_merge_commit_title\":\"COMMIT_OR_PR_TITLE\",\"squash_merge_commit_message\":\"COMMIT_MESSAGES\"}' > \"$api/repos/o/r.json\""
-wall "invisible squash settings are INFO, not a pass" "squash commit settings not visible" "printf '{\"default_branch\":\"main\"}' > \"$api/repos/o/r.json\""
+wall "invisible squash settings are SKIP, not a pass" "squash commit settings not visible" "printf '{\"default_branch\":\"main\"}' > \"$api/repos/o/r.json\""
 # A repository the door damaged before #105: the default branch is the throwaway
 # probe, the whole wall stands on that branch, and `main` has no rules at all.
 # Following the default branch reports it as a wall standing -- the checker
@@ -212,7 +233,7 @@ rm -f "$api/repos/o/r/rules/branches/__push-probe.json"
 # not report it must not be read as "main, fine": not verified, like every other
 # API-backed check here.
 wall "a default branch the API does not report is not verified rather than passed" \
-  "INFO  default branch not verified" \
+  "SKIP  default branch not verified" \
   "printf '{\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
 wall "a repository whose default branch is main is unchanged: no warning, no new noise" "-- 0 failed"
 wall "a healthy repository still says which branch the wall was checked on" "the wall is checked on main, the repository's default branch"
@@ -220,7 +241,12 @@ wall "dropped required check is caught" "required checks dropped: \['ci / b'\]" 
 wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\[\"squash\"\]/[\"squash\",\"merge\"]/' \"$api/repos/o/r/rules/branches/main.json\""
 wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
 wall "no rules at all is caught" "the wall is down" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
-wall "invisible bypass actors are INFO, not a pass" "bypass actors not visible" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
+wall "invisible bypass actors are SKIP, not a pass" "bypass actors not visible" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
+# Labels have no fixture yet at this point, so that read is the one SKIP of an
+# intact wall; the invisible bypass actors are the second.
+wall "an intact wall against the fixture counts only the label read as not verified" "-- 0 failed, 1 not verified"
+wall "invisible bypass actors are counted as not verified" "-- 0 failed, 2 not verified" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
+wall "an unreadable repository is counted, not passed" "-- 0 failed, 2 not verified" "printf '[]' > \"$api/repos/o/r.json\""
 # CodeQL: enforced by the code_scanning rule (the door since #41) or by
 # a `CodeQL` check name (repositories the door created before that). Either
 # passes; neither is the wall missing a stone.
@@ -248,7 +274,7 @@ MOCK
 chmod +x "$work/bin/gh"
 printf '{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole"}]}' > "$api/repos/o/r/rulesets/1.json"
 out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
-# The negative half is about the ruleset read, not about every INFO in the run:
+# The negative half is about the ruleset read, not about every SKIP in the run:
 # other checks legitimately say "not verified" when their fixture is absent.
 if grep -q "FAIL.*bypass actors present" <<<"$out" && ! grep -q "bypass actors not visible" <<<"$out"; then ok "the API is read through gh when it is installed (bypass actors seen, 404 is absent)"
 else bad "gh path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
@@ -280,12 +306,16 @@ then ok "each missing label carries the one command that creates it"
 else bad "no fix line"; printf '%s\n' "$out" | grep -i "label create" | sed 's/^/        /'; fi
 if ! grep -q "FAIL.*label" <<<"$out"; then ok "a missing label is never a FAIL"
 else bad "a missing label produced a FAIL"; fi
+# Every read answered (wall, bypass actors, labels): nothing is counted. A count
+# that includes a passed item is the defect in the other direction.
+if grep -q -- "-- 0 failed, 0 not verified" <<<"$out" && ! grep -q '^  SKIP ' <<<"$out"; then ok "a run whose every read was answered counts 0 not verified, and says so"
+else bad "a fully read run still counts something as not verified"; printf '%s\n' "$out" | grep -E 'SKIP|failed' | sed 's/^/        /'; fi
 if grep -q -- "--paginate" "$work/gh-calls.log"; then ok "the label read is paginated (30 per page would report labels missing that are there)"
 else bad "the label read is not paginated"; sed 's/^/        /' "$work/gh-calls.log"; fi
 # The exit code is the property that keeps consumers merging; lock it.
 rm -f "$api/repos/o/r/labels.json"
 out2="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --no-network 2>&1)"; rc2=$?
-if grep -q "INFO.*labels not verified" <<<"$out2" || ! grep -qi "label the door\|labels the door" <<<"$out2"
+if grep -q "SKIP.*labels not verified" <<<"$out2" || ! grep -qi "label the door\|labels the door" <<<"$out2"
 then ok "offline, labels are not verified rather than reported missing"
 else bad "offline labels"; printf '%s\n' "$out2" | grep -i label | sed 's/^/        /'; fi
 [ "$rc2" = 0 ] || bad "the offline floor stopped passing"
