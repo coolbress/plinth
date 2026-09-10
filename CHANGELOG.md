@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-09-10
+
 ### Changed
 
 - The door renders
