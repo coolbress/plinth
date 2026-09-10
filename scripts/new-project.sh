@@ -457,25 +457,45 @@ codeql_enabled="$(date -u +%H:%M:%SZ)"
 # runner, the same), and coolbress/dividend_calendar (2026-09-09, #120: opened
 # 08:31:55Z, default setup `configured` at 08:32:21Z, blocked until an empty
 # commit pushed after that cleared the rule). The signal here is the one that
-# comes after all of those: default setup reports `configured` and its first
-# run on main, the one enabling it queues, has completed. Its languages are
-# read back on the same call. Missing it only costs the wait: the warning and
-# the re-push at the end stay for that case. The times are printed so a live
-# run is its own record.
-deadline=$((SECONDS + first_pr_wait)); setup="" ; main_run=""
+# comes after all of those: default setup reports `configured`, its first
+# run on main, the one enabling it queues, has completed, and main's `CodeQL`
+# check run (the results, processed after the run) is complete; then a minute.
+# Measured on coolbress/plinth-e2e-34499093907 (2026-09-10, run 1 of #117): the
+# first two alone were not enough, the pull request pushed 2 s after the run
+# completed (16:02:54Z, 16:02:56Z) got no analysis and merged only after the
+# driver's re-push. The languages are read back on the same call. Missing the
+# signal only costs the wait: the warning and the re-push at the end stay for
+# that case. Every candidate is printed with the time it was first seen, so a
+# live run is its own record.
+deadline=$((SECONDS + first_pr_wait)); setup=""; main_run=""
+for v in updated workflow run check analysis; do printf -v "seen_$v" ''; done
+mark() { # <name> <value>: kept and printed the first time the value is non-empty
+  local var="seen_$1"
+  [ -n "$2" ] && [ -z "${!var}" ] && { printf -v "$var" '%s' "$2"; echo "  $(date -u +%H:%M:%SZ) $1: $2"; }
+  return 0
+}
 while :; do
-  setup="$(gh api "repos/$repo/code-scanning/default-setup" --jq '"\(.state) \(.languages // [] | join(","))"' 2>/dev/null || true)"
+  setup="$(gh api "repos/$repo/code-scanning/default-setup" \
+    --jq '"\(.state) \(.languages // [] | join(",") | if . == "" then "-" else . end) \(.updated_at)"' 2>/dev/null || true)"
   main_run="$(gh api -X GET "repos/$repo/actions/runs" -f branch=main -F per_page=20 \
     --jq '.workflow_runs[] | select(.path == "dynamic/github-code-scanning/codeql" and .status == "completed") | .updated_at' 2>/dev/null | head -1 || true)"
-  [ "${setup%% *}" = configured ] && [ -n "$main_run" ] && break
+  [ "${setup%% *}" = configured ] && mark updated "$(awk '{print $3}' <<<"$setup")"
+  mark workflow "$(gh api "repos/$repo/actions/workflows" \
+    --jq '.workflows[] | select(.path == "dynamic/github-code-scanning/codeql") | "\(.state), created \(.created_at), updated \(.updated_at)"' 2>/dev/null | head -1 || true)"
+  mark run "$main_run"
+  mark check "$(gh api "repos/$repo/commits/main/check-runs" \
+    --jq '.check_runs[] | select(.name == "CodeQL" and .status == "completed") | "\(.conclusion) \(.completed_at)"' 2>/dev/null | head -1 || true)"
+  mark analysis "$(gh api "repos/$repo/code-scanning/analyses?ref=refs/heads/main" --jq '.[] | "\(.created_at) \(.category)"' 2>/dev/null | head -1 || true)"
+  [ "${setup%% *}" = configured ] && [ -n "$main_run" ] && [ -n "$seen_check" ] && break
   if [ "$SECONDS" -ge "$deadline" ]; then
-    echo "warning: CodeQL default setup has not completed its first analysis of main after $first_pr_wait s (state: ${setup%% *}, first run on main: ${main_run:-none}); pushing the first pull request anyway" >&2
+    echo "warning: CodeQL default setup has not completed its first analysis of main after $first_pr_wait s (state: ${setup%% *}, first run on main: ${main_run:-none}, CodeQL check on main: ${seen_check:-none}); pushing the first pull request anyway" >&2
     break
   fi
   sleep 5
 done
-codeql_langs="${setup#* }"
-echo "CodeQL default setup: enabled $codeql_enabled, ${setup%% *} with languages [$codeql_langs], first run on main completed ${main_run:-never}, first pull request pushed $(date -u +%H:%M:%SZ)"
+[ -z "$seen_check" ] || sleep 60
+read -r setup_state codeql_langs _ <<<"$setup"
+echo "CodeQL default setup: enabled $codeql_enabled, ${setup_state:-unreadable} with languages [${codeql_langs:-}], first run on main completed ${main_run:-never}, CodeQL check on main ${seen_check:-never}, first pull request pushed $(date -u +%H:%M:%SZ)"
 [ -n "$codeql_langs" ] && ! grep -qw python <<<"$codeql_langs" &&
   warn "CodeQL default setup analyses [$codeql_langs] and not the Python under src/. fix: $codeql_fix"
 branch="docs/first-pr"
@@ -529,7 +549,7 @@ while :; do
   # CodeQL's runs do not list under the branch; its check runs on the head do.
   if [ "$codeql" = 0 ]; then
     names="$(gh api "repos/$repo/commits/$head_sha/check-runs" --jq '.check_runs[].name' 2>/dev/null || true)"
-    grep -qE '^(CodeQL|Analyze \()' <<<"$names" && codeql=1
+    grep -qE '^(CodeQL|Analyze \()' <<<"$names" && { codeql=1; echo "  $(date -u +%H:%M:%SZ) CodeQL on the pull request head: $(grep -E '^(CodeQL|Analyze \()' <<<"$names" | tr '\n' ' ')"; }
   fi
   [ "$seen" -ge 2 ] && [ "$codeql" = 1 ] && break
   if [ "$SECONDS" -ge "$deadline" ]; then
@@ -544,7 +564,7 @@ while :; do
     # Guarded on `codeql`, not implied by reaching here: a short streak now
     # arrives at this line too, and CodeQL may well have been found already.
     if [ "$codeql" = 0 ]; then
-      echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s; the merge stays blocked until it does" >&2
+      echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s (check runs on its head: $(tr '\n' ' ' <<<"$names")); the merge stays blocked until it does" >&2
       repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
     fi
     break

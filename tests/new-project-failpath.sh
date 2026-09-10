@@ -40,6 +40,9 @@ case "$all" in
   "api repos/"*"/languages"*)                    step=languages ;;
   "api repos/"*"/code-scanning/default-setup"*)  step=setup-read ;;
   *code-scanning*"languages[]"*)                 step=codeql-langs ;;
+  *"/code-scanning/analyses"*)                   step=analyses ;;
+  "api repos/"*"/actions/workflows"*)            step=workflows ;;
+  "api repos/"*"/commits/main/check-runs"*)      step=main-checkrun ;;
   "api repos/"*"/commits/"*"/check-runs"*)       step=checkruns ;;
   # GitHub reads a community-health file from the root, `.github/` or `docs/`,
   # and the door asks about all of them: match the name, not one path.
@@ -136,7 +139,12 @@ case "$step" in
   # GitHub's language detection, some time after the first push; then default
   # setup's state and languages, as the door's jq joins them.
   languages)     [ "${MOCK_LANGUAGES:-python}" = python ] && printf 'Python\n' ;;
-  setup-read)    printf '%s %s\n' "${MOCK_SETUP:-configured}" "${MOCK_SETUP_LANGS:-actions,python}" ;;
+  setup-read)    printf '%s %s 2026-09-10T00:01:30Z\n' "${MOCK_SETUP:-configured}" "${MOCK_SETUP_LANGS:-actions,python}" ;;
+  # The other candidates the door records: the dynamic workflow, main's CodeQL
+  # check run (the one the push waits for, with the run), main's analyses.
+  workflows)     echo 'active, created 2026-09-10T00:00:30Z, updated 2026-09-10T00:01:00Z' ;;
+  main-checkrun) case "${MOCK_CODEQL_MAIN:-done}" in done) echo 'success 2026-09-10T00:02:00Z' ;; error) exit 1 ;; esac ;;
+  analyses)      echo '2026-09-10T00:02:00Z /language:python' ;;
   checkruns)     printf 'ci / lint\nci / test\n'; [ "${MOCK_CODEQL:-present}" = present ] && printf 'CodeQL\nAnalyze (python)\n' ;;
 esac
 exit 0
@@ -365,7 +373,7 @@ E="MOCK_SETUP=not-configured PLINTH_FIRST_PR_WAIT=1" run codeql-unconfigured ok 
 # the poll asks again, the wait runs out, and the repository stays (a Sonnet
 # review of this change: the unguarded read aborted the door under set -e).
 E="MOCK_CODEQL_MAIN=error PLINTH_FIRST_PR_WAIT=1" run codeql-main-unreadable ok yes no "warning: CodeQL default setup has not completed its first analysis of main" -- probe
-if grep -q "(state: not-configured, first run on main: 2026-09-10T00:01:00Z)" "$work/home-codeql-unconfigured/out"; then ok codeql-unconfigured "the warning says which of the two reads is missing"
+if grep -q "(state: not-configured, first run on main: 2026-09-10T00:01:00Z, CodeQL check on main: success 2026-09-10T00:02:00Z)" "$work/home-codeql-unconfigured/out"; then ok codeql-unconfigured "the warning says which of the reads is missing"
 else bad codeql-unconfigured "the warning does not say what was read"; grep warning "$work/home-codeql-unconfigured/out" | sed 's/^/        /'; fi
 # Default setup enabled before GitHub's language detection has run analyses
 # `actions` alone (#120 finding I): detection that never lists Python warns, and
@@ -433,7 +441,7 @@ check "CodeQL default setup is enabled after GitHub lists the languages, with ac
 check "default setup reports configured and its first run on main has completed before the first pull request is pushed" \
   '[ "$(grep -E "default-setup --jq|branch=main|push -q -u origin docs/first-pr" "$log" | sed -E "s/.*default-setup --jq.*/setup/; s/.*branch=main.*/main/; s/.*docs\/first-pr.*/push/" | head -3 | tr "\n" " ")" = "setup main push " ]'
 check "the door prints the times it saw, so a live run is its own record" \
-  'grep -qE "^CodeQL default setup: enabled [0-9:]+Z, configured with languages \[actions,python\], first run on main completed 2026-09-10T00:01:00Z, first pull request pushed [0-9:]+Z$" "$work/home-none/out"'
+  'grep -qE "^CodeQL default setup: enabled [0-9:]+Z, configured with languages \[actions,python\], first run on main completed 2026-09-10T00:01:00Z, CodeQL check on main success 2026-09-10T00:02:00Z, first pull request pushed [0-9:]+Z$" "$work/home-none/out" && grep -qE "^  [0-9:]+Z (updated|workflow|run|check|analysis): " "$work/home-none/out" && [ "$(grep -cE "^  [0-9:]+Z (updated|workflow|run|check|analysis): " "$work/home-none/out")" = 5 ]'
 check "the first pull request head is checked for a CodeQL check run" 'grep -q "/check-runs" "$log"'
 check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowed\[\]=coolbress/plinth/\*" "$log"'
 check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
