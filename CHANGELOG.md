@@ -11,6 +11,18 @@ inside pull requests and have no tag.
 
 ### Fixed
 
+- `floor-check` also asks the agent settings to deny `. ./.env` and
+  `source .env` (`Bash(. *.env*)`, `Bash(source *.env*)`), and this
+  repository's settings do. Measured on Claude Code 2.1.267 with the sandbox
+  off: `Read(./.env)` already stops `cat`, `head`, `tail`, `sed`, `grep` and
+  `<` on `.env`, alone and in a pipe, `&&` or `;` chain, but not a sourced
+  `.env`, which an agent did to load a key and got the value back in a shell
+  error (#128). The two Bash rules stop every sourcing shape tried, including
+  inside `set -a; ...; set +a`, and leave `.venv/bin/activate` alone. Still
+  open, and now named by the sandbox-off warning: `$(cat .env)`, `bash -c
+  "cat .env"`, and an interpreter opening the file; only the sandbox's
+  `denyRead` stops those.
+
 - The door prints the admin fix's arguments on a third line, joined to the
   call by a backslash. With the arguments on the call line it was 82
   characters and still wrapped at 80 columns (#132, measured after #125);
