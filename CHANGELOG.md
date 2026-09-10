@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-09-10
+
 ### Added
 
 - Tier 2, the real repository journey: `scripts/e2e.sh` runs the door against
