@@ -220,15 +220,26 @@ E="MOCK_GIT_VERSION=2.27.0" run git-old  err no no "git 2.27.0 is too old"      
 E="FAIL_AT=headers"   run token-unread   err no no "cannot read api.github.com/user"          -- probe
 E="MOCK_NOAUTH=1"     run gh-logged-out err no no "gh auth login"                            -- probe
 E="MOCK_SCOPES=repo"  run scope-missing err no no "lacks the scope(s) workflow"              -- probe
-E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"                      -- probe
+E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"                      -- probe --archetype=backend
 # The fix line is copied out of wrapped chat output. One ~250-character line
 # with two absolute plugin paths arrived as three commands, three times (#125):
-# so it is printed as two short lines, a directory assignment and a call
-# through it, and each runs on its own if the paste splits them.
+# so it is printed as three short lines, a directory assignment, a call
+# through it, and the arguments joined by a backslash (#132: the call with
+# its arguments still wrapped at 80 columns). `P=` runs on its own if the
+# paste splits the lines; the backslash keeps the call and its arguments one
+# command.
 if grep -qxF "    P=$root/scripts" "$work/home-fine-grained/out" \
-   && grep -qxF '    "$P/with-admin-token.sh" "$P/new-project.sh" probe' "$work/home-fine-grained/out"
-then ok fine-grained "the fix is two short lines: P=<scripts dir>, then the call through \$P"
-else bad fine-grained "the fix line is not in the copy-safe two-line shape"; grep -A3 "fix:" "$work/home-fine-grained/out" | sed 's/^/        /'; fi
+   && grep -qxF '    "$P/with-admin-token.sh" "$P/new-project.sh" \' "$work/home-fine-grained/out" \
+   && grep -qxF '      probe --archetype=backend' "$work/home-fine-grained/out"
+then ok fine-grained "the fix is three short lines: P=<scripts dir>, the call through \$P \\, the arguments"
+else bad fine-grained "the fix line is not in the copy-safe three-line shape"; grep -A4 "fix:" "$work/home-fine-grained/out" | sed 's/^/        /'; fi
+# Pasted as one block into a shell, the three lines are two commands and the
+# arguments reach the second one (the paste is simulated; the copy is not).
+# No terminal here, so the token comes from stdin, as in CI.
+paste_script="$(printf '%s\n' "P=$root/scripts" '"$P/with-admin-token.sh" /bin/echo RAN \' '  probe --archetype=backend')"
+paste_out="$(bash -c "$paste_script" <<<"ghp_$(printf 'x%.0s' $(seq 36))" 2>&1)"
+case "$paste_out" in *"RAN probe --archetype=backend"*) ok fine-grained "the three lines pasted into bash run as one call with its arguments" ;;
+  *) bad fine-grained "the pasted three lines did not reach the call's arguments"; printf '%s\n' "$paste_out" | sed 's/^/        /' ;; esac
 # A user typed the hint's placeholder literally; the refusal must name the
 # bare form as valid, or an agent "corrects" it to owner/name (#125).
 run angle-brackets err no no "is not <name> or <owner>/<name>"                                 -- '<probe>'

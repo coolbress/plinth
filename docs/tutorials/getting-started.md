@@ -51,10 +51,11 @@ create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1
 
 If a check fails it stops there and prints the one fix. Two you may meet:
 
-- `gh is using a fine-grained token`: run the two printed lines (`P=...`,
-  then `with-admin-token.sh` through it) in a separate terminal window, not
-  with `!` in Claude Code, which runs a line without a terminal. It asks for
-  an admin token at that terminal and never puts it on a command line.
+- `gh is using a fine-grained token`: copy the three printed lines (`P=...`,
+  then `with-admin-token.sh` through it, then the arguments) as one block into
+  a separate terminal window, not with `!` in Claude Code, which runs a line
+  without a terminal. It asks for an admin token at that terminal and never
+  puts it on a command line.
 - `rollback: off`: your token has no `delete_repo` scope. The generator
   continues; if it fails later the repository stays and it prints the URL to
   delete it by hand. `gh auth refresh -h github.com -s delete_repo` turns

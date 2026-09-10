@@ -27,13 +27,13 @@ What to do with the output:
 - **It stopped before creating anything** (exit 2): show the user the message
   verbatim. It names the one fix. Do not work around it; do not run
   `gh repo create`, `gh auth`, or the script with different arguments.
-- **It asks for the admin path**: the message contains two short lines, a
-  `P=` assignment and a call through it to `with-admin-token.sh`. Show both
-  verbatim and tell the user to run them in a separate terminal window, not
-  with `!`: `!` runs a line without a terminal, so the token prompt gets
-  nothing. It prompts for a token at that terminal; never put a token on a
-  command line or in a file, and never ask the user to paste one into the
-  chat.
+- **It asks for the admin path**: the message contains three short lines, a
+  `P=` assignment, a call through it to `with-admin-token.sh` ending in a
+  backslash, and the arguments. Show all three verbatim, as one block, and
+  tell the user to run them in a separate terminal window, not with `!`: `!`
+  runs a line without a terminal, so the token prompt gets nothing. It
+  prompts for a token at that terminal; never put a token on a command line
+  or in a file, and never ask the user to paste one into the chat.
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
 - **It finished** (exit 0): show the final lines. The next step for the user is
