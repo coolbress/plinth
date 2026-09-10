@@ -9,6 +9,15 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The door prints the admin fix's arguments on a third line, joined to the
+  call by a backslash. With the arguments on the call line it was 82
+  characters and still wrapped at 80 columns (#132, measured after #125);
+  every printed line now stays under about 60, `P=` runs alone if a paste
+  splits the lines, and the backslash keeps the call and its arguments one
+  command.
+
 ## [0.5.2] - 2026-09-10
 
 ### Added
@@ -35,10 +44,8 @@ inside pull requests and have no tag.
 ### Fixed
 
 - The door's admin path as a new user meets it (#125, observed in #120). The
-  fine-grained-token fix is printed as three short lines, `P=<scripts dir>`,
-  the call through it ending in a backslash, and the arguments (#132: with the
-  arguments on the call line it still wrapped at 80 columns), so a copy split
-  by wrapping still runs; the skills and
+  fine-grained-token fix is printed as two short lines, `P=<scripts dir>` and
+  the call through it, so a copy split by wrapping still runs; the skills and
   the tutorial say to run it in a separate terminal window, not with `!`, and
   `with-admin-token.sh` says so itself when it has no terminal to prompt at.
   An existing target directory that is empty is accepted (a non-empty one, a
