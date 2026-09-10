@@ -9,6 +9,13 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The door renders
+  [`coolbress/plinth-template@v1.2.0`](https://github.com/coolbress/plinth-template/releases/tag/v1.2.0):
+  its settings also deny `. ./.env` and `source .env`, and its README and
+  AGENTS.md say what the deny reaches and what only the sandbox does (#128).
+
 ### Fixed
 
 - `floor-check` also asks the agent settings to deny `. ./.env` and
