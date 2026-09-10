@@ -468,7 +468,7 @@ codeql_enabled="$(date -u +%H:%M:%SZ)"
 # that case. Every candidate is printed with the time it was first seen, so a
 # live run is its own record.
 deadline=$((SECONDS + first_pr_wait)); setup=""; main_run=""
-for v in updated workflow run check analysis; do printf -v "seen_$v" ''; done
+for v in updated workflow run check analysis; do printf -v "seen_$v" '%s' ''; done
 mark() { # <name> <value>: kept and printed the first time the value is non-empty
   local var="seen_$1"
   [ -n "$2" ] && [ -z "${!var}" ] && { printf -v "$var" '%s' "$2"; echo "  $(date -u +%H:%M:%SZ) $1: $2"; }
