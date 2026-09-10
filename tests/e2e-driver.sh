@@ -59,13 +59,19 @@ case "$*" in
                                       # The probe after a create that failed: absent (404) unless its answer was merely lost.
                                       [ "$n" = 1 ] && [ "${CREATE_RC:-0}" != 0 ] && [ "${PROBE_LOST:-0}" = 0 ] && { echo "HTTP 404: Not Found (https://api.github.com/repos/tester/x-probe)" >&2; exit 1; }
                                       [ "$n" = 2 ] && [ "${EXISTS_RC:-0}" != 0 ] && { echo "HTTP 404: Not Found (https://api.github.com/repos/tester/x)" >&2; exit 1; }
+                                      # A cancellation landing on the last deletion: the runner signals the tree, gh dies by it, so does the driver.
+                                      [ "$n" = 2 ] && [ "${DELETE_KILL:-0}" != 0 ] && { kill -TERM "$PPID"; exit 143; }
                                       [ "${!rc:-0}" = 0 ] || { echo "HTTP 403: Must have admin rights" >&2; exit "${!rc}"; } ;;
   "api repos/"*"/commits/main --jq "*) echo "${MAIN_TIP:-0123456789ab docs: first pull request through the wall (#1)}" ;;   # GitHub appends the number (measured)
   "api repos/"*"/commits/"*)          echo "feedfacefeedfacefeedfacefeedfacefeedface" ;;
   "api repos/"*" --jq .default_branch") echo "${DEFAULT_BRANCH:-main}" ;;
   "pr checks "*"select(.bucket == \"fail\")"*) printf '%s' "${FAILED_CHECKS:-}" ;;
   # The names on the head: CodeQL is there unless CODEQL=0, and appears once the recovery push happened.
-  "pr checks "*".[].name")            [ "${CODEQL:-1}" = 1 ] || [ -e "$GH_LOG.pushed" ] && printf 'ci / test\nCodeQL\n' || printf 'ci / test\n' ;;
+  # With --json the real gh exits 0 whatever the buckets (2.79.0); CHECKS_RC is the exit of the first
+  # CHECKS_FAILS reads (default: every one), names printed all the same: the driver must read the exit.
+  "pr checks "*".[].name")            n="$(count names)"
+                                      [ "${CODEQL:-1}" = 1 ] || [ -e "$GH_LOG.pushed" ] && printf 'ci / test\nCodeQL\n' || printf 'ci / test\n'
+                                      [ -z "${CHECKS_RC:-}" ] || [ "$n" -gt "${CHECKS_FAILS:-999}" ] || { echo "HTTP 502: Bad Gateway" >&2; exit "$CHECKS_RC"; } ;;
   "pr view "*)                        if [ -e "$GH_LOG.pushed" ] && [ -n "${STATE_AFTER_PUSH:-}" ]; then echo "$STATE_AFTER_PUSH"; else echo "${STATE:-CLEAN}"; fi ;;
   "pr merge "*)                       [ "${MERGE_RC:-0}" = 0 ] || { echo "Pull request is not mergeable" >&2; exit "$MERGE_RC"; } ;;
 esac
@@ -98,7 +104,7 @@ said() { grep -q -- "$1" "$work/out"; }
 deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
 run() { # <env assignments...>
   export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"
-  unset CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
+  unset CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
   env "$@" PLINTH_E2E_WAIT=1 "$work/scripts/e2e.sh" >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -165,6 +171,15 @@ is "still one push"        [ "$(grep -c '^git -C .* push' "$GH_LOG")" = 1 ]
 is "deleted"               deletes 2
 run STATE=BLOCKED;         check "CodeQL present and blocked: no recovery push" no $?
 is "no push"               not saw "^git -C .* push"
+run STATE=BLOCKED CODEQL=0 CHECKS_RC=8; check "exit 8 (pending, without --json) is a read: CodeQL missing on it is pushed" no $?
+is "one push"              [ "$(grep -c '^git -C .* push' "$GH_LOG")" = 1 ]
+run STATE=BLOCKED CODEQL=0 CHECKS_RC=1; check "any other exit is not a read: not evidence that CodeQL is absent" no $?
+is "no push, whatever was listed" not saw "^git -C .* push"
+is "the unreadable answer is said, with gh's exit and words" said "could not read the checks on https://github.com/tester/plinth-e2e-42/pull/1 (gh exited 1: ci / test HTTP 502: Bad Gateway)"
+is "deleted"               deletes 2
+run STATE=BLOCKED CODEQL=0 CHECKS_RC=1 CHECKS_FAILS=1; check "read again next poll: the push waits for a readable answer" no $?
+is "one push, after the read that succeeded" [ "$(grep -c '^git -C .* push' "$GH_LOG")" = 1 ]
+is "two reads"             [ "$(cat "$GH_LOG.names")" = 2 ]
 run MERGE_RC=1;            check "a merge that keeps failing fails the journey" no $?
 is "deleted"               deletes 2
 run MAIN_TIP="0123456789ab chore: something else"
@@ -178,10 +193,20 @@ is "probe delete, then the real one" deletes 2
 is "the merged commit is reported, number and all" said "merged: 0123456789ab docs: first pull request through the wall (#1)"
 is "the deletion is reported" said "deleted https://github.com/tester/plinth-e2e-42"
 is "the generator, template and pin are recorded" bash -c 'grep -q "^template: coolbress/plinth-template@v0.0.0-stub feedfacefeed" "$1" && grep -q "python-ci.yml@stub-sha" "$1"' _ "$work/out"
-run DELETE_RC2=1 GITHUB_STEP_SUMMARY="$work/summary"
-check "merged but not deleted is a failure" no $?
-is "the repository is named loudly" said "plinth-e2e-42 EXISTS"
-is "and in the job summary"  grep -q "plinth-e2e-42" "$work/summary"
+run DELETE_RC2=1;          check "merged but not deleted is a failure, and cleanup tries once more" no $?
+is "the deletion is asked again" deletes 3
+is "and reported"          said "deleted https://github.com/tester/plinth-e2e-42"
+run DELETE_RC2=1 DELETE_RC3=1 GITHUB_STEP_SUMMARY="$work/summary"
+check "merged and not deleted twice is a failure" no $?
+is "the repository is named loudly, apart from a rollback" said "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42 may EXIST"
+is "and in the job summary"  grep -q "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42" "$work/summary"
+run DELETE_KILL=1;         check "a cancellation landing on the last deletion: the trap is still armed" no $?
+is "the deletion is asked again" deletes 3
+is "and reported"          said "deleted https://github.com/tester/plinth-e2e-42"
+run DELETE_KILL=1 DELETE_RC3=1 GITHUB_STEP_SUMMARY="$work/summary2"
+check "a cancellation, then a deletion that fails" no $?
+is "the repository is named loudly" said "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42 may EXIST"
+is "and in the job summary"  grep -q "plinth-e2e-42" "$work/summary2"
 
 echo
 echo "-- $pass passed, $fail failed"

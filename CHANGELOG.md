@@ -18,9 +18,14 @@ inside pull requests and have no tag.
   Its first act is to create and delete a sibling name, `<name>-probe`, so
   a token that can create but not delete stops before anything is left behind;
   a repository it could not delete is named on stderr and in the job summary,
-  and the exit is 1. When CodeQL has not picked the first pull request up
-  after a fifth of the wait, it pushes the door's recovery commit once (the
-  door's own advice; measured necessary on 2026-09-09, #117).
+  and the exit is 1; the cleanup trap stays armed through the last deletion,
+  so a cancellation landing there is reported too (#122). When CodeQL has not
+  picked the first pull request up after a fifth of the wait, it pushes the
+  door's recovery commit once (the door's own advice; measured necessary on
+  2026-09-09, #117), and only on a read of the check names that succeeded
+  (exit 0, or 8: pending): any other exit of `gh pr checks` is not evidence
+  that CodeQL is absent, and a merged repository whose deletion failed is
+  named apart from a rollback (#122).
   `.github/workflows/e2e.yml` runs it nightly and on demand from the secret
   `PLINTH_E2E_TOKEN`; an absent secret is red, not a pass.
   `tests/e2e-driver.sh` holds its failure paths against a mocked `gh`.
