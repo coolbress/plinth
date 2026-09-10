@@ -196,7 +196,10 @@ printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
   local out; [ -n "${3:-}" ] && eval "$3"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
-  if grep -q -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected '$2')"; printf '%s\n' "$out" | grep -E 'FAIL|INFO|failed' | sed 's/^/        /'; fi
+  # A summary naming N not verified must sit above exactly N SKIP lines.
+  local n want; n="$(grep -c '^  SKIP ' <<<"$out")"; want="${2##*failed, }"; want="${want%% *}"
+  if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
+  else bad "$1 (expected '$2', SKIP lines=$n)"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP|failed' | sed 's/^/        /'; fi
   printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
   printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
 }
