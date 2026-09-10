@@ -9,6 +9,19 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `floor-check` also asks the agent settings for `Bash(cat *.env)` and
+  `Bash(grep *.env)`, and this repository's settings carry them. The Read
+  deny's Bash check sees only a top-level command: measured on Claude Code
+  2.1.267 with `Read(./.env)` denied in every spelling, `echo "$(cat .env)"`,
+  `x=$(cat .env)`, `export $(cat .env | xargs)`, `(cat .env)` and
+  `{ cat .env; }` ran (anthropics/claude-code#89055). A Bash rule reaches
+  those; with the two rules each is refused, and `cat .env.example`,
+  `grep KEY .env.example`, `grep -rn "os.environ" .` still run. The
+  sandbox-off warning now names what stays open: `bash -c`, another reader
+  inside `$(...)`, a `grep -r` that names no file, an interpreter (#136).
+
 ### Changed
 
 - The door renders

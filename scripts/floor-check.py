@@ -355,6 +355,10 @@ def check_agent_settings(root: Path) -> None:
         # in Bash; `. ./.env` and `source .env` go through it (#128).
         "`. ./.env`": lambda d: bash_rule_stops(". ./.env", d),
         "`source .env`": lambda d: bash_rule_stops("source .env", d),
+        # The Read deny's Bash check sees only a top-level command; `$(cat .env)`
+        # and `(cat .env)` ran past it. A Bash rule reaches those (#136).
+        "`cat .env`": lambda d: bash_rule_stops("cat .env", d),
+        "`grep KEY .env`": lambda d: bash_rule_stops("grep KEY .env", d),
         "gh config reads": lambda d: d.startswith("Read(~/.config/gh"),
     }
     for what, match in wants.items():
@@ -620,7 +624,7 @@ def check_sandbox() -> None:
            f"sandbox on in {conf}" if on else
            f"sandbox off in {conf}/settings.json: run /sandbox once in Claude Code "
            "(macOS as is; Linux and WSL2 need bubblewrap and socat; native Windows is not supported); "
-           "without it a `$(cat .env)`, a `bash -c`, or a script that opens `.env` itself still reads it")
+           "without it a `bash -c`, a `$(head -1 .env)`, a `grep -r` that names no file, or a script that opens `.env` itself still reads it")
 
 
 # ── main ──────────────────────────────────────────────────────────────────
