@@ -504,7 +504,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
     meta = api(f"repos/{repo}", network)
     if meta in (ABSENT, ERROR) or not isinstance(meta, dict):
         if meta is ABSENT:
-            result("FAIL", f"repos/{repo} does not exist, or the token cannot see it (404)")
+            result("FAIL", f"repos/{repo} not found (404)")
         else:
             result("SKIP", f"could not read repos/{repo} (API error)")
         return
