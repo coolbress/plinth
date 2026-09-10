@@ -9,6 +9,14 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The door renders
+  [`coolbress/plinth-template@v1.3.0`](https://github.com/coolbress/plinth-template/releases/tag/v1.3.0):
+  its settings also deny `. ./.env` and `source .env` (#128), and a `cat` or
+  `grep` of `.env` inside `$(...)` or a subshell (#136); its README and
+  AGENTS.md say what the deny reaches and what only the sandbox does.
+
 ### Fixed
 
 - `floor-check` also asks the agent settings for `Bash(cat *.env)` and
@@ -21,16 +29,6 @@ inside pull requests and have no tag.
   `grep KEY .env.example`, `grep -rn "os.environ" .` still run. The
   sandbox-off warning now names what stays open: `bash -c`, another reader
   inside `$(...)`, a `grep -r` that names no file, an interpreter (#136).
-
-### Changed
-
-- The door renders
-  [`coolbress/plinth-template@v1.3.0`](https://github.com/coolbress/plinth-template/releases/tag/v1.3.0):
-  its settings also deny `. ./.env` and `source .env` (#128), and a `cat` or
-  `grep` of `.env` inside `$(...)` or a subshell (#136); its README and
-  AGENTS.md say what the deny reaches and what only the sandbox does.
-
-### Fixed
 
 - `floor-check` also asks the agent settings to deny `. ./.env` and
   `source .env` (`Bash(. *.env*)`, `Bash(source *.env*)`), and this
