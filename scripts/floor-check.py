@@ -33,7 +33,6 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
-from fnmatch import fnmatchcase
 from pathlib import Path
 
 # Archetypes whose floor includes a container image and a `.env.example`.
@@ -339,8 +338,13 @@ def check_agent_settings(root: Path) -> None:
     except json.JSONDecodeError:
         result("FAIL", ".claude/settings.json is not valid JSON")
         return
-    def bash_rule(d: str) -> bool:  # `Bash(source .env*` is not a rule; `d[5:-1]` would drop the `*`
-        return d.startswith("Bash(") and d.endswith(")")
+    def bash_rule_stops(cmd: str, d: str) -> bool:
+        """A `*` in a Bash rule matches any text and nothing else is special
+        (fnmatch would read `?` and `[...]` too). `Bash(source .env*` is not a
+        rule: without the closing parenthesis `d[5:-1]` would drop the `*`."""
+        if not (d.startswith("Bash(") and d.endswith(")")):
+            return False
+        return re.fullmatch(".*".join(map(re.escape, d[5:-1].split("*"))), cmd) is not None
 
     wants = {
         "force push": lambda d: d.startswith("Bash(git push --force") or d.startswith("Bash(git push -f"),
@@ -348,10 +352,9 @@ def check_agent_settings(root: Path) -> None:
         "gh auth token": lambda d: d.startswith("Bash(gh auth token"),
         ".env reads": lambda d: d.startswith("Read(./.env"),
         # `Read(./.env)` also stops `cat`, `head`, `tail`, `sed`, `grep` and `<`
-        # in Bash; `. ./.env` and `source .env` go through it (#128). A `*` in a
-        # Bash rule matches any text, so fnmatch stands in for the harness.
-        "`. ./.env`": lambda d: bash_rule(d) and fnmatchcase(". ./.env", d[5:-1]),
-        "`source .env`": lambda d: bash_rule(d) and fnmatchcase("source .env", d[5:-1]),
+        # in Bash; `. ./.env` and `source .env` go through it (#128).
+        "`. ./.env`": lambda d: bash_rule_stops(". ./.env", d),
+        "`source .env`": lambda d: bash_rule_stops("source .env", d),
         "gh config reads": lambda d: d.startswith("Read(~/.config/gh"),
     }
     for what, match in wants.items():
