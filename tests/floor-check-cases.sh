@@ -30,7 +30,7 @@ printf 'version: 2\n' > "$good/.github/dependabot.yml"
 for f in bug feature task; do printf 'name: %s\ndescription: "x"\nlabels: ["%s"]\nbody: []\n' "$f" "$f" > "$good/.github/ISSUE_TEMPLATE/$f.yml"; done
 printf '* text=auto eol=lf\nuv.lock linguist-generated\n' > "$good/.gitattributes"
 cat > "$good/.claude/settings.json" <<'JSON'
-{"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(gh auth token*)","Read(./.env)","Read(~/.config/gh/**)"]}}
+{"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(gh auth token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Read(~/.config/gh/**)"]}}
 JSON
 printf '[project]\nname = "app"\n' > "$good/pyproject.toml"; : > "$good/uv.lock"
 printf 'archetype: backend\n' > "$good/.copier-answers.yml"
@@ -89,6 +89,8 @@ plant "unpinned base image is caught" "sed -i.bak 's/@sha256:[0-9a-f]*//' Docker
 plant "root user is caught" "sed -i.bak 's/^USER app/USER root/' Dockerfile" "runs as root"
 plant "undocumented env var is caught" "printf 'x\n' > .env.example" "missing variables"
 plant "missing token deny is caught" "printf '{\"permissions\":{\"deny\":[]}}' > .claude/settings.json" "does not deny gh auth token"
+plant "a Read-only .env deny is caught" "sed -i.bak 's/\"Bash(\. \*\.env\*)\",\"Bash(source \*\.env\*)\",//' .claude/settings.json" "does not deny \`. ./.env\`"
+plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source *.env.local*)\"/' .claude/settings.json" "does not deny \`source .env\`"
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
 plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"

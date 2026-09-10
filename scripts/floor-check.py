@@ -33,6 +33,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 # Archetypes whose floor includes a container image and a `.env.example`.
@@ -343,6 +344,11 @@ def check_agent_settings(root: Path) -> None:
         "rm -rf": lambda d: d.startswith("Bash(rm -rf"),
         "gh auth token": lambda d: d.startswith("Bash(gh auth token"),
         ".env reads": lambda d: d.startswith("Read(./.env"),
+        # `Read(./.env)` also stops `cat`, `head`, `tail`, `sed`, `grep` and `<`
+        # in Bash; `. ./.env` and `source .env` go through it (#128). A `*` in a
+        # Bash rule matches any text, so fnmatch stands in for the harness.
+        "`. ./.env`": lambda d: d.startswith("Bash(") and fnmatchcase(". ./.env", d[5:-1]),
+        "`source .env`": lambda d: d.startswith("Bash(") and fnmatchcase("source .env", d[5:-1]),
         "gh config reads": lambda d: d.startswith("Read(~/.config/gh"),
     }
     for what, match in wants.items():
@@ -607,7 +613,8 @@ def check_sandbox() -> None:
     result("PASS" if on else "WARN",
            f"sandbox on in {conf}" if on else
            f"sandbox off in {conf}/settings.json: run /sandbox once in Claude Code "
-           "(macOS as is; Linux and WSL2 need bubblewrap and socat; native Windows is not supported)")
+           "(macOS as is; Linux and WSL2 need bubblewrap and socat; native Windows is not supported); "
+           "without it a `$(cat .env)`, a `bash -c`, or a script that opens `.env` itself still reads it")
 
 
 # ── main ──────────────────────────────────────────────────────────────────
