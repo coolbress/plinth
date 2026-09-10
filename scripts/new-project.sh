@@ -15,16 +15,17 @@
 #   4 visibility  public only; the repository must not exist yet
 # Then: create, render the box (copier, one tested tag), push main (the baseline,
 # before the wall, and the proof the token can push), confirm main is the
-# default branch the ruleset will target, labels, CodeQL, ruleset, secret
-# scanning, Dependabot, Actions allowlist, squash only, and the first pull
-# request, whose workflow must start.
+# default branch the ruleset will target, labels, ruleset, secret scanning,
+# Dependabot, Actions allowlist, squash only, CodeQL (once GitHub has detected
+# the languages, and waited for until its first analysis of main is done), and
+# the first pull request, whose workflow must start.
 #
 # fail-closed: after the repository is created, a fatal exit before setup
 # completes attempts a best-effort deletion -- the trap fires on `created=1`
 # alone and does not inspect the wall, so a failure after the ruleset is applied
 # deletes too. The local clone stays; a failed deletion prints the URL loudly.
 # Two steps are not fatal and warn instead: a label that cannot be created, and
-# a CodeQL default setup slow to register or to pick the first pull request up.
+# a CodeQL default setup slow to configure or to pick the first pull request up.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -82,10 +83,13 @@ command -v claude >/dev/null || stop "claude (Claude Code) is not installed" "  
 claude_v="$(claude --version 2>/dev/null | awk '{print $1}')" || claude_v=""
 below "$claude_floor" "${claude_v:-0}" && stop "claude ${claude_v:-?} is below the supported floor $claude_floor" "  fix: claude update"
 gh auth status >/dev/null 2>&1 || stop "gh is not logged in" "  fix: gh auth login   (browser login; the token stays in the keychain)"
-# How long the first pull request may take to be picked up by CI and CodeQL
-# (each wait, so twice this at worst). Tests shorten it; a typo must stop here,
-# not after the repository exists.
-first_pr_wait="${PLINTH_FIRST_PR_WAIT:-180}"
+# How long each wait below may take: GitHub detecting the languages, CodeQL
+# default setup's first analysis of main, and the first pull request being
+# picked up by CI and CodeQL (three waits, so three times this at worst). 300 s
+# covers the second, a CodeQL run for Python and Actions on a fresh runner;
+# the other two usually end within a minute. Tests shorten it; a typo must
+# stop here, not after the repository exists.
+first_pr_wait="${PLINTH_FIRST_PR_WAIT:-300}"
 case "$first_pr_wait" in ''|*[!0-9]*) stop "PLINTH_FIRST_PR_WAIT must be a whole number of seconds (got: $first_pr_wait)" "  fix: unset PLINTH_FIRST_PR_WAIT" ;; esac
 
 if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
@@ -389,13 +393,6 @@ grep -vE '^[[:space:]]*(#|$)' "$here/../labels.txt" | while IFS='|' read -r lbl 
 done
 
 # ── the wall ─────────────────────────────────────────────────────────────
-# CodeQL first: the ruleset requires CodeQL results through a code_scanning
-# rule, so nothing merges until CodeQL has analysed the pull request. Default
-# setup registers its workflow a minute or so after it is enabled, and a push
-# before that is never analysed (measured on coolbress/plinth#5, #41);
-# enabling it here, before the rest of the wall, spends that minute usefully.
-# The first pull request below waits for the registration before it pushes.
-gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default >/dev/null
 if ! err="$(gh api "repos/$repo/rulesets" -X POST --input "$here/../ruleset.json" 2>&1 >/dev/null)"; then
   printf 'could not apply the ruleset:\n%s\n' "$err" >&2
   exit 1
@@ -418,26 +415,69 @@ gh api -X PUT "repos/$repo/actions/permissions/selected-actions" \
 gh api "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=false -F delete_branch_on_merge=true \
   -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY >/dev/null
 
+# CodeQL: the ruleset requires its results through a code_scanning rule, so
+# nothing merges until CodeQL has analysed the pull request, and default setup
+# analyses only the languages it was enabled for. Enabled twenty seconds after
+# the first push, it reported `languages: ["actions"]`: GitHub's language
+# detection had not run yet, so the Python under src/ was never scanned while
+# the wall said CodeQL enforced (coolbress/dividend_calendar, 2026-09-09, #120
+# finding I; the consumer fixed it by hand with the languages spelled out). So
+# the detection is waited for, and the list is spelled out: the box is Python
+# in every archetype, and its workflows are Actions. Detection that never lists
+# Python is a warning, not a stop: the wall stands either way, and the fix is
+# the one command below.
+deadline=$((SECONDS + first_pr_wait))
+while ! gh api "repos/$repo/languages" --jq 'keys[]' 2>/dev/null | grep -qx Python; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    warn "GitHub has not detected Python in $url after $first_pr_wait s; enabling CodeQL default setup with actions and python anyway"
+    break
+  fi
+  sleep 5
+done
+codeql_fix="gh api -X PATCH repos/$repo/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'"
+gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default \
+  -f 'languages[]=actions' -f 'languages[]=python' >/dev/null ||
+  # Refused with the list (only measured after detection): enabled bare, which
+  # analyses what GitHub has detected so far, and the fix is named.
+  { warn "CodeQL default setup refused the language list; enabling it without one. Once it is configured, run: $codeql_fix"
+    gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default >/dev/null; }
+codeql_enabled="$(date -u +%H:%M:%SZ)"
+
 # ── the first pull request ───────────────────────────────────────────────
 # One line, the one the tutorial names. Its workflow must start: a run that
 # ends in startup_failure (allowlist, workflow file) reports no check name,
 # so the wall would never open. That is a wall failure, and it rolls back.
 # CodeQL must pick the pull request up as well: without an analysis the
-# code_scanning rule never opens. A push made seconds after default setup was
-# enabled is never analysed; one made minutes later is (#41). The
-# listed `dynamic/github-code-scanning/codeql` workflow is the readiness signal
-# used here; it exists once setup is registered, though its timing against the
-# first analysis is inferred, not measured. Missing it only costs the wait.
-deadline=$((SECONDS + first_pr_wait))
+# code_scanning rule never opens, and a pull request opened before default
+# setup has finished configuring is never analysed; its head stays blocked
+# until another is pushed. Measured three times: coolbress/plinth-e2e-20260909052724
+# (2026-09-09, #62; the door had seen the `dynamic/github-code-scanning/codeql`
+# workflow listed, the signal used until then, and the pull request opened at
+# 05:28:13Z got no analysis), coolbress/plinth-e2e-34324833382 (2026-09-09, on the
+# runner, the same), and coolbress/dividend_calendar (2026-09-09, #120: opened
+# 08:31:55Z, default setup `configured` at 08:32:21Z, blocked until an empty
+# commit pushed after that cleared the rule). The signal here is the one that
+# comes after all of those: default setup reports `configured` and its first
+# run on main, the one enabling it queues, has completed. Its languages are
+# read back on the same call. Missing it only costs the wait: the warning and
+# the re-push at the end stay for that case. The times are printed so a live
+# run is its own record.
+deadline=$((SECONDS + first_pr_wait)); setup="" ; main_run=""
 while :; do
-  paths="$(gh api "repos/$repo/actions/workflows" --jq '.workflows[].path' 2>/dev/null || true)"
-  grep -qx 'dynamic/github-code-scanning/codeql' <<<"$paths" && break
+  setup="$(gh api "repos/$repo/code-scanning/default-setup" --jq '"\(.state) \(.languages // [] | join(","))"' 2>/dev/null || true)"
+  main_run="$(gh api -X GET "repos/$repo/actions/runs" -f branch=main -F per_page=20 \
+    --jq '.workflow_runs[] | select(.path == "dynamic/github-code-scanning/codeql" and .status == "completed") | .updated_at' 2>/dev/null | head -1 || true)"
+  [ "${setup%% *}" = configured ] && [ -n "$main_run" ] && break
   if [ "$SECONDS" -ge "$deadline" ]; then
-    echo "warning: CodeQL default setup has not registered its workflow after $first_pr_wait s; pushing the first pull request anyway" >&2
+    echo "warning: CodeQL default setup has not completed its first analysis of main after $first_pr_wait s (state: ${setup%% *}, first run on main: ${main_run:-none}); pushing the first pull request anyway" >&2
     break
   fi
   sleep 5
 done
+codeql_langs="${setup#* }"
+echo "CodeQL default setup: enabled $codeql_enabled, ${setup%% *} with languages [$codeql_langs], first run on main completed ${main_run:-never}, first pull request pushed $(date -u +%H:%M:%SZ)"
+[ -n "$codeql_langs" ] && ! grep -qw python <<<"$codeql_langs" &&
+  warn "CodeQL default setup analyses [$codeql_langs] and not the Python under src/. fix: $codeql_fix"
 branch="docs/first-pr"
 git -C "$dir" switch -q -c "$branch"
 echo 'Made with [plinth](https://github.com/coolbress/plinth).' >> "$dir/README.md"
