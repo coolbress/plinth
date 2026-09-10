@@ -9,6 +9,15 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The door prints the admin fix's arguments on a third line, joined to the
+  call by a backslash. With the arguments on the call line it was 82
+  characters and still wrapped at 80 columns (#132, measured after #125);
+  every printed line now stays under about 60, `P=` runs alone if a paste
+  splits the lines, and the backslash keeps the call and its arguments one
+  command.
+
 ## [0.5.2] - 2026-09-10
 
 ### Added

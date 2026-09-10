@@ -137,7 +137,8 @@ else
     "  fix: run the door with an admin token, typed at a prompt (never on the command line)," \
     "  in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
     "    P=$(printf '%q' "$here")" \
-    "    \"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" $*" \
+    "    \"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" \\" \
+    "      $*" \
     "  the token, classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)" \
     "  or fine-grained (https://github.com/settings/personal-access-tokens): Repository permissions Administration," \
     "  Contents, Workflows, Pull requests: write on all repositories of $owner (a repository that does not exist" \
