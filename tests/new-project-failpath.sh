@@ -4,7 +4,7 @@
 # failure that leaves the wall down deletes the repository.
 #
 # "Any failure deletes" is not the contract and has not been for a while: a
-# label that cannot be created, a CodeQL default setup slow to register or to
+# label that cannot be created, a CodeQL default setup slow to configure or to
 # pick the first pull request up, a CI run seen but not seen twice, and a
 # default branch repaired before the wall went up all warn and carry on. Each
 # of those has a case here asserting `deleted=no`, because a rollback over one
@@ -37,7 +37,10 @@ case "$all" in
   "api /licenses/"*".spdx_id"*)                  step=license-check ;;
   *"/contents/copier.yml"*)                      step=choices ;;
   "api -X GET repos/"*"/actions/runs "*)          step=runs ;;
-  "api repos/"*"/actions/workflows"*)            step=workflows ;;
+  "api repos/"*"/languages"*)                    step=languages ;;
+  "api repos/"*"/code-scanning/default-setup"*)  step=setup-read ;;
+  *code-scanning*"languages[]"*)                 step=codeql-langs ;;
+  *"/code-scanning/analyses"*)                   step=analyses ;;
   "api repos/"*"/commits/"*"/check-runs"*)       step=checkruns ;;
   # GitHub reads a community-health file from the root, `.github/` or `docs/`,
   # and the door asks about all of them: match the name, not one path.
@@ -60,7 +63,10 @@ case "$all" in
   *actions/permissions*)                         step=actions ;;
   *allow_merge_commit*)                          step=merge ;;
 esac
-if [ "$step" = "${FAIL_AT:-}" ]; then echo "mock gh: failing at $step on purpose" >&2; exit 1; fi
+# `codeql` fails both PATCHes (with the language list and the bare fallback);
+# `codeql-langs` refuses only the list.
+if [ "$step" = "${FAIL_AT:-}" ] || { [ "$step" = codeql-langs ] && [ "${FAIL_AT:-}" = codeql ]; }; then
+  echo "mock gh: failing at $step on purpose" >&2; exit 1; fi
 case "$step" in
   auth)          [ "${MOCK_NOAUTH:-0}" = 1 ] && exit 1 ;;
   headers)       printf 'HTTP/2.0 200 OK\n'
@@ -115,7 +121,10 @@ case "$step" in
   set-default)   : > "$FIRST_PUSHED_FILE.patched" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
-  runs)          case "${MOCK_RUNS:-ok}" in
+  # On main the door asks for default setup's first run, completed: the jq
+  # leaves its `updated_at`, so the answer is a time, or nothing.
+  runs)          case "$all" in *branch=main*) case "${MOCK_CODEQL_MAIN:-done}" in done) echo 2026-09-10T00:01:00Z ;; error) exit 1 ;; esac; exit 0 ;; esac
+                 case "${MOCK_RUNS:-ok}" in
                    ok)      printf '.github/workflows/label.yml completed success\n.github/workflows/ci.yml queued null\n' ;;
                    startup) printf '.github/workflows/ci.yml completed startup_failure\n' ;;
                    # Listed once, then gone: the run exists, but the door never
@@ -125,8 +134,21 @@ case "$step" in
                    # No run at all: a real misconfiguration, and still fatal.
                    none)    printf '.github/workflows/label.yml completed success\n' ;;
                  esac ;;
-  workflows)     [ "${MOCK_CODEQL_WORKFLOW:-present}" = present ] && printf '.github/workflows/ci.yml\ndynamic/github-code-scanning/codeql\n' || printf '.github/workflows/ci.yml\n' ;;
-  checkruns)     printf 'ci / lint\nci / test\n'; [ "${MOCK_CODEQL:-present}" = present ] && printf 'CodeQL\nAnalyze (python)\n' ;;
+  # GitHub's language detection, some time after the first push; then default
+  # setup's state and languages, as the door's jq joins them.
+  languages)     [ "${MOCK_LANGUAGES:-python}" = python ] && printf 'Python\n' ;;
+  setup-read)    printf '%s %s 2026-09-10T00:01:30Z\n' "${MOCK_SETUP:-configured}" "${MOCK_SETUP_LANGS:-actions,python}" ;;
+  # Main's analyses, listed before the run completes (measured); a 404 body on
+  # stdout, as gh prints one, must not be read as a value.
+  analyses)      case "${MOCK_CODEQL_MAIN:-done}" in done) echo '2026-09-10T00:02:00Z /language:python' ;;
+                   *) echo '{"message":"no analysis found","status":"404"}'; exit 1 ;; esac ;;
+  # `after-repush`: CodeQL appears on the head only once the door has pushed
+  # its empty commit (a bare `push -q`, unlike the branch's `push -q -u`).
+  checkruns)     printf 'ci / lint\nci / test\n'
+                 case "${MOCK_CODEQL:-present}" in
+                   present) printf 'CodeQL\nAnalyze (python)\n' ;;
+                   after-repush) grep -q 'push -q$' "$GH_LOG" && printf 'CodeQL\nAnalyze (python)\n' ;;
+                 esac ;;
 esac
 exit 0
 MOCK
@@ -338,14 +360,59 @@ for at in copier push default-branch codeql ruleset secret dependabot actions al
   E="FAIL_AT=$at" run "$at" err yes yes "" -- probe
 done
 E="MOCK_RUNS=startup" run startup-failure err yes yes "failed at startup" -- probe
-# CodeQL default setup registers its workflow a minute or so after it is enabled;
-# a push before that is never analysed (measured: #41). The wall still
-# stands, so no analysis on the first pull request warns and names the re-push;
-# it does not delete the repository.
+# A pull request opened before CodeQL default setup has finished configuring is
+# never analysed (measured three times, #62 and #120; the comment in the door
+# has the times). The wall still stands, so no analysis on the first pull
+# request warns and names the re-push; it does not delete the repository.
 E="MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=1" run codeql-absent ok yes no "warning: CodeQL has not picked up the first pull request" -- probe
 if grep -q "git commit --allow-empty" "$work/home-codeql-absent/out"; then ok codeql-absent "the summary names the re-push"
 else bad codeql-absent "the summary does not name the re-push"; fi
-E="MOCK_CODEQL_WORKFLOW=missing PLINTH_FIRST_PR_WAIT=1" run codeql-late ok yes no "warning: CodeQL default setup has not registered its workflow" -- probe
+# The door pushes the recovery itself, once, before it asks the user to: an
+# empty commit on the pull request branch after a while with no CodeQL on the
+# head (owner decision 2026-09-11, #117). CodeQL picking that up ends the wait
+# with no warning and no line to type; never picking it up warns, says the
+# re-push happened, and names the manual one.
+if [ "$(grep -c '^git -C .* push -q$' "$work/home-codeql-absent/calls.log")" = 1 ] && grep -q "one empty commit pushed" "$work/home-codeql-absent/out"
+then ok codeql-absent "one empty commit is pushed by the door, and the warning says so"
+else bad codeql-absent "no single re-push by the door"; grep -E 'push|warning' "$work/home-codeql-absent/calls.log" "$work/home-codeql-absent/out" | sed 's/^/        /'; fi
+E="MOCK_CODEQL=after-repush PLINTH_FIRST_PR_WAIT=1" run codeql-after-repush ok yes no "CodeQL on the pull request head: CodeQL" -- probe
+if ! grep -q "warning: CodeQL" "$work/home-codeql-after-repush/out" && ! grep -q "git commit --allow-empty" "$work/home-codeql-after-repush/out" \
+   && [ "$(grep -c '^git -C .* push -q$' "$work/home-codeql-after-repush/calls.log")" = 1 ]
+then ok codeql-after-repush "CodeQL on the re-pushed head ends the wait: no warning, nothing to type"
+else bad codeql-after-repush "the re-push was not enough, or was repeated"; grep -E 'push|warning|allow-empty' "$work/home-codeql-after-repush/calls.log" "$work/home-codeql-after-repush/out" | sed 's/^/        /'; fi
+# The readiness signal is two reads: default setup reports `configured`, and
+# its first run on main has completed. Either one missing within the wait
+# warns, pushes anyway, and keeps the re-push at the end.
+E="MOCK_CODEQL_MAIN=absent PLINTH_FIRST_PR_WAIT=1" run codeql-main-late ok yes no "warning: CodeQL default setup has not completed its first analysis of main" -- probe
+E="MOCK_SETUP=not-configured PLINTH_FIRST_PR_WAIT=1" run codeql-unconfigured ok yes no "warning: CodeQL default setup has not completed its first analysis of main" -- probe
+# A read that fails (rate limit, a 5xx) is not an answer and not a wall failure:
+# the poll asks again, the wait runs out, and the repository stays (a Sonnet
+# review of this change: the unguarded read aborted the door under set -e).
+E="MOCK_CODEQL_MAIN=error PLINTH_FIRST_PR_WAIT=1" run codeql-main-unreadable ok yes no "warning: CodeQL default setup has not completed its first analysis of main" -- probe
+if ! grep -q "analysis: {" "$work/home-codeql-main-unreadable/out" && grep -q "analysis of main listed: none" "$work/home-codeql-main-unreadable/out"
+then ok codeql-main-unreadable "a 404 body is not recorded as an analysis (run 2 of the measurement did)"
+else bad codeql-main-unreadable "the 404 body was read as an analysis"; grep analysis "$work/home-codeql-main-unreadable/out" | sed 's/^/        /'; fi
+if grep -q "(state: not-configured, first run on main: 2026-09-10T00:01:00Z, analysis of main listed: 2026-09-10T00:02:00Z /language:python)" "$work/home-codeql-unconfigured/out"; then ok codeql-unconfigured "the warning says which of the reads is missing"
+else bad codeql-unconfigured "the warning does not say what was read"; grep warning "$work/home-codeql-unconfigured/out" | sed 's/^/        /'; fi
+# Default setup enabled before GitHub's language detection has run analyses
+# `actions` alone (#120 finding I): detection that never lists Python warns, and
+# the list is spelled out on the enable regardless.
+E="MOCK_LANGUAGES=none PLINTH_FIRST_PR_WAIT=1" run languages-late ok yes no "warning: GitHub has not detected Python" -- probe
+if grep -q "code-scanning/default-setup -f state=configured -f query_suite=default -f languages\[\]=actions -f languages\[\]=python" "$work/home-languages-late/calls.log"
+then ok languages-late "default setup is still enabled with actions and python spelled out"
+else bad languages-late "default setup was enabled without the language list"; grep code-scanning "$work/home-languages-late/calls.log" | sed 's/^/        /'; fi
+# A list GitHub refuses: enabled bare, the fix named, no rollback (the wall stands).
+E="FAIL_AT=codeql-langs" run codeql-langs-refused ok yes no "warning: CodeQL default setup refused the language list" -- probe
+if [ "$(grep -c "code-scanning/default-setup -f state=configured" "$work/home-codeql-langs-refused/calls.log")" = 2 ] \
+   && grep -q "PATCH repos/tester/probe/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=python'" "$work/home-codeql-langs-refused/out"
+then ok codeql-langs-refused "the bare enable follows, and the fix line carries the list"
+else bad codeql-langs-refused "no bare enable, or no fix line"; grep -E "code-scanning|warning" "$work/home-codeql-langs-refused/calls.log" "$work/home-codeql-langs-refused/out" | sed 's/^/        /'; fi
+# What default setup reports analysing is read back: Python missing is said,
+# with the one command that adds it.
+E="MOCK_SETUP_LANGS=actions" run codeql-actions-only ok yes no "warning: CodeQL default setup analyses [actions] and not the Python under src/" -- probe
+if grep -q "fix: gh api -X PATCH repos/tester/probe/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=python'" "$work/home-codeql-actions-only/out"
+then ok codeql-actions-only "the fix is the one PATCH measured to work"
+else bad codeql-actions-only "no fix line"; grep warning "$work/home-codeql-actions-only/out" | sed 's/^/        /'; fi
 # "Seen twice in a row" is about stability; "did it ever appear" is about
 # existence. One counter answered both, so a run listed on the poll that ran out
 # of time was reported as never appearing and the repository was deleted (#108).
@@ -388,9 +455,12 @@ check "main is the first branch pushed" \
 check "no throwaway probe branch is pushed" '! grep -q "push-probe" "$log"'
 check "the default branch is read back from the API before the ruleset is applied" \
   'grep -E "jq .default_branch|/rulesets" "$log" | head -1 | grep -q default_branch'
-check "CodeQL default setup precedes the ruleset" 'grep -E "code-scanning|/rulesets" "$log" | head -1 | grep -q code-scanning'
-check "the CodeQL workflow is awaited before the first pull request is pushed" \
-  '[ "$(grep -E "actions/workflows|^gh pr create" "$log" | sed -E "s/.*actions\/workflows.*/wf/; s/^gh pr create.*/pr/" | head -2 | tr "\n" " ")" = "wf pr " ]'
+check "CodeQL default setup is enabled after GitHub lists the languages, with actions and python spelled out" \
+  'grep -E "/languages|code-scanning/default-setup -f state" "$log" | head -1 | grep -q "/languages --jq" && grep -q "state=configured -f query_suite=default -f languages\[\]=actions -f languages\[\]=python" "$log"'
+check "default setup reports configured and its first run on main has completed before the first pull request is pushed" \
+  '[ "$(grep -E "default-setup --jq|branch=main|push -q -u origin docs/first-pr" "$log" | sed -E "s/.*default-setup --jq.*/setup/; s/.*branch=main.*/main/; s/.*docs\/first-pr.*/push/" | head -3 | tr "\n" " ")" = "setup main push " ]'
+check "the door prints the times it saw, so a live run is its own record" \
+  'grep -qE "^CodeQL default setup: enabled [0-9:]+Z, configured with languages \[actions,python\], first run on main completed 2026-09-10T00:01:00Z, analysis of main listed 2026-09-10T00:02:00Z /language:python, first pull request pushed [0-9:]+Z$" "$work/home-none/out" && [ "$(grep -cE "^  [0-9:]+Z (updated|run|analysis): " "$work/home-none/out")" = 3 ]'
 check "the first pull request head is checked for a CodeQL check run" 'grep -q "/check-runs" "$log"'
 check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowed\[\]=coolbress/plinth/\*" "$log"'
 check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
@@ -423,6 +493,7 @@ check "every label is created with --force, so GitHub's default set (wontfix) do
 check "the default branch is main" '[ "$("$REAL_GIT" -C "$proj" rev-parse --verify -q main)" != "" ]'
 check "the first pull request is one README line on docs/first-pr" \
   '[ "$("$REAL_GIT" -C "$proj" rev-parse --abbrev-ref HEAD)" = docs/first-pr ] && [ "$("$REAL_GIT" -C "$proj" diff --stat main docs/first-pr | tail -1 | grep -o "[0-9]* insertion")" = "1 insertion" ]'
+check "CodeQL on the first push means no empty commit is pushed" '! grep -q "push -q$" "$log" && [ "$("$REAL_GIT" -C "$proj" rev-list --count main..docs/first-pr)" = 1 ]'
 check "render is final: real name, owner and license in pyproject.toml and uv.lock, src/probe/, no bootstrap.sh" \
   'grep -q probe "$proj/pyproject.toml" && grep -q MIT "$proj/pyproject.toml" && grep -q tester "$proj/pyproject.toml" && grep -q probe "$proj/uv.lock" && [ -d "$proj/src/probe" ] && [ ! -e "$proj/bootstrap.sh" ]'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \

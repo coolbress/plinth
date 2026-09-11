@@ -199,6 +199,9 @@ printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_
 good_rules='[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1},{"type":"non_fast_forward","ruleset_source_type":"Repository","ruleset_id":1},{"type":"pull_request","parameters":{"allowed_merge_methods":["squash"]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"ci / a"},{"context":"ci / b"},{"context":"CodeQL"}]},"ruleset_source_type":"Repository","ruleset_id":1}]'
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
+mkdir -p "$api/repos/o/r/code-scanning"
+good_setup='{"state":"configured","languages":["actions","python"],"query_suite":"default"}'
+printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
   local out; [ -n "${3:-}" ] && eval "$3"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
@@ -208,6 +211,7 @@ wall() { # <description> <expected substring in output> [shell that edits the fi
   else bad "$1 (expected '$2', SKIP lines=$n)"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP|failed' | sed 's/^/        /'; fi
   printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
   printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
+  printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 }
 wall "intact wall passes" "-- 0 failed"
 wall "squash commits are the pull request title and description" "PASS  squash commits carry"
@@ -265,6 +269,15 @@ wall "CodeQL as a rule, not a name, passes" "CodeQL enforced (rule)" "printf '%s
 wall "CodeQL as a legacy check name passes" "CodeQL enforced (check name)"
 wall "CodeQL neither rule nor name is caught" "CodeQL not enforced" "printf '%s' \"\$rules_neither\" > \"$api/repos/o/r/rules/branches/main.json\""
 wall "a code_scanning rule for another tool is caught" "CodeQL not enforced" "printf '%s' \"\$rules_other_tool\" > \"$api/repos/o/r/rules/branches/main.json\""
+# The rule is only as wide as the languages default setup analyses: enabled
+# before detection it analysed `actions` alone while the wall said enforced
+# (#120 finding I). Python missing is named with its fix; an unreadable setup
+# (the Actions token in CI) is not verified, never a pass.
+wall "the languages default setup analyses are reported" "PASS  CodeQL default setup analyses \['actions', 'python'\]"
+wall "default setup without python is caught, with the fix" "WARN  CodeQL default setup analyses \['actions'\], not the Python under src/" "printf '{\"state\":\"configured\",\"languages\":[\"actions\"]}' > \"$api/repos/o/r/code-scanning/default-setup.json\""
+wall "the fix for a missing language is the one PATCH" "gh api -X PATCH repos/o/r/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=python'" "printf '{\"state\":\"configured\",\"languages\":[\"actions\"]}' > \"$api/repos/o/r/code-scanning/default-setup.json\""
+wall "unreadable default setup is SKIP, not a pass" "SKIP  CodeQL default setup languages not verified" "rm \"$api/repos/o/r/code-scanning/default-setup.json\""
+wall "unreadable default setup is counted as not verified" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/code-scanning/default-setup.json\""
 
 # Through gh: on the owner's machine the token is in gh's keychain, not the
 # environment, and only that token sees bypass actors. A mock gh serves the

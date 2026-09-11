@@ -9,6 +9,33 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The door opens the first pull request only once CodeQL default setup's
+  first run on `main` has completed and a minute has passed, and enables
+  default setup once GitHub has detected the languages, with `actions` and
+  `python` spelled out. The listed `dynamic/github-code-scanning/codeql`
+  workflow was the signal before, and three repositories in a row
+  (`plinth-e2e-20260909052724` and `plinth-e2e-34324833382` in #62,
+  `dividend_calendar` in #120, all 2026-09-09) had a first pull request that
+  was never analysed and merged only after a re-push; enabled twenty seconds
+  after the first push, default setup analysed `actions` alone and the Python
+  under `src/` was never scanned. Measured on three more (#117): a pull
+  request pushed 2 s after the run completed was not analysed
+  (`plinth-e2e-34499093907`, 2026-09-10); pushed 230 s and 66 s after, it was
+  (`plinth-e2e-34502351744`, 2026-09-10; `plinth-e2e-34546889124`,
+  2026-09-11, no re-push). If CodeQL still has not picked the pull request up
+  after 90 s, the door pushes one empty commit itself, the recovery it used to
+  print for the user to type (analysed every time it was tried, the door's own
+  included: `plinth-e2e-34548699421`, 2026-09-11, pushed 4 s after the run and
+  missed, re-pushed at 90 s and analysed 8 s later); the printed line stays for
+  the case after that. The door prints the times it saw, and
+  warns with the fix when Python is not in the list. `PLINTH_FIRST_PR_WAIT`
+  now bounds three waits and defaults to 300 s.
+- `floor-check` reports the languages CodeQL default setup analyses, warns
+  with the one `PATCH` when Python is not among them, and says `not verified`
+  when the token cannot read the setup (the Actions token in CI cannot).
+
 ## [0.5.3] - 2026-09-10
 
 ### Changed

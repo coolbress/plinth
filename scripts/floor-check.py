@@ -593,6 +593,20 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
     ok(by_rule or by_name,
        f"{branch}: CodeQL enforced ({'rule' if by_rule else 'check name'})",
        f"{branch}: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name")
+    # The rule is only as wide as the languages default setup analyses. Enabled
+    # before GitHub's language detection had run, it analysed `actions` alone
+    # and the Python under src/ was never scanned while this line said
+    # "enforced" (#120 finding I). Readable by an admin-read token; the Actions
+    # token in `ci / floor-check` cannot, and says so rather than pass.
+    setup = api(f"repos/{repo}/code-scanning/default-setup", network)
+    langs = setup.get("languages") if isinstance(setup, dict) else None
+    if not isinstance(langs, list):
+        result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
+    elif "python" in langs:
+        result("PASS", f"CodeQL default setup analyses {langs}")
+    else:
+        result("WARN", f"CodeQL default setup analyses {langs}, not the Python under src/")
+        result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'")
 
     ids = {r.get("ruleset_id") for r in rules if r.get("ruleset_source_type") == "Repository"}
     for rid in sorted(i for i in ids if i):
