@@ -9,6 +9,22 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `floor-check` compares the alert thresholds of the live `code_scanning`
+  rule with the ones `ruleset.json` gives CodeQL (`errors`,
+  `high_or_higher`). Both thresholds set to `none`, a rule that blocks
+  nothing, printed `CodeQL enforced (rule)` and exited 0 (#96). Weaker is now
+  a FAIL naming the field and the ruleset page that edits it; equal or
+  stricter passes; a field the rule does not carry, or a value GitHub does
+  not document, is `not verified`. Where several rulesets carry a CodeQL
+  rule the strictest live value is compared, as GitHub enforces every rule.
+  A repository that requires CodeQL by check name (the door before #41)
+  still passes the enforcement line, and the thresholds are `not verified`
+  there rather than claimed: a check name asks the analysis to finish and
+  blocks on no alert. A consumer whose rule was weakened sees a new FAIL in
+  `ci / floor-check` when it raises its pin; the FAIL is the finding.
+
 ## [0.5.5] - 2026-09-11
 
 ### Added

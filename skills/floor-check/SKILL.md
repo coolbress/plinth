@@ -28,8 +28,9 @@ checks only the files. It reads the GitHub API through `gh` with the user's
 own login, so bypass actors are visible; without a login they show as SKIP.
 `--sandbox` adds the one item that belongs to this machine, not the
 repository: whether Claude Code's sandbox is on. `--ruleset` expects the wall
-`/plinth:new-project` raises; for a repository with a different wall (plinth
-itself, for one) pass `--expect-checks "<name>, <name>"` instead.
+`/plinth:new-project` raises, the CodeQL alert thresholds of its
+`code_scanning` rule included; for a repository with a different wall (plinth
+itself, for one) pass `--expect-checks "<name>, <name>"` as well.
 
 ## Report
 

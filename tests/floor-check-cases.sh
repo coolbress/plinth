@@ -202,7 +202,7 @@ inherit "no templates anywhere is still caught" "FAIL  issue forms neither local
 # The wall, against a fixture API laid out like api.github.com paths.
 api="$work/api"; mkdir -p "$api/repos/o/r/rules/branches" "$api/repos/o/r/rulesets"
 printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
-good_rules='[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1},{"type":"non_fast_forward","ruleset_source_type":"Repository","ruleset_id":1},{"type":"pull_request","parameters":{"allowed_merge_methods":["squash"]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"ci / a"},{"context":"ci / b"},{"context":"CodeQL"}]},"ruleset_source_type":"Repository","ruleset_id":1}]'
+good_rules='[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1},{"type":"non_fast_forward","ruleset_source_type":"Repository","ruleset_id":1},{"type":"pull_request","parameters":{"allowed_merge_methods":["squash"]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"ci / a"},{"context":"ci / b"},{"context":"CodeQL"}]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"code_scanning","parameters":{"code_scanning_tools":[{"tool":"CodeQL","alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}]},"ruleset_source_type":"Repository","ruleset_id":1}]'
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 mkdir -p "$api/repos/o/r/code-scanning"
@@ -210,7 +210,7 @@ good_setup='{"state":"configured","languages":["actions","python"],"query_suite"
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
   local out; [ -n "${3:-}" ] && eval "$3"
-  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
   # A summary naming N not verified must sit above exactly N SKIP lines.
   local n want; n="$(grep -c '^  SKIP ' <<<"$out")"; want="${2##*failed, }"; want="${want%% *}"
   if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
@@ -265,16 +265,51 @@ wall "invisible bypass actors are counted as not verified" "-- 0 failed, 2 not v
 wall "an unreadable repository is counted, not passed" "-- 0 failed, 2 not verified" "printf '[]' > \"$api/repos/o/r.json\""
 # CodeQL: enforced by the code_scanning rule (the door since #41) or by
 # a `CodeQL` check name (repositories the door created before that). Either
-# passes; neither is the wall missing a stone.
+# holds the wall; neither does not. The fixture carries both.
 strip_name='map(if .type=="required_status_checks" then .parameters.required_status_checks |= map(select(.context!="CodeQL")) else . end)'
-rule_for() { printf '{"type":"code_scanning","parameters":{"code_scanning_tools":[{"tool":"%s","alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}]},"ruleset_source_type":"Repository","ruleset_id":1}' "$1"; }
-rules_rule_only="$(jq -c "$strip_name + [\$r]" --argjson r "$(rule_for CodeQL)" <<<"$good_rules")"
-rules_neither="$(jq -c "$strip_name" <<<"$good_rules")"
-rules_other_tool="$(jq -c "$strip_name + [\$r]" --argjson r "$(rule_for Semgrep)" <<<"$good_rules")"
+strip_rule='map(select(.type!="code_scanning"))'
+rule_for() { # <tool> [alerts_threshold] [security_alerts_threshold] [ruleset_id]
+  printf '{"type":"code_scanning","parameters":{"code_scanning_tools":[{"tool":"%s","alerts_threshold":"%s","security_alerts_threshold":"%s"}]},"ruleset_source_type":"Repository","ruleset_id":%s}' "$1" "${2:-errors}" "${3:-high_or_higher}" "${4:-1}"
+}
+rules_rule_only="$(jq -c "$strip_name" <<<"$good_rules")"
+rules_name_only="$(jq -c "$strip_rule" <<<"$good_rules")"
+rules_neither="$(jq -c "$strip_name | $strip_rule" <<<"$good_rules")"
+rules_other_tool="$(jq -c "$strip_name | $strip_rule + [\$r]" --argjson r "$(rule_for Semgrep)" <<<"$good_rules")"
 wall "CodeQL as a rule, not a name, passes" "CodeQL enforced (rule)" "printf '%s' \"\$rules_rule_only\" > \"$api/repos/o/r/rules/branches/main.json\""
-wall "CodeQL as a legacy check name passes" "CodeQL enforced (check name)"
+wall "CodeQL as a legacy check name passes" "CodeQL enforced (check name)" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
 wall "CodeQL neither rule nor name is caught" "CodeQL not enforced" "printf '%s' \"\$rules_neither\" > \"$api/repos/o/r/rules/branches/main.json\""
 wall "a code_scanning rule for another tool is caught" "CodeQL not enforced" "printf '%s' \"\$rules_other_tool\" > \"$api/repos/o/r/rules/branches/main.json\""
+# The rule's alert thresholds are the policy: `none` on both is a rule that
+# blocks nothing, and it printed `CodeQL enforced (rule)` (#96). The live
+# policy is compared with --ruleset; equal or stricter passes, weaker fails,
+# a field that cannot be read is not verified, and a check name proves none
+# of it.
+policy() { # <alerts_threshold> <security_alerts_threshold> -- the fixture with the rule's thresholds replaced
+  jq -c "$strip_rule + [\$r]" --argjson r "$(rule_for CodeQL "$1" "$2")" <<<"$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+}
+wall "both thresholds weakened to none is caught" "FAIL  main: CodeQL alert thresholds weakened: alerts_threshold=none (expected errors), security_alerts_threshold=none (expected high_or_higher)" "policy none none"
+wall "the security threshold alone weakened is caught, and named alone" "weakened: security_alerts_threshold=critical (expected high_or_higher)$" "policy errors critical"
+wall "the alerts threshold alone weakened is caught, and named alone" "weakened: alerts_threshold=none (expected errors)$" "policy none high_or_higher"
+wall "a weakened rule fails the run" "-- 1 failed" "policy none none"
+wall "a weakened rule names where to repair it" "https://github.com/o/r/settings/rules/1" "policy none none"
+wall "a weakened rule is caught even with the legacy check name also required" "CodeQL alert thresholds weakened" "policy none none"
+wall "equal thresholds pass" "PASS  main: CodeQL alert thresholds errors / high_or_higher (expected errors / high_or_higher)" "policy errors high_or_higher"
+wall "stricter thresholds pass" "PASS  main: CodeQL alert thresholds errors_and_warnings / medium_or_higher" "policy errors_and_warnings medium_or_higher"
+wall "the strictest thresholds pass" "PASS  main: CodeQL alert thresholds all / all" "policy all all"
+wall "a missing threshold field is not verified, not passed" "SKIP  main: CodeQL alert thresholds not verified: security_alerts_threshold unreadable" "jq -c '$strip_rule + [{\"type\":\"code_scanning\",\"parameters\":{\"code_scanning_tools\":[{\"tool\":\"CodeQL\",\"alerts_threshold\":\"errors\"}]},\"ruleset_source_type\":\"Repository\",\"ruleset_id\":1}]' <<<\"\$good_rules\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "a missing threshold field is counted as not verified" "-- 0 failed, 2 not verified" "jq -c '$strip_rule + [{\"type\":\"code_scanning\",\"parameters\":{\"code_scanning_tools\":[{\"tool\":\"CodeQL\"}]},\"ruleset_source_type\":\"Repository\",\"ruleset_id\":1}]' <<<\"\$good_rules\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "a threshold value GitHub does not document is not verified" "SKIP  main: CodeQL alert thresholds not verified: alerts_threshold unreadable" "policy severe high_or_higher"
+wall "a legacy check name does not claim the thresholds" "SKIP  main: CodeQL alert thresholds not verified: a check name does not set them" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "a legacy check name counts the thresholds as not verified" "-- 0 failed, 2 not verified" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
+# Two rulesets both with a CodeQL rule: GitHub enforces every rule, so the
+# strictest governs. A second, weaker ruleset is not a weakening.
+# shellcheck disable=SC2016  # evaluated by wall(), where $r and $a expand
+two='jq -c ". + [\$r]" --argjson r "$(rule_for CodeQL none none 2)" <<<"$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf "{\"bypass_actors\":[]}" > "$api/repos/o/r/rulesets/2.json"'
+wall "a second ruleset with a weaker CodeQL rule is not a weakening" "PASS  main: CodeQL alert thresholds errors / high_or_higher" "$two"
+wall "two rulesets, the strict one holds: nothing failed" "-- 0 failed, 1 not verified" "$two"
+# shellcheck disable=SC2016  # evaluated by wall(), where $r and $a expand
+two_weak='jq -c "$strip_rule + [\$a, \$b]" --argjson a "$(rule_for CodeQL none critical)" --argjson b "$(rule_for CodeQL errors none 2)" <<<"$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf "{\"bypass_actors\":[]}" > "$api/repos/o/r/rulesets/2.json"'
+wall "two weak rulesets do not add up to the policy" "weakened: security_alerts_threshold=critical (expected high_or_higher)$" "$two_weak"
 # The rule is only as wide as the languages default setup analyses: enabled
 # before detection it analysed `actions` alone while the wall said enforced
 # (#120 finding I). Python missing is named with its fix; an unreadable setup
@@ -321,7 +356,7 @@ have += ["bug", "documentation", "duplicate", "enhancement", "good first issue",
 print(json.dumps([{"name": n} for n in have]))
 PYEOF
 : > "$work/gh-calls.log"
-out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
 if grep -q "WARN  labels the door creates that are missing: spec, wayfinder:task" <<<"$out" \
   || grep -q "WARN  labels the door creates that are missing: wayfinder:task, spec" <<<"$out"
 then ok "the two missing labels are named, and only those"

@@ -19,7 +19,7 @@ may inherit from the owner's `.github` repository (issue forms, SECURITY.md)
 are accepted from there. The wall is read from the live rules API and
 compared with what the ruleset the door applies expects; a wall that got
 weaker (a required check dropped, a bypass actor added, a merge method
-widened) is a FAIL, not a warning.
+widened, a CodeQL alert threshold lowered) is a FAIL, not a warning.
 """
 
 from __future__ import annotations
@@ -544,7 +544,55 @@ def check_labels(repo: str, network: bool) -> None:
         result("INFO", f"  gh label create {n} --repo {repo} --color {colour[n]}")
 
 
-def check_wall(repo: str, expected: list[str], merge_methods: set[str], network: bool) -> None:
+# The values GitHub documents for a code_scanning rule's thresholds, weakest
+# first: `none` blocks nothing, `all` blocks on every alert. A live value at
+# or above the expected one holds the wall.
+THRESHOLDS = {
+    "alerts_threshold": ["none", "errors", "errors_and_warnings", "all"],
+    "security_alerts_threshold": ["none", "critical", "high_or_higher", "medium_or_higher", "all"],
+}
+
+
+def codeql_policy(data: dict) -> dict[str, str] | None:
+    """The thresholds ruleset.json gives CodeQL, or None when it has no such rule."""
+    for r in data["rules"]:
+        for t in r.get("parameters", {}).get("code_scanning_tools", []) if r["type"] == "code_scanning" else []:
+            if t.get("tool") == "CodeQL":
+                return {k: t[k] for k in THRESHOLDS if k in t}
+    return None
+
+
+def check_codeql_policy(repo: str, branch: str, tools: list[dict], policy: dict[str, str] | None) -> None:
+    """The live CodeQL rules' thresholds against the policy (#96). `none` on
+    both is a rule that blocks nothing, and it read as "enforced (rule)".
+    GitHub applies every rule that targets the branch, so with several the
+    strictest live value is what governs; weaker is a FAIL, a value that
+    cannot be read (or is not one GitHub documents) is not verified."""
+    if policy is None:
+        result("SKIP", f"{branch}: CodeQL alert thresholds not compared (no --ruleset)")
+        return
+    weak, unread, live = [], [], {}
+    for field, order in THRESHOLDS.items():
+        ranks = [order.index(t[field]) for t in tools if t.get(field) in order]
+        want = policy.get(field)
+        if not ranks or want not in order:
+            unread.append(field)
+            continue
+        live[field] = order[max(ranks)]
+        if max(ranks) < order.index(want):
+            weak.append(f"{field}={live[field]} (expected {want})")
+    if weak:
+        result("FAIL", f"{branch}: CodeQL alert thresholds weakened: {', '.join(weak)}")
+        for rid in sorted({t["ruleset_id"] for t in tools if t.get("ruleset_id")}):
+            result("INFO", f"  the rule is edited in https://github.com/{repo}/settings/rules/{rid}")
+    if unread:
+        result("SKIP", f"{branch}: CodeQL alert thresholds not verified: {', '.join(unread)} unreadable")
+    if not weak and not unread:
+        result("PASS", f"{branch}: CodeQL alert thresholds {live['alerts_threshold']} / {live['security_alerts_threshold']} "
+                       f"(expected {policy['alerts_threshold']} / {policy['security_alerts_threshold']})")
+
+
+def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool) -> None:
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("SKIP", "wall not checked (offline)")
         return
@@ -618,12 +666,21 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], network:
     # it through a code_scanning rule (blocks with a reason, and on the alerts
     # themselves); repositories created before #41 require the
     # `CodeQL` check name instead. Either holds the wall; neither does not.
-    tools = by_type.get("code_scanning", {}).get("parameters", {}).get("code_scanning_tools", [])
-    by_rule = any(t.get("tool") == "CodeQL" for t in tools)
+    # Every rule of the branch is read, not one per type: a second ruleset
+    # can carry a second CodeQL rule.
+    tools = [dict(t, ruleset_id=r.get("ruleset_id")) for r in rules if r.get("type") == "code_scanning"
+             for t in r.get("parameters", {}).get("code_scanning_tools", []) if t.get("tool") == "CodeQL"]
     by_name = "CodeQL" in have
-    ok(by_rule or by_name,
-       f"{branch}: CodeQL enforced ({'rule' if by_rule else 'check name'})",
+    ok(bool(tools) or by_name,
+       f"{branch}: CodeQL enforced ({'rule' if tools else 'check name'})",
        f"{branch}: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name")
+    if tools:
+        check_codeql_policy(repo, branch, tools, policy)
+    elif by_name:
+        # A check name only asks the analysis to finish: the alerts it finds
+        # block nothing. Said as not verified, not as the rule's policy.
+        result("SKIP", f"{branch}: CodeQL alert thresholds not verified: a check name does not set them; "
+                       f"the door's code_scanning rule does (scripts/add-ruleset-rule.sh {repo} code-scanning)")
     # The rule is only as wide as the languages default setup analyses. Enabled
     # before GitHub's language detection had run, it analysed `actions` alone
     # and the Python under src/ was never scanned while this line said
@@ -680,7 +737,7 @@ def main() -> int:
     ap.add_argument("--root", default=".", help="repository checkout")
     ap.add_argument("--project", default=".", help="project root, relative to --root")
     ap.add_argument("--repo", help="owner/name on GitHub; enables inheritance and wall checks")
-    ap.add_argument("--ruleset", help="ruleset.json the door applies; its contexts are the expected checks")
+    ap.add_argument("--ruleset", help="ruleset.json the door applies; its contexts are the expected checks and its CodeQL thresholds the expected policy")
     ap.add_argument("--expect-checks", help="required check names, comma separated; overrides --ruleset")
     ap.add_argument("--archetype", help="override the archetype in .copier-answers.yml")
     ap.add_argument("--no-network", action="store_true", help="skip everything that needs api.github.com")
@@ -714,8 +771,10 @@ def main() -> int:
     if a.repo:
         expected: list[str] = []
         merge_methods = {"squash"}
+        policy = None
         if a.ruleset:
             data = ruleset_for(json.loads(read(Path(a.ruleset))), archetype)
+            policy = codeql_policy(data)
             expected = [c["context"] for r in data["rules"] if r["type"] == "required_status_checks"
                         for c in r["parameters"]["required_status_checks"]]
             merge_methods = {m for r in data["rules"] if r["type"] == "pull_request"
@@ -723,7 +782,7 @@ def main() -> int:
         if a.expect_checks:
             expected = [c.strip() for c in a.expect_checks.split(",") if c.strip()]
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
-        check_wall(a.repo, expected, merge_methods, network)
+        check_wall(a.repo, expected, merge_methods, policy, network)
         check_labels(a.repo, network)
     else:
         result("SKIP", "no --repo: wall not checked")
