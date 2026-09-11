@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-09-11
+
 ### Fixed
 
 - `new-project` reads the owner's shared `.github/ISSUE_TEMPLATE` listing once.
