@@ -40,6 +40,14 @@ inside pull requests and have no tag.
 - README states the limit of the wall: anyone holding administration can change
   the ruleset; it stops the everyday agent, not the administrator (#129).
 
+### Fixed
+
+- The three things the door prints at the end and the next session never sees
+  (the CodeQL recovery push, the fine-grained token line, what to do with
+  Dependabot's pull requests) are written into the first pull request's body
+  and a "First day" section of `README.md`; the terminal says where they now
+  live (#141, from #120 and #125).
+
 ## [0.5.4] - 2026-09-11
 
 ### Fixed
