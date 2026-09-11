@@ -445,7 +445,7 @@ gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f
 codeql_enabled="$(date -u +%H:%M:%SZ)"
 
 # ── the first pull request ───────────────────────────────────────────────
-# One line, the one the tutorial names. Its workflow must start: a run that
+# One README section, the one the tutorial names. Its workflow must start: a run that
 # ends in startup_failure (allowlist, workflow file) reports no check name,
 # so the wall would never open. That is a wall failure, and it rolls back.
 # CodeQL must pick the pull request up as well: without an analysis the
@@ -513,7 +513,19 @@ echo "CodeQL default setup: enabled $codeql_enabled, ${setup_state:-unreadable} 
   warn "CodeQL default setup analyses [$codeql_langs] and not the Python under src/. fix: $codeql_fix"
 branch="docs/first-pr"
 git -C "$dir" switch -q -c "$branch"
-echo 'Made with [plinth](https://github.com/coolbress/plinth).' >> "$dir/README.md"
+# What the door used to print only at the end goes into the repository too:
+# the terminal that ran the door is not the one the next session reads (#126;
+# in #120 the next session spent fourteen minutes rediscovering the first two
+# lines, and nothing said what to do with Dependabot's pull request, opened
+# sixteen seconds after this one). Three sentences, in the first pull
+# request's body and in README.md, where a person reads before the first
+# session. The token line is unconditional here: the reader may not be the
+# person who ran the door.
+recovery="git commit --allow-empty -m 'ci: trigger code scanning' && git push"
+first_day="- If the merge stays blocked on CodeQL, push once more: \`$recovery\`.
+- If your everyday gh token is fine-grained with selected repositories, add \`$name\` to it: https://github.com/settings/personal-access-tokens
+- Dependabot opens pull requests from the first minute, and the wall treats them like any other: merge one when every required check is green, or close it."
+printf '\n## First day\n\n%s\n\nMade with [plinth](https://github.com/coolbress/plinth).\n' "$first_day" >> "$dir/README.md"
 git -C "$dir" commit -q -am "docs: first pull request through the wall"
 git -C "$dir" push -q -u origin "$branch"
 head_sha="$(git -C "$dir" rev-parse HEAD)"
@@ -526,19 +538,25 @@ if [ "$has_pr" = yes ]; then
   # Your template's own fields are not filled in here, and cannot be: the box
   # does not know what your headings ask for. It says so instead of pretending,
   # and this pull request exists to be merged in a minute, not to be a record.
-  first_pr_body="Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. It adds one line to README.md and nothing else.
+  first_pr_body="Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. It adds a First day section to README.md and nothing else.
 
 Not verified yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+
+$first_day
 
 This body does not follow $owner/.github's pull-request template, which this repository inherits: the box cannot answer fields it has not read. Rewrite it with \`gh pr edit $repo --body-file -\` if you want the record to match, or merge it as it is."
 else
   first_pr_body="## What and why
 
-Opened by /plinth:new-project to prove the wall. Every required check must be green before the merge button enables, so merging this is the proof that the wall stands and can be opened. It adds one line to README.md and changes nothing else.
+Opened by /plinth:new-project to prove the wall. Every required check must be green before the merge button enables, so merging this is the proof that the wall stands and can be opened. It adds a First day section to README.md and changes nothing else.
 
 ## How it was verified
 
-Nothing yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial"
+Nothing yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+
+## First day
+
+$first_day"
 fi
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
   --body "$first_pr_body")"
@@ -593,7 +611,7 @@ while :; do
     # arrives at this line too, and CodeQL may well have been found already.
     if [ "$codeql" = 0 ]; then
       echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s, $([ "$repushed" = 1 ] && echo "one empty commit pushed" || echo "no re-push yet") (check runs on its head: $(tr '\n' ' ' <<<"$names")); the merge stays blocked until it does" >&2
-      repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
+      repush="    if it stays blocked, push once more: cd $dir && $recovery"
     fi
     break
   fi
@@ -607,7 +625,8 @@ done: $url (public, $spdx, $arch, $template_repo@$template_ref)
   first pull request: $pr_url
     wait for every check to turn green, then merge (squash). A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
 ${repush:+$repush
-}  next: cd $dir && claude
+}  the recovery push, the token line and what to do with Dependabot's pull requests are in the pull request's body and in README.md under "First day"
+  next: cd $dir && claude
 EOF
 [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ] || \
   echo "  if your everyday gh token is fine-grained with selected repositories, add $name to it: https://github.com/settings/personal-access-tokens"
