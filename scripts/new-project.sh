@@ -468,8 +468,11 @@ codeql_enabled="$(date -u +%H:%M:%SZ)"
 # (2026-09-10, completed 16:32:28Z, pushed 16:36:18Z: analysed 11 s later);
 # coolbress/plinth-e2e-34546889124 (2026-09-11, analyses listed 00:33:15Z and
 # 00:33:27Z, run completed 00:33:48Z, updated_at 00:33:49Z, pushed 00:34:54Z:
-# analysed 9 s later, merged with no re-push). So the run completing is the
-# event, and 2 s after it is too soon while 66 s is enough; the analyses are
+# analysed 9 s later, merged with no re-push); coolbress/plinth-e2e-34548699421
+# (2026-09-11, the minute removed on purpose: completed 00:59:36Z, pushed
+# 00:59:40Z, not analysed; the door's own re-push below at 01:01:16Z was
+# analysed 8 s later). So the run completing is the event, and 2 s or 4 s
+# after it is too soon while 66 s is enough; the analyses are
 # listed before the run completes and are not a signal on their own. Main's
 # commit never carries a `CodeQL` check run, and the dynamic workflow is
 # `active` the second it is enabled: neither is a signal. The languages are
@@ -477,7 +480,7 @@ codeql_enabled="$(date -u +%H:%M:%SZ)"
 # re-push below covers that case. The times are printed as each is first
 # seen, so a live run is its own record.
 # ponytail: the minute is a margin, measured to hold at 66 s and to fail at
-# 2 s; the boundary between is not measured.
+# 4 s; the boundary between is not measured.
 deadline=$((SECONDS + first_pr_wait)); setup=""; main_run=""
 for v in updated run analysis; do printf -v "seen_$v" '%s' ''; done
 mark() { # <name> <value>: kept and printed whenever the value changes; null and empty are not values
@@ -547,9 +550,11 @@ pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "doc
 # CodeQL missing from the head after a while is answered here, once, with the
 # recovery that was printed for the user to type until now: an empty commit
 # pushed. A push made after default setup has settled is analysed every time
-# it was tried (four recovery pushes and run 2, #62 #120 #117); the first push
-# is the one it can miss, and the user should not have to know that. Ninety
-# seconds: CodeQL appeared on a head 11 s after its push when it did at all.
+# it was tried (four recovery pushes, then this one on
+# coolbress/plinth-e2e-34548699421, 2026-09-11: pushed 01:01:16Z, analysed 8 s
+# later, #62 #120 #117); the first push is the one it can miss, and the user
+# should not have to know that. Ninety seconds: CodeQL appeared on a head
+# within 11 s of its push when it did at all.
 deadline=$((SECONDS + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""
 repush_at=$((SECONDS + (first_pr_wait < 90 ? first_pr_wait : 90))); repushed=0
 while :; do

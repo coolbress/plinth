@@ -26,8 +26,10 @@ inside pull requests and have no tag.
   (`plinth-e2e-34502351744`, 2026-09-10; `plinth-e2e-34546889124`,
   2026-09-11, no re-push). If CodeQL still has not picked the pull request up
   after 90 s, the door pushes one empty commit itself, the recovery it used to
-  print for the user to type (analysed every time it was tried); the printed
-  line stays for the case after that. The door prints the times it saw, and
+  print for the user to type (analysed every time it was tried, the door's own
+  included: `plinth-e2e-34548699421`, 2026-09-11, pushed 4 s after the run and
+  missed, re-pushed at 90 s and analysed 8 s later); the printed line stays for
+  the case after that. The door prints the times it saw, and
   warns with the fix when Python is not in the list. `PLINTH_FIRST_PR_WAIT`
   now bounds three waits and defaults to 300 s.
 - `floor-check` reports the languages CodeQL default setup analyses, warns
