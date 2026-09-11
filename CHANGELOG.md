@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-09-11
+
 ### Fixed
 
 - `floor-check` compares the alert thresholds of the live `code_scanning`
