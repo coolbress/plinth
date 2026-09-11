@@ -9,6 +9,14 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `new-project` reads the owner's shared `.github/ISSUE_TEMPLATE` listing once.
+  The config-only warning came from a second read of the same folder, and a
+  second read that failed printed as "no config", so the owner whose contact
+  links stop applying was not told (#101). The answer now comes from the one
+  listing already held; a listing that cannot be read still stops the run.
+
 ## [0.5.6] - 2026-09-11
 
 ### Fixed

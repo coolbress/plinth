@@ -235,17 +235,16 @@ usable_form() { # <text> <name> -> 0 when GitHub would offer it
     *)    grep -q '^name:' <<<"$1" && grep -q '^description:' <<<"$1" && grep -q '^body:' <<<"$1" ;;
   esac
 }
-shared_config_only() { # -> yes when the shared folder holds a config and no form
-  gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>/dev/null |
-    grep -qiE '^config\.(yml|yaml)$' && echo yes || echo no
-}
-shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
-  local listing name body enc
+# `config-only` comes from the same listing as the forms answer: a second read
+# of the folder could fail after the first succeeded, and a failed read is not
+# "no config" (#101).
+shared_forms() { # -> yes (a template GitHub can offer) | no | config-only | unknown
+  local listing name body enc config=no
   listing="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>&1)" || {
     case "$listing" in *"Not Found"*|*"404"*) echo no ;;
       *) echo "unknown: .github/ISSUE_TEMPLATE: $listing" ;; esac; return; }
   while read -r name; do
-    case "$name" in ""|config.yml|config.yaml) continue ;; *.yml|*.yaml|*.md) ;; *) continue ;; esac
+    case "$name" in "") continue ;; config.yml|config.yaml) config=yes; continue ;; *.yml|*.yaml|*.md) ;; *) continue ;; esac
     enc="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE/$name" --jq .content 2>&1)" || {
       echo "unknown: .github/ISSUE_TEMPLATE/$name: $enc"; return; }
     body="$(base64 -d <<<"$enc" 2>&1)" || {
@@ -253,7 +252,7 @@ shared_forms() { # -> yes (a template GitHub can offer) | no | unknown
     [ -n "$body" ] || continue
     usable_form "$body" "$name" && { echo yes; return; }
   done <<<"$listing"
-  echo no
+  [ "$config" = yes ] && echo config-only || echo no
 }
 # GitHub applies default community-health files only from a *public* `.github`
 # repository. A private one is readable through the API by whoever can see it,
@@ -298,7 +297,7 @@ if [ "$force_defaults" = 0 ]; then
       # A shared folder holding only a config is not forms, and rendering ours
       # replaces it: GitHub swaps the folder whole. Say so rather than let the
       # owner's contact links and blank-issue setting disappear quietly.
-      [ "$has_forms" = no ] && [ "$(shared_config_only)" = yes ] &&
+      [ "$has_forms" = config-only ] &&
         warn "$owner/.github publishes an issue-template config but no form; the box renders its own forms and config, and yours will not apply to $repo"
       ;;
   esac
