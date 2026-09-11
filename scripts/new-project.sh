@@ -37,7 +37,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # an unpinned resolution would let any package published later run there.
 # Raising the tag, the version or the date is the only edit here.
 template_repo="coolbress/plinth-template"
-template_ref="v1.3.0"
+template_ref="v1.4.0"
 template_ci=".github/workflows/ci.yml"
 copier_version="9.18.2"
 copier_newer="2026-09-09"
@@ -80,6 +80,7 @@ git_v="$(git --version | awk '{print $3}')"
 below 2.28 "$git_v" && stop "git $git_v is too old (2.28 or newer: init -b, switch)" "  fix: upgrade git"
 command -v uv  >/dev/null || stop "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh"
 command -v gh  >/dev/null || stop "gh (GitHub CLI) is not installed" "  fix: https://cli.github.com, then gh auth login"
+command -v python3 >/dev/null || stop "python3 is not installed (it shapes the ruleset for the archetype)" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install python3"
 command -v claude >/dev/null || stop "claude (Claude Code) is not installed" "  fix: curl -fsSL https://claude.ai/install.sh | bash"
 claude_v="$(claude --version 2>/dev/null | awk '{print $1}')" || claude_v=""
 below "$claude_floor" "${claude_v:-0}" && stop "claude ${claude_v:-?} is below the supported floor $claude_floor" "  fix: claude update"
@@ -193,6 +194,13 @@ if [ -n "$arch_choices" ] && [ -n "$lic_choices" ]; then
 else
   warn "could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
 fi
+
+# The ruleset for this archetype. ruleset.json is the wall every archetype
+# reports to; a service archetype's ci.yml also carries the `image` check, and
+# scripts/floor-check.py, which owns that name and the archetype set, adds it
+# here and expects it of the wall in CI (#127). Shaped before anything exists.
+ruleset_body="$(python3 "$here/floor-check.py" --print-ruleset --ruleset "$here/../ruleset.json" --archetype "$arch")" \
+  || stop "could not shape the ruleset for the archetype $arch (scripts/floor-check.py --print-ruleset)"
 
 # The owner's shared community-health files. GitHub applies `<owner>/.github`'s
 # copy to a repository that carries none of its own, so writing ours would
@@ -394,7 +402,7 @@ grep -vE '^[[:space:]]*(#|$)' "$here/../labels.txt" | while IFS='|' read -r lbl 
 done
 
 # ── the wall ─────────────────────────────────────────────────────────────
-if ! err="$(gh api "repos/$repo/rulesets" -X POST --input "$here/../ruleset.json" 2>&1 >/dev/null)"; then
+if ! err="$(gh api "repos/$repo/rulesets" -X POST --input - <<<"$ruleset_body" 2>&1 >/dev/null)"; then
   printf 'could not apply the ruleset:\n%s\n' "$err" >&2
   exit 1
 fi

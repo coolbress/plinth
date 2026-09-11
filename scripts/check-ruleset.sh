@@ -9,6 +9,11 @@
 set -euo pipefail
 
 f="${1:-ruleset.json}"
+# Optional: contexts a shaped ruleset adds to the nine, comma separated. The
+# door posts ruleset.json plus `image` for a service archetype
+# (scripts/floor-check.py --print-ruleset); the tests run that body through
+# here with `image`, so the wall's invariants hold for it too (#127).
+extra="${2:-}"
 fail=0
 
 jq empty "$f" 2>/dev/null || { echo "FAIL  $f is not valid JSON"; exit 1; }
@@ -43,9 +48,11 @@ chk 'squash is the only merge method' \
 # named `ci`, the called jobs live in python-ci.yml. Three files must agree
 # (this one, python-ci.yml, the instance's ci.yml); rename one and every
 # repository locks itself out of merging.
-chk 'required checks are exactly the python-ci jobs' \
+want='["ci / pr-title","ci / lint","ci / typecheck","ci / test","ci / build","ci / secrets","ci / deps","ci / diff-size","ci / floor-check"]'
+[ -z "$extra" ] || want="$(jq -c --arg x "$extra" '. + ($x|split(","))' <<<"$want")"
+chk "required checks are exactly the python-ci jobs${extra:+ plus $extra}" \
     '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context]' \
-    '["ci / pr-title","ci / lint","ci / typecheck","ci / test","ci / build","ci / secrets","ci / deps","ci / diff-size","ci / floor-check"]'
+    "$want"
 # A name alone lets anyone post a green check under it; the source app pins it.
 chk 'every required check comes from the GitHub Actions app (15368)' \
     '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].integration_id]|unique' \

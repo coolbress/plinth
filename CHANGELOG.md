@@ -9,6 +9,35 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- A backend or data-ml repository's ruleset requires the check `image`, the
+  plain job plinth-template v1.4.0 renders into its `ci.yml` (build the
+  Dockerfile, run the image, read its first log line). The door asks
+  `scripts/floor-check.py --print-ruleset` for the archetype's ruleset, so the
+  name and the archetype set have one owner, and the checker expects the same
+  name of the wall and the job in `ci.yml` for those archetypes. `ruleset.json`
+  is unchanged: applied by hand, it is the wall every archetype reports to. A
+  service repository created earlier that raises its plinth pin sees
+  `ci / floor-check` fail until `image` is required and the job exists; the
+  name is a new contract, added and never renamed (#127). The door now needs
+  `python3`. `scripts/check-ruleset.sh` takes an optional second argument, the
+  contexts a shaped ruleset adds, so the body the door posts for a service
+  archetype is held to the same invariants as `ruleset.json`.
+
+### Changed
+
+- The door renders plinth-template v1.4.0. The instance's `ci.yml` grants
+  `issues: read` to its python-ci.yml call, so `ci / floor-check`'s label check
+  reads labels instead of reporting `not verified` (#102); `AGENTS.md` says a
+  ruleset or code-scanning change is a person's, never administration on the
+  everyday token, and `CONTRIBUTING.md` states the limit of the wall (#129); a
+  service instance carries the `image` job and its Dependabot docker updates
+  ignore major and minor (#127). The template pins python-ci.yml at `98e8e56`,
+  the first pin that carries the label check.
+- README states the limit of the wall: anyone holding administration can change
+  the ruleset; it stops the everyday agent, not the administrator (#129).
+
 ## [0.5.4] - 2026-09-11
 
 ### Fixed
