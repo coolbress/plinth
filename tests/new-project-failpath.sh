@@ -344,6 +344,13 @@ for empty in gitkeep config empty; do
   then ok "shared-forms-$empty" "a shared folder holding only $empty is not forms; the box renders its own"
   else bad "shared-forms-$empty" "the box suppressed its forms for a folder with no usable template"; fi
 done
+# A config and no form: the owner is told theirs stops applying. The answer
+# comes from the one listing already read; a second read could fail after the
+# first succeeded and silence the warning as "no config" (#101).
+if grep -q "warning: tester/.github publishes an issue-template config but no form" "$work/home-shared-forms-config/out" \
+  && [ "$(grep -c "contents/.github/ISSUE_TEMPLATE --jq" "$work/home-shared-forms-config/calls.log")" = 1 ]
+then ok shared-forms-config "the config-only warning is printed, from a single listing"
+else bad shared-forms-config "no warning, or the listing was read twice"; grep -E "ISSUE_TEMPLATE|warning" "$work/home-shared-forms-config/calls.log" "$work/home-shared-forms-config/out" | sed 's/^/        /'; fi
 if grep -q "does not follow tester/.github's pull-request template" "$work/home-shared-pr-only/calls.log"; then ok shared-pr-only "the first pull request says it does not follow the inherited template"
 else bad shared-pr-only "the first pull request is silent about the inherited template"; fi
 if grep -q "^gh pr create.*## What and why" "$work/home-shared-pr-only/calls.log"; then bad shared-pr-only "plinth's headings were imposed over the owner's template"
