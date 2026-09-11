@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-09-11
+
 ### Fixed
 
 - The door opens the first pull request only once CodeQL default setup's
