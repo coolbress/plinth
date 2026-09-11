@@ -503,7 +503,7 @@ while :; do
   fi
   sleep 5
 done
-[ -z "$main_run" ] || sleep 60
+# LIVE TEST, reverted next: no minute, so the first push is missed and the door re-pushes.
 read -r setup_state codeql_langs _ <<<"$setup"
 echo "CodeQL default setup: enabled $codeql_enabled, ${setup_state:-unreadable} with languages [${codeql_langs:-}], first run on main completed ${main_run:-never}, analysis of main listed ${seen_analysis:-never}, first pull request pushed $(date -u +%H:%M:%SZ)"
 [ -n "$codeql_langs" ] && ! grep -qw python <<<"$codeql_langs" &&
