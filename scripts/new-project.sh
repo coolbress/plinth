@@ -25,7 +25,8 @@
 # alone and does not inspect the wall, so a failure after the ruleset is applied
 # deletes too. The local clone stays; a failed deletion prints the URL loudly.
 # Two steps are not fatal and warn instead: a label that cannot be created, and
-# a CodeQL default setup slow to configure or to pick the first pull request up.
+# a CodeQL default setup slow to configure or to pick the first pull request up
+# (the door pushes one empty commit itself, which is analysed; then it warns).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -457,21 +458,28 @@ codeql_enabled="$(date -u +%H:%M:%SZ)"
 # runner, the same), and coolbress/dividend_calendar (2026-09-09, #120: opened
 # 08:31:55Z, default setup `configured` at 08:32:21Z, blocked until an empty
 # commit pushed after that cleared the rule). The signal here is the one that
-# comes after all of those: default setup reports `configured`, its first
-# run on main, the one enabling it queues, has completed, and that run's
-# analysis of main is listed by the code-scanning API (the results, processed
-# after the run); then a minute. Measured on 2026-09-10 (#117): run 1,
-# coolbress/plinth-e2e-34499093907, pushed 2 s after the run completed
-# (16:02:54Z, 16:02:56Z) and got no analysis, merged only after the driver's
-# re-push; run 2, coolbress/plinth-e2e-34502351744, pushed 230 s after
-# (16:32:28Z, 16:36:18Z) and was analysed 11 s later. Main's commit never
-# carries a `CodeQL` check run, and the dynamic workflow is `active` the
-# second it is enabled: neither is a signal. The languages are read back on
-# the same call. Missing the signal only costs the wait: the warning and the
-# re-push at the end stay for that case. Every candidate is printed each time
-# its value changes, so a live run is its own record.
+# comes after all of those: default setup reports `configured` with its
+# `updated_at` set (that happens as its first run on main, the one enabling
+# it queues, completes), that run is listed completed, its analyses of main
+# are listed by the code-scanning API, and then a minute has passed. Measured
+# on three repositories (#117): coolbress/plinth-e2e-34499093907 (2026-09-10,
+# run completed 16:02:54Z, pull request pushed 16:02:56Z: not analysed, merged
+# only after the driver's re-push); coolbress/plinth-e2e-34502351744
+# (2026-09-10, completed 16:32:28Z, pushed 16:36:18Z: analysed 11 s later);
+# coolbress/plinth-e2e-34546889124 (2026-09-11, analyses listed 00:33:15Z and
+# 00:33:27Z, run completed 00:33:48Z, updated_at 00:33:49Z, pushed 00:34:54Z:
+# analysed 9 s later, merged with no re-push). So the run completing is the
+# event, and 2 s after it is too soon while 66 s is enough; the analyses are
+# listed before the run completes and are not a signal on their own. Main's
+# commit never carries a `CodeQL` check run, and the dynamic workflow is
+# `active` the second it is enabled: neither is a signal. The languages are
+# read back on the same call. Missing the signal only costs the wait: the
+# re-push below covers that case. The times are printed as each is first
+# seen, so a live run is its own record.
+# ponytail: the minute is a margin, measured to hold at 66 s and to fail at
+# 2 s; the boundary between is not measured.
 deadline=$((SECONDS + first_pr_wait)); setup=""; main_run=""
-for v in updated workflow run analysis; do printf -v "seen_$v" '%s' ''; done
+for v in updated run analysis; do printf -v "seen_$v" '%s' ''; done
 mark() { # <name> <value>: kept and printed whenever the value changes; null and empty are not values
   local var="seen_$1"
   [ -n "$2" ] && [ "$2" != null ] && [ "${!var}" != "$2" ] && { printf -v "$var" '%s' "$2"; echo "  $(date -u +%H:%M:%SZ) $1: $2"; }
@@ -486,17 +494,16 @@ while :; do
   main_run="$(gh api -X GET "repos/$repo/actions/runs" -f branch=main -F per_page=20 \
     --jq '.workflow_runs[] | select(.path == "dynamic/github-code-scanning/codeql" and .status == "completed") | .updated_at' 2>/dev/null | head -1 || true)"
   [ "${setup%% *}" = configured ] && mark updated "$(awk '{print $3}' <<<"$setup")"
-  mark workflow "$(api_first "repos/$repo/actions/workflows" '.workflows[] | select(.path == "dynamic/github-code-scanning/codeql") | "\(.state), created \(.created_at), updated \(.updated_at)"')"
   mark run "$main_run"
   mark analysis "$(api_first "repos/$repo/code-scanning/analyses?ref=refs/heads/main&per_page=1" '.[] | "\(.created_at) \(.category)"')"
-  [ "${setup%% *}" = configured ] && [ -n "$main_run" ] && [ -n "$seen_analysis" ] && break
+  [ "${setup%% *}" = configured ] && [ -n "$seen_updated" ] && [ -n "$main_run" ] && [ -n "$seen_analysis" ] && break
   if [ "$SECONDS" -ge "$deadline" ]; then
     echo "warning: CodeQL default setup has not completed its first analysis of main after $first_pr_wait s (state: ${setup%% *}, first run on main: ${main_run:-none}, analysis of main listed: ${seen_analysis:-none}); pushing the first pull request anyway" >&2
     break
   fi
   sleep 5
 done
-[ -z "$seen_analysis" ] || sleep 60
+[ -z "$main_run" ] || sleep 60
 read -r setup_state codeql_langs _ <<<"$setup"
 echo "CodeQL default setup: enabled $codeql_enabled, ${setup_state:-unreadable} with languages [${codeql_langs:-}], first run on main completed ${main_run:-never}, analysis of main listed ${seen_analysis:-never}, first pull request pushed $(date -u +%H:%M:%SZ)"
 [ -n "$codeql_langs" ] && ! grep -qw python <<<"$codeql_langs" &&
@@ -537,7 +544,14 @@ pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "doc
 # streak, "did it ever appear" wants the flag, and answering the second with the
 # first deletes a repository whose run was listed on the very poll that gave up
 # (#108).
+# CodeQL missing from the head after a while is answered here, once, with the
+# recovery that was printed for the user to type until now: an empty commit
+# pushed. A push made after default setup has settled is analysed every time
+# it was tried (four recovery pushes and run 2, #62 #120 #117); the first push
+# is the one it can miss, and the user should not have to know that. Ninety
+# seconds: CodeQL appeared on a head 11 s after its push when it did at all.
 deadline=$((SECONDS + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""
+repush_at=$((SECONDS + (first_pr_wait < 90 ? first_pr_wait : 90))); repushed=0
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
     --jq '.workflow_runs[] | "\(.path) \(.status) \(.conclusion)"' 2>/dev/null || true)"
@@ -555,6 +569,12 @@ while :; do
     grep -qE '^(CodeQL|Analyze \()' <<<"$names" && { codeql=1; echo "  $(date -u +%H:%M:%SZ) CodeQL on the pull request head: $(grep -E '^(CodeQL|Analyze \()' <<<"$names" | tr '\n' ' ')"; }
   fi
   [ "$seen" -ge 2 ] && [ "$codeql" = 1 ] && break
+  if [ "$codeql" = 0 ] && [ "$repushed" = 0 ] && [ "$SECONDS" -ge "$repush_at" ]; then
+    echo "  $(date -u +%H:%M:%SZ) CodeQL has not picked up the first pull request; pushing an empty commit once"
+    git -C "$dir" commit -q --allow-empty -m 'ci: trigger code scanning' && git -C "$dir" push -q
+    head_sha="$(git -C "$dir" rev-parse HEAD)"; repushed=1
+    sleep 5; continue   # the new head is read at least once before the deadline can end the wait
+  fi
   if [ "$SECONDS" -ge "$deadline" ]; then
     # No CI run at all is a misconfiguration (allowlist, workflow file): a wall
     # failure. A run that appeared but was never seen twice running is not --
@@ -567,7 +587,7 @@ while :; do
     # Guarded on `codeql`, not implied by reaching here: a short streak now
     # arrives at this line too, and CodeQL may well have been found already.
     if [ "$codeql" = 0 ]; then
-      echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s (check runs on its head: $(tr '\n' ' ' <<<"$names")); the merge stays blocked until it does" >&2
+      echo "warning: CodeQL has not picked up the first pull request within $first_pr_wait s, $([ "$repushed" = 1 ] && echo "one empty commit pushed" || echo "no re-push yet") (check runs on its head: $(tr '\n' ' ' <<<"$names")); the merge stays blocked until it does" >&2
       repush="    if it stays blocked, push once more: cd $dir && git commit --allow-empty -m 'ci: trigger code scanning' && git push"
     fi
     break

@@ -41,7 +41,6 @@ case "$all" in
   "api repos/"*"/code-scanning/default-setup"*)  step=setup-read ;;
   *code-scanning*"languages[]"*)                 step=codeql-langs ;;
   *"/code-scanning/analyses"*)                   step=analyses ;;
-  "api repos/"*"/actions/workflows"*)            step=workflows ;;
   "api repos/"*"/commits/"*"/check-runs"*)       step=checkruns ;;
   # GitHub reads a community-health file from the root, `.github/` or `docs/`,
   # and the door asks about all of them: match the name, not one path.
@@ -139,13 +138,17 @@ case "$step" in
   # setup's state and languages, as the door's jq joins them.
   languages)     [ "${MOCK_LANGUAGES:-python}" = python ] && printf 'Python\n' ;;
   setup-read)    printf '%s %s 2026-09-10T00:01:30Z\n' "${MOCK_SETUP:-configured}" "${MOCK_SETUP_LANGS:-actions,python}" ;;
-  # The other candidates the door records: the dynamic workflow, and main's
-  # analysis listed (the one the push waits for, with the run); a 404 body on
+  # Main's analyses, listed before the run completes (measured); a 404 body on
   # stdout, as gh prints one, must not be read as a value.
-  workflows)     echo 'active, created 2026-09-10T00:00:30Z, updated 2026-09-10T00:01:00Z' ;;
   analyses)      case "${MOCK_CODEQL_MAIN:-done}" in done) echo '2026-09-10T00:02:00Z /language:python' ;;
                    *) echo '{"message":"no analysis found","status":"404"}'; exit 1 ;; esac ;;
-  checkruns)     printf 'ci / lint\nci / test\n'; [ "${MOCK_CODEQL:-present}" = present ] && printf 'CodeQL\nAnalyze (python)\n' ;;
+  # `after-repush`: CodeQL appears on the head only once the door has pushed
+  # its empty commit (a bare `push -q`, unlike the branch's `push -q -u`).
+  checkruns)     printf 'ci / lint\nci / test\n'
+                 case "${MOCK_CODEQL:-present}" in
+                   present) printf 'CodeQL\nAnalyze (python)\n' ;;
+                   after-repush) grep -q 'push -q$' "$GH_LOG" && printf 'CodeQL\nAnalyze (python)\n' ;;
+                 esac ;;
 esac
 exit 0
 MOCK
@@ -364,6 +367,19 @@ E="MOCK_RUNS=startup" run startup-failure err yes yes "failed at startup" -- pro
 E="MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=1" run codeql-absent ok yes no "warning: CodeQL has not picked up the first pull request" -- probe
 if grep -q "git commit --allow-empty" "$work/home-codeql-absent/out"; then ok codeql-absent "the summary names the re-push"
 else bad codeql-absent "the summary does not name the re-push"; fi
+# The door pushes the recovery itself, once, before it asks the user to: an
+# empty commit on the pull request branch after a while with no CodeQL on the
+# head (owner decision 2026-09-11, #117). CodeQL picking that up ends the wait
+# with no warning and no line to type; never picking it up warns, says the
+# re-push happened, and names the manual one.
+if [ "$(grep -c '^git -C .* push -q$' "$work/home-codeql-absent/calls.log")" = 1 ] && grep -q "one empty commit pushed" "$work/home-codeql-absent/out"
+then ok codeql-absent "one empty commit is pushed by the door, and the warning says so"
+else bad codeql-absent "no single re-push by the door"; grep -E 'push|warning' "$work/home-codeql-absent/calls.log" "$work/home-codeql-absent/out" | sed 's/^/        /'; fi
+E="MOCK_CODEQL=after-repush PLINTH_FIRST_PR_WAIT=1" run codeql-after-repush ok yes no "CodeQL on the pull request head: CodeQL" -- probe
+if ! grep -q "warning: CodeQL" "$work/home-codeql-after-repush/out" && ! grep -q "git commit --allow-empty" "$work/home-codeql-after-repush/out" \
+   && [ "$(grep -c '^git -C .* push -q$' "$work/home-codeql-after-repush/calls.log")" = 1 ]
+then ok codeql-after-repush "CodeQL on the re-pushed head ends the wait: no warning, nothing to type"
+else bad codeql-after-repush "the re-push was not enough, or was repeated"; grep -E 'push|warning|allow-empty' "$work/home-codeql-after-repush/calls.log" "$work/home-codeql-after-repush/out" | sed 's/^/        /'; fi
 # The readiness signal is two reads: default setup reports `configured`, and
 # its first run on main has completed. Either one missing within the wait
 # warns, pushes anyway, and keeps the re-push at the end.
@@ -444,7 +460,7 @@ check "CodeQL default setup is enabled after GitHub lists the languages, with ac
 check "default setup reports configured and its first run on main has completed before the first pull request is pushed" \
   '[ "$(grep -E "default-setup --jq|branch=main|push -q -u origin docs/first-pr" "$log" | sed -E "s/.*default-setup --jq.*/setup/; s/.*branch=main.*/main/; s/.*docs\/first-pr.*/push/" | head -3 | tr "\n" " ")" = "setup main push " ]'
 check "the door prints the times it saw, so a live run is its own record" \
-  'grep -qE "^CodeQL default setup: enabled [0-9:]+Z, configured with languages \[actions,python\], first run on main completed 2026-09-10T00:01:00Z, analysis of main listed 2026-09-10T00:02:00Z /language:python, first pull request pushed [0-9:]+Z$" "$work/home-none/out" && [ "$(grep -cE "^  [0-9:]+Z (updated|workflow|run|analysis): " "$work/home-none/out")" = 4 ]'
+  'grep -qE "^CodeQL default setup: enabled [0-9:]+Z, configured with languages \[actions,python\], first run on main completed 2026-09-10T00:01:00Z, analysis of main listed 2026-09-10T00:02:00Z /language:python, first pull request pushed [0-9:]+Z$" "$work/home-none/out" && [ "$(grep -cE "^  [0-9:]+Z (updated|run|analysis): " "$work/home-none/out")" = 3 ]'
 check "the first pull request head is checked for a CodeQL check run" 'grep -q "/check-runs" "$log"'
 check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowed\[\]=coolbress/plinth/\*" "$log"'
 check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
@@ -477,6 +493,7 @@ check "every label is created with --force, so GitHub's default set (wontfix) do
 check "the default branch is main" '[ "$("$REAL_GIT" -C "$proj" rev-parse --verify -q main)" != "" ]'
 check "the first pull request is one README line on docs/first-pr" \
   '[ "$("$REAL_GIT" -C "$proj" rev-parse --abbrev-ref HEAD)" = docs/first-pr ] && [ "$("$REAL_GIT" -C "$proj" diff --stat main docs/first-pr | tail -1 | grep -o "[0-9]* insertion")" = "1 insertion" ]'
+check "CodeQL on the first push means no empty commit is pushed" '! grep -q "push -q$" "$log" && [ "$("$REAL_GIT" -C "$proj" rev-list --count main..docs/first-pr)" = 1 ]'
 check "render is final: real name, owner and license in pyproject.toml and uv.lock, src/probe/, no bootstrap.sh" \
   'grep -q probe "$proj/pyproject.toml" && grep -q MIT "$proj/pyproject.toml" && grep -q tester "$proj/pyproject.toml" && grep -q probe "$proj/uv.lock" && [ -d "$proj/src/probe" ] && [ ! -e "$proj/bootstrap.sh" ]'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
