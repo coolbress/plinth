@@ -18,6 +18,11 @@ inside pull requests and have no tag.
   second read that failed printed as "no config", so the owner whose contact
   links stop applying was not told (#101). The answer now comes from the one
   listing already held; a listing that cannot be read still stops the run.
+- The arsenal's When line for `frontend-design` names the moment instead of
+  quoting a phrase: any page a person will look at, server-rendered HTML
+  included, from its first version (#68, finding N of #120). In the first
+  real-project record the agent never reached for the plugin across four
+  feature pull requests, and the owner's one stated gap was an unstyled page.
 
 ## [0.5.6] - 2026-09-11
 
