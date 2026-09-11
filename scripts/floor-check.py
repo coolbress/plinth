@@ -39,6 +39,12 @@ from pathlib import Path
 # Must agree with the `_exclude` conditions in the template's copier.yml;
 # tests/archetype-single-source.sh checks that.
 CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
+# A service archetype's ci.yml carries one check python-ci.yml does not: `image`,
+# a plain job that builds and runs the container (#127). Not a line in
+# ruleset.json: applied by hand, that file is the wall every archetype reports
+# to. The door asks this file for the archetype's ruleset (--print-ruleset) and
+# the expectation below adds the same name, so the two cannot disagree.
+IMAGE_CHECK = {"context": "image", "integration_id": 15368}
 
 SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", ".scratch", "dist"}
 # What GitHub accepts under .github/ISSUE_TEMPLATE: forms in either YAML
@@ -455,6 +461,24 @@ def check_dockerfile(project: Path) -> None:
            f".dockerignore lacks {missing}: they ship inside the image")
 
 
+def check_image_job(root: Path) -> None:
+    """The check the ruleset requires of a service archetype exists in the caller (#127)."""
+    ci = root / ".github" / "workflows" / "ci.yml"
+    text = read(ci) if ci.is_file() else ""
+    ok(re.search(r"^  image:\s*$", text, re.M) is not None and "docker build" in text and "docker run" in text,
+       "ci.yml carries the image job (docker build, docker run)",
+       "ci.yml has no `image` job that builds and runs the container; the ruleset requires that check for this archetype")
+
+
+def ruleset_for(data: dict, archetype: str | None) -> dict:
+    """ruleset.json as the door applies it: with the image check for a service archetype."""
+    if archetype in CONDITIONAL_ARCHETYPES:
+        for r in data["rules"]:
+            if r["type"] == "required_status_checks":
+                r["parameters"]["required_status_checks"].append(dict(IMAGE_CHECK))
+    return data
+
+
 def check_env_example(project: Path) -> None:
     e = project / ".env.example"
     if not ok(e.is_file(), ".env.example present", ".env.example missing"):
@@ -655,10 +679,17 @@ def main() -> int:
     ap.add_argument("--no-network", action="store_true", help="skip everything that needs api.github.com")
     ap.add_argument("--sandbox", action="store_true", help="also report whether Claude Code's sandbox is on for this machine")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--print-ruleset", action="store_true",
+                    help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
     a = ap.parse_args()
 
     if a.print_conditional_archetypes:
         print(" ".join(CONDITIONAL_ARCHETYPES))
+        return 0
+    if a.print_ruleset:
+        if not a.ruleset:
+            ap.error("--print-ruleset needs --ruleset")
+        print(json.dumps(ruleset_for(json.loads(read(Path(a.ruleset))), a.archetype), indent=2))
         return 0
 
     root = Path(a.root).resolve()
@@ -668,13 +699,16 @@ def main() -> int:
 
     print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}")
     check_files(root, owner, network)
-    check_project(project, archetype_of(project, a.archetype))
+    archetype = archetype_of(project, a.archetype)
+    check_project(project, archetype)
+    if archetype in CONDITIONAL_ARCHETYPES:
+        check_image_job(root)
 
     if a.repo:
         expected: list[str] = []
         merge_methods = {"squash"}
         if a.ruleset:
-            data = json.loads(read(Path(a.ruleset)))
+            data = ruleset_for(json.loads(read(Path(a.ruleset))), archetype)
             expected = [c["context"] for r in data["rules"] if r["type"] == "required_status_checks"
                         for c in r["parameters"]["required_status_checks"]]
             merge_methods = {m for r in data["rules"] if r["type"] == "pull_request"

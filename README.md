@@ -55,17 +55,22 @@ plugin with hooks. Run
 `/plinth:arsenal` for the catalog; licenses are in [NOTICE](NOTICE).
 
 Nothing in the plugin enforces anything. Enforcement is the ruleset on GitHub,
-which `/plinth:new-project` raises and which owners cannot bypass. When `gh`
-holds a restricted fine-grained token, the generator asks you to rerun it
-through `scripts/with-admin-token.sh`, which prompts for an admin token at the
-terminal and keeps it off every command line.
+which `/plinth:new-project` raises and which owners cannot bypass. It can be
+changed, though: an owner, or anyone holding administration, can edit the
+ruleset, so the wall stops the everyday agent and not the administrator. That
+is why the generated `AGENTS.md` tells the agent never to ask for
+administration on the everyday token: a ruleset or code-scanning change is a
+person's, typed through `scripts/with-admin-token.sh` or made in Settings.
+When `gh` holds a restricted fine-grained token, the generator asks you to
+rerun it through `scripts/with-admin-token.sh`, which prompts for an admin
+token at the terminal and keeps it off every command line.
 
 ## Status
 
 The install works end to end and CI proves it on a clean runner. `new-project`
 creates a repository with the wall up, or creates nothing (its failure paths
 run in CI against a mocked `gh`). It renders
-[plinth-template v1.3.0](https://github.com/coolbress/plinth-template/releases/tag/v1.3.0),
+[plinth-template v1.4.0](https://github.com/coolbress/plinth-template/releases/tag/v1.4.0),
 whose CI reports every check the wall requires. In both live journeys so far
 (the v0.5.1 baseline by hand and one green `e2e` run on a runner, #62,
 2026-09-09) the first pull request merged, but only after the recovery commit

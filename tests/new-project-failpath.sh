@@ -121,6 +121,8 @@ case "$step" in
   set-default)   : > "$FIRST_PUSHED_FILE.patched" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
+  # The door pipes the archetype's ruleset in (`--input -`); keep it for the checks.
+  ruleset)       [ -t 0 ] || cat > "$HOME/ruleset-posted.json" ;;
   # On main the door asks for default setup's first run, completed: the jq
   # leaves its `updated_at`, so the answer is a time, or nothing.
   runs)          case "$all" in *branch=main*) case "${MOCK_CODEQL_MAIN:-done}" in done) echo 2026-09-10T00:01:00Z ;; error) exit 1 ;; esac; exit 0 ;; esac
@@ -349,6 +351,7 @@ else ok shared-pr-only "plinth's headings are not imposed over the owner's templ
 E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "" -- probe --force-defaults
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
+run backend        ok yes no "(public, MIT, backend, as owner)"                                -- probe --archetype=backend
 # The spdx id is still looked up (`mit` -> `MIT`); the license *text* is not:
 # the template renders LICENSE from the choice, so a fetch would write over it.
 if grep -q 'license=Apache-2.0' "$work/home-apache/calls.log" && ! grep -q -- '--jq .body' "$work/home-apache/calls.log"
@@ -512,8 +515,15 @@ check "the terminal points at where the same text now lives" \
 check "CodeQL on the first push means no empty commit is pushed" '! grep -q "push -q$" "$log" && [ "$("$REAL_GIT" -C "$proj" rev-list --count main..docs/first-pr)" = 1 ]'
 check "render is final: real name, owner and license in pyproject.toml and uv.lock, src/probe/, no bootstrap.sh" \
   'grep -q probe "$proj/pyproject.toml" && grep -q MIT "$proj/pyproject.toml" && grep -q tester "$proj/pyproject.toml" && grep -q probe "$proj/uv.lock" && [ -d "$proj/src/probe" ] && [ ! -e "$proj/bootstrap.sh" ]'
+# The wall per archetype (#127): a service archetype's ruleset requires the
+# `image` check its ci.yml carries, from the Actions app; a cli one is
+# ruleset.json as committed. Read from what the mock saw on stdin.
+check "a cli ruleset is ruleset.json, unchanged" \
+  'cmp -s <(jq -S . "$work/home-none/ruleset-posted.json") <(jq -S . "$root/ruleset.json")'
+check "a backend ruleset requires the image check, from the Actions app, and the nine" \
+  '[ "$(jq -c "[.rules[]|select(.type==\"required_status_checks\").parameters.required_status_checks[]|select(.context==\"image\")|.integration_id]" "$work/home-backend/ruleset-posted.json")" = "[15368]" ] && [ "$(jq "[.rules[]|select(.type==\"required_status_checks\").parameters.required_status_checks[].context]|length" "$work/home-backend/ruleset-posted.json")" = 10 ]'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.3.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.4.0 in " "$work/home-none/out"'
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

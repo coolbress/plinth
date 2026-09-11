@@ -38,6 +38,8 @@ printf 'import os\nos.environ["APP_PORT"]\n' > "$good/src/app/__main__.py"
 printf 'APP_PORT=8000\n' > "$good/.env.example"
 printf 'FROM python:3.12-slim@sha256:%064d\nRUN uv sync --locked\nUSER app\nCMD ["python", "-m", "app"]\n' 0 > "$good/Dockerfile"
 printf '.git\n.env\n.venv\n' > "$good/.dockerignore"
+mkdir -p "$good/.github/workflows"
+printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@0\n  image:\n    steps:\n      - run: docker build -t t .\n      - run: docker run --rm t\n' > "$good/.github/workflows/ci.yml"
 
 out="$(python3 "$checker" --root "$good" --no-network 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out"; then ok "complete backend instance passes offline"
@@ -98,6 +100,10 @@ plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Ba
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
 plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"
+# The image check is the service archetypes' own required check (#127): the job
+# has to exist in the caller, and a cli instance is not asked for it.
+plant "a service instance whose ci.yml has no image job is caught" "rm .github/workflows/ci.yml" "no \`image\` job"
+plant "a cli instance is not asked for the image job" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm .github/workflows/ci.yml" "__none__" || true
 # Issue forms: GitHub reads every form in the folder whatever it is called, in
 # either YAML spelling, plus the legacy Markdown templates. A name this checker
 # did not expect is not a missing form (#85).
@@ -353,6 +359,26 @@ sub="$work/sub"; rm -rf "$sub"; cp -R "$good" "$sub"; mkdir -p "$sub/app"; mv "$
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$sub" --project app --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
 if grep -q "required checks dropped" <<<"$out" && grep -q "uv.lock committed" <<<"$out"; then ok "--project and --ruleset are honoured (ruleset's nine checks expected, project files found under app/)"
 else bad "--project/--ruleset path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+
+# The ruleset the door applies, per archetype: ruleset.json as it is for cli and
+# library, plus the `image` check for a service archetype, from the Actions app
+# and nothing else; and the checker expects the same name of the wall (#127).
+python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype cli > "$work/cli-ruleset.json"
+if "$root/scripts/check-ruleset.sh" "$work/cli-ruleset.json" >/dev/null 2>&1 && cmp -s <(jq -S . "$work/cli-ruleset.json") <(jq -S . "$root/ruleset.json")
+then ok "--print-ruleset for cli is ruleset.json, unchanged"; else bad "--print-ruleset for cli changed the wall"; fi
+for arch in backend data-ml; do
+  svc="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype "$arch")"
+  ids="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|select(.context=="image")|.integration_id]' <<<"$svc")"
+  n="$(jq '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context]|length' <<<"$svc")"
+  if [ "$ids" = "[15368]" ] && [ "$n" = 10 ]; then ok "--print-ruleset for $arch adds the image check from the Actions app, and nothing else"
+  else bad "--print-ruleset for $arch: image integration ids $ids, $n contexts"; fi
+done
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
+if grep -q "wall expectation: checks \[.*'image'\]" <<<"$out"; then ok "a backend instance expects the image check of the wall, from --ruleset"
+else bad "a backend instance's expectation lacks image"; printf '%s\n' "$out" | grep -E 'wall expectation' | sed 's/^/        /'; fi
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --archetype cli --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
+if grep -q "wall expectation: checks \[.*'ci / floor-check'\]," <<<"$out" && ! grep -q "'image'" <<<"$out"; then ok "a cli instance expects the nine, not image"
+else bad "a cli instance's expectation carries image"; printf '%s\n' "$out" | grep -E 'wall expectation' | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

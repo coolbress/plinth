@@ -46,7 +46,7 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.3.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.4.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
 If a check fails it stops there and prints the one fix. Two you may meet:
