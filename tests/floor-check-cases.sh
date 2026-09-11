@@ -367,12 +367,13 @@ python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype cl
 if "$root/scripts/check-ruleset.sh" "$work/cli-ruleset.json" >/dev/null 2>&1 && cmp -s <(jq -S . "$work/cli-ruleset.json") <(jq -S . "$root/ruleset.json")
 then ok "--print-ruleset for cli is ruleset.json, unchanged"; else bad "--print-ruleset for cli changed the wall"; fi
 for arch in backend data-ml; do
-  svc="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype "$arch")"
-  ids="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|select(.context=="image")|.integration_id]' <<<"$svc")"
-  n="$(jq '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context]|length' <<<"$svc")"
-  if [ "$ids" = "[15368]" ] && [ "$n" = 10 ]; then ok "--print-ruleset for $arch adds the image check from the Actions app, and nothing else"
-  else bad "--print-ruleset for $arch: image integration ids $ids, $n contexts"; fi
+  python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype "$arch" > "$work/$arch-ruleset.json"
+  if "$root/scripts/check-ruleset.sh" "$work/$arch-ruleset.json" image >/dev/null 2>&1
+  then ok "--print-ruleset for $arch is the wall plus image, from one app (check-ruleset.sh passes with image)"
+  else bad "--print-ruleset for $arch fails the wall's invariants:"; "$root/scripts/check-ruleset.sh" "$work/$arch-ruleset.json" image | grep FAIL -A2 | sed 's/^/        /'; fi
 done
+plant "a buildx build in the image job is a build" "sed -i.bak 's/docker build/docker buildx build/' .github/workflows/ci.yml" "__none__" || true
+plant "docker words outside the image job do not count" "printf 'jobs:\n  ci:\n    uses: x\n  image:\n    steps:\n      - run: echo\n  other:\n    steps:\n      - run: docker build . \&\& docker run t\n' > .github/workflows/ci.yml" "no \`image\` job"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
 if grep -q "wall expectation: checks \[.*'image'\]" <<<"$out"; then ok "a backend instance expects the image check of the wall, from --ruleset"
 else bad "a backend instance's expectation lacks image"; printf '%s\n' "$out" | grep -E 'wall expectation' | sed 's/^/        /'; fi

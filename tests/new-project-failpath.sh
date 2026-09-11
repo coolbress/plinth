@@ -520,8 +520,8 @@ check "render is final: real name, owner and license in pyproject.toml and uv.lo
 # ruleset.json as committed. Read from what the mock saw on stdin.
 check "a cli ruleset is ruleset.json, unchanged" \
   'cmp -s <(jq -S . "$work/home-none/ruleset-posted.json") <(jq -S . "$root/ruleset.json")'
-check "a backend ruleset requires the image check, from the Actions app, and the nine" \
-  '[ "$(jq -c "[.rules[]|select(.type==\"required_status_checks\").parameters.required_status_checks[]|select(.context==\"image\")|.integration_id]" "$work/home-backend/ruleset-posted.json")" = "[15368]" ] && [ "$(jq "[.rules[]|select(.type==\"required_status_checks\").parameters.required_status_checks[].context]|length" "$work/home-backend/ruleset-posted.json")" = 10 ]'
+check "a backend ruleset is the wall plus image, from the same app (check-ruleset.sh passes with image)" \
+  '"$root/scripts/check-ruleset.sh" "$work/home-backend/ruleset-posted.json" image >/dev/null'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
   'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.4.0 in " "$work/home-none/out"'
 

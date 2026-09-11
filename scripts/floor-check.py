@@ -25,6 +25,7 @@ widened) is a FAIL, not a warning.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -43,8 +44,9 @@ CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
 # a plain job that builds and runs the container (#127). Not a line in
 # ruleset.json: applied by hand, that file is the wall every archetype reports
 # to. The door asks this file for the archetype's ruleset (--print-ruleset) and
-# the expectation below adds the same name, so the two cannot disagree.
-IMAGE_CHECK = {"context": "image", "integration_id": 15368}
+# the expectation below adds the same name, so the two cannot disagree. It comes
+# from the same app as the nine (their integration_id), not a second literal.
+IMAGE_CHECK = "image"
 
 SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", ".scratch", "dist"}
 # What GitHub accepts under .github/ISSUE_TEMPLATE: forms in either YAML
@@ -465,17 +467,22 @@ def check_image_job(root: Path) -> None:
     """The check the ruleset requires of a service archetype exists in the caller (#127)."""
     ci = root / ".github" / "workflows" / "ci.yml"
     text = read(ci) if ci.is_file() else ""
-    ok(re.search(r"^  image:\s*$", text, re.M) is not None and "docker build" in text and "docker run" in text,
+    m = re.search(r"^  image:\s*$", text, re.M)
+    # The job's own lines: up to the next two-space key. `buildx build` is a build too.
+    block = re.split(r"^  \S", text[m.end():], maxsplit=1, flags=re.M)[0] if m else ""
+    ok(m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
        "ci.yml carries the image job (docker build, docker run)",
        "ci.yml has no `image` job that builds and runs the container; the ruleset requires that check for this archetype")
 
 
 def ruleset_for(data: dict, archetype: str | None) -> dict:
     """ruleset.json as the door applies it: with the image check for a service archetype."""
+    data = copy.deepcopy(data)
     if archetype in CONDITIONAL_ARCHETYPES:
         for r in data["rules"]:
             if r["type"] == "required_status_checks":
-                r["parameters"]["required_status_checks"].append(dict(IMAGE_CHECK))
+                checks = r["parameters"]["required_status_checks"]
+                checks.append({"context": IMAGE_CHECK, "integration_id": checks[0]["integration_id"]})
     return data
 
 

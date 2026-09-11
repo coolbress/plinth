@@ -21,7 +21,9 @@ inside pull requests and have no tag.
   service repository created earlier that raises its plinth pin sees
   `ci / floor-check` fail until `image` is required and the job exists; the
   name is a new contract, added and never renamed (#127). The door now needs
-  `python3`.
+  `python3`. `scripts/check-ruleset.sh` takes an optional second argument, the
+  contexts a shaped ruleset adds, so the body the door posts for a service
+  archetype is held to the same invariants as `ruleset.json`.
 
 ### Changed
 
