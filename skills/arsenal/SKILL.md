@@ -18,7 +18,7 @@ route by hand: run `/ask-matt` and let it pick the skill.
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
 | `mattpocock-skills` | Planning, specs, tickets, TDD, code review, domain modelling | Any change bigger than a typo; start with `/ask-matt` | ~1.6k tokens always on | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
-| `frontend-design` | Design direction for landing pages and app screens | "Make this screen look good"; it decides direction when the brief is vague | ~70 tokens always on | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/frontend-design) (Apache-2.0) |
+| `frontend-design` | Design direction for landing pages and app screens | Any page a person will look at, server-rendered HTML included, from its first version; the user will not ask for styling. It decides direction when the brief is vague | ~70 tokens always on | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/frontend-design) (Apache-2.0) |
 | `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions. Not for deciding; verify with `/research` | ~100 tokens always on, ~90k per call | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail-skills` | Write the least code that works; review and audit for over-engineering | While implementing, and when a diff feels bigger than the task | ~1k tokens always on, no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 
