@@ -491,8 +491,24 @@ check "every wayfinder label docs/agents/issue-tracker.md names is created (the 
 check "every label is created with --force, so GitHub's default set (wontfix) does not warn on every run" \
   'grep -q "^gh label create.* --force$" "$log" && [ "$(grep -c "^gh label create" "$log")" = "$(grep -c "^gh label create.* --force$" "$log")" ]'
 check "the default branch is main" '[ "$("$REAL_GIT" -C "$proj" rev-parse --verify -q main)" != "" ]'
-check "the first pull request is one README line on docs/first-pr" \
-  '[ "$("$REAL_GIT" -C "$proj" rev-parse --abbrev-ref HEAD)" = docs/first-pr ] && [ "$("$REAL_GIT" -C "$proj" diff --stat main docs/first-pr | tail -1 | grep -o "[0-9]* insertion")" = "1 insertion" ]'
+check "the first pull request is one README section on docs/first-pr, and nothing else" \
+  '[ "$("$REAL_GIT" -C "$proj" rev-parse --abbrev-ref HEAD)" = docs/first-pr ] && [ "$("$REAL_GIT" -C "$proj" diff --name-only main docs/first-pr)" = README.md ]'
+# What the door prints at the end reaches the next session through the
+# repository, not the terminal that ran the door (#126): the three sentences, in
+# order, in the pull request body (the mock logs it verbatim after `gh pr
+# create`) and under a First day heading in README.md; the terminal says where.
+three_lines() { # <file>: the three sentences' order in <file>, as one word
+  grep -oE "^- (If the merge stays blocked on CodeQL, push once more: .git commit --allow-empty -m .ci: trigger code scanning. && git push|If your everyday gh token is fine-grained with selected repositories, add .probe. to it: https://github.com/settings/personal-access-tokens|Dependabot opens pull requests from the first minute, and the wall treats them like any other)" "$1" \
+    | sed -E 's/^- If the merge.*/recovery/; s/^- If your everyday.*/token/; s/^- Dependabot.*/dependabot/' | tr "\n" " "; }
+check "the first pull request body carries the recovery push, the token line and the Dependabot note, in that order" \
+  '[ "$(sed -n "/^gh pr create/,/^gh /p" "$log" | three_lines /dev/stdin)" = "recovery token dependabot " ]'
+check "README.md says the same three things under First day, before the first session" \
+  '[ "$(sed -n "/^## First day$/,\$p" "$proj/README.md" | three_lines /dev/stdin)" = "recovery token dependabot " ] && grep -q "^Made with \[plinth\]" "$proj/README.md"'
+# The owner's template drops our headings, not the three sentences.
+check "the first pull request under the owner's template still carries the three sentences, in order" \
+  '[ "$(sed -n "/^gh pr create/,/^gh /p" "$work/home-shared-pr-only/calls.log" | three_lines /dev/stdin)" = "recovery token dependabot " ]'
+check "the terminal points at where the same text now lives" \
+  'grep -q "are in the pull request.s body and in README.md under \"First day\"" "$work/home-none/out"'
 check "CodeQL on the first push means no empty commit is pushed" '! grep -q "push -q$" "$log" && [ "$("$REAL_GIT" -C "$proj" rev-list --count main..docs/first-pr)" = 1 ]'
 check "render is final: real name, owner and license in pyproject.toml and uv.lock, src/probe/, no bootstrap.sh" \
   'grep -q probe "$proj/pyproject.toml" && grep -q MIT "$proj/pyproject.toml" && grep -q tester "$proj/pyproject.toml" && grep -q probe "$proj/uv.lock" && [ -d "$proj/src/probe" ] && [ ! -e "$proj/bootstrap.sh" ]'
