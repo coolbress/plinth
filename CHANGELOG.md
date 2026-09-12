@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-09-13
+
 ### Changed
 
 - `taste-skill` replaces `frontend-design` in the default set, pinned to
