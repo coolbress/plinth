@@ -39,6 +39,11 @@ Then start Claude Code and type `/plinth:arsenal` to see what was installed.
 /plinth:new-project my-app
 ```
 
+Type `/` and choose `plinth:new-project` from the list rather than pasting the
+line: the skill is user-only, so the agent cannot run it and cannot see it. An
+answer that it "is not installed" usually means the line reached the agent as
+text (a leading space is enough); `/plinth:arsenal` shows what is installed.
+
 `my-app` is created under your GitHub login; `someorg/my-app` creates it in an
 organization you belong to. Run it from anywhere: the generator creates
 `~/my-app` itself (`--dir=<path>` puts it elsewhere), and an existing directory
