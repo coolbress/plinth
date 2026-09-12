@@ -9,6 +9,16 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `new-project` renders plinth-template v1.4.1. The `image` job's comment
+  now tells a server instance to capture `docker logs` into a variable and
+  pipe from that; an instance that rewrote the step as `docker logs … | head
+  -1` under `pipefail` failed on some runs with exit 141, `head` closing the
+  pipe before `docker logs` finished, with the container healthy (#151, from
+  #149). The job itself is unchanged; the template's test refuses a live
+  docker process on a pipe.
+
 ## [0.5.8] - 2026-09-13
 
 ### Changed

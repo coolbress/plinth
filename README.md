@@ -72,7 +72,7 @@ token at the terminal and keeps it off every command line.
 The install works end to end and CI proves it on a clean runner. `new-project`
 creates a repository with the wall up, or creates nothing (its failure paths
 run in CI against a mocked `gh`). It renders
-[plinth-template v1.4.0](https://github.com/coolbress/plinth-template/releases/tag/v1.4.0),
+[plinth-template v1.4.1](https://github.com/coolbress/plinth-template/releases/tag/v1.4.1),
 whose CI reports every check the wall requires. In both live journeys so far
 (the v0.5.1 baseline by hand and one green `e2e` run on a runner, #62,
 2026-09-09) the first pull request merged, but only after the recovery commit
