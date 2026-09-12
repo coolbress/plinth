@@ -102,10 +102,17 @@ not() { ! "$@"; }
 saw() { grep -q -- "$1" "$GH_LOG"; }
 said() { grep -q -- "$1" "$work/out"; }
 deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
+# The wait is 2 s, not 1: e2e.sh reads its deadline from $SECONDS, whole seconds,
+# and a 1 s deadline set at the end of a wall-clock second is already reached at
+# the first poll's check, so a case that needs a second poll (a read that
+# succeeds, the recovery push, the merge after it) fails before it. With 2 s a
+# tick before the first check leaves 1 < 2, and the 2 s sleep makes the second
+# poll the last one, unless the first poll itself takes over a second (the
+# mocks take milliseconds). Every timed-out case now takes 2 s (#156).
 run() { # <env assignments...>
   export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"
   unset CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
-  env "$@" PLINTH_E2E_WAIT=1 "$work/scripts/e2e.sh" >"$work/out" 2>&1
+  env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
 
