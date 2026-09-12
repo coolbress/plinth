@@ -9,6 +9,17 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `tests/e2e-driver.sh` runs the journey with a 2 s wait instead of 1 s.
+  `scripts/e2e.sh` reads its deadline from `$SECONDS`, whole seconds, so a
+  1 s deadline set at the end of a wall-clock second was already reached at
+  the first poll's check, and the cases that need a second poll (a read that
+  succeeds, the recovery push, the merge after it) failed on some runs of
+  `ci / tools`, on `main` too. Measured on one laptop: 2 of 20 runs red
+  before, 0 of 5 after; the race forced by hand reproduces `main`'s failing
+  pair at 1 s and passes at 2 s (#156).
+
 ### Changed
 
 - The tutorial's `new-project` step, the README's skill table and the arsenal
