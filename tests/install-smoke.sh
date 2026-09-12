@@ -52,7 +52,7 @@ python3 - "$(claude plugin list --json)" "$matt_min" "$matt_max_exclusive" <<'PY
 import json, sys
 plugins = {p["id"]: p for p in json.loads(sys.argv[1])}
 range_min, range_max = (tuple(int(x) for x in v.split(".")) for v in sys.argv[2:4])
-want = ["plinth@plinth", "frontend-design@plinth", "last30days@plinth", "ponytail-skills@plinth",
+want = ["plinth@plinth", "taste-skill@plinth", "last30days@plinth", "ponytail-skills@plinth",
         "mattpocock-skills@claude-plugins-official"]
 for i, p in sorted(plugins.items()):
     print(f"  {i:45} {str(p.get('version')):12} enabled={p.get('enabled')} errors={p.get('errors', [])}")
@@ -78,4 +78,4 @@ expect() {  # expect <plugin> <needle>...
 }
 expect plinth@plinth "Skills (3)" "arsenal" "floor-check" "new-project" "Hooks (0)"
 expect ponytail-skills@plinth "Skills (6)" "Hooks (0)"
-expect frontend-design@plinth "Skills (1)"
+expect taste-skill@plinth "Skills (13)" "Hooks (0)"

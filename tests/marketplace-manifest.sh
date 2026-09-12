@@ -30,7 +30,7 @@ check(market.get("version") == plugin["version"], f"marketplace.json version equ
 
 deps = plugin["dependencies"]
 names = [d["name"] if isinstance(d, dict) else d for d in deps]
-check(names == ["mattpocock-skills", "frontend-design", "last30days", "ponytail-skills"],
+check(names == ["mattpocock-skills", "taste-skill", "last30days", "ponytail-skills"],
       f"dependencies are exactly the default four: {names}")
 matt = deps[0]
 # No "version" range here: Claude Code resolves a range against {name}--v* tags on the
@@ -39,7 +39,9 @@ matt = deps[0]
 check(isinstance(matt, dict) and matt.get("marketplace") == "claude-plugins-official" and "version" not in matt,
       "mattpocock-skills is resolved cross-marketplace, without a version range (see comment)")
 check("ponytail" in entries and "ponytail" not in names, "ponytail is in the catalog and not a dependency")
-for n in ("impeccable", "taste-skill", "i-have-adhd", "playbook", "review"):
+# One tool per slot: frontend-design and taste-skill are never both on (#68, from #149).
+# Impeccable is listed in the arsenal with its own installer and is not a marketplace entry.
+for n in ("frontend-design", "impeccable", "i-have-adhd", "playbook", "review"):
     check(n not in entries, f"no marketplace entry named {n}")
 
 pinned = {n: p["source"].get("sha") for n, p in entries.items() if isinstance(p["source"], dict)}
@@ -70,8 +72,8 @@ check(re.search(r"^allowed-tools:", fm, re.M) is None, "floor-check: allowed-too
 fm = frontmatter("arsenal")
 check("disable-model-invocation" not in fm, "arsenal: the model may open the catalog on its own")
 body = (root / "skills/arsenal/SKILL.md").read_text()
-check(all(f"`{n}`" in body for n in names + ["ponytail"]),
-      "arsenal lists the default four and the catalog entry")
+check(all(f"`{n}`" in body for n in names + ["ponytail", "impeccable"]),
+      "arsenal lists the default four and the two catalog entries")
 
 print(f"-- {fails} failed")
 sys.exit(1 if fails else 0)

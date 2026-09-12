@@ -9,6 +9,23 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `taste-skill` replaces `frontend-design` in the default set, pinned to
+  `ccbc156` of Leonxlnx/taste-skill (#68, from #149). In the second
+  real-project record the When line of 0.5.7 worked: Sonnet 5 reached for
+  `frontend-design` unprompted on a page a person looks at, and the owner read
+  the result as generic. On the same page and the same sentence `taste-skill`
+  took under five minutes, asked nothing, touched one file, and the owner
+  preferred it. Impeccable, the owner's favourite by eye, is listed and not
+  installed: its marketplace plugin did not register its skill on Claude Code
+  2.1.269, and its `npx impeccable install` writes hooks, agents and skills
+  into the repository, which nothing in the default set does. One measurement, one
+  page, one owner; the next observation looks again. The default install's
+  always-on estimate rises by about 1.6k tokens (thirteen skill descriptions
+  where there was one) on the `claude plugin details` meter; no check locks
+  that number, the meter is an estimate.
+
 ## [0.5.7] - 2026-09-11
 
 ### Fixed

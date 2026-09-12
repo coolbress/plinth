@@ -17,15 +17,13 @@
       "source": "./"
     },
     {
-      "name": "frontend-design",
-      "description": "Design direction for landing pages and app screens. Anthropic's first-party plugin, pinned here to a commit.",
+      "name": "taste-skill",
+      "description": "Frontend design that does not look templated: landing pages, portfolios, redesigns. Thirteen skills, no hooks; pinned here to a commit.",
       "category": "design",
       "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/anthropics/claude-plugins-official.git",
-        "path": "plugins/frontend-design",
-        "ref": "main",
-        "sha": "0120fb83da5d7cdaa52dd11979690f2dc5f76052"
+        "source": "url",
+        "url": "https://github.com/Leonxlnx/taste-skill.git",
+        "sha": "ccbc15639c97057cbfcf32ecebc38ef716e4bb37"
       }
     },
     {
