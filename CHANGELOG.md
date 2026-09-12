@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-09-13
+
 ### Changed
 
 - `new-project` renders plinth-template v1.4.1. The `image` job's comment
