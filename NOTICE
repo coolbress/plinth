@@ -4,9 +4,9 @@ The marketplace in .claude-plugin/marketplace.json lists third-party plugins.
 Entries mounted from a subdirectory (git-subdir) do not carry the upstream
 LICENSE file, so the licenses are recorded here, with the pinned commit.
 
-frontend-design
-  https://github.com/anthropics/claude-plugins-official  (plugins/frontend-design)
-  Apache-2.0  ·  commit 0120fb83da5d7cdaa52dd11979690f2dc5f76052
+taste-skill
+  https://github.com/Leonxlnx/taste-skill
+  MIT  ·  commit ccbc15639c97057cbfcf32ecebc38ef716e4bb37
 
 last30days
   https://github.com/mvanhorn/last30days-skill

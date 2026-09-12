@@ -47,11 +47,13 @@ Three skills, prefixed `/plinth:`:
 
 Installed with plinth as dependencies, each pinned to a commit:
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
-[frontend-design](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/frontend-design),
+[taste-skill](https://github.com/Leonxlnx/taste-skill) (frontend design that
+does not look templated),
 [last30days](https://github.com/mvanhorn/last30days-skill) and
 [ponytail-skills](https://github.com/DietrichGebert/ponytail) (the ponytail
 skills without its hooks). Listed but not installed: `ponytail`, the full
-plugin with hooks. Run
+plugin with hooks, and [Impeccable](https://github.com/pbakaus/impeccable),
+whose installer writes hooks, agents and skills into the repository. Run
 `/plinth:arsenal` for the catalog; licenses are in [NOTICE](NOTICE).
 
 Nothing in the plugin enforces anything. Enforcement is the ruleset on GitHub,
