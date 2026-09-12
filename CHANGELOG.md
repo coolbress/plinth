@@ -9,6 +9,15 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The tutorial's `new-project` step, the README's skill table and the arsenal
+  say how the door is invoked: type `/` and pick it. It is user-only, so the
+  agent cannot see or run it, and an agent answering that it is not installed
+  usually means the line reached it as text. In the second real-project record the
+  owner pasted the line with a leading space and lost four minutes to that
+  answer (#152, from #149).
+
 ## [0.5.9] - 2026-09-13
 
 ### Changed
