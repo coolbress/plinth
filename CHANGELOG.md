@@ -9,6 +9,28 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The "First day" note the door writes into the first pull request and
+  README.md says two more things about Dependabot: its first pull request
+  usually lands while the door waits for CodeQL, so the door's own is #2; and
+  after "Update branch" the merge stays blocked for a minute or two while the
+  required checks and CodeQL run on the new head, a merge tried then is refused
+  with "the base branch policy prohibits the merge", and the answer is to wait
+  for a clean state, not to add an approval. Measured on a real instance on 2026-09-16
+  with `PUT /pulls/N/merge`: a Dependabot pull request merged with no review
+  before and after a web branch update; the only refusal named the strict
+  status-check rule ("10 of 10 required status checks are expected"). The
+  approval the second real-project record needed was a merge attempted before
+  those checks had rerun (#153, from #149).
+
+- The tutorial's `new-project` step, the README's skill table and the arsenal
+  say how the door is invoked: type `/` and pick it. It is user-only, so the
+  agent cannot see or run it, and an agent answering that it is not installed
+  usually means the line reached it as text. In the second real-project record the
+  owner pasted the line with a leading space and lost four minutes to that
+  answer (#152, from #149).
+
 ### Fixed
 
 - `tests/e2e-driver.sh` runs the journey with a 2 s wait instead of 1 s.
@@ -19,15 +41,6 @@ inside pull requests and have no tag.
   `ci / tools`, on `main` too. Measured on one laptop: 2 of 20 runs red
   before, 0 of 5 after; the race forced by hand reproduces `main`'s failing
   pair at 1 s and passes at 2 s (#156).
-
-### Changed
-
-- The tutorial's `new-project` step, the README's skill table and the arsenal
-  say how the door is invoked: type `/` and pick it. It is user-only, so the
-  agent cannot see or run it, and an agent answering that it is not installed
-  usually means the line reached it as text. In the second real-project record the
-  owner pasted the line with a leading space and lost four minutes to that
-  answer (#152, from #149).
 
 ## [0.5.9] - 2026-09-13
 

@@ -75,8 +75,10 @@ The generator opened a pull request titled `docs: first pull request through
 the wall`. Its change is a **First day** section appended to `README.md`,
 three sentences for the next session: the push that clears a merge stuck on
 CodeQL, adding the repository to a fine-grained token, and what to do with
-the pull requests Dependabot opens from the first minute. The same three are
-in the pull request's body. Then the line:
+the pull requests Dependabot opens from the first minute (its first usually
+lands before the door's, which is why yours is #2, and after "Update branch"
+the merge waits a minute or two for the checks, not for an approval). The
+same three are in the pull request's body. Then the line:
 
 ```text
 Made with [plinth](https://github.com/coolbress/plinth).

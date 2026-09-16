@@ -514,6 +514,14 @@ check "the first pull request body carries the recovery push, the token line and
   '[ "$(sed -n "/^gh pr create/,/^gh /p" "$log" | three_lines /dev/stdin)" = "recovery token dependabot " ]'
 check "README.md says the same three things under First day, before the first session" \
   '[ "$(sed -n "/^## First day$/,\$p" "$proj/README.md" | three_lines /dev/stdin)" = "recovery token dependabot " ] && grep -q "^Made with \[plinth\]" "$proj/README.md"'
+# #153: the Dependabot line also says the door's pull request is #2, names the
+# refusal a merge meets while the checks rerun after "Update branch", and says
+# to wait rather than approve (measured on a real instance, 2026-09-16: a
+# person's own branch update needed no approval once the checks had rerun).
+dependabot_says() { # <file>: the Dependabot line carries the three #153 phrases
+  grep -E "^- Dependabot opens pull requests" "$1" | grep -F "pull request is #2" | grep -F "prohibits the merge" | grep -qF "wait for the state to read clean rather than adding an approval"; }
+check "the Dependabot line says the door's pull request is #2 and an update waits for checks, not an approval, in the body and README alike" \
+  'dependabot_says <(sed -n "/^gh pr create/,/^gh /p" "$log") && dependabot_says "$proj/README.md"'
 # The owner's template drops our headings, not the three sentences.
 check "the first pull request under the owner's template still carries the three sentences, in order" \
   '[ "$(sed -n "/^gh pr create/,/^gh /p" "$work/home-shared-pr-only/calls.log" | three_lines /dev/stdin)" = "recovery token dependabot " ]'
