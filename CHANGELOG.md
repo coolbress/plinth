@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-09-17
+
 ### Changed
 
 - The "First day" note the door writes into the first pull request and
