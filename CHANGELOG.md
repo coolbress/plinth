@@ -9,6 +9,22 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The e2e journey (`scripts/e2e.sh`, the nightly and the release gate)
+  renders a backend instance: the door runs with `--archetype=backend`, so
+  the ruleset it applies is shaped with the `image` check and the instance's
+  first pull request waits for the template's `image` job like every other
+  required check. Before, the door ran with its cli default, and the two
+  template releases about that job (v1.4.0, #127; v1.4.1, #151) had only
+  ever been exercised on real GitHub by a hand-run repository: v0.5.9 and
+  v0.5.10 shipped behind a green gate that never ran the check. The cli path
+  stays covered offline (`tests/new-project-failpath.sh`,
+  `tests/e2e-driver.sh`); one journey a night, no matrix. The log says
+  `archetype: backend` and lists the checks the pull request waited for, the
+  job summary names the archetype, and the driver test fails if the
+  archetype is missing or another value (#164).
+
 ## [0.5.10] - 2026-09-17
 
 ### Changed
