@@ -30,10 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # One version behind on purpose (#167): this pin exists so that Dependabot
-      # opens its first pull request here, which is what #167 has to observe. The
-      # workflow runs only on workflow_dispatch and has never run. Dependabot's
-      # pull request raises the pin; delete this comment when it merges.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
