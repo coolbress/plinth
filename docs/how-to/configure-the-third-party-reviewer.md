@@ -8,7 +8,8 @@ The check is `third-party / review`. It passes when the Codex code reviewer
 completion comment on the pull request's current commit. That is evidence of
 participation: it does not say the whole change was reviewed, that the
 findings were handled, or anything about the code's quality. It never blocks
-on what the reviewer said. Drafts are not summoned; a ready pull request must
+on what the reviewer said. Drafts, bot-authored and release pull requests are
+not summoned ([below](#pull-requests-it-passes-without-summoning)); any other ready pull request must
 show a signal on its current head, and the check summons the reviewer at most
 twice per commit.
 
@@ -50,6 +51,29 @@ pull request that changes that section together with other files, so a rule
 change arrives on its own and is visible; it compares only that section and
 only within one pull request, so it is not a guarantee that the instructions
 cannot be weakened.
+
+### Pull requests it passes without summoning
+
+On two kinds of pull request the check passes at once, posts no summons and
+looks for no review; the job's log says which:
+
+- `bot-authored pull request: not summoned`: the author's type is `Bot`, or
+  the login is a bot's (`dependabot[bot]`, `app/dependabot`, `dependabot`).
+- `release pull request: not summoned`: the title is the one
+  `scripts/make-release.sh` writes, `chore(release): vX.Y.Z`. A title that
+  only resembles it (`chore(release-notes): …`) is summoned as usual.
+
+On these the check is no evidence that anyone looked. If `third-party /
+review` is one of your required checks, such a pull request meets it with no
+review attached. To have one reviewed, comment the summons (`@codex review`)
+on it yourself; the check still passes either way.
+
+Two things this does not do. The provider's own app may review anyway: Codex
+starts on its own when a pull request is opened or marked ready, and has no
+setting to skip by author or title. And skipping the summons skips findings:
+on the first Dependabot pull request here (#178) the reviewer had nothing to
+say about the bump and one correct comment about this repository's text next
+to it.
 
 ## What to do with the findings
 
