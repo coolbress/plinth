@@ -508,7 +508,7 @@ check "the first pull request is one README section on docs/first-pr, and nothin
 # order, in the pull request body (the mock logs it verbatim after `gh pr
 # create`) and under a First day heading in README.md; the terminal says where.
 three_lines() { # <file>: the three sentences' order in <file>, as one word
-  grep -oE "^- (If the merge stays blocked on CodeQL, push once more: .git commit --allow-empty -m .ci: trigger code scanning. && git push|If your everyday gh token is fine-grained with selected repositories, add .probe. to it: https://github.com/settings/personal-access-tokens|Dependabot opens pull requests from the first minute, and the wall treats them like any other)" "$1" \
+  grep -oE "^- (If the merge stays blocked on CodeQL, push once more: .git commit --allow-empty -m .ci: trigger code scanning. && git push|If your everyday gh token is fine-grained with selected repositories, add .probe. to it: https://github.com/settings/personal-access-tokens|Dependabot opens pull requests from the first minute: merge one when every required check is green)" "$1" \
     | sed -E 's/^- If the merge.*/recovery/; s/^- If your everyday.*/token/; s/^- Dependabot.*/dependabot/' | tr "\n" " "; }
 check "the first pull request body carries the recovery push, the token line and the Dependabot note, in that order" \
   '[ "$(sed -n "/^gh pr create/,/^gh /p" "$log" | three_lines /dev/stdin)" = "recovery token dependabot " ]'
@@ -518,8 +518,8 @@ check "README.md says the same three things under First day, before the first se
 # refusal a merge meets while the checks rerun after "Update branch", and says
 # to wait rather than approve (measured on a real instance, 2026-09-16: a
 # person's own branch update needed no approval once the checks had rerun).
-dependabot_says() { # <file>: the Dependabot line carries the three #153 phrases
-  grep -E "^- Dependabot opens pull requests" "$1" | grep -F "pull request is #2" | grep -F "prohibits the merge" | grep -qF "wait for the state to read clean rather than adding an approval"; }
+dependabot_says() { # <file>: the Dependabot line carries the three #153 phrases and #179's
+  grep -E "^- Dependabot opens pull requests" "$1" | grep -F "CodeQL does not analyse a head Dependabot pushed" | grep -F "pull request is #2" | grep -F "prohibits the merge" | grep -qF "wait for the state to read clean rather than adding an approval"; }
 check "the Dependabot line says the door's pull request is #2 and an update waits for checks, not an approval, in the body and README alike" \
   'dependabot_says <(sed -n "/^gh pr create/,/^gh /p" "$log") && dependabot_says "$proj/README.md"'
 # The owner's template drops our headings, not the three sentences.

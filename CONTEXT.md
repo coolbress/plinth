@@ -8,8 +8,10 @@ from stay in the lab.
   asserted properties hold. Raised on GitHub, not in the plugin, so an agent cannot
   turn it off. Check names: `ci / pr-title`, `lint`, `typecheck`, `test`,
   `build`, `secrets`, `deps`, `diff-size`, `floor-check`; CodeQL is required
-  as a code scanning rule, not as a check name, so a missing analysis blocks
-  with a reason instead of a check that never reports.
+  as a code scanning rule, not as a check name: with default setup off the
+  rule blocks with a reason (#41), where a required name would never report. On a
+  head Dependabot pushed, default setup starts no analysis and the rule still
+  passes; `main` is analysed after the merge (#179).
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
   the wall, opens the first pull request, and deletes the repository if any
   step after creation fails.
