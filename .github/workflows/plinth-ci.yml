@@ -80,7 +80,7 @@ jobs:
           set -euo pipefail
           v="$(sed -n 's/^actionlint_version="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
           sum="$(sed -n 's/^actionlint_sha256="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
-          [ -n "$v" ] && [ -n "$sum" ] || { echo "actionlint pin not found in tests/workflow-lint.sh"; exit 1; }
+          if [ -z "$v" ] || [ -z "$sum" ]; then echo "actionlint pin not found in tests/workflow-lint.sh"; exit 1; fi
           d="$RUNNER_TEMP/actionlint"; mkdir -p "$d"
           f="actionlint_${v}_linux_amd64.tar.gz"
           curl -fsSL --retry 3 -o "$d/$f" \
