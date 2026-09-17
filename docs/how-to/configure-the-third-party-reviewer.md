@@ -54,14 +54,17 @@ cannot be weakened.
 
 ### Pull requests it passes without summoning
 
-On two kinds of pull request the check passes at once, posts no summons and
-looks for no review; the job's log says which:
+On two kinds of pull request the step that looks for a review passes at once,
+posts no summons and looks for no review; its log says which. The step before
+it still runs on them: one that changes `## Code Review Rules` together with
+other files fails the check like any other.
 
 - `bot-authored pull request: not summoned`: the author's type is `Bot`, or
   the login is a bot's (`dependabot[bot]`, `app/dependabot`, `dependabot`).
 - `release pull request: not summoned`: the title is the one
-  `scripts/make-release.sh` writes, `chore(release): vX.Y.Z`. A title that
-  only resembles it (`chore(release-notes): …`) is summoned as usual.
+  `scripts/make-release.sh` writes, exactly `chore(release): vX.Y.Z`. A title
+  that only resembles it (`chore(release-notes): …`, `chore(release): v2 docs
+  only`) is summoned as usual.
 
 On these the check is no evidence that anyone looked. If `third-party /
 review` is one of your required checks, such a pull request meets it with no

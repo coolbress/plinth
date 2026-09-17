@@ -61,6 +61,15 @@ gate ''     'chore(release-notes): … is summoned'       'TITLE=chore(release-n
 gate ''     'chore: release the lock is summoned'       'TITLE=chore: release the lock'
 gate ''     'a title that mentions the release title later is summoned' 'TITLE=docs: what chore(release): v1 means'
 gate ''     'chore(release): without a version is summoned' 'TITLE=chore(release): notes'
+gate ''     'a version followed by more words is summoned' 'TITLE=chore(release): v2 docs only'
+gate ''     'a version with a suffix is summoned'          'TITLE=chore(release): v1.2.3-not-a-release'
+gate ''     'a two-part version is summoned'               'TITLE=chore(release): v1.2'
+# The tag shape here is the one make-release.sh accepts.
+if grep -qF '[[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]' "$root/scripts/make-release.sh"; then
+  echo "  PASS  make-release.sh still accepts only vX.Y.Z"
+else
+  echo "  FAIL  make-release.sh's tag check changed; the gate's pattern may be stale" >&2; fails=$((fails+1))
+fi
 # A title is text its author chooses: it must stay data.
 gate ''     'a title with shell syntax is not run' 'TITLE=$(touch '"$tmp"'/pwned) `touch '"$tmp"'/pwned`; chore(release): v1'
 if [ -e "$tmp/pwned" ]; then echo "  FAIL  the title was executed" >&2; fails=$((fails+1)); else echo "  PASS  the title stayed data"; fi

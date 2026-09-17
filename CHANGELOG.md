@@ -13,8 +13,9 @@ inside pull requests and have no tag.
 
 - `third-party / review` passes a bot-authored pull request (author type
   `Bot`, or a login spelled `…[bot]`, `app/…` or `dependabot`) and a release
-  pull request (title `chore(release): vX.Y.Z`, the one `make-release.sh`
-  writes) without posting the summons or waiting, and its log says which.
+  pull request (title exactly `chore(release): vX.Y.Z`, the one
+  `make-release.sh` writes) without posting the summons or waiting, and its
+  log says which. The step on the reviewer's instructions still runs on them.
   Callers see no renamed input, job or check name. On those pull requests the
   check is no evidence of a review; a repository that requires it should know
   that. Commenting the summons still gets a review, and the provider's own app

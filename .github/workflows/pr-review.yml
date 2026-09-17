@@ -31,9 +31,10 @@ name: pr-review
 #        agents on closed pull requests), so an unverified verdict is not a
 #        merge condition. Findings are still handled: reproduce, then fix or
 #        say why not (docs/how-to/configure-the-third-party-reviewer.md).
-#   no   anything on a draft, a bot-authored pull request or a release pull
-#        request (`chore(release): vX.Y.Z`): those pass without a summons and
-#        without a review, and the log says which (#167).
+#   no   a review on a draft, a bot-authored pull request or a release pull
+#        request (`chore(release): vX.Y.Z`): on those the second step passes
+#        without a summons and without looking for a review, and its log says
+#        which (#167). The first step, on the instructions, still runs on them.
 #   no   that anyone read the review. Reading is the job of the person who
 #        presses merge.
 #   no   that the reviewer is independent of the author: `reviewer-logins` is a
@@ -87,7 +88,7 @@ on:
 jobs:
   review:
     # No `if:` here: a skipped job has no check name. Drafts, bot-authored and
-    # release pull requests are handled in the step below, which passes
+    # release pull requests are handled in the second step, which passes
     # without summoning a review.
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -233,8 +234,9 @@ jobs:
           fi
           # A release pull request: the title scripts/make-release.sh writes.
           # Four generated lines, guarded by tests/make-release-guards.sh and
-          # the e2e run on the merged commit. One constant, not a filter.
-          if printf '%s' "${TITLE:-}" | grep -Eq '^chore\(release\): v[0-9]'; then
+          # the e2e run on the merged commit. One constant, not a filter: the
+          # whole title, with the only tag shape make-release.sh accepts.
+          if printf '%s' "${TITLE:-}" | grep -Eq '^chore\(release\): v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "release pull request: not summoned"
             exit 0
           fi
