@@ -25,7 +25,15 @@ directory exactly as the README says, so it needs network and a few minutes.
 downloads the one version pinned in that file, the same file `ci / docs` runs,
 and lints from its cache afterwards. Everything else runs offline in seconds.
 
-The link check is the one step of a required check this list leaves out.
+That list is every step of `ci / install` and `ci / docs` but one, the link
+check. It is not all of `ci / tools`: its four linters (actionlint,
+`bash -n`, shellcheck, zizmor) run there at versions the workflow pins, and
+no local command here stands in for them. They matter when the change touches
+`scripts/`, `tests/` or a workflow; the commands to copy are the `run:` lines
+of the `tools` job in `.github/workflows/plinth-ci.yml`. CodeQL and the
+`canary` jobs run only on GitHub.
+
+The link check is left out on purpose.
 `ci / docs` runs a checksum-pinned Linux build of lychee
 (`.github/workflows/plinth-ci.yml`); a package manager installs whatever
 version it has, the check needs network, and the sites it asks can answer

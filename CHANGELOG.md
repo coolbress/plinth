@@ -35,7 +35,8 @@ inside pull requests and have no tag.
   gives the command for a local look with an unpinned lychee. The documented
   test loop names the tests that failed and ends non-zero; it used to end
   with the status of the last test, so a failure in the middle still read as
-  0 (#113).
+  0. CONTRIBUTING also names what the list does not cover: the four linters
+  of `ci / tools`, CodeQL and the canary jobs (#113).
 
 ## [0.5.11] - 2026-09-17
 
