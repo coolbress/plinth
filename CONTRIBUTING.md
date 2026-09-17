@@ -11,7 +11,7 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke and markdownlint need network
+# every test; install-smoke, markdownlint and workflow-lint need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
@@ -23,15 +23,25 @@ without it a failure in the middle scrolls past and the block still ends in 0.
 directory exactly as the README says, so it needs network and a few minutes.
 `tests/markdownlint.sh` needs Node.js, and network the first time: `npx`
 downloads the one version pinned in that file, the same file `ci / docs` runs,
-and lints from its cache afterwards. Everything else runs offline in seconds.
+and lints from its cache afterwards. `tests/shell-lint.sh` needs shellcheck and
+`tests/workflow-lint.sh` needs actionlint and `uvx` (or `pipx`), with network
+the first time for zizmor; a missing tool is a FAIL that names the install
+command, never a skip. Everything else runs offline in seconds.
 
-That list is every step of `ci / install` and `ci / docs` but one, the link
-check. It is not all of `ci / tools`: its four linters (actionlint,
-`bash -n`, shellcheck, zizmor) run there at versions the workflow pins, and
-no local command here stands in for them. They matter when the change touches
-`scripts/`, `tests/` or a workflow; the commands to copy are the `run:` lines
-of the `tools` job in `.github/workflows/plinth-ci.yml`. CodeQL and the
-`canary` jobs run only on GitHub.
+That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
+one, the link check. CodeQL and the `canary` jobs run only on GitHub.
+
+The two lint files are what `ci / tools` calls, with the same flags, but a
+local pass is the CI pass only where the tool is the same one:
+
+- zizmor is: both sides run the exact version pinned in `tests/workflow-lint.sh`.
+- actionlint is pinned there too, and CI installs that checksum-verified Linux
+  build. A laptop runs the actionlint it has. Another version still runs, and
+  the output names it and says the pass is not the pinned pass; in CI another
+  version is a FAIL.
+- shellcheck and bash are not pinned, in CI or here. The file prints the
+  versions it ran. macOS ships bash 3.2 and the runner has 5.x, so `bash -n`
+  can fail locally on syntax CI accepts: a stricter pass, not the same one.
 
 The link check is left out on purpose.
 `ci / docs` runs a checksum-pinned Linux build of lychee

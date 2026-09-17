@@ -9,6 +9,19 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `ci / tools` runs its four linters through `tests/shell-lint.sh` (`bash -n`,
+  shellcheck) and `tests/workflow-lint.sh` (actionlint, zizmor), so
+  CONTRIBUTING's "every `tests/*.sh`" runs them with CI's flags. The actionlint
+  and zizmor pins live only in `tests/workflow-lint.sh`; the workflow's install
+  step reads them from there. A missing tool is a FAIL with the install
+  command and does not hide the other tool's result. An actionlint that is not
+  the pinned version is a FAIL in CI; locally it runs and the output says the
+  pass is not the pinned pass. shellcheck and bash stay unpinned and the
+  versions that ran are printed. `tests/lint-wrappers-cases.sh` holds those
+  verdicts with stub tools (#170).
+
 ## [0.5.12] - 2026-09-17
 
 ### Added
