@@ -11,12 +11,15 @@ inside pull requests and have no tag.
 
 ### Changed
 
-- `third-party / review` passes a bot-authored pull request (author type
-  `Bot`, or a login spelled `…[bot]`, `app/…` or `dependabot`) and a release
-  pull request (title exactly `chore(release): vX.Y.Z`, the one
-  `make-release.sh` writes) without posting the summons or waiting, and its
-  log says which. The step on the reviewer's instructions still runs on them.
-  Callers see no renamed input, job or check name. On those pull requests the
+- `third-party / review` passes a pull request Dependabot opened, as long as
+  every commit on it is Dependabot's and verified, without posting the summons
+  or waiting, and its log says so. Every other bot's pull request, a coding
+  agent's included, is looked at like a person's. A new input,
+  `pass-release-pull-requests` (default `false`), does the same for a pull
+  request titled exactly `chore(release): vX.Y.Z`; a title is its author's
+  choice, so it is off unless the caller asks, and this repository's own call
+  turns it on. The step on the reviewer's instructions still runs on all of
+  them. No input, job or check name is renamed. On those pull requests the
   check is no evidence of a review; a repository that requires it should know
   that. Commenting the summons still gets a review, and the provider's own app
   may review on its own trigger. The decision is lifted out of the workflow
