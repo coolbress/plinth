@@ -1,5 +1,8 @@
 # Keeps the commit-SHA pins on GitHub Actions current. The repository requires
 # SHA pinning, so these are the only version bumps a workflow file ever gets.
+# To run it now instead of waiting for the week: Insights, Dependency graph,
+# Dependabot, "Recent update jobs", "Check for updates". That page answers 404
+# to a browser that is not signed in with write access.
 version: 2
 updates:
   - package-ecosystem: github-actions
