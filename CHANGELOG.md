@@ -15,9 +15,11 @@ inside pull requests and have no tag.
   blocks". Measured otherwise: CodeQL default setup starts no analysis for a
   head Dependabot pushed, the `CodeQL` check lands `neutral`, and both the rule
   and the older required check name accept it (plinth-template #16 merged that
-  way on 2026-09-16). CONTEXT.md and the README now say what happens; no
-  check or ruleset changed, and `main` is still analysed after the merge
-  (#179).
+  way on 2026-09-16). CONTEXT.md and the README now say what happens, and the
+  First day note the door writes into a new repository no longer says the wall
+  treats Dependabot's pull requests like any other: it says CodeQL does not
+  analyse those heads and what does run on them. No check or ruleset changed,
+  and `main` is still analysed after the merge (#179).
 
 ### Changed
 
