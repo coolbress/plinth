@@ -214,12 +214,14 @@ quiet "SHA pins, a local action, a docker digest, a comment and a run block are 
   "wf '- uses: actions/checkout@$sha40 # v4' '- uses: ./.github/actions/x' '- uses: docker://alpine@sha256:$sha64' '# - uses: old/one@v1' '- run: |' '    uses: not/yaml@v1' '  env:' '    A: b' > .github/workflows/t.yml" "pinned|workflow"
 quiet "the word uses inside a run line is not a uses key" "wf '- run: grep -rn \"uses:\" .github/workflows' > .github/workflows/t.yml" "pins not verified"
 says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
+says  "an explicit-key uses is not verified either" "wf '- ? uses' '  : actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
 says  "a repository with no workflow says so rather than pass" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm -r .github/workflows" "INFO  no workflow file under \.github/workflows"
 
 # JSON logs: a service archetype's source, read statically. A hint is a hint:
 # the PASS line says it is not proof of what the process prints.
 says  "the good fixture's formatter is a static hint, and is called one" ":" "PASS  JSON logs: static hint in src/app/__main__\.py .*not proof"
 warns "a service that only prints is named with its entry point" "printf 'print(\"plain text startup\")\n' > src/app/__main__.py" "JSON logs: no logging found under src/ (entry point src/app/__main__\.py)"
+warns "a hint that is only a comment is not a hint" "printf '# TODO: add pythonjsonlogger\nprint(1)\n' > src/app/__main__.py" "JSON logs: no logging found"
 says  "structlog's JSONRenderer is a hint" "printf 'import structlog\nstructlog.configure(processors=[structlog.processors.JSONRenderer()])\n' > src/app/__main__.py" "PASS  JSON logs: static hint in src/app/__main__\.py"
 says  "python-json-logger in another module is a hint, named by its path" "printf 'print(1)\n' > src/app/__main__.py && printf 'from pythonjsonlogger import jsonlogger\n' > src/app/log.py" "PASS  JSON logs: static hint in src/app/log\.py"
 says  "logging this checker does not recognise is not verified, not passed" "printf 'import logging\nlogging.basicConfig()\n' > src/app/__main__.py" "SKIP  JSON logs not verified: src/app/__main__\.py"

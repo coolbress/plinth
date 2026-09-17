@@ -459,7 +459,7 @@ def check_action_pins(root: Path) -> None:
                 total += 1
                 if not action_is_pinned(m.group(2)):
                     unpinned.append((n, m.group(2)))
-            elif re.search(r"""(?:^|[{,])\s*(?:-\s+)?['"]?uses['"]?\s*:""", line):  # a key, not a word inside a value
+            elif re.search(r"""(?:^|[{,])\s*(?:-\s+)?(?:\?\s+)?['"]?uses['"]?\s*(?::|$)""", line):  # a key, not a word inside a value
                 unread.append(n)
         if unpinned:
             clean = False
@@ -589,7 +589,9 @@ def check_json_logs(project: Path) -> None:
     if not files:
         result("SKIP", "JSON logs not verified: no Python file under src/")
         return
-    texts = {f.relative_to(project).as_posix(): read(f) for f in files}
+    # Comments are dropped: `# TODO: add pythonjsonlogger` is not a setup. A string
+    # is kept, because logging.config.dictConfig names its formatter in one.
+    texts = {f.relative_to(project).as_posix(): re.sub(r"#.*", "", read(f)) for f in files}
     for rel, text in texts.items():
         for label, patterns in JSON_LOG_HINTS:
             if all(re.search(p, text) for p in patterns):
