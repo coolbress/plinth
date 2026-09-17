@@ -71,29 +71,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # Official release binary, checksum verified: rhysd/actionlint has no
-      # action of its own, and a third-party wrapper would need allowlisting.
-      # The version and the checksum are read from tests/workflow-lint.sh, the
-      # one pin; that script fails here when another version ends up on PATH.
-      - name: Install actionlint
-        run: |
-          set -euo pipefail
-          v="$(sed -n 's/^actionlint_version="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
-          sum="$(sed -n 's/^actionlint_sha256="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
-          if [ -z "$v" ] || [ -z "$sum" ]; then echo "actionlint pin not found in tests/workflow-lint.sh"; exit 1; fi
-          d="$RUNNER_TEMP/actionlint"; mkdir -p "$d"
-          f="actionlint_${v}_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/rhysd/actionlint/releases/download/v${v}/$f"
-          echo "${sum}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" actionlint
-          echo "$d" >> "$GITHUB_PATH"
-
       # The commands, their flags and the reason for each live in the two
-      # files, so a local run is the same call.
-      - name: Workflow syntax, usage and security (actionlint, zizmor)
-        run: ./tests/workflow-lint.sh
-
+      # lint files, so a local run is the same call. A failed step skips the
+      # ones after it, so after checkout the steps that need nothing from the
+      # network run first, and the two that download (actionlint's binary, then
+      # zizmor through pipx) run last.
       - name: Shell syntax and static analysis (bash -n, shellcheck)
         run: ./tests/shell-lint.sh
 
@@ -123,6 +105,27 @@ jobs:
 
       - name: The e2e driver deletes what it made on every failure, and names what it could not
         run: ./tests/e2e-driver.sh
+
+      # Official release binary, checksum verified: rhysd/actionlint has no
+      # action of its own, and a third-party wrapper would need allowlisting.
+      # The version and the checksum are read from tests/workflow-lint.sh, the
+      # one pin; that script fails here when another version ends up on PATH.
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          v="$(sed -n 's/^actionlint_version="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
+          sum="$(sed -n 's/^actionlint_sha256="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
+          if [ -z "$v" ] || [ -z "$sum" ]; then echo "actionlint pin not found in tests/workflow-lint.sh"; exit 1; fi
+          d="$RUNNER_TEMP/actionlint"; mkdir -p "$d"
+          f="actionlint_${v}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/rhysd/actionlint/releases/download/v${v}/$f"
+          echo "${sum}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" actionlint
+          echo "$d" >> "$GITHUB_PATH"
+
+      - name: Workflow syntax, usage and security (actionlint, zizmor)
+        run: ./tests/workflow-lint.sh
 
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
   # and the README install block is the one the tutorial shows.
