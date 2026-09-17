@@ -459,7 +459,11 @@ def check_action_pins(root: Path) -> None:
                 total += 1
                 if not action_is_pinned(m.group(2)):
                     unpinned.append((n, m.group(2)))
-            elif re.search(r"""(?:^|[{,])\s*(?:-\s+)?(?:\?\s+)?['"]?uses['"]?\s*(?::|$)""", line):  # a key, not a word inside a value
+            # The net is wider than any one spelling: the word anywhere in the key part
+            # of the line (`? uses`, `&a uses:`, `"uses":`), or as a key inside a flow
+            # mapping. A word inside a value (`run: grep uses:`) is not a key.
+            elif re.search(r"\buses\b", re.split(r":(?:\s|$)", line, maxsplit=1)[0]) \
+                    or re.search(r"""[{,]\s*['"]?uses['"]?\s*:""", line):
                 unread.append(n)
         if unpinned:
             clean = False

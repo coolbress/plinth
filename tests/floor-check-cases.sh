@@ -215,6 +215,8 @@ quiet "SHA pins, a local action, a docker digest, a comment and a run block are 
 quiet "the word uses inside a run line is not a uses key" "wf '- run: grep -rn \"uses:\" .github/workflows' > .github/workflows/t.yml" "pins not verified"
 says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
 says  "an explicit-key uses is not verified either" "wf '- ? uses' '  : actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
+says  "an anchored uses key is not verified either" "wf '- &step uses: actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
+says  "a uses later in a flow mapping is not verified either" "wf '- {name: a, uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
 says  "a repository with no workflow says so rather than pass" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm -r .github/workflows" "INFO  no workflow file under \.github/workflows"
 
 # JSON logs: a service archetype's source, read statically. A hint is a hint:
