@@ -11,12 +11,25 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-for t in tests/*.sh; do "./$t"; done                        # every test; install-smoke needs network
+for t in tests/*.sh; do "./$t"; done                        # every test; install-smoke and markdownlint need network
 ```
 
 `tests/install-smoke.sh` installs plinth into a temporary Claude Code config
 directory exactly as the README says, so it needs network and a few minutes.
-Everything else runs offline in seconds.
+`tests/markdownlint.sh` needs Node.js, and network the first time: `npx`
+downloads the one version pinned in that file, the same file `ci / docs` runs,
+and lints from its cache afterwards. Everything else runs offline in seconds.
+
+The link check is the one step of a required check this list leaves out.
+`ci / docs` runs a checksum-pinned Linux build of lychee
+(`.github/workflows/plinth-ci.yml`); a package manager installs whatever
+version it has, the check needs network, and the sites it asks can answer
+differently from one hour to the next, so a local pass does not promise a
+pass there. To look before pushing anyway, with a lychee of your own:
+
+```bash
+lychee --no-progress --exclude-path .scratch -- './**/*.md'   # network; not the pinned build
+```
 
 Tier 2 is the same journey on real GitHub, and no pull request runs it:
 

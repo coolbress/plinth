@@ -143,8 +143,9 @@ jobs:
         with:
           persist-credentials: false
 
+      # The version is pinned in the test, so a local run lints with what runs here.
       - name: markdownlint
-        run: npx --yes markdownlint-cli2@0.23.2 "**/*.md"
+        run: ./tests/markdownlint.sh
 
       # Official release binary, checksum verified: no third-party action to allowlist.
       # Bump the version and the checksum together (checksum: the release's .sha256 asset).
