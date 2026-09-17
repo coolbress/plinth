@@ -24,11 +24,16 @@ Tier 2 is the same journey on real GitHub, and no pull request runs it:
 scripts/with-admin-token.sh scripts/e2e.sh   # creates plinth-e2e-<run> under you, merges its first pull request, deletes it
 ```
 
-It runs the generator, reads the wall back with the floor checker, waits for
-every check on the first pull request (pushing the generator's recovery
-commit once if CodeQL has not picked it up, #117), squash-merges it and
-deletes the repository; ten to twenty minutes, with the token the generator
-asks for. A classic token (`repo`, `workflow`, `delete_repo`) is the one
+It runs the generator with `--archetype=backend`, reads the wall back with
+the floor checker, waits for every check on the first pull request (pushing
+the generator's recovery commit once if CodeQL has not picked it up, #117),
+squash-merges it and deletes the repository; ten to twenty minutes, with the
+token the generator asks for. A backend, not the generator's cli default,
+because it is the archetype with the most machinery: only a service archetype
+shapes the ruleset with the `image` check and renders the template's `image`
+job, so only it puts them in the gate (#164; the cli path is covered offline
+by `tests/new-project-failpath.sh` and `tests/e2e-driver.sh`). One journey a
+night, no matrix; the job summary and the log's `archetype:` line say which. A classic token (`repo`, `workflow`, `delete_repo`) is the one
 measured to work; a fine-grained one without Administration: write is
 refused before anything exists. Its
 first act is to create and delete a sibling name, `<name>-probe`, so a

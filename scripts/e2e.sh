@@ -11,6 +11,14 @@
 # workflow runs it nightly and on demand; make-release.sh run 2 accepts a
 # green run on the commit it is about to tag, and nothing else.
 #
+# The instance is a backend, not the door's default cli: the archetype with
+# the most machinery. Only a service archetype shapes the ruleset with the
+# `image` check and renders the template's `image` job, so only it exercises
+# them on real GitHub (#164; before it, the two template releases about that
+# job, #127 and #151, were verified by a hand-run repository). The cli path
+# is covered offline: tests/new-project-failpath.sh renders one against the
+# mocked gh, and tests/e2e-driver.sh drives this journey against a stub door.
+#
 # Exit 0 means the whole journey happened, deletion included. Before the door
 # runs, the token creates and deletes <name>-probe: a token that can create
 # but not delete would leave a repository behind on every run, and that is
@@ -31,6 +39,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # template's CI plus CodeQL's first analysis. Tests shorten it.
 wait_s="${PLINTH_E2E_WAIT:-1500}"
 case "$wait_s" in ''|*[!0-9]*) echo "PLINTH_E2E_WAIT must be a whole number of seconds (got: $wait_s)" >&2; exit 2 ;; esac
+archetype=backend # one journey a night, the archetype with the most machinery (see the header)
 
 read -r id login < <(gh api user --jq '"\(.id) \(.login)"') \
   || { echo "gh cannot read the token's user: is GH_TOKEN set, or gh logged in?" >&2; exit 2; }
@@ -107,11 +116,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$here/new-project.sh" "$repo" --dir="$dir" 2>&1 | tee "$work/door.log"
+"$here/new-project.sh" "$repo" --dir="$dir" --archetype="$archetype" 2>&1 | tee "$work/door.log"
 pr_url="$(sed -n 's/^  first pull request: //p' "$work/door.log")"
 [ -n "$pr_url" ] || fail "the door did not report a first pull request"
 
-# The record: which generator, which template commit, which workflow pin.
+# The record: which archetype (the log and the job summary: a reader of the
+# run must not have to open the door's line), which generator, which template
+# commit, which workflow pin.
+echo "archetype: $archetype"
+[ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf 'archetype: %s (the instance the journey rendered; cli is covered offline)\n' "$archetype" >> "$GITHUB_STEP_SUMMARY"
 template_repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$here/new-project.sh")"
 template_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$here/new-project.sh")"
 template_sha="$(gh api "repos/$template_repo/commits/$template_ref" --jq .sha 2>/dev/null || echo unresolved)"
@@ -163,6 +176,18 @@ while :; do
   [ "$SECONDS" -lt "$deadline" ] \
     || fail "the first pull request was not merged within $wait_s s (merge state: $state):" "$(gh pr checks "$pr_url" 2>&1 || true)"
   sleep $(( wait_s < 20 ? wait_s : 20 ))
+done
+# What the pull request waited for, by name: the required checks only
+# (--required reads what the rulesets require; measured on this repository's
+# own pull requests, 2026-09-17), so the line is the gate, not every check
+# that happened to run, and `image` on it means `image` was required. A
+# record, not a gate: the merge above is the truth, so a read that keeps
+# failing does not turn a finished journey red, but it is tried three times
+# and the line says it was not read, with gh's exit, never a silent blank.
+for attempt in 1 2 3; do
+  rc=0; checks="$(gh pr checks "$pr_url" --required --json name,bucket --jq '.[] | "\(.name)=\(.bucket)"' 2>&1)" || rc=$?
+  if [ "$rc" = 0 ]; then echo "checks: $(tr '\n' ' ' <<<"$checks")"; break; fi
+  if [ "$attempt" = 3 ]; then echo "checks: unread (gh exited $rc after 3 attempts: ${checks//$'\n'/ })"; else sleep 2; fi
 done
 # Read main back rather than trust the exit code: the squash commit is the
 # pull request's title, and main carrying it is what "merged" means here.

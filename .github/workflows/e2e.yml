@@ -1,6 +1,7 @@
 name: e2e
 #
-# Tier 2: the door's journey on real GitHub (scripts/e2e.sh). Nightly, and on
+# Tier 2: the door's journey on real GitHub (scripts/e2e.sh), on a backend
+# instance so the `image` check is in the gate (#164). Nightly, and on
 # demand for a release candidate: scripts/make-release.sh run 2 accepts a
 # green run of this workflow on the very commit it tags, so the candidate is
 # `gh workflow run e2e.yml --ref main` once the release pull request has
