@@ -35,6 +35,7 @@ import copy
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -396,7 +397,8 @@ def check_tracked_dotenv(root: Path) -> None:
     only; the contents are not read, and this is not a secret scanner (history,
     other file names and `.envrc` are outside it)."""
     try:
-        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, text=True, timeout=30)
+        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, timeout=30,
+                           encoding="utf-8", errors="replace")  # a file name is any bytes; never a traceback
     except (OSError, subprocess.TimeoutExpired):
         r = None
     if r is None or r.returncode != 0:
@@ -409,7 +411,7 @@ def check_tracked_dotenv(root: Path) -> None:
         result("PASS", f"no dotenv file is tracked ({len(tracked)} tracked files read; names only, not contents or history)")
     for f in found:
         result("WARN", f"tracked dotenv file: {f}")
-        result("INFO", f"  git rm --cached -- {f}   (ignore it in .gitignore; a value that was ever real is rotated, not only untracked)")
+        result("INFO", f"  git rm --cached -- {shlex.quote(f)}   (ignore it in .gitignore; a value that was ever real is rotated, not only untracked)")
 
 
 USES_LINE = re.compile(r"""^\s*(?:-\s+)?uses:\s+(['"]?)([^'"\s#]+)\1\s*(?:#.*)?$""")
@@ -467,7 +469,8 @@ def check_action_pins(root: Path) -> None:
                 if v.startswith("docker://"):
                     result("INFO", f"  {v}: pin the image by digest (docker://image@sha256:<digest>)")
                 elif m:
-                    result("INFO", f"  gh api repos/{m.group(1)}/commits/{m.group(2)} --jq .sha   (then uses: {v.split('@')[0]}@<that sha> # {m.group(2)})")
+                    # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
+                    result("INFO", f"  gh api {shlex.quote(f'repos/{m.group(1)}/commits/{m.group(2)}')} --jq .sha   (then pin the uses: to that SHA, the old ref as its comment)")
                 else:
                     result("INFO", f"  {v}: write it as owner/repo@<full commit SHA>")
         if unread:

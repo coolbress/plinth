@@ -190,6 +190,14 @@ says  "the good fixture says no dotenv file is tracked" ":" "PASS  no dotenv fil
 warns "a tracked .env is named" "printf 'AUDIT_DUMMY=not-a-secret\n' > .env && git add -f .env" "tracked dotenv file: \.env$"
 says  "a tracked .env carries its repair" "printf 'A=b\n' > .env && git add -f .env" "INFO    git rm --cached -- \.env"
 warns "a tracked dotenv in a subdirectory is named by its path" "mkdir -p deploy && printf 'A=b\n' > deploy/.env.production && git add -f deploy/.env.production" "tracked dotenv file: deploy/\.env\.production$"
+# The repair line is pasted into a shell, and the path is the repository's to choose.
+says  "a path with shell syntax in it is quoted in the repair" "mkdir 'a\$(touch PWN)' && printf 'A=b\n' > 'a\$(touch PWN)/.env' && git add -f ." "INFO    git rm --cached -- 'a\\\$\(touch PWN\)/\.env'"
+# A file name is any bytes, and macOS refuses to create one that is not UTF-8,
+# so git is a shim here: the listing must be decoded without a traceback.
+mkdir -p "$work/gitshim"; printf '#!/bin/sh\nprintf "caf\\351.txt\\0README.md\\0"\n' > "$work/gitshim/git"; chmod +x "$work/gitshim/git"
+out="$(PATH="$work/gitshim:$PATH" python3 "$checker" --root "$good" --no-network 2>&1)"
+if grep -q "PASS  no dotenv file is tracked (2 tracked files" <<<"$out" && ! grep -q Traceback <<<"$out"; then ok "a file name that is not UTF-8 does not abort the check"
+else bad "a non-UTF-8 file name"; printf '%s\n' "$out" | grep -E 'dotenv|Error|Traceback' | sed 's/^/        /'; fi
 quiet "an untracked local .env is not the defect" "printf 'A=b\n' > .env" "dotenv"
 quiet "tracked placeholders are allowed" "printf 'A=\n' | tee .env.sample > .env.template && git add -f .env.example .env.sample .env.template" "dotenv"
 quiet "a tracked directory named .env is not a dotenv file" "mkdir .env && printf 'x\n' > .env/pyvenv.cfg && git add -f .env/pyvenv.cfg" "dotenv"
@@ -199,6 +207,7 @@ says  "outside a git work tree the dotenv check is not verified, not passed" "rm
 says  "the good fixture's SHA-pinned reusable workflow passes" ":" "PASS  every action in 1 workflow file is pinned to a commit \(1 uses\)"
 warns "an action pinned to a tag is named with its file and line" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "\.github/workflows/t\.yml: not pinned to a full commit SHA: line 5 actions/checkout@v4$"
 says  "a tag-pinned action carries the command that finds its SHA" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "INFO    gh api repos/actions/checkout/commits/v4 --jq \.sha"
+says  "a ref with shell syntax in it is quoted in the repair" "wf '- uses: a/b@\$(id)' > .github/workflows/t.yml" "INFO    gh api 'repos/a/b/commits/\\\$\(id\)' --jq"
 warns "a branch ref, a short SHA and a quoted value are all unpinned" "wf '- uses: a/b@main' '- uses: c/d@3d3c42e' '- uses: \"e/f/sub@v1\"' > .github/workflows/t.yaml" "line 5 a/b@main, line 6 c/d@3d3c42e, line 7 e/f/sub@v1$"
 warns "a docker action pinned to a tag is unpinned" "wf '- uses: docker://alpine:3.20' > .github/workflows/t.yml" "line 5 docker://alpine:3.20"
 quiet "SHA pins, a local action, a docker digest, a comment and a run block are not findings" \
