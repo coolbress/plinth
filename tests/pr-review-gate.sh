@@ -27,33 +27,38 @@ PY
 [ -s "$tmp/gate.sh" ] || { echo "  FAIL  could not extract the gate snippet" >&2; exit 1; }
 
 fails=0
-# The commit lists the step hands the gate, in the shape `pulls/N/commits` gives
-# (measured on plinth#178 and plinth-template#17, 2026-09-17).
-commits() {  # <file> <login:verified> ...
+# The push logs the step hands the gate, in the shape `repos/:r/activity?ref=`
+# gives, newest first (measured on two open Dependabot branches, 2026-09-18: one
+# `branch_creation`, and a `force_push` over one, all by `dependabot[bot]`).
+HEAD=0253f94aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+OLD=2bb3f23bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+pushes() {  # <file> <actor:after> ...   newest first
   python3 - "$@" <<'PY'
 import json, sys
 out = []
 for spec in sys.argv[2:]:
-    login, verified = spec.rsplit(":", 1)
-    out.append({"author": {"login": login} if login else None,
-                "commit": {"verification": {"verified": verified == "true"}}})
+    actor, after = spec.rsplit(":", 1)
+    out.append({"activity_type": "push", "after": after,
+                "actor": {"login": actor, "type": "Bot"} if actor else None})
 json.dump(out, open(sys.argv[1], "w"))
 PY
 }
-commits "$tmp/dependabot.json" 'dependabot[bot]:true'
-commits "$tmp/mixed.json"      'dependabot[bot]:true' 'coolbress:true'
-commits "$tmp/unsigned.json"   'dependabot[bot]:false'
-commits "$tmp/noauthor.json"   ':true'
-commits "$tmp/empty.json"
+pushes "$tmp/dependabot.json" "dependabot[bot]:$HEAD" "dependabot[bot]:$OLD"
+pushes "$tmp/person-last.json"  "coolbress:$HEAD" "dependabot[bot]:$OLD"
+pushes "$tmp/person-then-recreated.json" "dependabot[bot]:$HEAD" "coolbress:$OLD" "dependabot[bot]:$OLD"
+pushes "$tmp/agent.json"      "cursor[bot]:$HEAD" "dependabot[bot]:$OLD"
+pushes "$tmp/stale.json"      "dependabot[bot]:$OLD"
+pushes "$tmp/noactor.json"    ":$HEAD"
+pushes "$tmp/empty.json"
 echo 'null' > "$tmp/null.json"
-printf '[{"author"' > "$tmp/broken.json"
-python3 -c 'import json,sys; json.dump([{"author":{"login":"dependabot[bot]"},"commit":{"verification":{"verified":True}}}]*100, open(sys.argv[1],"w"))' "$tmp/fullpage.json"
+printf '[{"actor"' > "$tmp/broken.json"
+python3 -c 'import json,sys; json.dump([{"after":sys.argv[2],"actor":{"login":"dependabot[bot]"}}]*100, open(sys.argv[1],"w"))' "$tmp/fullpage.json" "$HEAD"
 
 gate() {  # <want: the printed reason, or "" for "go on and look"> <name> [VAR=value ...]
   local want="$1" name="$2"; shift 2
   local got rc
   got="$(env -i PATH="$PATH" DRAFT=false MERGED=false PR_STATE=open PASS_RELEASE=false \
-           COMMITS_JSON="$tmp/dependabot.json" \
+           ACTIVITY_JSON="$tmp/dependabot.json" HEAD_SHA="$HEAD" \
            AUTHOR_LOGIN=coolbress TITLE='fix(door): a title' "$@" bash "$tmp/gate.sh" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$got" = "$want" ]; then
     echo "  PASS  $name"
@@ -83,17 +88,24 @@ done
 gate ''     'a person whose login only contains "bot" is summoned' AUTHOR_LOGIN=robotnik
 gate ''     'a person whose login starts with "dependabot" is summoned' AUTHOR_LOGIN=dependabot-fan
 gate ''     'a login that ends with the name is summoned' 'AUTHOR_LOGIN=not-dependabot[bot]'
-# The author stays Dependabot when someone else pushes to the branch, so the
-# commits decide; anything the gate cannot read as "only Dependabot" goes on.
-gate ''     "Dependabot's pull request with a person's commit is summoned" 'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/mixed.json"
-gate ''     'an unverified commit under its name is summoned'  'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/unsigned.json"
-gate ''     'a commit with no GitHub author is summoned'       'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/noauthor.json"
-gate ''     'an empty commit list is summoned'                 'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/empty.json"
-gate ''     'a failed commits call (null) is summoned'         'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/null.json"
-gate ''     'a truncated commit list is summoned'              'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/broken.json"
-gate ''     'a missing commit list is summoned'                'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/absent.json"
-gate ''     'no commit list at all is summoned'                'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON=
-gate ''     'a full page of commits is summoned: more may follow' 'AUTHOR_LOGIN=dependabot[bot]' COMMITS_JSON="$tmp/fullpage.json"
+# The author stays Dependabot when someone else pushes to the branch, and a
+# commit's author is whatever was typed into it, so who pushed decides;
+# anything the gate cannot read as "only Dependabot pushed, up to this head"
+# goes on to the reviewer.
+D='AUTHOR_LOGIN=dependabot[bot]'
+gate ''     "a person's push on top is summoned"                  "$D" ACTIVITY_JSON="$tmp/person-last.json"
+gate ''     "a person's push that Dependabot later overwrote is summoned" "$D" ACTIVITY_JSON="$tmp/person-then-recreated.json"
+gate ''     "a coding agent's push on top is summoned"            "$D" ACTIVITY_JSON="$tmp/agent.json"
+gate ''     'a log that has not reached this head is summoned'    "$D" ACTIVITY_JSON="$tmp/stale.json"
+gate ''     'a push with no actor is summoned'                    "$D" ACTIVITY_JSON="$tmp/noactor.json"
+gate ''     'an empty log is summoned'                            "$D" ACTIVITY_JSON="$tmp/empty.json"
+gate ''     'a failed activity call (null) is summoned'           "$D" ACTIVITY_JSON="$tmp/null.json"
+gate ''     'a truncated log is summoned'                         "$D" ACTIVITY_JSON="$tmp/broken.json"
+gate ''     'a missing log is summoned'                           "$D" ACTIVITY_JSON="$tmp/absent.json"
+gate ''     'no log at all is summoned'                           "$D" ACTIVITY_JSON=
+gate ''     'a full page of pushes is summoned: more may follow'  "$D" ACTIVITY_JSON="$tmp/fullpage.json"
+gate ''     'a short head sha is summoned'                        "$D" HEAD_SHA=0253f94
+gate ''     'no head sha is summoned'                             "$D" HEAD_SHA=
 
 # The title scripts/make-release.sh writes, and two that only resemble it.
 gate "$REL" 'chore(release): v0.5.12 passes where the caller turned it on' PASS_RELEASE=true 'TITLE=chore(release): v0.5.12'
@@ -141,4 +153,4 @@ if [ "$fails" -ne 0 ]; then
   echo "-- $fails failed" >&2
   exit 1
 fi
-echo "-- passes without summoning: draft, merged or closed, Dependabot's own commits, a release title where asked; everything else goes on"
+echo "-- passes without summoning: draft, merged or closed, a branch only Dependabot pushed to, a release title where asked; everything else goes on"

@@ -31,7 +31,8 @@ name: pr-review
 #        agents on closed pull requests), so an unverified verdict is not a
 #        merge condition. Findings are still handled: reproduce, then fix or
 #        say why not (docs/how-to/configure-the-third-party-reviewer.md).
-#   no   a review on a draft or on a pull request Dependabot opened, nor,
+#   no   a review on a draft or on a pull request Dependabot opened and only
+#        Dependabot pushed to, nor,
 #        when the caller sets `pass-release-pull-requests`, on one titled
 #        `chore(release): vX.Y.Z`: on those the second step passes without a
 #        summons and without looking for a review, and its log says which
@@ -190,6 +191,7 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}   # a branch name is its author's text: env only
           DRAFT: ${{ github.event.pull_request.draft }}
           MERGED: ${{ github.event.pull_request.merged }}
           PR_STATE: ${{ github.event.pull_request.state }}
@@ -240,20 +242,26 @@ jobs:
           #
           # The author of a pull request does not change when someone else
           # pushes to its branch (measured on plinth-template#17: author
-          # `dependabot[bot]`, second commit a person's). So every commit must
-          # be Dependabot's too, with the signature GitHub verifies; a commit
-          # list that is missing or unreadable counts as "not only Dependabot".
+          # `dependabot[bot]`, second commit a person's), and a commit's author
+          # is whatever its writer typed: a commit signed by anyone, with
+          # Dependabot's address as the author, reads `author.login:
+          # dependabot[bot]`, `verified: true`. What cannot be typed is who
+          # pushed. The repository's activity log names the authenticated
+          # account behind every push to the branch, so: every push to this
+          # branch is Dependabot's, and the newest one is this head. A log that
+          # is missing, unreadable, empty, a full page (more may follow) or not
+          # yet at this head counts as "not only Dependabot".
           login="$(printf '%s' "${AUTHOR_LOGIN:-}" | tr '[:upper:]' '[:lower:]')"
           case "$login" in
             'dependabot[bot]'|app/dependabot|dependabot)
-              if python3 - "${COMMITS_JSON:-}" <<'PYGATE'
+              if python3 - "${ACTIVITY_JSON:-}" "${HEAD_SHA:-}" <<'PYGATE'
           import json, sys
           try:
-              commits = json.load(open(sys.argv[1]))
-              ok = isinstance(commits, list) and 0 < len(commits) < 100 and all(   # 100 = one full page: more may follow
-                  ((c.get("author") or {}).get("login") == "dependabot[bot]")
-                  and (((c.get("commit") or {}).get("verification") or {}).get("verified") is True)
-                  for c in commits)
+              pushes = json.load(open(sys.argv[1]))
+              head = sys.argv[2]
+              ok = (isinstance(pushes, list) and 0 < len(pushes) < 100 and len(head) == 40
+                    and pushes[0].get("after") == head          # newest first
+                    and all((p.get("actor") or {}).get("login") == "dependabot[bot]" for p in pushes))
           except Exception:
               ok = False
           sys.exit(0 if ok else 1)
@@ -262,7 +270,7 @@ jobs:
                 echo "Dependabot pull request: not summoned"
                 exit 0
               fi
-              echo "Dependabot pull request with a commit that is not Dependabot's: looked at like any other" >&2 ;;
+              echo "Dependabot pull request, but not every push to its branch is Dependabot's: looked at like any other" >&2 ;;
           esac
           # A release pull request, only where the caller turned it on: the
           # title scripts/make-release.sh writes, whole, with the only tag shape
@@ -274,11 +282,13 @@ jobs:
             exit 0
           fi
           SH
-          # The pull request's commits, for the gate. A failed call leaves a file
-          # the gate cannot read as a list, which it takes as "go on and look".
-          gh api "repos/$REPO/pulls/$NUMBER/commits?per_page=100" > "$RUNNER_TEMP/commits.json" 2>/dev/null \
-            || echo 'null' > "$RUNNER_TEMP/commits.json"
-          why="$(COMMITS_JSON="$RUNNER_TEMP/commits.json" bash "$RUNNER_TEMP/gate.sh")"
+          # Who pushed to the head branch, for the gate. A failed call leaves a
+          # file the gate cannot read as a list, which it takes as "go on and
+          # look". The count is printed so a run shows whether the call works.
+          gh api --method GET "repos/$REPO/activity" -f ref="refs/heads/$HEAD_REF" -F per_page=100 \
+            > "$RUNNER_TEMP/activity.json" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/activity.json"
+          echo "pushes read for the head branch: $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(len(d) if isinstance(d,list) else "none")' "$RUNNER_TEMP/activity.json" 2>/dev/null || echo none)"
+          why="$(ACTIVITY_JSON="$RUNNER_TEMP/activity.json" bash "$RUNNER_TEMP/gate.sh")"
           if [ -n "$why" ]; then
             echo "$why"
             exit 0

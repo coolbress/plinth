@@ -61,9 +61,12 @@ its log says which. The step before it still runs on them: one that changes
 other.
 
 - `Dependabot pull request: not summoned`: the author is Dependabot
-  (`dependabot[bot]`) and every commit on the pull request is Dependabot's,
-  with the signature GitHub verifies. Once anyone else has pushed to the
-  branch, an "Update branch" included, it is looked at like any other. No
+  (`dependabot[bot]`) and every push to its branch was Dependabot's, up to
+  the current head, by the repository's activity log. The log names the
+  account that pushed; a commit's author line does not count, because
+  whoever writes a commit chooses it. Once anyone else has pushed to the
+  branch, an "Update branch" included, it is looked at like any other, and it
+  stays so if Dependabot later overwrites that push. No
   other bot is on the list: a coding agent's account is a bot too (`Copilot`,
   `cursor[bot]`, `claude[bot]`, `devin-ai-integration[bot]`), and what it opens
   is code, which is what the review is for. Renovate is not on it either; it

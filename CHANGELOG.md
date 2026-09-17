@@ -12,8 +12,8 @@ inside pull requests and have no tag.
 ### Changed
 
 - `third-party / review` passes a pull request Dependabot opened, as long as
-  every commit on it is Dependabot's and verified, without posting the summons
-  or waiting, and its log says so. Every other bot's pull request, a coding
+  every push to its branch was Dependabot's by the repository's activity log,
+  without posting the summons or waiting, and its log says so. Every other bot's pull request, a coding
   agent's included, is looked at like a person's. A new input,
   `pass-release-pull-requests` (default `false`), does the same for a pull
   request titled exactly `chore(release): vX.Y.Z`; a title is its author's
