@@ -38,6 +38,19 @@ inside pull requests and have no tag.
   0. CONTRIBUTING also names what the list does not cover: the four linters
   of `ci / tools`, CodeQL and the canary jobs (#113).
 
+### Fixed
+
+- Installing on a machine with git older than 2.37 failed with
+  `index.lock: File exists`, and nothing said why (#171). The cause is in git
+  and the installer, not here: for a `git-subdir` source (`ponytail-skills`)
+  the installer checks out offline first inside a partial clone that has no
+  trees; git 2.30.1 to 2.35.3 segfault there and leave `index.lock`, and the
+  installer's networked retry dies on the lock. 2.37.0 and newer fail the
+  offline attempt cleanly and the retry succeeds (2.36 was not measured). The
+  macOS system git can be 2.30.1. The README and the tutorial now state git
+  2.37 or newer, and `tests/install-smoke.sh` stops on an older git with the
+  cause and the fix instead of the lock message.
+
 ## [0.5.11] - 2026-09-17
 
 ### Changed

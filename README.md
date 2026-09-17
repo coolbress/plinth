@@ -9,7 +9,8 @@ repository with both already in place.
 > ones get a read-only `floor-check` · **Claude Code 2.1.234 or newer** as the
 > host (skills follow the Agent Skills format and may load elsewhere, but only
 > Claude Code is tested) · macOS / Linux (Windows via WSL) · tools: `claude`,
-> `gh`, `git`, `uv`.
+> `gh`, `git` (2.37 or newer: on an older one, the macOS system git included, the
+> install fails with `index.lock: File exists`; `brew install git`), `uv`.
 >
 > **Outside:** when a wall cannot be raised (no admin, private repository, no
 > `gh` auth) the tool stops before creating anything and says why. Private
