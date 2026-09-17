@@ -78,7 +78,13 @@ whose CI reports every check the wall requires. In both live journeys so far
 (the v0.5.1 baseline by hand and one green `e2e` run on a runner, #62,
 2026-09-09) the first pull request merged, but only after the recovery commit
 the door prints: CodeQL did not analyse the pull request on its first push
-(#117). `floor-check` runs the checker `ci / floor-check` runs, read-only;
+(#117). A pull request whose head Dependabot pushed merges without a CodeQL
+analysis: default setup starts none for it, the `CodeQL` check lands `neutral`,
+and the code scanning rule passes (#179: five such heads on three
+repositories). What runs on those heads is `ci / deps`, the tests and the other
+required checks; `main` is analysed after the merge, and a head a person
+pushed to the same pull request was analysed. Heads pushed by other bots or by
+a workflow's `GITHUB_TOKEN` were not measured. `floor-check` runs the checker `ci / floor-check` runs, read-only;
 exit 0 means no FAIL in what it could read, and its summary counts what it
 could not. A third-party review check (`third-party / review`, Codex) is
 available as an optional check; see

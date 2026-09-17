@@ -9,6 +9,16 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- CONTEXT.md said that under the code scanning rule "a missing analysis
+  blocks". Measured otherwise: CodeQL default setup starts no analysis for a
+  head Dependabot pushed, the `CodeQL` check lands `neutral`, and both the rule
+  and the older required check name accept it (plinth-template #16 merged that
+  way on 2026-09-16). CONTEXT.md and the README now say what happens; no
+  check or ruleset changed, and `main` is still analysed after the merge
+  (#179).
+
 ### Changed
 
 - `ci / tools` runs its four linters through `tests/shell-lint.sh` (`bash -n`,
