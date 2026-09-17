@@ -177,13 +177,15 @@ while :; do
     || fail "the first pull request was not merged within $wait_s s (merge state: $state):" "$(gh pr checks "$pr_url" 2>&1 || true)"
   sleep $(( wait_s < 20 ? wait_s : 20 ))
 done
-# What the pull request waited for, by name: the record that the archetype's
-# own checks (`image` on a backend) were in the gate, not only in the ruleset.
-# A record, not a gate: the merge above is the truth, so a read that keeps
+# What the pull request waited for, by name: the required checks only
+# (--required reads what the rulesets require; measured on this repository's
+# own pull requests, 2026-09-17), so the line is the gate, not every check
+# that happened to run, and `image` on it means `image` was required. A
+# record, not a gate: the merge above is the truth, so a read that keeps
 # failing does not turn a finished journey red, but it is tried three times
 # and the line says it was not read, with gh's exit, never a silent blank.
 for attempt in 1 2 3; do
-  rc=0; checks="$(gh pr checks "$pr_url" --json name,bucket --jq '.[] | "\(.name)=\(.bucket)"' 2>&1)" || rc=$?
+  rc=0; checks="$(gh pr checks "$pr_url" --required --json name,bucket --jq '.[] | "\(.name)=\(.bucket)"' 2>&1)" || rc=$?
   if [ "$rc" = 0 ]; then echo "checks: $(tr '\n' ' ' <<<"$checks")"; break; fi
   if [ "$attempt" = 3 ]; then echo "checks: unread (gh exited $rc after 3 attempts: ${checks//$'\n'/ })"; else sleep 2; fi
 done

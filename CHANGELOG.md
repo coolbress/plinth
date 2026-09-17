@@ -21,7 +21,7 @@ inside pull requests and have no tag.
   v0.5.10 shipped behind a green gate that never ran the check. The cli path
   stays covered offline (`tests/new-project-failpath.sh`,
   `tests/e2e-driver.sh`); one journey a night, no matrix. The log says
-  `archetype: backend` and lists the checks the pull request waited for, the
+  `archetype: backend` and lists the required checks the pull request waited for, the
   job summary names the archetype, and the driver test fails if the
   archetype is missing or another value (#164).
 

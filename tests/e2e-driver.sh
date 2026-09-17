@@ -66,8 +66,8 @@ case "$*" in
   "api repos/"*"/commits/"*)          echo "feedfacefeedfacefeedfacefeedfacefeedface" ;;
   "api repos/"*" --jq .default_branch") echo "${DEFAULT_BRANCH:-main}" ;;
   "pr checks "*"select(.bucket == \"fail\")"*) printf '%s' "${FAILED_CHECKS:-}" ;;
-  # The record line after the merge (#164): RECORD_RC makes every read fail with that exit.
-  "pr checks "*"--json name,bucket "*) [ -z "${RECORD_RC:-}" ] || { echo "HTTP 502: Bad Gateway" >&2; exit "$RECORD_RC"; }; printf 'ci / test=pass\nimage=pass\n' ;;
+  # The record line after the merge (#164), required checks only: RECORD_RC makes every read fail with that exit.
+  "pr checks "*"--required --json name,bucket "*) [ -z "${RECORD_RC:-}" ] || { echo "HTTP 502: Bad Gateway" >&2; exit "$RECORD_RC"; }; printf 'ci / test=pass\nimage=pass\n' ;;
   # The names on the head: CodeQL is there unless CODEQL=0, and appears once the recovery push happened.
   # With --json the real gh exits 0 whatever the buckets (2.79.0); CHECKS_RC is the exit of the first
   # CHECKS_FAILS reads (default: every one), names printed all the same: the driver must read the exit.
@@ -204,7 +204,7 @@ is "the archetype is said"  said "^archetype: backend$"
 is "and in the job summary" grep -q "^archetype: backend " "$work/summary0"
 is "the checks the pull request waited for are listed by name" said "^checks: ci / test=pass image=pass $"
 run RECORD_RC=1;           check "a record read that keeps failing does not turn a finished journey red" ok $?
-is "read three times"      [ "$(grep -c '^gh pr checks .*--json name,bucket ' "$GH_LOG")" = 3 ]
+is "read three times, required checks only" [ "$(grep -c '^gh pr checks .*--required --json name,bucket ' "$GH_LOG")" = 3 ]
 is "the line says it was not read, with gh's exit and words" said "^checks: unread (gh exited 1 after 3 attempts: HTTP 502: Bad Gateway)$"
 is "merged and deleted all the same" deletes 2
 is "merged once"           [ "$(grep -c '^gh pr merge ' "$GH_LOG")" = 1 ]
