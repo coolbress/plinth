@@ -90,12 +90,14 @@ jobs:
           echo "$d" >> "$GITHUB_PATH"
 
       # The commands, their flags and the reason for each live in the two
-      # files, so a local run is the same call.
-      - name: Workflow syntax, usage and security (actionlint, zizmor)
-        run: ./tests/workflow-lint.sh
-
+      # files, so a local run is the same call. Shell first: it is offline, and
+      # a failed step skips the ones after it, so the step that downloads
+      # (zizmor) goes last, where a network failure hides no other result.
       - name: Shell syntax and static analysis (bash -n, shellcheck)
         run: ./tests/shell-lint.sh
+
+      - name: Workflow syntax, usage and security (actionlint, zizmor)
+        run: ./tests/workflow-lint.sh
 
       - name: The two lint files fail on a missing tool or a version that is not the pin
         run: ./tests/lint-wrappers-cases.sh
