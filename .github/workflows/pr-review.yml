@@ -31,6 +31,10 @@ name: pr-review
 #        agents on closed pull requests), so an unverified verdict is not a
 #        merge condition. Findings are still handled: reproduce, then fix or
 #        say why not (docs/how-to/configure-the-third-party-reviewer.md).
+#   no   a review on a draft, a bot-authored pull request or a release pull
+#        request (`chore(release): vX.Y.Z`): on those the second step passes
+#        without a summons and without looking for a review, and its log says
+#        which (#167). The first step, on the instructions, still runs on them.
 #   no   that anyone read the review. Reading is the job of the person who
 #        presses merge.
 #   no   that the reviewer is independent of the author: `reviewer-logins` is a
@@ -83,8 +87,9 @@ on:
 
 jobs:
   review:
-    # No `if:` here: a skipped job has no check name. Drafts are handled in
-    # the step below, which passes without summoning a review.
+    # No `if:` here: a skipped job has no check name. Drafts, bot-authored and
+    # release pull requests are handled in the second step, which passes
+    # without summoning a review.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -176,6 +181,11 @@ jobs:
           DRAFT: ${{ github.event.pull_request.draft }}
           MERGED: ${{ github.event.pull_request.merged }}
           PR_STATE: ${{ github.event.pull_request.state }}
+          # Author and title go through `env:`, never `${{ }}` inside `run:`:
+          # a title is text the author of the pull request chooses.
+          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          TITLE: ${{ github.event.pull_request.title }}
           LOGINS: ${{ inputs.reviewer-logins }}
           ASK: ${{ inputs.ask-comment }}
           WAIT: ${{ inputs.wait-seconds }}
@@ -187,6 +197,12 @@ jobs:
             echo "::error::not a pull request: nothing to check."
             exit 1
           fi
+          # Pass without summoning, or go on? The decision is a script of its
+          # own so tests/pr-review-gate.sh can lift it out of this file and run
+          # it; it prints the reason when the check passes here and nothing when
+          # the reviewer is to be looked for.
+          cat > "$RUNNER_TEMP/gate.sh" <<'SH'
+          set -euo pipefail
           # Drafts are never summoned; a ready head must show its own evidence,
           # and summonses per commit are limited (two, below). This check asks
           # "was this commit reviewed", so it used to re-run on every push: 29
@@ -199,6 +215,35 @@ jobs:
           fi
           if [ "${MERGED:-false}" = "true" ] || [ "${PR_STATE:-open}" != "open" ]; then
             echo "pull request already merged or closed: not waiting."
+            exit 0
+          fi
+          # A pull request a bot opened (#167): the payload's user type says so
+          # (`Bot`, measured on plinth#178 with login `dependabot[bot]`); the
+          # login is the fallback, in the spellings GitHub uses for one account:
+          # `dependabot[bot]` in the payload, `app/dependabot` in gh, and
+          # `dependabot` as an actor. To have one reviewed, comment the summons
+          # on it yourself.
+          login="$(printf '%s' "${AUTHOR_LOGIN:-}" | tr '[:upper:]' '[:lower:]')"
+          case "$login" in
+            *'[bot]'|app/*|dependabot) bot=1 ;;
+            *) bot=0 ;;
+          esac
+          if [ "${AUTHOR_TYPE:-}" = "Bot" ] || [ "$bot" = 1 ]; then
+            echo "bot-authored pull request: not summoned"
+            exit 0
+          fi
+          # A release pull request: the title scripts/make-release.sh writes.
+          # Four generated lines, guarded by tests/make-release-guards.sh and
+          # the e2e run on the merged commit. One constant, not a filter: the
+          # whole title, with the only tag shape make-release.sh accepts.
+          if printf '%s' "${TITLE:-}" | grep -Eq '^chore\(release\): v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "release pull request: not summoned"
+            exit 0
+          fi
+          SH
+          why="$(bash "$RUNNER_TEMP/gate.sh")"
+          if [ -n "$why" ]; then
+            echo "$why"
             exit 0
           fi
           echo "pull request #$NUMBER, head $HEAD_SHA"

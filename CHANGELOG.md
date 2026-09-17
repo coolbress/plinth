@@ -9,6 +9,29 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `third-party / review` passes a bot-authored pull request (author type
+  `Bot`, or a login spelled `…[bot]`, `app/…` or `dependabot`) and a release
+  pull request (title exactly `chore(release): vX.Y.Z`, the one
+  `make-release.sh` writes) without posting the summons or waiting, and its
+  log says which. The step on the reviewer's instructions still runs on them.
+  Callers see no renamed input, job or check name. On those pull requests the
+  check is no evidence of a review; a repository that requires it should know
+  that. Commenting the summons still gets a review, and the provider's own app
+  may review on its own trigger. The decision is lifted out of the workflow
+  and run by `tests/pr-review-gate.sh` (#167).
+- `ci / tools` runs its four linters through `tests/shell-lint.sh` (`bash -n`,
+  shellcheck) and `tests/workflow-lint.sh` (actionlint, zizmor), so
+  CONTRIBUTING's "every `tests/*.sh`" runs them with CI's flags. The actionlint
+  and zizmor pins live only in `tests/workflow-lint.sh`; the workflow's install
+  step reads them from there. A missing tool is a FAIL with the install
+  command and does not hide the other tool's result. An actionlint that is not
+  the pinned version is a FAIL in CI; locally it runs and the output says the
+  pass is not the pinned pass. shellcheck and bash stay unpinned and the
+  versions that ran are printed. `tests/lint-wrappers-cases.sh` holds those
+  verdicts with stub tools (#170).
+
 ### Fixed
 
 - CONTEXT.md said that under the code scanning rule "a missing analysis
@@ -20,19 +43,6 @@ inside pull requests and have no tag.
   treats Dependabot's pull requests like any other: it says CodeQL does not
   analyse those heads and what does run on them. No check or ruleset changed,
   and `main` is still analysed after the merge (#179).
-
-### Changed
-
-- `ci / tools` runs its four linters through `tests/shell-lint.sh` (`bash -n`,
-  shellcheck) and `tests/workflow-lint.sh` (actionlint, zizmor), so
-  CONTRIBUTING's "every `tests/*.sh`" runs them with CI's flags. The actionlint
-  and zizmor pins live only in `tests/workflow-lint.sh`; the workflow's install
-  step reads them from there. A missing tool is a FAIL with the install
-  command and does not hide the other tool's result. An actionlint that is not
-  the pinned version is a FAIL in CI; locally it runs and the output says the
-  pass is not the pinned pass. shellcheck and bash stay unpinned and the
-  versions that ran are printed. `tests/lint-wrappers-cases.sh` holds those
-  verdicts with stub tools (#170).
 
 ## [0.5.12] - 2026-09-17
 

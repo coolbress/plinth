@@ -97,6 +97,9 @@ jobs:
       - name: Third-party review check blocks on presence, never on the verdict
         run: ./tests/pr-review-attest.sh
 
+      - name: Third-party review check passes drafts, bots and releases without summoning, and nothing else
+        run: ./tests/pr-review-gate.sh
+
       - name: The reviewer's instructions cannot be softened inside a reviewed pull request
         run: ./tests/pr-review-policy-pin.sh
 
