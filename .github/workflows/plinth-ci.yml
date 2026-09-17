@@ -73,10 +73,9 @@ jobs:
 
       # The commands, their flags and the reason for each live in the two
       # lint files, so a local run is the same call. A failed step skips the
-      # ones after it, so every offline step comes first and the two that use
-      # the network (the actionlint download, then zizmor through pipx) come
-      # last: a download that fails hides no offline result. The two can still
-      # hide each other: a failed actionlint download skips zizmor as well.
+      # ones after it, so after checkout the steps that need nothing from the
+      # network run first, and the two that download (actionlint's binary, then
+      # zizmor through pipx) run last.
       - name: Shell syntax and static analysis (bash -n, shellcheck)
         run: ./tests/shell-lint.sh
 
