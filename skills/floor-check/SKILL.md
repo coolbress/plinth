@@ -66,4 +66,17 @@ of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
 not-verified count says what was not. In consumer CI that count is not 0:
 the bypass-actor read needs an admin-read token the Actions token never is.
 
+## What three of the checks read, and what they do not
+
+Three checks are static reads with a stated scope (#95, the predicates #42
+left open). A finding from any of them is a WARN, never a FAIL, so a
+repository that passed before they existed still passes; a PASS from them
+covers only what is listed here.
+
+| Check | Reads | Does not read |
+| --- | --- | --- |
+| Tracked dotenv | `git ls-files` under `--root`: a tracked file named `.env` or `.env.<anything>`, except `.env.example`, `.env.sample`, `.env.template` | File contents, git history, an untracked local `.env` (not the defect), `.envrc`, other names such as `prod.env`. It is not a secret scanner; `ci / secrets` is. Outside a git work tree it is a SKIP |
+| Action pins | Every `uses:` line in `.github/workflows/*.yml` and `*.yaml`: `owner/repo@<40-hex SHA>`, `docker://…@sha256:<digest>` or a local `./` path. Comments and block scalars (`run: \|`) are skipped | Composite actions under `.github/actions`, whether the SHA exists upstream, what the pinned action itself calls. A `uses` written in a form the line pattern cannot read (flow style, a quoted, anchored or explicit `?` key: any `uses` in key position that is not a plain `uses: value`) is a SKIP naming the line |
+| JSON logs | For a service archetype (`backend`, `data-ml`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
+
 Do not fix anything in this session, and do not run anything that writes.

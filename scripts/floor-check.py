@@ -20,6 +20,12 @@ are accepted from there. The wall is read from the live rules API and
 compared with what the ruleset the door applies expects; a wall that got
 weaker (a required check dropped, a bypass actor added, a merge method
 widened, a CodeQL alert threshold lowered) is a FAIL, not a warning.
+
+Three checks are static and WARN-only (#95): tracked dotenv files (names in
+the index, not contents or history), action pins (`uses:` lines of
+.github/workflows, not composite actions), JSON logs (a known setup in a
+service archetype's src/, never what the process prints). What each reads and
+does not read is in its docstring and in skills/floor-check/SKILL.md.
 """
 
 from __future__ import annotations
@@ -29,6 +35,7 @@ import copy
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -219,6 +226,8 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     check_gitattributes(root)
     check_agent_settings(root)
     check_doc_links(root)
+    check_tracked_dotenv(root)
+    check_action_pins(root)
 
 
 def md_front_matter_name(text: str) -> str:
@@ -374,6 +383,108 @@ def check_agent_settings(root: Path) -> None:
            f".claude/settings.json does not deny {what}")
 
 
+# The three predicates below were named by #42 and shipped by #95. Each is new
+# ground: a repository passed yesterday without them being read, so a finding is
+# a WARN, and promoting one to FAIL is a compatibility decision taken later.
+
+# Placeholder dotenv names: committed on purpose, values not real.
+DOTENV_PLACEHOLDERS = {".env.example", ".env.sample", ".env.template"}
+
+
+def check_tracked_dotenv(root: Path) -> None:
+    """Is a `.env` or `.env.<anything>` in the index? The evidence is git's, not
+    the disk's: an untracked local `.env` is what `.gitignore` is for. Names
+    only; the contents are not read, and this is not a secret scanner (history,
+    other file names and `.envrc` are outside it)."""
+    try:
+        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, timeout=30,
+                           encoding="utf-8", errors="replace")  # a file name is any bytes; never a traceback
+    except (OSError, subprocess.TimeoutExpired):
+        r = None
+    if r is None or r.returncode != 0:
+        result("SKIP", "tracked dotenv files not verified (git could not list the tracked files of --root)")
+        return
+    tracked = [f for f in r.stdout.split("\0") if f]
+    found = sorted(f for f in tracked if (n := f.rsplit("/", 1)[-1]) not in DOTENV_PLACEHOLDERS
+                   and (n == ".env" or n.startswith(".env.")))
+    if not found:
+        result("PASS", f"no dotenv file is tracked ({len(tracked)} tracked files read; names only, not contents or history)")
+    for f in found:
+        result("WARN", f"tracked dotenv file: {f}")
+        result("INFO", f"  git rm --cached -- {shlex.quote(f)}   (ignore it in .gitignore; a value that was ever real is rotated, not only untracked)")
+
+
+USES_LINE = re.compile(r"""^\s*(?:-\s+)?uses:\s+(['"]?)([^'"\s#]+)\1\s*(?:#.*)?$""")
+
+
+def action_is_pinned(value: str) -> bool:
+    if value.startswith("./"):
+        return True  # a local action or workflow: the commit is this repository's own
+    if value.startswith("docker://"):
+        return re.search(r"@sha256:[0-9a-f]{64}$", value) is not None
+    return re.fullmatch(r"[^@]+@[0-9a-fA-F]{40}", value) is not None
+
+
+def check_action_pins(root: Path) -> None:
+    """Every `uses:` in .github/workflows/*.yml|yaml is a full commit SHA (a
+    sha256 digest for docker://, anything for a local ./ path). Lines, not a
+    YAML parser (standard library only): comments and block scalars (`run: |`)
+    are skipped, and a `uses` the line pattern cannot read is a SKIP, not a
+    pass. Composite actions under .github/actions are not read, and whether a
+    SHA exists upstream is not asked."""
+    d = root / ".github" / "workflows"
+    files = sorted(p for p in d.iterdir() if p.is_file() and p.suffix in {".yml", ".yaml"}) if d.is_dir() else []
+    if not files:
+        result("INFO", "no workflow file under .github/workflows: no action pin to check")
+        return
+    total, clean = 0, True
+    for p in files:
+        rel = p.relative_to(root).as_posix()
+        unpinned, unread, block = [], [], None
+        for n, line in enumerate(read(p).splitlines(), 1):
+            if not line.strip():
+                continue
+            indent = len(line) - len(line.lstrip())
+            if block is not None:
+                if indent > block:
+                    continue  # inside a block scalar: shell, not workflow syntax
+                block = None
+            if line.lstrip().startswith("#"):
+                continue
+            if re.search(r":\s*[|>][-+0-9]*\s*(?:#.*)?$", line):
+                # The scalar's lines sit deeper than its key, and after `- ` the key starts past the dash.
+                block = re.match(r"\s*(?:-\s+)*", line).end()
+            m = USES_LINE.match(line)
+            if m:
+                total += 1
+                if not action_is_pinned(m.group(2)):
+                    unpinned.append((n, m.group(2)))
+            # The net is wider than any one spelling: the word anywhere in the key part
+            # of the line (`? uses`, `&a uses:`, `"uses":`), or as a key inside a flow
+            # mapping. A word inside a value (`run: grep uses:`) is not a key.
+            elif re.search(r"\buses\b", re.split(r":(?:\s|$)", line, maxsplit=1)[0]) \
+                    or re.search(r"""[{,]\s*['"]?uses['"]?\s*:""", line):
+                unread.append(n)
+        if unpinned:
+            clean = False
+            result("WARN", f"{rel}: not pinned to a full commit SHA: " + ", ".join(f"line {n} {v}" for n, v in unpinned))
+            for v in sorted({v for _, v in unpinned}):
+                m = re.fullmatch(r"([^/@]+/[^/@]+)(?:/[^@]*)?@(.+)", v)
+                if v.startswith("docker://"):
+                    result("INFO", f"  {v}: pin the image by digest (docker://image@sha256:<digest>)")
+                elif m:
+                    # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
+                    result("INFO", f"  gh api {shlex.quote(f'repos/{m.group(1)}/commits/{m.group(2)}')} --jq .sha   (then pin the uses: to that SHA, the old ref as its comment)")
+                else:
+                    result("INFO", f"  {v}: write it as owner/repo@<full commit SHA>")
+        if unread:
+            clean = False
+            result("SKIP", f"{rel}: action pins not verified: line {', '.join(map(str, unread))} "
+                           "mentions uses in a form this checker does not read")
+    if clean:
+        result("PASS", f"every action in {len(files)} workflow file{'s' * (len(files) != 1)} is pinned to a commit ({total} uses)")
+
+
 def check_doc_links(root: Path) -> None:
     link = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
     fenced = re.compile(r"```.*?```", re.S)
@@ -426,11 +537,12 @@ def check_project(project: Path, archetype: str | None) -> None:
         result("SKIP", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")
         return
     if archetype not in CONDITIONAL_ARCHETYPES:
-        result("INFO", f"archetype {archetype}: no container image or .env.example required")
+        result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
         return
-    result("INFO", f"archetype {archetype}: container image and .env.example required")
+    result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required")
     check_dockerfile(project)
     check_env_example(project)
+    check_json_logs(project)
 
 
 def check_dockerfile(project: Path) -> None:
@@ -461,6 +573,43 @@ def check_dockerfile(project: Path) -> None:
         missing = [m for m in (".git", ".env", ".venv") if m not in read(di)]
         ok(not missing, ".dockerignore keeps .git, .env, .venv out of the image",
            f".dockerignore lacks {missing}: they ship inside the image")
+
+
+# What a JSON log setup looks like in source: every pattern of one entry in one file.
+JSON_LOG_HINTS = (
+    ("a logging.Formatter subclass that calls json.dumps", (r"class\s+\w+\([\w.]*Formatter\)", r"json\.dumps")),
+    ("structlog's JSONRenderer", (r"structlog", r"JSONRenderer")),
+    ("python-json-logger", (r"pythonjsonlogger",)),
+    ("loguru with serialize=True", (r"loguru", r"serialize\s*=\s*True")),
+)
+
+
+def check_json_logs(project: Path) -> None:
+    """Does a service's source carry a known JSON log setup? Static and nothing
+    more: the application is never run, so a PASS is a hint in a file, not proof
+    of what the process prints. Logging the patterns do not know is a SKIP; only
+    a source tree with no logging at all is a finding."""
+    files = sorted((project / "src").rglob("*.py")) if (project / "src").is_dir() else []
+    if not files:
+        result("SKIP", "JSON logs not verified: no Python file under src/")
+        return
+    # Comments are dropped: `# TODO: add pythonjsonlogger` is not a setup. A string
+    # is kept, because logging.config.dictConfig names its formatter in one.
+    texts = {f.relative_to(project).as_posix(): re.sub(r"#.*", "", read(f)) for f in files}
+    for rel, text in texts.items():
+        for label, patterns in JSON_LOG_HINTS:
+            if all(re.search(p, text) for p in patterns):
+                result("PASS", f"JSON logs: static hint in {rel} ({label}); a hint in the source, not proof of what the process prints")
+                return
+    logging_in = [rel for rel, text in texts.items()
+                  if re.search(r"^\s*(?:import|from)\s+[^#\n]*\b(?:logging|structlog|loguru)\b", text, re.M)]
+    if logging_in:
+        result("SKIP", f"JSON logs not verified: {', '.join(logging_in)} set up logging in a way this checker does not recognise "
+                       "(known: a logging.Formatter with json.dumps, structlog JSONRenderer, python-json-logger, loguru serialize=True)")
+        return
+    entry = f"src/{package_name(project) or '<package>'}/__main__.py"
+    result("WARN", f"JSON logs: no logging found under src/ (entry point {entry}): a container's plain-text output is collected as unparsed lines")
+    result("INFO", f"  in {entry}, give the root logger a StreamHandler(sys.stdout) whose logging.Formatter returns json.dumps(...) per record")
 
 
 def check_image_job(root: Path) -> None:

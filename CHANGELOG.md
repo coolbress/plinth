@@ -9,6 +9,23 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- The floor checker reads the three predicates #42 named and never shipped:
+  a tracked dotenv file (`git ls-files`: `.env` and `.env.<anything>`, not
+  `.env.example`, `.env.sample` or `.env.template`; an untracked local `.env`
+  is not the defect), an action not pinned to a full commit SHA (every
+  `uses:` line of `.github/workflows`, a sha256 digest for `docker://`,
+  comments and `run: |` blocks skipped), and a service archetype with no JSON
+  logs (a known setup anywhere under `src/`). Each finding is a WARN with the
+  path and one repair line, never a FAIL: a consumer whose `ci / floor-check`
+  passed yesterday passes today, and promoting one is a later compatibility
+  decision. What cannot be read is a SKIP, not a pass: no git work tree, a
+  `uses` in a form the line pattern does not know, logging the hints do not
+  recognise. The JSON-log PASS says it is a static hint, not proof of what
+  the process prints. Scope and limits are in `skills/floor-check/SKILL.md`
+  (#95).
+
 ## [0.5.11] - 2026-09-17
 
 ### Changed
