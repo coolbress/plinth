@@ -73,41 +73,32 @@ jobs:
 
       # Official release binary, checksum verified: rhysd/actionlint has no
       # action of its own, and a third-party wrapper would need allowlisting.
-      # Bump the version and the checksum together (the release's checksums.txt).
+      # The version and the checksum are read from tests/workflow-lint.sh, the
+      # one pin; that script fails here when another version ends up on PATH.
       - name: Install actionlint
-        env:
-          ACTIONLINT_VERSION: "1.7.12"
-          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
         run: |
           set -euo pipefail
+          v="$(sed -n 's/^actionlint_version="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
+          sum="$(sed -n 's/^actionlint_sha256="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
+          [ -n "$v" ] && [ -n "$sum" ] || { echo "actionlint pin not found in tests/workflow-lint.sh"; exit 1; }
           d="$RUNNER_TEMP/actionlint"; mkdir -p "$d"
-          f="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          f="actionlint_${v}_linux_amd64.tar.gz"
           curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/$f"
-          echo "${ACTIONLINT_SHA256}  $d/$f" | sha256sum -c -
+            "https://github.com/rhysd/actionlint/releases/download/v${v}/$f"
+          echo "${sum}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" actionlint
           echo "$d" >> "$GITHUB_PATH"
 
-      # actionlint also runs shellcheck over every `run:` block. `job.workflow_sha`
-      # is real (python-ci.yml fetches the checker with it, measured) but not in
-      # actionlint's schema yet; that one message is ignored.
-      - name: Workflow syntax and usage (actionlint)
-        run: actionlint -color -ignore 'property "workflow_sha" is not defined'
+      # The commands, their flags and the reason for each live in the two
+      # files, so a local run is the same call.
+      - name: Workflow syntax, usage and security (actionlint, zizmor)
+        run: ./tests/workflow-lint.sh
 
-      # One file per call: `bash -n a.sh b.sh` parses a.sh only, b.sh is $1.
-      - name: Shell syntax (bash -n)
-        run: for f in scripts/*.sh tests/*.sh; do bash -n "$f"; done
+      - name: Shell syntax and static analysis (bash -n, shellcheck)
+        run: ./tests/shell-lint.sh
 
-      - name: Shell static analysis (shellcheck)
-        run: shellcheck -S warning scripts/*.sh tests/*.sh
-
-      # Security audit of the workflows, every severity: these files run in
-      # consumers' repositories, the widest blast radius here. Not an action
-      # (allowlist discipline); pipx is on the runner. 1.30.0 adds a low
-      # finding that asks for the `$/` self-repository syntax, which actionlint
-      # 1.7.12 does not know yet; raise both together.
-      - name: Workflow security (zizmor)
-        run: pipx run zizmor==1.29.0 --no-progress .github/workflows/
+      - name: The two lint files fail on a missing tool or a version that is not the pin
+        run: ./tests/lint-wrappers-cases.sh
 
       - name: Ruleset upgrade refuses names that never reported
         run: ./tests/upgrade-ruleset-guard.sh
