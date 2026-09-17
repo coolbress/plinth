@@ -179,8 +179,14 @@ while :; do
 done
 # What the pull request waited for, by name: the record that the archetype's
 # own checks (`image` on a backend) were in the gate, not only in the ruleset.
-# A read that failed leaves the line empty; the merge above is the truth.
-echo "checks: $(gh pr checks "$pr_url" --json name,bucket --jq '.[] | "\(.name)=\(.bucket)"' 2>/dev/null | tr '\n' ' ')"
+# A record, not a gate: the merge above is the truth, so a read that keeps
+# failing does not turn a finished journey red, but it is tried three times
+# and the line says it was not read, with gh's exit, never a silent blank.
+for attempt in 1 2 3; do
+  rc=0; checks="$(gh pr checks "$pr_url" --json name,bucket --jq '.[] | "\(.name)=\(.bucket)"' 2>&1)" || rc=$?
+  if [ "$rc" = 0 ]; then echo "checks: $(tr '\n' ' ' <<<"$checks")"; break; fi
+  if [ "$attempt" = 3 ]; then echo "checks: unread (gh exited $rc after 3 attempts: ${checks//$'\n'/ })"; else sleep 2; fi
+done
 # Read main back rather than trust the exit code: the squash commit is the
 # pull request's title, and main carrying it is what "merged" means here.
 # GitHub appends the number, `title (#1)` (measured 2026-09-09; the first
