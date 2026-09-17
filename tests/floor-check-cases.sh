@@ -34,12 +34,20 @@ cat > "$good/.claude/settings.json" <<'JSON'
 JSON
 printf '[project]\nname = "app"\n' > "$good/pyproject.toml"; : > "$good/uv.lock"
 printf 'archetype: backend\n' > "$good/.copier-answers.yml"
-printf 'import os\nos.environ["APP_PORT"]\n' > "$good/src/app/__main__.py"
+cat > "$good/src/app/__main__.py" <<'PYSRC'
+import json, logging, os
+os.environ["APP_PORT"]
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps({"message": record.getMessage()})
+PYSRC
 printf 'APP_PORT=8000\n' > "$good/.env.example"
 printf 'FROM python:3.12-slim@sha256:%064d\nRUN uv sync --locked\nUSER app\nCMD ["python", "-m", "app"]\n' 0 > "$good/Dockerfile"
 printf '.git\n.env\n.venv\n' > "$good/.dockerignore"
 mkdir -p "$good/.github/workflows"
-printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@0\n  image:\n    steps:\n      - run: docker build -t t .\n      - run: docker run --rm t\n' > "$good/.github/workflows/ci.yml"
+printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n  image:\n    steps:\n      - run: docker build -t t .\n      - run: docker run --rm t\n' 0 > "$good/.github/workflows/ci.yml"
+# Tracked-file evidence needs an index, so the fixture is a git work tree (#95).
+git -C "$good" init -q 2>/dev/null && git -C "$good" add -A
 
 out="$(python3 "$checker" --root "$good" --no-network 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out"; then ok "complete backend instance passes offline"
@@ -155,6 +163,69 @@ warns "the .yml body defect is still named" \
   "printf 'name: bug\ndescription: x\nlabels: [\"bug\"]\nbody: nope\n' > .github/ISSUE_TEMPLATE/bug.yml" "body is not a list"
 plant "block-list labels are accepted" "printf 'name: t\ndescription: \"x\"\nlabels:\n  - task\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "__none__" || true
 plant "multi-stage and --platform FROM are understood" "printf 'FROM --platform=linux/amd64 python:3.12-slim@sha256:%064d AS base\nFROM base\nRUN uv sync --locked\nUSER app\nCMD [\"python\", \"-m\", \"app\"]\n' 0 > Dockerfile" "__none__" || true
+
+# The three predicates #42 deferred (#95): a tracked dotenv file, an action not
+# pinned to a commit, a service with no JSON logs. Each is new ground, so each
+# is a WARN and never a FAIL; each names the path and carries its repair; and
+# what the checker cannot read is a SKIP, never a PASS.
+says() { # <description> <shell to change the copy> <expected ERE on one output line>
+  local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
+  ( cd "$copy" && eval "$2" )
+  local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
+  if grep -qE -- "$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -E 'WARN|FAIL|SKIP' | sed 's/^/        /'; fi
+}
+quiet() { # <description> <shell to change the copy> <ERE no WARN, FAIL or SKIP line may match>
+  local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
+  ( cd "$copy" && eval "$2" )
+  local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"; local rc=$?
+  if [ "$rc" = 0 ] && ! grep -qE -- "(WARN|FAIL|SKIP).*($3)" <<<"$out"; then ok "$1"
+  else bad "$1 (rc=$rc, no WARN, FAIL or SKIP should mention '$3')"; printf '%s\n' "$out" | grep -E 'WARN|FAIL|SKIP' | sed 's/^/        /'; fi
+}
+wf() { printf 'jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n'; printf '      %s\n' "$@"; }  # a workflow with these step lines
+sha40="$(printf '%040d' 0)"; sha64="$(printf '%064d' 0)"
+
+# Dotenv: the evidence is the index, not the disk. An untracked local `.env` is
+# what `.gitignore` is for; a tracked one is in every clone.
+says  "the good fixture says no dotenv file is tracked" ":" "PASS  no dotenv file is tracked"
+warns "a tracked .env is named" "printf 'AUDIT_DUMMY=not-a-secret\n' > .env && git add -f .env" "tracked dotenv file: \.env$"
+says  "a tracked .env carries its repair" "printf 'A=b\n' > .env && git add -f .env" "INFO    git rm --cached -- \.env"
+warns "a tracked dotenv in a subdirectory is named by its path" "mkdir -p deploy && printf 'A=b\n' > deploy/.env.production && git add -f deploy/.env.production" "tracked dotenv file: deploy/\.env\.production$"
+quiet "an untracked local .env is not the defect" "printf 'A=b\n' > .env" "dotenv"
+quiet "tracked placeholders are allowed" "printf 'A=\n' | tee .env.sample > .env.template && git add -f .env.example .env.sample .env.template" "dotenv"
+quiet "a tracked directory named .env is not a dotenv file" "mkdir .env && printf 'x\n' > .env/pyvenv.cfg && git add -f .env/pyvenv.cfg" "dotenv"
+says  "outside a git work tree the dotenv check is not verified, not passed" "rm -rf .git" "SKIP  tracked dotenv files not verified"
+
+# Actions: every `uses:` in .github/workflows, read as workflow syntax.
+says  "the good fixture's SHA-pinned reusable workflow passes" ":" "PASS  every action in 1 workflow file is pinned to a commit \(1 uses\)"
+warns "an action pinned to a tag is named with its file and line" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "\.github/workflows/t\.yml: not pinned to a full commit SHA: line 5 actions/checkout@v4$"
+says  "a tag-pinned action carries the command that finds its SHA" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "INFO    gh api repos/actions/checkout/commits/v4 --jq \.sha"
+warns "a branch ref, a short SHA and a quoted value are all unpinned" "wf '- uses: a/b@main' '- uses: c/d@3d3c42e' '- uses: \"e/f/sub@v1\"' > .github/workflows/t.yaml" "line 5 a/b@main, line 6 c/d@3d3c42e, line 7 e/f/sub@v1$"
+warns "a docker action pinned to a tag is unpinned" "wf '- uses: docker://alpine:3.20' > .github/workflows/t.yml" "line 5 docker://alpine:3.20"
+quiet "SHA pins, a local action, a docker digest, a comment and a run block are not findings" \
+  "wf '- uses: actions/checkout@$sha40 # v4' '- uses: ./.github/actions/x' '- uses: docker://alpine@sha256:$sha64' '# - uses: old/one@v1' '- run: |' '    uses: not/yaml@v1' '  env:' '    A: b' > .github/workflows/t.yml" "pinned|workflow"
+quiet "the word uses inside a run line is not a uses key" "wf '- run: grep -rn \"uses:\" .github/workflows' > .github/workflows/t.yml" "pins not verified"
+says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
+says  "a repository with no workflow says so rather than pass" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm -r .github/workflows" "INFO  no workflow file under \.github/workflows"
+
+# JSON logs: a service archetype's source, read statically. A hint is a hint:
+# the PASS line says it is not proof of what the process prints.
+says  "the good fixture's formatter is a static hint, and is called one" ":" "PASS  JSON logs: static hint in src/app/__main__\.py .*not proof"
+warns "a service that only prints is named with its entry point" "printf 'print(\"plain text startup\")\n' > src/app/__main__.py" "JSON logs: no logging found under src/ (entry point src/app/__main__\.py)"
+says  "structlog's JSONRenderer is a hint" "printf 'import structlog\nstructlog.configure(processors=[structlog.processors.JSONRenderer()])\n' > src/app/__main__.py" "PASS  JSON logs: static hint in src/app/__main__\.py"
+says  "python-json-logger in another module is a hint, named by its path" "printf 'print(1)\n' > src/app/__main__.py && printf 'from pythonjsonlogger import jsonlogger\n' > src/app/log.py" "PASS  JSON logs: static hint in src/app/log\.py"
+says  "logging this checker does not recognise is not verified, not passed" "printf 'import logging\nlogging.basicConfig()\n' > src/app/__main__.py" "SKIP  JSON logs not verified: src/app/__main__\.py"
+says  "logging imported beside other modules is still logging" "printf 'import json, logging, sys\nlogging.basicConfig(stream=sys.stdout)\n' > src/app/__main__.py" "SKIP  JSON logs not verified"
+quiet "unrecognised logging is not called a defect either" "printf 'import logging\nlogging.basicConfig()\n' > src/app/__main__.py" "no logging found"
+quiet "a cli instance is not asked for JSON logs" "sed -i.bak 's/backend/cli/' .copier-answers.yml && printf 'print(1)\n' > src/app/__main__.py" "JSON logs"
+
+# The ticket's reproduction, all three at once: three WARNs, and the exit code
+# consumers merge on does not move.
+repro="$work/repro"; rm -rf "$repro"; cp -R "$good" "$repro"
+( cd "$repro" && printf 'AUDIT_DUMMY=not-a-secret\n' > .env && git add -f .env \
+  && wf '- uses: actions/checkout@v4' > .github/workflows/extra.yml && printf 'print("plain text startup")\n' > src/app/__main__.py )
+out="$(python3 "$checker" --root "$repro" --no-network 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && [ "$(grep -c '^  WARN ' <<<"$out")" = 3 ] && grep -q -- '-- 0 failed' <<<"$out"; then ok "the three new findings are WARNs and the floor still exits 0"
+else bad "the #95 reproduction (rc=$rc)"; printf '%s\n' "$out" | grep -E 'WARN|FAIL|failed' | sed 's/^/        /'; fi
 
 # Inheritance, against a fixture API. The claim "the shared set is read when the
 # repository has none" needs a fixture; without one it is an assertion (#85).
