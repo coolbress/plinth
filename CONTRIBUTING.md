@@ -11,8 +11,13 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-for t in tests/*.sh; do "./$t"; done                        # every test; install-smoke and markdownlint need network
+# every test; install-smoke and markdownlint need network
+failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
+[ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
+
+The last line is there because a loop ends with the status of its last test:
+without it a failure in the middle scrolls past and the block still ends in 0.
 
 `tests/install-smoke.sh` installs plinth into a temporary Claude Code config
 directory exactly as the README says, so it needs network and a few minutes.

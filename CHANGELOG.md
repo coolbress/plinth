@@ -32,7 +32,10 @@ inside pull requests and have no tag.
   the only version pin, so CONTRIBUTING's "every `tests/*.sh`" now lints
   markdown with what the required check runs (it needs Node.js, and network
   on the first run). CONTRIBUTING says the link check is CI-only and why, and
-  gives the command for a local look with an unpinned lychee (#113).
+  gives the command for a local look with an unpinned lychee. The documented
+  test loop names the tests that failed and ends non-zero; it used to end
+  with the status of the last test, so a failure in the middle still read as
+  0 (#113).
 
 ## [0.5.11] - 2026-09-17
 
