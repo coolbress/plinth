@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-09-17
+
 ### Added
 
 - The floor checker reads the three predicates #42 named and never shipped:
