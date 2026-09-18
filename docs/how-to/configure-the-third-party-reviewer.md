@@ -37,6 +37,8 @@ show a signal on its current head. The check posts a summons only when the
 caller gives it a person's token ([below](#summoning-the-reviewer)); without one
 it waits for the reviewer's own trigger.
 
+Probe for #205: this line exists only to give the reviewer a diff. Never merged.
+
 ## 1. Enable the reviewer on the repository
 
 Turn on Codex code review for the repository in the Codex settings,
