@@ -115,7 +115,10 @@ owner is the organization and no person's token matches (an input naming the
 person is not built until someone needs it). A login read that fails for a
 reason other than the token, a rate limit or an outage, fails the same way;
 the error line carries `gh`'s own words so the two are told apart, and a
-re-run fixes the second.
+re-run fixes the second. A pull request opened from a fork gets no secrets
+from GitHub, so on it the token is empty however the caller is set: nothing is
+posted, the log says why, and with automatic reviews off such a pull request
+is reviewed only when a person comments the summons.
 With it the summons goes out as that person, at most twice per commit, and
 `ask-comment` is its text. Without it nothing is posted, the job needs only
 `pull-requests: read`, and the check waits for the reviewer's own trigger,

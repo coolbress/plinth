@@ -237,6 +237,7 @@ jobs:
           ASK: ${{ inputs.ask-comment }}
           SUMMONS_TOKEN: ${{ secrets.summons-token }}
           OWNER: ${{ github.repository_owner }}
+          FORK: ${{ github.event.pull_request.head.repo.fork }}   # a fork's pull request gets no secrets
           WAIT: ${{ inputs.wait-seconds }}
           POLL: 20
         run: |
@@ -504,7 +505,14 @@ jobs:
           cat > "$RUNNER_TEMP/summon.sh" <<'SUMMON'
           set -euo pipefail
           if [ -z "${SUMMONS_TOKEN:-}" ]; then
-            echo "no summons-token: nothing is posted; waiting for the reviewer's own trigger"
+            if [ "${FORK:-false}" = "true" ]; then
+              # GitHub withholds secrets from a pull request opened from a fork,
+              # so a configured token is empty here; say so, or the caller reads
+              # it as "not configured".
+              echo "no summons-token (a fork's pull request gets no secrets): nothing is posted; waiting for the reviewer's own trigger, or for a person to comment the summons"
+            else
+              echo "no summons-token: nothing is posted; waiting for the reviewer's own trigger"
+            fi
             exit 0
           fi
           if [ -z "${ASK:-}" ]; then

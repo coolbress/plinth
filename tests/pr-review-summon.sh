@@ -47,6 +47,12 @@ echo "-- without a token nothing is posted, whatever the login file says"
 run "no token, no file"              ""   "@codex review" coolbress missing       0 "nothing is posted"
 run "no token, owner's login file"   ""   "@codex review" coolbress "$OWNER_JSON" 0 "nothing is posted"
 run "no token: never 'post'"         ""   "@codex review" coolbress "$OWNER_JSON" 0 "nothing is posted"
+# A fork's pull request gets no secrets, so a configured token arrives empty: the line says which case this is.
+FORK=true  run "no token on a fork's pull request: says so"  "" "@codex review" coolbress missing 0 "a fork's pull request gets no secrets"
+FORK=false run "no token, not a fork: plain line"            "" "@codex review" coolbress missing 0 "no summons-token: nothing"
+if FORK=false SUMMONS_TOKEN="" ASK="@codex review" OWNER=coolbress LOGIN_JSON="$tmp/login.json" bash "$tmp/summon.sh" | grep -q "fork"; then
+  echo "  FAIL  not a fork, but the fork line printed" >&2; fails=$((fails + 1))
+fi
 if SUMMONS_TOKEN="" ASK="@codex review" OWNER=coolbress LOGIN_JSON="$tmp/login.json" bash "$tmp/summon.sh" | grep -qx post; then
   echo "  FAIL  no token but 'post' printed" >&2; fails=$((fails + 1))
 fi
