@@ -6,7 +6,7 @@ name: pr-review
 #   on:
 #     pull_request:        { types: [opened, synchronize, reopened, ready_for_review] }
 #     pull_request_review: { types: [submitted] }
-#   permissions: { contents: read, pull-requests: write }
+#   permissions: { contents: read, pull-requests: read }
 #   jobs:
 #     third-party:
 #       uses: coolbress/plinth/.github/workflows/pr-review.yml@<commit-sha>
@@ -47,6 +47,15 @@ name: pr-review
 #        (measured on #174).
 #   no   that the reviewer is independent of the author: `reviewer-logins` is a
 #        trust setting, not an independence check.
+#   no   that a review gets started. The summons it can post reaches the
+#        reviewer only from a person's account: measured 2026-09-18 (#186),
+#        two `@codex review` comments from `github-actions[bot]` drew nothing
+#        in the full wait, and the same text from a person started a review
+#        sixteen seconds later; of seven reviewers read that day none
+#        documents honouring a bot's mention (#185). So without the
+#        `summons-token` secret nothing is posted and the wait is for the
+#        reviewer's own trigger; with it, the summons is posted as that
+#        person, at most twice per commit.
 #   no   that the instructions cannot be weakened: only the designated section
 #        is compared, and only within one pull request.
 #
@@ -69,7 +78,14 @@ on:
         type: string
         default: "chatgpt-codex-connector[bot]"
       ask-comment:
-        description: "Comment posted to summon the reviewer when no review is attached. Empty: never summon."
+        # Declared although no caller gives a token today, so it does nothing
+        # anywhere yet: removing an input is a MAJOR change (a caller that
+        # passes it fails with "Invalid input"), so it stays (#185).
+        description: |
+          The comment that summons the reviewer when no review is attached.
+          Posted only with the `summons-token` secret, as that person; without
+          the secret nothing is posted, because a bot's mention is not honoured
+          (#185). Today no caller gives the secret. Empty: never summon.
         type: string
         default: "@codex review"
       wait-seconds:
@@ -101,6 +117,19 @@ on:
         description: "Interval between looks."
         type: number
         default: 20
+    secrets:
+      summons-token:
+        description: |
+          A token of the repository owner, whose GitHub account is the one
+          connected to the reviewer: the token's login is checked against
+          `github.repository_owner`, so this fits a repository owned by a
+          person, not by an organization (there the owner is the organization
+          and no person's login matches). With it the summons is posted as
+          that person and the reviewer starts; without it nothing is posted.
+          A token whose login cannot be read, is another person's, or cannot
+          post the comment fails the check at once with the reason, not after
+          the wait.
+        required: false
 
 jobs:
   review:
@@ -111,7 +140,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      pull-requests: write   # only to post the summoning comment
+      pull-requests: read    # the summons, when posted, goes out with summons-token, never with this token
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -206,6 +235,8 @@ jobs:
           PASS_RELEASE: ${{ inputs.pass-release-pull-requests }}
           LOGINS: ${{ inputs.reviewer-logins }}
           ASK: ${{ inputs.ask-comment }}
+          SUMMONS_TOKEN: ${{ secrets.summons-token }}
+          OWNER: ${{ github.repository_owner }}
           WAIT: ${{ inputs.wait-seconds }}
           POLL: 20
         run: |
@@ -460,28 +491,86 @@ jobs:
           fetch
           if judge; then exit 0; fi
 
-          # Summon at most twice per commit, counted through a marker hidden in
-          # the comment. Why not once (measured 2026-09-01): a summons posted
-          # before the reviewer app was installed left its marker and was
-          # ignored, and "already asked" then blocked every later attempt. A
-          # summons the reviewer never saw is as good as none, so one retry.
-          # Not more: an unbounded loop papers the pull request with summonses.
+          # Whether to post the summons at all, and as whom. A mention posted by
+          # `github-actions[bot]` is not honoured (measured 2026-09-18, #186:
+          # two drew nothing in the full wait, a person's identical comment
+          # started a review in sixteen seconds), so the summons goes out only
+          # with `summons-token`, as that person, once the token's login has
+          # been read and is the repository owner's. The decision is a script
+          # of its own so tests/pr-review-summon.sh can lift it out and run
+          # it: it prints `post` when the summons is to be posted, prints why
+          # not otherwise, and exits 1 when a token is set but cannot be used,
+          # so a broken token fails here and not after the wait.
+          cat > "$RUNNER_TEMP/summon.sh" <<'SUMMON'
+          set -euo pipefail
+          if [ -z "${SUMMONS_TOKEN:-}" ]; then
+            echo "no summons-token: nothing is posted; waiting for the reviewer's own trigger"
+            exit 0
+          fi
+          if [ -z "${ASK:-}" ]; then
+            echo "ask-comment is empty: nothing is posted"
+            exit 0
+          fi
+          login="$(python3 - "${LOGIN_JSON:-/dev/null}" <<'PYLOGIN'
+          import json, sys
+          try:
+              d = json.load(open(sys.argv[1]))
+              print((d.get("login") or "") if isinstance(d, dict) else "")
+          except Exception:
+              print("")
+          PYLOGIN
+          )"
+          if [ -z "$login" ]; then
+            echo "::error::summons-token is set but no login could be read with it; fix or remove the secret." >&2
+            exit 1
+          fi
+          lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+          if [ "$(lower "$login")" != "$(lower "${OWNER:-}")" ]; then
+            echo "::error::summons-token belongs to '$login', not to the repository owner '${OWNER:-}'; the summons is posted only as the owner." >&2
+            exit 1
+          fi
+          echo "post"
+          SUMMON
+          # Who the summons would be posted as: read once, with the token.
+          echo 'null' > "$RUNNER_TEMP/login.json"; : > "$RUNNER_TEMP/login.err"
+          if [ -n "${SUMMONS_TOKEN:-}" ]; then
+            GH_TOKEN="$SUMMONS_TOKEN" gh api user > "$RUNNER_TEMP/login.json" 2> "$RUNNER_TEMP/login.err" || echo 'null' > "$RUNNER_TEMP/login.json"
+          fi
+          if ! post="$(LOGIN_JSON="$RUNNER_TEMP/login.json" bash "$RUNNER_TEMP/summon.sh")"; then
+            # gh's own words tell a bad token (HTTP 401) from a call that did
+            # not get through (rate limit, 5xx); the second is fixed by a re-run.
+            echo "::error::summons-token is set but cannot be used (the reason is above); nothing was posted and the wait is skipped. gh said: $(tr '\n' ' ' < "$RUNNER_TEMP/login.err" | cut -c1-300)"
+            exit 1
+          fi
+          echo "$post"
+
+          # With a token: at most twice per commit, counted through a marker
+          # hidden in the comment, so a loop cannot paper the pull request. The
+          # second try dates from 2026-09-01, when a summons drew nothing and
+          # "already asked" then blocked every later attempt; that summons was
+          # a bot's, which today reads as the case above (#185).
           marker="<!-- third-party-review: $HEAD_SHA -->"
           asked() {
             gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq '.[].body' 2>/dev/null \
               | grep -cF "$marker" || true
           }
           ask() {
-            [ -n "${ASK:-}" ] || return 0
+            [ "$post" = "post" ] || return 0
             n="$(asked)"
             if [ "${n:-0}" -ge 2 ]; then
               echo "asked twice already; not asking again."
               return 0
             fi
             printf '%s\n\n%s\n' "$ASK" "$marker" > "$RUNNER_TEMP/ask.md"
-            gh pr comment "$NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/ask.md" \
-              && echo "asked ($(( ${n:-0} + 1 ))/2): $ASK" \
-              || echo "::warning::could not post the summons; comment '$ASK' on the pull request yourself"
+            if GH_TOKEN="$SUMMONS_TOKEN" gh pr comment "$NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/ask.md"; then
+              echo "asked ($(( ${n:-0} + 1 ))/2) as $OWNER: $ASK"
+            else
+              # A token that reads its login but cannot comment here (no access
+              # to this repository, or read-only on pull requests) is found out
+              # only now; fail here, not after the wait.
+              echo "::error::summons-token could not post the summons (the token reads as $OWNER but cannot comment on this pull request); fix the secret's access and re-run."
+              exit 1
+            fi
           }
           ask
 
@@ -501,8 +590,9 @@ jobs:
           done
 
           echo "::error::no third-party review is attached to this commit ($HEAD_SHA)."
-          echo "  - is the reviewer enabled for this repository? https://chatgpt.com/codex/settings/code-review"
-          echo "  - you can comment '$ASK' on the pull request yourself and re-run this job."
+          echo "  - is the reviewer's automatic review on for this repository? https://chatgpt.com/codex/settings/code-review"
+          echo "  - comment '$ASK' on the pull request yourself and re-run this job: a person's comment"
+          echo "    starts the review, this job's does not unless the caller gives summons-token."
           echo "  - if an author listed above is the reviewer under another name,"
           echo "    set reviewer-logins in the caller to that name."
           exit 1

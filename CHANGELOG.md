@@ -11,6 +11,25 @@ inside pull requests and have no tag.
 
 ### Changed
 
+- `third-party / review` posts its summons only when the caller passes the
+  new optional secret `summons-token`, a token of the repository owner, whose
+  login it checks first; a token whose login cannot be read, is another
+  person's, or cannot post the comment fails the check at once with the
+  reason. The comparison is with the repository owner, so this fits a
+  repository owned by a person, not an organization. Without the secret
+  nothing is posted and the check waits for the reviewer's own trigger. Why:
+  a mention from `github-actions[bot]` drew no review (twice, in the full
+  wait, on #186) while a person's did within sixteen seconds, and no reviewer
+  read documents honouring a bot's mention. The job's permission drops to
+  `pull-requests: read`; a caller granting more is not broken. `ask-comment`
+  stays declared (removing an input breaks callers) and is now the text
+  posted with a token; no caller gives one today. The decision is lifted out
+  and run by `tests/pr-review-summon.sh` (#185).
+- What #167's gate leaves, measured: on a Dependabot or release pull request
+  the check passes in seconds instead of waiting about four minutes for the
+  reviewer's own review (the time measured on #186 from the push run's start
+  to the review), and the reviewer reviews those pull requests anyway when
+  its automatic reviews are on (#185).
 - `third-party / review` prints, once it has decided, how many inline
   comments the accepted reviewer left on the reviewed head and their URLs,
   in the log and the job summary; zero prints as zero, and the line says it
