@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.15] - 2026-09-18
+
 ### Changed
 
 - The how-to for `third-party / review` says that the check is not a barrier
