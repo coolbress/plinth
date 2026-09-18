@@ -181,11 +181,13 @@ for bad in 'null' '{"message":"Not Found"}' '<html>'; do
     echo "  FAIL  unreadable comments ($bad) printed as zero" >&2; fails=$((fails + 1))
   fi
 done
-rm -f "$tmp/rc.json"
-if python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 && grep -q "could not be read" "$tmp/log"; then
-  echo "  PASS  a missing comments file: could not be read, verdict stands"
+rm -f "$tmp/rc.json"; : > "$tmp/summary.md"
+if GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
+   && grep -q "could not be read" "$tmp/log" && grep -q "could not be read" "$tmp/summary.md" && ! grep -q "no inline comments" "$tmp/summary.md"; then
+  echo "  PASS  a missing comments file: could not be read, in the log and the summary; verdict stands"
 else
-  echo "  FAIL  a missing comments file: expected a pass saying it could not be read" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
+  echo "  FAIL  a missing comments file: expected a pass saying it could not be read in the log and the summary" >&2
+  sed 's/^/        /' "$tmp/log" "$tmp/summary.md" >&2; fails=$((fails + 1))
 fi
 if grep -q "|| echo 'null' > \"\$RUNNER_TEMP/\$2\"" "$wf"; then
   echo "  PASS  the step writes null, not [], when a call fails"
