@@ -9,6 +9,25 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `third-party / review` prints, once it has decided, how many inline
+  comments the accepted reviewer left on the reviewed head and their URLs,
+  in the log and the job summary; zero prints as zero, and the line says it
+  is a snapshot as of that run. The verdict is unchanged: the check still
+  blocks on presence, never on findings. `AGENTS.md` and the how-to say to
+  read the inline comments, not only the summary, and to record in the pull
+  request description what happened to each (#176).
+- The how-to says what was measured about the reviewer's triggers (#186,
+  2026-09-18): with the provider's "Automatic reviews" toggle off, the summons
+  `third-party / review` posts from `github-actions[bot]` drew no review in
+  the check's full wait and the check failed; the same text from a person's
+  account started a review in sixteen seconds. So the toggle stays on; the
+  0.5.13 note that "the provider's own app may review on its own trigger" is
+  the trigger that has been observed to work. What the check's own summons
+  does with the toggle on is not measured, and #185 decides what becomes of
+  it (#176).
+
 ## [0.5.13] - 2026-09-18
 
 ### Changed

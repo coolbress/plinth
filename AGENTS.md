@@ -24,6 +24,11 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   pull request description, which becomes the squash commit. AI is never a
   `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
 - A same-session `/code-review` helps but is not independent; say so. `third-party / review` only records an accepted reviewer's signal on the commit.
+  Whoever opens or merges a pull request reads the reviewer's inline comments
+  (`gh api repos/<owner>/<repo>/pulls/<n>/comments`; the check's log lists their
+  URLs), not only its summary, and the description says what was done with
+  each: fixed, answered with the reason, or moved to an issue. How many rounds:
+  [When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop).
 - Issues and pull requests follow [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change)
   (the pull-request shape) and [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)
   (what a record has to carry). Read the templates that actually apply first,

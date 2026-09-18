@@ -138,6 +138,46 @@ run "the same wording from someone else does not count" "$(done_cmt someone "$D1
 # The reviewer's P1 scenario, head moved back to an older commit: bound by
 # commit, there is no time heuristic at all, and the old completion simply does not match.
 
+echo "-- once decided, the log and the job summary list the reviewer's inline comments on this head (#176)"
+# The verdict never depends on this; the count is for the person who merges.
+# Inline comments: made on this head, an old one moved onto the head, someone
+# else's on this head. Only the first is counted.
+rcm_url() {  # author, original_commit_id, url
+  printf '{"user":{"login":"%s"},"commit_id":"%s","original_commit_id":"%s","html_url":"%s","body":"P2 ..."}' "$1" "$HEAD" "$2" "$3"
+}
+report() {  # name, review-comments JSON, pass condition, expected log line, expected url count
+  echo '[]' > "$tmp/r.json"; printf '%s' "$2" > "$tmp/rc.json"
+  printf '%s' "$(cmt "$BOT" "$HEAD" completed)" > "$tmp/i.json"   # the verdict comes from the marker
+  : > "$tmp/summary.md"
+  GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$tmp/attest.py" "$HEAD" "$BOT" \
+    "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
+  got=$?
+  urls_log="$(grep -c 'https://' "$tmp/log")"; urls_sum="$(grep -c '^- https://' "$tmp/summary.md")"
+  if [ "$got" -ne 0 ] || ! grep -qF "$3" "$tmp/log" || ! grep -qF "$3" "$tmp/summary.md" \
+     || [ "$urls_log" -ne "$4" ] || [ "$urls_sum" -ne "$4" ]; then
+    echo "  FAIL  $1: exit $got, wanted '$3' with $4 url(s) in log and summary (log $urls_log, summary $urls_sum)" >&2
+    sed 's/^/        /' "$tmp/log" "$tmp/summary.md" >&2; fails=$((fails + 1))
+  else
+    echo "  PASS  $1"
+  fi
+}
+U1=https://github.com/o/r/pull/1#discussion_r1; U2=https://github.com/o/r/pull/1#discussion_r2
+report "none: printed as zero, not silence"  '[]' "no inline comments on this head" 0
+report "two on this head are counted"        "[$(rcm_url "$BOT" "$HEAD" "$U1"),$(rcm_url "$BOT" "$HEAD" "$U2")]" "reviewer left 2 inline comments" 2
+report "one on an older head is not counted" "[$(rcm_url "$BOT" "$HEAD" "$U1"),$(rcm_url "$BOT" "$OLD" "$U2")]" "reviewer left 1 inline comment on" 1
+report "someone else's is not counted"       "[$(rcm_url someone "$HEAD" "$U1")]" "no inline comments on this head" 0
+if grep -qF "$U1" "$tmp/log"; then
+  echo "  FAIL  someone else's comment url leaked into the log" >&2; fails=$((fails + 1))
+fi
+# Without a summary file (a local run) the report still prints and the verdict still stands.
+echo '[]' > "$tmp/r.json"; printf '%s' "[$(rcm_url "$BOT" "$HEAD" "$U1")]" > "$tmp/rc.json"; echo '[]' > "$tmp/i.json"
+if env -u GITHUB_STEP_SUMMARY python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
+   && grep -qF "$U1" "$tmp/log"; then
+  echo "  PASS  no summary file: the log alone carries the url"
+else
+  echo "  FAIL  no summary file: expected a pass with the url in the log" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
+fi
+
 echo "-- when nothing matches, the log carries the clues (wrong name or commit: fix it in one go)"
 printf '%s' "$(cmt "$BOT" "$OLD" completed)" > "$tmp/i.json"
 echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
