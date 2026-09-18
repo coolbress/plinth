@@ -11,6 +11,12 @@ inside pull requests and have no tag.
 
 ### Changed
 
+- The how-to for `third-party / review` says that the check is not a barrier
+  against people with write access: three of its signals are issue comments
+  (the security review's marker, the completion comment, the summary row), and it does not look
+  at whether such a comment was edited after it was posted, or by whom, so one
+  that someone else edited can still count. Left as it is by the owner's
+  decision, with the reasons on #196. No check changed.
 - `third-party / review` binds the reviewer's completion comment to the push,
   as it does the summary row: the comment counts only when its `created_at` is
   later than the newest push of the head in the repository's activity log and
