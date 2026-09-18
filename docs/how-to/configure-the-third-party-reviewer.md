@@ -88,19 +88,25 @@ on it yourself; the check still passes either way.
 
 Two things this does not do. It does not stop the provider's own app from
 reviewing anyway: Codex starts on its own when a pull request is opened or
-marked ready wherever "Automatic reviews" is on, and no setting narrows that
-by author or title. What can be set (seen on `chatgpt.com/codex/settings`,
-2026-09-18): a repository's "Automatic code review" offers `Review all PRs`,
-`Review team PRs` and `Follow personal preferences`, no off; the personal
-"Automatic reviews" toggle, on the code review tab and the security review
-tab, is what turns it off. With that toggle off and each repository on
-`Follow personal preferences`, the summons this check posts is the only
-trigger, and a repository without this check gets no review unless someone
-comments `@codex review` themselves. This repository runs that way. Do not
-spell the summons in a pull request description: one that did (#184) drew a
-comment from the reviewer asking for an environment. And skipping the summons
-skips findings: on the first Dependabot pull request here (#178) the reviewer
-had nothing to say about the bump and one correct comment about this
+marked ready wherever its "Automatic reviews" toggle is on, and no setting
+narrows that by author or title (seen on `chatgpt.com/codex/settings`,
+2026-09-18: a repository offers `Review all PRs`, `Review team PRs` and
+`Follow personal preferences`; the personal toggle, on the code review tab and
+the security review tab, is the off switch). Leave that toggle on. The summons
+this check posts is not a substitute for it: measured on #186 (2026-09-18,
+toggle off), two `@codex review` comments from `github-actions[bot]` drew no
+review in the check's full wait and the check failed, while the same text
+commented by a person's account started a review sixteen seconds later. What
+the summons has done on its own, with the toggle on, has not been measured;
+the reviews on every earlier pull request here arrived while the toggle was
+on. Another repository measured the same and moved its summons to a token
+owned by the Codex-connected person (hide212131/hane#57, read 2026-09-18);
+this workflow does not, so with the toggle off a pull request gets no review
+until a person comments the summons. Do not spell the summons in a pull
+request description: one that did (#184) drew a comment from the reviewer
+asking for an environment. And skipping the summons skips nothing the toggle
+does not already give: on the first Dependabot pull request here (#178) the
+reviewer had nothing to say about the bump and one correct comment about this
 repository's text next to it.
 
 ## What to do with the findings
