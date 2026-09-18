@@ -18,6 +18,14 @@ inside pull requests and have no tag.
   signal, and the driver finished with exit 0. That happens on about 0.09%
   of runs (8 of 9,403 bash 3.2 seeds); seeds 6126 and 1672 reproduce #201's
   two failing lines on the unchanged file and pass after (#201).
+- `third-party / review` no longer counts Copilot's could-not-review notice
+  as a review. Asked by a person who has reached their quota, Copilot still
+  submits a review on the current commit whose body is `Copilot was unable
+  to review this pull request because …` (measured on two public pull
+  requests, 2026-09-19), and a caller accepting
+  `copilot-pull-request-reviewer[bot]` passed on it. A review whose body
+  begins with that text, in any letter case, no longer counts, and the log
+  names it; a review that mentions the words further down still counts (#204).
 
 ## [0.5.15] - 2026-09-18
 

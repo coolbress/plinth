@@ -9,8 +9,14 @@ completion comment, or a `Completed` row in its summary comment's table, on
 the pull request's current commit. The row is there because a review started
 by a push that found nothing has left only that (measured on #190, 2026-09-18:
 the check waited the full window on a commit the reviewer had looked at, #191);
-a `Running` row does not count. The row names its commit in seven characters
-and the completion comment in ten, which a later head can be made to share, so
+a `Running` row does not count. A review counts unless its body begins with a
+could-not-review notice the check knows. It knows one, Copilot's `Copilot was
+unable to review this pull request`, which Copilot submits as a review on the
+current commit when the person who asked for the review has reached their
+quota (measured on two public pull requests, 2026-09-19, #204); the check's
+log names such a review and says why it was not counted. The row names its
+commit in seven characters and the completion comment in ten, which a later
+head can be made to share, so
 each counts only when its time (the row's completion, the comment's
 `created_at`) is later than the newest push of the current head in the
 repository's activity log, and the head is the one commit the branch has
