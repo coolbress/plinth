@@ -9,6 +9,18 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `third-party / review` prints, once it has decided, how many inline
+  comments the accepted reviewer left on the reviewed head and their URLs,
+  in the log and the job summary; zero prints as zero, and the line says it
+  is a snapshot as of that run. The verdict is unchanged: the check still
+  blocks on presence, never on findings. `AGENTS.md` and the how-to say to
+  read the inline comments, not only the summary, and to record in the pull
+  request description what happened to each; the how-to points at the
+  provider's Automatic reviews toggle now that the summons is the only
+  trigger here (#176).
+
 ## [0.5.13] - 2026-09-18
 
 ### Changed
