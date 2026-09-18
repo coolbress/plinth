@@ -381,10 +381,18 @@ jobs:
           logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}
           MARK = re.compile(r"<!--\s*codex-security-review:v1\s*(\{.*?\})\s*-->", re.S)
 
+          def readable(p):
+              """Is the file a JSON list? The step writes `null` when a call
+              fails, so a failed fetch and an empty list are told apart (#188)."""
+              try:
+                  return isinstance(json.loads(pathlib.Path(p).read_text() or "[]"), list)
+              except (OSError, json.JSONDecodeError):
+                  return False
+
           def load(p):
               try:
                   d = json.loads(pathlib.Path(p).read_text() or "[]")
-              except json.JSONDecodeError:
+              except (OSError, json.JSONDecodeError):
                   return []
               return d if isinstance(d, list) else []
 
@@ -413,9 +421,16 @@ jobs:
               urls = [it.get("html_url") or "(no url)" for it in load(rcomments_p)
                       if ours(it) and it.get("original_commit_id") == head]
               n = len(urls)
-              line = (f"reviewer left {n} inline comment{'s' if n != 1 else ''} on {head[:8]}"
-                      if n else f"no inline comments on this head ({head[:8]})")
-              line += " as of this check run; a later review may add more"
+              if not readable(rcomments_p):
+                  # A failed or malformed fetch is not zero comments (#188): say
+                  # so, never the zero line. The verdict above was not built on
+                  # this file, so it stands.
+                  line = ("inline comments: could not be read (the pulls/<n>/comments call failed"
+                          " or did not return a list); run the live query in the how-to")
+              else:
+                  line = (f"reviewer left {n} inline comment{'s' if n != 1 else ''} on {head[:8]}"
+                          if n else f"no inline comments on this head ({head[:8]})")
+                  line += " as of this check run; a later review may add more"
               print(line)
               for u in urls:
                   print(f"   {u}")
@@ -478,7 +493,9 @@ jobs:
           PY
 
           # The three signals live in three APIs; one alone misses (see the docstring).
-          get() { gh api "repos/$REPO/$1" --paginate > "$RUNNER_TEMP/$2" 2>/dev/null || echo '[]' > "$RUNNER_TEMP/$2"; }
+          # A failed call leaves `null`, not `[]`: the verdict reads either as
+          # "no signal", and the inline-comment report tells them apart (#188).
+          get() { gh api "repos/$REPO/$1" --paginate > "$RUNNER_TEMP/$2" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/$2"; }
           fetch() {
             get "pulls/$NUMBER/reviews"   reviews.json
             get "pulls/$NUMBER/comments"  rcomments.json

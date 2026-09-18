@@ -169,6 +169,32 @@ report "someone else's is not counted"       "[$(rcm_url someone "$HEAD" "$U1")]
 if grep -qF "$U1" "$tmp/log"; then
   echo "  FAIL  someone else's comment url leaked into the log" >&2; fails=$((fails + 1))
 fi
+# A failed or malformed fetch of the comments is not zero comments (#188): the
+# line says it could not be read, never the zero line, and the verdict (here
+# from the marker) still stands. The step writes `null` when the call fails.
+report "fetch failed (null): could not be read"   'null'                     "could not be read" 0
+report "an API error object: could not be read"   '{"message":"Not Found"}'  "could not be read" 0
+report "not JSON: could not be read"              '<html>'                   "could not be read" 0
+for bad in 'null' '{"message":"Not Found"}' '<html>'; do
+  printf '%s' "$bad" > "$tmp/rc.json"; echo '[]' > "$tmp/r.json"; printf '%s' "$(cmt "$BOT" "$HEAD" completed)" > "$tmp/i.json"
+  if python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" 2>&1 | grep -q "no inline comments"; then
+    echo "  FAIL  unreadable comments ($bad) printed as zero" >&2; fails=$((fails + 1))
+  fi
+done
+rm -f "$tmp/rc.json"; : > "$tmp/summary.md"
+if GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
+   && grep -q "could not be read" "$tmp/log" && grep -q "could not be read" "$tmp/summary.md" && ! grep -q "no inline comments" "$tmp/summary.md"; then
+  echo "  PASS  a missing comments file: could not be read, in the log and the summary; verdict stands"
+else
+  echo "  FAIL  a missing comments file: expected a pass saying it could not be read in the log and the summary" >&2
+  sed 's/^/        /' "$tmp/log" "$tmp/summary.md" >&2; fails=$((fails + 1))
+fi
+if grep -q "|| echo 'null' > \"\$RUNNER_TEMP/\$2\"" "$wf"; then
+  echo "  PASS  the step writes null, not [], when a call fails"
+else
+  echo "  FAIL  the step's fetch fallback is not null; a failed call would read as an empty list" >&2; fails=$((fails + 1))
+fi
+
 # Without a summary file (a local run) the report still prints and the verdict still stands.
 echo '[]' > "$tmp/r.json"; printf '%s' "[$(rcm_url "$BOT" "$HEAD" "$U1")]" > "$tmp/rc.json"; echo '[]' > "$tmp/i.json"
 if env -u GITHUB_STEP_SUMMARY python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
