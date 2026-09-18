@@ -165,9 +165,8 @@ echo "-- summary table row signal (#191: a zero-finding review started by a push
 # The summary comment as measured on plinth#186, #189 and #190 (2026-09-18):
 # the HTML marker on the first line, then one table row per review, the commit
 # as seven characters. On #190's second head that row was all the reviewer
-# left. The `Completed` row is measured; the `Running` row's exact wording is
-# not (nobody caught one), so that fixture is the measured row with the status
-# swapped.
+# left. Both rows are measured: `Completed` there, `Running` on #195
+# (`🔄 **Running** since <relative-time …>`, 2026-09-18).
 row() {  # status cell, short sha, [completed at]
   printf '| 📝 **Code Review** | %s <relative-time datetime="%s">%s</relative-time> | `%s` | New commits |' "$1" "${3:-$T_DONE}" "${3:-$T_DONE}" "$2"
 }
@@ -180,7 +179,7 @@ body = (first + "\n\n## Codex Review Summary\n\nThis comment shows the latest Co
 print(json.dumps([{"user": {"login": who}, "body": body}], ensure_ascii=False))' "$@"
 }
 SUM='<!-- codex-pull-request-review-summary -->'
-DONE_ST='✅ **Completed**'; RUN_ST='⏳ **Running**'
+DONE_ST='✅ **Completed**'; RUN_ST='🔄 **Running** since'
 runsum "Completed row for this head passes"              "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" "$PUSHED" 0
 runsum "Completed row for an older head does not count"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")")" "$PUSHED" 1
 runsum "Running row for this head does not count"        "$(sum_cmt "$BOT" "$SUM" "$(row "$RUN_ST" "${HEAD:0:7}")")" "$PUSHED" 1
@@ -304,6 +303,34 @@ runsum "comment older than the push, row newer: the row passes" \
 runsum "row left out for a commit sharing seven characters, comment's ten are this head's alone: the comment passes" \
   "$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1]) + json.loads(sys.argv[2])))' \
      "$ROW_HEAD" "$CMT_HEAD")" "[$(push "$HEAD" "$T_PUSH" "$TWIN")]" 0
+
+echo "-- the newest push of the head is the latest by time, whatever order the log arrives in (#197)"
+# `repos/<r>/activity` is newest first by default and with `direction=desc`,
+# oldest first with `direction=asc` (measured 2026-09-18). The step asks for
+# `desc`; the judgement does not lean on it: among the pushes whose `after` is
+# the head, the latest timestamp is the push, and when one of them has no
+# readable timestamp nothing is known about the newest, so neither signal counts.
+OLDEST_FIRST="[$(push "$HEAD" "$T_PUSH"),$(push "$OLD" 2026-09-18T07:16:00Z),$(push "$HEAD" 2026-09-18T07:30:00Z)]"
+runsum "oldest-first log, head pushed twice, the row between the two pushes: does not count"     "$ROW_HEAD" "$OLDEST_FIRST" 1
+runsum "oldest-first log, head pushed twice, the comment between the two pushes: does not count" "$CMT_HEAD" "$OLDEST_FIRST" 1
+NO_STAMP="{\"after\":\"$HEAD\"}"
+runsum "a push of the head without a timestamp, listed first: the row does not count"      "$ROW_HEAD" "[$NO_STAMP,$(push "$HEAD" "$T_PUSH")]" 1
+runsum "a push of the head without a timestamp, listed last: the row does not count"       "$ROW_HEAD" "[$(push "$HEAD" "$T_PUSH"),$NO_STAMP]" 1
+runsum "a push of the head without a timestamp, listed first: the comment does not count"  "$CMT_HEAD" "[$NO_STAMP,$(push "$HEAD" "$T_PUSH")]" 1
+runsum "a push of the head without a timestamp, listed last: the comment does not count"   "$CMT_HEAD" "[$(push "$HEAD" "$T_PUSH"),$NO_STAMP]" 1
+runsum "a push of the head with a null timestamp, listed last: does not count" \
+  "$CMT_HEAD" "[$(push "$HEAD" "$T_PUSH"),{\"after\":\"$HEAD\",\"timestamp\":null}]" 1
+runsum "a push of the head with a time that is not UTC to the second, listed last: does not count" \
+  "$ROW_HEAD" "[$(push "$HEAD" "$T_PUSH"),$(push "$HEAD" 2026-09-18T09:00:00+02:00)]" 1
+runsum "oldest-first log, the row after both pushes of the head: passes" \
+  "$ROW_HEAD" "[$(push "$HEAD" 2026-09-18T07:00:00Z),$(push "$OLD" 2026-09-18T07:05:00Z),$(push "$HEAD" "$T_PUSH")]" 0
+runsum "another commit's push without a timestamp does not get in the way: passes" \
+  "$CMT_HEAD" "[$(push "$HEAD" "$T_PUSH"),{\"after\":\"$OLD\",\"before\":\"$OLD\"}]" 0
+if grep -vE '^[[:space:]]*#' "$wf" | grep -E 'gh api .*repos/\$REPO/activity' | grep -q -- '-f direction=desc'; then   # comment lines do not count
+  echo "  PASS  the step asks for the log newest first"
+else
+  echo "  FAIL  the activity call does not pass direction=desc; the order is left to the endpoint's default" >&2; fails=$((fails + 1))
+fi
 
 echo "-- once decided, the log and the job summary list the reviewer's inline comments on this head (#176)"
 # The verdict never depends on this; the count is for the person who merges.

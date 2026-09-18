@@ -328,11 +328,13 @@ jobs:
           SH
           # Who pushed to the head branch, and when: for the gate, and for the
           # judgement's completion-comment and summary-row signals (#191,
-          # #193). A failed call leaves a
-          # file the gate cannot read as a list, which it takes as "go on and
-          # look". The count is printed so a run shows whether the call works.
+          # #193). Newest first is asked for by name: the gate reads the first
+          # entry as the newest push (`asc` returns oldest first, measured
+          # 2026-09-18; #197). A failed call leaves a file the gate cannot
+          # read as a list, which it takes as "go on and look". The count is
+          # printed so a run shows whether the call works.
           pushes() {
-            gh api --method GET "repos/$REPO/activity" -f ref="refs/heads/$HEAD_REF" -F per_page=100 \
+            gh api --method GET "repos/$REPO/activity" -f ref="refs/heads/$HEAD_REF" -f direction=desc -F per_page=100 \
               > "$RUNNER_TEMP/activity.json" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/activity.json"
           }
           pushes
@@ -390,6 +392,10 @@ jobs:
               head to the branch, read from the repository's activity log.
               Both times are written by a server, the vendor's and GitHub's;
               a commit's own dates are its author's text and are not read.
+              The newest push of the head is the latest timestamp among the
+              log's entries whose `after` is the head, in whatever order they
+              arrive; if one of those has no readable timestamp, the push
+              counts as unread (#197).
               This is a time next to the commit, not in place of it. The
               time says the row was completed after this head arrived, not
               which commit was completed: the review of an earlier head with
@@ -541,8 +547,11 @@ jobs:
           pushes = [p for p in load(activity_p) if isinstance(p, dict)]
           if len(pushes) >= 100:   # a full page: older pushes may be missing
               pushes = []
-          pushed = next((str(p.get("timestamp") or "") for p in pushes if p.get("after") == head), "")
-          pushed = pushed[:19] if STAMP.match(pushed) else ""
+          # The newest push of this head is the latest by time, not the first
+          # listed: the step asks for newest first, and this does not lean on
+          # it (#197). One of them without a readable time: nothing is known.
+          stamps = [str(p.get("timestamp") or "") for p in pushes if p.get("after") == head]
+          pushed = max(stamps)[:19] if stamps and all(STAMP.match(t) for t in stamps) else ""
           tips = {str(p.get(k) or "") for p in pushes for k in ("before", "after")}
 
           def unbound(sha, when):
