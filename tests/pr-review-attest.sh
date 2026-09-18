@@ -158,7 +158,9 @@ print(json.dumps([{"user": {"login": who}, "body": body}], ensure_ascii=False))'
 }
 # The pushes to the head branch, newest first, as `repos/<r>/activity` returns
 # them (fields as measured on this branch, 2026-09-18).
-push() { printf '{"after":"%s","before":"%s","timestamp":"%s","activity_type":"push","actor":{"login":"someone"}}' "$1" "$OLD" "$2"; }
+push() {  # after, timestamp, [before]
+  printf '{"after":"%s","before":"%s","timestamp":"%s","activity_type":"push","actor":{"login":"someone"}}' "$1" "${3:-$OLD}" "$2"
+}
 runsum() {  # name, issue-comments JSON, activity JSON ('-' = the argument is not given), expected exit
   printf '%s' "$2" > "$tmp/i.json"; echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
   if [ "$3" = "-" ]; then
@@ -209,6 +211,30 @@ runsum "a row without a completion time: does not count" \
   "$(sum_cmt "$BOT" "$SUM" "| 📝 **Code Review** | $DONE_ST | \`${HEAD:0:7}\` | New commits |")" "$PUSHED" 1
 runsum "a completion time that is not UTC: does not count" \
   "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}" 2026-09-18T09:21:03+02:00)")" "$PUSHED" 1
+# The time says the row was completed after this head arrived, not which
+# commit was completed (the reviewer's second P1 on PR #192): a review of an
+# earlier head with the same seven characters, still running when this head is
+# pushed, completes after the push. The log holds every commit the branch has
+# pointed at (`before` and `after` of each push, force pushes included), so the
+# row counts only when this head is the one commit among them that begins with
+# the row's characters, and only when the log is whole (under a page of 100,
+# as the gate reads it).
+TWIN="${HEAD:0:7}bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"    # another commit, the same seven characters
+NEAR="${HEAD:0:6}0bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"   # shares six
+runsum "the head replaced a commit with the same seven characters whose review finished after the push: does not count" \
+  "$ROW_HEAD" "[$(push "$HEAD" "$T_PUSH" "$TWIN")]" 1
+grep -qF "another commit" "$tmp/log" || { echo "  FAIL  log does not name the other commit as the reason" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
+runsum "such a commit anywhere earlier in the log: does not count" \
+  "$ROW_HEAD" "[$(push "$HEAD" "$T_PUSH"),$(push "$OLD" 2026-09-18T07:10:00Z "$TWIN"),$(push "$TWIN" 2026-09-18T07:05:00Z)]" 1
+runsum "a commit sharing only six characters does not get in the way: passes" \
+  "$ROW_HEAD" "[$(push "$HEAD" "$T_PUSH" "$NEAR")]" 0
+many() {  # how many pushes, this head first
+  python3 -c 'import json,sys
+n, head, old, t = int(sys.argv[1]), *sys.argv[2:5]
+print(json.dumps([{"after": head, "before": old, "timestamp": t}] + [{"after": old, "before": old, "timestamp": "2026-09-18T07:00:00Z"}] * (n - 1)))' "$1" "$HEAD" "$OLD" "$T_PUSH"
+}
+runsum "a log of 99 pushes is whole: passes"                       "$ROW_HEAD" "$(many 99)"  0
+runsum "a full page of 100 pushes may have more behind it: does not count" "$ROW_HEAD" "$(many 100)" 1
 runsum "when it does not count for the push, the log says so" "$ROW_HEAD" 'null' 1
 if grep -qF "the push of this head" "$tmp/log"; then
   echo "  PASS  log names the push as the reason"
