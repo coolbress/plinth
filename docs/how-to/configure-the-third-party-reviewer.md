@@ -8,8 +8,8 @@ The check is `third-party / review`. It passes when the Codex code reviewer
 completion comment on the pull request's current commit. That is evidence of
 participation: it does not say the whole change was reviewed, that the
 findings were handled, or anything about the code's quality. It never blocks
-on what the reviewer said. Drafts, bot-authored and release pull requests are
-not summoned ([below](#pull-requests-it-passes-without-summoning)); any other ready pull request must
+on what the reviewer said. Drafts and Dependabot's pull requests are not
+summoned, nor release pull requests where that is turned on ([below](#pull-requests-it-passes-without-summoning)); any other ready pull request must
 show a signal on its current head, and the check summons the reviewer at most
 twice per commit.
 
@@ -54,17 +54,32 @@ cannot be weakened.
 
 ### Pull requests it passes without summoning
 
-On two kinds of pull request the step that looks for a review passes at once,
-posts no summons and looks for no review; its log says which. The step before
-it still runs on them: one that changes `## Code Review Rules` together with
-other files fails the check like any other.
+On one kind of pull request, and on a second if you turn it on, the step that
+looks for a review passes at once, posts no summons and looks for no review;
+its log says which. The step before it still runs on them: one that changes
+`## Code Review Rules` together with other files fails the check like any
+other.
 
-- `bot-authored pull request: not summoned`: the author's type is `Bot`, or
-  the login is a bot's (`dependabot[bot]`, `app/dependabot`, `dependabot`).
-- `release pull request: not summoned`: the title is the one
-  `scripts/make-release.sh` writes, exactly `chore(release): vX.Y.Z`. A title
-  that only resembles it (`chore(release-notes): …`, `chore(release): v2 docs
-  only`) is summoned as usual.
+- `Dependabot pull request: not summoned`: the author is Dependabot
+  (`dependabot[bot]`) and every push to its branch was Dependabot's, up to
+  the current head, by the repository's activity log. The log names the
+  account that pushed; a commit's author line does not count, because
+  whoever writes a commit chooses it. Once anyone else has pushed to the
+  branch, an "Update branch" included, it is looked at like any other, and it
+  stays so if Dependabot later overwrites that push. No
+  other bot is on the list: a coding agent's account is a bot too (`Copilot`,
+  `cursor[bot]`, `claude[bot]`, `devin-ai-integration[bot]`), and what it opens
+  is code, which is what the review is for. Renovate is not on it either; it
+  has not been measured here.
+- `release pull request: not summoned`, only with
+  `pass-release-pull-requests: true` under `with:`. The title must be exactly
+  `chore(release): vX.Y.Z`, the one `scripts/make-release.sh` writes; one that
+  only resembles it (`chore(release-notes): …`, `chore(release): v2 docs
+  only`) is summoned as usual. The author of a pull request chooses its title,
+  so with this on anyone who can open a pull request, an agent included, can
+  skip the review by choosing that title. It is off by default; leave it off
+  where `third-party / review` is a required check. This repository turns it
+  on: the check is optional here and a release is four generated lines.
 
 On these the check is no evidence that anyone looked. If `third-party /
 review` is one of your required checks, such a pull request meets it with no

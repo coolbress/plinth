@@ -39,3 +39,7 @@ concurrency:
 jobs:
   third-party:
     uses: ./.github/workflows/pr-review.yml
+    with:
+      # This repository's release pull requests are four lines
+      # scripts/make-release.sh writes, and the check is not required here.
+      pass-release-pull-requests: true

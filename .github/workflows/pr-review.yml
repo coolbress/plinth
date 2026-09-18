@@ -31,10 +31,14 @@ name: pr-review
 #        agents on closed pull requests), so an unverified verdict is not a
 #        merge condition. Findings are still handled: reproduce, then fix or
 #        say why not (docs/how-to/configure-the-third-party-reviewer.md).
-#   no   a review on a draft, a bot-authored pull request or a release pull
-#        request (`chore(release): vX.Y.Z`): on those the second step passes
-#        without a summons and without looking for a review, and its log says
-#        which (#167). The first step, on the instructions, still runs on them.
+#   no   a review on a draft or on a pull request Dependabot opened and only
+#        Dependabot pushed to, nor,
+#        when the caller sets `pass-release-pull-requests`, on one titled
+#        `chore(release): vX.Y.Z`: on those the second step passes without a
+#        summons and without looking for a review, and its log says which
+#        (#167). The first step, on the instructions, still runs on them. A
+#        pull request opened by any other bot, a coding agent included, is
+#        looked at like a person's.
 #   no   that anyone read the review. Reading is the job of the person who
 #        presses merge.
 #   no   that the reviewer is independent of the author: `reviewer-logins` is a
@@ -80,6 +84,15 @@ on:
         description: "Heading of the instruction section, as the reviewer reads it."
         type: string
         default: "## Code Review Rules"
+      pass-release-pull-requests:
+        description: |
+          Off by default. When true, a pull request titled exactly
+          `chore(release): vX.Y.Z` passes without a summons and without a
+          review. A title is chosen by the pull request's author, so turning
+          this on lets anyone skip the review by choosing that title; do not
+          turn it on where this check is required.
+        type: boolean
+        default: false
       poll-seconds:
         description: "Interval between looks."
         type: number
@@ -87,9 +100,9 @@ on:
 
 jobs:
   review:
-    # No `if:` here: a skipped job has no check name. Drafts, bot-authored and
-    # release pull requests are handled in the second step, which passes
-    # without summoning a review.
+    # No `if:` here: a skipped job has no check name. Drafts, Dependabot's pull
+    # requests and (when the caller asks) release pull requests are handled in
+    # the second step, which passes without summoning a review.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -178,14 +191,15 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}   # a branch name is its author's text: env only
           DRAFT: ${{ github.event.pull_request.draft }}
           MERGED: ${{ github.event.pull_request.merged }}
           PR_STATE: ${{ github.event.pull_request.state }}
           # Author and title go through `env:`, never `${{ }}` inside `run:`:
           # a title is text the author of the pull request chooses.
           AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
-          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
           TITLE: ${{ github.event.pull_request.title }}
+          PASS_RELEASE: ${{ inputs.pass-release-pull-requests }}
           LOGINS: ${{ inputs.reviewer-logins }}
           ASK: ${{ inputs.ask-comment }}
           WAIT: ${{ inputs.wait-seconds }}
@@ -217,31 +231,64 @@ jobs:
             echo "pull request already merged or closed: not waiting."
             exit 0
           fi
-          # A pull request a bot opened (#167): the payload's user type says so
-          # (`Bot`, measured on plinth#178 with login `dependabot[bot]`); the
-          # login is the fallback, in the spellings GitHub uses for one account:
-          # `dependabot[bot]` in the payload, `app/dependabot` in gh, and
+          # Dependabot's pull requests (#167), by name and nothing wider. The
+          # first version passed every author of type `Bot`; coding agents are
+          # `Bot` too (`cursor[bot]`, `claude[bot]`, `devin-ai-integration[bot]`)
+          # and their pull requests are code, the ones a review is for. The three
+          # spellings GitHub uses for the one account: `dependabot[bot]` in the
+          # payload (measured on plinth#178), `app/dependabot` in gh, and
           # `dependabot` as an actor. To have one reviewed, comment the summons
           # on it yourself.
+          #
+          # The author of a pull request does not change when someone else
+          # pushes to its branch (measured on plinth-template#17: author
+          # `dependabot[bot]`, second commit a person's), and a commit's author
+          # is whatever its writer typed: a commit signed by anyone, with
+          # Dependabot's address as the author, reads `author.login:
+          # dependabot[bot]`, `verified: true`. What cannot be typed is who
+          # pushed. The repository's activity log names the authenticated
+          # account behind every push to the branch, so: every push to this
+          # branch is Dependabot's, and the newest one is this head. A log that
+          # is missing, unreadable, empty, a full page (more may follow) or not
+          # yet at this head counts as "not only Dependabot".
           login="$(printf '%s' "${AUTHOR_LOGIN:-}" | tr '[:upper:]' '[:lower:]')"
           case "$login" in
-            *'[bot]'|app/*|dependabot) bot=1 ;;
-            *) bot=0 ;;
+            'dependabot[bot]'|app/dependabot|dependabot)
+              if python3 - "${ACTIVITY_JSON:-}" "${HEAD_SHA:-}" <<'PYGATE'
+          import json, sys
+          try:
+              pushes = json.load(open(sys.argv[1]))
+              head = sys.argv[2]
+              ok = (isinstance(pushes, list) and 0 < len(pushes) < 100 and len(head) == 40
+                    and pushes[0].get("after") == head          # newest first
+                    and all((p.get("actor") or {}).get("login") == "dependabot[bot]" for p in pushes))
+          except Exception:
+              ok = False
+          sys.exit(0 if ok else 1)
+          PYGATE
+              then
+                echo "Dependabot pull request: not summoned"
+                exit 0
+              fi
+              echo "Dependabot pull request, but not every push to its branch is Dependabot's: looked at like any other" >&2 ;;
           esac
-          if [ "${AUTHOR_TYPE:-}" = "Bot" ] || [ "$bot" = 1 ]; then
-            echo "bot-authored pull request: not summoned"
-            exit 0
-          fi
-          # A release pull request: the title scripts/make-release.sh writes.
-          # Four generated lines, guarded by tests/make-release-guards.sh and
-          # the e2e run on the merged commit. One constant, not a filter: the
-          # whole title, with the only tag shape make-release.sh accepts.
-          if printf '%s' "${TITLE:-}" | grep -Eq '^chore\(release\): v[0-9]+\.[0-9]+\.[0-9]+$'; then
+          # A release pull request, only where the caller turned it on: the
+          # title scripts/make-release.sh writes, whole, with the only tag shape
+          # it accepts. A title is chosen by the author, so this is off unless
+          # asked for (`pass-release-pull-requests`).
+          if [ "${PASS_RELEASE:-false}" = "true" ] \
+             && printf '%s' "${TITLE:-}" | grep -Eq '^chore\(release\): v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "release pull request: not summoned"
             exit 0
           fi
           SH
-          why="$(bash "$RUNNER_TEMP/gate.sh")"
+          # Who pushed to the head branch, for the gate. A failed call leaves a
+          # file the gate cannot read as a list, which it takes as "go on and
+          # look". The count is printed so a run shows whether the call works.
+          gh api --method GET "repos/$REPO/activity" -f ref="refs/heads/$HEAD_REF" -F per_page=100 \
+            > "$RUNNER_TEMP/activity.json" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/activity.json"
+          echo "pushes read for the head branch: $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(len(d) if isinstance(d,list) else "none")' "$RUNNER_TEMP/activity.json" 2>/dev/null || echo none)"
+          why="$(ACTIVITY_JSON="$RUNNER_TEMP/activity.json" bash "$RUNNER_TEMP/gate.sh")"
           if [ -n "$why" ]; then
             echo "$why"
             exit 0
