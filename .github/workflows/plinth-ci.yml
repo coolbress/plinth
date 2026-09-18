@@ -100,6 +100,9 @@ jobs:
       - name: Third-party review check passes drafts, bots and releases without summoning, and nothing else
         run: ./tests/pr-review-gate.sh
 
+      - name: pr-review posts the summons only as the owner, with a token
+        run: ./tests/pr-review-summon.sh
+
       - name: The reviewer's instructions cannot be softened inside a reviewed pull request
         run: ./tests/pr-review-policy-pin.sh
 

@@ -29,6 +29,9 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   URLs), not only its summary, and the description says what was done with
   each: fixed, answered with the reason, or moved to an issue. How many rounds:
   [When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop).
+  Never write the reviewer's summons text (its `@` mention) in a pull request
+  description or comment: the reviewer reads it as a task and answers with
+  noise (#184, #189). Describe it instead.
 - Issues and pull requests follow [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change)
   (the pull-request shape) and [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)
   (what a record has to carry). Read the templates that actually apply first,

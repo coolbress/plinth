@@ -10,8 +10,9 @@ participation: it does not say the whole change was reviewed, that the
 findings were handled, or anything about the code's quality. It never blocks
 on what the reviewer said. Drafts and Dependabot's pull requests are not
 summoned, nor release pull requests where that is turned on ([below](#pull-requests-it-passes-without-summoning)); any other ready pull request must
-show a signal on its current head, and the check summons the reviewer at most
-twice per commit.
+show a signal on its current head. The check posts a summons only when the
+caller gives it a person's token ([below](#summoning-the-reviewer)); without one
+it waits for the reviewer's own trigger.
 
 ## 1. Enable the reviewer on the repository
 
@@ -32,7 +33,7 @@ on:
     types: [submitted]
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 concurrency:
   group: third-party-${{ github.event.pull_request.number }}
   cancel-in-progress: false
@@ -42,8 +43,9 @@ jobs:
 ```
 
 Keep the job name `third-party`; the check name comes from it. To accept a
-different reviewer, change what is posted to summon it, or wait longer than
-15 minutes, pass `reviewer-logins`, `ask-comment` or `wait-seconds` under `with:`.
+different reviewer, or wait longer than 15 minutes, pass `reviewer-logins` or
+`wait-seconds` under `with:`; `ask-comment` changes the summons text, which is
+posted only with a token ([below](#summoning-the-reviewer)).
 `reviewer-logins` says whose signal counts; it does not check that the
 reviewer is independent of the author. The reviewer reads its instructions
 from `## Code Review Rules` in the repository's `AGENTS.md`. The check fails a
@@ -86,6 +88,47 @@ review` is one of your required checks, such a pull request meets it with no
 review attached. To have one reviewed, comment the summons (`@codex review`)
 on it yourself; the check still passes either way.
 
+### Summoning the reviewer
+
+The check does not start a review by itself. It used to comment `@codex
+review` as `github-actions[bot]` whenever no review was attached; measured
+on #186 (2026-09-18) that drew no review in the full wait, twice, while the same
+text from a person's account started one sixteen seconds later, and of seven
+reviewers read that day (Codex, Copilot, CodeRabbit, Gemini Code Assist, Qodo,
+Cursor Bugbot, Claude Code) none documents honouring a bot's mention. So the
+summons is posted only when the caller passes a person's token:
+
+```yaml
+jobs:
+  third-party:
+    uses: coolbress/plinth/.github/workflows/pr-review.yml@<commit-sha> # vX.Y.Z
+    secrets:
+      summons-token: ${{ secrets.CODEX_SUMMONS_TOKEN }}
+```
+
+The token must be the repository owner's, the account connected to the
+reviewer: the check reads the token's login before posting and fails at once,
+with the reason, when the login cannot be read, is another person's, or the
+post itself is refused. The login is compared with the repository's owner, so
+this fits a repository owned by a person; in an organization's repository the
+owner is the organization and no person's token matches (an input naming the
+person is not built until someone needs it). A login read that fails for a
+reason other than the token, a rate limit or an outage, fails the same way;
+the error line carries `gh`'s own words so the two are told apart, and a
+re-run fixes the second. A pull request opened from a fork gets no secrets
+from GitHub, so on it the token is empty however the caller is set: nothing is
+posted, the log says why, and with automatic reviews off such a pull request
+is reviewed only when a person comments the summons.
+With it the summons goes out as that person, at most twice per commit, and
+`ask-comment` is its text. Without it nothing is posted, the job needs only
+`pull-requests: read`, and the check waits for the reviewer's own trigger,
+which with the provider's automatic reviews on arrives about four minutes after
+a push (measured on #186). This repository gives no token: automatic reviews
+are on. A token is what a repository wants when it turns automatic reviews off
+to leave Dependabot and release pull requests unreviewed; it then also takes
+on a token that expires, a person's name on every summons, and a check that
+turns red on every pull request when the token stops working (#185).
+
 Two things this does not do. It does not stop the provider's own app from
 reviewing anyway: Codex starts on its own when a pull request is opened or
 marked ready wherever its "Automatic reviews" toggle is on, and no setting
@@ -101,8 +144,9 @@ the summons has done on its own, with the toggle on, has not been measured;
 the reviews on every earlier pull request here arrived while the toggle was
 on. Another repository measured the same and moved its summons to a token
 owned by the Codex-connected person (hide212131/hane#57, read 2026-09-18);
-this workflow does not, so with the toggle off a pull request gets no review
-until a person comments the summons. Do not spell the summons in a pull
+this workflow does the same only when given `summons-token`, so with the
+toggle off and no token a pull request gets no review until a person comments
+the summons. Do not spell the summons in a pull
 request description: one that did (#184) drew a comment from the reviewer
 asking for an environment. And skipping the summons skips nothing the toggle
 does not already give: on the first Dependabot pull request here (#178) the

@@ -25,7 +25,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write   # only to post the summoning comment
+  pull-requests: read    # nothing is posted: no summons-token is given here (#185)
 
 # One run at a time per pull request; a waiting job that overlaps only burns
 # minutes. Never cancel (measured 2026-09-01): a review arriving started a
