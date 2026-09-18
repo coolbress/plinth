@@ -111,8 +111,12 @@ deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
 # tick before the first check leaves 1 < 2, and the 2 s sleep makes the second
 # poll the last one, unless the first poll itself takes over a second (the
 # mocks take milliseconds). Every timed-out case now takes 2 s (#156).
+# Each run's log is numbered, not named by $RANDOM: the mock keeps counters
+# beside it (.delete, .names, .pushed) that the truncation below does not
+# reset, and a name drawn twice gave a later run an earlier one's count (#201).
+runs=0
 run() { # <env assignments...>
-  export GH_LOG="$work/log.$RANDOM"; : > "$GH_LOG"
+  runs=$((runs + 1)); export GH_LOG="$work/log.$runs"; : > "$GH_LOG"
   unset RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
   env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" >"$work/out" 2>&1
 }
