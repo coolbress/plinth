@@ -126,11 +126,13 @@ and became #175. Once the check has decided, its log and its job summary list
 the accepted reviewer's inline comments on the reviewed head with their URLs,
 or say `no inline comments on this head`. That list is what the check saw
 when it decided; a review that finishes later (the security review has taken
-over 30 minutes) is not on it. The live list, filtered the same way, is:
+over 30 minutes) is not on it. The live list, filtered the same way, with
+`<login>` one of the caller's `reviewer-logins` (the default is
+`chatgpt-codex-connector[bot]`; with several logins, one call per login):
 
 ```bash
 gh api repos/<owner>/<repo>/pulls/<n>/comments --paginate \
-  --jq '.[] | select(.user.login == "chatgpt-codex-connector[bot]" and .original_commit_id == "<head sha>") | .html_url'
+  --jq '.[] | select(.user.login == "<login>" and .original_commit_id == "<head sha>") | .html_url'
 ```
 
 Without the filter the endpoint returns every review comment on the pull

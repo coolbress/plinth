@@ -305,7 +305,7 @@ jobs:
           # workflow alone, the first run would be the test, with a red pull
           # request as the result.
           cat > "$RUNNER_TEMP/attest.py" <<'PY'
-          """Did an accepted reviewer account leave a signal on THIS commit?
+          r"""Did an accepted reviewer account leave a signal on THIS commit?
           Participation evidence, no verdict.
 
           Three signals, all accepted; the first to arrive wins (measured 2026-09-01):
