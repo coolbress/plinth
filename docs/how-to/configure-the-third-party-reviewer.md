@@ -9,7 +9,11 @@ completion comment, or a `Completed` row in its summary comment's table, on
 the pull request's current commit. The row is there because a review started
 by a push that found nothing has left only that (measured on #190, 2026-09-18:
 the check waited the full window on a commit the reviewer had looked at, #191);
-a `Running` row does not count. That is evidence of
+a `Running` row does not count. The row names its commit in seven characters,
+which a later head can be made to share, so it counts only when its completion
+time is later than the newest push of the current head in the repository's
+activity log; where that push cannot be read (a fork's branch, a failed call)
+the row does not count and the log says so. That is evidence of
 participation: it does not say the whole change was reviewed, that the
 findings were handled, or anything about the code's quality. It never blocks
 on what the reviewer said. Drafts and Dependabot's pull requests are not

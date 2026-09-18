@@ -145,8 +145,8 @@ echo "-- summary table row signal (#191: a zero-finding review started by a push
 # left. The `Completed` row is measured; the `Running` row's exact wording is
 # not (nobody caught one), so that fixture is the measured row with the status
 # swapped.
-row() {  # status cell, short sha
-  printf '| 📝 **Code Review** | %s <relative-time datetime="2026-09-18T07:21:03.1Z">2026-09-18T07:21:03.1Z</relative-time> | `%s` | New commits |' "$1" "$2"
+row() {  # status cell, short sha, [completed at]
+  printf '| 📝 **Code Review** | %s <relative-time datetime="%s">%s</relative-time> | `%s` | New commits |' "$1" "${3:-$T_DONE}" "${3:-$T_DONE}" "$2"
 }
 sum_cmt() {  # author, first line, row...
   python3 -c 'import json,sys
@@ -156,17 +156,78 @@ body = (first + "\n\n## Codex Review Summary\n\nThis comment shows the latest Co
         + "\n\n\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\nCodex reacts with 👀 while any review is running.\n\n</details>")
 print(json.dumps([{"user": {"login": who}, "body": body}], ensure_ascii=False))' "$@"
 }
+# The pushes to the head branch, newest first, as `repos/<r>/activity` returns
+# them (fields as measured on this branch, 2026-09-18).
+push() { printf '{"after":"%s","before":"%s","timestamp":"%s","activity_type":"push","actor":{"login":"someone"}}' "$1" "$OLD" "$2"; }
+runsum() {  # name, issue-comments JSON, activity JSON ('-' = the argument is not given), expected exit
+  printf '%s' "$2" > "$tmp/i.json"; echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
+  if [ "$3" = "-" ]; then
+    python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
+  else
+    printf '%s' "$3" > "$tmp/a.json"
+    python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1
+  fi
+  got=$?
+  if [ "$got" -ne "$4" ]; then
+    echo "  FAIL  $1: expected exit $4, got $got" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
+  else
+    echo "  PASS  $1"
+  fi
+}
 SUM='<!-- codex-pull-request-review-summary -->'
 DONE_ST='✅ **Completed**'; RUN_ST='⏳ **Running**'
-run "Completed row for this head passes"              "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" 0
-run "Completed row for an older head does not count"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")")" 1
-run "Running row for this head does not count"        "$(sum_cmt "$BOT" "$SUM" "$(row "$RUN_ST" "${HEAD:0:7}")")" 1
-run "the same row from someone else does not count"   "$(sum_cmt someone "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" 1
-run "a sha inside the head but not its prefix does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:1:7}")")" 1
-run "a sha shorter than seven characters does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:6}")")" 1
-run "the row in a comment that is not the summary comment does not count" "$(sum_cmt "$BOT" "Here is the table you asked for:" "$(row "$DONE_ST" "${HEAD:0:7}")")" 1
-run "old head Completed, this head Running: does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")" "$(row "$RUN_ST" "${HEAD:0:7}")")" 1
-run "old head Completed, this head Completed: passes"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")" "$(row "$DONE_ST" "${HEAD:0:7}")")" 0
+T_PUSH=2026-09-18T07:15:40Z; T_DONE=2026-09-18T07:21:03.356745Z   # pushed, then reviewed
+PUSHED="[$(push "$HEAD" "$T_PUSH")]"
+runsum "Completed row for this head passes"              "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" "$PUSHED" 0
+runsum "Completed row for an older head does not count"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")")" "$PUSHED" 1
+runsum "Running row for this head does not count"        "$(sum_cmt "$BOT" "$SUM" "$(row "$RUN_ST" "${HEAD:0:7}")")" "$PUSHED" 1
+runsum "the same row from someone else does not count"   "$(sum_cmt someone "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" "$PUSHED" 1
+runsum "a sha inside the head but not its prefix does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:1:7}")")" "$PUSHED" 1
+runsum "a sha shorter than seven characters does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:6}")")" "$PUSHED" 1
+runsum "the row in a comment that is not the summary comment does not count" "$(sum_cmt "$BOT" "Here is the table you asked for:" "$(row "$DONE_ST" "${HEAD:0:7}")")" "$PUSHED" 1
+runsum "old head Completed, this head Running: does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")" "$(row "$RUN_ST" "${HEAD:0:7}")")" "$PUSHED" 1
+runsum "old head Completed, this head Completed: passes"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")" "$(row "$DONE_ST" "${HEAD:0:7}")")" "$PUSHED" 0
+
+# Seven characters do not name one commit: a head made to share them with an
+# earlier, reviewed head would ride on that head's row (the reviewer's P1 on
+# PR #192). So the row also has to be newer than the push that brought this
+# head, both times written by a server (the vendor's, GitHub's), neither by
+# the author of the commit. Where the push cannot be read the row does not
+# count; the other signals are untouched.
+ROW_HEAD="$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")"
+runsum "the row is older than the push of this head (an earlier head with the same seven characters): does not count" \
+  "$ROW_HEAD" "[$(push "$HEAD" 2026-09-18T07:30:00Z)]" 1
+runsum "this head pushed, replaced, reviewed row in between, pushed back: the newest push decides, does not count" \
+  "$ROW_HEAD" "[$(push "$HEAD" 2026-09-18T07:30:00Z),$(push "$OLD" 2026-09-18T07:16:00Z),$(push "$HEAD" "$T_PUSH")]" 1
+runsum "completed in the same second as the push: does not count" "$ROW_HEAD" "[$(push "$HEAD" 2026-09-18T07:21:03Z)]" 1
+runsum "no push of this head in the log: does not count"  "$ROW_HEAD" "[$(push "$OLD" "$T_PUSH")]" 1
+runsum "an empty push log: does not count"                "$ROW_HEAD" '[]' 1
+runsum "the push log could not be read (null): does not count" "$ROW_HEAD" 'null' 1
+runsum "no push log given: does not count"                "$ROW_HEAD" - 1
+runsum "a push without a timestamp: does not count"       "$ROW_HEAD" "[{\"after\":\"$HEAD\"}]" 1
+runsum "a row without a completion time: does not count" \
+  "$(sum_cmt "$BOT" "$SUM" "| 📝 **Code Review** | $DONE_ST | \`${HEAD:0:7}\` | New commits |")" "$PUSHED" 1
+runsum "a completion time that is not UTC: does not count" \
+  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}" 2026-09-18T09:21:03+02:00)")" "$PUSHED" 1
+runsum "when it does not count for the push, the log says so" "$ROW_HEAD" 'null' 1
+if grep -qF "the push of this head" "$tmp/log"; then
+  echo "  PASS  log names the push as the reason"
+else
+  echo "  FAIL  log does not say the row was left out for the push" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
+fi
+# The other signals do not read the push log: a review object passes without it.
+echo '[]' > "$tmp/i.json"
+printf '[{"user":{"login":"%s"},"commit_id":"%s","state":"COMMENTED"}]' "$BOT" "$HEAD" > "$tmp/r.json"
+if python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1; then
+  echo "  PASS  a review object passes with no push log"
+else
+  echo "  FAIL  a review object needs the push log" >&2; fails=$((fails + 1))
+fi
+if grep -q '"\$RUNNER_TEMP/icomments.json" "\$RUNNER_TEMP/activity.json"' "$wf"; then
+  echo "  PASS  the step hands the push log to the judgement"
+else
+  echo "  FAIL  the step does not pass activity.json to attest.py; the summary row would never count" >&2; fails=$((fails + 1))
+fi
 
 echo "-- once decided, the log and the job summary list the reviewer's inline comments on this head (#176)"
 # The verdict never depends on this; the count is for the person who merges.

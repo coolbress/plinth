@@ -21,8 +21,9 @@ name: pr-review
 #   yes  an accepted reviewer account (`reviewer-logins`) left a review signal
 #        tied to THIS commit: a review, a review comment made on it, a
 #        completion comment naming it, or a `Completed` row for it in the
-#        reviewer's summary table (#191). Evidence of participation. A signal
-#        on an older commit does not count.
+#        reviewer's summary table that is newer than the push of this commit
+#        (#191). Evidence of participation. A signal on an older commit does
+#        not count.
 #   yes  a change to the designated rules section is not mixed with other
 #        changes in the same pull request.
 # What it does not check:
@@ -319,11 +320,15 @@ jobs:
             exit 0
           fi
           SH
-          # Who pushed to the head branch, for the gate. A failed call leaves a
+          # Who pushed to the head branch, and when: for the gate, and for the
+          # judgement's summary-row signal (#191). A failed call leaves a
           # file the gate cannot read as a list, which it takes as "go on and
           # look". The count is printed so a run shows whether the call works.
-          gh api --method GET "repos/$REPO/activity" -f ref="refs/heads/$HEAD_REF" -F per_page=100 \
-            > "$RUNNER_TEMP/activity.json" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/activity.json"
+          pushes() {
+            gh api --method GET "repos/$REPO/activity" -f ref="refs/heads/$HEAD_REF" -F per_page=100 \
+              > "$RUNNER_TEMP/activity.json" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/activity.json"
+          }
+          pushes
           echo "pushes read for the head branch: $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(len(d) if isinstance(d,list) else "none")' "$RUNNER_TEMP/activity.json" 2>/dev/null || echo none)"
           why="$(ACTIVITY_JSON="$RUNNER_TEMP/activity.json" bash "$RUNNER_TEMP/gate.sh")"
           if [ -n "$why" ]; then
@@ -364,7 +369,18 @@ jobs:
               `| 📝 **Code Review** | ✅ **Completed** <time> | \`fd4bb91\` | New commits |`.
               A `**Completed**` row whose commit, seven characters as the
               vendor writes it, is a prefix of the head counts. Any other
-              status does not; the trigger column is not read.
+              status does not; the trigger column is not read. Seven
+              characters do not name one commit: a head made to share them
+              with an earlier, reviewed head would ride on that head's row
+              (the reviewer's finding on plinth#192). So the row's completion
+              time must also be later than the newest push that brought this
+              head to the branch, read from the repository's activity log.
+              Both times are written by a server, the vendor's and GitHub's;
+              a commit's own dates are its author's text and are not read.
+              This is a time next to the commit, not in place of it. Where
+              the push cannot be read (the call failed, the head is not in
+              the log, a fork's branch) the row does not count and the log
+              says so; signals 1 to 3 do not read the log.
 
           Author alone cannot tell a code review from a security review; the
           same bot posts both. So the sentence guaranteed is exactly "the
@@ -377,6 +393,7 @@ jobs:
 
           head, logins_csv = sys.argv[1:3]
           reviews_p, rcomments_p, icomments_p = sys.argv[3:6]
+          activity_p = sys.argv[6] if len(sys.argv) > 6 else ""   # pushes to the head branch, newest first
 
           #: The commit a completion comment names. Bound here; no time heuristic.
           REVIEWED = re.compile(r"Reviewed commit:\*{0,2}\s*`([0-9a-f]{7,40})`", re.I)
@@ -393,8 +410,13 @@ jobs:
 
           #: The summary comment starts with this line; a table anywhere else is not read.
           SUMMARY = "<!-- codex-pull-request-review-summary -->"
-          #: One row of its table: status (bold, after one emoji) and commit. Vendor text.
-          ROW = re.compile(r"^\|[^|\n]*\|\s*(?:\S+\s+)?\*\*([^*|\n]+)\*\*[^|\n]*\|\s*`([0-9a-f]{7,40})`\s*\|", re.M)
+          #: One row of its table: status (bold, after one emoji), the rest of
+          #: that cell, and the commit. Vendor text.
+          ROW = re.compile(r"^\|[^|\n]*\|\s*(?:\S+\s+)?\*\*([^*|\n]+)\*\*([^|\n]*)\|\s*`([0-9a-f]{7,40})`\s*\|", re.M)
+          #: When the row's review completed, to the second, UTC only.
+          WHEN = re.compile(r'datetime="(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?Z"')
+          #: GitHub's push time, the same shape without a fraction.
+          STAMP = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
 
           def readable(p):
               """Is the file a JSON list? The step writes `null` when a call
@@ -499,22 +521,34 @@ jobs:
               if head.startswith(sha) or sha.startswith(head):
                   looked(f"completion comment (Reviewed commit: {sha})", body.splitlines()[0][:90])
 
-          # 4 summary table row: `Completed`, and the commit is a prefix of the head.
+          # 4 summary table row: `Completed`, the commit is a prefix of the head,
+          # and the completion is later than the newest push of this head. Both
+          # times are UTC to the second in one shape, so they compare as text.
+          pushed = next((str(p.get("timestamp") or "") for p in load(activity_p)
+                         if isinstance(p, dict) and p.get("after") == head), "")
+          pushed = pushed[:19] if STAMP.match(pushed) else ""
           rows = []
           for it in load(icomments_p):
               body = it.get("body") or ""
               if not ours(it) or not body.lstrip().startswith(SUMMARY):
                   continue
-              for status, sha in ROW.findall(body):
-                  rows.append((sha, status))
-                  if status == "Completed" and head.startswith(sha):
-                      looked(f"summary table row (Completed, {sha})")
+              for status, cell, sha in ROW.findall(body):
+                  when = WHEN.search(cell)
+                  when = when.group(1) if when else ""
+                  fits = status == "Completed" and head.startswith(sha)
+                  if fits and pushed and when > pushed:
+                      looked(f"summary table row (Completed, {sha}, {when}Z; this head was pushed {pushed}Z)")
+                  note = "<- this commit" if head.startswith(sha) else ""
+                  if fits:
+                      note += (f", not counted: completed {when or '(no time read)'}, and the push of this head "
+                               + (f"was {pushed}Z" if pushed else "could not be read"))
+                  rows.append((sha, status, note))
 
           print("not yet.")
           for sha, status in states[-3:]:
               print(f"   marker {sha[:8]} status={status} {'<- this commit' if sha == head else ''}")
-          for sha, status in rows[-3:]:
-              print(f"   summary row {sha[:8]} status={status} {'<- this commit' if head.startswith(sha) else ''}")
+          for sha, status, note in rows[-3:]:
+              print(f"   summary row {sha[:8]} status={status} {note}")
           if seen:
               print("  authors seen on this pull request: " + ", ".join(sorted(x for x in seen if x)))
           sys.exit(1)
@@ -528,10 +562,11 @@ jobs:
             get "pulls/$NUMBER/reviews"   reviews.json
             get "pulls/$NUMBER/comments"  rcomments.json
             get "issues/$NUMBER/comments" icomments.json
+            pushes   # again with every look: whether the log can trail the push was not measured
           }
           judge() {
             python3 "$RUNNER_TEMP/attest.py" "$HEAD_SHA" "$LOGINS" \
-              "$RUNNER_TEMP/reviews.json" "$RUNNER_TEMP/rcomments.json" "$RUNNER_TEMP/icomments.json"
+              "$RUNNER_TEMP/reviews.json" "$RUNNER_TEMP/rcomments.json" "$RUNNER_TEMP/icomments.json" "$RUNNER_TEMP/activity.json"
           }
 
           fetch
