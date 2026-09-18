@@ -12,10 +12,12 @@ inside pull requests and have no tag.
 ### Changed
 
 - The how-to for `third-party / review` says that the check is not a barrier
-  against people with write access: it reads a comment's author, text and
-  creation time, not whether someone edited the comment afterwards, so a
-  reviewer's comment that someone else edited can still count. Left as it is
-  by the owner's decision, with the reasons on #196. No check changed.
+  against people with write access: it reads a comment's author and current
+  text, and a completion comment's creation time (the marker and the summary
+  row are read from the text alone), not whether someone edited the comment
+  afterwards, so a reviewer's comment that someone else edited can still
+  count. Left as it is by the owner's decision, with the reasons on #196. No
+  check changed.
 - `third-party / review` binds the reviewer's completion comment to the push,
   as it does the summary row: the comment counts only when its `created_at` is
   later than the newest push of the head in the repository's activity log and
