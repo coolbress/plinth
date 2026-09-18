@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.14] - 2026-09-18
+
 ### Changed
 
 - `third-party / review` reads a fourth signal: a `Completed` row in the
