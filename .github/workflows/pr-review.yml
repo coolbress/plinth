@@ -40,7 +40,11 @@ name: pr-review
 #        pull request opened by any other bot, a coding agent included, is
 #        looked at like a person's.
 #   no   that anyone read the review. Reading is the job of the person who
-#        presses merge.
+#        presses merge. To make that easier the log and the job summary list
+#        the accepted reviewer's inline comments on this commit, with their
+#        URLs, once the check has decided (#176); a summary comment saying
+#        "no major issues" has arrived next to an unanswered inline finding
+#        (measured on #174).
 #   no   that the reviewer is independent of the author: `reviewer-logins` is a
 #        trust setting, not an independence check.
 #   no   that the instructions cannot be weakened: only the designated section
@@ -327,7 +331,7 @@ jobs:
           deterministic security checks (CodeQL, zizmor, bandit, secrets,
           dependencies) already block in CI.
           """
-          import json, re, sys, pathlib
+          import json, os, re, sys, pathlib
 
           head, logins_csv = sys.argv[1:3]
           reviews_p, rcomments_p, icomments_p = sys.argv[3:6]
@@ -360,6 +364,35 @@ jobs:
               for it in load(path):
                   seen.add(((it.get("user") or {}).get("login") or ""))
 
+          def looked(how, excerpt=None):
+              """The verdict is yes. Say so, then list the accepted reviewer's
+              inline comments made on this commit (`original_commit_id`, the
+              field that does not move) with their URLs, in the log and in the
+              job summary. Zero is printed as zero. The count never changes the
+              verdict; it is there so the person who merges sees what the
+              summary comment does not say (#176: a P2 merged past unread while
+              the summary read "Didn't find any major issues"). It is what the
+              fetch that produced the signal saw: a review that finishes later
+              (the security review has taken over 30 minutes) adds comments
+              this line does not show, so it says so."""
+              print(f"third party looked at this commit: {how}")
+              if excerpt:
+                  print(f"   {excerpt}")
+              urls = [it.get("html_url") or "(no url)" for it in load(rcomments_p)
+                      if ours(it) and it.get("original_commit_id") == head]
+              n = len(urls)
+              line = (f"reviewer left {n} inline comment{'s' if n != 1 else ''} on {head[:8]}"
+                      if n else f"no inline comments on this head ({head[:8]})")
+              line += " as of this check run; a later review may add more"
+              print(line)
+              for u in urls:
+                  print(f"   {u}")
+              summary = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary:
+                  with open(summary, "a") as f:
+                      f.write(line + "\n" + "".join(f"- {u}\n" for u in urls))
+              sys.exit(0)
+
           # 1 review objects and review comments: the commit must match.
           #
           # Two different fields, and mixing them opens the check (measured
@@ -375,8 +408,7 @@ jobs:
                                     ("review-comment", rcomments_p, "original_commit_id")):
               for it in load(path):
                   if ours(it) and it.get(field) == head:
-                      print(f"third party looked at this commit: {kind} ({it.get('state') or 'comment'})")
-                      sys.exit(0)
+                      looked(f"{kind} ({it.get('state') or 'comment'})")
 
           # 2 marker: `completed` only. `running` is looking, not looked.
           states = []
@@ -390,8 +422,7 @@ jobs:
                       continue
                   states.append((d.get("headSha") or "", d.get("status") or "?"))
                   if d.get("headSha") == head and d.get("status") == "completed":
-                      print("third party looked at this commit: marker status=completed")
-                      sys.exit(0)
+                      looked("marker status=completed")
 
           # 3 completion comment, bound by the commit it names.
           for it in load(icomments_p):
@@ -404,9 +435,7 @@ jobs:
                   continue
               sha = m.group(1)
               if head.startswith(sha) or sha.startswith(head):
-                  print(f"third party looked at this commit: completion comment (Reviewed commit: {sha})")
-                  print(f"   {body.splitlines()[0][:90]}")
-                  sys.exit(0)
+                  looked(f"completion comment (Reviewed commit: {sha})", body.splitlines()[0][:90])
 
           print("not yet.")
           for sha, status in states[-3:]:

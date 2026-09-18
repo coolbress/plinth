@@ -86,12 +86,22 @@ review` is one of your required checks, such a pull request meets it with no
 review attached. To have one reviewed, comment the summons (`@codex review`)
 on it yourself; the check still passes either way.
 
-Two things this does not do. The provider's own app may review anyway: Codex
-starts on its own when a pull request is opened or marked ready, and has no
-setting to skip by author or title. And skipping the summons skips findings:
-on the first Dependabot pull request here (#178) the reviewer had nothing to
-say about the bump and one correct comment about this repository's text next
-to it.
+Two things this does not do. It does not stop the provider's own app from
+reviewing anyway: Codex starts on its own when a pull request is opened or
+marked ready wherever "Automatic reviews" is on, and no setting narrows that
+by author or title. What can be set (seen on `chatgpt.com/codex/settings`,
+2026-09-18): a repository's "Automatic code review" offers `Review all PRs`,
+`Review team PRs` and `Follow personal preferences`, no off; the personal
+"Automatic reviews" toggle, on the code review tab and the security review
+tab, is what turns it off. With that toggle off and each repository on
+`Follow personal preferences`, the summons this check posts is the only
+trigger, and a repository without this check gets no review unless someone
+comments `@codex review` themselves. This repository runs that way. Do not
+spell the summons in a pull request description: one that did (#184) drew a
+comment from the reviewer asking for an environment. And skipping the summons
+skips findings: on the first Dependabot pull request here (#178) the reviewer
+had nothing to say about the bump and one correct comment about this
+repository's text next to it.
 
 ## What to do with the findings
 
@@ -107,6 +117,27 @@ findings still have to be handled, in the pull request, before merging:
 An agent handling the findings does the same, and does not close the matter
 by asking "merge anyway?": the person merging should see what was found, what
 was fixed, and what is still open.
+
+Read the inline comments, not only the summary comment. The summary's
+wording does not cover them: on #174 the summary read "Didn't find any major
+issues" while the same review had left one inline P2 (a step order in `ci /
+tools`), and the pull request was merged with it unanswered; the P2 was right
+and became #175. Once the check has decided, its log and its job summary list
+the accepted reviewer's inline comments on the reviewed head with their URLs,
+or say `no inline comments on this head`. That list is what the check saw
+when it decided; a review that finishes later (the security review has taken
+over 30 minutes) is not on it. The live list, filtered the same way, is:
+
+```bash
+gh api repos/<owner>/<repo>/pulls/<n>/comments --paginate \
+  --jq '.[] | select(.user.login == "chatgpt-codex-connector[bot]" and .original_commit_id == "<head sha>") | .html_url'
+```
+
+Without the filter the endpoint returns every review comment on the pull
+request, every head and every author. The pull request description then says
+what happened to each one: fixed, answered with the reason, or moved to an
+issue. On #180 the summary comment still read `running` when the inline
+comment was already there.
 
 ## When to stop
 
