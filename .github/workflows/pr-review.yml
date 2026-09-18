@@ -21,10 +21,15 @@ name: pr-review
 #   yes  an accepted reviewer account (`reviewer-logins`) left a review signal
 #        tied to THIS commit: a review, a review comment made on it, a
 #        completion comment naming it, or a `Completed` row for it in the
-#        reviewer's summary table that is newer than the push of this commit,
-#        where no other commit the branch has pointed at begins with the row's
-#        characters (#191). Evidence of participation. A signal on an older
-#        commit does not count.
+#        reviewer's summary table. The comment and the row name the commit by
+#        its first characters (ten, seven), so each counts only when it is
+#        newer than the push of this commit and no other commit the branch has
+#        pointed at begins with those characters (#191, #193). A fork's head
+#        is pushed to the fork, not here, and was absent from this log on the
+#        two fork pull requests measured (#193); there neither counts, and
+#        the pull request passes on a review, a review comment or the marker.
+#        Evidence of participation. A signal on an older commit does not
+#        count.
 #   yes  a change to the designated rules section is not mixed with other
 #        changes in the same pull request.
 # What it does not check:
@@ -322,7 +327,8 @@ jobs:
           fi
           SH
           # Who pushed to the head branch, and when: for the gate, and for the
-          # judgement's summary-row signal (#191). A failed call leaves a
+          # judgement's completion-comment and summary-row signals (#191,
+          # #193). A failed call leaves a
           # file the gate cannot read as a list, which it takes as "go on and
           # look". The count is printed so a run shows whether the call works.
           pushes() {
@@ -359,10 +365,16 @@ jobs:
             3 completion comment: with zero findings no review object may
               appear at all, only a plain issue comment ("Codex Review: Didn't
               find any major issues", "Security review completed..."). It names
-              the commit (`**Reviewed commit:** \`db8c8772fd\``), so it is bound
-              by commit, never by time. Two earlier versions bound by time and
-              both were guesses. String matching is brittle; that is why all
-              the signals are read.
+              the commit (`**Reviewed commit:** \`db8c8772fd\``), ten
+              characters, and it stays on the pull request: a later head made
+              to share them would pass on it before any review of that head
+              (#193). So it is bound as signal 4 is, by the same predicate:
+              its `created_at` must be later than the newest push of this
+              head, and the head must be the one commit the branch has
+              pointed at that begins with the characters it names. Two
+              earlier versions bound by time in place of the commit and both
+              were guesses; this is a time next to the commit. String
+              matching is brittle; that is why all the signals are read.
             4 summary table row: a zero-finding review started by a push
               (`New commits`) has left none of the above (measured on
               plinth#190, head fd4bb91; #191). What it did leave is a row in
@@ -389,8 +401,12 @@ jobs:
               that begins with the row's characters. Where the push cannot be
               read (the call failed, the head is not in the log, a fork's
               branch) or the log is a full page of 100, which may have more
-              behind it, the row does not count and the log says so; signals
-              1 to 3 do not read the log.
+              behind it, neither the row nor the completion comment counts
+              and the log says so; signals 1 and 2 compare forty characters
+              and do not read the log. A fork's pull request therefore passes
+              on signal 1 or 2 only (the owner's decision on #193: the fork
+              is where the person who can push a colliding head is least
+              known).
 
           Author alone cannot tell a code review from a security review; the
           same bot posts both. So the sentence guaranteed is exactly "the
@@ -405,7 +421,7 @@ jobs:
           reviews_p, rcomments_p, icomments_p = sys.argv[3:6]
           activity_p = sys.argv[6] if len(sys.argv) > 6 else ""   # pushes to the head branch, newest first
 
-          #: The commit a completion comment names. Bound here; no time heuristic.
+          #: The commit a completion comment names, seven to forty characters.
           REVIEWED = re.compile(r"Reviewed commit:\*{0,2}\s*`([0-9a-f]{7,40})`", re.I)
 
           #: Completion wording with zero findings. Vendor text: brittle by nature.
@@ -518,7 +534,31 @@ jobs:
                   if d.get("headSha") == head and d.get("status") == "completed":
                       looked("marker status=completed")
 
-          # 3 completion comment, bound by the commit it names.
+          # Signals 3 and 4 name the head by a prefix (ten characters, seven), so
+          # both are also bound to the push of this head and to the head being
+          # the one such commit (#191, #193). All times are UTC to the second in
+          # one shape, so they compare as text.
+          pushes = [p for p in load(activity_p) if isinstance(p, dict)]
+          if len(pushes) >= 100:   # a full page: older pushes may be missing
+              pushes = []
+          pushed = next((str(p.get("timestamp") or "") for p in pushes if p.get("after") == head), "")
+          pushed = pushed[:19] if STAMP.match(pushed) else ""
+          tips = {str(p.get(k) or "") for p in pushes for k in ("before", "after")}
+
+          def unbound(sha, when):
+              """Why a signal that names this head as `sha` and was finished at
+              `when` is not tied to it; empty when it is."""
+              if not pushed:
+                  return "the push of this head could not be read, or the log is a full page"
+              if not when > pushed:
+                  return f"finished {when or '(no time read)'}, not after the push of this head ({pushed}Z)"
+              if [t for t in tips if t.startswith(sha)] != [head]:
+                  return f"another commit this branch has pointed at begins with {sha}"
+              return ""
+
+          # 3 completion comment: names a prefix of the head, created after the
+          # newest push of this head (`created_at`, GitHub's).
+          left_out = []
           for it in load(icomments_p):
               body = it.get("body") or ""
               if not ours(it) or not DONE.search(body):
@@ -528,18 +568,17 @@ jobs:
                   # A completion that names no commit belongs to an unknown commit.
                   continue
               sha = m.group(1)
-              if head.startswith(sha) or sha.startswith(head):
-                  looked(f"completion comment (Reviewed commit: {sha})", body.splitlines()[0][:90])
+              if head.startswith(sha):
+                  when = str(it.get("created_at") or "")
+                  when = when[:19] if STAMP.match(when) else ""
+                  why = unbound(sha, when)
+                  if not why:
+                      looked(f"completion comment (Reviewed commit: {sha}, {when}Z; this head was pushed {pushed}Z)",
+                             body.splitlines()[0][:90])
+                  left_out.append((sha, why))
 
           # 4 summary table row: `Completed`, the commit is a prefix of the head,
-          # and the completion is later than the newest push of this head. Both
-          # times are UTC to the second in one shape, so they compare as text.
-          pushes = [p for p in load(activity_p) if isinstance(p, dict)]
-          if len(pushes) >= 100:   # a full page: older pushes may be missing
-              pushes = []
-          pushed = next((str(p.get("timestamp") or "") for p in pushes if p.get("after") == head), "")
-          pushed = pushed[:19] if STAMP.match(pushed) else ""
-          tips = {str(p.get(k) or "") for p in pushes for k in ("before", "after")}
+          # and the completion is later than the newest push of this head.
           rows = []
           for it in load(icomments_p):
               body = it.get("body") or ""
@@ -549,21 +588,19 @@ jobs:
                   when = WHEN.search(cell)
                   when = when.group(1) if when else ""
                   fits = status == "Completed" and head.startswith(sha)
-                  alone = [t for t in tips if t.startswith(sha)] == [head]
-                  if fits and pushed and when > pushed and alone:
+                  why = unbound(sha, when) if fits else ""
+                  if fits and not why:
                       looked(f"summary table row (Completed, {sha}, {when}Z; this head was pushed {pushed}Z)")
                   note = "<- this commit" if head.startswith(sha) else ""
-                  if fits and not pushed:
-                      note += ", not counted: the push of this head could not be read, or the log is a full page"
-                  elif fits and not when > pushed:
-                      note += f", not counted: completed {when or '(no time read)'}, not after the push of this head ({pushed}Z)"
-                  elif fits:
-                      note += f", not counted: another commit this branch has pointed at begins with {sha}"
+                  if why:
+                      note += f", not counted: {why}"
                   rows.append((sha, status, note))
 
           print("not yet.")
           for sha, status in states[-3:]:
               print(f"   marker {sha[:8]} status={status} {'<- this commit' if sha == head else ''}")
+          for sha, why in left_out[-3:]:
+              print(f"   completion comment {sha} <- this commit, not counted: {why}")
           for sha, status, note in rows[-3:]:
               print(f"   summary row {sha[:8]} status={status} {note}")
           if seen:

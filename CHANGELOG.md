@@ -9,6 +9,21 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `third-party / review` binds the reviewer's completion comment to the push,
+  as it does the summary row: the comment counts only when its `created_at` is
+  later than the newest push of the head in the repository's activity log and
+  the head is the one commit the branch has pointed at that begins with the
+  characters the comment names (ten, as the vendor writes them; a later head
+  can be made to share them, and the comment stays on the pull request). Where
+  the push cannot be read, or the log is a full page of 100, the comment does
+  not count and the "not yet" log names its commit and the reason. A fork's
+  branch is not in the base repository's log, so a fork's pull request no
+  longer passes on a completion comment (nor, since 0.5.14, on the row): it
+  passes on a review, a review comment or the marker. No input, job or check
+  name changed, and no API call was added (#193).
+
 ## [0.5.14] - 2026-09-18
 
 ### Changed

@@ -9,13 +9,20 @@ completion comment, or a `Completed` row in its summary comment's table, on
 the pull request's current commit. The row is there because a review started
 by a push that found nothing has left only that (measured on #190, 2026-09-18:
 the check waited the full window on a commit the reviewer had looked at, #191);
-a `Running` row does not count. The row names its commit in seven characters,
-which a later head can be made to share, so it counts only when its completion
-time is later than the newest push of the current head in the repository's
-activity log, and the head is the one commit the branch has pointed at, by that
-log, that begins with those characters; where that push cannot be read (a
-fork's branch, a failed call, a log of a full page of 100 pushes) the row does
-not count and the log says so. That is evidence of
+a `Running` row does not count. The row names its commit in seven characters
+and the completion comment in ten, which a later head can be made to share, so
+each counts only when its time (the row's completion, the comment's
+`created_at`) is later than the newest push of the current head in the
+repository's activity log, and the head is the one commit the branch has
+pointed at, by that log, that begins with those characters; where that push
+cannot be read (a fork's branch, a failed call, a log of a full page of 100
+pushes) neither counts and the log says which was left out and why. A fork's
+branch is not in the base repository's log (measured on two fork pull requests
+of `cli/cli`, 2026-09-18), so a pull request from a fork passes on a review, a
+review comment or the security review's `completed` marker, not on the
+completion comment or the row: a
+zero-finding review that leaves only those waits the window and fails, and a
+person asks for another review or merges past an optional check (#193). That is evidence of
 participation: it does not say the whole change was reviewed, that the
 findings were handled, or anything about the code's quality. It never blocks
 on what the reviewer said. Drafts and Dependabot's pull requests are not
