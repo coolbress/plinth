@@ -138,6 +138,36 @@ run "the same wording from someone else does not count" "$(done_cmt someone "$D1
 # The reviewer's P1 scenario, head moved back to an older commit: bound by
 # commit, there is no time heuristic at all, and the old completion simply does not match.
 
+echo "-- summary table row signal (#191: a zero-finding review started by a push left only this)"
+# The summary comment as measured on plinth#186, #189 and #190 (2026-09-18):
+# the HTML marker on the first line, then one table row per review, the commit
+# as seven characters. On #190's second head that row was all the reviewer
+# left. The `Completed` row is measured; the `Running` row's exact wording is
+# not (nobody caught one), so that fixture is the measured row with the status
+# swapped.
+row() {  # status cell, short sha
+  printf '| 📝 **Code Review** | %s <relative-time datetime="2026-09-18T07:21:03.1Z">2026-09-18T07:21:03.1Z</relative-time> | `%s` | New commits |' "$1" "$2"
+}
+sum_cmt() {  # author, first line, row...
+  python3 -c 'import json,sys
+who, first = sys.argv[1:3]
+body = (first + "\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n"
+        "| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n" + "\n".join(sys.argv[3:])
+        + "\n\n\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\nCodex reacts with 👀 while any review is running.\n\n</details>")
+print(json.dumps([{"user": {"login": who}, "body": body}], ensure_ascii=False))' "$@"
+}
+SUM='<!-- codex-pull-request-review-summary -->'
+DONE_ST='✅ **Completed**'; RUN_ST='⏳ **Running**'
+run "Completed row for this head passes"              "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" 0
+run "Completed row for an older head does not count"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")")" 1
+run "Running row for this head does not count"        "$(sum_cmt "$BOT" "$SUM" "$(row "$RUN_ST" "${HEAD:0:7}")")" 1
+run "the same row from someone else does not count"   "$(sum_cmt someone "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" 1
+run "a sha inside the head but not its prefix does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:1:7}")")" 1
+run "a sha shorter than seven characters does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:6}")")" 1
+run "the row in a comment that is not the summary comment does not count" "$(sum_cmt "$BOT" "Here is the table you asked for:" "$(row "$DONE_ST" "${HEAD:0:7}")")" 1
+run "old head Completed, this head Running: does not count" "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")" "$(row "$RUN_ST" "${HEAD:0:7}")")" 1
+run "old head Completed, this head Completed: passes"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")" "$(row "$DONE_ST" "${HEAD:0:7}")")" 0
+
 echo "-- once decided, the log and the job summary list the reviewer's inline comments on this head (#176)"
 # The verdict never depends on this; the count is for the person who merges.
 # Inline comments: made on this head, an old one moved onto the head, someone
@@ -208,7 +238,10 @@ echo "-- when nothing matches, the log carries the clues (wrong name or commit: 
 printf '%s' "$(cmt "$BOT" "$OLD" completed)" > "$tmp/i.json"
 echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
 python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 || true
-for want in "${OLD:0:8}" "codex"; do
+# A summary row still running on this head is a clue too (#191).
+printf '%s' "$(sum_cmt "$BOT" "$SUM" "$(row "$RUN_ST" "${HEAD:0:7}")")" > "$tmp/i2.json"
+python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i2.json" >>"$tmp/log" 2>&1 || true
+for want in "${OLD:0:8}" "codex" "summary row ${HEAD:0:7} status=Running <- this commit"; do
   if grep -qF "$want" "$tmp/log"; then
     echo "  PASS  log names: $want"
   else

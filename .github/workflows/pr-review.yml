@@ -19,9 +19,10 @@ name: pr-review
 #
 # What it checks, exactly:
 #   yes  an accepted reviewer account (`reviewer-logins`) left a review signal
-#        tied to THIS commit: a review, a review comment made on it, or a
-#        completion comment naming it. Evidence of participation. A signal on
-#        an older commit does not count.
+#        tied to THIS commit: a review, a review comment made on it, a
+#        completion comment naming it, or a `Completed` row for it in the
+#        reviewer's summary table (#191). Evidence of participation. A signal
+#        on an older commit does not count.
 #   yes  a change to the designated rules section is not mixed with other
 #        changes in the same pull request.
 # What it does not check:
@@ -340,7 +341,8 @@ jobs:
           r"""Did an accepted reviewer account leave a signal on THIS commit?
           Participation evidence, no verdict.
 
-          Three signals, all accepted; the first to arrive wins (measured 2026-09-01):
+          Four signals, all accepted; the first to arrive wins (1 to 3 measured
+          2026-09-01, 4 on 2026-09-18):
 
             1 review object: a code review ends as a review with state
               COMMENTED, even with zero findings. Fast, about four minutes.
@@ -354,7 +356,15 @@ jobs:
               the commit (`**Reviewed commit:** \`db8c8772fd\``), so it is bound
               by commit, never by time. Two earlier versions bound by time and
               both were guesses. String matching is brittle; that is why all
-              three signals are read.
+              the signals are read.
+            4 summary table row: a zero-finding review started by a push
+              (`New commits`) has left none of the above (measured on
+              plinth#190, head fd4bb91; #191). What it did leave is a row in
+              the summary issue comment, edited in place:
+              `| 📝 **Code Review** | ✅ **Completed** <time> | \`fd4bb91\` | New commits |`.
+              A `**Completed**` row whose commit, seven characters as the
+              vendor writes it, is a prefix of the head counts. Any other
+              status does not; the trigger column is not read.
 
           Author alone cannot tell a code review from a security review; the
           same bot posts both. So the sentence guaranteed is exactly "the
@@ -380,6 +390,11 @@ jobs:
           )
           logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}
           MARK = re.compile(r"<!--\s*codex-security-review:v1\s*(\{.*?\})\s*-->", re.S)
+
+          #: The summary comment starts with this line; a table anywhere else is not read.
+          SUMMARY = "<!-- codex-pull-request-review-summary -->"
+          #: One row of its table: status (bold, after one emoji) and commit. Vendor text.
+          ROW = re.compile(r"^\|[^|\n]*\|\s*(?:\S+\s+)?\*\*([^*|\n]+)\*\*[^|\n]*\|\s*`([0-9a-f]{7,40})`\s*\|", re.M)
 
           def readable(p):
               """Is the file a JSON list? The step writes `null` when a call
@@ -484,15 +499,28 @@ jobs:
               if head.startswith(sha) or sha.startswith(head):
                   looked(f"completion comment (Reviewed commit: {sha})", body.splitlines()[0][:90])
 
+          # 4 summary table row: `Completed`, and the commit is a prefix of the head.
+          rows = []
+          for it in load(icomments_p):
+              body = it.get("body") or ""
+              if not ours(it) or not body.lstrip().startswith(SUMMARY):
+                  continue
+              for status, sha in ROW.findall(body):
+                  rows.append((sha, status))
+                  if status == "Completed" and head.startswith(sha):
+                      looked(f"summary table row (Completed, {sha})")
+
           print("not yet.")
           for sha, status in states[-3:]:
               print(f"   marker {sha[:8]} status={status} {'<- this commit' if sha == head else ''}")
+          for sha, status in rows[-3:]:
+              print(f"   summary row {sha[:8]} status={status} {'<- this commit' if head.startswith(sha) else ''}")
           if seen:
               print("  authors seen on this pull request: " + ", ".join(sorted(x for x in seen if x)))
           sys.exit(1)
           PY
 
-          # The three signals live in three APIs; one alone misses (see the docstring).
+          # The signals live in three APIs; one alone misses (see the docstring).
           # A failed call leaves `null`, not `[]`: the verdict reads either as
           # "no signal", and the inline-comment report tells them apart (#188).
           get() { gh api "repos/$REPO/$1" --paginate > "$RUNNER_TEMP/$2" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/$2"; }
