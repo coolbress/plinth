@@ -23,6 +23,14 @@ inside pull requests and have no tag.
   longer passes on a completion comment (nor, since 0.5.14, on the row): it
   passes on a review, a review comment or the marker. No input, job or check
   name changed, and no API call was added (#193).
+- `third-party / review` asks for the repository's activity log newest first
+  by name (`direction=desc`; it was the endpoint's default), and the judgement
+  takes the newest push of the head as the latest timestamp among the head's
+  pushes, not the first one listed; when one of them has no readable timestamp
+  neither the completion comment nor the summary row counts. In an
+  oldest-first log a head pushed, replaced and pushed back had its older push
+  read as the newest, so a comment or row made between the two pushes counted.
+  That order was not seen from the API. The gate's code is unchanged (#197).
 
 ## [0.5.14] - 2026-09-18
 
