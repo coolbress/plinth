@@ -4,8 +4,18 @@ Add a review signal from a reviewer other than the author's own agent session
 to the checks on a repository, and optionally to its wall.
 
 The check is `third-party / review`. It passes when the Codex code reviewer
-(`chatgpt-codex-connector[bot]`) has left a review, a review comment or a
-completion comment on the pull request's current commit. That is evidence of
+(`chatgpt-codex-connector[bot]`) has left a review, a review comment, a
+completion comment, or a `Completed` row in its summary comment's table, on
+the pull request's current commit. The row is there because a review started
+by a push that found nothing has left only that (measured on #190, 2026-09-18:
+the check waited the full window on a commit the reviewer had looked at, #191);
+a `Running` row does not count. The row names its commit in seven characters,
+which a later head can be made to share, so it counts only when its completion
+time is later than the newest push of the current head in the repository's
+activity log, and the head is the one commit the branch has pointed at, by that
+log, that begins with those characters; where that push cannot be read (a
+fork's branch, a failed call, a log of a full page of 100 pushes) the row does
+not count and the log says so. That is evidence of
 participation: it does not say the whole change was reviewed, that the
 findings were handled, or anything about the code's quality. It never blocks
 on what the reviewer said. Drafts and Dependabot's pull requests are not

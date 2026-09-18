@@ -11,6 +11,17 @@ inside pull requests and have no tag.
 
 ### Changed
 
+- `third-party / review` reads a fourth signal: a `Completed` row in the
+  accepted reviewer's summary comment table whose commit is a prefix of the
+  head and whose completion time is later than the newest push of that head
+  in the repository's activity log, where that head is the one commit the
+  branch has pointed at that begins with the row's characters (seven
+  characters can be made to match an earlier head; where the push cannot be
+  read, or the log is a full page of 100, the row does not count). A
+  review started by a push that found nothing left only that row on
+  #190, and the check failed after the full wait on a commit the reviewer had
+  looked at. Any other status does not count, and the trigger column is not
+  read. No input, job or check name changed (#191).
 - The inline-comment report of `third-party / review` says
   `inline comments: could not be read` when the comments call failed or did
   not return a list, instead of `no inline comments on this head`; the step
