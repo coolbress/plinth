@@ -11,6 +11,11 @@ inside pull requests and have no tag.
 
 ### Changed
 
+- The inline-comment report of `third-party / review` says
+  `inline comments: could not be read` when the comments call failed or did
+  not return a list, instead of `no inline comments on this head`; the step
+  now writes `null`, not `[]`, when a call fails, and the verdict reads either
+  as "no signal" as before. A missing file no longer raises (#188).
 - `third-party / review` posts its summons only when the caller passes the
   new optional secret `summons-token`, a token of the repository owner, whose
   login it checks first; a token whose login cannot be read, is another

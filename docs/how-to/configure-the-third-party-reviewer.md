@@ -174,7 +174,9 @@ issues" while the same review had left one inline P2 (a step order in `ci /
 tools`), and the pull request was merged with it unanswered; the P2 was right
 and became #175. Once the check has decided, its log and its job summary list
 the accepted reviewer's inline comments on the reviewed head with their URLs,
-or say `no inline comments on this head`. That list is what the check saw
+or say `no inline comments on this head`; when the comments could not be
+fetched at all it says `inline comments: could not be read` instead of zero,
+and the live query below is the list. That list is what the check saw
 when it decided; a review that finishes later (the security review has taken
 over 30 minutes) is not on it. The live list, filtered the same way, with
 `<login>` one of the caller's `reviewer-logins` (the default is
