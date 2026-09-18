@@ -37,14 +37,14 @@ BOT='chatgpt-codex-connector[bot]'
 
 # The completion comment that arrives when nothing was found; wording as
 # measured. The comment names the commit itself: `**Reviewed commit:** \`db8c8772fd\``.
-done_cmt() {  # author, text, [commit named]
+done_cmt() {  # author, text, [commit named], [created_at; '' = the field is absent]
   # shellcheck disable=SC2016  # single quotes are right: Python code, not shell expansion
   python3 -c 'import json,sys
 who, text = sys.argv[1:3]
-sha = sys.argv[3] if len(sys.argv) > 3 else ""
+sha, at = sys.argv[3:5]
 body = text + ("\n\n**Reviewed commit:** `" + sha + "`" if sha else "")
-print(json.dumps([{"user": {"login": who}, "created_at": "2026-09-01T06:08:51Z",
-                   "body": body}], ensure_ascii=False))' "$1" "$2" "${3:-}"
+print(json.dumps([{"user": {"login": who}, **({"created_at": at} if at else {}),
+                   "body": body}], ensure_ascii=False))' "$1" "$2" "${3:-}" "${4-2026-09-18T07:21:03Z}"
 }
 
 # One issue comment: author, marker sha, marker status.
@@ -127,35 +127,6 @@ runrc "an old comment moved onto the head does not count"  "$(rcm "$BOT" "$HEAD"
 runrc "someone else's review comment does not count"       "$(rcm "someone" "$HEAD" "$HEAD")" 1
 runrc "a comment without original_commit_id does not count" '[{"user":{"login":"chatgpt-codex-connector[bot]"},"commit_id":"'"$HEAD"'"}]' 1
 
-echo "-- completion comment signal (measured: zero findings create no review object)"
-D1="Codex Review: Didn't find any major issues. Keep it up!"   # wording as measured
-D2="Security review completed. No security issues were found in this pull request."
-run "completion comment names this commit"          "$(done_cmt "$BOT" "$D1" "${HEAD:0:10}")" 0
-run "security review completion counts too"         "$(done_cmt "$BOT" "$D2" "$HEAD")" 0
-run "completion naming another commit does not count" "$(done_cmt "$BOT" "$D1" "${OLD:0:10}")" 1
-run "completion naming no commit does not count"    "$(done_cmt "$BOT" "$D1")" 1
-run "the same wording from someone else does not count" "$(done_cmt someone "$D1" "$HEAD")" 1
-# The reviewer's P1 scenario, head moved back to an older commit: bound by
-# commit, there is no time heuristic at all, and the old completion simply does not match.
-
-echo "-- summary table row signal (#191: a zero-finding review started by a push left only this)"
-# The summary comment as measured on plinth#186, #189 and #190 (2026-09-18):
-# the HTML marker on the first line, then one table row per review, the commit
-# as seven characters. On #190's second head that row was all the reviewer
-# left. The `Completed` row is measured; the `Running` row's exact wording is
-# not (nobody caught one), so that fixture is the measured row with the status
-# swapped.
-row() {  # status cell, short sha, [completed at]
-  printf '| 📝 **Code Review** | %s <relative-time datetime="%s">%s</relative-time> | `%s` | New commits |' "$1" "${3:-$T_DONE}" "${3:-$T_DONE}" "$2"
-}
-sum_cmt() {  # author, first line, row...
-  python3 -c 'import json,sys
-who, first = sys.argv[1:3]
-body = (first + "\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n"
-        "| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n" + "\n".join(sys.argv[3:])
-        + "\n\n\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\nCodex reacts with 👀 while any review is running.\n\n</details>")
-print(json.dumps([{"user": {"login": who}, "body": body}], ensure_ascii=False))' "$@"
-}
 # The pushes to the head branch, newest first, as `repos/<r>/activity` returns
 # them (fields as measured on this branch, 2026-09-18).
 push() {  # after, timestamp, [before]
@@ -176,10 +147,40 @@ runsum() {  # name, issue-comments JSON, activity JSON ('-' = the argument is no
     echo "  PASS  $1"
   fi
 }
-SUM='<!-- codex-pull-request-review-summary -->'
-DONE_ST='✅ **Completed**'; RUN_ST='⏳ **Running**'
 T_PUSH=2026-09-18T07:15:40Z; T_DONE=2026-09-18T07:21:03.356745Z   # pushed, then reviewed
 PUSHED="[$(push "$HEAD" "$T_PUSH")]"
+
+echo "-- completion comment signal (measured: zero findings create no review object)"
+D1="Codex Review: Didn't find any major issues. Keep it up!"   # wording as measured
+D2="Security review completed. No security issues were found in this pull request."
+runsum "completion comment names this commit"          "$(done_cmt "$BOT" "$D1" "${HEAD:0:10}")" "$PUSHED" 0
+runsum "security review completion counts too"         "$(done_cmt "$BOT" "$D2" "$HEAD")" "$PUSHED" 0
+runsum "completion naming another commit does not count" "$(done_cmt "$BOT" "$D1" "${OLD:0:10}")" "$PUSHED" 1
+runsum "completion naming no commit does not count"    "$(done_cmt "$BOT" "$D1")" "$PUSHED" 1
+runsum "the same wording from someone else does not count" "$(done_cmt someone "$D1" "$HEAD")" "$PUSHED" 1
+# The reviewer's P1 scenario, head moved back to an older commit: the old
+# completion names another commit and does not match.
+
+echo "-- summary table row signal (#191: a zero-finding review started by a push left only this)"
+# The summary comment as measured on plinth#186, #189 and #190 (2026-09-18):
+# the HTML marker on the first line, then one table row per review, the commit
+# as seven characters. On #190's second head that row was all the reviewer
+# left. The `Completed` row is measured; the `Running` row's exact wording is
+# not (nobody caught one), so that fixture is the measured row with the status
+# swapped.
+row() {  # status cell, short sha, [completed at]
+  printf '| 📝 **Code Review** | %s <relative-time datetime="%s">%s</relative-time> | `%s` | New commits |' "$1" "${3:-$T_DONE}" "${3:-$T_DONE}" "$2"
+}
+sum_cmt() {  # author, first line, row...
+  python3 -c 'import json,sys
+who, first = sys.argv[1:3]
+body = (first + "\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n"
+        "| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n" + "\n".join(sys.argv[3:])
+        + "\n\n\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\nCodex reacts with 👀 while any review is running.\n\n</details>")
+print(json.dumps([{"user": {"login": who}, "body": body}], ensure_ascii=False))' "$@"
+}
+SUM='<!-- codex-pull-request-review-summary -->'
+DONE_ST='✅ **Completed**'; RUN_ST='⏳ **Running**'
 runsum "Completed row for this head passes"              "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${HEAD:0:7}")")" "$PUSHED" 0
 runsum "Completed row for an older head does not count"  "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${OLD:0:7}")")" "$PUSHED" 1
 runsum "Running row for this head does not count"        "$(sum_cmt "$BOT" "$SUM" "$(row "$RUN_ST" "${HEAD:0:7}")")" "$PUSHED" 1
@@ -252,8 +253,57 @@ fi
 if grep -q '"\$RUNNER_TEMP/icomments.json" "\$RUNNER_TEMP/activity.json"' "$wf"; then
   echo "  PASS  the step hands the push log to the judgement"
 else
-  echo "  FAIL  the step does not pass activity.json to attest.py; the summary row would never count" >&2; fails=$((fails + 1))
+  echo "  FAIL  the step does not pass activity.json to attest.py; the completion comment and the summary row would never count" >&2; fails=$((fails + 1))
 fi
+
+echo "-- the completion comment is bound to the push and to the one commit, as the row is (#193)"
+# The comment names ten characters and stays on the pull request, so a later
+# head made to share them would pass on it before any review of that head. It
+# gets the row's two conditions from the same push log: created after the
+# newest push of this head (`created_at`, GitHub's), and this head the one
+# commit the branch has pointed at that begins with the characters it names.
+# A fork's branch is not in the base repository's log (measured on cli/cli,
+# 2026-09-18): there the comment does not count, by the owner's decision.
+CMT_HEAD="$(done_cmt "$BOT" "$D1" "${HEAD:0:10}")"   # created 07:21:03Z, after T_PUSH
+TWIN10="${HEAD:0:10}bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"   # another commit, the same ten characters
+NEAR9="${HEAD:0:9}0bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"    # shares nine
+runsum "the comment is older than the newest push of this head: does not count" \
+  "$CMT_HEAD" "[$(push "$HEAD" 2026-09-18T07:30:00Z)]" 1
+grep -qF "completion comment ${HEAD:0:10}" "$tmp/log" && grep -qF "not after the push of this head" "$tmp/log" \
+  || { echo "  FAIL  log does not name the comment's commit and the push as the reason" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
+runsum "this head pushed again after the comment: the newest push decides, does not count" \
+  "$CMT_HEAD" "[$(push "$HEAD" 2026-09-18T07:30:00Z),$(push "$OLD" 2026-09-18T07:16:00Z),$(push "$HEAD" "$T_PUSH")]" 1
+runsum "created in the same second as the push: does not count" "$CMT_HEAD" "[$(push "$HEAD" 2026-09-18T07:21:03Z)]" 1
+runsum "the head replaced a commit with the same ten characters, comment newer than the push: does not count" \
+  "$CMT_HEAD" "[$(push "$HEAD" "$T_PUSH" "$TWIN10")]" 1
+grep -qF "completion comment ${HEAD:0:10}" "$tmp/log" && grep -qF "another commit" "$tmp/log" \
+  || { echo "  FAIL  log does not name the comment's commit and the other commit as the reason" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
+runsum "such a commit as an earlier push's head: does not count" \
+  "$CMT_HEAD" "[$(push "$HEAD" "$T_PUSH"),$(push "$OLD" 2026-09-18T07:10:00Z "$TWIN10"),$(push "$TWIN10" 2026-09-18T07:05:00Z)]" 1
+runsum "a comment naming all forty characters, older than the push: does not count" \
+  "$(done_cmt "$BOT" "$D2" "$HEAD")" "[$(push "$HEAD" 2026-09-18T07:30:00Z)]" 1
+runsum "no push of this head in the log: does not count"        "$CMT_HEAD" "[$(push "$OLD" "$T_PUSH")]" 1
+runsum "an empty push log: does not count"                      "$CMT_HEAD" '[]' 1
+runsum "the push log could not be read (null): does not count"  "$CMT_HEAD" 'null' 1
+grep -qF "completion comment ${HEAD:0:10}" "$tmp/log" && grep -qF "the push of this head could not be read" "$tmp/log" \
+  || { echo "  FAIL  log does not say the comment was left out for the push" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
+runsum "no push log given: does not count"                      "$CMT_HEAD" - 1
+runsum "a push without a timestamp: does not count"             "$CMT_HEAD" "[{\"after\":\"$HEAD\"}]" 1
+runsum "a full page of 100 pushes may have more behind it: does not count" "$CMT_HEAD" "$(many 100)" 1
+runsum "a comment without created_at: does not count"           "$(done_cmt "$BOT" "$D1" "${HEAD:0:10}" '')" "$PUSHED" 1
+runsum "a created_at that is not a UTC time: does not count"    "$(done_cmt "$BOT" "$D1" "${HEAD:0:10}" 2026-09-18T09:21:03+02:00)" "$PUSHED" 1
+runsum "a comment newer than the push, no such other commit: passes" "$CMT_HEAD" "$PUSHED" 0
+runsum "one second after the push: passes"                      "$CMT_HEAD" "[$(push "$HEAD" 2026-09-18T07:21:02Z)]" 0
+runsum "a commit sharing only nine characters does not get in the way: passes" \
+  "$CMT_HEAD" "[$(push "$HEAD" "$T_PUSH" "$NEAR9")]" 0
+runsum "a log of 99 pushes is whole: passes"                    "$CMT_HEAD" "$(many 99)" 0
+# A comment left out does not take the row down with it, nor the other way round.
+runsum "comment older than the push, row newer: the row passes" \
+  "$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1]) + json.loads(sys.argv[2])))' \
+     "$(done_cmt "$BOT" "$D1" "${HEAD:0:10}" 2026-09-18T07:00:00Z)" "$ROW_HEAD")" "$PUSHED" 0
+runsum "row left out for a commit sharing seven characters, comment's ten are this head's alone: the comment passes" \
+  "$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1]) + json.loads(sys.argv[2])))' \
+     "$ROW_HEAD" "$CMT_HEAD")" "[$(push "$HEAD" "$T_PUSH" "$TWIN")]" 0
 
 echo "-- once decided, the log and the job summary list the reviewer's inline comments on this head (#176)"
 # The verdict never depends on this; the count is for the person who merges.
