@@ -26,13 +26,12 @@ person asks for another review or merges past an optional check (#193). That is 
 participation: it does not say the whole change was reviewed, that the
 findings were handled, or anything about the code's quality. It never blocks
 on what the reviewer said. Nor is it a barrier against people with write
-access to the repository: of a comment the check reads who wrote it and its
-current text (the marker and the summary row, the row's completion time
-included, are text), and for a completion comment also when it was created;
-it does not read whether the comment was edited afterwards or by whom, and
-GitHub lets people with write access edit other people's comments (its
-documentation; not tried here). The pull request page marks an edited comment
-and keeps its history; the check does not look at it (#196). Drafts and Dependabot's pull requests are not
+access to the repository. Three of the signals are issue comments (the security
+review's marker, the completion comment, the summary row), and the check does not look at
+whether such a comment was edited after it was posted, or by whom, so one that
+someone else edited can still count. GitHub lets people with write access edit
+other people's comments (its documentation; not tried here); the pull request
+page marks an edited comment and keeps its history (#196). Drafts and Dependabot's pull requests are not
 summoned, nor release pull requests where that is turned on ([below](#pull-requests-it-passes-without-summoning)); any other ready pull request must
 show a signal on its current head. The check posts a summons only when the
 caller gives it a person's token ([below](#summoning-the-reviewer)); without one
