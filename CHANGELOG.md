@@ -9,6 +9,16 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `tests/e2e-driver.sh` numbers each case's mock log instead of naming it
+  with `$RANDOM`. The mock `gh` keeps counters beside the log that a new case
+  does not reset, so when the cancellation case drew an earlier case's name
+  it counted its second deletion as the third or fourth, never sent the
+  signal, and the driver finished with exit 0. That happens on about 0.09%
+  of runs (8 of 9,403 bash 3.2 seeds); seeds 6126 and 1672 reproduce #201's
+  two failing lines on the unchanged file and pass after (#201).
+
 ## [0.5.15] - 2026-09-18
 
 ### Changed
