@@ -11,6 +11,27 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.18] - 2026-09-19
+
+One change, to when `third-party / review` asks the reviewer for a review.
+It matters only to a caller that passes the `summons-token` secret; without
+it nothing is posted, as before. The files that changed are the reusable
+workflow `pr-review.yml`, plinth's own caller `third-party.yml`, the summons
+test and the name of its CI step, the third-party reviewer how-to, and
+`CHANGELOG.md`. No input, job, check name or secret was renamed, and nothing
+a new repository receives from the door changes.
+
+Why: on 2026-09-18 the reviewer's own trigger did not start three times on
+this repository, while a request from the owner's account drew a review in
+about two minutes. With a token the check used to ask at the start of the
+wait and again halfway, whatever the reviewer was doing. It now asks a third
+of the way in only if no accepted reviewer has been active since the push,
+and at two thirds only if none has been active since the first ask point
+(#206). plinth's own caller passes `secrets.SUMMONS_TOKEN`, which does not
+exist yet, so nothing is posted here until the owner creates it.
+
+tested with plinth-template v1.4.1
+
 ### Changed
 
 - With the `summons-token` secret, `third-party / review` no longer posts the
@@ -674,7 +695,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.17...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.18...HEAD
+[0.5.18]: https://github.com/coolbress/plinth/releases/tag/v0.5.18
 [0.5.17]: https://github.com/coolbress/plinth/releases/tag/v0.5.17
 [0.5.16]: https://github.com/coolbress/plinth/releases/tag/v0.5.16
 [0.5.15]: https://github.com/coolbress/plinth/releases/tag/v0.5.15
