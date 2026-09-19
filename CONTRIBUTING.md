@@ -164,7 +164,8 @@ of pull requests under it. Run 2 reads no file, so any clone or worktree can
 run it; given the second argument, it says it does not read it. Run 1 also
 adds the version's link reference at the end of `CHANGELOG.md` and moves the
 `[Unreleased]` compare link to the new tag. Neither link resolves before run 2,
-so `ci / docs` skips the two links of the version `plugin.json` names.
+so `ci / docs` skips the two links of the version `plugin.json` names, from
+the release pull request until the next release moves the version on.
 
 The script refuses a why without the exact tested line, a why that is nothing
 but that line and markup, a why-file with a heading line, and in run 2 a

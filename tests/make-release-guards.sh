@@ -257,6 +257,10 @@ back
 why_is "$(printf 'A reason.\n\ntested with %s v0.0.0-not-the-pin' "${template%% *}")"
 run "v$next" "$work/why.md";       check "a section tested with another template tag is refused" no $?
 back
+why_is "$(printf 'A reason.\n\n## Migration\n\nMore.\n\ntested with %s' "$template")"
+run "v$next" "$work/why.md";       check "a section whose why has a heading line is refused, as the why-file is" no $?
+is "  and the refusal names the heading" says "heading"
+back
 why_is "A reason, the tested line below."
 edit "t = t.replace('- An entry waiting for the release.\n', '- An entry waiting for the release.\n\ntested with ' + arg + '\n', 1)" "$template"
 run "v$next" "$work/why.md";       check "a tested line under the first ### is not the why's" no $?

@@ -18,16 +18,16 @@ pull requests and have no tag.
   (`vX.Y.Z <why-file>`), checks it as it checked the notes file and also
   refuses a heading line in it, and writes it under the new version's heading
   above the entries. It also adds the version's link reference and moves the
-  `[Unreleased]` compare link to the new tag. Run 2 reads no file: it checks
-  the why and the exact `tested with` line in that section of the merged
-  `main` again, then publishes the section, heading left out, with the
-  generated index under it. The text is in the release pull request's diff
+  `[Unreleased]` compare link to the new tag. Run 2 reads no file: it runs
+  run 1's checks again on that section of the merged `main`, on the text
+  above its first `###`, then publishes the section, heading left out, with
+  the generated index under it. The text is in the release pull request's diff
   before it is public, and run 2 runs from any clone or worktree. Every
   version heading down to 0.5.0 links its Release, where the earlier
   why-texts are. `ci / docs` skips the two links of the version `plugin.json`
-  names, which return 404 until run 2 publishes that version; every other
-  version's links are checked. No check name, job or workflow input changed
-  (#209).
+  names, from its release pull request (where they return 404) until the next
+  release; every other version's links are checked. No check name, job or
+  workflow input changed (#209).
 
 ## [0.5.16] - 2026-09-19
 

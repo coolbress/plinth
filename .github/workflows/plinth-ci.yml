@@ -166,7 +166,8 @@ jobs:
           # The version plugin.json names has no Release until run 2 of
           # scripts/make-release.sh, after its pull request merges; until then
           # its CHANGELOG.md link and the [Unreleased] compare link from its tag
-          # answer 404. Those two are skipped, every earlier version's are checked.
+          # answer 404. Those two are skipped, and stay skipped until the next
+          # release moves the version on; every earlier version's are checked.
           v="$(jq -er .version .claude-plugin/plugin.json)"; v="${v//./[.]}"
           repo='https://github[.]com/coolbress/plinth'
           "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" \

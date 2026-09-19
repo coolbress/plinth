@@ -24,10 +24,11 @@
 # tested tag is the only compatibility statement plinth makes. Run 1 takes the
 # why as a file, as `git commit -F` takes a message, and keeps it in
 # CHANGELOG.md; nothing reads the file again. Run 2 reads the version's section
-# of the merged `main`, checks the why and the tested line again (the pull
-# request can change them), and publishes the section, heading left out, as the
-# Release's text with the generated index under it; .github/release.yml groups
-# the index. Run 2 accepts the second argument and does not read it.
+# of the merged `main`, runs run 1's checks again on the why above its first
+# `###` (the pull request can change it), and publishes the section, heading
+# left out, as the Release's text with the generated index under it;
+# .github/release.yml groups the index. Run 2 accepts the second argument and
+# does not read it.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -56,6 +57,13 @@ check_why() {
   # Prose, not structure: headings and rules are not a why; letters are.
   [ -n "$(grep -vF -- "$tested" <<<"$text" | grep -vE '^[[:space:]]*#' | tr -cd '[:alpha:]')" ] \
     || stop "$1 says nothing but the tested line and markup: write why this release exists"
+  # It sits under the version's `##` heading as prose. A `##` or `###` line
+  # would cut the section; any other level fails markdownlint there (a second
+  # h1, or a skipped level), and `ci / docs` with it.
+  if grep -qE '^ {0,3}#{1,6}([[:space:]]|$)' <<<"$text"; then
+    stop "$1 has a heading line; the why is prose under the version's heading, and a heading would cut the section:" \
+         "$(grep -nE '^ {0,3}#{1,6}([[:space:]]|$)' <<<"$text")"
+  fi
 }
 
 # -- where we are: a clean main that equals origin/main ----------------------
@@ -157,11 +165,6 @@ fi
 [ -n "$why_file" ] || stop "run 1 needs the why-file: why this release exists, and the tested line" "$usage"
 [ -f "$why_file" ] || stop "why-file not found: $why_file"
 check_why "the why-file" < "$why_file"
-# It goes under the version heading as prose: a heading would cut the section.
-if grep -qE '^ {0,3}#{1,6}([[:space:]]|$)' "$why_file"; then
-  stop "the why-file has a heading line; the why is prose under the version's heading, and a heading would cut the section:" \
-       "$(grep -nE '^ {0,3}#{1,6}([[:space:]]|$)' "$why_file")"
-fi
 [ "$(printf '%s\n%s\n' "$current" "$ver" | sort -V | tail -1)" = "$ver" ] && [ "$current" != "$ver" ] \
   || stop "$ver is not above the current version $current"
 if tag_on_origin; then
@@ -187,7 +190,8 @@ for f in (plugin, market):
 p = pathlib.Path(changelog); text = p.read_text()
 # The links first, so that nothing in the why is taken for them: Unreleased
 # compares from the new tag, and the new version links its Release. Neither
-# exists before run 2; plinth-ci.yml's link check skips these two.
+# exists before run 2; plinth-ci.yml's link check skips the two links of the
+# version plugin.json names.
 text = re.sub(r"^\[Unreleased\]: (\S+)/compare/\S+\.\.\.HEAD$",
               lambda m: f"[Unreleased]: {m[1]}/compare/v{ver}...HEAD\n[{ver}]: {m[1]}/releases/tag/v{ver}",
               text, count=1, flags=re.M)
