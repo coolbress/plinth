@@ -65,9 +65,11 @@ name: pr-review
 #        reviewer's own trigger; with it, the summons is posted as that
 #        person (#206): a third of the way into the wait if no accepted
 #        reviewer has been active since the push, and at two thirds if none
-#        has been active since the first of those points. Earlier summonses
-#        for the commit are counted by a hidden marker and it stops at two; a
-#        count that cannot be read reads as none.
+#        has been active since the first of those points; at neither when the
+#        branch's activity log, read at that point, confirms that another
+#        commit was pushed after this head (#215). Earlier summonses for the
+#        commit are counted by a hidden marker and it stops at two; a count
+#        that cannot be read reads as none.
 #   no   that the instructions cannot be weakened: only the designated section
 #        is compared, and only within one pull request.
 #
@@ -97,9 +99,11 @@ on:
           Posted only with the `summons-token` secret, as that person: a third
           of the way into `wait-seconds` if no accepted reviewer has been
           active since the push, and at two thirds if none has been active
-          since the first of those points (#206). Without the secret nothing
-          is posted, because a bot's mention is not honoured (#185). Empty:
-          never summon.
+          since the first of those points (#206); at neither when the
+          branch's activity log, read at that point, confirms that another
+          commit was pushed after this head (#215). Without the secret
+          nothing is posted, because a bot's mention is not honoured (#185).
+          Empty: never summon.
         type: string
         default: "@codex review"
       wait-seconds:
@@ -717,7 +721,7 @@ jobs:
             exit 1
           fi
           if [ "$post" = "post" ]; then
-            echo "summons-token reads as $OWNER: nothing is posted now; at $(( WAIT / 3 ))s and $(( 2 * WAIT / 3 ))s the summons goes out, the first unless an accepted reviewer has been active since the push, the second unless one has been active since the first"
+            echo "summons-token reads as $OWNER: nothing is posted now; at $(( WAIT / 3 ))s and $(( 2 * WAIT / 3 ))s the summons goes out, the first unless an accepted reviewer has been active since the push, the second unless one has been active since the first, neither when the activity log confirms a newer push than this head"
           else
             echo "$post"
           fi
@@ -729,13 +733,16 @@ jobs:
           # way into the wait the summons goes out only if no accepted reviewer
           # has started, and at two thirds once more only if none has been
           # active since the first ask point, asked or not (a request that
-          # draws nothing works minutes later, openai/codex#33048). The test is
-          # a pure function so tests/pr-review-summon.sh can lift it out: it
-          # prints why, and exits 0 when an accepted reviewer has been active
-          # since then, 1 when not.
+          # draws nothing works minutes later, openai/codex#33048). Neither goes
+          # out when the branch's activity log confirms that another commit was
+          # pushed after this head (#215). The test is a pure function so
+          # tests/pr-review-summon.sh can lift it out: it prints why, and exits
+          # 0 when not to ask (this head replaced, or an accepted reviewer
+          # active since then), 1 when to ask.
           cat > "$RUNNER_TEMP/started.py" <<'PYSTART'
-          """Has an accepted reviewer shown life on this pull request since the
-          newest push of the head, and since `since` when it is given?
+          """Has this head been replaced by a newer push, or has an accepted
+          reviewer shown life on this pull request since the newest push of the
+          head, and since `since` when it is given?
 
           Loose on purpose: a request that lands while a review of the head is
           running is folded into it (measured on #207, #205), so asking once
@@ -762,8 +769,24 @@ jobs:
                   return []
               return d if isinstance(d, list) else []
 
+          # Replaced (#215): the reviewer reviews the pull request's current head,
+          # so a request from this run would serve the newer commit and be
+          # counted as this one's. Only a log that confirms it: short of a full
+          # page, this head's push in it, every entry stamped, and every push
+          # at the latest second naming a commit, none of them this head. The
+          # order is not read (#197). A tie with this head, or anything
+          # unreadable, confirms nothing.
+          log = load(activity_p)
+          if (0 < len(log) < 100 and any(isinstance(p, dict) and p.get("after") == head for p in log)
+                  and all(isinstance(p, dict) and STAMP.match(str(p.get("timestamp") or "")) for p in log)):
+              latest = max(p["timestamp"] for p in log)
+              newest = sorted({str(p.get("after") or "") for p in log if p["timestamp"] == latest})
+              if head not in newest and all(newest):
+                  print(f"this head is no longer the branch's newest push ({', '.join(newest)})")
+                  sys.exit(0)
+
           # The newest push of the head, read as attest.py reads it (#197).
-          pushes = [p for p in load(activity_p) if isinstance(p, dict)]
+          pushes = [p for p in log if isinstance(p, dict)]
           if len(pushes) >= 100:   # a full page: older pushes may be missing
               pushes = []
           stamps = [str(p.get("timestamp") or "") for p in pushes if p.get("after") == head]

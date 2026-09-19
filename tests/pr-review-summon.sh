@@ -12,9 +12,11 @@
 #
 # When it asks (#206): nothing at the start; a third of the way into the wait
 # if no accepted reviewer has been active since the push, and at two thirds if
-# none has been active since the first ask point. That test is a
-# Python snippet, lifted and run against fixtures like the one above; the
-# schedule is checked by running the whole step on a clock the test moves.
+# none has been active since the first ask point; at neither when the
+# activity log confirms that another commit was pushed after this head
+# (#215). That test is a Python snippet, lifted and run against fixtures like
+# the one above; the schedule is checked by running the whole step on a clock
+# the test moves, with an activity log that changes as the clock does.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -133,6 +135,36 @@ started "push unreadable: the head's push has no time"             "$AFTER" "[{\
 started "second ask point: active after the push, none since"      "$(said "$BOT" 2026-09-18T10:21:00Z 2026-09-18T10:22:00Z)" "$LOG" 2026-09-18T10:25:00Z 1 "nothing from an accepted reviewer since the first ask point (2026-09-18T10:25:00Z)"
 started "second ask point, push unreadable: none since the first"  "$(said "$BOT" 2026-09-18T10:21:00Z 2026-09-18T10:22:00Z)" null 2026-09-18T10:25:00Z 1 "nothing from an accepted reviewer since the first ask point (2026-09-18T10:25:00Z)"
 
+# A newer push replaced this head (#215): the reviewer reviews the newer commit, so
+# a request here is counted as this head's but serves that one. Only a log that
+# confirms it: read, short of a full page, this head's push in it, every entry
+# stamped, and every push at the latest second names a commit, none of them this
+# head. The order is not read.
+B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+C=cccccccccccccccccccccccccccccccccccccccc
+push() {  # commit, timestamp (or "none"): one entry of the activity log
+  if [ "$2" = none ]; then printf '{"after":"%s"}' "$1"; else printf '{"after":"%s","timestamp":"%s"}' "$1" "$2"; fi
+}
+A20="$(push "$HEAD" 2026-09-18T10:20:00Z)"
+B22="$(push "$B" 2026-09-18T10:22:00Z)"
+REPLACED="this head is no longer the branch's newest push"
+echo "-- replaced by a newer push: exit 0, do not ask (#215)"
+started "another commit pushed after this head"                    "[]" "[$B22,$A20]" "" 0 "$REPLACED ($B)"
+started "the same, the log's array in the other order"             "[]" "[$A20,$B22]" "" 0 "$REPLACED ($B)"
+started "two other commits share the latest second"                "[]" "[$B22,$(push "$C" 2026-09-18T10:22:00Z),$A20]" "" 0 "$REPLACED ($B, $C)"
+started "second ask point: another commit pushed after this head"  "[]" "[$B22,$A20]" 2026-09-18T10:25:00Z 0 "$REPLACED ($B)"
+
+echo "-- the log confirms nothing: #206's decision stands"
+started "this head is the newest push"                             "[]" "[$A20,$(push "$B" 2026-09-18T10:10:00Z)]" "" 1 "nothing from an accepted reviewer since the push (2026-09-18T10:20:00Z)"
+started "this head pushed back after another commit"               "[]" "[$(push "$HEAD" 2026-09-18T10:25:00Z),$B22,$A20]" "" 1 "nothing from an accepted reviewer since the push (2026-09-18T10:25:00Z)"
+started "another commit pushed at this head's second"              "[]" "[$(push "$B" 2026-09-18T10:20:00Z),$A20]" "" 1 "nothing from an accepted reviewer since the push (2026-09-18T10:20:00Z)"
+started "an entry without a timestamp"                             "[]" "[$(push "$C" none),$B22,$A20]" "" 1 "nothing from an accepted reviewer since the push"
+started "a push at the latest second names no commit"              "[]" "[{\"timestamp\":\"2026-09-18T10:22:00Z\"},$A20]" "" 1 "nothing from an accepted reviewer since the push"
+started "this head not in the log, a newer commit's push is"       "[]" "[$B22]" "" 1 "the push of this head could not be read"
+started "a full page of 100 whose latest push is another commit"   "[]" "[$B22$(for _ in $(seq 99); do printf ',%s' "$A20"; done)]" "" 1 "the push of this head could not be read"
+started "the log unreadable (null)"                                "[]" null "" 1 "the push of this head could not be read"
+started "push unreadable, active since the first ask point"        "$(said "$BOT" 2026-09-18T10:26:00Z 2026-09-18T10:27:00Z)" "[$B22]" 2026-09-18T10:25:00Z 0 "reviewer active since the first ask point (2026-09-18T10:25:00Z)"
+
 # The whole step, on a clock that only `sleep` moves, with `gh` answering from
 # files: when it posts, not only whether. A 30 s wait, a look every 10 s. The
 # mocks are sh where they can be: a Python start is slow on some laptops.
@@ -142,7 +174,8 @@ cat > "$tmp/bin/gh" <<'SH'
 case "$*" in
   "pr comment"*|*--jq*) exec python3 "$MOCK/../gh.py" "$@" ;;
   "api user") touch "$MOCK/user-called"; echo '{"login":"coolbress"}' ;;
-  */activity*) cat "$MOCK/activity.json" ;;
+  */activity*)   # only the pushes made by the clock's time: a log that changes during the run
+    awk -v c="$(cat "$MOCK/clock")" 'BEGIN { printf "[" } $1 <= c { sub(/^[0-9]+ /, ""); printf "%s%s", (n++ ? "," : ""), $0 } END { print "]" }' "$MOCK/pushes" ;;
   */issues/7/comments*) cat "$MOCK/icomments.json" ;;
   *) echo '[]' ;;
 esac
@@ -166,10 +199,14 @@ if [ "$f" = "+%s" ]; then echo "$c"; else /bin/date -u -r "$c" "$f" 2>/dev/null 
 SH
 chmod +x "$tmp/bin/"*
 T0=1789726800   # 2026-09-18T10:20:00Z, the push in $LOG; the run starts then
-step() {  # name, token, issue comments before the run, expected posts (seconds into the wait, space separated); W, P: wait and poll
+stamp() { /bin/date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || /bin/date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
+step() {  # name, token, issue comments before the run, expected posts (seconds into the wait, space separated); W, P: wait and poll; PUSHES: "seconds:commit ..." (default: this head at 0)
   rm -rf "$tmp/m"; mkdir -p "$tmp/m"
   echo "$T0" > "$tmp/m/clock"
-  printf '%s' "$LOG" > "$tmp/m/activity.json"; printf '%s' "${3:-[]}" > "$tmp/m/icomments.json"
+  for p in ${PUSHES:-0:$HEAD}; do
+    t=$(( T0 + ${p%%:*} )); printf '%s %s\n' "$t" "$(push "${p#*:}" "$(stamp "$t")")"
+  done > "$tmp/m/pushes"
+  printf '%s' "${3:-[]}" > "$tmp/m/icomments.json"
   PATH="$tmp/bin:$PATH" MOCK="$tmp/m" RUNNER_TEMP="$tmp/rt" REPO=o/r NUMBER=7 HEAD_SHA="$HEAD" HEAD_REF=b \
     AUTHOR_LOGIN=coolbress TITLE=t LOGINS="$BOT" ASK="@codex review" SUMMONS_TOKEN="$2" OWNER=coolbress \
     WAIT="${W:-30}" POLL="${P:-10}" bash "$tmp/step.sh" >"$tmp/out" 2>&1
@@ -201,6 +238,17 @@ if [ -e "$tmp/m/user-called" ]; then echo "  FAIL  no token, but the login was r
 # further than the next ask point, so both still come on time.
 W=20 P=20 step "20 s wait, 20 s looks: asks at 6 s and 13 s"            tok ""  "6 13"
 W=45 P=20 step "45 s wait, 20 s looks: asks at 15 s and 30 s"           tok ""  "15 30"
+# The log changes during the run (#215): each ask point reads it again.
+PUSHES="0:$HEAD 15:$B" step "B pushed between the ask points: the first asks, the second does not"  tok "" "10"
+grep -qF "$REPLACED ($B): not asking" "$tmp/out" \
+  || { echo "  FAIL  the second ask point's log does not say the head was replaced" >&2; fails=$((fails + 1)); }
+# B newest at the first point, this head pushed back before the second: a run judged
+# replaced once must ask again when it is the newest push again.
+PUSHES="0:$HEAD 5:$B 15:$HEAD" step "A, B, then A again: no ask at 1/3, the ask at 2/3"   tok "" "20"
+if ! grep -qF "$REPLACED ($B): not asking" "$tmp/out" \
+   || ! grep -qF "nothing from an accepted reviewer since the push (2026-09-18T10:20:15Z): asking (1/2)" "$tmp/out"; then
+  echo "  FAIL  the log does not say replaced at 1/3 and asking at 2/3" >&2; fails=$((fails + 1))
+fi
 
 echo "-- the workflow itself: read permission only, and the post goes out with the token"
 if grep -q 'pull-requests: write' "$wf"; then
