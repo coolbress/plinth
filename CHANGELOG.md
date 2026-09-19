@@ -11,6 +11,28 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- With the `summons-token` secret, a run of `third-party / review` whose head
+  a newer push has replaced no longer posts the summons. The caller's
+  concurrency group holds the newer commit's run until the old one ends, and
+  the old one kept asking at its ask points. The reviewer reviews the pull
+  request's current head, so those requests served the newer commit while
+  being counted as the old head's, and could reach up to four for one commit
+  on the token owner's review allowance. At each ask point the check now reads
+  the activity log it already fetches for that look, and does not ask when the
+  log confirms that another commit was pushed after this head; its log says
+  `this head is no longer the branch's newest push (<commit>): not asking`.
+  "Confirms" is narrow: the log is short of a full page of 100, this head's
+  push is in it, every entry has a readable time, and every push at the
+  latest second names a commit, none of them this head; the order the log
+  lists them in is not read. Anything else, a push of this head in the same
+  second as another commit's included, leaves the decision to the rules of
+  #206, unchanged. A head pushed back after another commit is the newest push
+  again and asks as usual. A push that lands just after the log is read is
+  not seen. No input, job or check name changed, no API call was added, and
+  the job's permission stays `pull-requests: read` (#215).
+
 ## [0.5.18] - 2026-09-19
 
 One change, to when `third-party / review` asks the reviewer for a review.

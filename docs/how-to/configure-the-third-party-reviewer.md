@@ -196,6 +196,22 @@ When it asks, with a token:
   summons was posted: a request can draw nothing and work minutes later
   (openai/codex#33048). A third of the wait is left for the review, which
   took about two minutes on #199 and #207.
+- At either point, nothing goes out when the branch's activity log, read at
+  that point, confirms that another commit was pushed after this head (#215).
+  The reviewer reviews the pull request's current head, so a request from the
+  old head's run would serve the newer commit and be counted as the old one's;
+  the newer commit's own run asks for it. "Confirms" is narrow: the log was
+  read and is short of a full page of 100, this head's push is in it, every
+  entry has a readable time, and every push at the latest second names a
+  commit, none of them this head.
+  The order the log lists them in is not read. A push of this head and
+  another commit in the same second, or anything unreadable, confirms
+  nothing, and the two points above decide. A head pushed back after another
+  commit is the newest push again, so its run asks as usual. The log is read
+  once per look: a push that lands just after the read, or that the log does
+  not show yet, is not seen (whether the log can trail a push has not been
+  measured). The old head's run still looks for a review of the old head
+  until its wait ends; ending it early is not built.
 - Before each summons the check counts its earlier ones for this commit, across
   runs, by a marker hidden in each, and posts none once it counts two. A count
   it cannot read (the comments call failed) reads as none. `ask-comment` is
@@ -221,6 +237,7 @@ the second point asks, which buys that second review on the token owner's
 allowance. Telling the two apart would mean reading the vendor's text, which
 this test does not do. The log says why at each point, for example
 `reviewer active since the push (<time>): <login>, comment updated <time>:
+not asking`, `this head is no longer the branch's newest push (<commit>):
 not asking` or `nothing from an accepted reviewer since the first ask point
 (<time>): asking (2/2)`.
 
