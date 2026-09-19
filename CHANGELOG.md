@@ -16,8 +16,10 @@ pull requests and have no tag.
 - With the `summons-token` secret, `third-party / review` no longer posts the
   summons at the start of the wait. A third of the way into `wait-seconds` it
   asks if no accepted reviewer has started, and at two thirds once more if
-  none has been active since the first of those points, at most twice per
-  commit as before. "Started" means an account in `reviewer-logins` has an
+  none has been active since the first of those points. As before it counts
+  its earlier summonses for the commit by a hidden marker and stops at two; a
+  count that cannot be read (the comments call failed) reads as none, so a
+  run then can post more. "Started" means an account in `reviewer-logins` has an
   issue comment on the pull request created or updated after the newest push
   of the head; where that push cannot be read, the first ask goes out on
   schedule, and the second is measured from the first ask point.

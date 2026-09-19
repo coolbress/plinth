@@ -166,13 +166,13 @@ if [ "$f" = "+%s" ]; then echo "$c"; else /bin/date -u -r "$c" "$f" 2>/dev/null 
 SH
 chmod +x "$tmp/bin/"*
 T0=1789726800   # 2026-09-18T10:20:00Z, the push in $LOG; the run starts then
-step() {  # name, token, issue comments before the run, expected posts (seconds into the wait, space separated)
+step() {  # name, token, issue comments before the run, expected posts (seconds into the wait, space separated); W, P: wait and poll
   rm -rf "$tmp/m"; mkdir -p "$tmp/m"
   echo "$T0" > "$tmp/m/clock"
   printf '%s' "$LOG" > "$tmp/m/activity.json"; printf '%s' "${3:-[]}" > "$tmp/m/icomments.json"
   PATH="$tmp/bin:$PATH" MOCK="$tmp/m" RUNNER_TEMP="$tmp/rt" REPO=o/r NUMBER=7 HEAD_SHA="$HEAD" HEAD_REF=b \
     AUTHOR_LOGIN=coolbress TITLE=t LOGINS="$BOT" ASK="@codex review" SUMMONS_TOKEN="$2" OWNER=coolbress \
-    WAIT=30 POLL=10 bash "$tmp/step.sh" >"$tmp/out" 2>&1
+    WAIT="${W:-30}" POLL="${P:-10}" bash "$tmp/step.sh" >"$tmp/out" 2>&1
   got=$?
   at="$(python3 -c 'import json,sys; print(" ".join(str(p["at"] - int(sys.argv[2])) for p in json.load(open(sys.argv[1])) if "at" in p))' "$tmp/m/icomments.json" "$T0")"
   if [ "$got" -ne 1 ] || [ "$at" != "$4" ] || ! grep -qF "configure-the-third-party-reviewer.md#summoning-the-reviewer" "$tmp/out"; then
@@ -192,11 +192,15 @@ grep -qF "nothing from an accepted reviewer since the first ask point (2026-09-1
 step "token, reviewer started after the push: only the second ask"     tok "$AFTER" "20"
 grep -qF "reviewer active since the push (2026-09-18T10:20:00Z): $BOT, comment updated 2026-09-18T10:20:05Z: not asking" "$tmp/out" \
   || { echo "  FAIL  the first ask point's log does not say why it did not ask" >&2; fails=$((fails + 1)); }
-step "token, one ask by an earlier run: one more, never a third"       tok "$PRIOR" "10"
+step "token, one ask by an earlier run: one more, then the cap"        tok "$PRIOR" "10"
 grep -qF "asked twice already for this commit" "$tmp/out" \
   || { echo "  FAIL  the cap is not in the log" >&2; fails=$((fails + 1)); }
 step "no token (an empty secret): nothing posted, login never read"   ""  ""  ""
 if [ -e "$tmp/m/user-called" ]; then echo "  FAIL  no token, but the login was read" >&2; fails=$((fails + 1)); fi
+# A look every 20 s is longer than a third of a short wait: the step sleeps no
+# further than the next ask point, so both still come on time.
+W=20 P=20 step "20 s wait, 20 s looks: asks at 6 s and 13 s"            tok ""  "6 13"
+W=45 P=20 step "45 s wait, 20 s looks: asks at 15 s and 30 s"           tok ""  "15 30"
 
 echo "-- the workflow itself: read permission only, and the post goes out with the token"
 if grep -q 'pull-requests: write' "$wf"; then

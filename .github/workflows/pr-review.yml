@@ -65,8 +65,9 @@ name: pr-review
 #        reviewer's own trigger; with it, the summons is posted as that
 #        person (#206): a third of the way into the wait if no accepted
 #        reviewer has been active since the push, and at two thirds if none
-#        has been active since the first of those points, at most twice per
-#        commit.
+#        has been active since the first of those points. Earlier summonses
+#        for the commit are counted by a hidden marker and it stops at two; a
+#        count that cannot be read reads as none.
 #   no   that the instructions cannot be weakened: only the designated section
 #        is compared, and only within one pull request.
 #
@@ -789,8 +790,10 @@ jobs:
           sys.exit(1)
           PYSTART
 
-          # With a token: at most twice per commit, counted through a marker
-          # hidden in the comment, so a loop cannot paper the pull request. The
+          # With a token: it stops at two summonses per commit, counted through
+          # a marker hidden in each, so a loop cannot paper the pull request; a
+          # failed comments call counts as none, and a run then asks as if none
+          # had been posted (asking once too often is folded, #205). The
           # second try dates from 2026-09-01, when a summons drew nothing and
           # "already asked" then blocked every later attempt; that summons was
           # a bot's, which today reads as the case above (#185).
@@ -826,7 +829,15 @@ jobs:
           deadline=$(( start + WAIT ))
           first_at=""; second=0
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            sleep "$POLL"
+            # Sleep no further than the next ask point, so a wait shorter than
+            # three looks still asks at a third and two thirds of it.
+            next=$deadline
+            if [ -z "$first_at" ]; then next=$(( start + WAIT / 3 ));
+            elif [ "$second" -eq 0 ]; then next=$(( start + 2 * WAIT / 3 )); fi
+            nap=$(( next - $(date +%s) ))
+            if [ "$nap" -gt "$POLL" ]; then nap=$POLL; fi
+            if [ "$nap" -lt 0 ]; then nap=0; fi
+            sleep "$nap"
             now=$(date +%s); at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             fetch
             if judge; then exit 0; fi
