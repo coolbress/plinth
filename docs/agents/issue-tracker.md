@@ -57,6 +57,17 @@ Distinguish **completed** from **cancelled**, **superseded**, and **moved to a
 follow-up** — closing is not one state. Distinguish an automated check from an
 agent review from a person's own use of the thing from something not run at all.
 
+Issues and pull requests are public. They record product facts, not the
+owner's personal environment or what was done on their computer: leave out
+what is installed there, local registrations, paths, settings, how a credential
+was created, and which sessions ran. Keep decisions, dates, numbers, links,
+acceptance criteria and checkbox states, and keep a measurement's conditions and
+limits in impersonal terms (a tool's version, "on one machine", "not tried on an
+open pull request"), so the record does not claim more than was observed. A
+project term such as the everyday token is not personal and stays. An issue
+body's edit history is public too: text taken out later is still in the earlier
+revisions until the owner deletes them.
+
 A filled-in section is not value and an edited file is not completion. Judge by
 what the record says happened, not by whether the headings are all present.
 
