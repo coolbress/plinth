@@ -125,15 +125,49 @@ on #186 (2026-09-18) that drew no review in the full wait, twice, while the same
 text from a person's account started one sixteen seconds later, and of seven
 reviewers read that day (Codex, Copilot, CodeRabbit, Gemini Code Assist, Qodo,
 Cursor Bugbot, Claude Code) none documents honouring a bot's mention. So the
-summons is posted only when the caller passes a person's token:
+summons is posted only when the caller passes a person's token. By default no
+token is passed, nothing is posted, and the check waits for the reviewer's own
+trigger.
+
+The token is a workaround for one failure: the reviewer's own trigger not
+starting. On 2026-09-18 it did not start three times on this repository (#199
+twice after a push, #200 once after the draft was marked ready), while a
+request comment from the owner's account drew a finished review in about two
+minutes (#199, #207); the vendor's tracker has the same reports open
+(openai/codex#42698, openai/codex#33048). Keep the reviewer's automatic
+reviews on; the summons does not replace them. A reviewer that can be requested natively, as Copilot is through a
+ruleset rule or the reviewers API (#203), should be requested that way and
+needs no summons from this check; the summons is for reviewers whose only
+manual trigger is a comment.
 
 ```yaml
 jobs:
   third-party:
     uses: coolbress/plinth/.github/workflows/pr-review.yml@<commit-sha> # vX.Y.Z
     secrets:
-      summons-token: ${{ secrets.CODEX_SUMMONS_TOKEN }}
+      summons-token: ${{ secrets.SUMMONS_TOKEN }}
 ```
+
+The schedule below is in releases after v0.5.17. From v0.5.14 to v0.5.17 the
+same token posted the summons at the start of the wait and again halfway
+through it whenever no review was attached yet, whether or not the reviewer
+had started.
+
+The token is one person's, and that has costs. It expires and is rotated by
+hand; every summons carries that person's name; the reviews it starts draw on
+that person's review allowance with the vendor (manual and automatic reviews
+share one usage pool, by the vendor's pricing page, read for #205); and in a
+team someone has to decide whose token it is and what happens when they
+leave. A bot account or a GitHub App
+would be the ordinary answer and does not work here: the reviewer answers only
+a person's linked account (measured on #186). A token that stops working
+fails the check at once with the reason, not after the wait (#185). Make it a
+fine-grained token for this one repository, with an expiry and the repository
+permission "Pull requests: Read and write"; nothing else is needed. Measured
+on #207, a closed pull request (#205): with "Issues: Read and write" alone the
+post was refused (`Resource not accessible by personal access token`), and
+with "Pull requests: Read and write" alone it went through. The same post on
+an open pull request was not tried.
 
 The token must be the repository owner's, the account connected to the
 reviewer: the check reads the token's login before posting and fails at once,
@@ -146,17 +180,56 @@ reason other than the token, a rate limit or an outage, fails the same way;
 the error line carries `gh`'s own words so the two are told apart, and a
 re-run fixes the second. A pull request opened from a fork gets no secrets
 from GitHub, so on it the token is empty however the caller is set: nothing is
-posted, the log says why, and with automatic reviews off such a pull request
-is reviewed only when a person comments the summons.
-With it the summons goes out as that person, at most twice per commit, and
-`ask-comment` is its text. Without it nothing is posted, the job needs only
-`pull-requests: read`, and the check waits for the reviewer's own trigger,
-which with the provider's automatic reviews on arrives about four minutes after
-a push (measured on #186). This repository gives no token: automatic reviews
-are on. A token is what a repository wants when it turns automatic reviews off
-to leave Dependabot and release pull requests unreviewed; it then also takes
-on a token that expires, a person's name on every summons, and a check that
-turns red on every pull request when the token stops working (#185).
+posted, the log says why, and such a pull request waits for the reviewer's own
+trigger or for a person to comment the summons.
+
+When it asks, with a token:
+
+- Nothing is posted when the check starts. When the reviewer's own trigger
+  works it shows within seconds (on #195 its summary comment came two seconds
+  after the time its row gives as `Running since`), so a stall is plain long
+  before the wait is over.
+- A third of the way into `wait-seconds` (300 seconds at the default 900), the
+  summons goes out if no accepted reviewer has started.
+- Two thirds of the way in, it goes out once more if no accepted reviewer has
+  been active since the first of those points, whether or not the first
+  summons was posted: a request can draw nothing and work minutes later
+  (openai/codex#33048). A third of the wait is left for the review, which
+  took about two minutes on #199 and #207.
+- Before each summons the check counts its earlier ones for this commit, across
+  runs, by a marker hidden in each, and posts none once it counts two. A count
+  it cannot read (the comments call failed) reads as none. `ask-comment` is
+  the text.
+
+"Started" is a loose test: an account in `reviewer-logins` has an issue comment
+on the pull request created or updated after the newest push of the head,
+whatever the comment says (Codex's summary comment is created when a review
+starts, and CodeRabbit's likewise by #203). Reviews and review comments on the
+head are not tested: they pass the check. Where that push cannot be read (the
+call failed, the head is not in the log, the log is a full page of 100),
+nothing counts as started at the first point and the summons goes out; the
+second point is measured from the first, which the check's own clock gives. A
+loose test is affordable because of what an extra request costs, measured
+on #207 with automatic reviews on (#205): a request that lands while a review of
+the head is running is folded into it, one review for two requests, and a
+request after that review has completed runs a whole second review. Usually
+the check has passed by then and no longer asks. Not always: when a review of
+the head has completed but left no signal the check counts (the gap of #191,
+or a completion comment or row left out because the push could not be read),
+its comment reads as a start at the first point, nothing moves after it, and
+the second point asks, which buys that second review on the token owner's
+allowance. Telling the two apart would mean reading the vendor's text, which
+this test does not do. The log says why at each point, for example
+`reviewer active since the push (<time>): <login>, comment updated <time>:
+not asking` or `nothing from an accepted reviewer since the first ask point
+(<time>): asking (2/2)`.
+
+Without a token nothing is posted, the job needs only `pull-requests: read`,
+and the check waits for the reviewer's own trigger, which with the provider's
+automatic reviews on arrives about four minutes after a push (measured
+on #186). An empty secret reads as no token. This repository's own caller passes
+`secrets.SUMMONS_TOKEN`; until the owner creates that secret it is empty, and
+nothing is posted.
 
 Two things this does not do. It does not stop the provider's own app from
 reviewing anyway: Codex starts on its own when a pull request is opened or
@@ -168,10 +241,8 @@ the security review tab, is the off switch). Leave that toggle on. The summons
 this check posts is not a substitute for it: measured on #186 (2026-09-18,
 toggle off), two `@codex review` comments from `github-actions[bot]` drew no
 review in the check's full wait and the check failed, while the same text
-commented by a person's account started a review sixteen seconds later. What
-the summons has done on its own, with the toggle on, has not been measured;
-the reviews on every earlier pull request here arrived while the toggle was
-on. Another repository measured the same and moved its summons to a token
+commented by a person's account started a review sixteen seconds later.
+Another repository measured the same and moved its summons to a token
 owned by the Codex-connected person (hide212131/hane#57, read 2026-09-18);
 this workflow does the same only when given `summons-token`, so with the
 toggle off and no token a pull request gets no review until a person comments

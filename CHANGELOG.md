@@ -11,6 +11,32 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- With the `summons-token` secret, `third-party / review` no longer posts the
+  summons at the start of the wait. A third of the way into `wait-seconds` it
+  asks if no accepted reviewer has started, and at two thirds once more if
+  none has been active since the first of those points. As before it counts
+  its earlier summonses for the commit by a hidden marker and stops at two; a
+  count that cannot be read (the comments call failed) reads as none, so a
+  run then can post more. "Started" means an account in `reviewer-logins` has an
+  issue comment on the pull request created or updated after the newest push
+  of the head; where that push cannot be read, the first ask goes out on
+  schedule, and the second is measured from the first ask point.
+  The log says at each point why it asked or did not. Why: on 2026-09-18 the
+  reviewer's own trigger did not start three times while a request from the
+  owner's account drew a review in about two minutes, and a request that
+  lands on a review already running is folded into it (measured on #207,
+  #205). Without the secret nothing changes and nothing is posted. The
+  failure message names the how-to's summons section, which now says whose
+  token this is, what it costs, and that a reviewer with a native request
+  needs no summons. The token needs the repository permission "Pull
+  requests: Read and write"; "Issues: Read and write" alone was refused on a
+  pull request (measured on #207, #205). plinth's own caller passes `secrets.SUMMONS_TOKEN`, empty
+  until the owner creates it. No input, job or check name changed, no API
+  call was added, and the job's permission stays `pull-requests: read`
+  (#206).
+
 ## [0.5.17] - 2026-09-19
 
 One change, to how plinth is released. The files that changed are the

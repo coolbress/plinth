@@ -25,7 +25,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read    # nothing is posted: no summons-token is given here (#185)
+  pull-requests: read    # the summons, when posted, goes out with summons-token, never with this token (#185)
 
 # One run at a time per pull request; a waiting job that overlaps only burns
 # minutes. Never cancel (measured 2026-09-01): a review arriving started a
@@ -43,3 +43,8 @@ jobs:
       # This repository's release pull requests are four lines
       # scripts/make-release.sh writes, and the check is not required here.
       pass-release-pull-requests: true
+    secrets:
+      # The owner's fine-grained token, this repository only, with an expiry
+      # and Pull requests: Read and write (#205), for the fallback summons of
+      # #206. Until the secret exists it is empty, and nothing is posted.
+      summons-token: ${{ secrets.SUMMONS_TOKEN }}
