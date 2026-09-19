@@ -11,6 +11,25 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.17] - 2026-09-19
+
+One change, to how plinth is released. The files that changed are the
+release script and its test, `CHANGELOG.md`, `CONTRIBUTING.md`, `AGENTS.md`,
+and plinth's own CI and release configuration. No skill, reusable workflow,
+input, job, check name or secret changed, and nothing a new repository
+receives from the door changes.
+
+Why: this release moves the release note into `CHANGELOG.md`. A release
+used to be written twice, as the entries below and again in a separate notes
+file that no reviewer saw before it went public and that only one checkout
+held. From this version on, the version's section of `CHANGELOG.md` is the
+Release's text, written once and shown in the release pull request's diff.
+This is the first release cut that way: run 1 took this text as a file and
+wrote it into the section, and run 2 publishes that section of the merged
+`main` and reads nothing else (#209).
+
+tested with plinth-template v1.4.1
+
 ### Changed
 
 - A release's note is its section of this file, not a separate notes file.
@@ -629,7 +648,8 @@ pull requests and have no tag.
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.16...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.17...HEAD
+[0.5.17]: https://github.com/coolbress/plinth/releases/tag/v0.5.17
 [0.5.16]: https://github.com/coolbress/plinth/releases/tag/v0.5.16
 [0.5.15]: https://github.com/coolbress/plinth/releases/tag/v0.5.15
 [0.5.14]: https://github.com/coolbress/plinth/releases/tag/v0.5.14
