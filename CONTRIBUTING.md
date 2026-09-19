@@ -142,23 +142,38 @@ release needs a green run on the commit it tags (below).
 
 ## Cut a release
 
-Write the notes first: why this release exists, in a file, plus one line
+Write the why first, in a file anywhere (a temporary directory will do): a
+short paragraph on why this release exists, and one line
 `tested with <template> <tag>` naming the template tag `scripts/new-project.sh`
-pins (the script prints the exact line). Then, from an up-to-date `main`, run
-the same command twice:
+pins (the script prints the exact line). No headings: run 1 puts the text
+under the version's heading in `CHANGELOG.md`, above the entries, and nothing
+reads the file after that. Then, from an up-to-date `main`, run the same
+command twice:
 
 ```bash
-scripts/make-release.sh v0.5.0 notes.md   # 1: bumps both manifests and CHANGELOG.md on release/v0.5.0
+scripts/make-release.sh v0.5.0 why.md   # 1: bumps both manifests, writes the why into CHANGELOG.md, on release/v0.5.0
 # push the branch, open the pull request, merge it, pull main
-gh workflow run e2e.yml --ref main        # tier 2 on the release commit; the nightly run counts too
-scripts/make-release.sh v0.5.0 notes.md   # 2: tags the merged release commit, creates the GitHub Release
+gh workflow run e2e.yml --ref main      # tier 2 on the release commit; the nightly run counts too
+scripts/make-release.sh v0.5.0 why.md   # 2: tags the merged release commit, creates the GitHub Release
 ```
 
-The script refuses an empty notes file, a notes file without the tested line,
-a version that is not above the current one, a tag or release that already
-exists, a leftover `release/vX.Y.Z` branch, and any `main` that has
-uncommitted changes to tracked files or differs from `origin/main` (the
-untracked notes file in the checkout is fine). Run 2 also refuses a release
+The version's section of `CHANGELOG.md` is the release note. The release pull
+request shows it in its diff, and run 2 publishes that section of the merged
+`main`, heading left out, as the Release's text, with GitHub's generated index
+of pull requests under it. Run 2 reads no file, so any clone or worktree can
+run it; given the second argument, it says it does not read it. Run 1 also
+adds the version's link reference at the end of `CHANGELOG.md` and moves the
+`[Unreleased]` compare link to the new tag. Neither link resolves before run 2,
+so `ci / docs` skips the two links of the version `plugin.json` names.
+
+The script refuses a why without the exact tested line, a why that is nothing
+but that line and markup, a why-file with a heading line, and in run 2 a
+section whose why (above its first `###`) fails the same checks, as after an
+edit to the pull request. It also refuses a version that is not above the
+current one, a tag or release that already exists, a leftover
+`release/vX.Y.Z` branch, and any `main` that has uncommitted changes to
+tracked files or differs from `origin/main` (an untracked why-file in the
+checkout is fine). Run 2 also refuses a release
 commit without a green `e2e` run on that exact commit: the latest green run
 on another commit does not count, and neither does a failed, cancelled,
 skipped or still-running one, or a query that failed. If `main` has moved past

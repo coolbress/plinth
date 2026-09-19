@@ -11,7 +11,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 
 ## Always
 
-- `version` moves only in a release: `scripts/make-release.sh vX.Y.Z <notes>` bumps both manifests,
+- `version` moves only in a release: `scripts/make-release.sh vX.Y.Z <why-file>` bumps both manifests,
   then tags from the merged `main`; never bump it elsewhere. `tests/make-release-guards.sh` checks it.
 - Pin every third-party marketplace entry to a full commit SHA. Raising a pin is a pull request.
 - Keep the caller job named `ci` in `.github/workflows/ci.yml`. Check names are

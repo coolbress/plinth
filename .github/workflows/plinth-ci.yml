@@ -163,7 +163,14 @@ jobs:
             "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/$f"
           echo "${LYCHEE_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/lychee"
-          "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" -- './**/*.md'
+          # The version plugin.json names has no Release until run 2 of
+          # scripts/make-release.sh, after its pull request merges; until then
+          # its CHANGELOG.md link and the [Unreleased] compare link from its tag
+          # answer 404. Those two are skipped, every earlier version's are checked.
+          v="$(jq -er .version .claude-plugin/plugin.json)"; v="${v//./[.]}"
+          repo='https://github[.]com/coolbress/plinth'
+          "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" \
+            --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
 
       - name: No internal vocabulary in public text
         run: ./tests/de-jargon.sh
