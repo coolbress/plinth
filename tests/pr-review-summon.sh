@@ -10,8 +10,9 @@
 # nothing posted without a token, posted only as the owner with one, and a
 # token that cannot be used fails at once rather than after the wait.
 #
-# When it asks (#206): nothing at the start, a third and two thirds of the way
-# into the wait, each only if no accepted reviewer has started. That test is a
+# When it asks (#206): nothing at the start; a third of the way into the wait
+# if no accepted reviewer has been active since the push, and at two thirds if
+# none has been active since the first ask point. That test is a
 # Python snippet, lifted and run against fixtures like the one above; the
 # schedule is checked by running the whole step on a clock the test moves.
 set -uo pipefail

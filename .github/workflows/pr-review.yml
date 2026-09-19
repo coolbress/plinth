@@ -63,8 +63,9 @@ name: pr-review
 #        documents honouring a bot's mention (#185). So without the
 #        `summons-token` secret nothing is posted and the wait is for the
 #        reviewer's own trigger; with it, the summons is posted as that
-#        person, a third and two thirds of the way into the wait, each time
-#        only if no accepted reviewer has started (#206), at most twice per
+#        person (#206): a third of the way into the wait if no accepted
+#        reviewer has been active since the push, and at two thirds if none
+#        has been active since the first of those points, at most twice per
 #        commit.
 #   no   that the instructions cannot be weakened: only the designated section
 #        is compared, and only within one pull request.
@@ -92,10 +93,12 @@ on:
         # change (a caller that passes it fails with "Invalid input") (#185).
         description: |
           The comment that summons the reviewer when no review is attached.
-          Posted only with the `summons-token` secret, as that person, a third
-          and two thirds of the way into `wait-seconds` when no accepted
-          reviewer has started (#206); without the secret nothing is posted,
-          because a bot's mention is not honoured (#185). Empty: never summon.
+          Posted only with the `summons-token` secret, as that person: a third
+          of the way into `wait-seconds` if no accepted reviewer has been
+          active since the push, and at two thirds if none has been active
+          since the first of those points (#206). Without the secret nothing
+          is posted, because a bot's mention is not honoured (#185). Empty:
+          never summon.
         type: string
         default: "@codex review"
       wait-seconds:
@@ -135,8 +138,8 @@ on:
           `github.repository_owner`, so this fits a repository owned by a
           person, not by an organization (there the owner is the organization
           and no person's login matches). With it the summons is posted as
-          that person when the reviewer's own trigger has not started; without
-          it nothing is posted. An empty value reads as no token.
+          that person, when and as `ask-comment` says; without it nothing is
+          posted. An empty value reads as no token.
           A token whose login cannot be read, is another person's, or cannot
           post the comment fails the check at once with the reason, not after
           the wait.
@@ -713,7 +716,7 @@ jobs:
             exit 1
           fi
           if [ "$post" = "post" ]; then
-            echo "summons-token reads as $OWNER: nothing is posted now; at $(( WAIT / 3 ))s and $(( 2 * WAIT / 3 ))s the summons goes out unless an accepted reviewer has started"
+            echo "summons-token reads as $OWNER: nothing is posted now; at $(( WAIT / 3 ))s and $(( 2 * WAIT / 3 ))s the summons goes out, the first unless an accepted reviewer has been active since the push, the second unless one has been active since the first"
           else
             echo "$post"
           fi
@@ -727,7 +730,8 @@ jobs:
           # active since the first ask point, asked or not (a request that
           # draws nothing works minutes later, openai/codex#33048). The test is
           # a pure function so tests/pr-review-summon.sh can lift it out: it
-          # prints why, and exits 0 when a reviewer has started, 1 when not.
+          # prints why, and exits 0 when an accepted reviewer has been active
+          # since then, 1 when not.
           cat > "$RUNNER_TEMP/started.py" <<'PYSTART'
           """Has an accepted reviewer shown life on this pull request since the
           newest push of the head, and since `since` when it is given?
@@ -795,7 +799,7 @@ jobs:
             gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq '.[].body' 2>/dev/null \
               | grep -cF "$marker" || true
           }
-          ask() {  # [first ask point]: ask, unless an accepted reviewer has started
+          ask() {  # [first ask point]: ask, unless an accepted reviewer has been active since the push, or since the first ask point when given
             [ "$post" = "post" ] || return 0
             if why="$(python3 "$RUNNER_TEMP/started.py" "$HEAD_SHA" "$LOGINS" \
                         "$RUNNER_TEMP/icomments.json" "$RUNNER_TEMP/activity.json" "${1:-}")"; then

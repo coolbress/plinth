@@ -45,7 +45,6 @@ jobs:
       pass-release-pull-requests: true
     secrets:
       # The owner's fine-grained token, this repository only, with an expiry
-      # and Pull requests: Read and write (#205): asks for a review when the
-      # reviewer's own trigger has not started (#206). Until the secret
-      # exists it is empty, and nothing is posted.
+      # and Pull requests: Read and write (#205), for the fallback summons of
+      # #206. Until the secret exists it is empty, and nothing is posted.
       summons-token: ${{ secrets.SUMMONS_TOKEN }}
