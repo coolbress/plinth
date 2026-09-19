@@ -46,5 +46,7 @@ jobs:
     secrets:
       # The owner's fine-grained token, this repository only, with an expiry
       # and Pull requests: Read and write (#205), for the fallback summons of
-      # #206. Until the secret exists it is empty, and nothing is posted.
+      # #206, created by the owner on 2026-09-19. A fork's run gets no secrets,
+      # and Dependabot's gets no Actions secrets: there it is empty, and nothing
+      # is posted.
       summons-token: ${{ secrets.SUMMONS_TOKEN }}
