@@ -360,6 +360,10 @@ jobs:
 
             1 review object: a code review ends as a review with state
               COMMENTED, even with zero findings. Fast, about four minutes.
+              Not every review object is a review: Copilot, asked by a person
+              out of quota, submits one on the head seconds later whose body is
+              a notice that it could not review (#204). A body that begins
+              with that notice does not count.
             2 marker: `<!-- codex-security-review:v1 {"headSha":..,"status":"completed"} -->`
               inside the summary issue comment. `completed` needs the security
               review to finish too, which has taken over 30 minutes, and has
@@ -437,6 +441,10 @@ jobs:
               r"|No security issues were found|리뷰를 마쳤",   # the same completion in Korean, measured
               re.I,
           )
+          #: A review object whose body begins so says no review happened: Copilot
+          #: submits it on the head when the person who asked is out of quota
+          #: (measured 2026-09-19, #204). Vendor text, the one notice measured.
+          COULD_NOT_REVIEW = re.compile(r"\s*Copilot was unable to review this pull request", re.I)
           logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}
           MARK = re.compile(r"<!--\s*codex-security-review:v1\s*(\{.*?\})\s*-->", re.S)
 
@@ -519,11 +527,16 @@ jobs:
           # before the real review arrived. `original_commit_id` is the commit
           # the comment was made on and never moves; that is the one read.
           # Review objects (`pulls/N/reviews`) have no such field and their
-          # `commit_id` does not move.
+          # `commit_id` does not move. A review object that is a could-not-review
+          # notice is left out (#204); review comments are not read for it.
+          notices = []
           for kind, path, field in (("review", reviews_p, "commit_id"),
                                     ("review-comment", rcomments_p, "original_commit_id")):
               for it in load(path):
                   if ours(it) and it.get(field) == head:
+                      if kind == "review" and COULD_NOT_REVIEW.match(it.get("body") or ""):
+                          notices.append(it)
+                          continue
                       looked(f"{kind} ({it.get('state') or 'comment'})")
 
           # 2 marker: `completed` only. `running` is looking, not looked.
@@ -606,6 +619,9 @@ jobs:
                   rows.append((sha, status, note))
 
           print("not yet.")
+          for it in notices[-3:]:
+              print(f"   review {(it.get('user') or {}).get('login')} ({it.get('state') or '?'}) <- this commit,"
+                    f" not counted: a could-not-review notice: {(it.get('body') or '').strip().splitlines()[0][:90]}")
           for sha, status in states[-3:]:
               print(f"   marker {sha[:8]} status={status} {'<- this commit' if sha == head else ''}")
           for sha, why in left_out[-3:]:

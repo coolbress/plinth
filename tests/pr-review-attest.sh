@@ -64,11 +64,11 @@ PY
 }
 
 fails=0
-run() {  # name, issue-comments JSON, expected exit, [reviews JSON]
+run() {  # name, issue-comments JSON, expected exit, [reviews JSON], [accepted logins]
   printf '%s' "$2" > "$tmp/i.json"
   printf '%s' "${4:-[]}" > "$tmp/r.json"
   echo '[]' > "$tmp/rc.json"
-  python3 "$tmp/attest.py" "$HEAD" "$BOT" \
+  python3 "$tmp/attest.py" "$HEAD" "${5:-$BOT}" \
     "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
   got=$?
   if [ "$got" -ne "$3" ]; then
@@ -126,6 +126,37 @@ runrc "a review comment made on this commit passes"        "$(rcm "$BOT" "$HEAD"
 runrc "an old comment moved onto the head does not count"  "$(rcm "$BOT" "$HEAD" "$OLD")"  1
 runrc "someone else's review comment does not count"       "$(rcm "someone" "$HEAD" "$HEAD")" 1
 runrc "a comment without original_commit_id does not count" '[{"user":{"login":"chatgpt-codex-connector[bot]"},"commit_id":"'"$HEAD"'"}]' 1
+
+echo "-- a could-not-review notice is a review object, not a review (#204)"
+# Asked by a person who is out of quota, Copilot still submits a review object
+# on the head, state COMMENTED, and this notice is its whole body (measured
+# 2026-09-19 on ranokay/waves#317 and dineTH2003-dev/WarehousePOS#59, no
+# inline comment). It is matched on how the body begins, so a real review that
+# mentions the words further down still counts.
+CP='copilot-pull-request-reviewer[bot]'
+NOTICE='Copilot was unable to review this pull request because the user who requested the review has reached their quota limit.'
+REAL=$'### 🟡 Changes recommended\n\nThe retry loop never resets its counter.'   # the opening as measured
+rv() {  # author, commit, body
+  python3 -c 'import json,sys; print(json.dumps({"user": {"login": sys.argv[1]}, "commit_id": sys.argv[2], "state": "COMMENTED", "body": sys.argv[3]}, ensure_ascii=False))' "$1" "$2" "$3"
+}
+run "the measured notice as the only review on the head: does not count" '[]' 1 "[$(rv "$CP" "$HEAD" "$NOTICE")]" "$CP"
+grep -qF "review $CP (COMMENTED) <- this commit, not counted: a could-not-review notice" "$tmp/log" \
+  || { echo "  FAIL  log does not name the review and the notice as the reason" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
+run "the notice with another reason after \"because\": does not count" '[]' 1 \
+  "[$(rv "$CP" "$HEAD" 'Copilot was unable to review this pull request because it is too large.')]" "$CP"
+run "the notice after leading whitespace: does not count" '[]' 1 "[$(rv "$CP" "$HEAD" $'\n  '"$NOTICE")]" "$CP"
+run "the notice in another letter case: does not count" '[]' 1 \
+  "[$(rv "$CP" "$HEAD" 'COPILOT WAS UNABLE TO REVIEW THIS PULL REQUEST because the user who requested the review has reached their quota limit.')]" "$CP"
+run "the notice next to a real review from someone not accepted: does not count" '[]' 1 \
+  "[$(rv "$CP" "$HEAD" "$NOTICE"),$(rv someone "$HEAD" "$REAL")]" "$CP"
+run "a Copilot review with a real body on the head passes" '[]' 0 "[$(rv "$CP" "$HEAD" "$REAL")]" "$CP"
+run "a review that mentions the words after its first line passes" '[]' 0 \
+  "[$(rv "$CP" "$HEAD" "$REAL"$'\n\n'"Copilot was unable to review this pull request's lockfile.")]" "$CP"
+run "a review with an empty body passes (Codex and CodeRabbit leave those)" '[]' 0 "[$(rv "$BOT" "$HEAD" '')]"
+run "the notice on an older commit, a real review on the head: passes" '[]' 0 \
+  "[$(rv "$CP" "$OLD" "$NOTICE"),$(rv "$CP" "$HEAD" "$REAL")]" "$CP"
+run "the notice, then a real review, both on the head: passes" '[]' 0 \
+  "[$(rv "$CP" "$HEAD" "$NOTICE"),$(rv "$CP" "$HEAD" "$REAL")]" "$CP"
 
 # The pushes to the head branch, newest first, as `repos/<r>/activity` returns
 # them (fields as measured on this branch, 2026-09-18).
