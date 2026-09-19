@@ -9,6 +9,8 @@ inside pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.16] - 2026-09-19
+
 ### Fixed
 
 - `tests/e2e-driver.sh` numbers each case's mock log instead of naming it
