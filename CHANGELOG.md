@@ -19,7 +19,8 @@ pull requests and have no tag.
   none has been active since the first of those points, at most twice per
   commit as before. "Started" means an account in `reviewer-logins` has an
   issue comment on the pull request created or updated after the newest push
-  of the head; where that push cannot be read, the asks go out on schedule.
+  of the head; where that push cannot be read, the first ask goes out on
+  schedule, and the second is measured from the first ask point.
   The log says at each point why it asked or did not. Why: on 2026-09-18 the
   reviewer's own trigger did not start three times while a request from the
   owner's account drew a review in about two minutes, and a request that

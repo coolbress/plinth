@@ -113,6 +113,10 @@ started "first ask point: comment created after the push"          "$AFTER" "$LO
 started "created before the push, updated after it"                "$(said "$BOT" 2026-09-18T10:10:00Z 2026-09-18T10:21:00Z)" "$LOG" "" 0 "comment updated 2026-09-18T10:21:00Z"
 started "accepted login in another letter case"                    "$(said 'ChatGPT-Codex-Connector[bot]' 2026-09-18T10:21:00Z 2026-09-18T10:21:00Z)" "$LOG" "" 0 "reviewer active"
 started "second ask point: updated after the first ask point"      "$(said "$BOT" 2026-09-18T10:21:00Z 2026-09-18T10:26:00Z)" "$LOG" 2026-09-18T10:25:00Z 0 "reviewer active since the first ask point (2026-09-18T10:25:00Z)"
+# The first ask point is the step's own clock: readable when the push is not. A review the
+# first ask started and finished leaves comments the check cannot count without the push
+# (signals 3 and 4); asking again would buy a whole second review (#205).
+started "second ask point, push unreadable: active since the first" "$(said "$BOT" 2026-09-18T10:26:00Z 2026-09-18T10:27:00Z)" null 2026-09-18T10:25:00Z 0 "reviewer active since the first ask point (2026-09-18T10:25:00Z)"
 
 echo "-- nobody has: exit 1, ask"
 started "nothing from an accepted reviewer"                        "[]" "$LOG" "" 1 "nothing from an accepted reviewer since the push (2026-09-18T10:20:00Z)"
@@ -126,6 +130,7 @@ started "push unreadable: the head is not in the log"              "$AFTER" "[{\
 started "push unreadable: a full page of 100"                      "$AFTER" "$FULL" "" 1 "the push of this head could not be read"
 started "push unreadable: the head's push has no time"             "$AFTER" "[{\"after\":\"$HEAD\"}]" "" 1 "the push of this head could not be read"
 started "second ask point: active after the push, none since"      "$(said "$BOT" 2026-09-18T10:21:00Z 2026-09-18T10:22:00Z)" "$LOG" 2026-09-18T10:25:00Z 1 "nothing from an accepted reviewer since the first ask point (2026-09-18T10:25:00Z)"
+started "second ask point, push unreadable: none since the first"  "$(said "$BOT" 2026-09-18T10:21:00Z 2026-09-18T10:22:00Z)" null 2026-09-18T10:25:00Z 1 "nothing from an accepted reviewer since the first ask point (2026-09-18T10:25:00Z)"
 
 # The whole step, on a clock that only `sleep` moves, with `gh` answering from
 # files: when it posts, not only whether. A 30 s wait, a look every 10 s. The

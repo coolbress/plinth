@@ -155,16 +155,19 @@ had started.
 
 The token is one person's, and that has costs. It expires and is rotated by
 hand; every summons carries that person's name; the reviews it starts draw on
-that person's review allowance with the vendor; and in a team someone has to decide whose
-token it is and what happens when they leave. A bot account or a GitHub App
+that person's review allowance with the vendor (manual and automatic reviews
+share one usage pool, by the vendor's pricing page, read for #205); and in a
+team someone has to decide whose token it is and what happens when they
+leave. A bot account or a GitHub App
 would be the ordinary answer and does not work here: the reviewer answers only
 a person's linked account (measured on #186). A token that stops working
 fails the check at once with the reason, not after the wait (#185). Make it a
 fine-grained token for this one repository, with an expiry and the repository
 permission "Pull requests: Read and write"; nothing else is needed. Measured
-on #207 (#205): with "Issues: Read and write" alone the post on a pull request
-was refused (`Resource not accessible by personal access token`), and with
-"Pull requests: Read and write" alone it went through.
+on #207, a closed pull request (#205): with "Issues: Read and write" alone the
+post was refused (`Resource not accessible by personal access token`), and
+with "Pull requests: Read and write" alone it went through. The same post on
+an open pull request was not tried.
 
 The token must be the repository owner's, the account connected to the
 reviewer: the check reads the token's login before posting and fails at once,
@@ -193,21 +196,30 @@ When it asks, with a token:
   summons was posted: a request can draw nothing and work minutes later
   (openai/codex#33048). A third of the wait is left for the review, which
   took about two minutes on #199 and #207.
-- Never more than twice per commit, counted across runs by a marker hidden in
-  the comment. `ask-comment` is the text.
+- Before each summons the check counts its earlier ones for this commit, across
+  runs, by a marker hidden in each, and posts none once it counts two. A count
+  it cannot read (the comments call failed) reads as none. `ask-comment` is
+  the text.
 
 "Started" is a loose test: an account in `reviewer-logins` has an issue comment
 on the pull request created or updated after the newest push of the head,
-whatever the comment says (Codex's summary comment and CodeRabbit's are created
-when a review starts). Reviews and review comments on the head are not tested:
-they pass the check. Where that push cannot be read (the call failed, the head
-is not in the log, the log is a full page of 100), nothing counts as started
-and the summons goes out on schedule. A loose test is affordable because of
-what an extra request costs, measured on #207 with automatic reviews on
-(#205): a request that lands while a review of the head is running is folded
-into it, one review for two requests; a request after that review has
-completed runs a whole second review, but by then the check has passed and no
-longer asks. The log says why at each point, for example
+whatever the comment says (Codex's summary comment is created when a review
+starts, and CodeRabbit's likewise by #203). Reviews and review comments on the
+head are not tested: they pass the check. Where that push cannot be read (the
+call failed, the head is not in the log, the log is a full page of 100),
+nothing counts as started at the first point and the summons goes out; the
+second point is measured from the first, which the check's own clock gives. A
+loose test is affordable because of what an extra request costs, measured
+on #207 with automatic reviews on (#205): a request that lands while a review of
+the head is running is folded into it, one review for two requests, and a
+request after that review has completed runs a whole second review. Usually
+the check has passed by then and no longer asks. Not always: when a review of
+the head has completed but left no signal the check counts (the gap of #191,
+or a completion comment or row left out because the push could not be read),
+its comment reads as a start at the first point, nothing moves after it, and
+the second point asks, which buys that second review on the token owner's
+allowance. Telling the two apart would mean reading the vendor's text, which
+this test does not do. The log says why at each point, for example
 `reviewer active since the push (<time>): <login>, comment updated <time>:
 not asking` or `nothing from an accepted reviewer since the first ask point
 (<time>): asking (2/2)`.
