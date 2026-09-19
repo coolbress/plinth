@@ -2,9 +2,9 @@
 # label only, never by title; `label.yml` derives the label from the type in
 # the pull-request title, so nobody applies these by hand except `breaking`.
 #
-# This orders the index under the notes `scripts/make-release.sh` publishes.
-# The *why* above it is still written by a person: what a consumer has to do
-# is not in the commit log.
+# This orders the index `scripts/make-release.sh` publishes under the version's
+# CHANGELOG.md section. The *why* that opens that section is still written by
+# a person: what a consumer has to do is not in the commit log.
 changelog:
   categories:
     - title: Changes callers must act on

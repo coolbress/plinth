@@ -2,12 +2,32 @@
 
 All notable changes to plinth. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). A version is a
-`vX.Y.Z` tag on `main` plus a GitHub Release whose notes say why it exists and
-which template tag it was tested with; `scripts/make-release.sh` cuts one, and
-the version number moves only there. Numbers before the first tag were bumped
-inside pull requests and have no tag.
+`vX.Y.Z` tag on `main` plus a GitHub Release; `scripts/make-release.sh` cuts
+one, and the version number moves only there. After 0.5.16 a version's section
+opens with why it exists and which template tag it was tested with, and the
+section is its Release's text. For 0.5.16 and earlier that why is in the
+Release each heading links to. Numbers before the first tag were bumped inside
+pull requests and have no tag.
 
 ## [Unreleased]
+
+### Changed
+
+- A release's note is its section of this file, not a separate notes file.
+  `scripts/make-release.sh` run 1 takes the why as a file
+  (`vX.Y.Z <why-file>`), checks it as it checked the notes file and also
+  refuses a heading line in it, and writes it under the new version's heading
+  above the entries. It also adds the version's link reference and moves the
+  `[Unreleased]` compare link to the new tag. Run 2 reads no file: it runs
+  run 1's checks again on that section of the merged `main`, on the text
+  above its first `###`, then publishes the section, heading left out, with
+  the generated index under it. The text is in the release pull request's diff
+  before it is public, and run 2 runs from any clone or worktree. Every
+  version heading down to 0.5.0 links its Release, where the earlier
+  why-texts are. `ci / docs` skips the two links of the version `plugin.json`
+  names, from its release pull request (where they return 404) until the next
+  release; every other version's links are checked. No check name, job or
+  workflow input changed (#209).
 
 ## [0.5.16] - 2026-09-19
 
@@ -608,3 +628,22 @@ inside pull requests and have no tag.
   2026-09-06 with their comments. Commit messages from before that date cite
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
+
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.16...HEAD
+[0.5.16]: https://github.com/coolbress/plinth/releases/tag/v0.5.16
+[0.5.15]: https://github.com/coolbress/plinth/releases/tag/v0.5.15
+[0.5.14]: https://github.com/coolbress/plinth/releases/tag/v0.5.14
+[0.5.13]: https://github.com/coolbress/plinth/releases/tag/v0.5.13
+[0.5.12]: https://github.com/coolbress/plinth/releases/tag/v0.5.12
+[0.5.11]: https://github.com/coolbress/plinth/releases/tag/v0.5.11
+[0.5.10]: https://github.com/coolbress/plinth/releases/tag/v0.5.10
+[0.5.9]: https://github.com/coolbress/plinth/releases/tag/v0.5.9
+[0.5.8]: https://github.com/coolbress/plinth/releases/tag/v0.5.8
+[0.5.7]: https://github.com/coolbress/plinth/releases/tag/v0.5.7
+[0.5.6]: https://github.com/coolbress/plinth/releases/tag/v0.5.6
+[0.5.5]: https://github.com/coolbress/plinth/releases/tag/v0.5.5
+[0.5.4]: https://github.com/coolbress/plinth/releases/tag/v0.5.4
+[0.5.3]: https://github.com/coolbress/plinth/releases/tag/v0.5.3
+[0.5.2]: https://github.com/coolbress/plinth/releases/tag/v0.5.2
+[0.5.1]: https://github.com/coolbress/plinth/releases/tag/v0.5.1
+[0.5.0]: https://github.com/coolbress/plinth/releases/tag/v0.5.0
