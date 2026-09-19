@@ -228,8 +228,8 @@ Without a token nothing is posted, the job needs only `pull-requests: read`,
 and the check waits for the reviewer's own trigger, which with the provider's
 automatic reviews on arrives about four minutes after a push (measured
 on #186). An empty secret reads as no token. This repository's own caller passes
-`secrets.SUMMONS_TOKEN`; until the owner creates that secret it is empty, and
-nothing is posted.
+`secrets.SUMMONS_TOKEN`, which the owner created on 2026-09-19; on #214 the
+check logged `summons-token reads as coolbress`.
 
 Two things this does not do. It does not stop the provider's own app from
 reviewing anyway: Codex starts on its own when a pull request is opened or

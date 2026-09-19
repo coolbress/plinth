@@ -27,8 +27,12 @@ about two minutes. With a token the check used to ask at the start of the
 wait and again halfway, whatever the reviewer was doing. It now asks a third
 of the way in only if no accepted reviewer has been active since the push,
 and at two thirds only if none has been active since the first ask point
-(#206). plinth's own caller passes `secrets.SUMMONS_TOKEN`, which does not
-exist yet, so nothing is posted here until the owner creates it.
+(#206). plinth's own caller passes `secrets.SUMMONS_TOKEN`, which the owner
+created on the day of this release. On a scratch pull request (#214) the check
+logged `summons-token reads as coolbress` with the asks due at 300 s and
+600 s; the review arrived before either, so no summons was posted there.
+(Corrected after publication: this paragraph first said the secret did not
+exist yet.)
 
 tested with plinth-template v1.4.1
 
@@ -53,10 +57,10 @@ tested with plinth-template v1.4.1
   token this is, what it costs, and that a reviewer with a native request
   needs no summons. The token needs the repository permission "Pull
   requests: Read and write"; "Issues: Read and write" alone was refused on a
-  pull request (measured on #207, #205). plinth's own caller passes `secrets.SUMMONS_TOKEN`, empty
-  until the owner creates it. No input, job or check name changed, no API
-  call was added, and the job's permission stays `pull-requests: read`
-  (#206).
+  pull request (measured on #207, #205). plinth's own caller passes
+  `secrets.SUMMONS_TOKEN`, which the owner created on 2026-09-19. No input,
+  job or check name changed, no API call was added, and the job's
+  permission stays `pull-requests: read` (#206).
 
 ## [0.5.17] - 2026-09-19
 
