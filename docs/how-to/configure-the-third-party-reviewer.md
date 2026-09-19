@@ -160,9 +160,11 @@ token it is and what happens when they leave. A bot account or a GitHub App
 would be the ordinary answer and does not work here: the reviewer answers only
 a person's linked account (measured on #186). A token that stops working
 fails the check at once with the reason, not after the wait (#185). Make it a
-fine-grained token for this one repository, with an expiry. GitHub's
-documentation lists posting a comment on a pull request under the "Issues"
-repository permission (read and write); that has not been tried here (#205).
+fine-grained token for this one repository, with an expiry and the repository
+permission "Pull requests: Read and write"; nothing else is needed. Measured
+on #207 (#205): with "Issues: Read and write" alone the post on a pull request
+was refused (`Resource not accessible by personal access token`), and with
+"Pull requests: Read and write" alone it went through.
 
 The token must be the repository owner's, the account connected to the
 reviewer: the check reads the token's login before posting and fails at once,

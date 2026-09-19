@@ -810,7 +810,7 @@ jobs:
               # A token that reads its login but cannot comment here (no access
               # to this repository, or read-only on pull requests) is found out
               # only now; fail here, not after the wait.
-              echo "::error::summons-token could not post the summons (the token reads as $OWNER but cannot comment on this pull request); fix the secret's access and re-run."
+              echo "::error::summons-token could not post the summons (the token reads as $OWNER but cannot comment on this pull request); the token needs Pull requests: Read and write on this repository (#205). Fix the secret and re-run."
               exit 1
             fi
           }

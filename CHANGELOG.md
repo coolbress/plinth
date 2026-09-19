@@ -27,7 +27,9 @@ pull requests and have no tag.
   #205). Without the secret nothing changes and nothing is posted. The
   failure message names the how-to's summons section, which now says whose
   token this is, what it costs, and that a reviewer with a native request
-  needs no summons. plinth's own caller passes `secrets.SUMMONS_TOKEN`, empty
+  needs no summons. The token needs the repository permission "Pull
+  requests: Read and write"; "Issues: Read and write" alone was refused on a
+  pull request (measured on #207, #205). plinth's own caller passes `secrets.SUMMONS_TOKEN`, empty
   until the owner creates it. No input, job or check name changed, no API
   call was added, and the job's permission stays `pull-requests: read`
   (#206).
