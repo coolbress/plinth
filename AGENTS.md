@@ -11,6 +11,17 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 
 ## Always
 
+- Before editing, inspect the branch, working-tree changes, worktree list and
+  commits ahead of the intended base: `git fetch origin`, then
+  `git status -sb`, `git worktree list`, `git log --oneline origin/main..HEAD`.
+  Identify what belongs to this task. Those show the state of the checkout,
+  not who else is using it: no command shows another session, so a clean
+  checkout on `main` is not proof that it is yours alone. When it is not, or
+  when it holds unrelated or unexplained work, leave it untouched and work in
+  a uniquely named worktree branched from an explicitly verified base:
+  `git worktree add --no-track -b <type>/<slug> .claude/worktrees/<slug> origin/main`
+  (that path is ignored; one outside the repository works too). Never switch,
+  reset, rebase or stash another task's checkout.
 - `version` moves only in a release: `scripts/make-release.sh vX.Y.Z <why-file>` bumps both manifests,
   then tags from the merged `main`; never bump it elsewhere. `tests/make-release-guards.sh` checks it.
 - Pin every third-party marketplace entry to a full commit SHA. Raising a pin is a pull request.

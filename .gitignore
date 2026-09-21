@@ -6,3 +6,6 @@ canary/dist/
 canary/.smoke/
 # Personal Claude Code settings never get committed; only .claude/settings.json does.
 .claude/settings.local.json
+# A worktree under here is another checkout, not content: `git add .` would
+# otherwise stage it as a gitlink.
+.claude/worktrees/
