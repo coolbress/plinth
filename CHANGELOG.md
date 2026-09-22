@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `new-project` renders plinth-template v1.5.0. A repository it creates now
+  records `plinth_sha` — the commit of plinth whose reusable workflows its CI
+  calls — in `.copier-answers.yml`, where it was computed on every render
+  before. What that buys is an update that can be told to keep the pin the
+  repository already has: while the answer was computed, `copier update`
+  re-rendered the `uses:` pins from the template's own default, so a
+  repository whose Dependabot had raised them got a conflict in each workflow
+  file and one whose Dependabot had not was moved back without a word.
+  Rendering is otherwise unchanged, the door passes the same answers, and the
+  value a new repository gets is the same one (plinth-template#22).
+
 ## [0.5.19] - 2026-09-22
 
 Two changes, and the first one reaches every repository plinth creates.
