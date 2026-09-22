@@ -560,14 +560,22 @@ def resolve_plinth_pin(root: Path) -> tuple[str | None, str | None]:
     Dependabot moves and `.copier-answers.yml` never does (a `plinth_sha` an
     update would otherwise take from a stale recorded answer or the
     template's own default, neither of which is what Dependabot last set).
-    Returns (sha, None) once established, or (None, reason) when it is not."""
+    Returns (sha, None) once established, or (None, reason) when it is not.
+    A plinth `uses:` not pinned to a full commit SHA is unknown too, not
+    silently dropped: today's pin is not established while any of them could
+    be tracking a moving ref (#233 review)."""
     shas: set[str] = set()
+    loose = False
     for p in workflow_files(root):
         for _, value, readable in iter_uses(read(p)):
             if readable and value.startswith(f"{PLINTH_REPO}/"):
                 ref = value.rpartition("@")[2]
                 if re.fullmatch(r"[0-9a-fA-F]{40}", ref):
                     shas.add(ref)
+                else:
+                    loose = True
+    if loose:
+        return None, f"a {PLINTH_REPO} workflow uses: line is not pinned to a full commit SHA"
     if len(shas) == 1:
         return next(iter(shas)), None
     if not shas:
@@ -593,8 +601,12 @@ def check_template_drift(root: Path, network: bool) -> None:
         result("SKIP", "template drift not verified (no .copier-answers.yml: not made by the door)")
         return
     src_path = answers.get("_src_path", "")
-    if template_repo not in src_path:
-        result("SKIP", f"template drift not verified (_src_path {src_path!r} names no {template_repo})")
+    # Exactly what the door writes, not a substring: a foreign source such as
+    # a local checkout at .../coolbress/plinth-template would otherwise pass
+    # too, and copier update would then pull from it, not the real template
+    # (#233 review).
+    if src_path != f"gh:{template_repo}":
+        result("SKIP", f"template drift not verified (_src_path {src_path!r} is not gh:{template_repo}, the door's own form)")
         return
     if "_commit" not in answers:
         result("SKIP", "template drift not verified (.copier-answers.yml has no _commit)")

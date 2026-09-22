@@ -538,6 +538,12 @@ says "an answers file without _commit is not verified" \
 says "a _src_path that is not the plinth template is not verified" \
   "printf 'archetype: backend\n_src_path: gh:example/other-template\n_commit: v1.0.0\n' > .copier-answers.yml" \
   "SKIP  template drift not verified \(_src_path"
+# A foreign source containing the template's name as a substring must not
+# pass a bare `in` check: copier update pulls from _src_path, and passing
+# that through would run against whatever that foreign source is (#233 review).
+says "a foreign _src_path that merely contains the template's name is not the door's own form" \
+  "printf 'archetype: backend\n_src_path: /tmp/coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml" \
+  "SKIP  template drift not verified \(_src_path '/tmp/coolbress/plinth-template' is not gh:coolbress/plinth-template"
 says "a git describe value is not verified, quoted as recorded, and no command is printed" \
   "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0-3-gabc1234\n' > .copier-answers.yml" \
   "SKIP  template drift not verified \(recorded tag 'v1\.0\.0-3-gabc1234' is not an exact release tag\)"
@@ -557,6 +563,21 @@ says "two workflow files pinned to different plinth commits: the command is with
 says "a commented uses: line is not counted as a plinth pin" \
   "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    # uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n    uses: ./local\n' 0 > .github/workflows/one.yml" \
   "no update command: no coolbress/plinth workflow uses: line found"
+# One workflow pinned to a full SHA and another tracking a tag must not let
+# the tag be silently dropped: today's pin is not established while any
+# plinth uses: could be moving (#233 review) -- printing a command from the
+# one SHA that happens to be pinned would rewrite the other file too.
+says "one plinth pin on a full SHA and another on a tag: the command is withheld, not printed from the one SHA" \
+  "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    uses: coolbress/plinth/.github/workflows/label.yml@main\n' > .github/workflows/two.yml" \
+  "no update command: a coolbress/plinth workflow uses: line is not pinned to a full commit SHA"
+loosecopy="$work/loose-pin"; rm -rf "$loosecopy"; cp -R "$good" "$loosecopy"
+printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$loosecopy/.copier-answers.yml"
+rm -r "$loosecopy/.github/workflows"; mkdir -p "$loosecopy/.github/workflows"
+printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > "$loosecopy/.github/workflows/one.yml"
+printf 'jobs:\n  b:\n    uses: coolbress/plinth/.github/workflows/label.yml@main\n' > "$loosecopy/.github/workflows/two.yml"
+out="$(python3 "$checker" --root "$loosecopy" --no-network 2>&1)"
+if grep -q "plinth_sha=$sha40" <<<"$out"; then bad "the loose-pin case printed the lone SHA as if it were established"; printf '%s\n' "$out" | grep -E 'template|plinth_sha' | sed 's/^/        /'
+else ok "the loose-pin case never prints the lone SHA as if it were established"; fi
 
 # The changed-files list and diff: one call to the template's compare API,
 # made only when behind, filtered to template/ (the door's own tests, docs
