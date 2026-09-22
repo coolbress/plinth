@@ -563,17 +563,24 @@ def resolve_plinth_pin(root: Path) -> tuple[str | None, str | None]:
     Returns (sha, None) once established, or (None, reason) when it is not.
     A plinth `uses:` not pinned to a full commit SHA is unknown too, not
     silently dropped: today's pin is not established while any of them could
-    be tracking a moving ref (#233 review)."""
+    be tracking a moving ref (#233 review). So is any `uses:` this checker
+    cannot parse at all (flow style, an anchored or explicit key): its value
+    is unread, so it cannot be ruled out as a second, disagreeing plinth pin
+    either (#233 review, round 2)."""
     shas: set[str] = set()
-    loose = False
+    loose = unread = False
     for p in workflow_files(root):
         for _, value, readable in iter_uses(read(p)):
-            if readable and value.startswith(f"{PLINTH_REPO}/"):
+            if not readable:
+                unread = True
+            elif value.startswith(f"{PLINTH_REPO}/"):
                 ref = value.rpartition("@")[2]
                 if re.fullmatch(r"[0-9a-fA-F]{40}", ref):
                     shas.add(ref)
                 else:
                     loose = True
+    if unread:
+        return None, "a workflow uses: line could not be read; it may or may not pin coolbress/plinth"
     if loose:
         return None, f"a {PLINTH_REPO} workflow uses: line is not pinned to a full commit SHA"
     if len(shas) == 1:

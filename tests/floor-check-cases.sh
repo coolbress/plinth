@@ -579,6 +579,22 @@ out="$(python3 "$checker" --root "$loosecopy" --no-network 2>&1)"
 if grep -q "plinth_sha=$sha40" <<<"$out"; then bad "the loose-pin case printed the lone SHA as if it were established"; printf '%s\n' "$out" | grep -E 'template|plinth_sha' | sed 's/^/        /'
 else ok "the loose-pin case never prints the lone SHA as if it were established"; fi
 
+# One plinth pin in the ordinary block form (readable) and another in valid
+# flow-style YAML this checker cannot parse: the unreadable one's value is
+# unknown, so it cannot be ruled out as a second, disagreeing plinth pin
+# either (#233 review, round 2).
+says "one plinth pin readable and another in a form this checker cannot parse: the command is withheld" \
+  "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    steps:\n      - {uses: coolbress/plinth/.github/workflows/label.yml@%040d}\n' 1 > .github/workflows/two.yml" \
+  "no update command: a workflow uses: line could not be read; it may or may not pin coolbress/plinth"
+unreadcopy="$work/unread-pin"; rm -rf "$unreadcopy"; cp -R "$good" "$unreadcopy"
+printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$unreadcopy/.copier-answers.yml"
+rm -r "$unreadcopy/.github/workflows"; mkdir -p "$unreadcopy/.github/workflows"
+printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > "$unreadcopy/.github/workflows/one.yml"
+printf 'jobs:\n  b:\n    steps:\n      - {uses: coolbress/plinth/.github/workflows/label.yml@%040d}\n' 1 > "$unreadcopy/.github/workflows/two.yml"
+out="$(python3 "$checker" --root "$unreadcopy" --no-network 2>&1)"
+if grep -q "plinth_sha=$sha40" <<<"$out"; then bad "an unreadable second plinth uses: line still let the lone parsed SHA print"; printf '%s\n' "$out" | grep -E 'template|plinth_sha' | sed 's/^/        /'
+else ok "an unreadable second plinth uses: line withholds the command too, not just a lone parsed SHA"; fi
+
 # The changed-files list and diff: one call to the template's compare API,
 # made only when behind, filtered to template/ (the door's own tests, docs
 # and copier.yml are not rendered into a consumer repository).
