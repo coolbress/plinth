@@ -527,6 +527,22 @@ if [ "$rc" = 1 ] && grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep 
 then ok "a --root that does not exist is reported, not a traceback"
 else bad "a --root that does not exist (rc=$rc)"; printf '%s\n' "$out" | tail -5 | sed 's/^/        /'; fi
 
+# A caller that named a --project chose it. Sending them to a different
+# project below the root is sending them away from the one they meant to
+# repair, so the search runs only when this run is checking the root itself.
+psel="$work/proj-selected"; rm -rf "$psel"; cp -R "$sub" "$psel"; mkdir -p "$psel/svc"
+out="$(python3 "$checker" --root "$psel" --project svc --no-network 2>&1)"
+if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && grep -q "FAIL  uv.lock missing: CI runs" <<<"$out" \
+&& ! grep -q -- "--project=" <<<"$out"
+then ok "a --project the caller named is not redirected to another project below the root"
+else bad "a named --project was redirected"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+# ...and the same tree checked at the root still gets the hint, so the guard
+# narrows the search rather than switching it off.
+out="$(python3 "$checker" --root "$psel" --no-network 2>&1)"
+if grep -q "run again with --project=app" <<<"$out"
+then ok "the same tree checked at the root still names app/"
+else bad "the root run lost its hint"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
+
 # The lockfile hint is bound to the lockfile actually being there: a project
 # directory with no uv.lock keeps the line that says to create one.
 pnl="$work/proj-nolock"; rm -rf "$pnl"; cp -R "$sub" "$pnl"; rm "$pnl/app/uv.lock"

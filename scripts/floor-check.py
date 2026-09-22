@@ -744,7 +744,11 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
     # Which project is meant is the reader's to say: nothing is guessed,
     # nothing is re-run, and the list is an INFO so the counts do not move.
     present = (project / "pyproject.toml").is_file()
-    below = [] if present else projects_below(root)
+    # Only when this run is checking the root itself. A caller that named a
+    # --project chose it; telling them to go and check a different one sends
+    # them away from the project they meant to repair (#238 review). The
+    # report #221 came from is a run at the root, which is this case.
+    below = [] if present or project != root else projects_below(root)
     one = below[0] if len(below) == 1 else None
     # Written `--project=<value>`, and the value quoted: the line is pasted
     # into a shell, the directory name is the repository's to choose, and a

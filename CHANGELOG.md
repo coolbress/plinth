@@ -30,10 +30,13 @@ pull requests and have no tag.
   directory down. Run at the root of such a repository — a monorepo, a
   `backend/` folder — it reported `pyproject.toml missing` and `uv.lock
   missing` for files that exist, and nothing said that `--project <dir>` is
-  the answer. Now, when exactly one directory directly below the root holds a
-  `pyproject.toml`, both lines name that directory and the flag to run again
-  with, and the `uv.lock` line does so only when that directory really holds
-  one. A candidate is skipped when its name opens with a dot, when it is one
+  the answer. Now, when a run is checking the root itself and exactly one
+  directory directly below it holds a `pyproject.toml`, both lines name that
+  directory and the flag to run again with, and the `uv.lock` line does so
+  only when that directory really holds one. A run that was given a
+  `--project` is left alone: the caller chose that project, so its missing
+  files read as files to add there rather than as a reason to go and check a
+  different one. A candidate is skipped when its name opens with a dot, when it is one
   of the directories this checker already never walks into (`node_modules`,
   `dist`, `.venv`, `.git`, `.plinth-ci`, `.smoke`, `.scratch`), or when it is
   a symlink — anything else one level down is offered, `build/` and `vendor/`
