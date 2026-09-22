@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:floor-check` checks the wall again when the agent's shell is zsh.
+  The skill's command passed the repository as `${repo:+--repo "$repo"}`,
+  which zsh does not split into words, so the checker got the single argument
+  `--repo <owner>/<name>` and the wall went unchecked. The flag and its value
+  are now two expansions, the same in bash and zsh, and still add nothing
+  when there is no repository. `tests/floor-check-run-block.sh` runs the
+  skill's own command under both shells.
+
 ## [0.5.20] - 2026-09-23
 
 This release is about `floor-check` saying two things it could not say before.
