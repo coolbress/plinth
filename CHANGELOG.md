@@ -46,10 +46,12 @@ pull requests and have no tag.
   included. With no candidate the lines read as before; with several they read
   as before plus a list of them. It never chooses a project or re-runs itself:
   which one is meant is the reader's to say. No other item changed, and the
-  failure count moves in exactly one case: a root holding a `uv.lock` but no
-  `pyproject.toml`, with the project found below it holding no lockfile, used
-  to pass that item on the root's file and now fails it on the project's
-  (#221).
+  failure count moves in one situation: a root that holds a `uv.lock` but no
+  `pyproject.toml`, with a project found below it. That item used to pass on
+  the root's file; it now reports on the project's, which fails whether or not
+  the project has a lockfile of its own. Measured over the four combinations
+  of a root and a project lockfile: both with a root one go from `10 failed`
+  to `11`, and both without one stay at `11` (#221).
 
 - `new-project` renders plinth-template v1.5.0. A repository it creates now
   records `plinth_sha` — the commit of plinth whose reusable workflows its CI

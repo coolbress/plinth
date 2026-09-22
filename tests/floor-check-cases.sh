@@ -560,6 +560,13 @@ out="$(python3 "$checker" --root "$pstray" --no-network 2>&1)"
 if grep -q "FAIL  app/uv.lock missing: CI runs" <<<"$out" && ! grep -q "PASS  uv.lock committed" <<<"$out"
 then ok "a stray uv.lock at a root with no project does not pass the item for the project found below"
 else bad "a stray uv.lock at the root"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  uv.lock' | sed 's/^/        /'; fi
+# ...and it does not suppress the pointer when the project has one either.
+pstray2="$work/proj-stray-lock-both"; rm -rf "$pstray2"; cp -R "$sub" "$pstray2"; : > "$pstray2/uv.lock"
+out="$(python3 "$checker" --root "$pstray2" --no-network 2>&1)"
+if grep -q "FAIL  uv.lock missing here; found app/uv.lock: run again with --project=app" <<<"$out" \
+&& ! grep -q "PASS  uv.lock committed" <<<"$out"
+then ok "a stray uv.lock at the root does not pass the item when the project below has one too"
+else bad "a stray uv.lock beside a project lockfile"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  uv.lock' | sed 's/^/        /'; fi
 
 # A name argparse would read as the next flag rather than as this one's value.
 # The hint is only worth printing if running it as printed works.
