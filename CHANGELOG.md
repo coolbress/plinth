@@ -13,7 +13,7 @@ pull requests and have no tag.
 
 ### Changed
 
-- `new-project` renders plinth-template v1.4.2 instead of v1.4.1, so a new
+- `new-project` renders plinth-template v1.4.3 instead of v1.4.1, so a new
   repository says how to branch and what to do about a checkout another
   session may already be using. The `AGENTS.md` its agents load every turn
   opens with the rule to inspect the checkout before editing (`git fetch
@@ -29,7 +29,10 @@ pull requests and have no tag.
   along, so the rule and the base are two guards and not one said twice.
   Neither is a technical block: no hook, no deny rule, nothing that refuses a
   command. plinth's own `AGENTS.md`, `CONTRIBUTING.md` and `.gitignore` carry
-  the same three (#218).
+  the same three (#218). v1.4.3 adds one fix on top: the instance's
+  tree-hygiene tests read git's "not a git repository" message in a fixed
+  locale, so a fresh render skips them instead of failing three of them where
+  git speaks another language (plinth-template#19).
 
 ### Fixed
 
