@@ -11,6 +11,36 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.19] - 2026-09-22
+
+Two changes, and the first one reaches every repository plinth creates.
+
+A new repository now says how to branch, and what to do about a checkout
+another session may already be using. Its `AGENTS.md` — the file its agents
+load every turn — opens with the rule to inspect the checkout before editing,
+and, unless the checkout is yours alone, to leave it untouched and work in a
+uniquely named worktree branched from an explicitly verified base. Every
+branch instruction names that base. Until now the instruction and its command
+disagreed: "Branch from `main`" was paired with `git switch -c <type>/<slug>`,
+which branches from whatever `HEAD` is, and two agent sessions sharing one
+checkout turned that into a branch cut from another task's scratch commit.
+Naming the base keeps another task's commits out of the new branch; the rule
+is what covers the uncommitted work git still carries along without a word.
+Neither is a technical block: no hook, no deny rule, nothing that refuses a
+command. `.gitignore` also ignores `.claude/worktrees/`, the path the rule
+names, which `git add .` would otherwise stage as a gitlink.
+
+The second matters only to a repository that passes `summons-token` to
+`third-party / review`: a run whose head a newer push has replaced no longer
+asks the reviewer for a review. It used to keep asking at its ask points while
+the newer commit's run waited behind it in the concurrency group, and those
+requests were served against the pull request's current head while being
+counted as the old one's — up to four for a single commit on the token owner's
+review allowance. Without the secret nothing is posted, as before, and no
+input, job, check name or permission changed.
+
+tested with plinth-template v1.4.3
+
 ### Changed
 
 - `new-project` renders plinth-template v1.4.3 instead of v1.4.1, so a new
@@ -744,7 +774,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.18...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.19...HEAD
+[0.5.19]: https://github.com/coolbress/plinth/releases/tag/v0.5.19
 [0.5.18]: https://github.com/coolbress/plinth/releases/tag/v0.5.18
 [0.5.17]: https://github.com/coolbress/plinth/releases/tag/v0.5.17
 [0.5.16]: https://github.com/coolbress/plinth/releases/tag/v0.5.16
