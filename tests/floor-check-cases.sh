@@ -6,6 +6,9 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 checker="$root/scripts/floor-check.py"
+# #219 reads scripts/new-project.sh beside the checker (the real one here, not
+# a fixture): captured once so the fixtures stay a PASS across a pin raise.
+target_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -33,7 +36,7 @@ cat > "$good/.claude/settings.json" <<'JSON'
 {"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(gh auth token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Bash(cat *.env)","Bash(grep *.env)","Read(~/.config/gh/**)"]}}
 JSON
 printf '[project]\nname = "app"\n' > "$good/pyproject.toml"; : > "$good/uv.lock"
-printf 'archetype: backend\n' > "$good/.copier-answers.yml"
+printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: %s\n' "$target_ref" > "$good/.copier-answers.yml"
 cat > "$good/src/app/__main__.py" <<'PYSRC'
 import json, logging, os
 os.environ["APP_PORT"]
@@ -68,8 +71,8 @@ skips "offline with --repo: the wall and the labels are counted as not verified,
 skips "offline without --repo: the unchecked wall is counted once" \
   "1 not verified" --root "$good" --no-network
 noarch="$work/noarch"; rm -rf "$noarch"; cp -R "$good" "$noarch"; rm "$noarch/.copier-answers.yml"
-skips "no archetype: the skipped conditional items are counted" \
-  "2 not verified" --root "$noarch" --no-network
+skips "no archetype: the skipped conditional items are counted (and template drift, which also reads .copier-answers.yml)" \
+  "3 not verified" --root "$noarch" --no-network
 
 # Planted defects, each must be named.
 plant() { # <description> <shell to break the copy> <expected FAIL substring>
@@ -499,6 +502,155 @@ else bad "a backend instance's expectation lacks image"; printf '%s\n' "$out" | 
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --archetype cli --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
 if grep -q "wall expectation: checks \[.*'ci / floor-check'\]," <<<"$out" && ! grep -q "'image'" <<<"$out"; then ok "a cli instance expects the nine, not image"
 else bad "a cli instance's expectation carries image"; printf '%s\n' "$out" | grep -E 'wall expectation' | sed 's/^/        /'; fi
+
+# #219: is the template plinth is tested with today ahead of the tag this
+# repository was rendered from? The target is read from the real
+# scripts/new-project.sh beside the real checker (not a fixture, #219), so the
+# good fixture (recorded at $target_ref) always PASSes and every other case
+# below sets _commit far enough from $target_ref to stay true across a pin raise.
+says "the good fixture's recorded template tag matches the target" ":" \
+  "PASS  template: the recorded tag is the target tag \($target_ref\)"
+
+drift() { # <description> <_commit value> <expected ERE in the output>; never a FAIL
+  local copy="$work/drift"; rm -rf "$copy"; cp -R "$good" "$copy"
+  printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: %s\n' "$2" > "$copy/.copier-answers.yml"
+  local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"; local rc=$?
+  if [ "$rc" != 0 ] || grep -q "FAIL.*template" <<<"$out"; then bad "$1 (never a FAIL, rc=$rc)"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; return; fi
+  if grep -qE -- "$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
+}
+drift "a recorded tag behind the target is named, with both tags" "v1.0.0" \
+  "WARN  template: v1\.0\.0 is behind $target_ref, the tag plinth is tested with"
+drift "offline, the changed files could not be read, and it says so rather than staying silent" "v1.0.0" \
+  "the changed files could not be read \(offline or API error\)"
+drift "offline, the update command still carries the pin this repository's own CI calls today" "v1.0.0" \
+  "copier update --vcs-ref $target_ref --data plinth_sha=$sha40"
+drift "a recorded tag ahead of the target is a plain statement, not a not-verified count" "v99.0.0" \
+  "INFO  template: the recorded tag v99\.0\.0 is ahead of $target_ref, the tag plinth is tested with"
+quiet "an ahead tag is not counted as not verified" \
+  "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v99.0.0\n' > .copier-answers.yml" \
+  "template drift not verified"
+plant "no .copier-answers.yml: the item never fails, it says not verified" "rm .copier-answers.yml" "__none__" || true
+says "no .copier-answers.yml is named as the reason" "rm .copier-answers.yml" \
+  "SKIP  template drift not verified \(no \.copier-answers\.yml: not made by the door\)"
+says "an answers file without _commit is not verified" \
+  "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n' > .copier-answers.yml" \
+  "SKIP  template drift not verified \(\.copier-answers\.yml has no _commit\)"
+says "a _src_path that is not the plinth template is not verified" \
+  "printf 'archetype: backend\n_src_path: gh:example/other-template\n_commit: v1.0.0\n' > .copier-answers.yml" \
+  "SKIP  template drift not verified \(_src_path"
+# A foreign source containing the template's name as a substring must not
+# pass a bare `in` check: copier update pulls from _src_path, and passing
+# that through would run against whatever that foreign source is (#233 review).
+says "a foreign _src_path that merely contains the template's name is not the door's own form" \
+  "printf 'archetype: backend\n_src_path: /tmp/coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml" \
+  "SKIP  template drift not verified \(_src_path '/tmp/coolbress/plinth-template' is not gh:coolbress/plinth-template"
+says "a git describe value is not verified, quoted as recorded, and no command is printed" \
+  "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0-3-gabc1234\n' > .copier-answers.yml" \
+  "SKIP  template drift not verified \(recorded tag 'v1\.0\.0-3-gabc1234' is not an exact release tag\)"
+quiet "a git describe value prints no update command" \
+  "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0-3-gabc1234\n' > .copier-answers.yml" \
+  "copier update"
+
+# The plinth pin: read from this repository's own workflow uses: lines, the
+# live truth Dependabot moves and .copier-answers.yml never does. Unknown
+# withholds the command and names why, but the tags and file list still print.
+says "no plinth workflow pin at all: the command is withheld, with the reason" \
+  "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows" \
+  "no update command: no coolbress/plinth workflow uses: line found"
+says "two workflow files pinned to different plinth commits: the command is withheld, both named" \
+  "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    uses: coolbress/plinth/.github/workflows/label.yml@%040d\n' 1 > .github/workflows/two.yml" \
+  "no update command: workflow pins disagree: 0000000000000000000000000000000000000000, 0000000000000000000000000000000000000001"
+says "a commented uses: line is not counted as a plinth pin" \
+  "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    # uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n    uses: ./local\n' 0 > .github/workflows/one.yml" \
+  "no update command: no coolbress/plinth workflow uses: line found"
+# One workflow pinned to a full SHA and another tracking a tag must not let
+# the tag be silently dropped: today's pin is not established while any
+# plinth uses: could be moving (#233 review) -- printing a command from the
+# one SHA that happens to be pinned would rewrite the other file too.
+says "one plinth pin on a full SHA and another on a tag: the command is withheld, not printed from the one SHA" \
+  "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    uses: coolbress/plinth/.github/workflows/label.yml@main\n' > .github/workflows/two.yml" \
+  "no update command: a coolbress/plinth workflow uses: line is not pinned to a full commit SHA"
+loosecopy="$work/loose-pin"; rm -rf "$loosecopy"; cp -R "$good" "$loosecopy"
+printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$loosecopy/.copier-answers.yml"
+rm -r "$loosecopy/.github/workflows"; mkdir -p "$loosecopy/.github/workflows"
+printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > "$loosecopy/.github/workflows/one.yml"
+printf 'jobs:\n  b:\n    uses: coolbress/plinth/.github/workflows/label.yml@main\n' > "$loosecopy/.github/workflows/two.yml"
+out="$(python3 "$checker" --root "$loosecopy" --no-network 2>&1)"
+if grep -q "plinth_sha=$sha40" <<<"$out"; then bad "the loose-pin case printed the lone SHA as if it were established"; printf '%s\n' "$out" | grep -E 'template|plinth_sha' | sed 's/^/        /'
+else ok "the loose-pin case never prints the lone SHA as if it were established"; fi
+
+# One plinth pin in the ordinary block form (readable) and another in valid
+# flow-style YAML this checker cannot parse: the unreadable one's value is
+# unknown, so it cannot be ruled out as a second, disagreeing plinth pin
+# either (#233 review, round 2).
+says "one plinth pin readable and another in a form this checker cannot parse: the command is withheld" \
+  "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    steps:\n      - {uses: coolbress/plinth/.github/workflows/label.yml@%040d}\n' 1 > .github/workflows/two.yml" \
+  "no update command: a workflow uses: line could not be read; it may or may not pin coolbress/plinth"
+unreadcopy="$work/unread-pin"; rm -rf "$unreadcopy"; cp -R "$good" "$unreadcopy"
+printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$unreadcopy/.copier-answers.yml"
+rm -r "$unreadcopy/.github/workflows"; mkdir -p "$unreadcopy/.github/workflows"
+printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > "$unreadcopy/.github/workflows/one.yml"
+printf 'jobs:\n  b:\n    steps:\n      - {uses: coolbress/plinth/.github/workflows/label.yml@%040d}\n' 1 > "$unreadcopy/.github/workflows/two.yml"
+out="$(python3 "$checker" --root "$unreadcopy" --no-network 2>&1)"
+if grep -q "plinth_sha=$sha40" <<<"$out"; then bad "an unreadable second plinth uses: line still let the lone parsed SHA print"; printf '%s\n' "$out" | grep -E 'template|plinth_sha' | sed 's/^/        /'
+else ok "an unreadable second plinth uses: line withholds the command too, not just a lone parsed SHA"; fi
+
+# The changed-files list and diff: one call to the template's compare API,
+# made only when behind, filtered to template/ (the door's own tests, docs
+# and copier.yml are not rendered into a consumer repository).
+tmpl_api="$work/api-template"; mkdir -p "$tmpl_api/repos/coolbress/plinth-template/compare"
+patch_agents=$'@@ -1,2 +1,3 @@\n # Agents\n+one more line\n'
+jq -n --arg patch "$patch_agents" '{files: [
+    {filename: "template/AGENTS.md", status: "modified", patch: $patch},
+    {filename: "template/.gitignore", status: "modified"},
+    {filename: "docs/README.md", status: "modified"}
+  ]}' > "$tmpl_api/repos/coolbress/plinth-template/compare/v1.0.0...${target_ref}.json"
+tcopy="$work/tmpl-drift"; rm -rf "$tcopy"; cp -R "$good" "$tcopy"
+printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy/.copier-answers.yml"
+out="$(FLOOR_CHECK_API_DIR="$tmpl_api" python3 "$checker" --root "$tcopy" 2>&1)"
+if grep -q "changed in the template: \.gitignore, AGENTS\.md" <<<"$out"; then ok "the changed-files list is scoped to template/ and strips the prefix"
+else bad "changed-files list"; printf '%s\n' "$out" | grep -E 'changed in the template' | sed 's/^/        /'; fi
+if grep -q "docs/README.md" <<<"$out"; then bad "a file outside template/ leaked into the changed-files list"
+else ok "a file outside template/ (the door never renders it) is left out"; fi
+if grep -q "  AGENTS.md:" <<<"$out" && grep -q "+one more line" <<<"$out"; then ok "the short list's diff is shown for AGENTS.md, from the same compare call"
+else bad "AGENTS.md diff"; printf '%s\n' "$out" | grep -E 'AGENTS|one more line' | sed 's/^/        /'; fi
+if grep -q "  \.gitignore:" <<<"$out"; then bad ".gitignore has no patch in the fixture; it should print no diff header"
+else ok "a short-list file with no patch in the compare response prints no diff block"; fi
+if grep -q "PASS  template:" <<<"$out" || grep -q "SKIP.*template drift" <<<"$out"; then bad "a behind repository must not read as passed or not verified"
+else ok "a behind repository is a WARN, and only a WARN"; fi
+
+# A compare call that fails (offline is covered above; here the fixture
+# directory exists but has no entry for this path -- a 404) behaves the same:
+# the WARN stands, the command still prints, the file list says it could not be read.
+empty_api="$work/api-template-empty"; mkdir -p "$empty_api/repos/coolbress/plinth-template"
+tcopy2="$work/tmpl-drift-404"; rm -rf "$tcopy2"; cp -R "$good" "$tcopy2"
+printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy2/.copier-answers.yml"
+out="$(FLOOR_CHECK_API_DIR="$empty_api" python3 "$checker" --root "$tcopy2" 2>&1)"
+if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier update --vcs-ref $target_ref --data plinth_sha=$sha40" <<<"$out"; then
+  ok "a compare call that 404s still prints the update command, and names the file list as unread"
+else bad "a 404 on the compare call"; printf '%s\n' "$out" | grep -E 'template|copier update' | sed 's/^/        /'; fi
+
+# Single-sourced: the target comes from scripts/new-project.sh beside the
+# checker, never a copy inside floor-check.py itself.
+selfdir="$work/selfcheck"; mkdir -p "$selfdir"
+cp "$checker" "$selfdir/floor-check.py"
+sed "s/^template_ref=\"$target_ref\"\$/template_ref=\"v9.9.9\"/" "$root/scripts/new-project.sh" > "$selfdir/new-project.sh"
+if ! grep -q 'template_ref="v9.9.9"' "$selfdir/new-project.sh"; then
+  bad "test setup: could not rewrite template_ref in the copied new-project.sh"
+else
+  scopy="$work/self-repo"; rm -rf "$scopy"; cp -R "$good" "$scopy"
+  printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v9.9.9\n' > "$scopy/.copier-answers.yml"
+  out="$(python3 "$selfdir/floor-check.py" --root "$scopy" --no-network 2>&1)"
+  if grep -q "PASS  template: the recorded tag is the target tag (v9.9.9)" <<<"$out"
+  then ok "the target tag is read from scripts/new-project.sh beside the checker, not a copy inside it (a fake v9.9.9 pin is honoured)"
+  else bad "the checker did not honour a rewritten new-project.sh beside it"; printf '%s\n' "$out" | grep template | sed 's/^/        /'; fi
+fi
+selfdir2="$work/selfcheck-missing"; mkdir -p "$selfdir2"
+cp "$checker" "$selfdir2/floor-check.py"
+out="$(python3 "$selfdir2/floor-check.py" --root "$good" --no-network 2>&1)"
+if grep -q "SKIP  template drift not verified (scripts/new-project.sh not found beside the checker" <<<"$out"
+then ok "no new-project.sh beside the checker: not verified, not passed"
+else bad "a missing new-project.sh"; printf '%s\n' "$out" | grep template | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

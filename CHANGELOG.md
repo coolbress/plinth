@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `floor-check` reports when a repository is behind the template tag plinth
+  is tested with today: the tag it was made from, the tag it would move to,
+  the template's own files that changed between the two, and a `copier
+  update` line carrying the plinth commit its own CI calls right now, read
+  from its workflow `uses:` lines, so the update does not move that pin under
+  it. Always a WARN, never a FAIL — `ci / floor-check` does not turn red for
+  falling behind. A repository the door did not make, or whose recorded tag
+  is not an exact release tag, is not verified rather than passed. It reports
+  only; running the update, resolving conflicts and opening a pull request is
+  a later skill (#219; stage 2 is #232).
+
 ### Changed
 
 - `new-project` renders plinth-template v1.5.0. A repository it creates now
