@@ -26,6 +26,13 @@ the index, not contents or history), action pins (`uses:` lines of
 .github/workflows, not composite actions), JSON logs (a known setup in a
 service archetype's src/, never what the process prints). What each reads and
 does not read is in its docstring and in skills/floor-check/SKILL.md.
+
+One more is WARN-only and reads no network beyond one GitHub compare call
+(#219): whether the template tag this repository was rendered from
+(.copier-answers.yml's _commit) is behind the tag plinth is tested with
+today (scripts/new-project.sh's template_ref, read from that file alone).
+Behind prints the template's own changed files and a `copier update` line;
+it never runs one.
 """
 
 from __future__ import annotations
@@ -54,6 +61,13 @@ CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
 # the expectation below adds the same name, so the two cannot disagree. It comes
 # from the same app as the nine (their integration_id), not a second literal.
 IMAGE_CHECK = "image"
+
+# This repository's own identity, as consumer workflows pin it (#219): the
+# `uses:` lines that call plinth's reusable workflows.
+PLINTH_REPO = "coolbress/plinth"
+# Template files the door renders unchanged (no .jinja): the short list #219's
+# drift item shows a diff for, alongside the bare list of what else changed.
+TEMPLATE_DRIFT_DIFF_FILES = ("AGENTS.md", "CONTRIBUTING.md", ".gitignore")
 
 SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", ".scratch", "dist"}
 # What GitHub accepts under .github/ISSUE_TEMPLATE: forms in either YAML
@@ -228,6 +242,7 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     check_doc_links(root)
     check_tracked_dotenv(root)
     check_action_pins(root)
+    check_template_drift(root, network)
 
 
 def md_front_matter_name(text: str) -> str:
@@ -425,45 +440,65 @@ def action_is_pinned(value: str) -> bool:
     return re.fullmatch(r"[^@]+@[0-9a-fA-F]{40}", value) is not None
 
 
+def iter_uses(text: str):
+    """Yield (line, value, readable) for every apparent `uses:` in workflow
+    YAML text. Lines, not a YAML parser (standard library only): comments and
+    the interior of a block scalar (`run: |`) are skipped. `readable` is False
+    for a `uses` the line pattern cannot parse (flow style, an anchored or
+    explicit key); `value` is None in that case. Shared by check_action_pins
+    and #219's plinth-pin lookup, so both skip the same ground the same way."""
+    block = None
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        if block is not None:
+            if indent > block:
+                continue  # inside a block scalar: shell, not workflow syntax
+            block = None
+        if line.lstrip().startswith("#"):
+            continue
+        if re.search(r":\s*[|>][-+0-9]*\s*(?:#.*)?$", line):
+            # The scalar's lines sit deeper than its key, and after `- ` the key starts past the dash.
+            block = re.match(r"\s*(?:-\s+)*", line).end()
+        m = USES_LINE.match(line)
+        if m:
+            yield n, m.group(2), True
+        # The net is wider than any one spelling: the word anywhere in the key part
+        # of the line (`? uses`, `&a uses:`, `"uses":`), or as a key inside a flow
+        # mapping. A word inside a value (`run: grep uses:`) is not a key.
+        elif re.search(r"\buses\b", re.split(r":(?:\s|$)", line, maxsplit=1)[0]) \
+                or re.search(r"""[{,]\s*['"]?uses['"]?\s*:""", line):
+            yield n, None, False
+
+
+def workflow_files(root: Path) -> list[Path]:
+    """.github/workflows/*.yml|yaml, sorted. Shared by check_action_pins and
+    #219's plinth-pin lookup, so both scan exactly the same files."""
+    d = root / ".github" / "workflows"
+    return sorted(p for p in d.iterdir() if p.is_file() and p.suffix in {".yml", ".yaml"}) if d.is_dir() else []
+
+
 def check_action_pins(root: Path) -> None:
     """Every `uses:` in .github/workflows/*.yml|yaml is a full commit SHA (a
-    sha256 digest for docker://, anything for a local ./ path). Lines, not a
-    YAML parser (standard library only): comments and block scalars (`run: |`)
-    are skipped, and a `uses` the line pattern cannot read is a SKIP, not a
-    pass. Composite actions under .github/actions are not read, and whether a
-    SHA exists upstream is not asked."""
-    d = root / ".github" / "workflows"
-    files = sorted(p for p in d.iterdir() if p.is_file() and p.suffix in {".yml", ".yaml"}) if d.is_dir() else []
+    sha256 digest for docker://, anything for a local ./ path). A `uses` the
+    line pattern cannot read (iter_uses) is a SKIP, not a pass. Composite
+    actions under .github/actions are not read, and whether a SHA exists
+    upstream is not asked."""
+    files = workflow_files(root)
     if not files:
         result("INFO", "no workflow file under .github/workflows: no action pin to check")
         return
     total, clean = 0, True
     for p in files:
         rel = p.relative_to(root).as_posix()
-        unpinned, unread, block = [], [], None
-        for n, line in enumerate(read(p).splitlines(), 1):
-            if not line.strip():
-                continue
-            indent = len(line) - len(line.lstrip())
-            if block is not None:
-                if indent > block:
-                    continue  # inside a block scalar: shell, not workflow syntax
-                block = None
-            if line.lstrip().startswith("#"):
-                continue
-            if re.search(r":\s*[|>][-+0-9]*\s*(?:#.*)?$", line):
-                # The scalar's lines sit deeper than its key, and after `- ` the key starts past the dash.
-                block = re.match(r"\s*(?:-\s+)*", line).end()
-            m = USES_LINE.match(line)
-            if m:
+        unpinned, unread = [], []
+        for n, value, readable in iter_uses(read(p)):
+            if readable:
                 total += 1
-                if not action_is_pinned(m.group(2)):
-                    unpinned.append((n, m.group(2)))
-            # The net is wider than any one spelling: the word anywhere in the key part
-            # of the line (`? uses`, `&a uses:`, `"uses":`), or as a key inside a flow
-            # mapping. A word inside a value (`run: grep uses:`) is not a key.
-            elif re.search(r"\buses\b", re.split(r":(?:\s|$)", line, maxsplit=1)[0]) \
-                    or re.search(r"""[{,]\s*['"]?uses['"]?\s*:""", line):
+                if not action_is_pinned(value):
+                    unpinned.append((n, value))
+            else:
                 unread.append(n)
         if unpinned:
             clean = False
@@ -483,6 +518,139 @@ def check_action_pins(root: Path) -> None:
                            "mentions uses in a form this checker does not read")
     if clean:
         result("PASS", f"every action in {len(files)} workflow file{'s' * (len(files) != 1)} is pinned to a commit ({total} uses)")
+
+
+def new_project_pin() -> tuple[str, str, str, str] | None:
+    """(template_repo, template_ref, copier_version, copier_newer) as
+    scripts/new-project.sh pins them -- read from that file and nowhere else
+    (#219), so a template release only has to move the pin once. Found beside
+    this file: locally, where both live in scripts/; in CI's floor-check job,
+    which downloads both from the same plinth commit into the same directory."""
+    p = Path(__file__).resolve().parent / "new-project.sh"
+    if not p.is_file():
+        return None
+    text = read(p)
+    fields = {}
+    for name in ("template_repo", "template_ref", "copier_version", "copier_newer"):
+        m = re.search(rf'^{name}="([^"]+)"$', text, re.M)
+        if not m:
+            return None
+        fields[name] = m.group(1)
+    return fields["template_repo"], fields["template_ref"], fields["copier_version"], fields["copier_newer"]
+
+
+def copier_answers(root: Path) -> dict[str, str] | None:
+    """.copier-answers.yml as a flat mapping. Not a YAML parser (standard
+    library only): one `key: value` per line, quotes stripped. The file the
+    door writes has no nesting."""
+    p = root / ".copier-answers.yml"
+    if not p.is_file():
+        return None
+    out: dict[str, str] = {}
+    for line in read(p).splitlines():
+        m = re.match(r"^([A-Za-z_]\w*):\s*(.*)$", line)
+        if m:
+            out[m.group(1)] = m.group(2).strip().strip("'\"")
+    return out
+
+
+def resolve_plinth_pin(root: Path) -> tuple[str | None, str | None]:
+    """The commit of coolbress/plinth this repository's CI calls today
+    (#219): read from its own workflow `uses:` lines, the live truth
+    Dependabot moves and `.copier-answers.yml` never does (a `plinth_sha` an
+    update would otherwise take from a stale recorded answer or the
+    template's own default, neither of which is what Dependabot last set).
+    Returns (sha, None) once established, or (None, reason) when it is not."""
+    shas: set[str] = set()
+    for p in workflow_files(root):
+        for _, value, readable in iter_uses(read(p)):
+            if readable and value.startswith(f"{PLINTH_REPO}/"):
+                ref = value.rpartition("@")[2]
+                if re.fullmatch(r"[0-9a-fA-F]{40}", ref):
+                    shas.add(ref)
+    if len(shas) == 1:
+        return next(iter(shas)), None
+    if not shas:
+        return None, f"no {PLINTH_REPO} workflow uses: line found"
+    return None, f"workflow pins disagree: {', '.join(sorted(shas))}"
+
+
+def check_template_drift(root: Path, network: bool) -> None:
+    """#219 stage 1: has the template plinth is tested with today moved past
+    the tag this repository was rendered from? Reports the drift and an
+    update command; runs nothing that writes. A PASS means only that the
+    recorded tag is the target tag -- not that this repository's own render
+    matches it file for file: another archetype, inherited forms or a
+    hand-made edit can mean a changed template file was never rendered here."""
+    pin = new_project_pin()
+    if pin is None:
+        result("SKIP", "template drift not verified (scripts/new-project.sh not found beside the checker, or unreadable)")
+        return
+    template_repo, target, copier_version, copier_newer = pin
+
+    answers = copier_answers(root)
+    if answers is None:
+        result("SKIP", "template drift not verified (no .copier-answers.yml: not made by the door)")
+        return
+    src_path = answers.get("_src_path", "")
+    if template_repo not in src_path:
+        result("SKIP", f"template drift not verified (_src_path {src_path!r} names no {template_repo})")
+        return
+    if "_commit" not in answers:
+        result("SKIP", "template drift not verified (.copier-answers.yml has no _commit)")
+        return
+    recorded = answers["_commit"]
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", recorded):
+        result("SKIP", f"template drift not verified (recorded tag {recorded!r} is not an exact release tag)")
+        return
+
+    def key(tag: str) -> tuple[int, ...]:
+        return tuple(int(x) for x in tag[1:].split("."))
+
+    if key(recorded) > key(target):
+        result("INFO", f"template: the recorded tag {recorded} is ahead of {target}, the tag plinth is tested with")
+        return
+    if recorded == target:
+        result("PASS", f"template: the recorded tag is the target tag ({target})")
+        return
+
+    cmp = api(f"repos/{template_repo}/compare/{recorded}...{target}", network)
+    if cmp in (ABSENT, ERROR):
+        changed, unread_reason = None, "offline or API error"
+    elif isinstance(cmp, dict) and isinstance(cmp.get("files"), list):
+        changed = [f for f in cmp["files"] if isinstance(f, dict) and f.get("filename", "").startswith("template/")]
+        unread_reason = None
+    else:
+        # A well-formed reply that still carries no `files` list (GitHub omits
+        # it for a very large diff): read, but not into what was expected.
+        changed, unread_reason = None, "an unexpected compare response"
+
+    sha, why_not = resolve_plinth_pin(root)
+    cmd = (f"uvx --from copier=={copier_version} --exclude-newer {copier_newer} "
+           f"copier update --vcs-ref {target} --data plinth_sha={sha}") if sha else None
+
+    if changed is None:
+        result("WARN", f"template: {recorded} is behind {target}, the tag plinth is tested with; "
+                       f"the changed files could not be read ({unread_reason})")
+    else:
+        names = sorted(f["filename"][len("template/"):] for f in changed)
+        result("WARN", f"template: {recorded} is behind {target}, the tag plinth is tested with; "
+                       f"changed in the template: {', '.join(names) if names else '(nothing under template/)'}")
+        result("INFO", "  the template's own change between the two tags, not this repository's diff: another "
+                       "archetype, inherited forms or a hand-made edit can mean some of it was never rendered here")
+        by_name = {f["filename"][len("template/"):]: f for f in changed}
+        for name in TEMPLATE_DRIFT_DIFF_FILES:
+            entry = by_name.get(name)
+            patch = entry.get("patch") if isinstance(entry, dict) else None
+            if patch:
+                result("INFO", f"  {name}:")
+                for pline in patch.splitlines():
+                    result("INFO", f"    {pline}")
+
+    if cmd:
+        result("INFO", f"  {cmd}")
+    else:
+        result("INFO", f"  no update command: {why_not}")
 
 
 def check_doc_links(root: Path) -> None:

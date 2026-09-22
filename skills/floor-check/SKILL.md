@@ -79,4 +79,32 @@ covers only what is listed here.
 | Action pins | Every `uses:` line in `.github/workflows/*.yml` and `*.yaml`: `owner/repo@<40-hex SHA>`, `docker://…@sha256:<digest>` or a local `./` path. Comments and block scalars (`run: \|`) are skipped | Composite actions under `.github/actions`, whether the SHA exists upstream, what the pinned action itself calls. A `uses` written in a form the line pattern cannot read (flow style, a quoted, anchored or explicit `?` key: any `uses` in key position that is not a plain `uses: value`) is a SKIP naming the line |
 | JSON logs | For a service archetype (`backend`, `data-ml`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
 
+## Template drift
+
+One item compares the template tag this repository was rendered from
+(`.copier-answers.yml`'s `_commit`) with the tag plinth is tested with today
+(`scripts/new-project.sh`'s `template_ref`). Equal is a PASS, worded as
+"the recorded tag is the target tag" and nothing more: it does not mean this
+repository's own render matches the template file for file, only that it was
+made from the current tag. Behind is a WARN, never a FAIL, naming both tags,
+the template's own files that changed between them (one GitHub compare call,
+and a diff of `AGENTS.md`, `CONTRIBUTING.md` and `.gitignore` if they are
+among them — the template's own change, not necessarily this repository's:
+another archetype, inherited forms or a hand-made edit can mean some of it
+was never rendered here), and a `copier update` line carrying the commit of
+plinth this repository's own workflows call today, read from their `uses:`
+lines so the update does not move that pin under it. When that pin cannot be
+established (no such `uses:` line, or two that disagree) the tags and file
+list still print, with no command. A repository the door did not make, or
+whose recorded tag is not an exact release tag, is a SKIP, not a PASS. It
+never runs `copier update`; running it, resolving conflicts and opening a
+pull request is a later skill (stage 2 of #219), named here only once it
+exists.
+
+A repository made before this item shipped hears about it two ways: an agent
+running an updated plugin's `/plinth:floor-check` by hand, or its own
+`ci / floor-check` once its workflow pin is raised (Dependabot proposes
+that) — CI downloads the checker from the plinth commit its own workflow is
+pinned to, so an older pin keeps running the older checker until then.
+
 Do not fix anything in this session, and do not run anything that writes.
