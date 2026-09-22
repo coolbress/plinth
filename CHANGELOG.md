@@ -45,8 +45,11 @@ pull requests and have no tag.
   a symlink — anything else one level down is offered, `build/` and `vendor/`
   included. With no candidate the lines read as before; with several they read
   as before plus a list of them. It never chooses a project or re-runs itself:
-  which one is meant is the reader's to say. Exit codes, counts and every
-  other item are unchanged (#221).
+  which one is meant is the reader's to say. No other item changed, and the
+  failure count moves in exactly one case: a root holding a `uv.lock` but no
+  `pyproject.toml`, with the project found below it holding no lockfile, used
+  to pass that item on the root's file and now fails it on the project's
+  (#221).
 
 - `new-project` renders plinth-template v1.5.0. A repository it creates now
   records `plinth_sha` — the commit of plinth whose reusable workflows its CI
