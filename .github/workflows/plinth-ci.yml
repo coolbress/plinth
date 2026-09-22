@@ -51,6 +51,13 @@ jobs:
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
 
+      # zsh is not assumed on the runner image; without it the next test fails, it does not skip.
+      - name: Install zsh
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+
+      - name: The floor-check skill's command passes the same arguments under bash and zsh
+        run: ./tests/floor-check-run-block.sh
+
       - name: The door creates nothing before preflight passes and deletes on any failure after
         run: ./tests/new-project-failpath.sh
 

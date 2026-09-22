@@ -20,7 +20,7 @@ the argument if the user gave one (`$ARGUMENTS`), otherwise the remote:
 ```bash
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"   # or the argument
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox \
-  --ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset.json" ${repo:+--repo "$repo"}
+  --ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset.json" ${repo:+--repo} ${repo:+"$repo"}
 ```
 
 Without a repository name the checker says `no --repo: wall not checked` and
