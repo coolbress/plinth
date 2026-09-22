@@ -730,8 +730,13 @@ def projects_below(root: Path) -> list[str]:
     # checkout would be offered as this repository's project and the reader
     # would be sent to read a tree that is not in it. A symlinked project
     # directory therefore gets no hint, which is what today already does.
+    # isprintable() for the same reason one step further: this name is printed
+    # into a result line the skill hands on whole, so a newline in it splits
+    # that line and the rest reads as further results -- a directory named
+    # "app\n  PASS  forged" put a PASS in the report (#238 review). Such a
+    # name gets no hint either.
     return [d.name for d in entries
-            if not d.name.startswith(".") and d.name not in SKIP_DIRS
+            if not d.name.startswith(".") and d.name not in SKIP_DIRS and d.name.isprintable()
             and not d.is_symlink() and d.is_dir() and (d / "pyproject.toml").is_file()]
 
 
