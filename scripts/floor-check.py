@@ -716,9 +716,70 @@ def package_name(project: Path) -> str | None:
     return m.group(1).replace("-", "_") if m else None
 
 
-def check_project(project: Path, archetype: str | None) -> None:
-    ok((project / "pyproject.toml").is_file(), "pyproject.toml present", "pyproject.toml missing")
-    ok((project / "uv.lock").is_file(), "uv.lock committed", "uv.lock missing: CI runs `uv sync --locked`")
+def projects_below(root: Path) -> list[str]:
+    """Directory names one level under --root that hold a pyproject.toml
+    (#221). One level and no further, and never a dot directory, one of
+    SKIP_DIRS or a symlink: the point is to name the project the reader
+    meant, not to search the tree. `--project` is relative to --root, so a name here is
+    already what that flag takes."""
+    try:
+        entries = sorted(root.iterdir())
+    except OSError:
+        return []
+    # is_dir() follows symlinks, so a link at the root pointing outside the
+    # checkout would be offered as this repository's project and the reader
+    # would be sent to read a tree that is not in it. A symlinked project
+    # directory therefore gets no hint, which is what today already does.
+    # isprintable() for the same reason one step further: this name is printed
+    # into a result line the skill hands on whole, so a newline in it splits
+    # that line and the rest reads as further results -- a directory named
+    # "app\n  PASS  forged" put a PASS in the report (#238 review). Such a
+    # name gets no hint either.
+    return [d.name for d in entries
+            if not d.name.startswith(".") and d.name not in SKIP_DIRS and d.name.isprintable()
+            and not d.is_symlink() and d.is_dir() and (d / "pyproject.toml").is_file()]
+
+
+def check_project(project: Path, root: Path, archetype: str | None) -> None:
+    # Run at the root of a repository whose project is one directory down (a
+    # monorepo, a backend/ folder, plinth's own canary/), this reported two
+    # files missing that do exist, and nothing said that --project is the
+    # answer (#221). With exactly one candidate below --root both lines name
+    # it and the flag; with several they stay as they were and a list follows.
+    # Which project is meant is the reader's to say: nothing is guessed,
+    # nothing is re-run, and the list is an INFO so the counts do not move.
+    present = (project / "pyproject.toml").is_file()
+    # Only when this run is checking the root itself. A caller that named a
+    # --project chose it; telling them to go and check a different one sends
+    # them away from the project they meant to repair (#238 review). The
+    # report #221 came from is a run at the root, which is this case.
+    below = [] if present or project != root else projects_below(root)
+    one = below[0] if len(below) == 1 else None
+    # Written `--project=<value>`, and the value quoted: the line is pasted
+    # into a shell, the directory name is the repository's to choose, and a
+    # name that opens with `-` is one argparse reads as the next flag rather
+    # than as this one's value.
+    flag = f"--project={shlex.quote(one)}" if one else ""
+    if one:
+        result("FAIL", f"pyproject.toml missing here; found {one}/pyproject.toml: run again with {flag}")
+    else:
+        ok(present, "pyproject.toml present", "pyproject.toml missing")
+        if below:
+            result("INFO", "  pyproject.toml below the root in " + ", ".join(f"{d}/" for d in below)
+                           + ": run again with --project=<one of them>")
+    # Once a project has been found below the root, both items speak about it.
+    # The root holds no pyproject.toml, so a uv.lock sitting there is not that
+    # project's lockfile: reporting it as one passed an item for a file that
+    # belongs to nothing this run checks, while sending the reader to a project
+    # where `--project=` reports it missing straight away (#238 review).
+    if one:
+        if (root / one / "uv.lock").is_file():
+            result("FAIL", f"uv.lock missing here; found {one}/uv.lock: run again with {flag}")
+        else:
+            result("FAIL", f"{one}/uv.lock missing: CI runs `uv sync --locked`")
+    else:
+        ok((project / "uv.lock").is_file(), "uv.lock committed",
+           "uv.lock missing: CI runs `uv sync --locked`")
 
     if archetype is None:
         result("SKIP", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")
@@ -1100,7 +1161,7 @@ def main() -> int:
     print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}")
     check_files(root, owner, network)
     archetype = archetype_of(project, a.archetype)
-    check_project(project, archetype)
+    check_project(project, root, archetype)
     if archetype in CONDITIONAL_ARCHETYPES:
         check_image_job(root)
 

@@ -30,7 +30,11 @@ own login, so bypass actors are visible; without a login they show as SKIP.
 repository: whether Claude Code's sandbox is on. `--ruleset` expects the wall
 `/plinth:new-project` raises, the CodeQL alert thresholds of its
 `code_scanning` rule included; for a repository with a different wall (plinth
-itself, for one) pass `--expect-checks "<name>, <name>"` as well.
+itself, for one) pass `--expect-checks "<name>, <name>"` as well. Add
+`--project <dir>` when the project is not at the repository root — the
+directory the repository's own CI gives `python-ci.yml` as its
+`working-directory` — because without it `pyproject.toml` and `uv.lock` are
+read from the root and reported missing although they exist one level down.
 
 ## Report
 

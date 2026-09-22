@@ -482,6 +482,137 @@ out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$sub" --project app
 if grep -q "required checks dropped" <<<"$out" && grep -q "uv.lock committed" <<<"$out"; then ok "--project and --ruleset are honoured (ruleset's nine checks expected, project files found under app/)"
 else bad "--project/--ruleset path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 
+# #221: run at the root of a repository whose project is one directory down,
+# the checker reports two files missing that do exist. The answer is --project,
+# so the FAIL line names it when exactly one directory below --root holds a
+# pyproject.toml. Which project is meant stays the user's to say: the checker
+# neither guesses nor re-runs itself.
+out="$(python3 "$checker" --root "$sub" --no-network 2>&1)"; rc=$?
+if grep -q "FAIL  pyproject.toml missing here; found app/pyproject.toml: run again with --project=app" <<<"$out" \
+&& grep -q "FAIL  uv.lock missing here; found app/uv.lock: run again with --project=app" <<<"$out"
+then ok "one pyproject.toml one level down: both FAIL lines name the directory and the flag"
+else bad "the --project hint"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+# The hint replaces the wording of two FAILs and adds no line of its own. The
+# baseline is the same tree with the candidate behind a name the search skips,
+# so a check added elsewhere later moves both summaries together and this case
+# keeps testing the hint rather than the fixture's totals.
+phid0="$work/proj-baseline"; rm -rf "$phid0"; cp -R "$sub" "$phid0"; mv "$phid0/app" "$phid0/.app"
+base="$(python3 "$checker" --root "$phid0" --no-network 2>&1 | grep -- '^-- ')"
+hint="$(grep -- '^-- ' <<<"$out")"
+if [ "$rc" = 1 ] && [ -n "$base" ] && [ "$hint" = "$base" ]
+then ok "the hint leaves the exit code and the summary line alone (same summary as with no candidate)"
+else bad "the hint changed the exit code or the summary (rc=$rc, hint='$hint', baseline='$base')"; fi
+# The line is actionable as printed: run it again that way and both items pass.
+out="$(python3 "$checker" --root "$sub" --project app --no-network 2>&1)"
+if grep -q "PASS  pyproject.toml present" <<<"$out" && grep -q "PASS  uv.lock committed" <<<"$out"
+then ok "the hinted --project turns both project items to PASS"
+else bad "the hinted --project"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  (pyproject|uv)' | sed 's/^/        /'; fi
+
+pnone="$work/proj-none"; rm -rf "$pnone"; cp -R "$good" "$pnone"; rm "$pnone/pyproject.toml"
+out="$(python3 "$checker" --root "$pnone" --no-network 2>&1)"
+if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q -- "--project" <<<"$out"
+then ok "no pyproject.toml below the root: the line stays as it was, with no hint"
+else bad "no candidate below the root"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+
+ptwo="$work/proj-two"; rm -rf "$ptwo"; cp -R "$sub" "$ptwo"; mkdir -p "$ptwo/svc"; cp "$ptwo/app/pyproject.toml" "$ptwo/svc/pyproject.toml"
+out="$(python3 "$checker" --root "$ptwo" --no-network 2>&1)"; rc=$?
+if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && grep -q "INFO.*app/.*svc/" <<<"$out" && [ "$rc" = 1 ] && grep -q -- '-- 2 failed, 3 not verified' <<<"$out"
+then ok "two candidates: today's line, both paths listed, and no choice made for the user"
+else bad "two candidates below the root (rc=$rc)"; printf '%s\n' "$out" | grep -E 'FAIL|INFO|failed' | sed 's/^/        /'; fi
+
+# The search is the first thing in the run to list the root's entries, so a
+# --root that is not there reaches it: it reports, it does not traceback.
+out="$(python3 "$checker" --root "$work/not-a-checkout" --no-network 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q "Traceback" <<<"$out"
+then ok "a --root that does not exist is reported, not a traceback"
+else bad "a --root that does not exist (rc=$rc)"; printf '%s\n' "$out" | tail -5 | sed 's/^/        /'; fi
+
+# A caller that named a --project chose it. Sending them to a different
+# project below the root is sending them away from the one they meant to
+# repair, so the search runs only when this run is checking the root itself.
+psel="$work/proj-selected"; rm -rf "$psel"; cp -R "$sub" "$psel"; mkdir -p "$psel/svc"
+out="$(python3 "$checker" --root "$psel" --project svc --no-network 2>&1)"
+if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && grep -q "FAIL  uv.lock missing: CI runs" <<<"$out" \
+&& ! grep -q -- "--project=" <<<"$out"
+then ok "a --project the caller named is not redirected to another project below the root"
+else bad "a named --project was redirected"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+# ...and the same tree checked at the root still gets the hint, so the guard
+# narrows the search rather than switching it off.
+out="$(python3 "$checker" --root "$psel" --no-network 2>&1)"
+if grep -q "run again with --project=app" <<<"$out"
+then ok "the same tree checked at the root still names app/"
+else bad "the root run lost its hint"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
+
+# Once a project has been found below the root, both items speak about it: a
+# project directory with no uv.lock is named as the one that needs one.
+pnl="$work/proj-nolock"; rm -rf "$pnl"; cp -R "$sub" "$pnl"; rm "$pnl/app/uv.lock"
+out="$(python3 "$checker" --root "$pnl" --no-network 2>&1)"
+if grep -q "FAIL  pyproject.toml missing here; found app/pyproject.toml" <<<"$out" \
+&& grep -q "FAIL  app/uv.lock missing: CI runs" <<<"$out" && ! grep -q "found app/uv.lock" <<<"$out"
+then ok "no uv.lock in the named directory: that directory is named as the one needing it"
+else bad "the uv.lock line without a lockfile below"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
+
+# A uv.lock at a root that holds no pyproject.toml belongs to no project this
+# run checks. Passing the item for it sent the reader to a project where
+# `--project=` reports the lockfile missing straight away.
+pstray="$work/proj-stray-lock"; rm -rf "$pstray"; cp -R "$sub" "$pstray"; rm "$pstray/app/uv.lock"; : > "$pstray/uv.lock"
+out="$(python3 "$checker" --root "$pstray" --no-network 2>&1)"
+if grep -q "FAIL  app/uv.lock missing: CI runs" <<<"$out" && ! grep -q "PASS  uv.lock committed" <<<"$out"
+then ok "a stray uv.lock at a root with no project does not pass the item for the project found below"
+else bad "a stray uv.lock at the root"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  uv.lock' | sed 's/^/        /'; fi
+# ...and it does not suppress the pointer when the project has one either.
+pstray2="$work/proj-stray-lock-both"; rm -rf "$pstray2"; cp -R "$sub" "$pstray2"; : > "$pstray2/uv.lock"
+out="$(python3 "$checker" --root "$pstray2" --no-network 2>&1)"
+if grep -q "FAIL  uv.lock missing here; found app/uv.lock: run again with --project=app" <<<"$out" \
+&& ! grep -q "PASS  uv.lock committed" <<<"$out"
+then ok "a stray uv.lock at the root does not pass the item when the project below has one too"
+else bad "a stray uv.lock beside a project lockfile"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  uv.lock' | sed 's/^/        /'; fi
+
+# A name argparse would read as the next flag rather than as this one's value.
+# The hint is only worth printing if running it as printed works.
+pdash="$work/proj-dash"; rm -rf "$pdash"; cp -R "$sub" "$pdash"; mv "$pdash/app" "$pdash/-app"
+out="$(python3 "$checker" --root "$pdash" --no-network 2>&1)"
+arg="$(sed -nE 's/.*run again with (--project=.*)$/\1/p' <<<"$out" | head -1)"
+if [ "$arg" = "--project=-app" ] && python3 "$checker" --root "$pdash" "$arg" --no-network 2>&1 | grep -q "PASS  pyproject.toml present"
+then ok "a directory name opening with - is printed as --project=<name> and runs as printed"
+else bad "a directory name opening with - (printed '$arg')"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
+
+# The name is printed into a result line the skill hands on whole, so a
+# newline in it splits that line and the rest reads as further results.
+pctl="$work/proj-control"; rm -rf "$pctl"; cp -R "$sub" "$pctl"
+mv "$pctl/app" "$pctl/$(printf 'app\n  PASS  forged floor item')"
+out="$(python3 "$checker" --root "$pctl" --no-network 2>&1)"
+if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q "PASS  forged floor item" <<<"$out"
+then ok "a directory name holding a newline is not offered, so no line is forged into the report"
+else bad "a control character in a candidate name"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  forged' | sed 's/^/        /'; fi
+
+# is_dir() follows symlinks, so without a guard a link out of the checkout is
+# offered and the reader is sent to read a tree this repository does not hold.
+psym="$work/proj-symlink"; rm -rf "$psym"; cp -R "$sub" "$psym"; mkdir -p "$work/proj-outside"
+mv "$psym/app" "$work/proj-outside/app"; ln -sfn "$work/proj-outside/app" "$psym/app"
+out="$(python3 "$checker" --root "$psym" --no-network 2>&1)"
+if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q -- "--project" <<<"$out"
+then ok "a symlinked directory is not offered as this repository's project"
+else bad "a symlinked candidate"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+
+# The hint is pasted into a shell, and a directory name is the repository's
+# to choose (the dotenv repair has the same guard).
+pq="$work/proj-quote"; rm -rf "$pq"; cp -R "$sub" "$pq"; mv "$pq/app" "$pq/a\$(touch PWN)"
+out="$(cd "$pq" && python3 "$checker" --root . --no-network 2>&1)"
+if grep -q -- "run again with --project='a\$(touch PWN)'" <<<"$out" && [ ! -e "$pq/PWN" ]
+then ok "a directory name with shell syntax in it is quoted in the hint"
+else bad "the hint did not quote the directory"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
+
+# A pyproject.toml the search must not offer: it is not a project of this
+# repository, and running with --project .venv would be worse than no hint.
+for d in .venv node_modules .tools; do
+  phid="$work/proj-hidden"; rm -rf "$phid"; cp -R "$sub" "$phid"; mv "$phid/app" "$phid/$d"
+  out="$(python3 "$checker" --root "$phid" --no-network 2>&1)"
+  if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q -- "--project" <<<"$out"
+  then ok "a pyproject.toml inside $d is not offered"
+  else bad "$d was offered as a project"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
+done
+
 # The ruleset the door applies, per archetype: ruleset.json as it is for cli and
 # library, plus the `image` check for a service archetype, from the Actions app
 # and nothing else; and the checker expects the same name of the wall (#127).
