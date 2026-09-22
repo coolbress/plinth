@@ -543,14 +543,23 @@ if grep -q "run again with --project=app" <<<"$out"
 then ok "the same tree checked at the root still names app/"
 else bad "the root run lost its hint"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
 
-# The lockfile hint is bound to the lockfile actually being there: a project
-# directory with no uv.lock keeps the line that says to create one.
+# Once a project has been found below the root, both items speak about it: a
+# project directory with no uv.lock is named as the one that needs one.
 pnl="$work/proj-nolock"; rm -rf "$pnl"; cp -R "$sub" "$pnl"; rm "$pnl/app/uv.lock"
 out="$(python3 "$checker" --root "$pnl" --no-network 2>&1)"
 if grep -q "FAIL  pyproject.toml missing here; found app/pyproject.toml" <<<"$out" \
-&& grep -q "FAIL  uv.lock missing: CI runs" <<<"$out" && ! grep -q "found app/uv.lock" <<<"$out"
-then ok "no uv.lock in the named directory: that line still says to create one"
+&& grep -q "FAIL  app/uv.lock missing: CI runs" <<<"$out" && ! grep -q "found app/uv.lock" <<<"$out"
+then ok "no uv.lock in the named directory: that directory is named as the one needing it"
 else bad "the uv.lock line without a lockfile below"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
+
+# A uv.lock at a root that holds no pyproject.toml belongs to no project this
+# run checks. Passing the item for it sent the reader to a project where
+# `--project=` reports the lockfile missing straight away.
+pstray="$work/proj-stray-lock"; rm -rf "$pstray"; cp -R "$sub" "$pstray"; rm "$pstray/app/uv.lock"; : > "$pstray/uv.lock"
+out="$(python3 "$checker" --root "$pstray" --no-network 2>&1)"
+if grep -q "FAIL  app/uv.lock missing: CI runs" <<<"$out" && ! grep -q "PASS  uv.lock committed" <<<"$out"
+then ok "a stray uv.lock at a root with no project does not pass the item for the project found below"
+else bad "a stray uv.lock at the root"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  uv.lock' | sed 's/^/        /'; fi
 
 # A name argparse would read as the next flag rather than as this one's value.
 # The hint is only worth printing if running it as printed works.

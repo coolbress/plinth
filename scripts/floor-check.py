@@ -762,14 +762,19 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
         if below:
             result("INFO", "  pyproject.toml below the root in " + ", ".join(f"{d}/" for d in below)
                            + ": run again with --project=<one of them>")
-    # The lockfile is the same repository's, one directory down with the
-    # project: the ticket's two FAILs are both for files that exist, so the
-    # second one says so too rather than reading as a lockfile to generate.
-    lock_here = (project / "uv.lock").is_file()
-    if one and not lock_here and (root / one / "uv.lock").is_file():
-        result("FAIL", f"uv.lock missing here; found {one}/uv.lock: run again with {flag}")
+    # Once a project has been found below the root, both items speak about it.
+    # The root holds no pyproject.toml, so a uv.lock sitting there is not that
+    # project's lockfile: reporting it as one passed an item for a file that
+    # belongs to nothing this run checks, while sending the reader to a project
+    # where `--project=` reports it missing straight away (#238 review).
+    if one:
+        if (root / one / "uv.lock").is_file():
+            result("FAIL", f"uv.lock missing here; found {one}/uv.lock: run again with {flag}")
+        else:
+            result("FAIL", f"{one}/uv.lock missing: CI runs `uv sync --locked`")
     else:
-        ok(lock_here, "uv.lock committed", "uv.lock missing: CI runs `uv sync --locked`")
+        ok((project / "uv.lock").is_file(), "uv.lock committed",
+           "uv.lock missing: CI runs `uv sync --locked`")
 
     if archetype is None:
         result("SKIP", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")

@@ -32,8 +32,11 @@ pull requests and have no tag.
   missing` for files that exist, and nothing said that `--project <dir>` is
   the answer. Now, when a run is checking the root itself and exactly one
   directory directly below it holds a `pyproject.toml`, both lines name that
-  directory and the flag to run again with, and the `uv.lock` line does so
-  only when that directory really holds one. A run that was given a
+  directory and the flag to run again with. Both items then speak about that
+  directory: the `uv.lock` line names it and the flag when it holds a
+  lockfile, and names `<dir>/uv.lock` as the missing one when it does not —
+  a `uv.lock` lying at a root that holds no `pyproject.toml` is nobody's
+  lockfile and no longer passes the item. A run that was given a
   `--project` is left alone: the caller chose that project, so its missing
   files read as files to add there rather than as a reason to go and check a
   different one. A candidate is skipped when its name opens with a dot, when it is one
