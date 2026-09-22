@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `new-project` renders plinth-template v1.4.2 instead of v1.4.1, so a new
+  repository says how to branch and what to do about a checkout another
+  session may already be using. The `AGENTS.md` its agents load every turn
+  opens with the rule to inspect the checkout before editing (`git fetch
+  origin`, then `git status -sb`, `git worktree list`,
+  `git log --oneline origin/main..HEAD`) and, unless the checkout is yours
+  alone, to leave it untouched and work in a uniquely named worktree branched
+  from an explicitly verified base. Every branch instruction names that base,
+  and the worktree the rule names is the one `.gitignore` now ignores,
+  `.claude/worktrees/`. `git switch -c <type>/<slug>` alone starts the branch
+  at whatever `HEAD` is, so in a checkout another task left on a scratch
+  commit it carries that commit into the new branch, which is the incident
+  behind this change; naming the base does not stop uncommitted changes riding
+  along, so the rule and the base are two guards and not one said twice.
+  Neither is a technical block: no hook, no deny rule, nothing that refuses a
+  command. plinth's own `AGENTS.md`, `CONTRIBUTING.md` and `.gitignore` carry
+  the same three (#218).
+
 ### Fixed
 
 - With the `summons-token` secret, a run of `third-party / review` whose head
