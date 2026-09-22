@@ -98,8 +98,7 @@ established (no such `uses:` line, or two that disagree) the tags and file
 list still print, with no command. A repository the door did not make, or
 whose recorded tag is not an exact release tag, is a SKIP, not a PASS. It
 never runs `copier update`; running it, resolving conflicts and opening a
-pull request is a later skill (stage 2 of #219), named here only once it
-exists.
+pull request is a later skill (#232), named here only once it is built.
 
 A repository made before this item shipped hears about it two ways: an agent
 running an updated plugin's `/plinth:floor-check` by hand, or its own

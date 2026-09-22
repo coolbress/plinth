@@ -22,7 +22,7 @@ pull requests and have no tag.
   falling behind. A repository the door did not make, or whose recorded tag
   is not an exact release tag, is not verified rather than passed. It reports
   only; running the update, resolving conflicts and opening a pull request is
-  a later skill (#219 stage 1; stage 2 to follow).
+  a later skill (#219; stage 2 is #232).
 
 ### Changed
 
