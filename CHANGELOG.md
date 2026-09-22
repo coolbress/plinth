@@ -26,6 +26,22 @@ pull requests and have no tag.
 
 ### Changed
 
+- `floor-check` names `--project` when a repository's project is one
+  directory down. Run at the root of such a repository — a monorepo, a
+  `backend/` folder — it reported `pyproject.toml missing` and `uv.lock
+  missing` for files that exist, and nothing said that `--project <dir>` is
+  the answer. Now, when exactly one directory directly below the root holds a
+  `pyproject.toml`, both lines name that directory and the flag to run again
+  with, and the `uv.lock` line does so only when that directory really holds
+  one. A candidate is skipped when its name opens with a dot, when it is one
+  of the directories this checker already never walks into (`node_modules`,
+  `dist`, `.venv`, `.git`, `.plinth-ci`, `.smoke`, `.scratch`), or when it is
+  a symlink — anything else one level down is offered, `build/` and `vendor/`
+  included. With no candidate the lines read as before; with several they read
+  as before plus a list of them. It never chooses a project or re-runs itself:
+  which one is meant is the reader's to say. Exit codes, counts and every
+  other item are unchanged (#221).
+
 - `new-project` renders plinth-template v1.5.0. A repository it creates now
   records `plinth_sha` — the commit of plinth whose reusable workflows its CI
   calls — in `.copier-answers.yml`, where it was computed on every render
