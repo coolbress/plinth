@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.20] - 2026-09-23
+
+This release is about `floor-check` saying two things it could not say before.
+It now reports when a repository has fallen behind the template tag plinth is
+tested with, naming both tags, the template's own files that changed between
+them, and a `copier update` line carrying the plinth commit that repository's
+own CI calls today — always a warning, never a failure, and it never runs the
+update itself. And run at the root of a repository whose Python project is one
+directory down, it no longer reports two files missing that are there: it names
+the directory and the `--project` flag to run again with, for whichever of
+`pyproject.toml` and `uv.lock` it finds below. It still never chooses a project
+for you. Underneath both, `new-project` renders plinth-template v1.5.0, where
+the plinth commit a repository pins is a recorded answer rather than one
+computed on every render, so `copier update` can keep the pin a repository
+already has instead of re-rendering it from the template's default — which used
+to hand a conflict to every repository whose Dependabot had raised it, and to
+move the pin back without a word on every repository whose Dependabot had not.
+
+tested with plinth-template v1.5.0
+
 ### Added
 
 - `floor-check` reports when a repository is behind the template tag plinth
@@ -827,7 +847,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.19...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.20...HEAD
+[0.5.20]: https://github.com/coolbress/plinth/releases/tag/v0.5.20
 [0.5.19]: https://github.com/coolbress/plinth/releases/tag/v0.5.19
 [0.5.18]: https://github.com/coolbress/plinth/releases/tag/v0.5.18
 [0.5.17]: https://github.com/coolbress/plinth/releases/tag/v0.5.17
