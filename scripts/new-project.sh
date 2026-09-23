@@ -142,6 +142,7 @@ if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
   for s in repo workflow; do has_scope "$s" || missing="$missing$s,"; done
   [ -z "$missing" ] || stop "gh's token lacks the scope(s) ${missing%,} (it has: ${scopes:-none})" \
     ${env_first:+"  $env_first"} \
+    ${env_first:+"  then, if gh holds no login of its own: gh auth login -s repo,workflow,delete_repo instead of the refresh below"} \
     "  fix: gh auth refresh -h github.com -s repo,workflow,delete_repo   (delete_repo is optional: it lets a failed run delete what it created)" \
     "  it runs here, in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  a personal access token instead: https://github.com/settings/tokens with the same scopes"

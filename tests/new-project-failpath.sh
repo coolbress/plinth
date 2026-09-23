@@ -258,6 +258,12 @@ E="MOCK_SCOPES=repo GITHUB_TOKEN=x" run scope-missing-env err no no "unset GITHU
 if grep -q "unset GH" "$work/home-fine-grained/out" "$work/home-scope-missing/out"
 then bad fine-grained "the unset line appears with no token in the environment"
 else ok fine-grained "no unset line without an environment token"; fi
+# With the environment token unset, gh may hold no login at all, and
+# `gh auth refresh` works only on a stored one: the line names the login (#246).
+if grep -qF "gh auth login -s repo,workflow,delete_repo" "$work/home-scope-missing-env/out" \
+   && ! grep -qF "gh auth login -s" "$work/home-scope-missing/out"
+then ok scope-missing-env "names gh auth login for when no login is stored, only with an environment token"
+else bad scope-missing-env "the scope stop does not name gh auth login for an environment-token-only user"; fi
 # The fix line is copied out of wrapped chat output. One ~250-character line
 # with two absolute plugin paths arrived as three commands, three times (#125):
 # so it is printed as three short lines, a directory assignment, a call
