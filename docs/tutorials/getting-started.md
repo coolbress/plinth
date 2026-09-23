@@ -67,7 +67,9 @@ If a check fails it stops there and prints the fix. Three you may meet:
   `gh auth refresh -h github.com -s repo,workflow,delete_repo`. Like the
   login, it runs from inside Claude Code, prints a one-time code and a URL,
   and a browser finishes it. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if
-  either is set: `gh` uses them before any login it stores.
+  either is set: `gh` uses them before any login it stores. If that leaves
+  `gh` with no login, the refresh has nothing to refresh: run
+  `gh auth login -s repo,workflow,delete_repo` instead.
 - `gh is using a fine-grained token`: either of two fixes. The browser login
   is shorter, but its token is scoped `repo` across the account rather than
   to selected repositories; the admin-token path keeps the fine-grained
