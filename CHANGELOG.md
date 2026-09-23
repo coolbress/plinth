@@ -11,6 +11,28 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `AGENTS.md` says that closing an issue writes its ending into the body —
+  `## Outcome`, naming which of completed, cancelled, superseded or moved to a
+  follow-up it is. The rule was already in `docs/agents/issue-tracker.md` and
+  in all three issue forms, but both are read when an issue is *opened*, and
+  `Closes #N` closes one through GitHub without asking anyone, so nothing
+  raised it at the moment it applies. Measured across every closed issue in
+  this tracker on 2026-09-23: 63 of 86 had an ending, 23 did not. Research
+  records are not in that count — their ending is `## Decision`, and 17 of 18
+  have one. Nothing about the product changes.
+
+  `docs/agents/issue-tracker.md`'s wayfinder **Resolve** step asked for
+  `## Findings`, `## Decision` *and* `## Outcome`, which contradicts the shape
+  the same file's table gives a record two sections earlier. It now matches the
+  table. No record has ever carried both: all 17 closed research and grilling
+  records use `## Question` / `## Findings` / `## Decision`, none has an
+  `## Outcome`, and the only two issues of that family that do are a map and a
+  spec. Resolve serves four child kinds, so it now branches: a `research`,
+  `prototype` or `grilling` child ends in `## Decision`, a `task` child in
+  `## Outcome` like any other task.
+
 ### Fixed
 
 - `/plinth:floor-check` checks the wall again when the agent's shell is zsh.
