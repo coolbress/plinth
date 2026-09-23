@@ -46,6 +46,24 @@ tested with plinth-template v1.5.0
 
 ### Fixed
 
+- The getting-started tutorial's login step no longer leads to a stop. It
+  said `gh auth login`, whose default scopes lack `workflow`, so a reader who
+  followed it met the scope stop on the first run. It now reads
+  `gh auth login -s repo,workflow,delete_repo`, says what `delete_repo` buys,
+  and says the command runs inside a Claude Code session: it prints a
+  one-time code and a URL, and a browser finishes it. The scope stop's
+  `gh auth refresh` fix says the same (#228).
+- The generator's fine-grained-token stop names two fixes instead of one:
+  the browser login above, after which the generator runs wherever it is
+  started, or the admin-token path in a separate terminal. The browser login
+  is shorter, but its token is scoped `repo` across the account rather than
+  to selected repositories; the admin-token path keeps the fine-grained
+  token's narrow reach. `README.md` and the tutorial say the same (#228).
+- With `GH_TOKEN` or `GITHUB_TOKEN` set, both stops first say to unset it,
+  because `gh` uses it before any login it stores; and the scope stop adds
+  that with no login of `gh`'s own left, `gh auth login` replaces the
+  refresh (#228, #246).
+
 - `/plinth:floor-check` checks the wall again when the agent's shell is zsh.
   The skill's command passed the repository as `${repo:+--repo "$repo"}`,
   which zsh does not split into words, so the checker got the single argument
