@@ -29,7 +29,9 @@ pull requests and have no tag.
   table. No record has ever carried both: all 17 closed research and grilling
   records use `## Question` / `## Findings` / `## Decision`, none has an
   `## Outcome`, and the only two issues of that family that do are a map and a
-  spec.
+  spec. Resolve serves four child kinds, so it now branches: a `research`,
+  `prototype` or `grilling` child ends in `## Decision`, a `task` child in
+  `## Outcome` like any other task.
 
 ### Fixed
 
