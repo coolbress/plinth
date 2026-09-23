@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:floor-check` writes the fix line for a FAIL or WARN from the `INFO`
+  lines indented under it. The checker puts a finding's repair there — the
+  `--project` guidance when several directories below the root hold a
+  `pyproject.toml`, `git rm --cached`, the action-pin lookups, `copier update`,
+  `gh label create`, the ruleset and default-branch fixes — but the skill told
+  the agent to leave every `INFO` alone, so its fix line could miss the one
+  actionable text. An `INFO` at the normal indent is still a fact to leave
+  where it is.
+
 ## [0.5.21] - 2026-09-23
 
 The generator's own setup step led every new reader to a stop: the
