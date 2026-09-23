@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.21] - 2026-09-23
+
+The generator's own setup step led every new reader to a stop: the
+tutorial's `gh auth login` gives default scopes, which lack `workflow`. The
+login step now carries the scopes and says it runs inside a Claude Code
+session, and the fine-grained stop names the browser login beside the
+admin-token path. Also in this release: `/plinth:floor-check` checks the wall
+again under zsh.
+
+tested with plinth-template v1.5.0
+
 ### Changed
 
 - `AGENTS.md` says that closing an issue writes its ending into the body —
@@ -34,6 +45,24 @@ pull requests and have no tag.
   `## Outcome` like any other task.
 
 ### Fixed
+
+- The getting-started tutorial's login step no longer leads to a stop. It
+  said `gh auth login`, whose default scopes lack `workflow`, so a reader who
+  followed it met the scope stop on the first run. It now reads
+  `gh auth login -s repo,workflow,delete_repo`, says what `delete_repo` buys,
+  and says the command runs inside a Claude Code session: it prints a
+  one-time code and a URL, and a browser finishes it. The scope stop's
+  `gh auth refresh` fix says the same (#228).
+- The generator's fine-grained-token stop names two fixes instead of one:
+  the browser login above, after which the generator runs wherever it is
+  started, or the admin-token path in a separate terminal. The browser login
+  is shorter, but its token is scoped `repo` across the account rather than
+  to selected repositories; the admin-token path keeps the fine-grained
+  token's narrow reach. `README.md` and the tutorial say the same (#228).
+- With `GH_TOKEN` or `GITHUB_TOKEN` set, both stops first say to unset it,
+  because `gh` uses it before any login it stores; and the scope stop adds
+  that with no login of `gh`'s own left, `gh auth login` replaces the
+  refresh (#228, #246).
 
 - `/plinth:floor-check` checks the wall again when the agent's shell is zsh.
   The skill's command passed the repository as `${repo:+--repo "$repo"}`,
@@ -879,7 +908,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.20...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.21...HEAD
+[0.5.21]: https://github.com/coolbress/plinth/releases/tag/v0.5.21
 [0.5.20]: https://github.com/coolbress/plinth/releases/tag/v0.5.20
 [0.5.19]: https://github.com/coolbress/plinth/releases/tag/v0.5.19
 [0.5.18]: https://github.com/coolbress/plinth/releases/tag/v0.5.18
