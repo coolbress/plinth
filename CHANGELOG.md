@@ -23,6 +23,14 @@ pull requests and have no tag.
   records are not in that count — their ending is `## Decision`, and 17 of 18
   have one. Nothing about the product changes.
 
+  `docs/agents/issue-tracker.md`'s wayfinder **Resolve** step asked for
+  `## Findings`, `## Decision` *and* `## Outcome`, which contradicts the shape
+  the same file's table gives a record two sections earlier. It now matches the
+  table. No record has ever carried both: all 17 closed research and grilling
+  records use `## Question` / `## Findings` / `## Decision`, none has an
+  `## Outcome`, and the only two issues of that family that do are a map and a
+  spec.
+
 ### Fixed
 
 - `/plinth:floor-check` checks the wall again when the agent's shell is zsh.
