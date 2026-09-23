@@ -1110,20 +1110,35 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
 
 def check_sandbox() -> None:
     """The sandbox is a setting of the machine, not of the repository, so CI
-    never asks for it; the skill does. Off is a WARN, not a FAIL: the floor
-    of the repository is intact either way."""
+    never asks for it; the skill does. Only `sandbox.enabled: true` is a
+    signal: `/sandbox` on Claude Code 2.1.278 writes that key nowhere read
+    here (#222), so its absence says nothing about on or off and is not
+    verified rather than a WARN. What the lines under it say was measured on
+    macOS only; they say so."""
     conf = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
-    on = False
+    on = None
     for name in ("settings.json", "settings.local.json"):
         try:
-            on = on or json.loads(read(conf / name)).get("sandbox", {}).get("enabled") is True
+            if json.loads(read(conf / name)).get("sandbox", {}).get("enabled") is True:
+                on = on or conf / name
         except (OSError, ValueError, AttributeError):
             pass
-    result("PASS" if on else "WARN",
-           f"sandbox on in {conf}" if on else
-           f"sandbox off in {conf}/settings.json: run /sandbox once in Claude Code "
-           "(macOS as is; Linux and WSL2 need bubblewrap and socat; native Windows is not supported); "
-           "without it a `bash -c`, a `$(head -1 .env)`, a `grep -r` that names no file, or a script that opens `.env` itself still reads it")
+    # A fact either way, never a PASS: on is not "good" here, since on macOS it
+    # stops gh and the door, so the measured lines follow both.
+    if on:
+        result("INFO", f"sandbox.enabled is true in {on}")
+    else:
+        result("SKIP", f"sandbox not verified: sandbox.enabled is not true in {conf}/settings.json or settings.local.json, "
+               "and /sandbox (Claude Code 2.1.278) does not write it there, so this cannot tell on from off")
+    result("INFO", "  off: a `bash -c`, a `$(head -1 .env)`, a `grep -r` that names no file, or a script that opens "
+           "`.env` itself still reads it; the sandbox is what closes those")
+    result("INFO", "  on, macOS (measured on Claude Code 2.1.278): `gh` stops working, because the sandbox enforces the floor's "
+           "deny `Read(~/.config/gh/**)` against `gh` itself; its fix, mask mode, is ignored in a repository's "
+           ".claude/settings.json and on macOS blocks like deny even from user settings, so no project setting fixes it: "
+           "anthropics/claude-code#95135 and anthropics/claude-code#67105 track it upstream")
+    result("INFO", "  on, macOS: /plinth:new-project stops at `uvx --from copier copier`: ~/.cache/uv is not writable, "
+           "and with UV_CACHE_DIR moved to a writable path uv panics reading the system proxy configuration")
+    result("INFO", "  Linux and WSL2 (bubblewrap and socat) and native Windows (no sandbox): not measured")
 
 
 # ── main ──────────────────────────────────────────────────────────────────
@@ -1138,7 +1153,7 @@ def main() -> int:
     ap.add_argument("--expect-checks", help="required check names, comma separated; overrides --ruleset")
     ap.add_argument("--archetype", help="override the archetype in .copier-answers.yml")
     ap.add_argument("--no-network", action="store_true", help="skip everything that needs api.github.com")
-    ap.add_argument("--sandbox", action="store_true", help="also report whether Claude Code's sandbox is on for this machine")
+    ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")

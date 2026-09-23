@@ -22,6 +22,19 @@ pull requests and have no tag.
   the agent to leave every `INFO` alone, so its fix line could miss the one
   actionable text. An `INFO` at the normal indent is still a fact to leave
   where it is.
+- `floor-check --sandbox` no longer reports the sandbox off and tells you to
+  run `/sandbox`. It read `sandbox.enabled`, which `/sandbox` on Claude Code
+  2.1.278 does not write, so an unset key is now `SKIP  sandbox not verified`,
+  and `sandbox.enabled: true` is an `INFO`, no longer a PASS. The lines under
+  either say what was measured on macOS (#222): off, a `bash -c` or a script can still
+  read `.env`; on, `gh` stops working because the sandbox enforces the floor's
+  `Read(~/.config/gh/**)` deny against it, which no repository setting can fix
+  (anthropics/claude-code#95135, #67105), and `/plinth:new-project` stops at
+  its `uvx` copier step. Linux and WSL2 are marked not measured. The
+  floor-check skill and the getting-started tutorial say the same, and
+  `/plinth:new-project` drops its `sandbox is off; run /sandbox` warning,
+  which read the same key and, on macOS, pointed at a setting that stops the
+  script's own copier step.
 
 ## [0.5.21] - 2026-09-23
 

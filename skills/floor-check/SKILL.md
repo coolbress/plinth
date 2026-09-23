@@ -1,6 +1,6 @@
 ---
 name: floor-check
-description: Read-only check of an existing repository against the plinth floor (the document set, agent settings, lockfile, container image, the live ruleset) plus the sandbox state of this machine. Reports what is missing as a list with one fix per item and never changes anything. Use when the user asks whether a repository is set up, protected, "has the floor", or what /plinth:new-project would have given it.
+description: Read-only check of an existing repository against the plinth floor (the document set, agent settings, lockfile, container image, the live ruleset) plus what this machine's Claude Code settings say about the sandbox. Reports what is missing as a list with one fix per item and never changes anything. Use when the user asks whether a repository is set up, protected, "has the floor", or what /plinth:new-project would have given it.
 argument-hint: "[owner/name]"
 disallowed-tools: Edit, Write, NotebookEdit
 ---
@@ -27,7 +27,20 @@ Without a repository name the checker says `no --repo: wall not checked` and
 checks only the files. It reads the GitHub API through `gh` with the user's
 own login, so bypass actors are visible; without a login they show as SKIP.
 `--sandbox` adds the one item that belongs to this machine, not the
-repository: whether Claude Code's sandbox is on. `--ruleset` expects the wall
+repository: Claude Code's sandbox. Only `sandbox.enabled: true` in the
+user's settings is read, and it is an `INFO`, not a PASS. `/sandbox` on
+Claude Code 2.1.278 does not write that key, so without it the item is not
+verified (SKIP), not reported off. Either way the `INFO` lines under it say
+what the sandbox closes and what it breaks, measured on macOS only: `gh`,
+through the floor's own `Read(~/.config/gh/**)` deny, with no fix a
+repository's settings can make (anthropics/claude-code#95135,
+anthropics/claude-code#67105), and `/plinth:new-project`'s copier step.
+Relay those lines as they are and do not tell the user to turn the sandbox
+on or off; on Linux and WSL2 nothing was measured. This SKIP is the one the
+not-verified line below names without a way to verify it: nothing plinth
+reads can.
+
+`--ruleset` expects the wall
 `/plinth:new-project` raises, the CodeQL alert thresholds of its
 `code_scanning` rule included; for a repository with a different wall (plinth
 itself, for one) pass `--expect-checks "<name>, <name>"` as well. Add
@@ -52,8 +65,6 @@ as is.
   Create CHANGELOG.md in the Keep a Changelog format with an Unreleased section.
 - FAIL  main: required checks dropped: ['ci / secrets']
   ${CLAUDE_PLUGIN_ROOT}/scripts/with-admin-token.sh ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-ruleset.sh owner/name 'ci / secrets:15368'
-- WARN  sandbox off in ~/.claude/settings.json: ...
-  Run /sandbox once in Claude Code.
 ```
 
 Ruleset fixes need repository administration, so they go through

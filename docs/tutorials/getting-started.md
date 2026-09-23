@@ -21,8 +21,11 @@ and merge the pull request the generator opens for you.
   yet: the wall requires CodeQL, which needs a GitHub Code Security license there.
 - The generated project is **Python (uv)**. Other languages are not produced
   by this version.
-- Optional but recommended: run `/sandbox` once in Claude Code. The generator
-  warns if it is off.
+- Claude Code's sandbox (`/sandbox`) is optional. On macOS, measured on Claude
+  Code 2.1.278, it stops `gh` (the floor's `Read(~/.config/gh/**)` deny is
+  enforced against `gh` itself; anthropics/claude-code#95135, #67105) and the
+  generator's `uvx --from copier copier` step, so this tutorial does not
+  complete with it on there. Linux and WSL2 were not measured.
 
 ## Install plinth
 
