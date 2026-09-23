@@ -61,7 +61,10 @@ Ruleset fixes need repository administration, so they go through
 that line in a separate terminal window, not with `!`: `!` runs it without a
 terminal, so the token prompt gets nothing. Never run it.
 
-INFO lines are facts, not defects; leave them where they are. SKIP lines are
+INFO lines are facts, not defects; leave them where they are. INFO lines
+indented under a FAIL or WARN are the exception: they belong to that finding
+and carry its repair or what the repair needs (a command, a URL, the change it
+brings), so write the fix line under that item from them. SKIP lines are
 what the run could not check (offline, no `--repo`, an API error, a token
 that does not see the item); the summary counts them as `N not verified`.
 After the FAIL and WARN list, name what was not verified in one line, and
