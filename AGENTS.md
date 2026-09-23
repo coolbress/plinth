@@ -48,7 +48,12 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   (what a record has to carry). Read the templates that actually apply first,
   the owner's `.github` defaults included; `gh --body` bypasses them. In a
   consumer repository their conventions win, and plinth's are the default only
-  where they have none.
+  where they have none. Closing an issue writes its ending into the body:
+  `## Outcome`, saying which of completed, cancelled, superseded or moved to a
+  follow-up it is, and what was verified (a research record's `## Decision` is
+  that ending). `Closes #N` closes it through GitHub without asking anyone, so
+  whoever merges writes it; measured 2026-09-23, 23 of 86 closed issues had no
+  ending.
 - Changing behaviour: verify the boundaries and partial failures of the inputs
   and states it touches, record which paths you exercised and which you did
   not, and do not widen a few cases into a guarantee about all of them.

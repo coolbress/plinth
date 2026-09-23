@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `AGENTS.md` says that closing an issue writes its ending into the body —
+  `## Outcome`, naming which of completed, cancelled, superseded or moved to a
+  follow-up it is. The rule was already in `docs/agents/issue-tracker.md` and
+  in all three issue forms, but both are read when an issue is *opened*, and
+  `Closes #N` closes one through GitHub without asking anyone, so nothing
+  raised it at the moment it applies. Measured across every closed issue in
+  this tracker on 2026-09-23: 63 of 86 had an ending, 23 did not. Research
+  records are not in that count — their ending is `## Decision`, and 17 of 18
+  have one. Nothing about the product changes.
+
 ### Fixed
 
 - `/plinth:floor-check` checks the wall again when the agent's shell is zsh.
