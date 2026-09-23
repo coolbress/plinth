@@ -250,6 +250,14 @@ E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"         
 if grep -qF "gh auth login -s repo,workflow,delete_repo" "$work/home-fine-grained/out"
 then ok fine-grained "the stop also names the browser-login fix"
 else bad fine-grained "the stop names only the admin-token fix"; fi
+# gh reads GH_TOKEN and GITHUB_TOKEN before the login it stores, so with one
+# of them set a login or refresh changes nothing the door sees: the stop says
+# to unset it first (#245 review).
+E="MOCK_FINE=1 GH_TOKEN=x" run fine-grained-env err no no "unset GH_TOKEN"            -- probe
+E="MOCK_SCOPES=repo GITHUB_TOKEN=x" run scope-missing-env err no no "unset GITHUB_TOKEN" -- probe
+if grep -q "unset GH" "$work/home-fine-grained/out" "$work/home-scope-missing/out"
+then bad fine-grained "the unset line appears with no token in the environment"
+else ok fine-grained "no unset line without an environment token"; fi
 # The fix line is copied out of wrapped chat output. One ~250-character line
 # with two absolute plugin paths arrived as three commands, three times (#125):
 # so it is printed as three short lines, a directory assignment, a call

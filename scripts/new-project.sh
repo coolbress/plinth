@@ -128,11 +128,20 @@ dir="${dir:-$HOME/$name}"
 headers="$(gh api -i user 2>&1 | tr -d '\r' | sed '/^$/q')" || stop "cannot read api.github.com/user as $login:" "$headers"
 scopes="$(awk 'tolower($1)=="x-oauth-scopes:"{sub(/^[^:]*: ?/,""); print; exit}' <<<"$headers")"
 has_scope() { grep -qE "(^|,) *$1 *(,|$)" <<<"$scopes"; }
+# gh reads these before the login it stores: with one set, a login or refresh
+# changes nothing this script sees, so the fix says to unset it first.
+env_first=""
+if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
+  env_vars=""
+  for v in GH_TOKEN GITHUB_TOKEN; do [ -z "${!v:-}" ] || env_vars="$env_vars $v"; done
+  [ -z "$env_vars" ] || env_first="first: unset$env_vars where the door runs (Claude Code: in the shell that started it, then restart it); gh uses it before any login"
+fi
 rollback="on"
 if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
   missing=""
   for s in repo workflow; do has_scope "$s" || missing="$missing$s,"; done
   [ -z "$missing" ] || stop "gh's token lacks the scope(s) ${missing%,} (it has: ${scopes:-none})" \
+    ${env_first:+"  $env_first"} \
     "  fix: gh auth refresh -h github.com -s repo,workflow,delete_repo   (delete_repo is optional: it lets a failed run delete what it created)" \
     "  it runs here, in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  a personal access token instead: https://github.com/settings/tokens with the same scopes"
@@ -144,6 +153,7 @@ else
     "  fix, either of two. The browser login is shorter, but its token is scoped repo across the account rather than" \
     "  to selected repositories; the admin-token path keeps the fine-grained token's narrow reach." \
     "  1. log gh in through a browser with the scopes the door reads, then run the door again where you ran it:" \
+    ${env_first:+"     $env_first"} \
     "       gh auth login -s repo,workflow,delete_repo" \
     "     it runs in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  2. run the door with an admin token, typed at a prompt (never on the command line)," \
