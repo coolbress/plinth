@@ -66,14 +66,16 @@ If a check fails it stops there and prints the fix. Three you may meet:
 - `gh's token lacks the scope(s)`: run the printed
   `gh auth refresh -h github.com -s repo,workflow,delete_repo`. Like the
   login, it runs from inside Claude Code, prints a one-time code and a URL,
-  and a browser finishes it.
+  and a browser finishes it. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if
+  either is set: `gh` uses them before any login it stores.
 - `gh is using a fine-grained token`: either of two fixes. The browser login
   is shorter, but its token is scoped `repo` across the account rather than
   to selected repositories; the admin-token path keeps the fine-grained
   token's narrow reach.
   1. `gh auth login -s repo,workflow,delete_repo`, as in
      [Before you start](#before-you-start), then run the generator again
-     where you ran it.
+     where you ran it. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if either
+     is set: `gh` uses them before any login it stores.
   2. Copy the three printed lines (`P=...`, then `with-admin-token.sh`
      through it, then the arguments) as one block into a separate terminal
      window, not with `!` in Claude Code, which runs a line without a

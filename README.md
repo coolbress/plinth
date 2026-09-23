@@ -70,7 +70,8 @@ account rather than to selected repositories; the admin-token path keeps the
 fine-grained token's narrow reach. The first is
 `gh auth login -s repo,workflow,delete_repo`, which runs inside Claude Code
 (a one-time code and a URL, finished in a browser), after which the generator
-runs wherever it is started. The second is to rerun it through
+runs wherever it is started. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if
+either is set: `gh` uses them before any login it stores. The second is to rerun it through
 `scripts/with-admin-token.sh` in a separate terminal, which prompts for an
 admin token there and keeps it off every command line.
 
