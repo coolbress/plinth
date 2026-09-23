@@ -64,9 +64,15 @@ ruleset, so the wall stops the everyday agent and not the administrator. That
 is why the generated `AGENTS.md` tells the agent never to ask for
 administration on the everyday token: a ruleset or code-scanning change is a
 person's, typed through `scripts/with-admin-token.sh` or made in Settings.
-When `gh` holds a restricted fine-grained token, the generator asks you to
-rerun it through `scripts/with-admin-token.sh`, which prompts for an admin
-token at the terminal and keeps it off every command line.
+When `gh` holds a fine-grained token, the generator stops and names two
+fixes. The browser login is shorter, but its token is scoped `repo` across the
+account rather than to selected repositories; the admin-token path keeps the
+fine-grained token's narrow reach. The first is
+`gh auth login -s repo,workflow,delete_repo`, which runs inside Claude Code
+(a one-time code and a URL, finished in a browser), after which the generator
+runs wherever it is started. The second is to rerun it through
+`scripts/with-admin-token.sh` in a separate terminal, which prompts for an
+admin token there and keeps it off every command line.
 
 ## Status
 

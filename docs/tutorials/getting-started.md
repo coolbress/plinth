@@ -10,8 +10,13 @@ and merge the pull request the generator opens for you.
   all four and names the missing one. Installing the plugin needs git 2.37 or
   newer: an older one (the macOS system git can be 2.30) fails with
   `index.lock: File exists`. `brew install git` fixes it.
-- Log in to GitHub with `gh auth login` (browser login). Do not export
-  `GH_TOKEN`; an agent session can read the environment.
+- Log in to GitHub with `gh auth login -s repo,workflow,delete_repo`
+  (browser login). The default scopes lack `workflow`, which the generator
+  needs; `delete_repo` lets a failed run delete the repository it created.
+  The command runs from inside a Claude Code session too: it prints a
+  one-time code and a URL, and a browser finishes it. No terminal is needed
+  and nothing secret is typed. Do not export `GH_TOKEN`; an agent session can
+  read the environment.
 - The repository will be **public**. Private repositories are not supported
   yet: the wall requires CodeQL, which needs a GitHub Code Security license there.
 - The generated project is **Python (uv)**. Other languages are not produced
@@ -56,13 +61,24 @@ one line with what it is about to do, for example:
 create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.5.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
-If a check fails it stops there and prints the one fix. Two you may meet:
+If a check fails it stops there and prints the fix. Three you may meet:
 
-- `gh is using a fine-grained token`: copy the three printed lines (`P=...`,
-  then `with-admin-token.sh` through it, then the arguments) as one block into
-  a separate terminal window, not with `!` in Claude Code, which runs a line
-  without a terminal. It asks for an admin token at that terminal and never
-  puts it on a command line.
+- `gh's token lacks the scope(s)`: run the printed
+  `gh auth refresh -h github.com -s repo,workflow,delete_repo`. Like the
+  login, it runs from inside Claude Code, prints a one-time code and a URL,
+  and a browser finishes it.
+- `gh is using a fine-grained token`: either of two fixes. The browser login
+  is shorter, but its token is scoped `repo` across the account rather than
+  to selected repositories; the admin-token path keeps the fine-grained
+  token's narrow reach.
+  1. `gh auth login -s repo,workflow,delete_repo`, as in
+     [Before you start](#before-you-start), then run the generator again
+     where you ran it.
+  2. Copy the three printed lines (`P=...`, then `with-admin-token.sh`
+     through it, then the arguments) as one block into a separate terminal
+     window, not with `!` in Claude Code, which runs a line without a
+     terminal. It asks for an admin token at that terminal and never puts it
+     on a command line.
 - `rollback: off`: your token has no `delete_repo` scope. The generator
   continues; if it fails later the repository stays and it prints the URL to
   delete it by hand. `gh auth refresh -h github.com -s delete_repo` turns

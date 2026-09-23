@@ -134,21 +134,27 @@ if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
   for s in repo workflow; do has_scope "$s" || missing="$missing$s,"; done
   [ -z "$missing" ] || stop "gh's token lacks the scope(s) ${missing%,} (it has: ${scopes:-none})" \
     "  fix: gh auth refresh -h github.com -s repo,workflow,delete_repo   (delete_repo is optional: it lets a failed run delete what it created)" \
+    "  it runs here, in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  a personal access token instead: https://github.com/settings/tokens with the same scopes"
   has_scope delete_repo || rollback="off (no delete_repo scope; on failure the repository stays: delete it at $url/settings)"
 elif [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   rollback="best effort (fine-grained token: needs Administration: write on $owner's repositories)"
 else
   stop "gh is using a fine-grained token; whether it reaches a repository that does not exist yet cannot be read" \
-    "  fix: run the door with an admin token, typed at a prompt (never on the command line)," \
-    "  in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
+    "  fix, either of two. The browser login is shorter, but its token is scoped repo across the account rather than" \
+    "  to selected repositories; the admin-token path keeps the fine-grained token's narrow reach." \
+    "  1. log gh in through a browser with the scopes the door reads, then run the door again where you ran it:" \
+    "       gh auth login -s repo,workflow,delete_repo" \
+    "     it runs in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
+    "  2. run the door with an admin token, typed at a prompt (never on the command line)," \
+    "     in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
     "    P=$(printf '%q' "$here")" \
     "    \"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" \\" \
     "      $*" \
-    "  the token, classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)" \
-    "  or fine-grained (https://github.com/settings/personal-access-tokens): Repository permissions Administration," \
-    "  Contents, Workflows, Pull requests: write on all repositories of $owner (a repository that does not exist" \
-    "  yet is not selectable); for an organization owner also Organization permissions Members: read"
+    "     the token, classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)" \
+    "     or fine-grained (https://github.com/settings/personal-access-tokens): Repository permissions Administration," \
+    "     Contents, Workflows, Pull requests: write on all repositories of $owner (a repository that does not exist" \
+    "     yet is not selectable); for an organization owner also Organization permissions Members: read"
 fi
 
 # ── 3 owner ──────────────────────────────────────────────────────────────
