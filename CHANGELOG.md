@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.21] - 2026-09-23
+
+The generator's own setup step led every new reader to a stop: the
+tutorial's `gh auth login` gives default scopes, which lack `workflow`. The
+login step now carries the scopes and says it runs inside a Claude Code
+session, and the fine-grained stop names the browser login beside the
+admin-token path. Also in this release: `/plinth:floor-check` checks the wall
+again under zsh.
+
+tested with plinth-template v1.5.0
+
 ### Changed
 
 - `AGENTS.md` says that closing an issue writes its ending into the body —
@@ -879,7 +890,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.20...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.21...HEAD
+[0.5.21]: https://github.com/coolbress/plinth/releases/tag/v0.5.21
 [0.5.20]: https://github.com/coolbress/plinth/releases/tag/v0.5.20
 [0.5.19]: https://github.com/coolbress/plinth/releases/tag/v0.5.19
 [0.5.18]: https://github.com/coolbress/plinth/releases/tag/v0.5.18
