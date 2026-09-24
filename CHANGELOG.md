@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.23] - 2026-09-24
+
+Installing plinth now tells you what it costs a session. The default set
+runs one hook, `last30days`'s `SessionStart` check, and its skills fill
+part of Claude Code's skill listing, which is capped at 1% of the model's
+context window. On a 1M-context model all of the default set's
+descriptions fit. On the two 200k models measured on a fresh install,
+most of them are cut to the skill's name. Adding a dependency that ships a hook
+is now something to ask about first. Also in this release: the
+contributing guide gives the squash merge command that keeps a pull
+request's description as its commit.
+
+tested with plinth-template v1.5.0
+
 ### Changed
 
 - The README and `/plinth:arsenal` no longer say the default set's skill
@@ -19,11 +33,11 @@ pull requests and have no tag.
   on a fresh install (#255): with a 1M-context model all 33 listed skills
   keep their descriptions; with the two 200k-context models measured
   (Haiku 4.5, Sonnet 4.5) the listing is cut to about 2,000 tokens and 25
-  of the 33 keep only their name. The per-plugin
-  figures in `/plinth:arsenal` are now these live readings. The earlier
-  estimate counted every `SKILL.md` on disk, including skills Claude Code
-  never lists: mattpocock-skills' files outside its manifest's `skills` list,
-  and its 14 marked `disable-model-invocation`.
+  of the 33 keep only their name. The per-plugin figures in
+  `/plinth:arsenal` are now these live readings. The earlier estimate
+  counted every `SKILL.md` on disk, including skills Claude Code never
+  lists: mattpocock-skills' files outside its manifest's `skills` list, and
+  its 14 marked `disable-model-invocation`.
 - `CONTRIBUTING.md` step 5 gives the merge command that makes the squash
   commit the pull request description: `gh pr merge --squash` with the
   description passed as `--body`. Without it GitHub's default squash
@@ -971,7 +985,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.22...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.23...HEAD
+[0.5.23]: https://github.com/coolbress/plinth/releases/tag/v0.5.23
 [0.5.22]: https://github.com/coolbress/plinth/releases/tag/v0.5.22
 [0.5.21]: https://github.com/coolbress/plinth/releases/tag/v0.5.21
 [0.5.20]: https://github.com/coolbress/plinth/releases/tag/v0.5.20
