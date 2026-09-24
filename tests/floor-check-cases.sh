@@ -468,13 +468,28 @@ else bad "offline labels"; printf '%s\n' "$out2" | grep -i label | sed 's/^/    
 [ "$rc2" = 0 ] || bad "the offline floor stopped passing"
 [ "$rc" = 0 ] && ok "a repository missing labels still exits 0" || bad "missing labels changed the exit code (rc=$rc)"
 
-# --sandbox reads this machine's Claude Code settings; off is WARN, never FAIL.
+# --sandbox reads this machine's Claude Code settings. /sandbox on Claude Code
+# 2.1.278 writes no sandbox.enabled (#222), so a missing or false key cannot say
+# "off": it is not verified (SKIP), never a WARN or a FAIL, and the lines under
+# it carry the trade-off measured on macOS, scoped to macOS.
 mkdir -p "$work/conf"; printf '{"sandbox":{"enabled":false}}' > "$work/conf/settings.json"
 out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"; rc=$?
-if [ "$rc" = 0 ] && grep -q "WARN.*sandbox off" <<<"$out"; then ok "--sandbox: off is a WARN and the floor still passes"; else bad "--sandbox off"; printf '%s\n' "$out" | grep -E 'sandbox|failed' | sed 's/^/        /'; fi
+if [ "$rc" = 0 ] && grep -q "SKIP.*sandbox not verified" <<<"$out" && ! grep -qE "(WARN|FAIL).*sandbox" <<<"$out"
+then ok "--sandbox: an unset key is not verified, not reported off, and the floor still passes"; else bad "--sandbox unset"; printf '%s\n' "$out" | grep -E 'sandbox|failed' | sed 's/^/        /'; fi
+under="$(sed -n '/SKIP.*sandbox not verified/,/^--/p' <<<"$out" | grep '^  INFO    ')"
+for want in 'Read(~/.config/gh/\*\*)' 'anthropics/claude-code#95135' 'anthropics/claude-code#67105' 'uvx --from copier copier' 'macOS' 'Linux, WSL2 and native Windows: not measured' '\.env'; do
+  grep -q -- "$want" <<<"$under" || { bad "--sandbox: the lines under the SKIP do not name $want"; printf '%s\n' "$under" | sed 's/^/        /'; }
+done
+grep -q 'Read(~/.config/gh' <<<"$under" && ok "--sandbox: the SKIP names the gh collision, uvx, the upstream issues and the macOS scope"
+rm -f "$work/conf/settings.json"
+out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "SKIP.*sandbox not verified" <<<"$out"; then ok "--sandbox: no settings file at all is not verified either"; else bad "--sandbox no file"; printf '%s\n' "$out" | grep sandbox | sed 's/^/        /'; fi
 printf '{"sandbox":{"enabled":true}}' > "$work/conf/settings.local.json"
 out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"
-if grep -q "PASS.*sandbox on" <<<"$out"; then ok "--sandbox: settings.local.json can turn it on"; else bad "--sandbox on"; printf '%s\n' "$out" | grep sandbox | sed 's/^/        /'; fi
+# On is a fact, not a PASS: on macOS it is the state in which gh and the door stop.
+if grep -q "^  INFO  sandbox.enabled is true in .*settings.local.json" <<<"$out" && ! grep -qE "(PASS|SKIP|WARN).*sandbox" <<<"$out" \
+   && grep -q 'Read(~/.config/gh' <<<"$out" && grep -q 'uvx --from copier copier' <<<"$out"
+then ok "--sandbox: sandbox.enabled true is an INFO, and the measured macOS lines still follow it"; else bad "--sandbox on"; printf '%s\n' "$out" | grep -iE 'sandbox|gh|uvx' | sed 's/^/        /'; fi
 
 # --project separate from --root, expectations from --ruleset
 sub="$work/sub"; rm -rf "$sub"; cp -R "$good" "$sub"; mkdir -p "$sub/app"; mv "$sub/pyproject.toml" "$sub/uv.lock" "$sub/.copier-answers.yml" "$sub/Dockerfile" "$sub/.dockerignore" "$sub/.env.example" "$sub/app/"; mv "$sub/src" "$sub/app/src"

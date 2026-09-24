@@ -20,7 +20,6 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 real_git="$(command -v git)"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/claude"
-printf '{"sandbox":{"enabled":true}}' > "$work/claude/settings.json"
 
 # ── mock: gh ─────────────────────────────────────────────────────────────
 cat > "$work/bin/gh" <<'MOCK'
@@ -332,11 +331,12 @@ E="GH_TOKEN=x"        run env-token     ok yes no "warning: GH_TOKEN is set in t
 E="GH_TOKEN=x PLINTH_TOKEN_SOURCE=prompt" run env-token-admin ok yes no "" -- probe
 if grep -q "warning: GH_TOKEN" "$work/home-env-token-admin/out"; then bad env-token-admin "the admin path warned about its own GH_TOKEN"
 else ok env-token-admin "the admin path does not warn about its own GH_TOKEN"; fi
-E="CLAUDE_CONFIG_DIR=$work/nowhere" run sandbox-off ok yes no "warning: sandbox is off" -- probe
-mkdir -p "$work/claude-local"; printf '{}' > "$work/claude-local/settings.json"; printf '{"sandbox":{"enabled":true}}' > "$work/claude-local/settings.local.json"
-E="CLAUDE_CONFIG_DIR=$work/claude-local" run sandbox-local ok yes no "" -- probe
-if grep -q "warning: sandbox" "$work/home-sandbox-local/out"; then bad sandbox-local "sandbox on in settings.local.json still warned"
-else ok sandbox-local "sandbox on in settings.local.json is seen"; fi
+# No sandbox advice from the door: /sandbox on Claude Code 2.1.278 does not
+# write sandbox.enabled, and on macOS the sandbox stops this script's own copier
+# step (#222, #229). floor-check --sandbox carries what was measured.
+E="CLAUDE_CONFIG_DIR=$work/nowhere" run no-toggle-key ok yes no "" -- probe
+if grep -qi "sandbox" "$work/home-no-toggle-key/out"; then bad no-toggle-key "the door still gives sandbox advice from a key /sandbox does not write"
+else ok no-toggle-key "the door says nothing about the sandbox"; fi
 E="MOCK_SCOPES=repo,workflow" run rollback-off ok yes no "rollback: off (no delete_repo scope" -- probe
 E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: best effort" -- probe
 # Labels are a convenience, not a wall stone: a failed create names the label and

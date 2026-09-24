@@ -7,7 +7,7 @@
 # Preflight, in order; the first miss stops with the one line that fixes it,
 # before anything exists:
 #   1 tools       claude >= 2.1.234, git >= 2.28, uv, gh logged in (warnings: token
-#                 in the environment, sandbox off, native Windows)
+#                 in the environment, native Windows)
 #   2 token       classic: scopes repo and workflow; delete_repo is optional and
 #                 without it rollback is off. Fine-grained: the admin path, because
 #                 its reach over a repository that does not exist yet cannot be read.
@@ -100,17 +100,6 @@ if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
   done
 fi
 case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) warn "native Windows is not tested; use WSL2" ;; esac
-conf="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-if command -v python3 >/dev/null && ! python3 - "$conf/settings.json" "$conf/settings.local.json" <<'PYCHK' 2>/dev/null
-import json, sys
-for f in sys.argv[1:]:
-    try:
-        if json.load(open(f)).get("sandbox", {}).get("enabled") is True: sys.exit(0)
-    except Exception:
-        pass
-sys.exit(1)
-PYCHK
-then warn "sandbox is off in $conf/settings.json; run /sandbox once in Claude Code (macOS: as is; Linux/WSL2: needs bubblewrap and socat; native Windows: not supported)"; fi
 
 # ── 2 token ──────────────────────────────────────────────────────────────
 login="$(gh api user --jq .login)"
