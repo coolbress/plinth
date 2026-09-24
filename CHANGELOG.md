@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.24] - 2026-09-24
+
+This release changes how `third-party / review` gets the scripts that
+decide its result. A repository that pins `pr-review.yml` to this
+release's commit now downloads four scripts from
+`raw.githubusercontent.com` at that same commit. Before, the scripts were
+written inline in the workflow. What the check decides is unchanged. A
+runner that cannot reach that host fails the check at the new step,
+rather than passing. The other two changes restructure
+`/plinth:new-project`'s script, and what it does is unchanged.
+
+tested with plinth-template v1.5.0
+
 ### Changed
 
 - `third-party / review` (`pr-review.yml`) now fetches its four judgement
@@ -994,7 +1007,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.23...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.24...HEAD
+[0.5.24]: https://github.com/coolbress/plinth/releases/tag/v0.5.24
 [0.5.23]: https://github.com/coolbress/plinth/releases/tag/v0.5.23
 [0.5.22]: https://github.com/coolbress/plinth/releases/tag/v0.5.22
 [0.5.21]: https://github.com/coolbress/plinth/releases/tag/v0.5.21
