@@ -81,11 +81,11 @@ jobs:
         with:
           persist-credentials: false
 
-      # The commands, their flags and the reason for each live in the two
-      # lint files, so a local run is the same call. A failed step skips the
-      # ones after it, so after checkout the steps that need nothing from the
-      # network run first, and the two that download (actionlint's binary, then
-      # zizmor through pipx) run last.
+      # The commands, their flags and the reason for each live in the lint
+      # files, so a local run is the same call. A failed step skips the ones
+      # after it, so after checkout the steps that need nothing from the
+      # network run first, and the ones that download (actionlint's binary,
+      # zizmor through pipx, then ruff and mypy through pipx) run last.
       - name: Shell syntax and static analysis (bash -n, shellcheck)
         run: ./tests/shell-lint.sh
 
@@ -142,6 +142,9 @@ jobs:
 
       - name: Workflow syntax, usage and security (actionlint, zizmor)
         run: ./tests/workflow-lint.sh
+
+      - name: plinth's own Python, linted and type-checked (ruff, mypy)
+        run: ./tests/python-lint.sh
 
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
   # and the README install block is the one the tutorial shows.

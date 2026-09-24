@@ -11,7 +11,7 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke, markdownlint and workflow-lint need network
+# every test; install-smoke, markdownlint, workflow-lint and python-lint need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
@@ -25,16 +25,20 @@ directory exactly as the README says, so it needs network and a few minutes.
 downloads the one version pinned in that file, the same file `ci / docs` runs,
 and lints from its cache afterwards. `tests/shell-lint.sh` needs shellcheck and
 `tests/workflow-lint.sh` needs actionlint and `uvx` (or `pipx`), with network
-the first time for zizmor; a missing tool is a FAIL that names the install
-command, never a skip. Everything else runs offline in seconds.
+the first time for zizmor, and `tests/python-lint.sh` needs `uvx` (or `pipx`),
+with network the first time for ruff and mypy; a missing tool is a FAIL that
+names the install command, never a skip. Everything else runs offline in seconds.
 
 That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
 one, the link check. CodeQL and the `canary` jobs run only on GitHub.
 
-The two lint files are what `ci / tools` calls, with the same flags, but a
+The lint files are what `ci / tools` calls, with the same flags, but a
 local pass is the CI pass only where the tool is the same one:
 
 - zizmor is: both sides run the exact version pinned in `tests/workflow-lint.sh`.
+- ruff and mypy are: both sides run the exact versions pinned in
+  `tests/python-lint.sh`, with each tool's defaults, no configuration file,
+  and mypy checking against the same Python version whatever runs it.
 - actionlint is pinned there too, and CI installs that checksum-verified Linux
   build. A laptop runs the actionlint it has. Another version still runs, and
   the output names it and says the pass is not the pinned pass; in CI another
@@ -219,7 +223,7 @@ third-party marketplaces do not auto-update by default.
   asks GitHub for that workflow's runs by it, and refuses to release when the
   query fails.
 - Shell and workflow files pass `bash -n`, `shellcheck -S warning`, actionlint
-  and zizmor (`ci / tools`). Anything they catch is not for a reviewer to report;
+  and zizmor, and plinth's own Python passes ruff and mypy (`ci / tools`). Anything they catch is not for a reviewer to report;
   see `## Code Review Rules` in `AGENTS.md`.
 - `## Code Review Rules` in `AGENTS.md` changes only in a pull request that
   changes nothing else; `third-party / review` fails the combination. Creating

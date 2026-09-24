@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- plinth's own CI lints and type-checks the Python it ships into consumers'
+  CI: `scripts/floor-check.py` and the pr-review judgement scripts.
+  `tests/python-lint.sh` runs ruff 0.16.8 and mypy 2.3.1 with their defaults
+  in `ci / tools`, mypy checking against Python 3.10. The 31 ruff findings
+  and 4 mypy errors it found are fixed without changing behaviour: regex flag
+  names spelled out (`re.IGNORECASE` for `re.I`), imports sorted,
+  `check=False` written where it was already the default, one `startswith`
+  given a tuple instead of two calls, redundant parentheses and an unused
+  `noqa` removed, a variable in `attest.py` renamed so it holds one type, and
+  two `cast`s for values mypy could not narrow (#261).
+
 ## [0.5.24] - 2026-09-24
 
 This release changes how `third-party / review` gets the scripts that

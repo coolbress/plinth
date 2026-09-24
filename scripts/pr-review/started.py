@@ -18,7 +18,10 @@ and review comments on the head are not read here: they pass the
 check before it asks. Where the push cannot be read, nothing counts
 as started at the first ask point.
 """
-import json, re, sys, pathlib
+import json
+import pathlib
+import re
+import sys
 
 head, logins_csv, icomments_p, activity_p = sys.argv[1:5]
 since = sys.argv[5] if len(sys.argv) > 5 else ""   # the first ask point, at the second
