@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `third-party / review` (`pr-review.yml`) now fetches its four judgement
+  scripts from `raw.githubusercontent.com/coolbress/plinth` at the commit the
+  caller's `uses:` line resolved to (`job.workflow_sha`), in a new step
+  before the check, instead of carrying them inline. What they decide is
+  unchanged. A runner that cannot reach that host now fails the check at
+  that step (#234).
+
 ## [0.5.23] - 2026-09-24
 
 Installing plinth now tells you what it costs a session. The default set

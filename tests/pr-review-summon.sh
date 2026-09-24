@@ -5,8 +5,8 @@
 # (measured 2026-09-18 on #186: two drew nothing in the full wait, a person's
 # identical comment started a review in sixteen seconds), so the summons goes
 # out only with the `summons-token` secret, as the repository owner. The
-# decision is a shell snippet inside the `run:` of pr-review.yml; lifted out
-# here and run against the login the token would return. Both directions:
+# decision is scripts/pr-review/summon.sh, which the workflow fetches and
+# runs; it is run here against the login the token would return. Both directions:
 # nothing posted without a token, posted only as the owner with one, and a
 # token that cannot be used fails at once rather than after the wait.
 #
@@ -14,7 +14,7 @@
 # if no accepted reviewer has been active since the push, and at two thirds if
 # none has been active since the first ask point; at neither when the
 # activity log confirms that another commit was pushed after this head
-# (#215). That test is a Python snippet, lifted and run against fixtures like
+# (#215). That test is scripts/pr-review/started.py, run against fixtures like
 # the one above; the schedule is checked by running the whole step on a clock
 # the test moves, with an activity log that changes as the clock does.
 set -uo pipefail
@@ -27,28 +27,23 @@ trap 'rm -rf "$tmp"' EXIT
 python3 - "$wf" "$tmp" <<'PY'
 import sys, pathlib, textwrap
 lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
-def lift(tag, out, must):
-    start = next(i for i, ln in enumerate(lines) if ln.rstrip().endswith(f"<<'{tag}'"))
-    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == tag)
-    body = textwrap.dedent("\n".join(lines[start + 1:end]))
-    assert must in body, f"{tag} snippet not found; the workflow changed shape"
-    pathlib.Path(sys.argv[2], out).write_text(body + "\n")
-lift("SUMMON", "summon.sh", 'echo "post"')
-lift("PYSTART", "started.py", "sys.exit")
 # The whole second step, to run it on a clock the test moves (below).
 start = next(i for i, ln in enumerate(lines) if "name: A third-party review is attached to this commit" in ln)
 start = next(i for i in range(start, len(lines)) if lines[i].strip() == "run: |") + 1
 end = next((i for i in range(start, len(lines)) if lines[i].strip() and len(lines[i]) - len(lines[i].lstrip()) < 10), len(lines))
 pathlib.Path(sys.argv[2], "step.sh").write_text(textwrap.dedent("\n".join(lines[start:end])) + "\n")
 PY
-[ -s "$tmp/summon.sh" ] && [ -s "$tmp/started.py" ] && [ -s "$tmp/step.sh" ] \
-  || { echo "  FAIL  could not extract the snippets" >&2; exit 1; }
+[ -s "$tmp/step.sh" ] || { echo "  FAIL  could not extract the step" >&2; exit 1; }
+summon="$root/scripts/pr-review/summon.sh"
+started="$root/scripts/pr-review/started.py"
+# The step runs the scripts from where its fetch step put them.
+mkdir -p "$tmp/rt/plinth/scripts" && ln -s "$root/scripts/pr-review" "$tmp/rt/plinth/scripts/pr-review"
 
 fails=0
 run() {  # name, token, ask, owner, login-json (or "missing"), expected exit, expected stdout text
   if [ "$5" = "missing" ]; then rm -f "$tmp/login.json"; else printf '%s' "$5" > "$tmp/login.json"; fi
   SUMMONS_TOKEN="$2" ASK="$3" OWNER="$4" LOGIN_JSON="$tmp/login.json" \
-    bash "$tmp/summon.sh" >"$tmp/out" 2>"$tmp/err"
+    bash "$summon" >"$tmp/out" 2>"$tmp/err"
   got=$?
   if [ "$got" -ne "$6" ] || ! grep -qF "$7" "$tmp/out" "$tmp/err"; then
     echo "  FAIL  $1: expected exit $6 with '$7', got exit $got" >&2
@@ -67,10 +62,10 @@ run "no token: never 'post'"         ""   "@codex review" coolbress "$OWNER_JSON
 # A fork's pull request gets no secrets, so a configured token arrives empty: the line says which case this is.
 FORK=true  run "no token on a fork's pull request: says so"  "" "@codex review" coolbress missing 0 "a fork's pull request gets no secrets"
 FORK=false run "no token, not a fork: plain line"            "" "@codex review" coolbress missing 0 "no summons-token: nothing"
-if FORK=false SUMMONS_TOKEN="" ASK="@codex review" OWNER=coolbress LOGIN_JSON="$tmp/login.json" bash "$tmp/summon.sh" | grep -q "fork"; then
+if FORK=false SUMMONS_TOKEN="" ASK="@codex review" OWNER=coolbress LOGIN_JSON="$tmp/login.json" bash "$summon" | grep -q "fork"; then
   echo "  FAIL  not a fork, but the fork line printed" >&2; fails=$((fails + 1))
 fi
-if SUMMONS_TOKEN="" ASK="@codex review" OWNER=coolbress LOGIN_JSON="$tmp/login.json" bash "$tmp/summon.sh" | grep -qx post; then
+if SUMMONS_TOKEN="" ASK="@codex review" OWNER=coolbress LOGIN_JSON="$tmp/login.json" bash "$summon" | grep -qx post; then
   echo "  FAIL  no token but 'post' printed" >&2; fails=$((fails + 1))
 fi
 
@@ -99,7 +94,7 @@ said() {  # login, created_at, updated_at: one issue comment
 started() {  # name, issue comments, activity log (or "missing"), first ask point ('' at the first), expected exit, expected text
   printf '%s' "$2" > "$tmp/ic.json"
   if [ "$3" = "missing" ]; then rm -f "$tmp/act.json"; else printf '%s' "$3" > "$tmp/act.json"; fi
-  python3 "$tmp/started.py" "$HEAD" "$BOT" "$tmp/ic.json" "$tmp/act.json" "$4" >"$tmp/out" 2>"$tmp/err"
+  python3 "$started" "$HEAD" "$BOT" "$tmp/ic.json" "$tmp/act.json" "$4" >"$tmp/out" 2>"$tmp/err"
   got=$?
   if [ "$got" -ne "$5" ] || ! grep -qF "$6" "$tmp/out"; then
     echo "  FAIL  $1: expected exit $5 with '$6', got exit $got" >&2
@@ -168,7 +163,7 @@ started "push unreadable, active since the first ask point"        "$(said "$BOT
 # The whole step, on a clock that only `sleep` moves, with `gh` answering from
 # files: when it posts, not only whether. A 30 s wait, a look every 10 s. The
 # mocks are sh where they can be: a Python start is slow on some laptops.
-mkdir -p "$tmp/bin" "$tmp/rt"
+mkdir -p "$tmp/bin"
 cat > "$tmp/bin/gh" <<'SH'
 #!/bin/sh
 case "$*" in

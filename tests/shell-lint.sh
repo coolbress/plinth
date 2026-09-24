@@ -10,14 +10,14 @@ fail=0
 
 # One file per call: `bash -n a.sh b.sh` parses a.sh only, b.sh is $1.
 v="$(bash -c 'echo "$BASH_VERSION"')"; bad=0
-for f in scripts/*.sh scripts/lib/*.sh tests/*.sh; do bash -n "$f" || bad=1; done
+for f in scripts/*.sh scripts/lib/*.sh scripts/pr-review/*.sh tests/*.sh; do bash -n "$f" || bad=1; done
 if [ "$bad" = 0 ]; then echo "  PASS  bash -n (bash $v)"; else echo "  FAIL  bash -n (bash $v)"; fail=1; fi
 
 if ! command -v shellcheck >/dev/null; then
   echo "  FAIL  shellcheck not found: brew install shellcheck (apt-get install shellcheck)"; fail=1
 else
   v="$(shellcheck --version | sed -n 's/^version: //p')"
-  if shellcheck -x -S warning scripts/*.sh scripts/lib/*.sh tests/*.sh; then echo "  PASS  shellcheck $v"
+  if shellcheck -x -S warning scripts/*.sh scripts/lib/*.sh scripts/pr-review/*.sh tests/*.sh; then echo "  PASS  shellcheck $v"
   else echo "  FAIL  shellcheck $v"; fail=1; fi
 fi
 exit "$fail"
