@@ -24,7 +24,8 @@ pull requests and have no tag.
   a `SessionStart` hook, and the 58 skills' listing is larger than Claude
   Code's skill-listing budget. `AGENTS.md`'s Ask-first rule on hooks now
   covers adding a dependency, or raising its pin, when that version ships
-  a hook.
+  a hook. `/plinth:arsenal`'s always-on figures are re-measured the same
+  way and now add up to the README's total.
 
 ## [0.5.22] - 2026-09-24
 
