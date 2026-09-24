@@ -64,6 +64,9 @@ jobs:
       - name: The door's shared .github decisions on fixtures, without the door
         run: ./tests/shared-github-cases.sh
 
+      - name: The template update runs the checker's command in a worktree and opens nothing over a conflict
+        run: ./tests/template-update-cases.sh
+
       - name: The admin token is read from the terminal, not from a pasted stdin
         run: ./tests/token-prompt-not-from-stdin.sh
 

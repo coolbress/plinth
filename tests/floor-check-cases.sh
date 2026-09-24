@@ -669,7 +669,7 @@ drift "a recorded tag behind the target is named, with both tags" "v1.0.0" \
 drift "offline, the changed files could not be read, and it says so rather than staying silent" "v1.0.0" \
   "the changed files could not be read \(offline or API error\)"
 drift "offline, the update command still carries the pin this repository's own CI calls today" "v1.0.0" \
-  "copier update --vcs-ref $target_ref --data plinth_sha=$sha40"
+  "copier update --defaults --vcs-ref $target_ref --data plinth_sha=$sha40"
 drift "a recorded tag ahead of the target is a plain statement, not a not-verified count" "v99.0.0" \
   "INFO  template: the recorded tag v99\.0\.0 is ahead of $target_ref, the tag plinth is tested with"
 quiet "an ahead tag is not counted as not verified" \
@@ -741,6 +741,29 @@ out="$(python3 "$checker" --root "$unreadcopy" --no-network 2>&1)"
 if grep -q "plinth_sha=$sha40" <<<"$out"; then bad "an unreadable second plinth uses: line still let the lone parsed SHA print"; printf '%s\n' "$out" | grep -E 'template|plinth_sha' | sed 's/^/        /'
 else ok "an unreadable second plinth uses: line withholds the command too, not just a lone parsed SHA"; fi
 
+# The template-update skill (#232) runs the command stage 1 prints, not a
+# second construction of it: --print-update-command prints that same line
+# and nothing else, or a reason on stderr and exit 1. `--defaults` is in it
+# because without a terminal copier update stops at "Interactive session
+# required" (measured, copier 9.18.2), and the skill has no terminal.
+pcopy="$work/print-cmd"; rm -rf "$pcopy"; cp -R "$good" "$pcopy"
+printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy/.copier-answers.yml"
+warned="$(python3 "$checker" --root "$pcopy" --no-network 2>&1 | sed -n 's/^  INFO    \(uvx .*copier update.*\)$/\1/p')"
+printed="$(python3 "$checker" --root "$pcopy" --print-update-command 2>/dev/null)"; rc=$?
+if [ "$rc" = 0 ] && [ -n "$warned" ] && [ "$printed" = "$warned" ]; then ok "--print-update-command prints exactly the line the drift WARN prints"
+else bad "--print-update-command (rc=$rc): printed '$printed', WARN printed '$warned'"; fi
+case "$printed" in *"copier update --defaults "*) ok "the update command runs without a terminal (--defaults)" ;;
+  *) bad "the update command has no --defaults: '$printed'" ;; esac
+printed="$(python3 "$checker" --root "$good" --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "the recorded tag is the target tag" "$work/print-err"; then ok "--print-update-command at the target tag prints no command, says why, exit 1"
+else bad "--print-update-command at the target (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+printed="$(python3 "$checker" --root "$loosecopy" --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "not pinned to a full commit SHA" "$work/print-err"; then ok "--print-update-command with no established pin prints no command, names the reason, exit 1"
+else bad "--print-update-command, loose pin (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+printed="$(python3 "$checker" --root "$noarch" --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "no .copier-answers.yml" "$work/print-err"; then ok "--print-update-command outside a door-made repository prints no command, exit 1"
+else bad "--print-update-command, no answers file (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+
 # The changed-files list and diff: one call to the template's compare API,
 # made only when behind, filtered to template/ (the door's own tests, docs
 # and copier.yml are not rendered into a consumer repository).
@@ -772,7 +795,7 @@ empty_api="$work/api-template-empty"; mkdir -p "$empty_api/repos/coolbress/plint
 tcopy2="$work/tmpl-drift-404"; rm -rf "$tcopy2"; cp -R "$good" "$tcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy2/.copier-answers.yml"
 out="$(FLOOR_CHECK_API_DIR="$empty_api" python3 "$checker" --root "$tcopy2" 2>&1)"
-if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier update --vcs-ref $target_ref --data plinth_sha=$sha40" <<<"$out"; then
+if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier update --defaults --vcs-ref $target_ref --data plinth_sha=$sha40" <<<"$out"; then
   ok "a compare call that 404s still prints the update command, and names the file list as unread"
 else bad "a 404 on the compare call"; printf '%s\n' "$out" | grep -E 'template|copier update' | sed 's/^/        /'; fi
 

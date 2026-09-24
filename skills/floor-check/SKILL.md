@@ -115,8 +115,9 @@ lines so the update does not move that pin under it. When that pin cannot be
 established (no such `uses:` line, or two that disagree) the tags and file
 list still print, with no command. A repository the door did not make, or
 whose recorded tag is not an exact release tag, is a SKIP, not a PASS. It
-never runs `copier update`; running it, resolving conflicts and opening a
-pull request is a later skill (#232), named here only once it is built.
+never runs `copier update`; `/plinth:template-update` runs that line, the
+user's to start, and leaves any conflict for a person before it opens a draft
+pull request.
 
 A repository made before this item shipped hears about it two ways: an agent
 running an updated plugin's `/plinth:floor-check` by hand, or its own

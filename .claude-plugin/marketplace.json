@@ -12,7 +12,7 @@
   "plugins": [
     {
       "name": "plinth",
-      "description": "Skills: new-project, floor-check, arsenal. Installs the default plugin set as dependencies. No hooks of its own; last30days adds a SessionStart hook.",
+      "description": "Skills: new-project, floor-check, template-update, arsenal. Installs the default plugin set as dependencies. No hooks of its own; last30days adds a SessionStart hook.",
       "category": "workflow",
       "source": "./"
     },

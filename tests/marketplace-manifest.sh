@@ -56,7 +56,8 @@ check(ponytail_skills["source"]["path"] == "skills", "ponytail-skills mounts ski
 check(entries["ponytail"]["source"]["sha"] == ponytail_skills["source"]["sha"], "ponytail and ponytail-skills pin the same commit")
 
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
-check(skills == ["arsenal", "floor-check", "new-project"], f"plinth skills are arsenal, floor-check, new-project: {skills}")
+check(skills == ["arsenal", "floor-check", "new-project", "template-update"],
+      f"plinth skills are arsenal, floor-check, new-project, template-update: {skills}")
 
 def frontmatter(name):
     text = (root / "skills" / name / "SKILL.md").read_text()
@@ -64,6 +65,8 @@ def frontmatter(name):
 
 fm = frontmatter("new-project")
 check("disable-model-invocation: true" in fm, "new-project: user-invoked only (it creates and deletes repositories)")
+fm = frontmatter("template-update")
+check("disable-model-invocation: true" in fm, "template-update: user-invoked only (it pushes a branch and opens a pull request)")
 fm = frontmatter("floor-check")
 line = re.search(r"^disallowed-tools:(.*)$", fm, re.M)
 check(line is not None and all(t in line.group(1) for t in ("Edit", "Write", "NotebookEdit")),
