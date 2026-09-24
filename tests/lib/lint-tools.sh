@@ -6,11 +6,11 @@
 # pipx and uvx pin a version but check no hash, so this uses a venv and
 # `pip install --require-hashes --only-binary=:all:`: a wheel whose hash is not
 # in the file stops the install, and nothing is built from source. The venv is
-# kept per lock file and interpreter under the user's cache directory, so a
-# second local run does not download again; CI starts empty every time. Each
-# run builds in a directory of its own (`<key>.<random>`) and uses any finished
-# one, so two runs at once never delete each other's; a venv cannot be moved
-# once made, its paths are absolute.
+# kept per lock file, interpreter and cache path (lint_tools_key) under the
+# user's cache directory, so a second local run does not download again; CI
+# starts empty every time. Each run builds in a directory of its own
+# (`<key>.<random>`) and uses any finished one, so two runs at once never
+# delete each other's; a venv cannot be moved once made, its paths are absolute.
 #
 # PLINTH_LINT_TOOLS_BIN, when set, is used as the tools' directory instead:
 # tests/lint-wrappers-cases.sh puts stubs there. The wrappers say so, and in CI
@@ -18,6 +18,17 @@
 
 lint_tool_version() { # <package> -> its pinned version in tests/lint-tools.txt
   sed -n "s/^$1==\([^ ;]*\).*/\1/p" "$root/tests/lint-tools.txt"
+}
+
+# The key covers the lock file's bytes; the interpreter's version, real path,
+# platform and ABI; and the cache directory's real path, because a venv's
+# console scripts name its Python by absolute path. The same cache volume
+# mounted at two paths therefore gives two keys. Nothing else is in it: two
+# machines or containers that match on all of these share one venv.
+lint_tools_key() { # <python> <lock file> <cache dir> -> the cache key on stdout
+  "$1" -c 'import hashlib, os, sys, sysconfig
+who = [sys.version, os.path.realpath(sys.executable), sysconfig.get_platform(), sys.implementation.cache_tag or "", os.path.realpath(sys.argv[2])]
+print(hashlib.sha256(open(sys.argv[1], "rb").read() + "\0".join(who).encode()).hexdigest()[:16])' "$2" "$3"
 }
 
 lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL line there, and 1
@@ -32,21 +43,16 @@ lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL li
   # Debian and Ubuntu package venv's pip bootstrap separately from python3.
   "$py" -c 'import ensurepip, venv' 2>/dev/null \
     || { echo "  FAIL  python3 cannot make a venv with pip: install python3-venv (Debian, Ubuntu: sudo apt-get install python3-venv)"; return 1; }
-  # The key names the lock file and the interpreter: its version, its real path,
-  # its platform and its ABI, so a cache shared across machines or containers
-  # never hands one a venv built for another.
-  key="$("$py" -c 'import hashlib, os, sys, sysconfig
-who = [sys.version, os.path.realpath(sys.executable), sysconfig.get_platform(), sys.implementation.cache_tag or ""]
-print(hashlib.sha256(open(sys.argv[1], "rb").read() + "\0".join(who).encode()).hexdigest()[:16])' "$req")" \
-    || { echo "  FAIL  cannot read $req"; return 1; }
   cache="${XDG_CACHE_HOME:-$HOME/.cache}/plinth/lint-tools"
-  # A finished venv for this lock file and interpreter; one without the marker
+  mkdir -p "$cache" || { echo "  FAIL  cannot make $cache"; return 1; }
+  key="$(lint_tools_key "$py" "$req" "$cache")" || { echo "  FAIL  cannot read $req"; return 1; }
+  # A finished venv for this key; one without the marker
   # (an interrupted run, or one still installing) is never used.
   for mark in "$cache/$key".*/.installed; do
     [ -f "$mark" ] && { printf '%s' "${mark%/.installed}/bin"; return 0; }
   done
   # A random name, not the PID: two containers sharing this cache can have the same PID.
-  mkdir -p "$cache" && dir="$(mktemp -d "$cache/$key.XXXXXX")" \
+  dir="$(mktemp -d "$cache/$key.XXXXXX")" \
     || { echo "  FAIL  cannot make a directory under $cache"; return 1; }
   if ! { "$py" -m venv "$dir" && "$dir/bin/python" -m pip install --quiet \
           --disable-pip-version-check --no-input --require-hashes --only-binary=:all: -r "$req"; } >&2; then
