@@ -76,34 +76,38 @@ available on every plan and this check stands without it; the
 deterministic security checks (CodeQL, zizmor, bandit, secrets,
 dependencies) already block in CI.
 """
-import json, os, re, sys, pathlib
+import json
+import os
+import pathlib
+import re
+import sys
 
 head, logins_csv = sys.argv[1:3]
 reviews_p, rcomments_p, icomments_p = sys.argv[3:6]
 activity_p = sys.argv[6] if len(sys.argv) > 6 else ""   # pushes to the head branch, newest first
 
 #: The commit a completion comment names, seven to forty characters.
-REVIEWED = re.compile(r"Reviewed commit:\*{0,2}\s*`([0-9a-f]{7,40})`", re.I)
+REVIEWED = re.compile(r"Reviewed commit:\*{0,2}\s*`([0-9a-f]{7,40})`", re.IGNORECASE)
 
 #: Completion wording with zero findings. Vendor text: brittle by nature.
 DONE = re.compile(
     # No apostrophe: the vendor writes "Didn't" and the character varies.
     r"find any major issues|Security review completed"
     r"|No security issues were found|리뷰를 마쳤",   # the same completion in Korean, measured
-    re.I,
+    re.IGNORECASE,
 )
 #: A review object whose body begins so says no review happened: Copilot
 #: submits it on the head when the person who asked is out of quota
 #: (measured 2026-09-19, #204). Vendor text, the one notice measured.
-COULD_NOT_REVIEW = re.compile(r"\s*Copilot was unable to review this pull request", re.I)
+COULD_NOT_REVIEW = re.compile(r"\s*Copilot was unable to review this pull request", re.IGNORECASE)
 logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}
-MARK = re.compile(r"<!--\s*codex-security-review:v1\s*(\{.*?\})\s*-->", re.S)
+MARK = re.compile(r"<!--\s*codex-security-review:v1\s*(\{.*?\})\s*-->", re.DOTALL)
 
 #: The summary comment starts with this line; a table anywhere else is not read.
 SUMMARY = "<!-- codex-pull-request-review-summary -->"
 #: One row of its table: status (bold, after one emoji), the rest of
 #: that cell, and the commit. Vendor text.
-ROW = re.compile(r"^\|[^|\n]*\|\s*(?:\S+\s+)?\*\*([^*|\n]+)\*\*([^|\n]*)\|\s*`([0-9a-f]{7,40})`\s*\|", re.M)
+ROW = re.compile(r"^\|[^|\n]*\|\s*(?:\S+\s+)?\*\*([^*|\n]+)\*\*([^|\n]*)\|\s*`([0-9a-f]{7,40})`\s*\|", re.MULTILINE)
 #: When the row's review completed, to the second, UTC only.
 WHEN = re.compile(r'datetime="(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?Z"')
 #: GitHub's push time, the same shape without a fraction.
@@ -130,7 +134,7 @@ def ours(it):
 seen = set()
 for path in (reviews_p, rcomments_p, icomments_p):
     for it in load(path):
-        seen.add(((it.get("user") or {}).get("login") or ""))
+        seen.add((it.get("user") or {}).get("login") or "")
 
 def looked(how, excerpt=None):
     """The verdict is yes. Say so, then list the accepted reviewer's
@@ -258,8 +262,8 @@ for it in load(icomments_p):
     if not ours(it) or not body.lstrip().startswith(SUMMARY):
         continue
     for status, cell, sha in ROW.findall(body):
-        when = WHEN.search(cell)
-        when = when.group(1) if when else ""
+        found = WHEN.search(cell)
+        when = found.group(1) if found else ""
         fits = status == "Completed" and head.startswith(sha)
         why = unbound(sha, when) if fits else ""
         if fits and not why:

@@ -49,6 +49,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import cast
 
 # Archetypes whose floor includes a container image and a `.env.example`.
 # Must agree with the `_exclude` conditions in the template's copier.yml;
@@ -126,7 +127,7 @@ def api(path: str, network: bool, paginate: bool = False):
             # (33 measured on plinth-template). One page would report labels
             # missing that are there.
             cmd = ["gh", "api", path] + (["--paginate"] if paginate else [])
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
         except (OSError, subprocess.TimeoutExpired):
             r = None
         if r is not None and r.returncode == 0:
@@ -142,7 +143,7 @@ def api(path: str, network: bool, paginate: bool = False):
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=20) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         return ABSENT if e.code == 404 else ERROR
@@ -174,10 +175,10 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
     c = root / "CONTRIBUTING.md"
     if ok(c.is_file(), "CONTRIBUTING.md present", "CONTRIBUTING.md missing"):
         text = read(c)
-        ok(re.search(r"uv run pytest|uv sync|pytest|npm test|make test|tests?/\S+\.(sh|py)", text, re.I) is not None,
+        ok(re.search(r"uv run pytest|uv sync|pytest|npm test|make test|tests?/\S+\.(sh|py)", text, re.IGNORECASE) is not None,
            "CONTRIBUTING.md says how to build and test",
            "CONTRIBUTING.md has no build or test command")
-        ok(re.search(r"pull request|\bPR\b|fork|merge", text, re.I) is not None,
+        ok(re.search(r"pull request|\bPR\b|fork|merge", text, re.IGNORECASE) is not None,
            "CONTRIBUTING.md says how to land a change",
            "CONTRIBUTING.md has no pull request flow")
         body = [ln for ln in text.splitlines() if ln.strip()]
@@ -213,7 +214,7 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
             result("FAIL", "issue forms neither local nor in the owner's .github repository")
         else:
             files, unread = {}, []
-            for entry in listing:
+            for entry in cast("list[dict]", listing):  # a list: the two branches above took every other value
                 name = entry.get("name", "")
                 # Configuration is not a candidate template. Fetching it would
                 # let a failed read of `config.yml` alone hide a listing that
@@ -247,10 +248,10 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
 
 def md_front_matter_name(text: str) -> str:
     """The value of `name:` in a Markdown template's front matter, or ""."""
-    fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
+    fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
     if not fm:
         return ""
-    m = re.search(r"^name:[ \t]*(.*)$", fm.group(1), re.M)
+    m = re.search(r"^name:[ \t]*(.*)$", fm.group(1), re.MULTILINE)
     # Quotes are syntax, not a name: `name: ""` has no title behind it.
     return m.group(1).strip().strip("'\"").strip() if m else ""
 
@@ -259,7 +260,7 @@ def yaml_body_is_list(text: str) -> bool:
     """Does `body:` hold a sequence? GitHub rejects a form whose body is not one.
 
     Regex, not a parser: this file is standard library only."""
-    m = re.search(r"^body:[ \t]*(.*)$", text, re.M)
+    m = re.search(r"^body:[ \t]*(.*)$", text, re.MULTILINE)
     if not m:
         return False
     inline = m.group(1).strip()
@@ -300,14 +301,14 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
                 f"{name} has no front matter `name:` with a value: GitHub does not offer it as a template")
             usable += good
             continue
-        keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.M)]
+        keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.MULTILINE)]
         say(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")
         # A value starting with `*` or `&` is read as a YAML alias and breaks the whole form.
         trap = [n for n, ln in enumerate(text.splitlines(), 1) if alias_trap.match(ln)]
         say(not trap, f"{name} has no unquoted YAML alias", f"{name} line {trap}: value starts with * or &")
         # `labels:` is plinth's policy, not GitHub's syntax: forms are valid
         # without it, so it does not decide whether GitHub can offer the file.
-        labelled = re.search(r"^labels:\s*\[.+\]", text, re.M) or re.search(r"^labels:\s*\n\s+- ", text, re.M)
+        labelled = re.search(r"^labels:\s*\[.+\]", text, re.MULTILINE) or re.search(r"^labels:\s*\n\s+- ", text, re.MULTILINE)
         say(labelled is not None, f"{name} labels its issues",
             f"{name} has no labels: those issues never sort in a list")
         # `body:` holding a scalar is a form GitHub rejects. This check is new
@@ -379,7 +380,7 @@ def check_agent_settings(root: Path) -> None:
         return re.fullmatch(".*".join(map(re.escape, d[5:-1].split("*"))), cmd) is not None
 
     wants = {
-        "force push": lambda d: d.startswith("Bash(git push --force") or d.startswith("Bash(git push -f"),
+        "force push": lambda d: d.startswith(("Bash(git push --force", "Bash(git push -f")),
         "rm -rf": lambda d: d.startswith("Bash(rm -rf"),
         "gh auth token": lambda d: d.startswith("Bash(gh auth token"),
         ".env reads": lambda d: d.startswith("Read(./.env"),
@@ -412,7 +413,7 @@ def check_tracked_dotenv(root: Path) -> None:
     only; the contents are not read, and this is not a secret scanner (history,
     other file names and `.envrc` are outside it)."""
     try:
-        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, timeout=30,
+        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, timeout=30, check=False,
                            encoding="utf-8", errors="replace")  # a file name is any bytes; never a traceback
     except (OSError, subprocess.TimeoutExpired):
         r = None
@@ -460,7 +461,7 @@ def iter_uses(text: str):
             continue
         if re.search(r":\s*[|>][-+0-9]*\s*(?:#.*)?$", line):
             # The scalar's lines sit deeper than its key, and after `- ` the key starts past the dash.
-            block = re.match(r"\s*(?:-\s+)*", line).end()
+            block = cast("re.Match[str]", re.match(r"\s*(?:-\s+)*", line)).end()  # matches every string, if only empty
         m = USES_LINE.match(line)
         if m:
             yield n, m.group(2), True
@@ -532,7 +533,7 @@ def new_project_pin() -> tuple[str, str, str, str] | None:
     text = read(p)
     fields = {}
     for name in ("template_repo", "template_ref", "copier_version", "copier_newer"):
-        m = re.search(rf'^{name}="([^"]+)"$', text, re.M)
+        m = re.search(rf'^{name}="([^"]+)"$', text, re.MULTILINE)
         if not m:
             return None
         fields[name] = m.group(1)
@@ -674,7 +675,7 @@ def check_template_drift(root: Path, network: bool) -> None:
 
 def check_doc_links(root: Path) -> None:
     link = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-    fenced = re.compile(r"```.*?```", re.S)
+    fenced = re.compile(r"```.*?```", re.DOTALL)
     inline = re.compile(r"`[^`\n]*`")
     docs = [p for p in root.rglob("*.md") if not (set(p.relative_to(root).parts) & SKIP_DIRS)]
     if not docs:
@@ -703,7 +704,7 @@ def archetype_of(project: Path, given: str | None) -> str | None:
         return given
     answers = project / ".copier-answers.yml"
     if answers.is_file():
-        m = re.search(r"^archetype:\s*(\S+)", read(answers), re.M)
+        m = re.search(r"^archetype:\s*(\S+)", read(answers), re.MULTILINE)
         if m:
             return m.group(1).strip("'\"")
     return None
@@ -712,7 +713,7 @@ def archetype_of(project: Path, given: str | None) -> str | None:
 def package_name(project: Path) -> str | None:
     if not (project / "pyproject.toml").is_file():
         return None
-    m = re.search(r'^name\s*=\s*"([^"]+)"', read(project / "pyproject.toml"), re.M)
+    m = re.search(r'^name\s*=\s*"([^"]+)"', read(project / "pyproject.toml"), re.MULTILINE)
     return m.group(1).replace("-", "_") if m else None
 
 
@@ -798,19 +799,19 @@ def check_dockerfile(project: Path) -> None:
     if not ok(d.is_file(), "Dockerfile present", "Dockerfile missing"):
         return
     text = read(d)
-    froms = [re.sub(r"^--\S+\s+", "", f).split() for f in re.findall(r"^FROM\s+(.+)$", text, re.M)]
+    froms = [re.sub(r"^--\S+\s+", "", f).split() for f in re.findall(r"^FROM\s+(.+)$", text, re.MULTILINE)]
     aliases = {parts[2] for parts in froms if len(parts) >= 3 and parts[1].upper() == "AS"}
     bases = [parts[0] for parts in froms if parts and parts[0] not in aliases and parts[0] != "scratch"]
     unpinned = [b for b in bases if "@sha256:" not in b]
     ok(bool(froms) and not unpinned, "every base image is pinned by digest",
        f"base images not pinned by digest: {unpinned or 'no FROM at all'}")
-    users = re.findall(r"^USER\s+(\S+)", text, re.M)
+    users = re.findall(r"^USER\s+(\S+)", text, re.MULTILINE)
     ok(bool(users) and users[-1].split(":")[0] not in {"root", "0"}, "the image does not run as root",
        "the image runs as root (no USER, or the last USER is root)")
     ok("uv sync --locked" in text, "the image installs from the lockfile (uv sync --locked)",
        "the image does not use `uv sync --locked`: it can drift from the repository")
     pkg = package_name(project)
-    cmd = re.search(r"^CMD\s+\[(.+)\]", text, re.M)
+    cmd = re.search(r"^CMD\s+\[(.+)\]", text, re.MULTILINE)
     parts = [p.strip().strip('"') for p in cmd.group(1).split(",")] if cmd else []
     entry = project / "src" / (pkg or "") / "__main__.py"
     ok(parts[:2] == ["python", "-m"] and len(parts) > 2 and parts[2] == pkg and entry.is_file(),
@@ -850,7 +851,7 @@ def check_json_logs(project: Path) -> None:
                 result("PASS", f"JSON logs: static hint in {rel} ({label}); a hint in the source, not proof of what the process prints")
                 return
     logging_in = [rel for rel, text in texts.items()
-                  if re.search(r"^\s*(?:import|from)\s+[^#\n]*\b(?:logging|structlog|loguru)\b", text, re.M)]
+                  if re.search(r"^\s*(?:import|from)\s+[^#\n]*\b(?:logging|structlog|loguru)\b", text, re.MULTILINE)]
     if logging_in:
         result("SKIP", f"JSON logs not verified: {', '.join(logging_in)} set up logging in a way this checker does not recognise "
                        "(known: a logging.Formatter with json.dumps, structlog JSONRenderer, python-json-logger, loguru serialize=True)")
@@ -864,9 +865,9 @@ def check_image_job(root: Path) -> None:
     """The check the ruleset requires of a service archetype exists in the caller (#127)."""
     ci = root / ".github" / "workflows" / "ci.yml"
     text = read(ci) if ci.is_file() else ""
-    m = re.search(r"^  image:\s*$", text, re.M)
+    m = re.search(r"^  image:\s*$", text, re.MULTILINE)
     # The job's own lines: up to the next two-space key. `buildx build` is a build too.
-    block = re.split(r"^  \S", text[m.end():], maxsplit=1, flags=re.M)[0] if m else ""
+    block = re.split(r"^  \S", text[m.end():], maxsplit=1, flags=re.MULTILINE)[0] if m else ""
     ok(m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
        "ci.yml carries the image job (docker build, docker run)",
        "ci.yml has no `image` job that builds and runs the container; the ruleset requires that check for this archetype")
@@ -889,7 +890,7 @@ def check_env_example(project: Path) -> None:
         return
     pattern = re.compile(r"""os\.(?:environ\s*\[\s*|environ\.get\s*\(\s*|getenv\s*\(\s*)['"]([A-Z_][A-Z0-9_]*)['"]""")
     used = {m for f in (project / "src").rglob("*.py") for m in pattern.findall(read(f))} if (project / "src").is_dir() else set()
-    documented = set(re.findall(r"^\s*#?\s*([A-Z_][A-Z0-9_]*)\s*=", read(e), re.M))
+    documented = set(re.findall(r"^\s*#?\s*([A-Z_][A-Z0-9_]*)\s*=", read(e), re.MULTILINE))
     missing = sorted(used - documented)
     ok(not missing, ".env.example documents every variable the code reads",
        f".env.example is missing variables the code reads: {missing}")

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verdicts of tests/shell-lint.sh and tests/workflow-lint.sh when a tool is
+# Verdicts of tests/shell-lint.sh, tests/workflow-lint.sh and tests/python-lint.sh when a tool is
 # missing, fails, or is not the pinned version. The tools are stubs on a PATH
 # that holds nothing else, so a linter installed on this machine cannot turn a
 # "missing" case into a pass. `bash -n` is the real one.
@@ -7,10 +7,14 @@ set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pin="$(sed -n 's/^actionlint_version="\(.*\)"$/\1/p' "$root/tests/workflow-lint.sh")"
 [ -n "$pin" ] || { echo "  FAIL  actionlint_version= not found in tests/workflow-lint.sh"; exit 1; }
+ruff_pin="$(sed -n 's/^ruff_version="\(.*\)"$/\1/p' "$root/tests/python-lint.sh")"
+mypy_pin="$(sed -n 's/^mypy_version="\(.*\)"$/\1/p' "$root/tests/python-lint.sh")"
+[ -n "$ruff_pin" ] && [ -n "$mypy_pin" ] || { echo "  FAIL  ruff_version= or mypy_version= not found in tests/python-lint.sh"; exit 1; }
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 base="$tmp/base"; mkdir -p "$base"
-for t in bash dirname sed head; do ln -s "$(command -v "$t")" "$base/$t"; done
+# git: python-lint.sh lists the files it checks with `git ls-files`.
+for t in bash dirname sed head git; do ln -s "$(command -v "$t")" "$base/$t"; done
 
 stub() { # <dir> <name> <body>
   mkdir -p "$tmp/$1"; printf '#!/bin/sh\n%s\n' "$3" > "$tmp/$1/$2"; chmod +x "$tmp/$1/$2"
@@ -57,6 +61,21 @@ check workflow-lint.sh local 0 "not the pinned pass" al-old pipx
 echo "-- workflow-lint.sh: zizmor runs at the exact pin, pipx first"
 check workflow-lint.sh local 0 "ran-pipx run zizmor==" al-pin pipx uvx
 check workflow-lint.sh local 0 "ran-uvx zizmor==" al-pin uvx
+
+echo "-- python-lint.sh: ruff and mypy at the exact pins, pipx first; one failing does not hide the other"
+check python-lint.sh local 1 "FAIL  ruff, mypy: neither pipx nor uvx found"
+check python-lint.sh local 0 "ran-pipx run ruff==$ruff_pin" pipx uvx
+check python-lint.sh local 0 "ran-uvx mypy==$mypy_pin" uvx
+check python-lint.sh local 1 "FAIL  ruff" uvx-bad
+check python-lint.sh local 1 "FAIL  mypy" uvx-bad
+# No Python file found is a FAIL, not a pass that checked nothing: the script,
+# copied into a repository that has no scripts/*.py, with a tool that would pass.
+empty="$tmp/empty"; mkdir -p "$empty/tests"; cp "$root/tests/python-lint.sh" "$empty/tests/"
+git -C "$empty" init -q && git -C "$empty" add tests/python-lint.sh
+out="$(PATH="$tmp/uvx:$base" "$base/bash" "$empty/tests/python-lint.sh" 2>&1)"; got=$?
+if [ "$got" = 1 ] && printf '%s' "$out" | grep -qF "FAIL  no Python file under scripts/"; then
+  pass=$((pass+1)); echo "  PASS  python-lint.sh   local exit 1, says: FAIL  no Python file under scripts/ (a repository without them)"
+else fail=$((fail+1)); printf '  FAIL  python-lint.sh   wanted exit 1 and "no Python file", got exit %s:\n%s\n' "$got" "$out"; fi
 
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]
