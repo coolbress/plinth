@@ -31,6 +31,13 @@ On a clean or CI machine, run `claude plugin marketplace add anthropics/claude-p
 first. One dependency lives there, and Claude Code registers that marketplace on
 its own only during an interactive first run.
 
+The default set runs one hook: `last30days` adds a `SessionStart` hook
+(about 0.4 s) that checks its own configuration. The set also brings 58
+skills whose listing, about 3,600 estimated tokens, is more than Claude
+Code's skill-listing budget of about 2,000. Past the budget, skill
+descriptions are left out of the listing, and on a fresh install no usage
+history decides which ones (#226).
+
 Third-party marketplaces do not auto-update. To move to a new version, run
 `claude plugin update plinth`, then `/reload-plugins`.
 

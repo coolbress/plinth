@@ -19,6 +19,12 @@ pull requests and have no tag.
   message is the description hard-wrapped at 72 columns, so a description
   written at about 80 columns landed on `main` with stray one-word lines.
   `AGENTS.md`'s "becomes the squash commit" points at that step.
+- The README's install section, `/plinth:arsenal` and the marketplace
+  descriptions say what the default set costs a session: `last30days` runs
+  a `SessionStart` hook, and the 58 skills' listing is larger than Claude
+  Code's skill-listing budget. `AGENTS.md`'s Ask-first rule on hooks now
+  covers adding a dependency, or raising its pin, when that version ships
+  a hook.
 
 ## [0.5.22] - 2026-09-24
 

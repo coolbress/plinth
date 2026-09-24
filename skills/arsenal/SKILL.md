@@ -23,7 +23,7 @@ line arrived as text, and this catalog being open shows plinth is installed.
 | --- | --- | --- | --- | --- |
 | `mattpocock-skills` | Planning, specs, tickets, TDD, code review, domain modelling | Any change bigger than a typo; start with `/ask-matt` | ~1.6k tokens always on | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
 | `taste-skill` | Frontend design that does not look templated: landing pages, portfolios, redesigns | Any page a person will look at, server-rendered HTML included, from its first version; the user will not ask for styling. It reads the brief, decides direction, and asks at most one question | ~1.7k tokens always on (13 skills), ~34k when `taste-skill` fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
-| `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions. Not for deciding; verify with `/research` | ~100 tokens always on, ~90k per call | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
+| `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions. Not for deciding; verify with `/research` | ~100 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail-skills` | Write the least code that works; review and audit for over-engineering | While implementing, and when a diff feels bigger than the task | ~1k tokens always on, no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 
 Built into Claude Code, nothing to install: `/design` for screen mockups and
