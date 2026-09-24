@@ -12,8 +12,12 @@
 # changing the set, and mypy reads no configuration file for the same reason.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ruff_version="0.16.8"
-mypy_version="2.3.1"
+# The versions are pinned in tests/lint-tools.in; both tools install
+# hash-checked from tests/lint-tools.txt (tests/lib/lint-tools.sh).
+# shellcheck source=tests/lib/lint-tools.sh
+. "$root/tests/lib/lint-tools.sh"
+ruff_version="$(lint_tool_version ruff)"
+mypy_version="$(lint_tool_version mypy)"
 # The Python mypy checks against, not the one that runs it, so a laptop and CI
 # agree. 3.10 is the oldest mypy 2.3.1 accepts; these scripts also run on older
 # python3 (a user's system one), which only compiling on it would show.
@@ -26,23 +30,19 @@ while IFS= read -r f; do files+=("$f"); done < <(git ls-files -- 'scripts/*.py')
 # No file is not a pass: a moved directory would otherwise lint nothing, green.
 if [ "${#files[@]}" = 0 ]; then echo "  FAIL  no Python file under scripts/ (git ls-files)"; exit 1; fi
 
-if command -v pipx >/dev/null; then run="pipx run"
-elif command -v uvx >/dev/null; then run="uvx"
-else run=""; fi
-if [ -z "$run" ]; then
-  echo "  FAIL  ruff, mypy: neither pipx nor uvx found: install uv (https://docs.astral.sh/uv/)"; exit 1
-fi
+if ! bin="$(lint_tools_bin)"; then echo "${bin/FAIL  /FAIL  ruff, mypy: }"; exit 1; fi
+from="${PLINTH_LINT_TOOLS_BIN:+, from PLINTH_LINT_TOOLS_BIN, not hash-checked}"
 
-if $run "ruff==$ruff_version" check --isolated --no-cache "${files[@]}"; then
-  echo "  PASS  ruff $ruff_version (${#files[@]} files, $run)"
+if "$bin/ruff" check --isolated --no-cache "${files[@]}"; then
+  echo "  PASS  ruff $ruff_version (${#files[@]} files$from)"
 else
-  echo "  FAIL  ruff $ruff_version ($run)"; fail=1
+  echo "  FAIL  ruff $ruff_version"; fail=1
 fi
 
 # `--cache-dir=/dev/null` writes no .mypy_cache into the checkout.
-if $run "mypy==$mypy_version" --config-file '' --cache-dir=/dev/null --python-version "$mypy_target" "${files[@]}"; then
-  echo "  PASS  mypy $mypy_version (${#files[@]} files, Python $mypy_target, $run)"
+if "$bin/mypy" --config-file '' --cache-dir=/dev/null --python-version "$mypy_target" "${files[@]}"; then
+  echo "  PASS  mypy $mypy_version (${#files[@]} files, Python $mypy_target$from)"
 else
-  echo "  FAIL  mypy $mypy_version ($run)"; fail=1
+  echo "  FAIL  mypy $mypy_version"; fail=1
 fi
 exit "$fail"

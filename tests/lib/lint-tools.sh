@@ -1,0 +1,48 @@
+# shellcheck shell=bash disable=SC2154  # $root is set by the script that sources this file
+# The Python tools of `ci / tools` (zizmor, ruff, mypy), installed from
+# tests/lint-tools.txt with every artifact checked against its hash (#264).
+# Sourced by tests/workflow-lint.sh and tests/python-lint.sh, which set $root.
+#
+# pipx and uvx pin a version but check no hash, so this uses a venv and
+# `pip install --require-hashes --only-binary=:all:`: a wheel whose hash is not
+# in the file stops the install, and nothing is built from source. The venv is
+# kept per lock file and interpreter under the user's cache directory, so a
+# second local run does not download again; CI starts empty every time. Each
+# run builds in a directory of its own (`<key>.<pid>`) and uses any finished
+# one, so two runs at once never delete each other's; a venv cannot be moved
+# once made, its paths are absolute.
+#
+# PLINTH_LINT_TOOLS_BIN, when set, is used as the tools' directory instead:
+# tests/lint-wrappers-cases.sh puts stubs there. The wrappers say so, and in CI
+# (GITHUB_ACTIONS) it is a FAIL: there the tools are the hash-checked ones.
+
+lint_tool_version() { # <package> -> its pinned version in tests/lint-tools.txt
+  sed -n "s/^$1==\([^ ;]*\).*/\1/p" "$root/tests/lint-tools.txt"
+}
+
+lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL line there, and 1
+  local req="$root/tests/lint-tools.txt" py key cache dir mark
+  if [ -n "${PLINTH_LINT_TOOLS_BIN:-}" ]; then
+    [ -z "${GITHUB_ACTIONS:-}" ] || { echo "  FAIL  PLINTH_LINT_TOOLS_BIN is set in CI, where the tools must be the hash-checked ones"; return 1; }
+    printf '%s' "$PLINTH_LINT_TOOLS_BIN"; return 0
+  fi
+  py="$(command -v python3)" || { echo "  FAIL  python3 not found: install Python 3.10 or later (https://www.python.org/downloads/)"; return 1; }
+  "$py" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null \
+    || { echo "  FAIL  $("$py" --version 2>&1) is older than 3.10, which the pinned tools need"; return 1; }
+  key="$("$py" -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read() + sys.version.encode()).hexdigest()[:16])' "$req")" \
+    || { echo "  FAIL  cannot read $req"; return 1; }
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}/plinth/lint-tools"
+  # A finished venv for this lock file and interpreter; one without the marker
+  # (an interrupted run, or one still installing) is never used.
+  for mark in "$cache/$key".*/.installed; do
+    [ -f "$mark" ] && { printf '%s' "${mark%/.installed}/bin"; return 0; }
+  done
+  dir="$cache/$key.$$"
+  if ! { mkdir -p "$cache" && "$py" -m venv "$dir" && "$dir/bin/python" -m pip install --quiet \
+          --disable-pip-version-check --no-input --require-hashes --only-binary=:all: -r "$req"; } >&2; then
+    rm -rf "${dir:?}"
+    echo "  FAIL  installing tests/lint-tools.txt, hash-checked, into a venv (needs network the first time)"; return 1
+  fi
+  touch "$dir/.installed"
+  printf '%s' "$dir/bin"
+}
