@@ -22,8 +22,9 @@ lint_tool_version() { # <package> -> its pinned version in tests/lint-tools.txt
 
 # The key covers the lock file's bytes; the interpreter's version, real path,
 # platform and ABI; and the cache directory's real path, because a venv's
-# console scripts name its Python by absolute path. The same cache volume
-# mounted at two paths therefore gives two keys. Nothing else is in it: two
+# console scripts name its Python by absolute path and lint_tools_bin builds
+# under that real path. The same cache volume mounted at two paths therefore
+# gives two keys. Nothing else is in it: two
 # machines or containers that match on all of these share one venv.
 lint_tools_key() { # <python> <lock file> <cache dir> -> the cache key on stdout
   "$1" -c 'import hashlib, os, sys, sysconfig
@@ -44,7 +45,9 @@ lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL li
   "$py" -c 'import ensurepip, venv' 2>/dev/null \
     || { echo "  FAIL  python3 cannot make a venv with pip: install python3-venv (Debian, Ubuntu: sudo apt-get install python3-venv)"; return 1; }
   cache="${XDG_CACHE_HOME:-$HOME/.cache}/plinth/lint-tools"
-  mkdir -p "$cache" || { echo "  FAIL  cannot make $cache"; return 1; }
+  # Built and keyed under the resolved path, so the path in the venv's scripts
+  # is the one in the key, however the cache was reached.
+  cache="$(mkdir -p "$cache" && cd -P "$cache" && pwd -P)" || { echo "  FAIL  cannot make $cache"; return 1; }
   key="$(lint_tools_key "$py" "$req" "$cache")" || { echo "  FAIL  cannot read $req"; return 1; }
   # A finished venv for this key; one without the marker
   # (an interrupted run, or one still installing) is never used.

@@ -92,14 +92,19 @@ cache_case() { # <XDG_CACHE_HOME> -> what lint_tools_bin prints
   (unset PLINTH_LINT_TOOLS_BIN GITHUB_ACTIONS; export XDG_CACHE_HOME="$1" PIP_NO_INDEX=1
    . "$root/tests/lib/lint-tools.sh"; lint_tools_bin 2>/dev/null)
 }
-key_a="$(. "$root/tests/lib/lint-tools.sh"; lint_tools_key "$(command -v python3)" "$root/tests/lint-tools.txt" "$tmp/cache-a/plinth/lint-tools")"
-mkdir -p "$tmp/cache-a/plinth/lint-tools/$key_a.planted/bin" && touch "$tmp/cache-a/plinth/lint-tools/$key_a.planted/.installed"
-got_a="$(cache_case "$tmp/cache-a")"; cp -R "$tmp/cache-a" "$tmp/cache-b"; got_b="$(cache_case "$tmp/cache-b")"
-if [ "$got_a" = "$tmp/cache-a/plinth/lint-tools/$key_a.planted/bin" ]; then pass=$((pass+1)); echo "  PASS  a finished venv under the same cache path is reused"
+# A symlink to A reaches the same venv under A's real path, the one its scripts name.
+real_a="$(mkdir -p "$tmp/cache-a/plinth/lint-tools" && cd -P "$tmp/cache-a/plinth/lint-tools" && pwd -P)"
+key_a="$(. "$root/tests/lib/lint-tools.sh"; lint_tools_key "$(command -v python3)" "$root/tests/lint-tools.txt" "$real_a")"
+mkdir -p "$real_a/$key_a.planted/bin" && touch "$real_a/$key_a.planted/.installed"
+got_a="$(cache_case "$tmp/cache-a")"; ln -s "$tmp/cache-a" "$tmp/cache-link"; got_link="$(cache_case "$tmp/cache-link")"
+cp -R "$tmp/cache-a" "$tmp/cache-b"; got_b="$(cache_case "$tmp/cache-b")"
+if [ "$got_a" = "$real_a/$key_a.planted/bin" ]; then pass=$((pass+1)); echo "  PASS  a finished venv under the same cache path is reused"
 else fail=$((fail+1)); echo "  FAIL  the planted venv under cache A was not reused: got '$got_a'"; fi
+if [ "$got_link" = "$real_a/$key_a.planted/bin" ]; then pass=$((pass+1)); echo "  PASS  a symlink to the cache gets the venv under its real path"
+else fail=$((fail+1)); echo "  FAIL  through a symlink to cache A, wanted '$real_a/$key_a.planted/bin', got '$got_link'"; fi
 case "$got_b" in
   *cache-b*planted*) fail=$((fail+1)); echo "  FAIL  cache B reused the venv copied from A: $got_b" ;;
-  *) pass=$((pass+1)); echo "  PASS  the same cache at another path builds its own venv" ;;
+  *) pass=$((pass+1)); echo "  PASS  the same cache at another path does not reuse the venv copied from it" ;;
 esac
 
 echo "-- tests/lint-tools.txt: every pin of lint-tools.in, every package hashed"
