@@ -8,7 +8,7 @@
 # in the file stops the install, and nothing is built from source. The venv is
 # kept per lock file and interpreter under the user's cache directory, so a
 # second local run does not download again; CI starts empty every time. Each
-# run builds in a directory of its own (`<key>.<pid>`) and uses any finished
+# run builds in a directory of its own (`<key>.<random>`) and uses any finished
 # one, so two runs at once never delete each other's; a venv cannot be moved
 # once made, its paths are absolute.
 #
@@ -29,6 +29,9 @@ lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL li
   py="$(command -v python3)" || { echo "  FAIL  python3 not found: install Python 3.10 or later (https://www.python.org/downloads/)"; return 1; }
   "$py" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null \
     || { echo "  FAIL  $("$py" --version 2>&1) is older than 3.10, which the pinned tools need"; return 1; }
+  # Debian and Ubuntu package venv's pip bootstrap separately from python3.
+  "$py" -c 'import ensurepip, venv' 2>/dev/null \
+    || { echo "  FAIL  python3 cannot make a venv with pip: install python3-venv (Debian, Ubuntu: sudo apt-get install python3-venv)"; return 1; }
   # The key names the lock file and the interpreter: its version, its real path,
   # its platform and its ABI, so a cache shared across machines or containers
   # never hands one a venv built for another.
@@ -42,8 +45,10 @@ print(hashlib.sha256(open(sys.argv[1], "rb").read() + "\0".join(who).encode()).h
   for mark in "$cache/$key".*/.installed; do
     [ -f "$mark" ] && { printf '%s' "${mark%/.installed}/bin"; return 0; }
   done
-  dir="$cache/$key.$$"
-  if ! { mkdir -p "$cache" && "$py" -m venv "$dir" && "$dir/bin/python" -m pip install --quiet \
+  # A random name, not the PID: two containers sharing this cache can have the same PID.
+  mkdir -p "$cache" && dir="$(mktemp -d "$cache/$key.XXXXXX")" \
+    || { echo "  FAIL  cannot make a directory under $cache"; return 1; }
+  if ! { "$py" -m venv "$dir" && "$dir/bin/python" -m pip install --quiet \
           --disable-pip-version-check --no-input --require-hashes --only-binary=:all: -r "$req"; } >&2; then
     rm -rf "${dir:?}"
     echo "  FAIL  installing tests/lint-tools.txt, hash-checked, into a venv (needs network the first time)"; return 1

@@ -25,7 +25,8 @@ directory exactly as the README says, so it needs network and a few minutes.
 downloads the one version pinned in that file, the same file `ci / docs` runs,
 and lints from its cache afterwards. `tests/shell-lint.sh` needs shellcheck and
 `tests/workflow-lint.sh` needs actionlint, and it and `tests/python-lint.sh`
-need `python3` 3.10 or later: zizmor, ruff and mypy install into a venv from
+need `python3` 3.10 or later that can make a venv (on Debian and Ubuntu, the
+`python3-venv` package): zizmor, ruff and mypy install into a venv from
 `tests/lint-tools.txt`, every file checked against its hash, with network the
 first time; a missing tool is a FAIL that names the install command, never a
 skip. Everything else runs offline in seconds.

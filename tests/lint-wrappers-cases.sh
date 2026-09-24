@@ -27,6 +27,8 @@ stub sc-bad shellcheck 'case "$1" in --version) echo "version: 9.9.9";; *) exit 
 stub al-pin actionlint "echo $pin"
 stub al-old actionlint 'echo 0.0.1'
 stub al-bad actionlint "case \"\$1\" in -version) echo $pin;; *) exit 1;; esac"
+# A python3 new enough but without venv's pip bootstrap (Debian's python3 without python3-venv).
+stub py-novenv python3 'case "$*" in *ensurepip*) exit 1;; *version_info*) exit 0;; *) exit 1;; esac'
 for tool in zizmor ruff mypy; do
   stub tools-ok  "$tool" "echo \"ran-$tool \$*\""
   stub tools-bad "$tool" 'exit 1'
@@ -67,6 +69,7 @@ check workflow-lint.sh local 0 "not hash-checked" al-pin tools-ok
 
 echo "-- python-lint.sh: one failing tool does not hide the other"
 check python-lint.sh local 1 "FAIL  ruff, mypy: python3 not found"
+check python-lint.sh local 1 "FAIL  ruff, mypy: python3 cannot make a venv with pip: install python3-venv" py-novenv
 check python-lint.sh local 0 "PASS  ruff $ruff_pin" tools-ok
 check python-lint.sh local 0 "PASS  mypy $mypy_pin" tools-ok
 check python-lint.sh local 1 "FAIL  ruff" tools-bad
