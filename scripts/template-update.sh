@@ -81,10 +81,12 @@ finish() { # <worktree>
     echo "Nothing pushed and nothing changed; further commits there are a person's."
     exit 0
   fi
-  branch="$(git -C "$wt" rev-parse --abbrev-ref HEAD)"
-  case "$branch" in
-    "$default"|HEAD|"") die "the worktree is on '$branch', not an update branch; nothing pushed" ;;
-  esac
+  # Only the branch --apply made: a worktree switched to any other branch is
+  # not the update, whatever it holds (Codex review on #273).
+  branch="$(state_get "$sf" branch)"
+  local on; on="$(git -C "$wt" rev-parse --abbrev-ref HEAD)"
+  [ -n "$branch" ] && [ "$on" = "$branch" ] && [ "$branch" != "$default" ] \
+    || die "the worktree is on '$on', not the update branch '$branch'; nothing committed or pushed. Switch back: git -C $wt switch $branch"
 
   left="$(conflicts_in "$wt")"
   if [ -n "$left" ]; then
@@ -226,8 +228,14 @@ fi
 [ -e "$wt" ] && die "$wt already exists: finish it ($0 --finish $wt) or discard it (git worktree remove --force $wt && git branch -D $branch)"
 git -C "$top" rev-parse -q --verify "refs/heads/$branch" >/dev/null \
   && die "branch $branch already exists: delete it (git branch -D $branch) or finish its worktree"
-[ -n "$(git -C "$top" ls-remote --heads origin "$branch" 2>/dev/null)" ] \
-  && die "branch $branch already exists on origin: an update is under way there"
+# --exit-code: 2 is "no such branch"; any other failure is not an answer,
+# and is a stop, not an absent branch (Codex review on #273).
+git -C "$top" ls-remote --exit-code --heads origin "$branch" >/dev/null; probe=$?
+case "$probe" in
+  2) ;;
+  0) die "branch $branch already exists on origin: an update is under way there" ;;
+  *) die "could not ask origin whether $branch exists (git ls-remote exit $probe, above); nothing created" ;;
+esac
 
 git -C "$top" worktree add -q --no-track -b "$branch" "$wt" "$base" || die "git worktree add failed"
 dirty="$(git -C "$wt" status --porcelain --untracked-files=all)"
@@ -248,7 +256,7 @@ echo "  $cmd"
 
 sf="$(state_file "$wt")"
 {
-  printf 'repo=%s\ndefault=%s\nbase=%s\nfrom=%s\nto=%s\ncommand=%s\n' "$repo" "$default" "$base" "$from" "$to" "$cmd"
+  printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\n' "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd"
   conflicts="$(conflicts_in "$wt")"
   while IFS= read -r p; do [ -n "$p" ] && printf 'conflict=%s\n' "$p"; done <<<"$conflicts"
   # Each file copier merged cleanly, with its content hash, so --finish can

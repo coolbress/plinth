@@ -67,7 +67,16 @@ case "${MOCK_COPIER:-clean}" in
   rej) printf -- '--- a\n+++ b\n' > CONTRIBUTING.md.rej ;;
 esac
 MOCK
-chmod +x "$work/bin/gh" "$work/bin/uvx"
+# ── wrapper: git, failing only `ls-remote` when MOCK_LSREMOTE_FAIL is set ─
+real_git="$(command -v git)"
+cat > "$work/bin/git" <<MOCK
+#!/usr/bin/env bash
+for a in "\$@"; do
+  if [ "\$a" = ls-remote ] && [ -n "\${MOCK_LSREMOTE_FAIL:-}" ]; then echo "fatal: could not read from remote repository" >&2; exit 128; fi
+done
+exec "$real_git" "\$@"
+MOCK
+chmod +x "$work/bin/gh" "$work/bin/uvx" "$work/bin/git"
 
 # A consumer repository at an old template tag, pushed to a bare origin.
 fixture() { # <name> → sets $repo and $BARE, cleans up what an earlier case left
@@ -216,6 +225,24 @@ git -C "$repo" commit -q -am "bump plinth" && git -C "$repo" push -q origin main
 run --apply "$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$raised\$" "$work/uvx.log"; then ok "copier is given the pin the workflows carry today, not the one first rendered"
 else bad "raised pin (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; fi
+
+# ── only the recorded update branch is finished ─────────────────────────
+fixture other; reset_logs
+base="$(git -C "$BARE" rev-parse main)"; wt="$(wt_of other)"
+out="$(cd "$repo" && MOCK_COPIER=conflict PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" 2>&1)"
+printf '# Contributing\nresolved\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add -A; git -C "$wt" switch -q -c unrelated-branch
+reset_logs
+run --finish "$wt"
+if [ "$rc" = 1 ] && ! grep -q "pr create" "$work/gh.log" && ! git -C "$BARE" rev-parse -q --verify refs/heads/unrelated-branch >/dev/null \
+   && grep -q "chore/template-$target_ref" <<<"$out"
+then ok "a worktree switched to another branch is not finished: nothing pushed, nothing opened"
+else bad "other branch (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── a remote branch probe that fails is a stop, not an absent branch ────
+fixture probe; reset_logs
+out="$(cd "$repo" && MOCK_LSREMOTE_FAIL=1 PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && [ ! -e "$(wt_of probe)" ]; then ok "git ls-remote failing stops before a worktree or copier"
+else bad "ls-remote failure (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # ── .rej files count as conflicts ───────────────────────────────────────
 fixture rej; reset_logs
