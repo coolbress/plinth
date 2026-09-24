@@ -20,7 +20,11 @@ release's commit now downloads four scripts from
 written inline in the workflow. What the check decides is unchanged. A
 runner that cannot reach that host fails the check at the new step,
 rather than passing. The other two changes restructure
-`/plinth:new-project`'s script, and what it does is unchanged.
+`/plinth:new-project`'s script. It reaches the same decisions, but when the
+owner has a public `.github` repository it now reads all three
+pull-request template paths and every file in its issue-template folder
+before deciding, where it used to stop at the first match and skip
+non-template files. That is one more API call per extra file, per run.
 
 tested with plinth-template v1.5.0
 
