@@ -185,7 +185,7 @@ set -u
 for a in "$@"; do
   if [ "$a" = push ]; then
     printf 'git %s\n' "$*" >> "$GH_LOG"
-    [ "${FAIL_AT:-}" = push ] && { echo "mock git: push refused on purpose" >&2; exit 1; }
+    [ "${FAIL_AT:-}" = push ] && { printf '%b\n' "${MOCK_PUSH_ERR:-mock git: push refused on purpose}" >&2; exit 1; }
     # An empty repository takes the first branch pushed as its default branch,
     # and the gh mock reads this file back. Last argument, minus any refspec
     # prefix: `HEAD:refs/heads/x` pushes `x`, `-u origin main` pushes `main`.
@@ -388,6 +388,40 @@ echo "after creation: any failure deletes"
 for at in copier push default-branch codeql ruleset secret dependabot actions allowlist merge pr; do
   E="FAIL_AT=$at" run "$at" err yes yes "" -- probe
 done
+# The push's hint follows what git said (#271): a GitHub server error is not
+# the token, and the fix is to run the door again; an authentication or
+# permission refusal keeps the token hint; anything else names both, as
+# possibilities. Each still rolls back.
+# git's words carry spaces, which E= would split, so they go through the
+# environment for the one run.
+push_fails() { local case="$1" text="$2" err="$3"
+  MOCK_PUSH_ERR="$err" E="FAIL_AT=push" run "$case" err yes yes "$text" -- probe; }
+export MOCK_PUSH_ERR
+push_fails push-5xx   "not the token: GitHub failed on its side" 'remote: Internal Server Error\n ! [remote rejected] main -> main (Internal Server Error)'
+push_fails push-502   "not the token: GitHub failed on its side" "fatal: unable to access 'https://github.com/tester/probe.git/': The requested URL returned error: 502"
+push_fails push-auth  "the token has the repo scope" 'remote: Invalid username or token.\nfatal: Authentication failed for x'
+push_fails push-403   "the token has the repo scope" "remote: Permission to tester/probe.git denied to tester.\nfatal: unable to access 'https://github.com/tester/probe.git/': The requested URL returned error: 403"
+push_fails push-503   "not the token: GitHub failed on its side" 'remote: Service Unavailable\nfatal: unable to access x'
+push_fails push-401   "the token has the repo scope" 'error: RPC failed; HTTP 401 curl 22 The requested URL returned error: 401'
+push_fails push-other "possibly" 'fatal: the remote end hung up unexpectedly'
+unset MOCK_PUSH_ERR
+for c in push-5xx push-502 push-503; do
+  if grep -q "the token has the repo scope" "$work/home-$c/out" || ! grep -q "run the door again" "$work/home-$c/out"
+  then bad "$c" "a server error blames the token, or does not say to run the door again"; sed 's/^/        /' "$work/home-$c/out"
+  else ok "$c" "names GitHub, not the token, and says to run the door again"; fi
+done
+# The fallback also prints the token hint, so it is absent "possibly" that
+# shows the refusal was recognised rather than fallen through.
+for c in push-auth push-403 push-401; do
+  if grep -q "run the door again" "$work/home-$c/out" || grep -q "possibly" "$work/home-$c/out" \
+     || ! grep -q "^  check: the token has the repo scope" "$work/home-$c/out"
+  then bad "$c" "an authentication refusal was not recognised as one"; sed 's/^/        /' "$work/home-$c/out"
+  else ok "$c" "keeps the token hint alone"; fi
+done
+if grep -q "the token has the repo scope" "$work/home-push-other/out" && grep -q "run the door again" "$work/home-push-other/out" \
+   && grep -q "the remote end hung up unexpectedly" "$work/home-push-other/out"
+then ok push-other "git's words, then both hints as possibilities"
+else bad push-other "an unrecognised push error lost git's words or a hint"; sed 's/^/        /' "$work/home-push-other/out"; fi
 E="MOCK_RUNS=startup" run startup-failure err yes yes "failed at startup" -- probe
 # A pull request opened before CodeQL default setup has finished configuring is
 # never analysed (measured three times, #62 and #120; the comment in the door

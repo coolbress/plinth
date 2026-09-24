@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- When `/plinth:new-project` cannot push the new repository's first commit,
+  its hint now follows git's error. A GitHub server error (`Internal Server
+  Error`, an HTTP 5xx) says GitHub failed, not the token, and to run the door
+  again; an authentication or permission refusal keeps the token hint; any
+  other error prints both as possibilities. The rollback that deletes the new
+  repository is unchanged.
+
 ## [0.5.25] - 2026-09-24
 
 A repository `/plinth:new-project` creates now tells its contributors how to
