@@ -494,13 +494,14 @@ codeql_enabled="$(date -u +%H:%M:%SZ)"
 # seen, so a live run is its own record.
 # ponytail: the minute is a margin, measured to hold at 66 s and to fail at
 # 4 s; the boundary between is not measured.
-deadline=$((SECONDS + first_pr_wait)); setup=""; main_run=""
-for v in updated run analysis; do printf -v "seen_$v" '%s' ''; done
-mark() { # <name> <value>: kept and printed whenever the value changes; null and empty are not values
+# A signal is printed when it changes, not on every poll; the first pull request's loop uses this too.
+mark() { # <name> <value> [label]: kept in seen_<name> and printed whenever the value changes; null and empty are not values
   local var="seen_$1"
-  [ -n "$2" ] && [ "$2" != null ] && [ "${!var}" != "$2" ] && { printf -v "$var" '%s' "$2"; echo "  $(date -u +%H:%M:%SZ) $1: $2"; }
+  [ -n "$2" ] && [ "$2" != null ] && [ "${!var}" != "$2" ] && { printf -v "$var" '%s' "$2"; echo "  $(date -u +%H:%M:%SZ) ${3:-$1}: $2"; }
   return 0
 }
+deadline=$((SECONDS + first_pr_wait)); setup=""; main_run=""
+for v in updated run analysis; do printf -v "seen_$v" '%s' ''; done
 api_first() { # <path> <jq>: the first line, or nothing on any failure (a 404 body is not a value)
   local out; out="$(gh api "$1" --jq "$2" 2>/dev/null)" || return 0; head -1 <<<"$out"
 }
@@ -586,7 +587,7 @@ pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "doc
 # later, #62 #120 #117); the first push is the one it can miss, and the user
 # should not have to know that. Ninety seconds: CodeQL appeared on a head
 # within 11 s of its push when it did at all.
-deadline=$((SECONDS + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""
+deadline=$((SECONDS + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""; seen_head_codeql=""
 repush_at=$((SECONDS + (first_pr_wait < 90 ? first_pr_wait : 90))); repushed=0
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
@@ -602,7 +603,8 @@ while :; do
   # CodeQL's runs do not list under the branch; its check runs on the head do.
   if [ "$codeql" = 0 ]; then
     names="$(gh api "repos/$repo/commits/$head_sha/check-runs" --jq '.check_runs[].name' 2>/dev/null || true)"
-    grep -qE '^(CodeQL|Analyze \()' <<<"$names" && { codeql=1; echo "  $(date -u +%H:%M:%SZ) CodeQL on the pull request head: $(grep -E '^(CodeQL|Analyze \()' <<<"$names" | tr '\n' ' ')"; }
+    mark head_codeql "$(grep -E '^(CodeQL|Analyze \()' <<<"$names" | tr '\n' ' ')" "CodeQL on the pull request head"
+    [ -n "$seen_head_codeql" ] && codeql=1
   fi
   [ "$seen" -ge 2 ] && [ "$codeql" = 1 ] && break
   if [ "$codeql" = 0 ] && [ "$repushed" = 0 ] && [ "$SECONDS" -ge "$repush_at" ]; then
