@@ -213,69 +213,20 @@ ruleset_body="$(python3 "$here/floor-check.py" --print-ruleset --ruleset "$here/
 # replace the owner's convention without saying so. Asked here, before anything
 # exists: a lookup that fails is not an answer, and the fix is to retry or to
 # choose, not to guess. `--force-defaults` skips the question and renders ours.
-#
-# Two answers, not one. GitHub decides the pull-request template per file and
-# the issue templates per folder: one local form -- or just a `config.yml` --
-# stops the whole shared folder being inherited, and the two are never merged.
-# `unknown: <why>` rather than a variable: these run in command substitutions,
-# which are subshells, so an assignment inside would never reach the caller.
-# "A failed lookup is not an answer" is only actionable if the reader learns
-# what failed, and `why_unknown` peels the reason back off.
-why_unknown() { case "$1" in unknown:*) printf '%s' "${1#unknown: }" ;; *) printf '(no message)' ;; esac; }
-shared_of() { # <path>... -> yes (any present) | no (all absent) | unknown (any unreadable)
-  local out seen_unknown=""
-  for path in "$@"; do
-    out="$(gh api "repos/$owner/.github/contents/$path" 2>&1 >/dev/null)" && { echo yes; return; }
-    case "$out" in *"Not Found"*|*"404"*) ;; *) seen_unknown="$path: $out" ;; esac
-  done
-  [ -n "$seen_unknown" ] && echo "unknown: $seen_unknown" || echo no
-}
-# One template GitHub can actually offer, in the owner's shared folder.
-# `.github/ISSUE_TEMPLATE` only: unlike a pull-request template, a default issue
-# form is inherited from that path alone, and scripts/floor-check.py queries the
-# same one. A name is not enough either -- an empty `bug.md` has the right
-# suffix and GitHub offers nothing -- so a candidate is read before it counts.
-usable_form() { # <text> <name> -> 0 when GitHub would offer it
-  case "$2" in
-    *.md) grep -qE '^name:[[:space:]]*[^[:space:]"'"'"']' <<<"$1" ;;
-    *)    grep -q '^name:' <<<"$1" && grep -q '^description:' <<<"$1" && grep -q '^body:' <<<"$1" ;;
-  esac
-}
-# `config-only` comes from the same listing as the forms answer: a second read
-# of the folder could fail after the first succeeded, and a failed read is not
-# "no config" (#101).
-shared_forms() { # -> yes (a template GitHub can offer) | no | config-only | unknown
-  local listing name body enc config=no
-  listing="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name' 2>&1)" || {
-    case "$listing" in *"Not Found"*|*"404"*) echo no ;;
-      *) echo "unknown: .github/ISSUE_TEMPLATE: $listing" ;; esac; return; }
-  while read -r name; do
-    case "$name" in "") continue ;; config.yml|config.yaml) config=yes; continue ;; *.yml|*.yaml|*.md) ;; *) continue ;; esac
-    enc="$(gh api "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE/$name" --jq .content 2>&1)" || {
-      echo "unknown: .github/ISSUE_TEMPLATE/$name: $enc"; return; }
-    body="$(base64 -d <<<"$enc" 2>&1)" || {
-      echo "unknown: .github/ISSUE_TEMPLATE/$name: content could not be decoded ($body)"; return; }
-    [ -n "$body" ] || continue
-    usable_form "$body" "$name" && { echo yes; return; }
-  done <<<"$listing"
-  [ "$config" = yes ] && echo config-only || echo no
-}
-# GitHub applies default community-health files only from a *public* `.github`
-# repository. A private one is readable through the API by whoever can see it,
-# so believing that read would suppress our copies for something the new public
-# repository never inherits.
-shared_repo_public() { # -> yes | no | unknown
+# The decisions are in scripts/lib/shared-github.sh; what they decide on is
+# fetched here, so they can be tested on fixtures (tests/shared-github-cases.sh).
+# shellcheck source=scripts/lib/shared-github.sh
+. "$here/lib/shared-github.sh"
+gh_read() { # <gh api args>... -> ok:<output> | err:<output>, both streams: a failure carries gh's own words
   local out
-  out="$(gh api "repos/$owner/.github" --jq .visibility 2>&1)" || {
-    case "$out" in *"Not Found"*|*"404"*) echo no ;; *) echo "unknown: $out" ;; esac; return; }
-  [ "$out" = public ] && echo yes || echo no
+  if out="$(gh api "$@" 2>&1)"; then printf 'ok:%s' "$out"; else printf 'err:%s' "$out"; fi
 }
 # Three ways to end up rendering our own copies: the caller asked for them, the
 # owner publishes no `.github`, or that repository is private and therefore
 # never inherited from. Only a lookup that *failed* stops the run.
 has_pr=no; has_forms=no
 if [ "$force_defaults" = 0 ]; then
-  vis="$(shared_repo_public)"
+  vis="$(shared_repo_public "$(gh_read "repos/$owner/.github" --jq .visibility)")"
   case "$vis" in
     unknown*) stop "cannot read whether $owner/.github is public" \
                "  the API said: $(why_unknown "$vis")" \
@@ -285,10 +236,22 @@ if [ "$force_defaults" = 0 ]; then
       # GitHub reads a community-health file from the root, `.github/` or
       # `docs/`. Checking only the root would miss an owner who used either of
       # the other two and write over the template this exists to protect.
-      has_pr="$(shared_of PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md)"
+      # `--silent`: only whether it exists matters, and a failure's words are on stderr.
+      pr_answers=()
+      for pr_path in PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md; do
+        pr_answers+=("$pr_path" "$(gh_read "repos/$owner/.github/contents/$pr_path" --silent)")
+      done
+      has_pr="$(shared_of "${pr_answers[@]}")"
       # A directory is not a template, and neither is a filename: the repository
       # would end up with no form anywhere and fail the floor check the box installs.
-      has_forms="$(shared_forms)"
+      # The listing once, then every name in it: which of them count is decided there.
+      form_answers=("$(gh_read "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE" --jq '.[].name')")
+      case "${form_answers[0]}" in ok:*)
+        while read -r form; do
+          [ -n "$form" ] && form_answers+=("$form" "$(gh_read "repos/$owner/.github/contents/.github/ISSUE_TEMPLATE/$form" --jq .content)")
+        done <<<"${form_answers[0]#ok:}" ;;
+      esac
+      has_forms="$(shared_forms "${form_answers[@]}")"
       # Computed first, because a `case` nested inside a command substitution is
       # hard to read and was written wrong once. `bash -n` on this machine's
       # bash 3.2 did not report that error; CI's bash 5 may well have. Do not

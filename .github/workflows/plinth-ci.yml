@@ -61,6 +61,9 @@ jobs:
       - name: The door creates nothing before preflight passes and deletes on any failure after
         run: ./tests/new-project-failpath.sh
 
+      - name: The door's shared .github decisions on fixtures, without the door
+        run: ./tests/shared-github-cases.sh
+
       - name: The admin token is read from the terminal, not from a pasted stdin
         run: ./tests/token-prompt-not-from-stdin.sh
 
