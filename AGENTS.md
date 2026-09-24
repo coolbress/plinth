@@ -63,7 +63,9 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 ## Ask first
 
 - Adding a dependency to `plugin.json`: it installs on every user's machine.
-- Adding a hook anywhere in the default plugin. Hooks live in the opt-in profile.
+- Adding a hook anywhere in the default plugin, or adding a dependency or raising
+  its pin when that version ships one. Hooks live in the opt-in profile; a
+  dependency's hook is still a hook in every user's session.
 
 ## Never
 

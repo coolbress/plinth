@@ -12,7 +12,7 @@
   "plugins": [
     {
       "name": "plinth",
-      "description": "Skills: new-project, floor-check, arsenal. Installs the default plugin set as dependencies. No hooks.",
+      "description": "Skills: new-project, floor-check, arsenal. Installs the default plugin set as dependencies. No hooks of its own; last30days adds a SessionStart hook.",
       "category": "workflow",
       "source": "./"
     },
@@ -28,7 +28,7 @@
     },
     {
       "name": "last30days",
-      "description": "What people said about a topic in the last 30 days. For discovery, not for decisions. About 90k tokens per call.",
+      "description": "What people said about a topic in the last 30 days. For discovery, not for decisions. About 90k tokens per call; runs a SessionStart hook that checks its configuration.",
       "category": "workflow",
       "source": {
         "source": "url",
