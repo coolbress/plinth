@@ -21,8 +21,9 @@ pull requests and have no tag.
   (Haiku 4.5, Sonnet 4.5) the listing is cut to about 2,000 tokens and 25
   of the 33 keep only their name. The per-plugin
   figures in `/plinth:arsenal` are now these live readings. The earlier
-  estimate also counted skills that Claude Code never lists, such as
-  mattpocock-skills' 22 with `disable-model-invocation`.
+  estimate counted every `SKILL.md` on disk, including skills Claude Code
+  never lists: mattpocock-skills' files outside its manifest's `skills` list,
+  and its 14 marked `disable-model-invocation`.
 - `CONTRIBUTING.md` step 5 gives the merge command that makes the squash
   commit the pull request description: `gh pr merge --squash` with the
   description passed as `--body`. Without it GitHub's default squash
