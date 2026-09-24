@@ -29,7 +29,12 @@ lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL li
   py="$(command -v python3)" || { echo "  FAIL  python3 not found: install Python 3.10 or later (https://www.python.org/downloads/)"; return 1; }
   "$py" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null \
     || { echo "  FAIL  $("$py" --version 2>&1) is older than 3.10, which the pinned tools need"; return 1; }
-  key="$("$py" -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read() + sys.version.encode()).hexdigest()[:16])' "$req")" \
+  # The key names the lock file and the interpreter: its version, its real path,
+  # its platform and its ABI, so a cache shared across machines or containers
+  # never hands one a venv built for another.
+  key="$("$py" -c 'import hashlib, os, sys, sysconfig
+who = [sys.version, os.path.realpath(sys.executable), sysconfig.get_platform(), sys.implementation.cache_tag or ""]
+print(hashlib.sha256(open(sys.argv[1], "rb").read() + "\0".join(who).encode()).hexdigest()[:16])' "$req")" \
     || { echo "  FAIL  cannot read $req"; return 1; }
   cache="${XDG_CACHE_HOME:-$HOME/.cache}/plinth/lint-tools"
   # A finished venv for this lock file and interpreter; one without the marker
