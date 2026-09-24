@@ -477,7 +477,7 @@ out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-net
 if [ "$rc" = 0 ] && grep -q "SKIP.*sandbox not verified" <<<"$out" && ! grep -qE "(WARN|FAIL).*sandbox" <<<"$out"
 then ok "--sandbox: an unset key is not verified, not reported off, and the floor still passes"; else bad "--sandbox unset"; printf '%s\n' "$out" | grep -E 'sandbox|failed' | sed 's/^/        /'; fi
 under="$(sed -n '/SKIP.*sandbox not verified/,/^--/p' <<<"$out" | grep '^  INFO    ')"
-for want in 'Read(~/.config/gh/\*\*)' 'anthropics/claude-code#95135' 'anthropics/claude-code#67105' 'uvx --from copier copier' 'macOS' 'Linux and WSL2.*not measured' '\.env'; do
+for want in 'Read(~/.config/gh/\*\*)' 'anthropics/claude-code#95135' 'anthropics/claude-code#67105' 'uvx --from copier copier' 'macOS' 'Linux, WSL2 and native Windows: not measured' '\.env'; do
   grep -q -- "$want" <<<"$under" || { bad "--sandbox: the lines under the SKIP do not name $want"; printf '%s\n' "$under" | sed 's/^/        /'; }
 done
 grep -q 'Read(~/.config/gh' <<<"$under" && ok "--sandbox: the SKIP names the gh collision, uvx, the upstream issues and the macOS scope"

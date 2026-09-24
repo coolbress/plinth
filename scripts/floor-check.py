@@ -1138,7 +1138,7 @@ def check_sandbox() -> None:
            "anthropics/claude-code#95135 and anthropics/claude-code#67105 track it upstream")
     result("INFO", "  on, macOS: /plinth:new-project stops at `uvx --from copier copier`: ~/.cache/uv is not writable, "
            "and with UV_CACHE_DIR moved to a writable path uv panics reading the system proxy configuration")
-    result("INFO", "  Linux and WSL2 (bubblewrap and socat) and native Windows (no sandbox): not measured")
+    result("INFO", "  Linux, WSL2 and native Windows: not measured")
 
 
 # ── main ──────────────────────────────────────────────────────────────────
