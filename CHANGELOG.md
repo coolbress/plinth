@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.22] - 2026-09-24
+
+`/plinth:floor-check` stopped giving advice it could not stand behind. It
+told everyone to run `/sandbox`, reading a setting `/sandbox` does not write,
+and on macOS the sandbox stops `gh` and the generator's copier step. The
+sandbox item now says what was measured and where, and no longer calls the
+sandbox off. Also in this release: the floor-check skill writes a finding's
+fix from the lines the checker indents under it.
+
+tested with plinth-template v1.5.0
+
 ### Changed
 
 - `/plinth:floor-check` writes the fix line for a FAIL or WARN from the `INFO`
@@ -934,7 +945,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.21...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.22...HEAD
+[0.5.22]: https://github.com/coolbress/plinth/releases/tag/v0.5.22
 [0.5.21]: https://github.com/coolbress/plinth/releases/tag/v0.5.21
 [0.5.20]: https://github.com/coolbress/plinth/releases/tag/v0.5.20
 [0.5.19]: https://github.com/coolbress/plinth/releases/tag/v0.5.19
