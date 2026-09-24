@@ -327,8 +327,19 @@ git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $
 # GitHub adopts the first branch pushed to an empty repository as the default,
 # then refuses to delete it, and the wall went up on the probe while main was
 # left open (#105). main goes first, and nothing is pushed before it.
+# The hint follows git's words: a GitHub server error is not the token, and
+# the fix is to run the door again (#271, a 500 in a release's e2e run).
 if ! err="$(git -C "$dir" push -q -u origin main 2>&1)"; then
-  printf 'cannot push to %s:\n%s\n  check: the token has the repo scope (or Contents: write), and no whitespace came along with a paste\n' "$url" "$err" >&2
+  token_hint='the token has the repo scope (or Contents: write), and no whitespace came along with a paste'
+  server_hint='GitHub failed on its side: run the door again'
+  case "$err" in
+    *"Internal Server Error"*|*"Bad Gateway"*|*"Service Unavailable"*|*"Gateway Timeout"*|*"HTTP 5"[0-9][0-9]*|*"error: 5"[0-9][0-9]*)
+      hint="  not the token: $server_hint" ;;
+    *"Authentication failed"*|*"Invalid username or"*|*"Permission to "*" denied"*|*"could not read Username"*|*"HTTP 40"[13]*|*"error: 40"[13]*)
+      hint="  check: $token_hint" ;;
+    *) hint="$(printf '  possibly: %s\n  possibly: %s' "$token_hint" "$server_hint")" ;;
+  esac
+  printf 'cannot push to %s:\n%s\n%s\n' "$url" "$err" "$hint" >&2
   exit 1
 fi
 # Read the default branch back rather than assume the push set it: the ruleset
