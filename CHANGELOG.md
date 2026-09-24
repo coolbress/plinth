@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.25] - 2026-09-24
+
+A repository `/plinth:new-project` creates now tells its contributors how to
+merge so that a pull request's description lands on `main` as written:
+plinth-template v1.5.1 carries the squash merge command into the generated
+`CONTRIBUTING.md`, where GitHub's default would hard-wrap the description at
+72 columns. Also in this release, plinth checks the tools it runs on itself
+more closely: its own Python is linted and type-checked, and zizmor, ruff
+and mypy install only from files whose hashes this repository lists.
+
+tested with plinth-template v1.5.1
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.5.1. Its only change: the
@@ -26,7 +38,6 @@ pull requests and have no tag.
   would have run unnoticed. A file whose hash is not listed now stops the
   step. The pins move to `tests/lint-tools.in`; `CONTRIBUTING.md` says how to
   raise one (#264).
-
 - plinth's own CI lints and type-checks the Python it ships into consumers'
   CI: `scripts/floor-check.py` and the pr-review judgement scripts.
   `tests/python-lint.sh` runs ruff 0.16.8 and mypy 2.3.1 with their defaults
@@ -1038,7 +1049,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.24...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.25...HEAD
+[0.5.25]: https://github.com/coolbress/plinth/releases/tag/v0.5.25
 [0.5.24]: https://github.com/coolbress/plinth/releases/tag/v0.5.24
 [0.5.23]: https://github.com/coolbress/plinth/releases/tag/v0.5.23
 [0.5.22]: https://github.com/coolbress/plinth/releases/tag/v0.5.22
