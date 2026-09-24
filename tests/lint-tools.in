@@ -1,0 +1,6 @@
+# The Python tools `ci / tools` runs, pinned exactly. tests/lint-tools.txt is
+# generated from this file with hashes; raise a pin here, then regenerate:
+#   uv pip compile tests/lint-tools.in --generate-hashes --universal --python-version 3.10 -o tests/lint-tools.txt
+zizmor==1.29.0
+ruff==0.16.8
+mypy==2.3.1

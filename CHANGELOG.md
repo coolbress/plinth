@@ -13,6 +13,14 @@ pull requests and have no tag.
 
 ### Changed
 
+- zizmor, ruff and mypy, the Python tools `ci / tools` runs, install from a
+  hash-locked `tests/lint-tools.txt` (with their dependencies) into a venv,
+  with `pip install --require-hashes --only-binary=:all:`. They ran through
+  `pipx run` or `uvx` before, pinned by version only, so a changed artifact
+  would have run unnoticed. A file whose hash is not listed now stops the
+  step. The pins move to `tests/lint-tools.in`; `CONTRIBUTING.md` says how to
+  raise one (#264).
+
 - plinth's own CI lints and type-checks the Python it ships into consumers'
   CI: `scripts/floor-check.py` and the pr-review judgement scripts.
   `tests/python-lint.sh` runs ruff 0.16.8 and mypy 2.3.1 with their defaults

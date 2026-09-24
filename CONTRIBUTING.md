@@ -24,10 +24,12 @@ directory exactly as the README says, so it needs network and a few minutes.
 `tests/markdownlint.sh` needs Node.js, and network the first time: `npx`
 downloads the one version pinned in that file, the same file `ci / docs` runs,
 and lints from its cache afterwards. `tests/shell-lint.sh` needs shellcheck and
-`tests/workflow-lint.sh` needs actionlint and `uvx` (or `pipx`), with network
-the first time for zizmor, and `tests/python-lint.sh` needs `uvx` (or `pipx`),
-with network the first time for ruff and mypy; a missing tool is a FAIL that
-names the install command, never a skip. Everything else runs offline in seconds.
+`tests/workflow-lint.sh` needs actionlint, and it and `tests/python-lint.sh`
+need `python3` 3.10 or later that can make a venv (on Debian and Ubuntu, the
+`python3-venv` package): zizmor, ruff and mypy install into a venv from
+`tests/lint-tools.txt`, every file checked against its hash, with network the
+first time; a missing tool is a FAIL that names the install command, never a
+skip. Everything else runs offline in seconds.
 
 That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
 one, the link check. CodeQL and the `canary` jobs run only on GitHub.
@@ -35,10 +37,11 @@ one, the link check. CodeQL and the `canary` jobs run only on GitHub.
 The lint files are what `ci / tools` calls, with the same flags, but a
 local pass is the CI pass only where the tool is the same one:
 
-- zizmor is: both sides run the exact version pinned in `tests/workflow-lint.sh`.
-- ruff and mypy are: both sides run the exact versions pinned in
-  `tests/python-lint.sh`, with each tool's defaults, no configuration file,
-  and mypy checking against the same Python version whatever runs it.
+- zizmor, ruff and mypy are: both sides install the same hash-checked files
+  from `tests/lint-tools.txt`. ruff and mypy run with their defaults and no
+  configuration file, and mypy checks against the same Python version
+  whatever runs it. To raise one of these pins, edit `tests/lint-tools.in` and
+  regenerate `tests/lint-tools.txt` with the command written at its top.
 - actionlint is pinned there too, and CI installs that checksum-verified Linux
   build. A laptop runs the actionlint it has. Another version still runs, and
   the output names it and says the pass is not the pinned pass; in CI another

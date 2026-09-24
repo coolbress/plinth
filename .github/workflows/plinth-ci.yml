@@ -85,7 +85,7 @@ jobs:
       # files, so a local run is the same call. A failed step skips the ones
       # after it, so after checkout the steps that need nothing from the
       # network run first, and the ones that download (actionlint's binary,
-      # zizmor through pipx, then ruff and mypy through pipx) run last.
+      # then zizmor, ruff and mypy from a hash-checked venv) run last.
       - name: Shell syntax and static analysis (bash -n, shellcheck)
         run: ./tests/shell-lint.sh
 
