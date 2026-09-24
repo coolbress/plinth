@@ -2,9 +2,9 @@
 # Which pull requests pr-review.yml passes without summoning the reviewer, and
 # which it goes on to look at (#167).
 #
-# The decision is a shell script inside the `run:` of pr-review.yml. It is
-# lifted out of that file here and run with the env the step gives it, so what
-# is tested is the workflow's own text and not a copy of the rule. Both
+# The decision is scripts/pr-review/gate.sh, which the workflow fetches and
+# runs; it is run here with the env the step gives it, so what is tested is
+# the workflow's own script and not a copy of the rule. Both
 # directions: a test that only sees passes proves little. The cases that must
 # NOT pass matter most here: the first version passed every `Bot` author, and
 # coding agents are bots.
@@ -15,16 +15,7 @@ wf="$root/.github/workflows/pr-review.yml"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-python3 - "$wf" "$tmp/gate.sh" <<'PY'
-import sys, pathlib, textwrap
-lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
-start = next(i for i, ln in enumerate(lines) if ln.rstrip().endswith("<<'SH'"))
-end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "SH")
-body = textwrap.dedent("\n".join(lines[start + 1:end]))
-assert "not summoned" in body and "draft pull request" in body, "gate snippet not found; the workflow changed shape"
-pathlib.Path(sys.argv[2]).write_text(body + "\n")
-PY
-[ -s "$tmp/gate.sh" ] || { echo "  FAIL  could not extract the gate snippet" >&2; exit 1; }
+gate_sh="$root/scripts/pr-review/gate.sh"
 
 fails=0
 # The push logs the step hands the gate, in the shape `repos/:r/activity?ref=`
@@ -59,7 +50,7 @@ gate() {  # <want: the printed reason, or "" for "go on and look"> <name> [VAR=v
   local got rc
   got="$(env -i PATH="$PATH" DRAFT=false MERGED=false PR_STATE=open PASS_RELEASE=false \
            ACTIVITY_JSON="$tmp/dependabot.json" HEAD_SHA="$HEAD" \
-           AUTHOR_LOGIN=coolbress TITLE='fix(door): a title' "$@" bash "$tmp/gate.sh" 2>/dev/null)"; rc=$?
+           AUTHOR_LOGIN=coolbress TITLE='fix(door): a title' "$@" bash "$gate_sh" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$got" = "$want" ]; then
     echo "  PASS  $name"
   else
@@ -148,6 +139,25 @@ sys.exit(1 if bad else 0)
 PY
 then echo "  PASS  no \${{ }} inside a run: block of pr-review.yml"
 else echo "  FAIL  a run: block of pr-review.yml interpolates \${{ }}" >&2; fails=$((fails+1)); fi
+
+# The scripts reach the step only through its fetch step, from the plinth
+# commit the caller's `uses:` resolved to: every script the step runs is
+# fetched, every fetched one is a file here, and the pin is job.workflow_sha
+# (inside a called workflow `github.workflow_*` names the caller's workflow).
+if python3 - "$wf" "$root/scripts/pr-review" <<'PY'
+import re, sys, pathlib
+text = pathlib.Path(sys.argv[1]).read_text()
+fetched = re.search(r'for f in ([^;]+); do\n\s+curl [^\n]+\n\s+"https://raw\.githubusercontent\.com/coolbress/plinth/\$\{PLINTH_SHA\}/scripts/pr-review/\$f"', text)
+pinned = "PLINTH_SHA: ${{ job.workflow_sha }}" in text
+used = set(re.findall(r'"\$PR_REVIEW/([^"]+)"', text))
+here = {p.name for p in pathlib.Path(sys.argv[2]).iterdir()}
+ok = bool(fetched and pinned and used) and used <= set(fetched.group(1).split()) == here
+if not ok:
+    print(f"fetched={fetched and fetched.group(1)} pinned={pinned} used={sorted(used)} here={sorted(here)}", file=sys.stderr)
+sys.exit(0 if ok else 1)
+PY
+then echo "  PASS  pr-review.yml fetches every script it runs, at job.workflow_sha"
+else echo "  FAIL  pr-review.yml runs a script it does not fetch, fetches one not in scripts/pr-review, or is not pinned to job.workflow_sha" >&2; fails=$((fails+1)); fi
 
 if [ "$fails" -ne 0 ]; then
   echo "-- $fails failed" >&2

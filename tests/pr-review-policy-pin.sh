@@ -17,10 +17,10 @@ trap 'rm -rf "$tmp"' EXIT
 
 # The step's `run:` is taken from the workflow itself; a copy here would drift.
 python3 - "$root/.github/workflows/pr-review.yml" "$tmp/step.sh" <<'PY'
-import sys, pathlib
+import re, sys, pathlib
 text = pathlib.Path(sys.argv[1]).read_text()
 i = text.index("      - name: The reviewer's instructions did not change in this pull request")
-j = text.index("      - name: A third-party review is attached to this commit", i)
+j = re.compile(r"^      \S", re.M).search(text, i + 1).start()   # the next step, or the comment above it
 block = text[i:j]
 run = block.split("        run: |\n", 1)[1]
 body = "\n".join(ln[10:] if ln.startswith("          ") else ln for ln in run.splitlines())

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # What the third-party review check blocks, and what it must not block.
 #
-# The judgement is a Python snippet inside the `run:` of pr-review.yml. Left
-# there alone nobody runs it: the first run is the test, and by then a pull
-# request is already red. So it is extracted here and run against fixtures.
+# The judgement is scripts/pr-review/attest.py, which pr-review.yml fetches
+# and runs. Left to the workflow alone nobody runs it before a pull request:
+# the first run is the test, and by then that pull request is already red. So
+# it is run here against fixtures.
 #
 # The fixtures are measured, not invented (2026-09-01): the first version
 # searched `pulls/*/reviews` and found nothing there, because Codex leaves a
@@ -20,16 +21,7 @@ wf="$root/.github/workflows/pr-review.yml"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-python3 - "$wf" "$tmp/attest.py" <<'PY'
-import sys, pathlib, textwrap
-lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
-start = next(i for i, ln in enumerate(lines) if ln.rstrip().endswith("<<'PY'"))
-end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "PY")
-body = textwrap.dedent("\n".join(lines[start + 1:end]))
-assert "codex-security-review" in body and "REVIEWED" in body, "judgement snippet not found; the workflow changed shape"
-pathlib.Path(sys.argv[2]).write_text(body + "\n")
-PY
-[ -s "$tmp/attest.py" ] || { echo "  FAIL  could not extract the judgement snippet" >&2; exit 1; }
+attest="$root/scripts/pr-review/attest.py"
 
 HEAD=71a704cdca35f00de6e110a3d77a165d895d882a
 OLD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -68,7 +60,7 @@ run() {  # name, issue-comments JSON, expected exit, [reviews JSON], [accepted l
   printf '%s' "$2" > "$tmp/i.json"
   printf '%s' "${4:-[]}" > "$tmp/r.json"
   echo '[]' > "$tmp/rc.json"
-  python3 "$tmp/attest.py" "$HEAD" "${5:-$BOT}" \
+  python3 "$attest" "$HEAD" "${5:-$BOT}" \
     "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
   got=$?
   if [ "$got" -ne "$3" ]; then
@@ -114,7 +106,7 @@ rcm() {  # author, commit_id, original_commit_id
 runrc() {  # name, review-comments JSON, expected exit
   echo '[]' > "$tmp/i.json"; echo '[]' > "$tmp/r.json"
   printf '%s' "$2" > "$tmp/rc.json"
-  python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
+  python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
   got=$?
   if [ "$got" -ne "$3" ]; then
     echo "  FAIL  $1: expected exit $3, got $got" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
@@ -166,10 +158,10 @@ push() {  # after, timestamp, [before]
 runsum() {  # name, issue-comments JSON, activity JSON ('-' = the argument is not given), expected exit
   printf '%s' "$2" > "$tmp/i.json"; echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
   if [ "$3" = "-" ]; then
-    python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
+    python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
   else
     printf '%s' "$3" > "$tmp/a.json"
-    python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1
+    python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1
   fi
   got=$?
   if [ "$got" -ne "$4" ]; then
@@ -275,7 +267,7 @@ fi
 # The other signals do not read the push log: a review object passes without it.
 echo '[]' > "$tmp/i.json"
 printf '[{"user":{"login":"%s"},"commit_id":"%s","state":"COMMENTED"}]' "$BOT" "$HEAD" > "$tmp/r.json"
-if python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1; then
+if python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1; then
   echo "  PASS  a review object passes with no push log"
 else
   echo "  FAIL  a review object needs the push log" >&2; fails=$((fails + 1))
@@ -374,7 +366,7 @@ report() {  # name, review-comments JSON, pass condition, expected log line, exp
   echo '[]' > "$tmp/r.json"; printf '%s' "$2" > "$tmp/rc.json"
   printf '%s' "$(cmt "$BOT" "$HEAD" completed)" > "$tmp/i.json"   # the verdict comes from the marker
   : > "$tmp/summary.md"
-  GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$tmp/attest.py" "$HEAD" "$BOT" \
+  GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$attest" "$HEAD" "$BOT" \
     "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1
   got=$?
   urls_log="$(grep -c 'https://' "$tmp/log")"; urls_sum="$(grep -c '^- https://' "$tmp/summary.md")"
@@ -402,12 +394,12 @@ report "an API error object: could not be read"   '{"message":"Not Found"}'  "co
 report "not JSON: could not be read"              '<html>'                   "could not be read" 0
 for bad in 'null' '{"message":"Not Found"}' '<html>'; do
   printf '%s' "$bad" > "$tmp/rc.json"; echo '[]' > "$tmp/r.json"; printf '%s' "$(cmt "$BOT" "$HEAD" completed)" > "$tmp/i.json"
-  if python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" 2>&1 | grep -q "no inline comments"; then
+  if python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" 2>&1 | grep -q "no inline comments"; then
     echo "  FAIL  unreadable comments ($bad) printed as zero" >&2; fails=$((fails + 1))
   fi
 done
 rm -f "$tmp/rc.json"; : > "$tmp/summary.md"
-if GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
+if GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
    && grep -q "could not be read" "$tmp/log" && grep -q "could not be read" "$tmp/summary.md" && ! grep -q "no inline comments" "$tmp/summary.md"; then
   echo "  PASS  a missing comments file: could not be read, in the log and the summary; verdict stands"
 else
@@ -422,7 +414,7 @@ fi
 
 # Without a summary file (a local run) the report still prints and the verdict still stands.
 echo '[]' > "$tmp/r.json"; printf '%s' "[$(rcm_url "$BOT" "$HEAD" "$U1")]" > "$tmp/rc.json"; echo '[]' > "$tmp/i.json"
-if env -u GITHUB_STEP_SUMMARY python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
+if env -u GITHUB_STEP_SUMMARY python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 \
    && grep -qF "$U1" "$tmp/log"; then
   echo "  PASS  no summary file: the log alone carries the url"
 else
@@ -432,10 +424,10 @@ fi
 echo "-- when nothing matches, the log carries the clues (wrong name or commit: fix it in one go)"
 printf '%s' "$(cmt "$BOT" "$OLD" completed)" > "$tmp/i.json"
 echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
-python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 || true
+python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" >"$tmp/log" 2>&1 || true
 # A summary row still running on this head is a clue too (#191).
 printf '%s' "$(sum_cmt "$BOT" "$SUM" "$(row "$RUN_ST" "${HEAD:0:7}")")" > "$tmp/i2.json"
-python3 "$tmp/attest.py" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i2.json" >>"$tmp/log" 2>&1 || true
+python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i2.json" >>"$tmp/log" 2>&1 || true
 for want in "${OLD:0:8}" "codex" "summary row ${HEAD:0:7} status=Running <- this commit"; do
   if grep -qF "$want" "$tmp/log"; then
     echo "  PASS  log names: $want"
