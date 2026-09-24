@@ -33,7 +33,7 @@ print(hashlib.sha256(open(sys.argv[1], "rb").read() + "\0".join(who).encode()).h
 }
 
 lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL line there, and 1
-  local req="$root/tests/lint-tools.txt" py key cache dir mark
+  local req="$root/tests/lint-tools.txt" py key cache real dir mark
   if [ -n "${PLINTH_LINT_TOOLS_BIN:-}" ]; then
     [ -z "${GITHUB_ACTIONS:-}" ] || { echo "  FAIL  PLINTH_LINT_TOOLS_BIN is set in CI, where the tools must be the hash-checked ones"; return 1; }
     printf '%s' "$PLINTH_LINT_TOOLS_BIN"; return 0
@@ -47,7 +47,8 @@ lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL li
   cache="${XDG_CACHE_HOME:-$HOME/.cache}/plinth/lint-tools"
   # Built and keyed under the resolved path, so the path in the venv's scripts
   # is the one in the key, however the cache was reached.
-  cache="$(mkdir -p "$cache" && cd -P "$cache" && pwd -P)" || { echo "  FAIL  cannot make $cache"; return 1; }
+  real="$(mkdir -p "$cache" && cd -P "$cache" && pwd -P)" || { echo "  FAIL  cannot make $cache"; return 1; }
+  cache="$real"
   key="$(lint_tools_key "$py" "$req" "$cache")" || { echo "  FAIL  cannot read $req"; return 1; }
   # A finished venv for this key; one without the marker
   # (an interrupted run, or one still installing) is never used.

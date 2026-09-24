@@ -84,7 +84,7 @@ if [ "$got" = 1 ] && printf '%s' "$out" | grep -qF "FAIL  no Python file under s
   pass=$((pass+1)); echo "  PASS  python-lint.sh   local exit 1, says: FAIL  no Python file under scripts/ (a repository without them)"
 else fail=$((fail+1)); printf '  FAIL  python-lint.sh   wanted exit 1 and "no Python file", got exit %s:\n%s\n' "$got" "$out"; fi
 
-echo "-- lib/lint-tools.sh: the same cache at another path is not reused (#266)"
+echo "-- lib/lint-tools.sh: where the venv is cached (#266)"
 # A finished venv planted under cache A is reused from A. The same tree copied
 # to B, as one volume mounted at two paths, must not be: its scripts name A's
 # Python. PIP_NO_INDEX makes B's own build fail at once instead of downloading.
@@ -106,6 +106,10 @@ case "$got_b" in
   *cache-b*planted*) fail=$((fail+1)); echo "  FAIL  cache B reused the venv copied from A: $got_b" ;;
   *) pass=$((pass+1)); echo "  PASS  the same cache at another path does not reuse the venv copied from it" ;;
 esac
+# A cache that cannot be made is a FAIL that names the path it tried.
+touch "$tmp/afile"; got_file="$(cache_case "$tmp/afile")"; want="FAIL  cannot make $tmp/afile/plinth/lint-tools"
+if printf '%s' "$got_file" | grep -qxF "  $want"; then pass=$((pass+1)); echo "  PASS  a cache that cannot be made says: $want"
+else fail=$((fail+1)); echo "  FAIL  wanted '$want', got '$got_file'"; fi
 
 echo "-- tests/lint-tools.txt: every pin of lint-tools.in, every package hashed"
 bad=""
