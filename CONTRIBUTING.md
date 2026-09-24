@@ -147,7 +147,22 @@ release needs a green run on the commit it tags (below).
    `CHANGELOG.md`, or the page under `docs/` that covers it. Not every change
    needs a README edit.
 5. Merge when green. Squash is the only merge method, the commit is the pull
-   request title and description, and the branch is deleted on merge.
+   request title and description, and the branch is deleted on merge. The
+   description is the commit only when the merge passes it: without a body,
+   GitHub's default squash message is the description hard-wrapped at 72
+   columns, and `gh pr merge --squash` takes that default.
+
+   ```bash
+   body="$(gh pr view <n> --json body --jq .body)" &&
+     gh pr merge <n> --squash --match-head-commit <sha> --body "$body"
+   ```
+
+   The `&&` stops the merge when the read fails, rather than merging with an
+   empty body, and no file is left in the checkout to be committed later.
+   `--match-head-commit` names the head step 4 read the description against:
+   a commit pushed after it stops the merge. It pins the commits only; the
+   description is read when the command runs, so finish editing it before
+   step 4, not after.
 
 ## Cut a release
 

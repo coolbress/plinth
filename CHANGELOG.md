@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `CONTRIBUTING.md` step 5 gives the merge command that makes the squash
+  commit the pull request description: `gh pr merge --squash` with the
+  description passed as `--body`. Without it GitHub's default squash
+  message is the description hard-wrapped at 72 columns, so a description
+  written at about 80 columns landed on `main` with stray one-word lines.
+  `AGENTS.md`'s "becomes the squash commit" points at that step.
+
 ## [0.5.22] - 2026-09-24
 
 `/plinth:floor-check` stopped giving advice it could not stand behind. It

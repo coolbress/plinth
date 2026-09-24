@@ -32,7 +32,8 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 - Product text is English. `.ko.md` translations are optional and never canonical.
 - A commit made with AI carries `Assisted-by: <agent>:<model>` (the Linux kernel's
   form, e.g. `Assisted-by: Claude:claude-fable-5-1`), and so does the last line of the
-  pull request description, which becomes the squash commit. AI is never a
+  pull request description, which becomes the squash commit when merged as
+  [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change) step 5 says. AI is never a
   `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
 - A same-session `/code-review` helps but is not independent; say so. `third-party / review` only records an accepted reviewer's signal on the commit.
   Whoever opens or merges a pull request reads the reviewer's inline comments
