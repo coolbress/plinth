@@ -13,6 +13,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- The README and `/plinth:arsenal` no longer say the default set's skill
+  listing is over a fixed ~2,000-token budget. Claude Code's cap is 1% of the
+  model's context window, built-in skills included. Measured with `/context`
+  on a fresh install (#255): with a 1M-context model all 33 listed skills
+  keep their descriptions; with the two 200k-context models measured
+  (Haiku 4.5, Sonnet 4.5) the listing is cut to about 2,000 tokens and 25
+  of the 33 keep only their name. The per-plugin
+  figures in `/plinth:arsenal` are now these live readings. The earlier
+  estimate also counted skills that Claude Code never lists, such as
+  mattpocock-skills' 22 with `disable-model-invocation`.
 - `CONTRIBUTING.md` step 5 gives the merge command that makes the squash
   commit the pull request description: `gh pr merge --squash` with the
   description passed as `--body`. Without it GitHub's default squash
@@ -21,11 +31,10 @@ pull requests and have no tag.
   `AGENTS.md`'s "becomes the squash commit" points at that step.
 - The README's install section, `/plinth:arsenal` and the marketplace
   descriptions say what the default set costs a session: `last30days` runs
-  a `SessionStart` hook, and the 58 skills' listing is larger than Claude
-  Code's skill-listing budget. `AGENTS.md`'s Ask-first rule on hooks now
-  covers adding a dependency, or raising its pin, when that version ships
-  a hook. `/plinth:arsenal`'s always-on figures are re-measured the same
-  way and now add up to the README's total.
+  a `SessionStart` hook, and its skills take up part of Claude Code's
+  skill listing (measured in the first entry above). `AGENTS.md`'s
+  Ask-first rule on hooks now covers adding a dependency, or raising its
+  pin, when that version ships a hook.
 
 ## [0.5.22] - 2026-09-24
 

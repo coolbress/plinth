@@ -32,11 +32,15 @@ first. One dependency lives there, and Claude Code registers that marketplace on
 its own only during an interactive first run.
 
 The default set runs one hook: `last30days` adds a `SessionStart` hook
-(about 0.4 s) that checks its own configuration. The set also brings 58
-skills whose listing, about 3,600 estimated tokens, is more than Claude
-Code's skill-listing budget of about 2,000. Past the budget, skill
-descriptions are left out of the listing, and on a fresh install no usage
-history decides which ones (#226).
+(about 0.4 s) that checks its own configuration. Its skills cost context too.
+Claude Code lists 33 of them for the model and caps the whole skill listing,
+its own built-in skills included, at 1% of the model's context window. As
+`/context` estimates it on a fresh install, with a 1M-context model all 33
+keep their descriptions, about 3,750 tokens. With the two 200k-context models
+measured (Haiku 4.5, Sonnet 4.5) the listing is cut to about 2,000 tokens and
+25 of the 33 keep only their name: they still run when called by name, but
+Claude is less likely to pick them on its own. The
+`skillListingBudgetFraction` setting raises the cap (#255).
 
 Third-party marketplaces do not auto-update. To move to a new version, run
 `claude plugin update plinth`, then `/reload-plugins`.
