@@ -29,6 +29,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 checker="$here/floor-check.py"
 state_name="plinth-template-update"
 
+# A path as a shell word, for a line the user or the skill runs as printed.
+q() { printf '%q' "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
 usage() { printf 'usage: %s [--apply <base-sha> | --finish <worktree>] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 
@@ -47,12 +49,12 @@ for tool in git gh python3 uvx; do
 done
 
 # What copier left that a person has to resolve: unmerged paths, `.rej`
-# files, and conflict markers (a marked file `git add`ed is no longer
+# files (untracked, or staged by a `git add -A`), and conflict markers (a marked file `git add`ed is no longer
 # unmerged, but it is not resolved either). One path per line.
 conflicts_in() { # <worktree>
   {
     git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=U
-    git -C "$1" -c core.quotePath=false ls-files --others -- '*.rej'
+    git -C "$1" -c core.quotePath=false ls-files --cached --others -- '*.rej'
     git -C "$1" -c core.quotePath=false grep -l --untracked -E '^(<<<<<<<|>>>>>>>) ' 2>/dev/null
   } | sort -u
 }
@@ -93,7 +95,7 @@ finish() { # <worktree>
     echo "Not resolved yet, in $wt:"
     indent <<<"$left"
     echo "Resolve each (remove every conflict marker, delete each .rej once applied), git add it, then run:"
-    echo "  $0 --finish $wt"
+    echo "  $(q "$0") --finish $(q "$wt")"
     exit 3
   fi
 
@@ -164,9 +166,13 @@ finish() { # <worktree>
   # The one push this script makes, to the update branch by name. The
   # default branch is refused above and never named here.
   git -C "$wt" push -q origin "HEAD:refs/heads/$branch" \
-    || { rm -f "$body"; die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $0 --finish $wt"; }
-  pr="$(gh pr create --repo "$repo" --draft --base "$default" --head "$branch" --title "$title" --body-file "$body")" \
-    || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $0 --finish $wt"; }
+    || { rm -f "$body"; die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $(q "$0") --finish $(q "$wt")"; }
+  # A pull request GitHub created although gh reported a failure (the reply
+  # lost on the way back) is this one: adopt it rather than fail on the
+  # duplicate every time (Codex review on #273).
+  pr="$(gh pr list --repo "$repo" --head "$branch" --base "$default" --state open --json url --jq '.[0].url // empty' 2>/dev/null)" || pr=""
+  [ -n "$pr" ] || pr="$(gh pr create --repo "$repo" --draft --base "$default" --head "$branch" --title "$title" --body-file "$body")" \
+    || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $(q "$0") --finish $(q "$wt")"; }
   rm -f "$body"
   printf 'pr=%s\n' "$pr" >> "$sf"
   echo "Draft pull request: $pr"
@@ -216,7 +222,7 @@ if [ "$mode" = plan ]; then
   echo "            (--defaults: each question takes the recorded answer; one never answered takes the template's default)"
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
-  echo "  $0 --apply $base"
+  echo "  $(q "$0") --apply $base"
   exit 0
 fi
 
@@ -225,7 +231,7 @@ fi
   || die "base moved: origin/$default is ${base:0:12} now, not the ${base_arg:0:12} the plan named; run the plan again"
 
 [ -n "$from" ] && [ -n "$to" ] || die "no _commit in .copier-answers.yml at the base, or no template_ref beside this script"
-[ -e "$wt" ] && die "$wt already exists: finish it ($0 --finish $wt) or discard it (git worktree remove --force $wt && git branch -D $branch)"
+[ -e "$wt" ] && die "$wt already exists: finish it ($(q "$0") --finish $(q "$wt")) or discard it (git worktree remove --force $(q "$wt") && git branch -D $branch)"
 git -C "$top" rev-parse -q --verify "refs/heads/$branch" >/dev/null \
   && die "branch $branch already exists: delete it (git branch -D $branch) or finish its worktree"
 # --exit-code: 2 is "no such branch"; any other failure is not an answer,
@@ -242,7 +248,7 @@ dirty="$(git -C "$wt" status --porcelain --untracked-files=all)"
 if [ -n "$dirty" ]; then
   echo "The new worktree is not clean before anything ran; copier was not run:" >&2
   printf '%s\n' "$dirty" | sed 's/^/  /' >&2
-  die "left as is in $wt (git worktree remove --force $wt; git branch -D $branch to discard)"
+  die "left as is in $wt (git worktree remove --force $(q "$wt") && git branch -D $branch to discard)"
 fi
 
 cmd="$(cmd_at "$wt")" || die "no update command at the base (above); $wt left for inspection"
@@ -252,7 +258,7 @@ echo "Running in $wt:"
 echo "  $cmd"
 # As the door runs copier: without the token in its environment.
 ( cd "$wt" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) \
-  || die "copier update failed (above); nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $wt && git branch -D $branch"
+  || die "copier update failed (above); nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $(q "$wt") && git branch -D $branch"
 
 sf="$(state_file "$wt")"
 {
@@ -274,7 +280,7 @@ if [ -n "$conflicts" ]; then
   echo "copier left conflicts; nothing is pushed and no pull request is opened until a person resolves them:"
   indent <<<"$conflicts"
   echo "In $wt, resolve each (remove every conflict marker, delete each .rej once applied), git add it, then run:"
-  echo "  $0 --finish $wt"
+  echo "  $(q "$0") --finish $(q "$wt")"
   exit 3
 fi
 finish "$wt"

@@ -36,6 +36,7 @@ printf 'gh %s\n' "$*" >> "$GH_LOG"
 case "$*" in
   "repo view"*)         echo "o/r main" ;;
   "api repos/o/r/branches/main"*) echo "${MOCK_REMOTE_SHA:-$(git -C "$BARE" rev-parse main)}" ;;
+  "pr list"*) cat "${MOCK_PR_EXISTING:-/dev/null}" ;;
   "pr create"*)
     [ -e "${MOCK_PR_FAIL:-/nonexistent}" ] && { rm "$MOCK_PR_FAIL"; echo "mock gh: pr create failing once" >&2; exit 1; }
     body=""; prev=""
@@ -225,6 +226,49 @@ git -C "$repo" commit -q -am "bump plinth" && git -C "$repo" push -q origin main
 run --apply "$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$raised\$" "$work/uvx.log"; then ok "copier is given the pin the workflows carry today, not the one first rendered"
 else bad "raised pin (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; fi
+
+# ── a pull request GitHub made although gh reported failure is adopted ──
+fixture adopt; reset_logs
+base="$(git -C "$BARE" rev-parse main)"; wt="$(wt_of adopt)"
+: > "$work/pr-fail-once"
+(cd "$repo" && MOCK_PR_FAIL="$work/pr-fail-once" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" >/dev/null 2>&1)
+echo "https://github.com/o/r/pull/77" > "$work/pr-existing"
+reset_logs
+out="$(cd "$repo" && MOCK_PR_EXISTING="$work/pr-existing" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && ! grep -q "pr create" "$work/gh.log" && grep -q "pull/77" <<<"$out" && grep -qx "pr=https://github.com/o/r/pull/77" "$(git -C "$wt" rev-parse --absolute-git-dir)/plinth-template-update"
+then ok "an open pull request already on the branch is recorded, not created twice"
+else bad "adopt (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── a staged .rej is still a conflict ───────────────────────────────────
+fixture stagedrej; reset_logs
+base="$(git -C "$BARE" rev-parse main)"; wt="$(wt_of stagedrej)"
+(cd "$repo" && MOCK_COPIER=rej PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" >/dev/null 2>&1)
+git -C "$wt" add -A
+reset_logs
+run --finish "$wt"
+if [ "$rc" = 3 ] && grep -q "CONTRIBUTING.md.rej" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
+then ok "a .rej staged with git add -A is still a conflict: nothing committed, nothing opened"
+else bad "staged .rej (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── the printed --finish line survives a path with spaces ───────────────
+spaced="$work/My Projects"; mkdir -p "$spaced"
+repo="$spaced/sp"; BARE="$spaced/sp.git"
+git init -q -b main "$repo"; mkdir -p "$repo/.github/workflows"
+cp "$work/conflict/.copier-answers.yml" "$work/conflict/CONTRIBUTING.md" "$work/conflict/AGENTS.md" "$repo/" 2>/dev/null
+printf '_commit: v1.0.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' > "$repo/.copier-answers.yml"
+printf '# Contributing\n' > "$repo/CONTRIBUTING.md"; printf '# Agents\n' > "$repo/AGENTS.md"
+cp "$work/conflict/.github/workflows/ci.yml" "$repo/.github/workflows/ci.yml"
+git -C "$repo" add -A && git -C "$repo" commit -q -m base
+git init -q --bare "$BARE"; git -C "$repo" remote add origin "$BARE"; git -C "$repo" push -q origin main; export BARE
+reset_logs
+out="$(cd "$repo" && MOCK_COPIER=conflict PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"
+line="$(grep -- '--finish ' <<<"$out" | tail -n 1)"
+wt="$spaced/sp-template-$target_ref"
+printf '# Contributing\nresolved\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add -A
+reset_logs
+out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" bash -c "$line" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log"; then ok "the printed --finish line runs as printed under a directory with a space"
+else bad "spaced path (rc=$rc): '$line'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # ── only the recorded update branch is finished ─────────────────────────
 fixture other; reset_logs
