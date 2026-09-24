@@ -13,6 +13,12 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.5.1. Its only change: the
+  generated `CONTRIBUTING.md` gives the squash merge command that keeps a pull
+  request's description as its commit, instead of GitHub's default, which
+  hard-wraps it at 72 columns (coolbress/plinth-template#24, the template's
+  copy of #250). `/plinth:floor-check` now reports a repository on v1.5.0 as
+  one tag behind.
 - zizmor, ruff and mypy, the Python tools `ci / tools` runs, install from a
   hash-locked `tests/lint-tools.txt` (with their dependencies) into a venv,
   with `pip install --require-hashes --only-binary=:all:`. They ran through
