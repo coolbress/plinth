@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.5.3. Its only change: the
+  generated `AGENTS.md` says the agent merges only when the person says so
+  for that pull request, with `CONTRIBUTING.md` step 7's command, and checks
+  a worktree for ignored files before removing it; step 7 says who decides
+  (coolbress/plinth-template#31, from the v1.0.0 release-candidate run).
+  `/plinth:floor-check` now reports a repository on v1.5.2 as one tag behind.
+
 ### Fixed
 
 - The README's install block now works on its own in a fresh Claude Code
