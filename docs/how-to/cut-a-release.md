@@ -14,7 +14,7 @@ to tracked files, and `gh` logged in with write access to the repository.
 1. Read the template tag the door pins:
 
    ```bash
-   sed -n 's/^template_ref=//p' scripts/new-project.sh
+   sed -nE 's/^template_ref="([^"]+)"$/\1/p' scripts/new-project.sh
    ```
 
 2. Write the why in a file outside the repository, for example
@@ -60,7 +60,11 @@ to tracked files, and `gh` logged in with write access to the repository.
 | The why says nothing but the tested line | Add a sentence on why the release exists |
 | The why has a heading line | Remove every line that starts with `#` |
 | The version is not above the current one | Pick the next version |
-| The tag, release or `release/vX.Y.Z` branch already exists | Pick the next version, or delete the leftover branch |
+| The tag or the release already exists | Pick the next version |
+| `release/vX.Y.Z` already exists on origin | Finish that release, or delete the leftover branch |
+| Run this from `main` | `git switch main` |
+| Shallow clone | `git fetch --unshallow` |
+| A local tag points elsewhere (run 2) | `git tag -d vX.Y.Z`, then run step 7 again |
 | `main` has uncommitted changes or differs from `origin/main` | Commit or discard them, then `git pull --ff-only` |
 | No green `e2e` run on the commit (run 2) | Wait for the run you started; if it failed, read its log and dispatch it again. If `main` moved past the release commit, dispatch it from a branch at that commit |
 | The section's why fails a check (run 2) | Fix the version's section of `CHANGELOG.md` in a pull request, merge it, and run step 7 again |
