@@ -49,12 +49,13 @@ Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
 ## What you get
 
-Three skills, prefixed `/plinth:`:
+Four skills, prefixed `/plinth:`:
 
 | Skill | Does | Who can call it |
 | --- | --- | --- |
 | `new-project <owner>/<name>` | Creates a repository with the required checks enforced; if a wall step fails it deletes the repository when the token allows and prints the URL when it cannot | You only: type `/` and pick it. The agent cannot see or run it; an agent saying it is not installed usually means the line was typed as text (`/plinth:arsenal` shows what is installed) |
 | `floor-check [owner/name]` | Reads an existing repository against the same floor the CI job checks, the live ruleset, whether it is behind the template plinth is tested with today, and what this machine's Claude Code settings say about the sandbox; lists each miss with one fix; changes nothing | You or the agent |
+| `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; a conflict is left for you to resolve before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 
 Installed with plinth as dependencies, each pinned to a commit:

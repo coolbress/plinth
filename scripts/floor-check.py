@@ -32,7 +32,8 @@ One more is WARN-only and reads no network beyond one GitHub compare call
 (.copier-answers.yml's _commit) is behind the tag plinth is tested with
 today (scripts/new-project.sh's template_ref, read from that file alone).
 Behind prints the template's own changed files and a `copier update` line;
-it never runs one.
+it never runs one. --print-update-command prints that line alone, for the
+template-update skill (#232), which runs it.
 """
 
 from __future__ import annotations
@@ -591,6 +592,55 @@ def resolve_plinth_pin(root: Path) -> tuple[str | None, str | None]:
     return None, f"workflow pins disagree: {', '.join(sorted(shas))}"
 
 
+def template_drift(root: Path) -> dict:
+    """Where this repository stands against the template tag plinth is
+    tested with, and the one `copier update` command that moves it there
+    (#219). Offline. The drift item below prints it; --print-update-command
+    prints the command alone for the template-update skill (#232), so the
+    command that runs is the one this item prints, never a second
+    construction of it. `state` is skip, ahead, current or behind; `reason`
+    says why a skip was not verified; `cmd` is set only when behind and the
+    plinth pin is established, and `why_not` says why it is not."""
+    pin = new_project_pin()
+    if pin is None:
+        return {"state": "skip", "reason": "scripts/new-project.sh not found beside the checker, or unreadable"}
+    template_repo, target, copier_version, copier_newer = pin
+    out: dict = {"template_repo": template_repo, "target": target}
+
+    answers = copier_answers(root)
+    if answers is None:
+        return {**out, "state": "skip", "reason": "no .copier-answers.yml: not made by the door"}
+    src_path = answers.get("_src_path", "")
+    # Exactly what the door writes, not a substring: a foreign source such as
+    # a local checkout at .../coolbress/plinth-template would otherwise pass
+    # too, and copier update would then pull from it, not the real template
+    # (#233 review).
+    if src_path != f"gh:{template_repo}":
+        return {**out, "state": "skip", "reason": f"_src_path {src_path!r} is not gh:{template_repo}, the door's own form"}
+    if "_commit" not in answers:
+        return {**out, "state": "skip", "reason": ".copier-answers.yml has no _commit"}
+    recorded = answers["_commit"]
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", recorded):
+        return {**out, "state": "skip", "reason": f"recorded tag {recorded!r} is not an exact release tag"}
+    out["recorded"] = recorded
+
+    def key(tag: str) -> tuple[int, ...]:
+        return tuple(int(x) for x in tag[1:].split("."))
+
+    if key(recorded) > key(target):
+        return {**out, "state": "ahead"}
+    if recorded == target:
+        return {**out, "state": "current"}
+
+    sha, why_not = resolve_plinth_pin(root)
+    # --defaults: without a terminal copier update stops at "Interactive
+    # session required" (measured, copier 9.18.2), and the skill that runs
+    # this line has none. It answers each question with the recorded answer.
+    cmd = (f"uvx --from copier=={copier_version} --exclude-newer {copier_newer} "
+           f"copier update --defaults --vcs-ref {target} --data plinth_sha={sha}") if sha else None
+    return {**out, "state": "behind", "cmd": cmd, "why_not": why_not}
+
+
 def check_template_drift(root: Path, network: bool) -> None:
     """#219 stage 1: has the template plinth is tested with today moved past
     the tag this repository was rendered from? Reports the drift and an
@@ -598,39 +648,16 @@ def check_template_drift(root: Path, network: bool) -> None:
     recorded tag is the target tag -- not that this repository's own render
     matches it file for file: another archetype, inherited forms or a
     hand-made edit can mean a changed template file was never rendered here."""
-    pin = new_project_pin()
-    if pin is None:
-        result("SKIP", "template drift not verified (scripts/new-project.sh not found beside the checker, or unreadable)")
+    d = template_drift(root)
+    if d["state"] == "skip":
+        result("SKIP", f"template drift not verified ({d['reason']})")
         return
-    template_repo, target, copier_version, copier_newer = pin
-
-    answers = copier_answers(root)
-    if answers is None:
-        result("SKIP", "template drift not verified (no .copier-answers.yml: not made by the door)")
-        return
-    src_path = answers.get("_src_path", "")
-    # Exactly what the door writes, not a substring: a foreign source such as
-    # a local checkout at .../coolbress/plinth-template would otherwise pass
-    # too, and copier update would then pull from it, not the real template
-    # (#233 review).
-    if src_path != f"gh:{template_repo}":
-        result("SKIP", f"template drift not verified (_src_path {src_path!r} is not gh:{template_repo}, the door's own form)")
-        return
-    if "_commit" not in answers:
-        result("SKIP", "template drift not verified (.copier-answers.yml has no _commit)")
-        return
-    recorded = answers["_commit"]
-    if not re.fullmatch(r"v\d+\.\d+\.\d+", recorded):
-        result("SKIP", f"template drift not verified (recorded tag {recorded!r} is not an exact release tag)")
-        return
-
-    def key(tag: str) -> tuple[int, ...]:
-        return tuple(int(x) for x in tag[1:].split("."))
-
-    if key(recorded) > key(target):
+    template_repo, target = d["template_repo"], d["target"]
+    recorded = d["recorded"]
+    if d["state"] == "ahead":
         result("INFO", f"template: the recorded tag {recorded} is ahead of {target}, the tag plinth is tested with")
         return
-    if recorded == target:
+    if d["state"] == "current":
         result("PASS", f"template: the recorded tag is the target tag ({target})")
         return
 
@@ -644,10 +671,6 @@ def check_template_drift(root: Path, network: bool) -> None:
         # A well-formed reply that still carries no `files` list (GitHub omits
         # it for a very large diff): read, but not into what was expected.
         changed, unread_reason = None, "an unexpected compare response"
-
-    sha, why_not = resolve_plinth_pin(root)
-    cmd = (f"uvx --from copier=={copier_version} --exclude-newer {copier_newer} "
-           f"copier update --vcs-ref {target} --data plinth_sha={sha}") if sha else None
 
     if changed is None:
         result("WARN", f"template: {recorded} is behind {target}, the tag plinth is tested with; "
@@ -667,10 +690,27 @@ def check_template_drift(root: Path, network: bool) -> None:
                 for pline in patch.splitlines():
                     result("INFO", f"    {pline}")
 
-    if cmd:
-        result("INFO", f"  {cmd}")
+    if d["cmd"]:
+        result("INFO", f"  {d['cmd']}")
     else:
-        result("INFO", f"  no update command: {why_not}")
+        result("INFO", f"  no update command: {d['why_not']}")
+
+
+def print_update_command(root: Path) -> int:
+    """--print-update-command: the drift item's command line alone on
+    stdout, exit 0; otherwise why there is none on stderr, exit 1."""
+    d = template_drift(root)
+    if d.get("cmd"):
+        print(d["cmd"])
+        return 0
+    why = {
+        "skip": lambda: f"template drift not verified ({d['reason']})",
+        "ahead": lambda: f"the recorded tag {d['recorded']} is ahead of {d['target']}, the tag plinth is tested with",
+        "current": lambda: f"the recorded tag is the target tag ({d['target']}): nothing to update",
+        "behind": lambda: f"{d['recorded']} is behind {d['target']}, but there is no update command: {d['why_not']}",
+    }[d["state"]]()
+    print(f"no update command: {why}", file=sys.stderr)
+    return 1
 
 
 def check_doc_links(root: Path) -> None:
@@ -1156,6 +1196,8 @@ def main() -> int:
     ap.add_argument("--no-network", action="store_true", help="skip everything that needs api.github.com")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--print-update-command", action="store_true",
+                    help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
     a = ap.parse_args()
@@ -1170,6 +1212,8 @@ def main() -> int:
         return 0
 
     root = Path(a.root).resolve()
+    if a.print_update_command:
+        return print_update_command(root)
     project = (root / a.project).resolve()
     network = not a.no_network
     owner = a.repo.split("/")[0] if a.repo else None

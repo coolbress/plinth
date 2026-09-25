@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:template-update` applies the template update `/plinth:floor-check`
+  reports. It prints a plan first and writes nothing until you say yes. Then it
+  runs the checker's own `copier update` line in a new worktree beside the
+  repository, branched from the default branch after checking that branch
+  against GitHub, and opens a draft pull request. The description lists what
+  merged cleanly and what a person resolved. A conflict stops it before
+  anything is pushed, left in the worktree for you to resolve; it never picks
+  a side. It never pushes to the default branch and does not wait for the
+  pull request's checks.
+
+### Changed
+
+- The `copier update` line in `/plinth:floor-check`'s template drift item
+  now carries `--defaults`. Without it, copier stops when there is no
+  terminal to ask its questions in. With it, each question takes the answer
+  the repository recorded, or the template's default for one it never
+  recorded.
+
 ### Fixed
 
 - When `/plinth:new-project` cannot push the new repository's first commit,

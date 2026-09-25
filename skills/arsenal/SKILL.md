@@ -13,8 +13,8 @@ enforcement.
 For the planning-to-review flow (grill, spec, tickets, implement, review) do not
 route by hand: run `/ask-matt` and let it pick the skill.
 
-`/plinth:new-project` is user-only, typed by the user as `/` plus a pick from
-the list, invisible to the agent: when a pasted line drew "not installed", the
+`/plinth:new-project` and `/plinth:template-update` are user-only, typed by
+the user as `/` plus a pick from the list, invisible to the agent: when a pasted line drew "not installed", the
 line arrived as text, and this catalog being open shows plinth is installed.
 
 ## Installed by default

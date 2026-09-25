@@ -86,6 +86,6 @@ expect() {  # expect <plugin> <needle>...
   done
   echo "  PASS  $1: ${*:2}"
 }
-expect plinth@plinth "Skills (3)" "arsenal" "floor-check" "new-project" "Hooks (0)"
+expect plinth@plinth "Skills (4)" "arsenal" "floor-check" "new-project" "template-update" "Hooks (0)"
 expect ponytail-skills@plinth "Skills (6)" "Hooks (0)"
 expect taste-skill@plinth "Skills (13)" "Hooks (0)"
