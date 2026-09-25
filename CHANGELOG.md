@@ -11,8 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- Four documentation pages: [Required checks](docs/reference/required-checks.md),
+  each check the wall requires with what it asserts, what a red means and the
+  fix, held to `ruleset.json` by `tests/required-checks-doc.sh`;
+  [Concepts](docs/explanation/concepts.md), why plinth is shaped the way it
+  is; and two maintainer how-tos,
+  [cut a release](docs/how-to/cut-a-release.md) (moved from `CONTRIBUTING.md`)
+  and [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md).
+  README, `CONTEXT.md` and `AGENTS.md` link to them instead of repeating the
+  check list.
+
 ### Fixed
 
+- `/plinth:new-project --private` pointed to a page that did not exist; it
+  now links to the private-repository section of the concepts page.
 - `/plinth:template-update` takes an open pull request already on its
   branch as its own only when that pull request's head is this repository
   at the commit it just pushed. Before, a fork's pull request from a branch
