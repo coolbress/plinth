@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.28] - 2026-09-25
+
+A repository `/plinth:new-project` creates now sends a reader who wants to
+know what a check does, or why it is red, to plinth's Required checks page:
+plinth-template v1.5.2 puts that link at the top of the generated `ci.yml`,
+where it used to point at the reusable workflow's source.
+
+tested with plinth-template v1.5.2
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.5.2. Its only change: the
@@ -1146,7 +1155,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.27...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.28...HEAD
+[0.5.28]: https://github.com/coolbress/plinth/releases/tag/v0.5.28
 [0.5.27]: https://github.com/coolbress/plinth/releases/tag/v0.5.27
 [0.5.26]: https://github.com/coolbress/plinth/releases/tag/v0.5.26
 [0.5.25]: https://github.com/coolbress/plinth/releases/tag/v0.5.25
