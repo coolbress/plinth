@@ -39,6 +39,15 @@ to tracked files, and `gh` logged in with write access to the repository.
    gh workflow run e2e.yml --ref main
    ```
 
+   If `gh` answers HTTP 403, your login cannot run workflows: run the same
+   command through `scripts/with-admin-token.sh` in a separate terminal
+   window, not with Claude Code's `!`, which gives the token prompt no
+   terminal:
+
+   ```bash
+   scripts/with-admin-token.sh gh workflow run e2e.yml --ref main
+   ```
+
    If a nightly run already passed on that exact commit, skip this step.
 7. Run the same command again:
 

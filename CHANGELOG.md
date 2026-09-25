@@ -25,6 +25,12 @@ pull requests and have no tag.
 
 ### Fixed
 
+- The concepts page said everything plinth runs from other repositories is
+  pinned. `mattpocock-skills` is not: it comes from Anthropic's official
+  marketplace at whatever version it serves, within the 1.2.3 to below 2.0.0
+  range the install test checks. The page now says so. The release how-to
+  now also says what to do when `gh workflow run e2e.yml` answers HTTP 403:
+  run it through `scripts/with-admin-token.sh` in a separate terminal.
 - `/plinth:new-project --private` pointed to a page that did not exist; it
   now links to the private-repository section of the concepts page.
 - `/plinth:template-update` takes an open pull request already on its

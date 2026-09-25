@@ -78,13 +78,17 @@ decision calls for it.
 
 ## About pins
 
-What plinth runs from other repositories is pinned. A consumer's CI calls
-plinth's reusable workflow at a commit SHA, not a tag, and Dependabot proposes
-raising it. Every third-party marketplace entry is pinned to a full commit
-SHA. A commit SHA cannot move. The template is the exception: the door renders
-one release tag of plinth-template, and a tag can be moved by whoever
-maintains that repository; the door does not check which commit it resolves
-to. Each plinth release names the tag it was tested with, and
+Most of what plinth runs from other repositories is pinned. A consumer's CI
+calls plinth's reusable workflow at a commit SHA, not a tag, and Dependabot
+proposes raising it. Every third-party entry in plinth's own marketplace is
+pinned to a full commit SHA. A commit SHA cannot move.
+
+Two things are not pinned that way. `mattpocock-skills` comes from
+Anthropic's official marketplace at whatever version it serves; plinth's
+install test only checks that the version is at least 1.2.3 and below 2.0.0.
+And the door renders one release tag of plinth-template, which whoever
+maintains that repository can move; the door does not check which commit it
+resolves to. Each plinth release names the tag it was tested with, and
 `/plinth:floor-check` reports a repository rendered from an older tag as
 behind.
 
