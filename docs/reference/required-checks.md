@@ -15,7 +15,7 @@
 
 | Check | Asserts | A red means | The fix |
 | --- | --- | --- | --- |
-| `ci / pr-title` | The pull request title is Conventional Commits, `type(scope): summary` or `type(scope)!: summary`, with one of the eleven standard types | The title does not match; the job summary names the types and a table of common substitutes | Edit the title, then push a commit: the check runs on a push, not on an edit |
+| `ci / pr-title` | The pull request title is Conventional Commits, `type: summary` or `type(scope): summary`, `!` before the colon for a breaking change; the type is one of the eleven standard types | The title does not match; the job summary names the types and a table of common substitutes | Edit the title, then push a commit: the check runs on a push, not on an edit |
 | `ci / lint` | `uv sync --locked` succeeds, `ruff check` and `ruff format --check` pass, and zizmor finds nothing at medium or above in `.github/workflows/` | The lockfile is missing or disagrees with `pyproject.toml`, ruff found a problem or an unformatted file, or zizmor found a workflow weakness | `uv lock`, `uv run ruff check --fix .`, `uv run ruff format .`; for zizmor, the rule it names in the log |
 | `ci / typecheck` | `uv run mypy .` passes | A type error; the log names file and line | Fix the type at that line |
 | `ci / test` | `uv run pytest` passes on `.python-version`, and on each version in the `extra-python-versions` input | A failing test, or one that fails only on an extra version (the log's `python <version>` line says which) | `uv run pytest`; for an extra version, `uv run --isolated --python <version> --with pytest pytest -q` |
