@@ -26,7 +26,8 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   then tags from the merged `main`; never bump it elsewhere. `tests/make-release-guards.sh` checks it.
 - Pin every third-party marketplace entry to a full commit SHA. Raising a pin is a pull request.
 - Keep the caller job named `ci` in `.github/workflows/ci.yml`. Check names are
-  `ci / <job>` and rulesets require them by name. Renaming a `python-ci.yml`
+  `ci / <job>` and rulesets require them by name
+  ([the list](docs/reference/required-checks.md)). Renaming a `python-ci.yml`
   job is a MAJOR change: every consumer ruleset requires the old name forever.
 - Never skip a job with `if:`. Report a pass instead; a skipped job has no check name.
 - Product text is English. `.ko.md` translations are optional and never canonical.

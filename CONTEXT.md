@@ -6,12 +6,8 @@ from stay in the lab.
 - **wall**: the required status checks and branch rules a repository's ruleset
   enforces on `main`. An automated check, not a review: green means the
   asserted properties hold. Raised on GitHub, not in the plugin, so an agent cannot
-  turn it off. Check names: `ci / pr-title`, `lint`, `typecheck`, `test`,
-  `build`, `secrets`, `deps`, `diff-size`, `floor-check`; CodeQL is required
-  as a code scanning rule, not as a check name: with default setup off the
-  rule blocks with a reason (#41), where a required name would never report. On a
-  head Dependabot pushed, default setup starts no analysis and the rule still
-  passes; `main` is analysed after the merge (#179).
+  turn it off. The checks, and what each asserts:
+  [docs/reference/required-checks.md](docs/reference/required-checks.md).
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
   the wall, opens the first pull request, and deletes the repository if any
   step after creation fails.

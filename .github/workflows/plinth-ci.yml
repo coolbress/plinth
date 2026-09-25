@@ -194,3 +194,6 @@ jobs:
 
       - name: README install block equals the tutorial's
         run: ./tests/readme-install-block.sh
+
+      - name: The required-checks page names exactly the checks the wall requires
+        run: ./tests/required-checks-doc.sh

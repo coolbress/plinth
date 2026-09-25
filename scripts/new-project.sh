@@ -64,7 +64,7 @@ if [ "$private" = 1 ]; then
   cat >&2 <<'EOF'
 private repositories are not supported yet: the wall requires CodeQL, and private CodeQL needs a GitHub Code Security license (org on Team+).
   now:   create it public (drop --private)
-  free:  GitLab Free has protected branches + pipelines-must-succeed (no CodeQL, no push protection) — see docs/explanation/what-private-repos-get
+  free:  GitLab Free has protected branches + pipelines-must-succeed (no CodeQL, no push protection) — see https://github.com/coolbress/plinth/blob/main/docs/explanation/concepts.md#about-private-repositories
   later: a lower wall for private repos (Semgrep OSS instead of CodeQL — the original standards decision, not built) is a v1.1 candidate
 EOF
   exit 2

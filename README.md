@@ -70,12 +70,9 @@ whose installer writes hooks, agents and skills into the repository. Run
 `/plinth:arsenal` for the catalog; licenses are in [NOTICE](NOTICE).
 
 Nothing in the plugin enforces anything. Enforcement is the ruleset on GitHub,
-which `/plinth:new-project` raises and which owners cannot bypass. It can be
-changed, though: an owner, or anyone holding administration, can edit the
-ruleset, so the wall stops the everyday agent and not the administrator. That
-is why the generated `AGENTS.md` tells the agent never to ask for
-administration on the everyday token: a ruleset or code-scanning change is a
-person's, typed through `scripts/with-admin-token.sh` or made in Settings.
+which `/plinth:new-project` raises and which owners cannot bypass; anyone
+holding administration can still edit it
+([About who can change the wall](docs/explanation/concepts.md#about-who-can-change-the-wall)).
 When `gh` holds a fine-grained token, the generator stops and names two
 fixes. The browser login is shorter, but its token is scoped `repo` across the
 account rather than to selected repositories; the admin-token path keeps the
@@ -97,13 +94,9 @@ whose CI reports every check the wall requires. In both live journeys so far
 (the v0.5.1 baseline by hand and one green `e2e` run on a runner, #62,
 2026-09-09) the first pull request merged, but only after the recovery commit
 the door prints: CodeQL did not analyse the pull request on its first push
-(#117). A pull request whose head Dependabot pushed merges without a CodeQL
-analysis: default setup starts none for it, the `CodeQL` check lands `neutral`,
-and the code scanning rule passes (#179: five such heads on three
-repositories). What runs on those heads is `ci / deps`, the tests and the other
-required checks; `main` is analysed after the merge, and a head a person
-pushed to the same pull request was analysed. Heads pushed by other bots or by
-a workflow's `GITHUB_TOKEN` were not measured. `floor-check` runs the checker `ci / floor-check` runs, read-only;
+(#117). What each required check asserts, what a red means and its fix,
+CodeQL on a head Dependabot pushed included (#179), is in
+[Required checks](docs/reference/required-checks.md). `floor-check` runs the checker `ci / floor-check` runs, read-only;
 exit 0 means no FAIL in what it could read, and its summary counts what it
 could not. A third-party review check (`third-party / review`, Codex) is
 available as an optional check; see
@@ -112,6 +105,9 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 
 ## Further reading
 
+- [Concepts](docs/explanation/concepts.md): why plinth is shaped the way it is.
+- How-to, for maintainers: [cut a release](docs/how-to/cut-a-release.md),
+  [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md).
 - [CONTEXT.md](CONTEXT.md): the vocabulary (wall, door, box, floor, arsenal, lab, profile).
 - [plinth-lab](https://github.com/coolbress/plinth-lab): the evidence behind the rules. Optional.
 
