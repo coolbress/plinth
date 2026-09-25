@@ -157,9 +157,10 @@ finish() { # <worktree>
     echo
     echo "## How it was verified"
     echo
-    echo "Opened as a draft once no conflict was left: no unmerged path, no \`.rej\`"
-    echo "file, no conflict marker. This repository's own checks had not run when it"
-    echo "was opened; they run on it now. No conflict was resolved automatically."
+    echo "Opened as a draft once no conflict was left: no unmerged path, and no"
+    echo "\`.rej\` file or conflict marker in a file the update changed (files unchanged"
+    echo "since $(printf '%.12s' "$base") were not read). This repository's own checks had not run"
+    echo "when it was opened; they run on it now. No conflict was resolved automatically."
     echo "copier's questions were answered with \`--defaults\`: each takes this"
     echo "repository's recorded answer, and a question it never answered takes the"
     echo "template's default (\`.copier-answers.yml\` in the diff shows any)."

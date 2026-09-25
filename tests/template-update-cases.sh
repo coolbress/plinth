@@ -283,6 +283,9 @@ run --apply "$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && ! grep -q "sample.rej\|merging.md" <<<"$out"
 then ok "a tracked .rej and a document with a marker line, both untouched by the update, do not stop it: the draft opens"
 else bad "base fixtures (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if tr '\n' ' ' < "$work/gh.log.body" | grep -q "conflict marker in a file the update changed"
+then ok "the description scopes its no-.rej, no-marker claim to the files the update changed"
+else bad "description claim"; sed 's/^/        /' "$work/gh.log.body"; fi
 
 # ── a staged .rej is still a conflict ───────────────────────────────────
 fixture stagedrej; reset_logs
