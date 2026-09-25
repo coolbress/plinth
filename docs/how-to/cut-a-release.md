@@ -18,13 +18,13 @@ to tracked files, and `gh` logged in with write access to the repository.
    ```
 
 2. Write the why in a file outside the repository, for example
-   `$TMPDIR/why.md`: a short paragraph on why this release exists, and one
+   `${TMPDIR:-/tmp}/why.md`: a short paragraph on why this release exists, and one
    line `tested with plinth-template <tag>` with the tag from step 1. Use no
    heading lines.
 3. Run the script once, from the up-to-date `main`:
 
    ```bash
-   scripts/make-release.sh vX.Y.Z "$TMPDIR/why.md"
+   scripts/make-release.sh vX.Y.Z "${TMPDIR:-/tmp}/why.md"
    ```
 
    It bumps `version` in both manifests, moves the `Unreleased` entries under
@@ -43,7 +43,7 @@ to tracked files, and `gh` logged in with write access to the repository.
 7. Run the same command again:
 
    ```bash
-   scripts/make-release.sh vX.Y.Z "$TMPDIR/why.md"
+   scripts/make-release.sh vX.Y.Z "${TMPDIR:-/tmp}/why.md"
    ```
 
    It pushes the annotated tag and creates the GitHub Release from the

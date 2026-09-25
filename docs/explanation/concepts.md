@@ -78,12 +78,15 @@ decision calls for it.
 
 ## About pins
 
-Everything plinth depends on is pinned to something that cannot move under
-it. A consumer's CI calls plinth's reusable workflow at a commit SHA, not a
-tag, and Dependabot proposes raising it. Every third-party marketplace entry
-is pinned to a full commit SHA. The door renders one template tag, and each
-plinth release names the tag it was tested with; `/plinth:floor-check` reports
-a repository rendered from an older tag as behind.
+What plinth runs from other repositories is pinned. A consumer's CI calls
+plinth's reusable workflow at a commit SHA, not a tag, and Dependabot proposes
+raising it. Every third-party marketplace entry is pinned to a full commit
+SHA. A commit SHA cannot move. The template is the exception: the door renders
+one release tag of plinth-template, and a tag can be moved by whoever
+maintains that repository; the door does not check which commit it resolves
+to. Each plinth release names the tag it was tested with, and
+`/plinth:floor-check` reports a repository rendered from an older tag as
+behind.
 
 A pin is also the recovery plan. plinth has one maintainer, and a SHA keeps
 working only while its repository exists. If maintenance stops, fork the
