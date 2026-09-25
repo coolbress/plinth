@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.5.2. Its only change: the
+  generated `ci.yml` points a reader who wants to know what a check does, or
+  why it is red, at plinth's [Required checks](docs/reference/required-checks.md)
+  page instead of `python-ci.yml` (coolbress/plinth-template#27).
+  `/plinth:floor-check` now reports a repository on v1.5.1 as one tag behind.
+
 ## [0.5.27] - 2026-09-25
 
 plinth now has the pages a reader needs besides the tutorial: every check
