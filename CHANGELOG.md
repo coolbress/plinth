@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.27] - 2026-09-25
+
+plinth now has the pages a reader needs besides the tutorial: every check
+the wall requires with what a red means and the fix, why plinth is shaped
+the way it is, and how a maintainer cuts a release or raises the template
+pin. Also in this release, `/plinth:template-update` no longer stops on a
+`.rej` file or a quoted conflict marker the repository already had, and
+takes over only its own pull request.
+
+tested with plinth-template v1.5.1
+
 ### Added
 
 - Four documentation pages: [Required checks](docs/reference/required-checks.md),
@@ -21,16 +32,14 @@ pull requests and have no tag.
   [cut a release](docs/how-to/cut-a-release.md) (moved from `CONTRIBUTING.md`)
   and [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md).
   README, `CONTEXT.md` and `AGENTS.md` link to them instead of repeating the
-  check list.
+  check list. The concepts page names the one dependency not pinned by SHA,
+  `mattpocock-skills`, which comes from Anthropic's official marketplace
+  within the 1.2.3 to below 2.0.0 range the install test checks. The release
+  how-to says what to do when `gh workflow run e2e.yml` answers HTTP 403: run
+  it through `scripts/with-admin-token.sh` in a separate terminal.
 
 ### Fixed
 
-- The concepts page said everything plinth runs from other repositories is
-  pinned. `mattpocock-skills` is not: it comes from Anthropic's official
-  marketplace at whatever version it serves, within the 1.2.3 to below 2.0.0
-  range the install test checks. The page now says so. The release how-to
-  now also says what to do when `gh workflow run e2e.yml` answers HTTP 403:
-  run it through `scripts/with-admin-token.sh` in a separate terminal.
 - `/plinth:new-project --private` pointed to a page that did not exist; it
   now links to the private-repository section of the concepts page.
 - `/plinth:template-update` takes an open pull request already on its
@@ -1129,7 +1138,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.26...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.27...HEAD
+[0.5.27]: https://github.com/coolbress/plinth/releases/tag/v0.5.27
 [0.5.26]: https://github.com/coolbress/plinth/releases/tag/v0.5.26
 [0.5.25]: https://github.com/coolbress/plinth/releases/tag/v0.5.25
 [0.5.24]: https://github.com/coolbress/plinth/releases/tag/v0.5.24
