@@ -21,7 +21,8 @@ pull requests and have no tag.
 - `/plinth:template-update` counts a `.rej` file or a conflict-marker line
   as a conflict only in files the update changed. A `.rej` fixture or a
   document quoting a marker that the repository already had no longer stops
-  every run. Unmerged paths still stop it wherever they are.
+  every run. Unmerged paths still stop it wherever they are, and so does
+  an untracked `.rej` in the new worktree, even one `.gitignore` ignores.
 
 ## [0.5.26] - 2026-09-25
 

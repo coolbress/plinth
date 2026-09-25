@@ -59,6 +59,9 @@ conflicts_in() { # <worktree> <base>
   {
     git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=U
     # Ignored ones too: a .rej copier wrote is one whatever .gitignore says.
+    # The clean check before copier does not see ignored files, so an ignored
+    # .rej something else put in the fresh worktree (a checkout hook) counts
+    # as well; deleting it and running again recovers (#276 review).
     git -C "$1" -c core.quotePath=false ls-files --others -- '*.rej'
     git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=d "$2" -- '*.rej'
     while IFS= read -r p; do
