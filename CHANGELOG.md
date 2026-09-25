@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:template-update` takes an open pull request already on its
+  branch as its own only when that pull request's head is this repository
+  at the commit it just pushed. Before, a fork's pull request from a branch
+  of the same name could be recorded in its place, leaving the update with
+  no pull request. Otherwise it opens its own.
+- `/plinth:template-update` counts a `.rej` file or a conflict-marker line
+  as a conflict only in files the update changed. A `.rej` fixture or a
+  document quoting a marker that the repository already had no longer stops
+  every run. Unmerged paths still stop it wherever they are.
+
 ## [0.5.26] - 2026-09-25
 
 A repository `/plinth:new-project` made from an older template can now be

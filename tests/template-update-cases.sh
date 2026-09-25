@@ -36,7 +36,12 @@ printf 'gh %s\n' "$*" >> "$GH_LOG"
 case "$*" in
   "repo view"*)         echo "o/r main" ;;
   "api repos/o/r/branches/main"*) echo "${MOCK_REMOTE_SHA:-$(git -C "$BARE" rev-parse main)}" ;;
-  "pr list"*) cat "${MOCK_PR_EXISTING:-/dev/null}" ;;
+  "pr list"*)
+    # MOCK_PR_EXISTING holds the JSON GitHub would answer; the script's own
+    # --jq filter is applied to it, as gh does.
+    jqf="."; prev=""
+    for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; prev="$a"; done
+    jq -r "$jqf" "${MOCK_PR_EXISTING:-/dev/null}" ;;
   "pr create"*)
     [ -e "${MOCK_PR_FAIL:-/nonexistent}" ] && { rm "$MOCK_PR_FAIL"; echo "mock gh: pr create failing once" >&2; exit 1; }
     body=""; prev=""
@@ -232,12 +237,52 @@ fixture adopt; reset_logs
 base="$(git -C "$BARE" rev-parse main)"; wt="$(wt_of adopt)"
 : > "$work/pr-fail-once"
 (cd "$repo" && MOCK_PR_FAIL="$work/pr-fail-once" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" >/dev/null 2>&1)
-echo "https://github.com/o/r/pull/77" > "$work/pr-existing"
+# What gh pr list answers: an open pull request on the branch, its head
+# repository and the commit at its head.
+pr_json() { # <url> <owner> <repo> <head-sha>
+  printf '[{"url":"%s","headRepositoryOwner":{"login":"%s"},"headRepository":{"name":"%s"},"headRefOid":"%s","isCrossRepository":%s}]\n' \
+    "$1" "$2" "$3" "$4" "$([ "$2/$3" = o/r ] && echo false || echo true)"
+}
+pr_json "https://github.com/o/r/pull/77" o r "$(git -C "$wt" rev-parse HEAD)" > "$work/pr-existing"
 reset_logs
 out="$(cd "$repo" && MOCK_PR_EXISTING="$work/pr-existing" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && ! grep -q "pr create" "$work/gh.log" && grep -q "pull/77" <<<"$out" && grep -qx "pr=https://github.com/o/r/pull/77" "$(git -C "$wt" rev-parse --absolute-git-dir)/plinth-template-update"
 then ok "an open pull request already on the branch is recorded, not created twice"
 else bad "adopt (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── a pull request on the branch that is not this update is not adopted ─
+# `--head` filters by branch name only: a fork's pull request from a branch
+# of the same name, or one whose head is not the commit just pushed, is
+# someone else's (#274).
+for who in "fork:fork r same" "stale:o r other"; do
+  name="${who%%:*}"; set -- ${who#*:}
+  fixture "adopt$name"; reset_logs
+  base="$(git -C "$BARE" rev-parse main)"; wt="$(wt_of "adopt$name")"
+  : > "$work/pr-fail-once"
+  (cd "$repo" && MOCK_PR_FAIL="$work/pr-fail-once" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" >/dev/null 2>&1)
+  head="$(git -C "$wt" rev-parse HEAD)"; [ "$3" = same ] || head="$(printf '%040d' 5)"
+  pr_json "https://github.com/$1/$2/pull/88" "$1" "$2" "$head" > "$work/pr-existing"
+  reset_logs
+  out="$(cd "$repo" && MOCK_PR_EXISTING="$work/pr-existing" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
+  if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -q "pull/9" <<<"$out" && ! grep -q "pull/88" <<<"$out" \
+     && grep -qx "pr=https://github.com/o/r/pull/9" "$(git -C "$wt" rev-parse --absolute-git-dir)/plinth-template-update"
+  then ok "an open pull request on the branch name from $([ "$name" = fork ] && echo "another owner's fork" || echo "this repository at another commit") is not adopted: the draft is created"
+  else bad "adopt $name (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; sed 's/^/        /' "$work/gh.log"; fi
+done
+
+# ── what the base already holds is not a conflict ───────────────────────
+# A tracked .rej fixture and a document quoting a conflict marker were there
+# before copier ran; only what the update changed is read (#274).
+fixture fixtures
+mkdir -p "$repo/docs" "$repo/tests/fixtures"
+printf -- '--- a\n+++ b\n' > "$repo/tests/fixtures/sample.rej"
+printf '# Merging\n\n```text\n<<<<<<< example\nours\n=======\ntheirs\n>>>>>>> example\n```\n' > "$repo/docs/merging.md"
+git -C "$repo" add -A && git -C "$repo" commit -q -m fixtures && git -C "$repo" push -q origin main
+reset_logs
+run --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && ! grep -q "sample.rej\|merging.md" <<<"$out"
+then ok "a tracked .rej and a document with a marker line, both untouched by the update, do not stop it: the draft opens"
+else bad "base fixtures (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # ── a staged .rej is still a conflict ───────────────────────────────────
 fixture stagedrej; reset_logs

@@ -50,12 +50,20 @@ done
 
 # What copier left that a person has to resolve: unmerged paths, `.rej`
 # files (untracked, or staged by a `git add -A`), and conflict markers (a marked file `git add`ed is no longer
-# unmerged, but it is not resolved either). One path per line.
-conflicts_in() { # <worktree>
+# unmerged, but it is not resolved either). The `.rej` and marker checks read
+# only what differs from <base>: a `.rej` fixture or a document quoting a
+# marker that the base already held is not the update's (#274). One path per
+# line.
+conflicts_in() { # <worktree> <base>
+  local p
   {
     git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=U
-    git -C "$1" -c core.quotePath=false ls-files --cached --others -- '*.rej'
-    git -C "$1" -c core.quotePath=false grep -l --untracked -E '^(<<<<<<<|>>>>>>>) ' 2>/dev/null
+    # Ignored ones too: a .rej copier wrote is one whatever .gitignore says.
+    git -C "$1" -c core.quotePath=false ls-files --others -- '*.rej'
+    git -C "$1" -c core.quotePath=false diff --name-only --diff-filter=d "$2" -- '*.rej'
+    while IFS= read -r p; do
+      [ -f "$1/$p" ] && [ ! -L "$1/$p" ] && LC_ALL=C grep -qE '^(<<<<<<<|>>>>>>>) ' -- "$1/$p" && printf '%s\n' "$p"
+    done < <(changed_since "$1" "$2")
   } | sort -u
 }
 
@@ -90,7 +98,7 @@ finish() { # <worktree>
   [ -n "$branch" ] && [ "$on" = "$branch" ] && [ "$branch" != "$default" ] \
     || die "the worktree is on '$on', not the update branch '$branch'; nothing committed or pushed. Switch back: git -C $wt switch $branch"
 
-  left="$(conflicts_in "$wt")"
+  left="$(conflicts_in "$wt" "$base")"
   if [ -n "$left" ]; then
     echo "Not resolved yet, in $wt:"
     indent <<<"$left"
@@ -169,8 +177,16 @@ finish() { # <worktree>
     || { rm -f "$body"; die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $(q "$0") --finish $(q "$wt")"; }
   # A pull request GitHub created although gh reported a failure (the reply
   # lost on the way back) is this one: adopt it rather than fail on the
-  # duplicate every time (Codex review on #273).
-  pr="$(gh pr list --repo "$repo" --head "$branch" --base "$default" --state open --json url --jq '.[0].url // empty' 2>/dev/null)" || pr=""
+  # duplicate every time (Codex review on #273). `--head` matches the branch
+  # name only, so a fork's pull request from a branch of the same name
+  # answers too: adopt only one whose head is this repository at the commit
+  # just pushed (#274).
+  local pushed own; pushed="$(git -C "$wt" rev-parse HEAD)"
+  own="$(printf '%s' "$repo" | tr '[:upper:]' '[:lower:]')"
+  pr="$(gh pr list --repo "$repo" --head "$branch" --base "$default" --state open \
+    --json url,headRepositoryOwner,headRepository,headRefOid \
+    --jq "[.[] | select((.headRepositoryOwner.login + \"/\" + .headRepository.name | ascii_downcase) == \"$own\" and .headRefOid == \"$pushed\")][0].url // empty" \
+    2>/dev/null)" || pr=""
   [ -n "$pr" ] || pr="$(gh pr create --repo "$repo" --draft --base "$default" --head "$branch" --title "$title" --body-file "$body")" \
     || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $(q "$0") --finish $(q "$wt")"; }
   rm -f "$body"
@@ -263,7 +279,7 @@ echo "  $cmd"
 sf="$(state_file "$wt")"
 {
   printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\n' "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd"
-  conflicts="$(conflicts_in "$wt")"
+  conflicts="$(conflicts_in "$wt" "$base")"
   while IFS= read -r p; do [ -n "$p" ] && printf 'conflict=%s\n' "$p"; done <<<"$conflicts"
   # Each file copier merged cleanly, with its content hash, so --finish can
   # tell copier's merge from a person's later edit. Nothing is staged: the
