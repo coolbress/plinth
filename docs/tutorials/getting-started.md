@@ -31,15 +31,15 @@ and merge the pull request the generator opens for you.
 
 <!-- install-block:start -->
 ```bash
+claude plugin marketplace add anthropics/claude-plugins-official
 claude plugin marketplace add coolbress/plinth
 claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-On a clean or CI machine, add the official marketplace first:
-`claude plugin marketplace add anthropics/claude-plugins-official`.
-One dependency lives there. Claude Code asks you to trust each marketplace the
-first time; answer yes for these two.
+The first line adds Anthropic's official marketplace, where one dependency
+lives; where it is already added, the line only says so. Claude Code asks you
+to trust each marketplace the first time; answer yes for these two.
 
 Then start Claude Code and type `/plinth:arsenal` to see what was installed.
 

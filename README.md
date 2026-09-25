@@ -22,14 +22,16 @@ repository with both already in place.
 
 <!-- install-block:start -->
 ```bash
+claude plugin marketplace add anthropics/claude-plugins-official
 claude plugin marketplace add coolbress/plinth
 claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-On a clean or CI machine, run `claude plugin marketplace add anthropics/claude-plugins-official`
-first. One dependency lives there, and Claude Code registers that marketplace on
-its own only during an interactive first run.
+The first line adds Anthropic's official marketplace, where one dependency
+lives. A fresh configuration does not have it until Claude Code's first
+interactive run, and without it plinth fails to load. Where it is already
+added, the line only says so.
 
 The default set runs one hook: `last30days` adds a `SessionStart` hook
 (about 0.4 s) that checks its own configuration. Its skills cost context too.

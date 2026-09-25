@@ -43,13 +43,13 @@ claude plugin validate --strict "$root"
 claude plugin validate --strict "$root/.claude-plugin/plugin.json"
 claude plugin validate --strict "$root/skills"
 
-echo "+ claude plugin marketplace add anthropics/claude-plugins-official   # the README's clean-machine line"
-claude plugin marketplace add anthropics/claude-plugins-official
-
+# The README block, as written, into this fresh configuration: nothing is added
+# first. Adding the official marketplace here once hid that the block alone
+# left plinth failing to load (#282).
 lines=()
 while IFS= read -r l; do lines+=("$l"); done \
   < <(awk '/<!-- install-block:start -->/{p=1;next} /<!-- install-block:end -->/{p=0} p' "$root/README.md" | grep '^claude ')
-[ "${#lines[@]}" = 2 ] || { echo "  FAIL  expected 2 README install lines, got ${#lines[@]}"; exit 1; }
+[ "${#lines[@]}" = 3 ] || { echo "  FAIL  expected 3 README install lines, got ${#lines[@]}"; exit 1; }
 for line in "${lines[@]}"; do
   line="${line//coolbress\/plinth/$root}"
   case "$line" in *" plugin install "*) line="$line -y" ;; esac

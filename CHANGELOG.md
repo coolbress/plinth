@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The README's install block now works on its own in a fresh Claude Code
+  configuration. It was two lines, and run as written before Claude Code's
+  first interactive run it left plinth failing to load: `mattpocock-skills`
+  lives in Anthropic's official marketplace, which such a configuration does
+  not have yet. The block now adds that marketplace first. Where it is already
+  added, the line only says so and exits 0. `tests/install-smoke.sh` runs the
+  block exactly as written; it used to add the official marketplace itself
+  first, which hid this. Found in the v1.0.0 release-candidate run (#282).
+
 ## [0.5.28] - 2026-09-25
 
 A repository `/plinth:new-project` creates now sends a reader who wants to
