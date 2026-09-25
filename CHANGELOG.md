@@ -11,6 +11,24 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.26] - 2026-09-25
+
+A repository `/plinth:new-project` made from an older template can now be
+brought up to the template plinth is tested with, as a draft pull request:
+`/plinth:template-update` runs the `copier update` line
+`/plinth:floor-check` prints, in a worktree beside the repository, after
+you have read its plan and said yes, and leaves any conflict for you to
+resolve before anything is pushed. `/plinth:floor-check`'s printed line
+gains `--defaults` so that it runs without a terminal. Also in this release,
+the door's hint after a failed first push follows git's error, so a GitHub
+server error no longer blames the token.
+
+Known limits of the new skill, filed as #274: an open pull request from a
+fork with the same branch name could be taken for the update's own, and a
+`.rej` file or a marker-like line already committed reads as a conflict.
+
+tested with plinth-template v1.5.1
+
 ### Added
 
 - `/plinth:template-update` applies the template update `/plinth:floor-check`
@@ -1078,7 +1096,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.25...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.26...HEAD
+[0.5.26]: https://github.com/coolbress/plinth/releases/tag/v0.5.26
 [0.5.25]: https://github.com/coolbress/plinth/releases/tag/v0.5.25
 [0.5.24]: https://github.com/coolbress/plinth/releases/tag/v0.5.24
 [0.5.23]: https://github.com/coolbress/plinth/releases/tag/v0.5.23
