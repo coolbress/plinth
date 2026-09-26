@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.5.4. Its only change: the
+  generated `CONTRIBUTING.md`, `AGENTS.md` and pull request template say
+  `Assisted-by` is the only line that marks AI, so a tool's default
+  `Co-Authored-By` and generated-with line are removed while a person's
+  trailers stay (coolbress/plinth-template#34, from #65's second
+  release-candidate pass). `/plinth:floor-check` now reports a repository on
+  v1.5.3 as one tag behind.
+
 ## [0.5.29] - 2026-09-26
 
 The fixes from the v1.0.0 release-candidate run. The README's install block
