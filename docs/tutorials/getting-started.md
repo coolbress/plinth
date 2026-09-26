@@ -80,12 +80,17 @@ If a check fails it stops there and prints the fix. Three you may meet:
   1. `gh auth login -s repo,workflow,delete_repo`, as in
      [Before you start](#before-you-start), then run the generator again
      where you ran it. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if either
-     is set: `gh` uses them before any login it stores.
+     is set: `gh` uses them before any login it stores. They usually come
+     from a shell startup file (`~/.zshrc`, `~/.bashrc`); remove them there,
+     then restart Claude Code, and the login and the generator stay inside
+     it, with no terminal switch.
   2. Copy the three printed lines (`P=...`, then `with-admin-token.sh`
      through it, then the arguments) as one block into a separate terminal
      window, not with `!` in Claude Code, which runs a line without a
      terminal. It asks for an admin token at that terminal and never puts it
-     on a command line.
+     on a command line. The stop also prints a link that opens GitHub's
+     fine-grained token form with its permissions filled in for your owner;
+     the one choice left there is "All repositories".
 - `rollback: off`: your token has no `delete_repo` scope. The generator
   continues; if it fails later the repository stays and it prints the URL to
   delete it by hand. `gh auth refresh -h github.com -s delete_repo` turns
