@@ -13,6 +13,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.5.5. The generated
+  `AGENTS.md` and the `non-engineer` output style say to answer the person in
+  the language they write in, summaries included, while code, commits, pull
+  requests and documents follow the repository's convention
+  (coolbress/plinth-template#30, from #65's first release-candidate run). Its
+  `CONTRIBUTING.md` step 5, `AGENTS.md` and pull request template say that a
+  close, fix or resolve word before an issue number anywhere in the
+  description closes that issue. `/plinth:floor-check` now reports a
+  repository on v1.5.4 as one tag behind.
+
 - The Claude Code floor rises from 2.1.234 to 2.1.274, and it is now checked.
   2.1.234 had been set by a feature, not by a run: the settings the template
   ships were measured on 2.1.267 and 2.1.278, and the user tasks ran on
