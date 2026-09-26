@@ -67,8 +67,9 @@ Four skills, prefixed `/plinth:`:
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 
 Installed with plinth as dependencies, each pinned to a commit except
-`mattpocock-skills`, which Anthropic's official marketplace serves within a
-tested version range ([About pins](docs/explanation/concepts.md#about-pins)):
+`mattpocock-skills`, which arrives at whatever version Anthropic's official
+marketplace serves; CI checks that version against the tested range
+([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (frontend design that
 does not look templated),
@@ -100,10 +101,11 @@ the permissions filled in.
 ## Status
 
 The install works end to end and CI proves it on a clean runner. `new-project`
-creates a repository with the wall up. When a step after the create fails, it
-deletes the repository if its token can, and otherwise prints the repository
-to delete. If the create's own answer is lost, it does neither, so check
-whether the repository exists (its failure paths run in CI against a mocked
+creates a repository with the wall up. When a step that setup cannot go on
+without fails after the create, it deletes the repository if its token can,
+and otherwise prints the repository to delete; a step it can go on without,
+such as a label, is named and left. If the create's own answer is lost, it
+does neither, so check whether the repository exists (its failure paths run in CI against a mocked
 `gh`). It renders
 [plinth-template v1.5.5](https://github.com/coolbress/plinth-template/releases/tag/v1.5.5),
 whose CI reports every check the wall requires. Since the release gate (#62),

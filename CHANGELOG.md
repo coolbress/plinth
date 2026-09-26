@@ -19,14 +19,17 @@ pull requests and have no tag.
   a green check means its asserted properties hold, not that the code is
   right. "Nobody can push past" now reads "nothing merges past", with who can
   still change the rules: anyone whose token has administration, an agent
-  included after the browser login. The dependency list no longer says every dependency is
-  pinned to a commit: `mattpocock-skills` comes within a tested version
-  range. The generator no longer "creates nothing" on failure: it deletes
-  what it created when its token can, names the repository when it cannot,
-  and does neither when the create's own answer is lost. The Status paragraph was about the 0.5.1 baseline of 2026-09-09. It
-  now describes the release gate and the release-candidate runs, and says no
-  one but the author has used plinth yet. `CONTEXT.md` no longer says the
-  default install has no hooks: `last30days` adds one.
+  included after the browser login. The dependency list no longer says every
+  dependency is pinned to a commit: `mattpocock-skills` arrives at whatever
+  version the official marketplace serves, and CI checks it against the
+  tested range. The generator no longer "creates nothing" on failure. When a
+  step that setup cannot go on without fails, it deletes what it created if
+  its token can, and names the repository if it cannot. A step it can go on
+  without, such as a label, is named and left. When the create's own answer
+  is lost, it does neither. The Status paragraph was about the 0.5.1 baseline
+  of 2026-09-09. It now describes the release gate and the release-candidate
+  runs, and says no one but the author has used plinth yet. `CONTEXT.md` no
+  longer says the default install has no hooks: `last30days` adds one.
 
 ## [0.5.31] - 2026-09-26
 
