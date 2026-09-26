@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.30] - 2026-09-26
+
+The findings from the second v1.0.0 release-candidate pass (RC2). A
+repository `/plinth:new-project` creates tells its agent that `Assisted-by`
+is the only line that marks AI, and to remove a tool's default
+`Co-Authored-By` and generated-with line (plinth-template v1.5.4); whether an
+agent follows it is not yet observed. When the generator stops for a token set
+in the environment, it names `~/.zshenv` as a place the token may come from,
+alongside `~/.zshrc` and `~/.bashrc`.
+
+tested with plinth-template v1.5.4
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.5.4. Its only change: the
@@ -1217,7 +1229,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.29...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.30...HEAD
+[0.5.30]: https://github.com/coolbress/plinth/releases/tag/v0.5.30
 [0.5.29]: https://github.com/coolbress/plinth/releases/tag/v0.5.29
 [0.5.28]: https://github.com/coolbress/plinth/releases/tag/v0.5.28
 [0.5.27]: https://github.com/coolbress/plinth/releases/tag/v0.5.27
