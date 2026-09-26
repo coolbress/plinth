@@ -52,7 +52,11 @@ set -u
 printf 'gh %s\n' "$*" >> "$GH_LOG"
 count() { local n; n="$(cat "$GH_LOG.$1" 2>/dev/null || echo 0)"; n=$((n + 1)); echo "$n" > "$GH_LOG.$1"; echo "$n"; }
 case "$*" in
-  "api user --jq "*)                  echo "7 tester" ;;
+  # A token GitHub refuses: the real gh exits 1 and prints the error body on
+  # stdout, where --jq is not applied, and its own line on stderr (#288).
+  "api user --jq "*)                  [ "${USER_401:-0}" = 0 ] || { printf '{\n  "message": "Bad credentials",\n  "status": "401"\n}\n'; echo "gh: Bad credentials (HTTP 401)" >&2; exit 1; }
+                                      [ "${USER_NO_LOGIN:-0}" = 0 ] || { echo "7 "; exit 0; }
+                                      echo "7 tester" ;;
   "repo create "*)                    [ "${CREATE_EXISTS:-0}" = 0 ] || { echo "GraphQL: Name already exists on this account (createRepository)" >&2; exit 1; }
                                       [ "${CREATE_RC:-0}" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$CREATE_RC"; } ;;
   "repo delete "*)                    n="$(count delete)"; rc="DELETE_RC$n"
@@ -115,12 +119,27 @@ deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
 # beside it (.delete, .names, .pushed) that the truncation below does not
 # reset, and a name drawn twice gave a later run an earlier one's count (#201).
 runs=0
-run() { # <env assignments...>
+run() { # <env assignments...> [-- <arguments to e2e.sh...>]
+  local envs=() args=()
+  while [ $# -gt 0 ]; do [ "$1" = -- ] && { shift; args=("$@"); break; }; envs+=("$1"); shift; done
+  set -- ${envs[@]+"${envs[@]}"}
   runs=$((runs + 1)); export GH_LOG="$work/log.$runs"; : > "$GH_LOG"
-  unset RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
-  env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" >"$work/out" 2>&1
+  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
+  env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" ${args[@]+"${args[@]}"} >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
+
+echo "-- the token's user, before anything is created"
+run USER_401=1;            check "a token GitHub refuses stops at the user lookup" no $?
+is "nothing created or deleted" not saw "^gh repo "
+is "it names the token, in gh's words" said "Bad credentials (HTTP 401)"
+is "no repository is named as left behind" not said "EXISTS"
+run USER_NO_LOGIN=1;       check "an answer with no login is a failed lookup, whatever gh's exit" no $?
+is "nothing created or deleted" not saw "^gh repo "
+run USER_401=1 -- tester;  check "an owner given on the command line does not carry a refused token past the lookup" no $?
+is "nothing created or deleted" not saw "^gh repo "
+run -- "";                 check "an empty owner argument falls back to the token's user" ok $?
+is "the probe is under the token's user" saw "^gh repo create tester/"
 
 echo "-- the first assert: create and delete, before the door"
 run CREATE_RC=1;           check "a token that cannot create stops before the door" no $?

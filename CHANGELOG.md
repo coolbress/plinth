@@ -24,6 +24,15 @@ pull requests and have no tag.
   e2e pin moves from 2.1.236 to 2.1.274, with its SHA256 from the release
   manifest (#65).
 
+### Fixed
+
+- `scripts/e2e.sh` stops at the token's user lookup, saying the token is
+  refused, when GitHub rejects the token. Before, `gh` printed its error body
+  where the user was read. The lookup's failure was lost, and the run went on
+  with an empty owner. It ended in a loud line saying to delete a repository
+  that never existed. An answer without a numeric id or a login now counts as
+  a failed lookup too (#288).
+
 ## [0.5.30] - 2026-09-26
 
 The findings from the second v1.0.0 release-candidate pass (RC2). A
