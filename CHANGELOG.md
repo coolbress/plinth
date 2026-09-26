@@ -21,6 +21,14 @@ pull requests and have no tag.
   release-candidate pass). `/plinth:floor-check` now reports a repository on
   v1.5.3 as one tag behind.
 
+### Fixed
+
+- When `GH_TOKEN` or `GITHUB_TOKEN` is set, `/plinth:new-project`'s stop and
+  the tutorial name `~/.zshenv` next to `~/.zshrc` and `~/.bashrc` as where the
+  variable may come from. Every zsh reads it, Claude Code's own shell included,
+  so a token left there stays after it is removed from `~/.zshrc` (from #65's
+  second release-candidate pass).
+
 ## [0.5.29] - 2026-09-26
 
 The fixes from the v1.0.0 release-candidate run. The README's install block

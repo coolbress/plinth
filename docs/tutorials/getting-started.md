@@ -81,7 +81,8 @@ If a check fails it stops there and prints the fix. Three you may meet:
      [Before you start](#before-you-start), then run the generator again
      where you ran it. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if either
      is set: `gh` uses them before any login it stores. They usually come
-     from a shell startup file (`~/.zshrc`, `~/.bashrc`); remove them there,
+     from a shell startup file (`~/.zshrc`, `~/.bashrc`, or `~/.zshenv`,
+     which every zsh reads, Claude Code's own shell included); remove them there,
      then restart Claude Code, and the login and the generator stay inside
      it, with no terminal switch.
   2. Copy the three printed lines (`P=...`, then `with-admin-token.sh`
