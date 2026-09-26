@@ -119,11 +119,14 @@ scopes="$(awk 'tolower($1)=="x-oauth-scopes:"{sub(/^[^:]*: ?/,""); print; exit}'
 has_scope() { grep -qE "(^|,) *$1 *(,|$)" <<<"$scopes"; }
 # gh reads these before the login it stores: with one set, a login or refresh
 # changes nothing this script sees, so the fix says to unset it first.
-env_first=""
+env_first=""; env_where=""
 if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
   env_vars=""
   for v in GH_TOKEN GITHUB_TOKEN; do [ -z "${!v:-}" ] || env_vars="$env_vars $v"; done
   [ -z "$env_vars" ] || env_first="first: unset$env_vars where the door runs (Claude Code: in the shell that started it, then restart it); gh uses it before any login"
+  # Usually exported from a shell startup file, so an unset alone comes back; after
+  # the clean-up the login below and the door run inside Claude Code (#285).
+  [ -z "$env_vars" ] || env_where="it usually comes from a shell startup file (~/.zshrc, ~/.bashrc): remove it there, or the next shell has it again; after that and a restart, the login and the door run inside Claude Code, no terminal switch"
 fi
 rollback="on"
 if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
@@ -131,6 +134,7 @@ if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
   for s in repo workflow; do has_scope "$s" || missing="$missing$s,"; done
   [ -z "$missing" ] || stop "gh's token lacks the scope(s) ${missing%,} (it has: ${scopes:-none})" \
     ${env_first:+"  $env_first"} \
+    ${env_where:+"  $env_where"} \
     ${env_first:+"  then, if gh holds no login of its own: gh auth login -s repo,workflow,delete_repo instead of the refresh below"} \
     "  fix: gh auth refresh -h github.com -s repo,workflow,delete_repo   (delete_repo is optional: it lets a failed run delete what it created)" \
     "  it runs here, in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
@@ -139,11 +143,18 @@ if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
 elif [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   rollback="best effort (fine-grained token: needs Administration: write on $owner's repositories)"
 else
+  # A fine-grained admin token, pre-filled for this owner (GitHub's token-template
+  # parameters); the repository selection has no parameter, so it is named.
+  # `members` only for an organization, whose membership step 3 reads.
+  kind_now="$(gh api "users/$owner" --jq .type 2>/dev/null)" || kind_now=""
+  token_link="https://github.com/settings/personal-access-tokens/new?name=plinth+new-project&target_name=$owner&expires_in=7&administration=write&contents=write&workflows=write&pull_requests=write"
+  [ "$kind_now" = Organization ] && token_link="$token_link&members=read"
   stop "gh is using a fine-grained token; whether it reaches a repository that does not exist yet cannot be read" \
     "  fix, either of two. The browser login is shorter, but its token is scoped repo across the account rather than" \
     "  to selected repositories; the admin-token path keeps the fine-grained token's narrow reach." \
     "  1. log gh in through a browser with the scopes the door reads, then run the door again where you ran it:" \
     ${env_first:+"     $env_first"} \
+    ${env_where:+"     $env_where"} \
     "       gh auth login -s repo,workflow,delete_repo" \
     "     it runs in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  2. run the door with an admin token, typed at a prompt (never on the command line)," \
@@ -151,10 +162,10 @@ else
     "    P=$(printf '%q' "$here")" \
     "    \"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" \\" \
     "      $*" \
-    "     the token, classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)" \
-    "     or fine-grained (https://github.com/settings/personal-access-tokens): Repository permissions Administration," \
-    "     Contents, Workflows, Pull requests: write on all repositories of $owner (a repository that does not exist" \
-    "     yet is not selectable); for an organization owner also Organization permissions Members: read"
+    "     the token, fine-grained, pre-filled for $owner (7 days; its permissions already set):" \
+    "       $token_link" \
+    "     the one choice left there: Repository access \"All repositories\" (a repository that does not exist yet is not selectable)" \
+    "     or classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)"
 fi
 
 # ── 3 owner ──────────────────────────────────────────────────────────────

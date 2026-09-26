@@ -13,6 +13,17 @@ pull requests and have no tag.
 
 ### Changed
 
+- When `gh` holds a fine-grained token, `/plinth:new-project`'s stop now
+  prints a link to GitHub's fine-grained token form, pre-filled for the owner
+  with the permissions the door needs (`members` too, for an organization) and
+  a 7-day expiry. The one choice left on the form is "All repositories", and
+  the stop names it. Before, the stop listed the permissions to pick by hand.
+  When `GH_TOKEN` or `GITHUB_TOKEN` is set, the stop also says the variable
+  usually comes from a shell startup file. Once it is removed there and Claude
+  Code is restarted, the browser login and the generator stay inside Claude
+  Code, with no terminal switch. The tutorial and README say the same. From
+  the v1.0.0 release-candidate run (#285).
+
 - `/plinth:new-project` renders plinth-template v1.5.3. Its only change: the
   generated `AGENTS.md` says the agent merges only when the person says so
   for that pull request, with `CONTRIBUTING.md` step 7's command, and checks

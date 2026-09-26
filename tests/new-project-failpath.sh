@@ -249,10 +249,30 @@ E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"         
 if grep -qF "gh auth login -s repo,workflow,delete_repo" "$work/home-fine-grained/out"
 then ok fine-grained "the stop also names the browser-login fix"
 else bad fine-grained "the stop names only the admin-token fix"; fi
+# Fix 2's token can be pre-filled: a creation link for the owner with the four
+# repository permissions at write, `members=read` only for an organization; the
+# repository selection has no parameter, so the stop names it (#285).
+link='https://github.com/settings/personal-access-tokens/new?'
+perms='administration=write&contents=write&workflows=write&pull_requests=write'
+if grep -qF "$link" "$work/home-fine-grained/out" && grep -qF "target_name=tester&" "$work/home-fine-grained/out" \
+   && grep -qF "$perms" "$work/home-fine-grained/out" && ! grep -qF "members=read" "$work/home-fine-grained/out" \
+   && grep -qF '"All repositories"' "$work/home-fine-grained/out"
+then ok fine-grained "fix 2 gives a pre-filled token link for the owner, without members, and names the one choice left"
+else bad fine-grained "no pre-filled token link for a personal owner"; grep -F -A2 "personal-access-tokens" "$work/home-fine-grained/out" | sed 's/^/        /'; fi
+E="MOCK_FINE=1"       run fine-grained-org err no no "with-admin-token.sh"                     -- someorg/probe
+if grep -qF "target_name=someorg&" "$work/home-fine-grained-org/out" && grep -qF "$perms&members=read" "$work/home-fine-grained-org/out"
+then ok fine-grained-org "an organization's link adds members=read"
+else bad fine-grained-org "no organization token link with members=read"; grep -F "personal-access-tokens/new" "$work/home-fine-grained-org/out" | sed 's/^/        /'; fi
 # gh reads GH_TOKEN and GITHUB_TOKEN before the login it stores, so with one
 # of them set a login or refresh changes nothing the door sees: the stop says
 # to unset it first (#245 review).
 E="MOCK_FINE=1 GH_TOKEN=x" run fine-grained-env err no no "unset GH_TOKEN"            -- probe
+# The environment token usually comes from a shell startup file, so unsetting
+# it once is not the end of it; after the clean-up the login and the door stay
+# in Claude Code, which is the point of fix 1 (#285).
+if grep -qF "startup file" "$work/home-fine-grained-env/out" && grep -qF "no terminal switch" "$work/home-fine-grained-env/out"
+then ok fine-grained-env "the unset step names the startup file and says the rest stays in Claude Code"
+else bad fine-grained-env "the unset step does not say where the token comes from or that the rest stays in Claude Code"; grep -F "unset" "$work/home-fine-grained-env/out" | sed 's/^/        /'; fi
 E="MOCK_SCOPES=repo GITHUB_TOKEN=x" run scope-missing-env err no no "unset GITHUB_TOKEN" -- probe
 if grep -q "unset GH" "$work/home-fine-grained/out" "$work/home-scope-missing/out"
 then bad fine-grained "the unset line appears with no token in the environment"

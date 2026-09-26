@@ -82,9 +82,12 @@ fine-grained token's narrow reach. The first is
 `gh auth login -s repo,workflow,delete_repo`, which runs inside Claude Code
 (a one-time code and a URL, finished in a browser), after which the generator
 runs wherever it is started. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if
-either is set: `gh` uses them before any login it stores. The second is to rerun it through
-`scripts/with-admin-token.sh` in a separate terminal, which prompts for an
-admin token there and keeps it off every command line.
+either is set: `gh` uses them before any login it stores. Remove them from the
+shell startup file they come from, and the login and the generator stay inside
+Claude Code. The second is to rerun it through `scripts/with-admin-token.sh` in
+a separate terminal, which prompts for an admin token there and keeps it off
+every command line; the stop prints a link to a fine-grained token form with
+the permissions filled in.
 
 ## Status
 
