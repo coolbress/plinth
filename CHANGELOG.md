@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.31] - 2026-09-26
+
+The last changes before v1.0.0 that the owner chose to land first. The
+Claude Code floor rises to 2.1.274, the stable channel's release, and CI now
+installs plinth on it; the e2e gate runs the same release. The e2e driver
+stops at the token's user lookup when GitHub refuses the token, instead of
+naming a repository that never existed. A repository `/plinth:new-project`
+creates tells its agent to answer in the language the person writes in, and
+that a closing word before an issue number in a sentence closes that issue
+(plinth-template v1.5.5).
+
+tested with plinth-template v1.5.5
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.5.5. The generated
@@ -1261,7 +1274,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.30...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.31...HEAD
+[0.5.31]: https://github.com/coolbress/plinth/releases/tag/v0.5.31
 [0.5.30]: https://github.com/coolbress/plinth/releases/tag/v0.5.30
 [0.5.29]: https://github.com/coolbress/plinth/releases/tag/v0.5.29
 [0.5.28]: https://github.com/coolbress/plinth/releases/tag/v0.5.28
