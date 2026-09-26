@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [0.5.29] - 2026-09-26
+
+The fixes from the v1.0.0 release-candidate run. The README's install block
+now works on its own in a fresh Claude Code configuration, where before it
+left plinth failing to load. A repository `/plinth:new-project` creates tells
+its agent to merge only when the person says so for that pull request, with
+the command that keeps the description as the commit, and to check a
+worktree before removing it (plinth-template v1.5.3). When `gh` holds a
+fine-grained token, the generator's stop links a pre-filled token form and
+says how the browser login stays inside Claude Code.
+
+tested with plinth-template v1.5.3
+
 ### Changed
 
 - When `gh` holds a fine-grained token, `/plinth:new-project`'s stop now
@@ -1186,7 +1199,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.28...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.29...HEAD
+[0.5.29]: https://github.com/coolbress/plinth/releases/tag/v0.5.29
 [0.5.28]: https://github.com/coolbress/plinth/releases/tag/v0.5.28
 [0.5.27]: https://github.com/coolbress/plinth/releases/tag/v0.5.27
 [0.5.26]: https://github.com/coolbress/plinth/releases/tag/v0.5.26
