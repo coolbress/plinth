@@ -5,12 +5,16 @@ from stay in the lab.
 
 - **wall**: the required status checks and branch rules a repository's ruleset
   enforces on `main`. An automated check, not a review: green means the
-  asserted properties hold. Raised on GitHub, not in the plugin, so an agent cannot
-  turn it off. The checks, and what each asserts:
+  asserted properties hold. Raised on GitHub, not in the plugin, so an agent
+  cannot turn it off from inside Claude Code; an agent whose token has
+  administration on the repository can still edit it, as anyone with that
+  access can. The checks, and what each asserts:
   [docs/reference/required-checks.md](docs/reference/required-checks.md).
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
-  the wall, opens the first pull request, and deletes the repository if any
-  step after creation fails.
+  the wall, opens the first pull request. If a step it cannot go on without
+  fails after the create, it deletes the repository when its token can and
+  names it when it cannot; a step it can go on without, such as a label, is
+  named and left.
 - **box**: the project template (`plinth-template`, rendered with copier). The
   files a new repository starts with. The door renders it at the tag pinned in
   `scripts/new-project.sh`.
@@ -22,7 +26,8 @@ from stay in the lab.
 - **lab**: `plinth-lab`, the evidence behind the rules. Optional reading; the
   product is written to be understood without it.
 - **profile**: an opt-in plugin that adds hooks on top of the default install
-  (`plinth-hooks`, not part of this version). The default install has no hooks.
+  (`plinth-hooks`, not part of this version). plinth itself has no hooks; of
+  the default set, `last30days` adds a `SessionStart` hook.
 
 Terms not defined here (agent, harness, session, context window, automated
 check, automated review, human review, skill) follow the

@@ -1,8 +1,13 @@
 # plinth
 
-The base a vibe-coded project stands on: required checks on GitHub that nobody
-can push past, a curated set of agent skills, and a generator that starts a new
-repository with both already in place.
+The base a vibe-coded project stands on: required checks on GitHub that
+nothing merges past, a curated set of agent skills, and a generator that starts
+a new repository with both already in place. It is for someone who directs an
+AI agent and does not read the diff. A green check means the properties that
+check asserts hold, not that the code is right. Anyone whose token has
+administration on the repository can change the rules, an agent included when
+it works with such a token, as it does after the browser login the generator
+offers ([who can change the wall](docs/explanation/concepts.md#about-who-can-change-the-wall)).
 
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
@@ -61,7 +66,10 @@ Four skills, prefixed `/plinth:`:
 | `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; a conflict is left for you to resolve before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 
-Installed with plinth as dependencies, each pinned to a commit:
+Installed with plinth as dependencies, each pinned to a commit except
+`mattpocock-skills`, which arrives at whatever version Anthropic's official
+marketplace serves; CI checks that version against the tested range
+([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (frontend design that
 does not look templated),
@@ -93,14 +101,22 @@ the permissions filled in.
 ## Status
 
 The install works end to end and CI proves it on a clean runner. `new-project`
-creates a repository with the wall up, or creates nothing (its failure paths
-run in CI against a mocked `gh`). It renders
+creates a repository with the wall up. When a step that setup cannot go on
+without fails after the create, it deletes the repository if its token can,
+and otherwise prints the repository to delete; a step it can go on without,
+such as a label, is named and left. If the create's own answer is lost, it
+does neither, so check whether the repository exists (its failure paths run in CI against a mocked
+`gh`). It renders
 [plinth-template v1.5.5](https://github.com/coolbress/plinth-template/releases/tag/v1.5.5),
-whose CI reports every check the wall requires. In both live journeys so far
-(the v0.5.1 baseline by hand and one green `e2e` run on a runner, #62,
-2026-09-09) the first pull request merged, but only after the recovery commit
-the door prints: CodeQL did not analyse the pull request on its first push
-(#117). What each required check asserts, what a red means and its fix,
+whose CI reports every check the wall requires. Since the release gate (#62),
+each release is tagged only after `e2e`, run on its release commit, has
+created a repository on real GitHub, merged its first pull request and deleted
+it. When CodeQL does not analyse the first push, the door prints a recovery
+commit (#117). The owner ran three tasks on a generated
+repository with 0.5.28: a first feature, a recovery from a failure, and a
+resume in a new session. The install, the login and a merge were run again
+with 0.5.29. Both runs are in #65. No one but the author has used plinth yet
+(#163). What each required check asserts, what a red means and its fix,
 CodeQL on a head Dependabot pushed included (#179), is in
 [Required checks](docs/reference/required-checks.md). `floor-check` runs the checker `ci / floor-check` runs, read-only;
 exit 0 means no FAIL in what it could read, and its summary counts what it
