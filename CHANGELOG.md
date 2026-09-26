@@ -17,12 +17,13 @@ pull requests and have no tag.
   reviewers read them before v1.0.0 (#65). The first paragraph names the user
   (someone who directs an AI agent and does not read the diff) and the limit:
   a green check means its asserted properties hold, not that the code is
-  right, and an administrator can still change the rules. "Nobody can push
-  past" is gone. The dependency list no longer says every dependency is
+  right. "Nobody can push past" now reads "nothing merges past", with who can
+  still change the rules: anyone whose token has administration, an agent
+  included after the browser login. The dependency list no longer says every dependency is
   pinned to a commit: `mattpocock-skills` comes within a tested version
   range. The generator no longer "creates nothing" on failure: it deletes
-  what it created when its token can, and names the repository when it
-  cannot. The Status paragraph was about the 0.5.1 baseline of 2026-09-09. It
+  what it created when its token can, names the repository when it cannot,
+  and does neither when the create's own answer is lost. The Status paragraph was about the 0.5.1 baseline of 2026-09-09. It
   now describes the release gate and the release-candidate runs, and says no
   one but the author has used plinth yet. `CONTEXT.md` no longer says the
   default install has no hooks: `last30days` adds one.

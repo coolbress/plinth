@@ -1,11 +1,13 @@
 # plinth
 
-The base a vibe-coded project stands on: required checks on GitHub that the
-agent cannot turn off or merge past, a curated set of agent skills, and a
-generator that starts a new repository with both already in place. It is for
-someone who directs an AI agent and does not read the diff. A green check means
-the properties that check asserts hold, not that the code is right, and anyone
-with administration on the repository can still change the rules.
+The base a vibe-coded project stands on: required checks on GitHub that
+nothing merges past, a curated set of agent skills, and a generator that starts
+a new repository with both already in place. It is for someone who directs an
+AI agent and does not read the diff. A green check means the properties that
+check asserts hold, not that the code is right. Anyone whose token has
+administration on the repository can change the rules, an agent included when
+it works with such a token, as it does after the browser login the generator
+offers ([who can change the wall](docs/explanation/concepts.md#about-who-can-change-the-wall)).
 
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
@@ -100,7 +102,9 @@ the permissions filled in.
 The install works end to end and CI proves it on a clean runner. `new-project`
 creates a repository with the wall up. When a step after the create fails, it
 deletes the repository if its token can, and otherwise prints the repository
-to delete (its failure paths run in CI against a mocked `gh`). It renders
+to delete. If the create's own answer is lost, it does neither, so check
+whether the repository exists (its failure paths run in CI against a mocked
+`gh`). It renders
 [plinth-template v1.5.5](https://github.com/coolbress/plinth-template/releases/tag/v1.5.5),
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its release commit, has
