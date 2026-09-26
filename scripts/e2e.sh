@@ -41,8 +41,19 @@ wait_s="${PLINTH_E2E_WAIT:-1500}"
 case "$wait_s" in ''|*[!0-9]*) echo "PLINTH_E2E_WAIT must be a whole number of seconds (got: $wait_s)" >&2; exit 2 ;; esac
 archetype=backend # one journey a night, the archetype with the most machinery (see the header)
 
-read -r id login < <(gh api user --jq '"\(.id) \(.login)"') \
-  || { echo "gh cannot read the token's user: is GH_TOKEN set, or gh logged in?" >&2; exit 2; }
+# A token GitHub refuses makes gh exit 1 with the error body on stdout, where
+# --jq is not applied: read through a process substitution, that lost the exit
+# and left an empty login, and the run went on to name a repository that never
+# existed (#288). So the exit is kept, and the answer's shape is checked too.
+# stderr apart, so a notice gh prints there cannot become the first word read.
+user_err="$(mktemp "${TMPDIR:-/tmp}/plinth-e2e-user.XXXXXX")"
+user="$(gh api user --jq '"\(.id) \(.login)"' 2>"$user_err")" && user_rc=0 || user_rc=$?
+read -r id login _ <<<"$user" || true
+why="$(grep -m1 '^gh: ' "$user_err" || true)"; rm -f "$user_err"
+if [ "$user_rc" != 0 ] || [[ ! "$id" =~ ^[0-9]+$ ]] || [ -z "$login" ]; then
+  echo "gh cannot read the token's user${why:+ ($why)}: the token is refused or missing; is GH_TOKEN set to a valid one, or gh logged in?" >&2
+  exit 2
+fi
 owner="${1:-$login}"
 name="plinth-e2e-${GITHUB_RUN_ID:-$(date -u +%Y%m%d%H%M%S)}"
 repo="$owner/$name"; url="https://github.com/$repo"
