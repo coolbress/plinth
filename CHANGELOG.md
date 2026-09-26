@@ -14,9 +14,10 @@ pull requests and have no tag.
 ## [0.5.30] - 2026-09-26
 
 The findings from the second v1.0.0 release-candidate pass (RC2). A
-repository `/plinth:new-project` creates marks AI with `Assisted-by` only,
-so a tool's default `Co-Authored-By` and generated-with line no longer reach
-its `main` (plinth-template v1.5.4). When the generator stops for a token set
+repository `/plinth:new-project` creates tells its agent that `Assisted-by`
+is the only line that marks AI, and to remove a tool's default
+`Co-Authored-By` and generated-with line (plinth-template v1.5.4); whether an
+agent follows it is not yet observed. When the generator stops for a token set
 in the environment, it names `~/.zshenv` as a place the token may come from,
 alongside `~/.zshrc` and `~/.bashrc`.
 
