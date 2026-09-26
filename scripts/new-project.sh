@@ -6,7 +6,7 @@
 #
 # Preflight, in order; the first miss stops with the one line that fixes it,
 # before anything exists:
-#   1 tools       claude >= 2.1.234, git >= 2.28, uv, gh logged in (warnings: token
+#   1 tools       claude >= 2.1.274, git >= 2.28, uv, gh logged in (warnings: token
 #                 in the environment, native Windows)
 #   2 token       classic: scopes repo and workflow; delete_repo is optional and
 #                 without it rollback is off. Fine-grained: the admin path, because
@@ -41,7 +41,7 @@ template_ref="v1.5.4"
 template_ci=".github/workflows/ci.yml"
 copier_version="9.18.2"
 copier_newer="2026-09-09"
-claude_floor="2.1.234"
+claude_floor="2.1.274"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
 usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--force-defaults]"

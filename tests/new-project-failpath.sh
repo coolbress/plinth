@@ -199,7 +199,7 @@ exec "$REAL_GIT" "$@"
 MOCK
 printf '#!/usr/bin/env bash\nexit 0\n' > "$work/bin/uv"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$work/bin/sleep"   # the poll's pause, skipped
-printf '#!/usr/bin/env bash\n[ "${MOCK_CLAUDE_OLD:-0}" = 1 ] && { echo "2.0.0 (Claude Code)"; exit 0; }\necho "2.1.240 (Claude Code)"\n' > "$work/bin/claude"
+printf '#!/usr/bin/env bash\n[ "${MOCK_CLAUDE_OLD:-0}" = 1 ] && { echo "2.0.0 (Claude Code)"; exit 0; }\necho "2.1.290 (Claude Code)"\n' > "$work/bin/claude"
 chmod +x "$work/bin/"*
 mkdir -p "$work/bin-nouv"; for f in gh git uvx claude sleep; do cp "$work/bin/$f" "$work/bin-nouv/"; done
 

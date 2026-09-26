@@ -13,12 +13,16 @@ pull requests and have no tag.
 
 ### Changed
 
-- The README's Claude Code floor, 2.1.234, is now checked: `ci / install`
-  installs plinth the README's way a second time on that exact version, after
-  the run on the current release. The floor has one source,
-  `scripts/new-project.sh`, and the install test fails when the README or
-  the tutorial states another. Measured on 2026-09-26: the install passes on
-  2.1.234 with all five plugins enabled and no errors (#65).
+- The Claude Code floor rises from 2.1.234 to 2.1.274, and it is now checked.
+  2.1.234 had been set by a feature, not by a run: the settings the template
+  ships were measured on 2.1.267 and 2.1.278, and the user tasks ran on
+  2.1.282 and 2.1.283. 2.1.274 is the stable channel's release on 2026-09-26,
+  so a person on that channel is not stopped. `ci / install` now installs
+  plinth the README's way a second time on the floor itself. The floor has one
+  source, `scripts/new-project.sh`: the install test fails when the README or
+  the tutorial states another, or when `e2e.yml` pins a release below it. The
+  e2e pin moves from 2.1.236 to 2.1.274, with its SHA256 from the release
+  manifest (#65).
 
 ## [0.5.30] - 2026-09-26
 
