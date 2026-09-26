@@ -281,7 +281,10 @@ E="MOCK_FINE=1 GH_TOKEN=x" run fine-grained-env err no no "unset GH_TOKEN"      
 # The environment token usually comes from a shell startup file, so unsetting
 # it once is not the end of it; after the clean-up the login and the door stay
 # in Claude Code, which is the point of fix 1 (#285).
-if grep -qF "startup file" "$work/home-fine-grained-env/out" && grep -qF "no terminal switch" "$work/home-fine-grained-env/out"
+# ~/.zshenv is named too: every zsh reads it, the agent's own shell included, so
+# a token left there survives removing it from ~/.zshrc (RC2 in #65).
+if grep -qF "startup file" "$work/home-fine-grained-env/out" && grep -qF "no terminal switch" "$work/home-fine-grained-env/out" \
+   && grep -qF ".zshenv, which every zsh reads" "$work/home-fine-grained-env/out"
 then ok fine-grained-env "the unset step names the startup file and says the rest stays in Claude Code"
 else bad fine-grained-env "the unset step does not say where the token comes from or that the rest stays in Claude Code"; grep -F "unset" "$work/home-fine-grained-env/out" | sed 's/^/        /'; fi
 E="MOCK_SCOPES=repo GITHUB_TOKEN=x" run scope-missing-env err no no "unset GITHUB_TOKEN" -- probe

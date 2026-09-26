@@ -126,7 +126,7 @@ if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
   [ -z "$env_vars" ] || env_first="first: unset$env_vars where the door runs (Claude Code: in the shell that started it, then restart it); gh uses it before any login"
   # Usually exported from a shell startup file, so an unset alone comes back; after
   # the clean-up the login below and the door run inside Claude Code (#285).
-  [ -z "$env_vars" ] || env_where="it usually comes from a shell startup file (~/.zshrc, ~/.bashrc): remove it there, or the next shell has it again; after that and a restart, the login and the door run inside Claude Code, no terminal switch"
+  [ -z "$env_vars" ] || env_where="it usually comes from a shell startup file (~/.zshrc, ~/.bashrc, or ~/.zshenv, which every zsh reads, Claude Code's own shell included): remove it there, or the next shell has it again; after that and a restart, the login and the door run inside Claude Code, no terminal switch"
 fi
 rollback="on"
 if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
