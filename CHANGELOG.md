@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The README and the glossary say what plinth can and cannot claim, as three
+  reviewers read them before v1.0.0 (#65). The first paragraph names the user
+  (someone who directs an AI agent and does not read the diff) and the limit:
+  a green check means its asserted properties hold, not that the code is
+  right, and an administrator can still change the rules. "Nobody can push
+  past" is gone. The dependency list no longer says every dependency is
+  pinned to a commit: `mattpocock-skills` comes within a tested version
+  range. The generator no longer "creates nothing" on failure: it deletes
+  what it created when its token can, and names the repository when it
+  cannot. The Status paragraph was about the 0.5.1 baseline of 2026-09-09. It
+  now describes the release gate and the release-candidate runs, and says no
+  one but the author has used plinth yet. `CONTEXT.md` no longer says the
+  default install has no hooks: `last30days` adds one.
+
 ## [0.5.31] - 2026-09-26
 
 The last changes before v1.0.0 that the owner chose to land first. The
