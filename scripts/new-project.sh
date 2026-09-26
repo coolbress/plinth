@@ -149,6 +149,10 @@ else
   kind_now="$(gh api "users/$owner" --jq .type 2>/dev/null)" || kind_now=""
   token_link="https://github.com/settings/personal-access-tokens/new?name=plinth+new-project&target_name=$owner&expires_in=7&administration=write&contents=write&workflows=write&pull_requests=write"
   [ "$kind_now" = Organization ] && token_link="$token_link&members=read"
+  # A lookup that failed is not "a personal account": an organization's token would
+  # then lack Members and fail step 3, so the stop names it (#286 review).
+  kind_note=""
+  [ -n "$kind_now" ] || kind_note="the type of $owner could not be read: if it is an organization, also set Organization permissions Members: read"
   stop "gh is using a fine-grained token; whether it reaches a repository that does not exist yet cannot be read" \
     "  fix, either of two. The browser login is shorter, but its token is scoped repo across the account rather than" \
     "  to selected repositories; the admin-token path keeps the fine-grained token's narrow reach." \
@@ -162,8 +166,9 @@ else
     "    P=$(printf '%q' "$here")" \
     "    \"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" \\" \
     "      $*" \
-    "     the token, fine-grained, pre-filled for $owner (7 days; its permissions already set):" \
+    "     the token, fine-grained, pre-filled for $owner (7 days; its${kind_note:+ repository} permissions already set):" \
     "       $token_link" \
+    ${kind_note:+"     $kind_note"} \
     "     the one choice left there: Repository access \"All repositories\" (a repository that does not exist yet is not selectable)" \
     "     or classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)"
 fi

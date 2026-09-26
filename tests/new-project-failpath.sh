@@ -263,6 +263,17 @@ E="MOCK_FINE=1"       run fine-grained-org err no no "with-admin-token.sh"      
 if grep -qF "target_name=someorg&" "$work/home-fine-grained-org/out" && grep -qF "$perms&members=read" "$work/home-fine-grained-org/out"
 then ok fine-grained-org "an organization's link adds members=read"
 else bad fine-grained-org "no organization token link with members=read"; grep -F "personal-access-tokens/new" "$work/home-fine-grained-org/out" | sed 's/^/        /'; fi
+# An owner whose type cannot be read may be an organization: the link cannot
+# claim its permissions are all set, and the stop names Members itself (#286 review).
+E="MOCK_FINE=1"       run fine-grained-unknown err no no "with-admin-token.sh"                 -- nobody/probe
+if grep -qF "the type of nobody could not be read" "$work/home-fine-grained-unknown/out" \
+   && grep -qF "Organization permissions Members: read" "$work/home-fine-grained-unknown/out" \
+   && ! grep -qF "members=read" "$work/home-fine-grained-unknown/out"
+then ok fine-grained-unknown "an unreadable owner type keeps the Members line instead of claiming the link is complete"
+else bad fine-grained-unknown "an unreadable owner type is treated as a personal account"; grep -F -A3 "pre-filled" "$work/home-fine-grained-unknown/out" | sed 's/^/        /'; fi
+if grep -qF "Organization permissions Members" "$work/home-fine-grained/out" "$work/home-fine-grained-org/out"
+then bad fine-grained "the Members line appears when the owner's type was read"
+else ok fine-grained "no Members line when the owner's type was read"; fi
 # gh reads GH_TOKEN and GITHUB_TOKEN before the login it stores, so with one
 # of them set a login or refresh changes nothing the door sees: the stop says
 # to unset it first (#245 review).
