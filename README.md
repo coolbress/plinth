@@ -7,7 +7,8 @@ repository with both already in place.
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
 > ones get a read-only `floor-check` · **Claude Code 2.1.234 or newer** as the
-> host (skills follow the Agent Skills format and may load elsewhere, but only
+> host (CI installs plinth on both that version and the current release;
+> skills follow the Agent Skills format and may load elsewhere, but only
 > Claude Code is tested) · macOS / Linux (Windows via WSL) · tools: `claude`,
 > `gh`, `git` (2.37 or newer: on an older one, the macOS system git included, the
 > install fails with `index.lock: File exists`; `brew install git`), `uv`.

@@ -23,7 +23,15 @@ echo "config dir: $CLAUDE_CONFIG_DIR"
 # this check turns red when that pin leaves the range.
 matt_min="1.2.3"; matt_max_exclusive="2.0.0"
 
-floor="2.1.234"
+# The Claude Code floor has one source, the door's own check; the README and the
+# tutorial state it. CI runs this file twice: on the stable release and on the
+# floor itself, so the floor is a version the install was seen to work on.
+floor="$(sed -nE 's/^claude_floor="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+[ -n "$floor" ] || { echo "  FAIL  no claude_floor in scripts/new-project.sh"; exit 1; }
+for doc in README.md docs/tutorials/getting-started.md; do
+  grep -qF "$floor or newer" "$root/$doc" \
+    || { echo "  FAIL  $doc does not state the floor as \"$floor or newer\""; exit 1; }
+done
 v="$(claude --version | awk '{print $1}')"
 [ "$(printf '%s\n%s\n' "$floor" "$v" | sort -V | head -1)" = "$floor" ] \
   || { echo "  FAIL  claude $v is below the supported floor $floor"; exit 1; }

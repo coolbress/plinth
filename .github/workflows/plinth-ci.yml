@@ -73,6 +73,18 @@ jobs:
       - name: Install plinth the way the README says
         run: ./tests/install-smoke.sh
 
+      # Last in the job: from here on `claude` is the floor, not stable.
+      - name: Install plinth the way the README says, on the Claude Code floor
+        env:
+          DISABLE_AUTOUPDATER: "1"
+        run: |
+          set -euo pipefail
+          floor="$(sed -nE 's/^claude_floor="([^"]+)"$/\1/p' scripts/new-project.sh)"
+          curl -fsSL https://claude.ai/install.sh | bash -s "$floor"
+          v="$(claude --version | awk '{print $1}')"
+          [ "$v" = "$floor" ] || { echo "::error::expected claude $floor, got $v"; exit 1; }
+          ./tests/install-smoke.sh
+
   # Tools: everything in this repository that is not prose is executable, and
   # most of it runs in other people's repositories (the reusable workflows, the
   # ruleset tools, the door). Lint it as such, then run the tests of the tools.

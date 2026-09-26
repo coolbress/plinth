@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The README's Claude Code floor, 2.1.234, is now checked: `ci / install`
+  installs plinth the README's way a second time on that exact version, after
+  the run on the current release. The floor has one source,
+  `scripts/new-project.sh`, and the install test fails when the README or
+  the tutorial states another. Measured on 2026-09-26: the install passes on
+  2.1.234 with all five plugins enabled and no errors (#65).
+
 ## [0.5.30] - 2026-09-26
 
 The findings from the second v1.0.0 release-candidate pass (RC2). A
