@@ -51,8 +51,8 @@ jobs:
       # (platforms.linux-x64.checksum).
       - name: Install Claude Code (one release, SHA256 verified)
         env:
-          CLAUDE_VERSION: "2.1.236"
-          CLAUDE_SHA256: "6c8818fa22187aa555c242be4abbacc44d6b71a32ac9631ee7b2b5d12f51f752"
+          CLAUDE_VERSION: "2.1.274"
+          CLAUDE_SHA256: "15e2d05148f801b5774032faad87e624ecd172e9903288bda448b892eb58fa07"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/claude"; mkdir -p "$d"
