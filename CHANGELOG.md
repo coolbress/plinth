@@ -40,8 +40,12 @@ pull requests and have no tag.
   file the reviewer actually reads. A caller that named `REVIEW.md` believed
   that file was guarded while `AGENTS.md` went unguarded. Now a value other
   than the default stops the check with an error saying the input is not
-  supported. The input names stay, so no caller breaks. `poll-seconds`, also
-  declared and ignored (a fixed 20), is now used. Found by the pre-1.0
+  supported. The input names stay, so a caller passing the defaults, or
+  nothing, is unchanged. A caller that passed another value now gets a red
+  check until it removes the value; before, that value was silently ignored.
+  `poll-seconds`, also declared and ignored (a fixed 20), is now used, and a
+  value that is not a whole number above 0 stops the check instead of
+  polling the API without a pause. Found by the pre-1.0
   external review.
 - `floor-check` compares which app each required check must come from, not
   only its name. The ruleset the generator raises pins every required check

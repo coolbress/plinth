@@ -293,6 +293,9 @@ jobs:
         run: |
           set -euo pipefail
           PR_REVIEW="$RUNNER_TEMP/plinth/scripts/pr-review"   # the fetch step above
+          # A zero or non-numeric interval would turn the wait into a loop of
+          # API calls with no sleep; refuse it before the loop starts.
+          case "${POLL:-}" in ''|*[!0-9]*|0) echo "::error::poll-seconds must be a whole number of seconds above 0 (got: ${POLL:-empty})"; exit 1 ;; esac
 
           if [ -z "${NUMBER:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
             echo "::error::not a pull request: nothing to check."
