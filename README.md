@@ -1,8 +1,8 @@
 # plinth
 
-The base a vibe-coded project stands on: required checks on GitHub that
-nothing merges past, a curated set of agent skills, and a generator that starts
-a new repository with both already in place. It is for someone who directs an
+The base a vibe-coded project stands on: required checks on GitHub that no
+change merges past while they are red, a curated set of agent skills, and a
+generator that starts a new repository with both already in place. It is for someone who directs an
 AI agent and does not read the diff. A green check means the properties that
 check asserts hold, not that the code is right, and a pull request can
 rewrite its own CI file so that its checks do nothing

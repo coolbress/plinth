@@ -509,6 +509,28 @@ wall "an unpinned duplicate beside a pinned one is not a source FAIL" "required 
   "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["required_status_checks"]=[{"context":"ci / a"}]; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
 wall "a strict rule beside a loose one is still strict" "required checks are strict" \
   "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["strict_required_status_checks_policy"]=False; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
+# A ruleset that pins its checks to different apps is compared check by
+# check; it does not switch the comparison off.
+mixed="$work/mixed-ruleset.json"
+python3 - "$root/ruleset.json" "$mixed" <<'MIXED'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for r in d["rules"]:
+    if r["type"] == "required_status_checks":
+        r["parameters"]["required_status_checks"] = [
+            {"context": "ci / a", "integration_id": 15368}, {"context": "ci / b", "integration_id": 999}]
+json.dump(d, open(sys.argv[2], "w"))
+MIXED
+mixed_out() { FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$mixed" 2>&1; }
+printf '%s' "$good_rules" | sed 's/"integration_id":15368//g; s/,}/}/g' > "$api/repos/o/r/rules/branches/main.json"
+out="$(mixed_out)"
+if [ "$(grep -c 'accepts a status from any source' <<<"$out")" = 2 ]; then ok "mixed-app ruleset: both unpinned checks FAIL, each against its own app"
+else bad "mixed-app ruleset: unpinned checks not both caught"; grep -E 'FAIL|INFO|SKIP|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
+printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"context":"ci \/ b","integration_id":999/' > "$api/repos/o/r/rules/branches/main.json"
+out="$(mixed_out)"
+if grep -qF "required checks come from the expected apps (999, 15368)" <<<"$out"; then ok "mixed-app ruleset: each check on its own app passes"
+else bad "mixed-app ruleset: correct pins not passed"; grep -E 'FAIL|INFO|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
+printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 
 # --project separate from --root, expectations from --ruleset
 sub="$work/sub"; rm -rf "$sub"; cp -R "$good" "$sub"; mkdir -p "$sub/app"; mv "$sub/pyproject.toml" "$sub/uv.lock" "$sub/.copier-answers.yml" "$sub/Dockerfile" "$sub/.dockerignore" "$sub/.env.example" "$sub/app/"; mv "$sub/src" "$sub/app/src"

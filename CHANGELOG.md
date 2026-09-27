@@ -35,6 +35,16 @@ pull requests and have no tag.
 
 ### Fixed
 
+- From the second pre-1.0 review. `floor-check` compares each required
+  check with the app its own ruleset entry pins. A ruleset whose checks name
+  different apps used to switch the comparison off entirely, and printed
+  "no --ruleset". A name that only `--expect-checks` gives, with no shared app
+  to assume, is reported as not verified. The poll-interval cases in
+  `tests/pr-review-summon.sh` sat after the script's last failure gate, so
+  they could not turn it red; they now run before it, under a time limit,
+  and fail instead of hanging when the guard is gone. The README's first
+  sentence says no change merges past the checks "while they are red", which
+  the pull-request rewrite limit two sentences on no longer contradicts.
 - The public text says what the two pre-1.0 reviews found it overstated.
   A pull request can rewrite its own CI file so that the required checks run
   nothing and pass. That needs only write access, is visible in the diff,
@@ -52,7 +62,7 @@ pull requests and have no tag.
 - `pr-review.yml` declared `policy-file` and `policy-heading` but ignored
   them: the guard always checked `## Code Review Rules` in `AGENTS.md`, the
   file the reviewer actually reads. A caller that named `REVIEW.md` believed
-  that file was guarded while `AGENTS.md` went unguarded. Now a value other
+  that file was guarded, and it was not. Now a value other
   than the default stops the check with an error saying the input is not
   supported. The input names stay, so a caller passing the defaults, or
   nothing, is unchanged. A caller that passed another value now gets a red
