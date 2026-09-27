@@ -35,6 +35,14 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `floor-check` compares which app each required check must come from, not
+  only its name. The ruleset the generator raises pins every required check
+  to GitHub Actions. A live rule that lost that pin can be satisfied by a
+  commit status of the same name, which anyone with write access can post.
+  `floor-check` reported such a rule as healthy ("all 9 expected checks are
+  required"). Now it fails, naming the check, as it does for a check pinned to
+  another app. Without `--ruleset` there is no expected app, so the comparison
+  is reported as not made. Found by the pre-1.0 external review.
 - `docs/how-to/run-a-project.md` no longer says a plain-words request for a
   typed skill "gets the work done by hand". The agent may do it without the
   skill's safeguards, or not at all. The page now names each skill's own
