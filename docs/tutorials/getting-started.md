@@ -116,8 +116,8 @@ Made with [plinth](https://github.com/coolbress/plinth).
 ```
 
 Open the pull request. The checks run for a few minutes. The merge button
-enables only when every required check is green; that is the wall, and nobody
-can push past it, including you.
+enables only when every required check is green; that is the wall, and nothing
+merges past it, including your own merge.
 
 A red check: click **Details** and read the last lines of the log. Fix it in
 the branch and push; the checks run again.
@@ -127,6 +127,9 @@ install, create, merge.
 
 ## Next
 
+- [Run a project](../how-to/run-a-project.md): the loop from an idea to a
+  merged change, what to type at each stage, and what to check before you
+  merge.
 - `cd my-app && claude`, then `/plinth:floor-check` to read the wall from
   the inside.
 - To move plinth to a new version later: `claude plugin update plinth`, then

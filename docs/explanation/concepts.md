@@ -16,6 +16,43 @@ writes the code cannot switch them off. The second is skills the harness
 loads only when a task calls for them. Nothing in the plugin enforces
 anything; the plugin can be uninstalled and the checks still stand.
 
+## About how the pieces fit
+
+```text
+ ┌─ GitHub ─────────────────────────────────────────────────────────┐
+ │ the rules on main: changes arrive as pull requests, and none     │
+ │ merges until the required checks and the code-scan rule pass     │
+ └──────────────────────────────────────────────────────────────────┘
+          ▲ set up by new-project        ▲ read by floor-check
+ ┌─ your repository ────────────────────────────────────────────────┐
+ │ the rules the agent reads every turn, how changes are proposed,  │
+ │ what the agent may not touch, and the CI that runs the checks    │
+ └──────────────────────────────────────────────────────────────────┘
+          ▲ made from plinth's template; template-update brings fixes
+ ┌─ Claude Code ────────────────────────────────────────────────────┐
+ │ plinth's four skills and a default set of others                 │
+ └──────────────────────────────────────────────────────────────────┘
+```
+
+The files behind the middle box are `AGENTS.md`, `CONTRIBUTING.md`, the issue
+forms and pull request template, `.claude/settings.json`, and a CI file that
+calls plinth's reusable workflow. `floor-check` reads both GitHub's rules and
+the repository. The code-scan rule passes a pull request Dependabot opened
+without scanning it; the scan runs on `main` after the merge (see "About what
+green means" below).
+
+Each part promises something different:
+
+| | By | Holds because | Does not hold |
+| --- | --- | --- | --- |
+| The agent is told | `AGENTS.md`, loaded every turn | Claude Code loads it | whether the agent follows it |
+| You choose | skills | you, or the model, pick one | when neither does |
+| The checks answer | the required checks | GitHub refuses the merge | what no check asserts; an administrator's edit |
+| The record remembers | issues and pull requests | they live on GitHub, not on one machine | what nobody wrote down |
+
+[Run a project](../how-to/run-a-project.md) walks the loop through these
+parts.
+
 ## About the three review layers
 
 A change can be reviewed in three ways, and they fail differently.

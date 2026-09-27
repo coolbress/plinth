@@ -128,6 +128,8 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 ## Further reading
 
 - [Concepts](docs/explanation/concepts.md): why plinth is shaped the way it is.
+- How-to, for users: [run a project](docs/how-to/run-a-project.md), what to
+  type at each stage and what to check before you merge.
 - How-to, for maintainers: [cut a release](docs/how-to/cut-a-release.md),
   [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md).
 - [CONTEXT.md](CONTEXT.md): the vocabulary (wall, door, box, floor, arsenal, lab, profile).
