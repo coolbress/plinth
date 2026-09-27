@@ -102,6 +102,17 @@ the merge (measured on five such heads in three repositories; heads other
 bots push were not measured). The reference page says, check by check, what
 each asserts.
 
+A pull request can also change the checks themselves. The CI file is part
+of the repository, so a pull request that replaces the call to plinth's
+workflow with jobs of the same names that do nothing gets every required
+check green. GitHub reports each check from the file on the pull request's
+branch, and the ruleset pins the check's name and app, not what it runs.
+This needs no administration, only the ordinary write access an agent
+has. The change is visible in the pull request's diff, and a follow-up
+check that flags it is #301; nothing in this version blocks it. Pinning a
+workflow so that a pull request cannot change it takes GitHub's required
+workflows, an organization feature.
+
 ## About who can change the wall
 
 The ruleset stops everyone who merges, owners included, from merging past a
@@ -149,8 +160,9 @@ behind.
 A pin is also the recovery plan. plinth has one maintainer, and a SHA keeps
 working only while its repository exists. If maintenance stops, fork the
 marketplace and the workflow repository, point `claude plugin marketplace add`
-and the `uses:` lines at the fork, and the pinned commits keep working from
-there. Signed releases are not promised.
+and the `uses:` lines at the fork, and change the `coolbress/plinth` download
+URLs inside `python-ci.yml` and `pr-review.yml` to the fork too; the pinned
+commits keep working from there. Signed releases are not promised.
 
 ## About private repositories
 

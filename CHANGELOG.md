@@ -30,11 +30,25 @@ pull requests and have no tag.
   and RC1 recorded `/plinth:template-update` going unused for a plain
   request. It draws on the retired playbook guide, #68's accepted design,
   plinth-lab#12, and a September 2026 review of practice.
-- `docs/explanation/concepts.md` opens with how the pieces fit: GitHub, the
+- `docs/explanation/concepts.md` has a section on how the pieces fit: GitHub, the
   repository and Claude Code, and what each part does and does not promise.
 
 ### Fixed
 
+- The public text says what the two pre-1.0 reviews found it overstated.
+  A pull request can rewrite its own CI file so that the required checks run
+  nothing and pass. That needs only write access, is visible in the diff,
+  and nothing in 1.0 blocks it (#301 would flag it). The README, the guide and
+  "About what green means" now say so. The guide no longer says an agent
+  without administration "cannot get past" the rules, or that the agent
+  asks before merging (it is told to), or that every dependency is pinned
+  (mattpocock-skills is range-checked). The generator's rollback is best
+  effort in the guide and in the `new-project` skill, which still said
+  "creates nothing". The arsenal no longer says every third-party entry is
+  pinned. The README describes the door's CodeQL recovery push as it is:
+  one empty commit, pushed by the door. The fork recipe names the download
+  URLs inside the two reusable workflows. The tutorial says the recommended
+  login is administration on every repository the person owns.
 - `pr-review.yml` declared `policy-file` and `policy-heading` but ignored
   them: the guard always checked `## Code Review Rules` in `AGENTS.md`, the
   file the reviewer actually reads. A caller that named `REVIEW.md` believed
