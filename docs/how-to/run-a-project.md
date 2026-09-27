@@ -43,7 +43,10 @@ can pick up from an ordinary request when the moment fits.
 
 For the left column, asking in your own words ("update the template") does
 not run the skill. The agent may do the work by hand, without the skill's
-confirmations and rollback, or not do it at all. Type the skill.
+safeguards, or not do it at all. Those safeguards differ by skill:
+`/plinth:new-project` deletes a repository it could not finish setting up;
+`/plinth:template-update` asks before each step and works in a separate
+folder, leaving any conflict for you. Type the skill.
 
 ## Pick the size of the job first
 
