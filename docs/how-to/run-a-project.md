@@ -118,7 +118,8 @@ say it again more precisely.
 ### 5. Check what the checks cannot
 
 On GitHub, nine required checks (ten for a service) run on every pull request,
-with a code scan beside them. Nothing merges until they pass. They answer only
+with the code-scan rule beside them (a dependency update passes that rule
+unscanned; see step 9). Nothing merges until they pass. They answer only
 their own questions: style, types, tests, packaging, secrets, dependencies,
 size, the title and the project's setup. A mistake no test looks for passes
 all of them. Before you say "merge", ask three things:
