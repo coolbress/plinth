@@ -13,6 +13,13 @@ pull requests and have no tag.
 
 ### Added
 
+- `docs/explanation/concepts.md` opens with why plinth exists, starting from
+  where agentic coding stands in 2026 rather than from its author's history:
+  checking has not kept up with writing, the harness is solved, and what is
+  missing is rules outside the agent and a way of working that leaves
+  evidence. The author's own attempts are one supporting sentence. The next
+  section no longer says the agent cannot switch the checks off without
+  saying "without administration".
 - `docs/how-to/run-a-project.md`: the user's loop, stage by stage, from an
   idea to a merged change, a bug and a resume. It covers what you type and
   what runs by itself, sizing a job, "say what proves it", three questions

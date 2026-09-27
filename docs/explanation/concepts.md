@@ -4,6 +4,23 @@ Why plinth is shaped the way it is. For the checks themselves, see
 [Required checks](../reference/required-checks.md); the vocabulary is in
 [CONTEXT.md](../../CONTEXT.md).
 
+## About why plinth exists
+
+AI agents now write code well; checking what they wrote has not kept up.
+Research and practice in 2026 point the same way. An agent's own "done" is not
+evidence. Review bots raise many comments and still miss problems. Planning
+kits shape what the agent does, but hold it to nothing. The harness, the
+program that turns a model into an agent, is solved and keeps improving:
+Claude Code is one. What most people building with an agent still lack sits
+outside it. They need rules the work must pass, kept somewhere the agent does
+not control, and a way of working that leaves evidence another person can
+read. Platforms are adding such gates, mostly on paid or enterprise plans.
+
+plinth fills that gap for a public repository: the rules live on GitHub, and
+the way of working comes from skills others already made well, with a guide
+to walking them. Its author's earlier attempts to keep the rules inside the
+agent came to the same conclusion.
+
 ## About what plinth is
 
 plinth helps someone building with a coding agent keep purpose, decisions and
@@ -11,8 +28,8 @@ context, repeat small verifiable changes, and leave a repository another
 developer can take over.
 
 It is not a harness: Claude Code is. plinth adds two things around it. The
-first is required checks in the environment, on GitHub, where the agent that
-writes the code cannot switch them off. The second is skills the harness
+first is required checks in the environment, on GitHub, where an agent without
+administration on the repository cannot switch them off. The second is skills the harness
 loads only when a task calls for them. Nothing in the plugin enforces
 anything; the plugin can be uninstalled and the checks still stand.
 
