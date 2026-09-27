@@ -1123,6 +1123,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         bad = unknown = 0
         for c in expected:
             if c not in live:
+                unknown += 1   # reported above as dropped; the PASS cannot speak for it
                 continue
             want = sources.get(c)
             if want is None:

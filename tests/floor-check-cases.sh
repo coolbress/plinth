@@ -521,7 +521,7 @@ for r in d["rules"]:
             {"context": "ci / a", "integration_id": 15368}, {"context": "ci / b", "integration_id": 999}]
 json.dump(d, open(sys.argv[2], "w"))
 MIXED
-mixed_out() { FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$mixed" 2>&1; }
+mixed_out() { FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$mixed" --expect-checks "ci / a, ci / b" 2>&1; }
 printf '%s' "$good_rules" | sed 's/"integration_id":15368//g; s/,}/}/g' > "$api/repos/o/r/rules/branches/main.json"
 out="$(mixed_out)"
 if [ "$(grep -c 'accepts a status from any source' <<<"$out")" = 2 ]; then ok "mixed-app ruleset: both unpinned checks FAIL, each against its own app"
@@ -530,6 +530,13 @@ printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"c
 out="$(mixed_out)"
 if grep -qF "required checks come from the expected apps (999, 15368)" <<<"$out"; then ok "mixed-app ruleset: each check on its own app passes"
 else bad "mixed-app ruleset: correct pins not passed"; grep -E 'FAIL|INFO|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
+# A dropped check withholds the aggregate PASS too.
+printf '%s' "$good_rules" | sed 's/,{"context":"ci \/ b","integration_id":15368}//' > "$api/repos/o/r/rules/branches/main.json"
+out="$(mixed_out)"
+if grep -q "required checks dropped" <<<"$out" && ! grep -q "required checks come from the expected apps" <<<"$out"; then
+  ok "a dropped check withholds the aggregate source PASS"
+else bad "a dropped check still produced the aggregate source PASS"; grep -E 'FAIL|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
+printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"context":"ci \/ b","integration_id":999/' > "$api/repos/o/r/rules/branches/main.json"
 # A check only --expect-checks names, with no shared app to assume, is not
 # compared; the aggregate PASS must not claim it.
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$mixed" --expect-checks "ci / a, ci / b, CodeQL" 2>&1)"

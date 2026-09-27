@@ -264,13 +264,22 @@ else
 fi
 
 # Without its guard the step would spin at 0 s and the wait would never end;
-# the time limit turns that into a failure here instead of a hung job.
+# the time limit turns that into a failure here instead of a hung job. Plain
+# bash, not `timeout`: stock macOS has none (#317's review).
+with_limit() {  # seconds, command...
+  local secs="$1"; shift
+  "$@" & local pid=$!
+  ( sleep "$secs"; kill "$pid" 2>/dev/null ) & local watch=$!
+  wait "$pid"; local rc=$?
+  kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null
+  return "$rc"
+}
 echo "-- a poll interval under 10 s or not a number is refused before the wait"
 for bad in 0 1 9 abc ""; do
   rm -rf "$tmp/m"; mkdir -p "$tmp/m"; echo "$T0" > "$tmp/m/clock"; : > "$tmp/m/pushes"; printf '[]' > "$tmp/m/icomments.json"
   if PATH="$tmp/bin:$PATH" MOCK="$tmp/m" RUNNER_TEMP="$tmp/rt" REPO=o/r NUMBER=7 HEAD_SHA="$HEAD" HEAD_REF=b \
        AUTHOR_LOGIN=coolbress TITLE=t LOGINS="$BOT" ASK="" SUMMONS_TOKEN="" OWNER=coolbress \
-       WAIT=30 POLL="$bad" timeout 20 bash "$tmp/step.sh" >"$tmp/out" 2>&1; then
+       WAIT=30 POLL="$bad" with_limit 20 bash "$tmp/step.sh" >"$tmp/out" 2>&1; then
     echo "  FAIL  poll-seconds '$bad' passed" >&2; fails=$((fails + 1))
   elif grep -q "poll-seconds must be a whole number of seconds, 10 or more" "$tmp/out"; then
     echo "  PASS  poll-seconds '$bad' is refused, and says why"
