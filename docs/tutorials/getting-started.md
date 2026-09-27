@@ -13,6 +13,9 @@ and merge the pull request the generator opens for you.
 - Log in to GitHub with `gh auth login -s repo,workflow,delete_repo`
   (browser login). The default scopes lack `workflow`, which the generator
   needs; `delete_repo` lets a failed run delete the repository it created.
+  The same login is administration on every repository you own, and an
+  agent working with it can change a repository's rules or delete it
+  ([who can change the wall](../explanation/concepts.md#about-who-can-change-the-wall)).
   The command runs from inside a Claude Code session too: it prints a
   one-time code and a URL, and a browser finishes it. No terminal is needed
   and nothing secret is typed. Do not export `GH_TOKEN`; an agent session can

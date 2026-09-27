@@ -9,13 +9,16 @@ plinth has two halves, and it helps to know which is which:
 
 - **Outside the agent, built by plinth:** the rules on GitHub that decide
   what merges, and the repository plinth sets up. An agent without
-  administration on the repository cannot get past them in a session; one
-  working with administration, as after the browser login, can change them.
+  administration cannot switch them off; one working with administration,
+  as after the browser login, can change them. Either can rewrite the CI file
+  inside a pull request, which the pull request's diff shows
+  ([what green means](../explanation/concepts.md#about-what-green-means)).
 - **Inside the agent, made by others:** the skills you type or the agent
   picks up, such as `/grill-with-docs` and `/implement` from
   [mattpocock/skills](https://github.com/mattpocock/skills). plinth does not
-  write these. It chooses them, installs them at versions it has tested,
-  and this page shows how to walk them. Their authors own them and their licences
+  write these. It chooses them, pins them to a commit (mattpocock-skills
+  comes from Anthropic's official marketplace instead, and CI checks its
+  version against a tested range), and this page shows how to walk them. Their authors own them and their licences
   apply; `/plinth:arsenal` lists each one with its source.
 
 Three lines carry it: **you decide** (steps 2, 3 and 6), **the checks answer**
@@ -44,7 +47,8 @@ can pick up from an ordinary request when the moment fits.
 For the left column, asking in your own words ("update the template") does
 not run the skill. The agent may do the work by hand, without the skill's
 safeguards, or not do it at all. Those safeguards differ by skill:
-`/plinth:new-project` deletes a repository it could not finish setting up;
+`/plinth:new-project` tries to delete a repository it could not finish
+setting up, and names it when its token cannot;
 `/plinth:template-update` asks before each step and works in a separate
 folder, leaving any conflict for you. Type the skill.
 
@@ -139,7 +143,8 @@ all of them. Before you say "merge", ask three things:
 
 ### 6. Merge on your word
 
-The agent asks before it merges, and a yes covers that one pull request,
+The agent is told to ask before it merges, and a yes covers that one pull
+request,
 unless you gave it a standing instruction for the session. When you merge, the
 ticket it was built for closes by itself. Then take the next ticket.
 

@@ -1,14 +1,15 @@
 ---
 name: new-project
-description: Create a new GitHub repository with required checks already enforced. User-invoked only; creates a remote repository and deletes it if any check cannot be raised.
+description: Create a new GitHub repository with required checks already enforced. User-invoked only; creates a remote repository, and if a check cannot be raised, deletes it when the token can or names it when it cannot.
 argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>]"
 disable-model-invocation: true
 ---
 
 # New project
 
-Creates `[<owner>/]<name>` on GitHub with the wall already up, or creates
-nothing. The owner is optional: a bare name goes under the user's login. One script does all of it; this skill runs it and relays what it says.
+Creates `[<owner>/]<name>` on GitHub with the wall already up. When a step it
+cannot go on without fails, it deletes the repository if its token can, and
+names it otherwise. The owner is optional: a bare name goes under the user's login. One script does all of it; this skill runs it and relays what it says.
 
 Run, with the user's arguments exactly as typed:
 
@@ -19,8 +20,10 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL, and
-opens the first pull request. If anything fails after creation it deletes the
-repository and says so.
+opens the first pull request. If a step it cannot go on without fails after
+creation, it deletes the repository when its token can and names it when it
+cannot; a label that fails is named and left. If the create's own answer is
+lost, it does neither.
 
 What to do with the output:
 

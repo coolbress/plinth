@@ -4,7 +4,9 @@ The base a vibe-coded project stands on: required checks on GitHub that
 nothing merges past, a curated set of agent skills, and a generator that starts
 a new repository with both already in place. It is for someone who directs an
 AI agent and does not read the diff. A green check means the properties that
-check asserts hold, not that the code is right. Anyone whose token has
+check asserts hold, not that the code is right, and a pull request can
+rewrite its own CI file so that its checks do nothing
+([what green means](docs/explanation/concepts.md#about-what-green-means)). Anyone whose token has
 administration on the repository can change the rules, an agent included when
 it works with such a token, as it does after the browser login the generator
 offers ([who can change the wall](docs/explanation/concepts.md#about-who-can-change-the-wall)).
@@ -111,8 +113,8 @@ does neither, so check whether the repository exists (its failure paths run in C
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its release commit, has
 created a repository on real GitHub, merged its first pull request and deleted
-it. When CodeQL does not analyse the first push, the door prints a recovery
-commit (#117). The owner ran three tasks on a generated
+it. When CodeQL has not analysed the first push after a while, the door
+pushes one empty commit to start it (#117). The owner ran three tasks on a generated
 repository with 0.5.28: a first feature, a recovery from a failure, and a
 resume in a new session. The install, the login and a merge were run again
 with 0.5.29. Both runs are in #65. No one but the author has used plinth yet

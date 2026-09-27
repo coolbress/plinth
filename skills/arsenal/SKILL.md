@@ -63,5 +63,6 @@ root, which writes the hooks, agents and skills above into the repository. Its
 own marketplace plugin loaded hooks and agents but did not register its skill
 on Claude Code 2.1.269.
 
-Every third-party entry is pinned to a commit in this repository's
+Every third-party entry except `mattpocock-skills`, which comes from
+Anthropic's official marketplace, is pinned to a commit in this repository's
 `.claude-plugin/marketplace.json`; the licenses are listed in `NOTICE`.
