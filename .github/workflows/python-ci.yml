@@ -504,7 +504,7 @@ jobs:
           found, i = [], 0
           while i < len(fields) and fields[i]:
               status = fields[i][0]
-              if status in "RC":
+              if status == "R":
                   old, new, i = fields[i + 1], fields[i + 2], i + 3
               else:
                   old = new = fields[i + 1]
