@@ -267,14 +267,14 @@ if [ "$fails" -ne 0 ]; then
   echo "-- $fails failed" >&2
   exit 1
 fi
-echo "-- a poll interval of 0 or not a number is refused before the wait"
-for bad in 0 abc ""; do
+echo "-- a poll interval under 10 s or not a number is refused before the wait"
+for bad in 0 1 9 abc ""; do
   rm -rf "$tmp/m"; mkdir -p "$tmp/m"; echo "$T0" > "$tmp/m/clock"; : > "$tmp/m/pushes"; printf '[]' > "$tmp/m/icomments.json"
   if PATH="$tmp/bin:$PATH" MOCK="$tmp/m" RUNNER_TEMP="$tmp/rt" REPO=o/r NUMBER=7 HEAD_SHA="$HEAD" HEAD_REF=b \
        AUTHOR_LOGIN=coolbress TITLE=t LOGINS="$BOT" ASK="" SUMMONS_TOKEN="" OWNER=coolbress \
        WAIT=30 POLL="$bad" bash "$tmp/step.sh" >"$tmp/out" 2>&1; then
     echo "  FAIL  poll-seconds '$bad' passed" >&2; fails=$((fails + 1))
-  elif grep -q "poll-seconds must be a whole number" "$tmp/out"; then
+  elif grep -q "poll-seconds must be a whole number of seconds, 10 or more" "$tmp/out"; then
     echo "  PASS  poll-seconds '$bad' is refused, and says why"
   else
     echo "  FAIL  poll-seconds '$bad' stopped without saying why" >&2; sed 's/^/        /' "$tmp/out" >&2; fails=$((fails + 1))

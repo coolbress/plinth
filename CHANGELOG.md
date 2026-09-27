@@ -44,8 +44,9 @@ pull requests and have no tag.
   nothing, is unchanged. A caller that passed another value now gets a red
   check until it removes the value; before, that value was silently ignored.
   `poll-seconds`, also declared and ignored (a fixed 20), is now used, and a
-  value that is not a whole number above 0 stops the check instead of
-  polling the API without a pause. Found by the pre-1.0
+  value that is not a whole number of 10 or more stops the check. Below that,
+  a long wait spends the repository's API quota, and a fetch that hits the
+  limit reads as no review. Found by the pre-1.0
   external review.
 - `floor-check` compares which app each required check must come from, not
   only its name. The ruleset the generator raises pins every required check
