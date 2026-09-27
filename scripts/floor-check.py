@@ -1092,8 +1092,11 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
        f"{branch}: merge methods within {sorted(merge_methods)}",
        f"{branch}: merge methods widened to {sorted(methods) or 'unknown'}")
 
-    rsc = by_type.get("required_status_checks", {}).get("parameters", {})
-    ok(rsc.get("strict_required_status_checks_policy") is True,
+    # Strict when any active required-checks rule is strict: GitHub enforces
+    # each rule, so one strict rule already requires a current branch.
+    strict = any(r.get("parameters", {}).get("strict_required_status_checks_policy") is True
+                 for r in rules if r.get("type") == "required_status_checks")
+    ok(strict,
        f"{branch}: required checks are strict (branch must be current)",
        f"{branch}: required checks are not strict")
     # Every active required-checks rule counts: GitHub enforces each of them,

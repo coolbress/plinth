@@ -44,7 +44,8 @@ pull requests and have no tag.
   another app. Without `--ruleset` there is no expected app, so the comparison
   is reported as not made. It also reads every active required-checks rule,
   not only the last one: GitHub enforces each, so a check is required when
-  any ruleset requires it and pinned when any pins it. Before, a second
+  any ruleset requires it and pinned when any pins it, and the branch must
+  be current when any of them is strict. Before, a second
   ruleset gave a false "dropped", and would have given a false "any source".
   Found by the pre-1.0 external review.
 - `docs/how-to/run-a-project.md` no longer says a plain-words request for a
