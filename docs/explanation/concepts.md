@@ -21,7 +21,7 @@ anything; the plugin can be uninstalled and the checks still stand.
 ```text
  ┌─ GitHub ─────────────────────────────────────────────────────────┐
  │ the rules on main: changes arrive as pull requests, and none     │
- │ merges until the required checks and the code scan pass          │
+ │ merges until the required checks and the code-scan rule pass     │
  └──────────────────────────────────────────────────────────────────┘
           ▲ set up by new-project        ▲ read by floor-check
  ┌─ your repository ────────────────────────────────────────────────┐
@@ -37,7 +37,9 @@ anything; the plugin can be uninstalled and the checks still stand.
 The files behind the middle box are `AGENTS.md`, `CONTRIBUTING.md`, the issue
 forms and pull request template, `.claude/settings.json`, and a CI file that
 calls plinth's reusable workflow. `floor-check` reads both GitHub's rules and
-the repository.
+the repository. The code-scan rule passes a pull request Dependabot opened
+without scanning it; the scan runs on `main` after the merge (see "About what
+green means" below).
 
 Each part promises something different:
 

@@ -8,8 +8,9 @@ first repository from [Getting started](../tutorials/getting-started.md).
 plinth has two halves, and it helps to know which is which:
 
 - **Outside the agent, built by plinth:** the rules on GitHub that decide
-  what merges, and the repository plinth sets up. The agent cannot talk its
-  way past them in a session.
+  what merges, and the repository plinth sets up. An agent without
+  administration on the repository cannot get past them in a session; one
+  working with administration, as after the browser login, can change them.
 - **Inside the agent, made by others:** the skills you type or the agent
   picks up, such as `/grill-with-docs` and `/implement` from
   [mattpocock/skills](https://github.com/mattpocock/skills). plinth does not
