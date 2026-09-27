@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Create a new GitHub repository with required checks already enforced. User-invoked only; creates a remote repository and deletes it if any check cannot be raised.
+description: Create a new GitHub repository with required checks already enforced. User-invoked only; creates a remote repository, and if a check cannot be raised, deletes it when the token can or names it when it cannot.
 argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>]"
 disable-model-invocation: true
 ---
