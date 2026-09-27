@@ -41,8 +41,12 @@ can pick up from an ordinary request when the moment fits.
 | `/wait-what`: "say that again, plainly" | |
 | `/plinth:new-project`, `/plinth:template-update` | |
 
-For the left column, asking in your own words ("update the template") gets
-the work done by hand, not by the skill built for it. Type the skill.
+For the left column, asking in your own words ("update the template") does
+not run the skill. The agent may do the work by hand, without the skill's
+safeguards, or not do it at all. Those safeguards differ by skill:
+`/plinth:new-project` deletes a repository it could not finish setting up;
+`/plinth:template-update` asks before each step and works in a separate
+folder, leaving any conflict for you. Type the skill.
 
 ## Pick the size of the job first
 
@@ -89,8 +93,9 @@ looks up the facts itself and brings you only the decisions.
 - Say what is out of scope, and what proves it is done (the rule above).
 
 It asks you to confirm that you both understand the same thing before it
-acts. The words you agreed on go into one file, `CONTEXT.md`, so later
-sessions use the same names.
+acts. The words you agreed on go into `CONTEXT.md`, so later sessions use the
+same names. A decision that is hard to reverse, surprising without its
+context, and a real trade-off is written up separately under `docs/adr/`.
 
 ### 3. Plan a big job: `/to-spec`, then `/to-tickets`
 
