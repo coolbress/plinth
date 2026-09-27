@@ -17,8 +17,8 @@ pull requests and have no tag.
   idea to a merged change, a bug and a resume. It covers what you type and
   what runs by itself, sizing a job, "say what proves it", three questions
   before a merge, and common mistakes. Most flow skills (`/grill-with-docs`,
-  `/to-spec`, `/to-tickets`, `/implement`, `/triage`) run only when typed, and
-  a plain-words request gets the work done by hand instead. #231 left the
+  `/to-spec`, `/to-tickets`, `/implement`, `/triage`) run only when typed; a
+  plain-words request does not run them. #231 left the
   situations page out until a record asked for it. The owner asked for it,
   and RC1 recorded `/plinth:template-update` going unused for a plain
   request. It draws on the retired playbook guide, #68's accepted design,
@@ -42,6 +42,15 @@ pull requests and have no tag.
   design: at four moments, five items.
 - The tutorial said nobody can push past the checks; it now says nothing
   merges past them, including your own merge.
+- `NOTICE` now carries each third-party plugin's copyright line and the MIT
+  permission text. MIT asks that both travel with every copy. `ponytail-skills`
+  is mounted from the upstream `skills/` folder, which has no LICENSE file,
+  so an installed copy carried neither; `NOTICE` had named only the licence
+  and the commit. Each licence was read on 2026-09-27, at the pinned commit
+  or, for the two plinth does not pin, at a commit `NOTICE` names:
+  MIT for taste-skill, last30days, ponytail and mattpocock-skills, and
+  Apache-2.0 for Impeccable, which plinth lists and does not install. plinth
+  copies none of their code.
 
 ### Changed
 
