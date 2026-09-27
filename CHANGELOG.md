@@ -13,6 +13,14 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.5.6. Its only change: the
+  generated `AGENTS.md` says that Claude Code's automatic memory stays on the
+  machine it ran on, so a decision, an unverified item or a next step the
+  next person needs goes into the issue or pull request, not only into memory.
+  It is the one improvement from the 2026-09-27 trends review taken before
+  v1.0.0; the rest are #299–#304. `/plinth:floor-check` now reports a
+  repository on v1.5.5 as one tag behind.
+
 - The README and the glossary say what plinth can and cannot claim, as three
   reviewers read them before v1.0.0 (#65). The first paragraph names the user
   (someone who directs an AI agent and does not read the diff) and the limit:
