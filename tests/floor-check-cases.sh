@@ -530,6 +530,12 @@ printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"c
 out="$(mixed_out)"
 if grep -qF "required checks come from the expected apps (999, 15368)" <<<"$out"; then ok "mixed-app ruleset: each check on its own app passes"
 else bad "mixed-app ruleset: correct pins not passed"; grep -E 'FAIL|INFO|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
+# A check only --expect-checks names, with no shared app to assume, is not
+# compared; the aggregate PASS must not claim it.
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$mixed" --expect-checks "ci / a, ci / b, CodeQL" 2>&1)"
+if grep -q "expected app for required check CodeQL is not known" <<<"$out" && ! grep -q "required checks come from the expected apps" <<<"$out"; then
+  ok "an uncompared check (SKIP) withholds the aggregate source PASS"
+else bad "an uncompared check still produced the aggregate source PASS"; grep -E 'SKIP|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 
 # --project separate from --root, expectations from --ruleset

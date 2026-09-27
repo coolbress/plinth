@@ -1120,7 +1120,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     if sources is None:
         result("INFO", f"{branch}: the source of each required check is not compared (no --ruleset)")
     else:
-        bad = 0
+        bad = unknown = 0
         for c in expected:
             if c not in live:
                 continue
@@ -1128,6 +1128,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             if want is None:
                 result("SKIP", f"{branch}: the expected app for required check {c} is not known "
                                "(not pinned in --ruleset); its source is not compared")
+                unknown += 1
                 continue
             if want in live[c]:
                 continue
@@ -1139,7 +1140,8 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                 got = ", ".join(str(i) for i in sorted(i for i in live[c] if i is not None))
                 result("FAIL", f"{branch}: required check {c} comes from app {got}, not {want}")
         apps = sorted({v for v in sources.values() if v is not None})
-        if not bad and apps:
+        # A PASS speaks for every expected check; with one uncompared it would not.
+        if not bad and not unknown and apps:
             label = "app" if len(apps) == 1 else "apps"
             result("PASS", f"{branch}: required checks come from the expected {label} ({', '.join(map(str, apps))})")
 
