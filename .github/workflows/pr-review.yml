@@ -115,11 +115,12 @@ on:
           The file the reviewer reads its instructions from. It lives inside the
           reviewed repository, so a pull request could rewrite its own reviewer;
           this workflow blocks the combination of an instruction change with any
-          other change.
+          other change. Only the default is supported: the reviewer reads
+          AGENTS.md, and another value stops the check with an error.
         type: string
         default: "AGENTS.md"
       policy-heading:
-        description: "Heading of the instruction section, as the reviewer reads it."
+        description: "Heading of the instruction section, as the reviewer reads it. Only the default is supported; another value stops the check with an error."
         type: string
         default: "## Code Review Rules"
       pass-release-pull-requests:
@@ -132,7 +133,7 @@ on:
         type: boolean
         default: false
       poll-seconds:
-        description: "Interval between looks."
+        description: "Interval between looks, in whole seconds; 10 or more."
         type: number
         default: 20
     secrets:
@@ -182,8 +183,18 @@ jobs:
           PR_STATE: ${{ github.event.pull_request.state }}
           POLICY_FILE: AGENTS.md              # where the reviewer reads its instructions
           POLICY_HEADING: "## Code Review Rules"
+          REQ_FILE: ${{ inputs.policy-file }}
+          REQ_HEADING: ${{ inputs.policy-heading }}
         run: |
           set -euo pipefail
+
+          # The reviewer reads AGENTS.md whatever a caller passes, so guarding
+          # another file would leave the one it reads unguarded. A caller that
+          # names another file or heading is stopped, not silently ignored.
+          if [ "${REQ_FILE:-$POLICY_FILE}" != "$POLICY_FILE" ] || [ "${REQ_HEADING:-$POLICY_HEADING}" != "$POLICY_HEADING" ]; then
+            echo "::error::policy-file '${REQ_FILE:-}' / policy-heading '${REQ_HEADING:-}' is not supported: the reviewer reads '$POLICY_HEADING' in $POLICY_FILE, and this check guards that. Leave both inputs at their defaults."
+            exit 1
+          fi
 
           # Nothing to guard on a merged or closed pull request. Measured
           # 2026-09-01: a review submitted after the merge re-ran this workflow,
@@ -278,10 +289,16 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           FORK: ${{ github.event.pull_request.head.repo.fork }}   # a fork's pull request gets no secrets
           WAIT: ${{ inputs.wait-seconds }}
-          POLL: 20
+          POLL: ${{ inputs.poll-seconds }}
         run: |
           set -euo pipefail
           PR_REVIEW="$RUNNER_TEMP/plinth/scripts/pr-review"   # the fetch step above
+          # Each look makes about four API calls. Below 10 s a 900 s wait spends
+          # hundreds of calls a minute from the repository's shared quota, and a
+          # fetch that hits the limit reads as no review; refuse it before the
+          # loop starts.
+          case "${POLL:-}" in ''|*[!0-9]*) poll_ok=0 ;; *) [ "$POLL" -ge 10 ] && poll_ok=1 || poll_ok=0 ;; esac
+          [ "$poll_ok" = 1 ] || { echo "::error::poll-seconds must be a whole number of seconds, 10 or more (got: ${POLL:-empty})"; exit 1; }
 
           if [ -z "${NUMBER:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
             echo "::error::not a pull request: nothing to check."
