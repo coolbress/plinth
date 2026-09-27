@@ -42,7 +42,11 @@ pull requests and have no tag.
   `floor-check` reported such a rule as healthy ("all 9 expected checks are
   required"). Now it fails, naming the check, as it does for a check pinned to
   another app. Without `--ruleset` there is no expected app, so the comparison
-  is reported as not made. Found by the pre-1.0 external review.
+  is reported as not made. It also reads every active required-checks rule,
+  not only the last one: GitHub enforces each, so a check is required when
+  any ruleset requires it and pinned when any pins it. Before, a second
+  ruleset gave a false "dropped", and would have given a false "any source".
+  Found by the pre-1.0 external review.
 - `docs/how-to/run-a-project.md` no longer says a plain-words request for a
   typed skill "gets the work done by hand". The agent may do it without the
   skill's safeguards, or not at all. The page now names each skill's own

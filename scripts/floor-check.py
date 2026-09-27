@@ -1096,7 +1096,15 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     ok(rsc.get("strict_required_status_checks_policy") is True,
        f"{branch}: required checks are strict (branch must be current)",
        f"{branch}: required checks are not strict")
-    live = {c["context"]: c.get("integration_id") for c in rsc.get("required_status_checks", [])}
+    # Every active required-checks rule counts: GitHub enforces each of them,
+    # so a check is required when any rule requires it, and pinned when any
+    # rule pins it. Keeping only the last rule of the type gave a false
+    # "dropped" or "any source" when a second ruleset carried part of it.
+    live: dict[str, set[int | None]] = {}
+    for r in rules:
+        if r.get("type") == "required_status_checks":
+            for c in r.get("parameters", {}).get("required_status_checks", []):
+                live.setdefault(c["context"], set()).add(c.get("integration_id"))
     have = set(live)
     missing = [c for c in expected if c not in live]
     ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
@@ -1107,9 +1115,10 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     if source is None:
         result("INFO", f"{branch}: the source of each required check is not compared (no --ruleset)")
     else:
-        unpinned = [c for c in expected if c in live and live[c] is None]
-        moved = [f"{c} comes from app {live[c]}, not {source}" for c in expected
-                 if c in live and live[c] is not None and live[c] != source]
+        pinned_right = {c for c in expected if c in live and source in live[c]}
+        unpinned = [c for c in expected if c in live and c not in pinned_right and None in live[c]]
+        moved = [f"{c} comes from app {', '.join(str(i) for i in sorted(i for i in live[c] if i is not None))}, not {source}"
+                 for c in expected if c in live and c not in pinned_right and None not in live[c]]
         for c in unpinned:
             result("FAIL", f"{branch}: required check {c} accepts a status from any source "
                            f"(expected app {source}); anyone with write access can satisfy it")
