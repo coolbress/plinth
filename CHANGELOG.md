@@ -11,6 +11,58 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-28
+
+By 2026, AI agents write code well; checking it has not kept up. Research and
+practitioners point the same way: an agent's own "done" is not evidence,
+review bots help but still miss things, and planning kits guide the agent
+without holding it to anything. The harness, the program that turns a model
+into an agent, is mature and keeps improving: Claude Code is one. What most
+people building with an agent still lack sits outside it: rules on GitHub the
+agent's work must pass, and a way of working that leaves evidence. Some
+platforms offer such gates, several of them on paid plans. GitHub's own
+building blocks are free for a public repository but have to be assembled.
+plinth 1.0 sets them up for a public repository with one command, and guides
+the inside with tools others made well. Our own attempts to put the rules
+inside the agent taught the same lesson.
+
+**You decide. The checks answer. The record remembers.** plinth is for someone
+who builds software by telling an AI agent what they want and does not read
+the code it writes. Why the rules are not simply told to the agent: Claude
+Code is the harness, and plinth puts the rules outside it, on GitHub. What
+makes the project professional: pro isn't the code you won't read, it's the
+setup around it. How to get better code from the agent: don't count on a
+better prompt; work in small steps the checks can answer, as [Run a
+project](https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md)
+walks through.
+
+**What 1.0 promises: the parts others build on stay put.** The required check
+names, the jobs, inputs and secrets of the reusable `python-ci.yml`, the shape
+of the ruleset the generator raises, and the four skill names (`new-project`,
+`floor-check`, `template-update`, `arsenal`) get no backward-incompatible
+change without a major version. A repository's ruleset requires checks by
+name, so a rename would break every consumer. From here, versions follow
+Semantic Versioning.
+
+**What 1.0 covers.** Public GitHub repositories, Python projects, Claude Code
+2.1.274 or newer as the host. Private repositories stop before anything is
+created. This release was tagged only after the end-to-end run created a
+repository on real GitHub, merged its first pull request and deleted it,
+twice, on this commit. Its author ran three tasks on a generated repository
+before this release: a first feature, a recovery from a failure, and a resume.
+
+**What 1.0 does not promise.** A green check means what that check asserts
+holds, not that the code is right: a defect planted on purpose passed every
+check. A pull request can rewrite its own CI file so that the required checks
+run nothing and pass; the diff shows it, and nothing in 1.0 blocks it (#301
+would flag it). Anyone whose token has administration on the repository can
+change the rules, an agent included. So far the author is the only user. A
+version number cannot settle whether another person can finish a project with
+plinth. That is what comes next (#163), with the candidates from the
+pre-release reviews (#299–#304, #310).
+
+tested with plinth-template v1.5.8
+
 ### Added
 
 - `docs/explanation/concepts.md` opens with why plinth exists, starting from
@@ -1413,7 +1465,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v0.5.31...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/coolbress/plinth/releases/tag/v1.0.0
 [0.5.31]: https://github.com/coolbress/plinth/releases/tag/v0.5.31
 [0.5.30]: https://github.com/coolbress/plinth/releases/tag/v0.5.30
 [0.5.29]: https://github.com/coolbress/plinth/releases/tag/v0.5.29
