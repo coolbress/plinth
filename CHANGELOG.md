@@ -46,7 +46,8 @@ pull requests and have no tag.
   permission text. MIT asks that both travel with every copy. `ponytail-skills`
   is mounted from the upstream `skills/` folder, which has no LICENSE file,
   so an installed copy carried neither; `NOTICE` had named only the licence
-  and the commit. Each licence was read at the pinned commit on 2026-09-27:
+  and the commit. Each licence was read on 2026-09-27, at the pinned commit
+  or, for the two plinth does not pin, at a commit `NOTICE` names:
   MIT for taste-skill, last30days, ponytail and mattpocock-skills, and
   Apache-2.0 for Impeccable, which plinth lists and does not install. plinth
   copies none of their code.

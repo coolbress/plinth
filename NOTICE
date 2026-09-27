@@ -4,8 +4,9 @@ The marketplace in .claude-plugin/marketplace.json lists third-party plugins.
 plinth does not copy their code: each entry points at its upstream repository
 at the commit below, and Claude Code fetches it from there. An entry mounted
 from a subdirectory (git-subdir) arrives without the upstream LICENSE file, so
-each notice is reproduced here in full. Read at the pinned commit on
-2026-09-27.
+each notice is reproduced here in full. Each licence was read on 2026-09-27:
+at the pinned commit for the three pinned entries, and at the commit named
+below for the two plinth does not pin.
 
 taste-skill
   https://github.com/Leonxlnx/taste-skill
@@ -23,15 +24,15 @@ ponytail-skills and ponytail
   Copyright (c) 2026 DietrichGebert
 
 mattpocock-skills is installed from the claude-plugins-official marketplace and
-keeps its own LICENSE file.
+keeps its own LICENSE file. plinth does not pin it.
   https://github.com/mattpocock/skills
-  MIT
+  MIT  ·  read at commit c55ee46073ed923f86ce59a5eb3b6d895095d1b7
   Copyright (c) 2026 Matt Pocock
 
 Impeccable is listed, not installed or distributed by plinth; its own
 installer (`npx impeccable install`) carries its LICENSE and NOTICE.md.
   https://github.com/pbakaus/impeccable
-  Apache-2.0
+  Apache-2.0  ·  read at commit 9d715cc4f5564a990ca8345abfdd5df6dc9b41c8
 
 The MIT License text, as each MIT project above carries it with its own
 copyright line:
