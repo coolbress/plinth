@@ -289,7 +289,7 @@ inherit "no templates anywhere is still caught" "FAIL  issue forms neither local
 # The wall, against a fixture API laid out like api.github.com paths.
 api="$work/api"; mkdir -p "$api/repos/o/r/rules/branches" "$api/repos/o/r/rulesets"
 printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
-good_rules='[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1},{"type":"non_fast_forward","ruleset_source_type":"Repository","ruleset_id":1},{"type":"pull_request","parameters":{"allowed_merge_methods":["squash"]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"ci / a"},{"context":"ci / b"},{"context":"CodeQL"}]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"code_scanning","parameters":{"code_scanning_tools":[{"tool":"CodeQL","alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}]},"ruleset_source_type":"Repository","ruleset_id":1}]'
+good_rules='[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1},{"type":"non_fast_forward","ruleset_source_type":"Repository","ruleset_id":1},{"type":"pull_request","parameters":{"allowed_merge_methods":["squash"]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"ci / a","integration_id":15368},{"context":"ci / b","integration_id":15368},{"context":"CodeQL"}]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"code_scanning","parameters":{"code_scanning_tools":[{"tool":"CodeQL","alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}]},"ruleset_source_type":"Repository","ruleset_id":1}]'
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 mkdir -p "$api/repos/o/r/code-scanning"
@@ -340,7 +340,7 @@ wall "a default branch the API does not report is not verified rather than passe
   "printf '{\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
 wall "a repository whose default branch is main is unchanged: no warning, no new noise" "-- 0 failed"
 wall "a healthy repository still says which branch the wall was checked on" "the wall is checked on main, the repository's default branch"
-wall "dropped required check is caught" "required checks dropped: \['ci / b'\]" "sed -i.bak 's/,{\"context\":\"ci \/ b\"}//' \"$api/repos/o/r/rules/branches/main.json\""
+wall "dropped required check is caught" "required checks dropped: \['ci / b'\]" "sed -i.bak 's/,{\"context\":\"ci \/ b\",\"integration_id\":15368}//' \"$api/repos/o/r/rules/branches/main.json\""
 wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\[\"squash\"\]/[\"squash\",\"merge\"]/' \"$api/repos/o/r/rules/branches/main.json\""
 wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
 wall "no rules at all is caught" "the wall is down" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
@@ -490,6 +490,25 @@ out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-net
 if grep -q "^  INFO  sandbox.enabled is true in .*settings.local.json" <<<"$out" && ! grep -qE "(PASS|SKIP|WARN).*sandbox" <<<"$out" \
    && grep -q 'Read(~/.config/gh' <<<"$out" && grep -q 'uvx --from copier copier' <<<"$out"
 then ok "--sandbox: sandbox.enabled true is an INFO, and the measured macOS lines still follow it"; else bad "--sandbox on"; printf '%s\n' "$out" | grep -iE 'sandbox|gh|uvx' | sed 's/^/        /'; fi
+
+# The source of each required check is part of the wall: a required
+# `ci / test` with no integration_id is satisfied by a commit status anyone
+# with write access can post. The shipped ruleset pins GitHub Actions (15368);
+# a live rule that lost or changed that pin is a weakened wall.
+wall "a required check with its source pin removed is a FAIL" "accepts a status from any source" \
+  "printf '%s' '$(printf '%s' "$good_rules" | sed 's/{"context":"ci \/ a","integration_id":15368}/{"context":"ci \/ a"}/')' > \"\$api/repos/o/r/rules/branches/main.json\""
+wall "a required check pinned to another app is a FAIL" "comes from app 999, not 15368" \
+  "printf '%s' '$(printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"context":"ci \/ b","integration_id":999/')' > \"\$api/repos/o/r/rules/branches/main.json\""
+printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+wall "the source pins as shipped pass" "required checks come from the expected app (15368)"
+# Two active rulesets: GitHub enforces both, so a check is required when
+# either requires it and pinned when either pins it.
+wall "a check carried by a second ruleset is not dropped" "all 2 expected checks are required" \
+  "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["required_status_checks"]=[{"context":"ci / a","integration_id":15368}]; a["ruleset_id"]=2; b=json.loads(json.dumps(rsc)); b["parameters"]["required_status_checks"]=[c for c in b["parameters"]["required_status_checks"] if c["context"]!="ci / a"]; print(json.dumps([x for x in r if x["type"]!="required_status_checks"]+[b,a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
+wall "an unpinned duplicate beside a pinned one is not a source FAIL" "required checks come from the expected app (15368)" \
+  "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["required_status_checks"]=[{"context":"ci / a"}]; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
+wall "a strict rule beside a loose one is still strict" "required checks are strict" \
+  "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["strict_required_status_checks_policy"]=False; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
 
 # --project separate from --root, expectations from --ruleset
 sub="$work/sub"; rm -rf "$sub"; cp -R "$good" "$sub"; mkdir -p "$sub/app"; mv "$sub/pyproject.toml" "$sub/uv.lock" "$sub/.copier-answers.yml" "$sub/Dockerfile" "$sub/.dockerignore" "$sub/.env.example" "$sub/app/"; mv "$sub/src" "$sub/app/src"

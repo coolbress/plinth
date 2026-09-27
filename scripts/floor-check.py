@@ -1030,7 +1030,8 @@ def check_codeql_policy(repo: str, branch: str, tools: list[dict], policy: dict[
                        f"(expected {policy['alerts_threshold']} / {policy['security_alerts_threshold']})")
 
 
-def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool) -> None:
+def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
+               source: int | None = None) -> None:
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("SKIP", "wall not checked (offline)")
         return
@@ -1091,14 +1092,43 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
        f"{branch}: merge methods within {sorted(merge_methods)}",
        f"{branch}: merge methods widened to {sorted(methods) or 'unknown'}")
 
-    rsc = by_type.get("required_status_checks", {}).get("parameters", {})
-    ok(rsc.get("strict_required_status_checks_policy") is True,
+    # Strict when any active required-checks rule is strict: GitHub enforces
+    # each rule, so one strict rule already requires a current branch.
+    strict = any(r.get("parameters", {}).get("strict_required_status_checks_policy") is True
+                 for r in rules if r.get("type") == "required_status_checks")
+    ok(strict,
        f"{branch}: required checks are strict (branch must be current)",
        f"{branch}: required checks are not strict")
-    have = {c["context"] for c in rsc.get("required_status_checks", [])}
-    missing = [c for c in expected if c not in have]
+    # Every active required-checks rule counts: GitHub enforces each of them,
+    # so a check is required when any rule requires it, and pinned when any
+    # rule pins it. Keeping only the last rule of the type gave a false
+    # "dropped" or "any source" when a second ruleset carried part of it.
+    live: dict[str, set[int | None]] = {}
+    for r in rules:
+        if r.get("type") == "required_status_checks":
+            for c in r.get("parameters", {}).get("required_status_checks", []):
+                live.setdefault(c["context"], set()).add(c.get("integration_id"))
+    have = set(live)
+    missing = [c for c in expected if c not in live]
     ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
        f"{branch}: required checks dropped: {missing}")
+    # Which app may report each check is part of the wall. Without the pin, a
+    # commit status of the same name, which anyone with write access can post,
+    # satisfies the requirement.
+    if source is None:
+        result("INFO", f"{branch}: the source of each required check is not compared (no --ruleset)")
+    else:
+        pinned_right = {c for c in expected if c in live and source in live[c]}
+        unpinned = [c for c in expected if c in live and c not in pinned_right and None in live[c]]
+        moved = [f"{c} comes from app {', '.join(str(i) for i in sorted(i for i in live[c] if i is not None))}, not {source}"
+                 for c in expected if c in live and c not in pinned_right and None not in live[c]]
+        for c in unpinned:
+            result("FAIL", f"{branch}: required check {c} accepts a status from any source "
+                           f"(expected app {source}); anyone with write access can satisfy it")
+        for m in moved:
+            result("FAIL", f"{branch}: required check {m}")
+        if not unpinned and not moved:
+            result("PASS", f"{branch}: required checks come from the expected app ({source})")
 
     # CodeQL is part of the floor whatever the ruleset names: the door requires
     # it through a code_scanning rule (blocks with a reason, and on the alerts
@@ -1229,17 +1259,23 @@ def main() -> int:
         expected: list[str] = []
         merge_methods = {"squash"}
         policy = None
+        source: int | None = None
         if a.ruleset:
             data = ruleset_for(json.loads(read(Path(a.ruleset))), archetype)
             policy = codeql_policy(data)
             expected = [c["context"] for r in data["rules"] if r["type"] == "required_status_checks"
                         for c in r["parameters"]["required_status_checks"]]
+            # The ruleset pins every check to one app; that app is the expected
+            # source for the checks named here or by --expect-checks.
+            ids = {c.get("integration_id") for r in data["rules"] if r["type"] == "required_status_checks"
+                   for c in r["parameters"]["required_status_checks"]}
+            source = ids.pop() if len(ids) == 1 and None not in ids else None
             merge_methods = {m for r in data["rules"] if r["type"] == "pull_request"
                              for m in r["parameters"].get("allowed_merge_methods", [])} or merge_methods
         if a.expect_checks:
             expected = [c.strip() for c in a.expect_checks.split(",") if c.strip()]
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
-        check_wall(a.repo, expected, merge_methods, policy, network)
+        check_wall(a.repo, expected, merge_methods, policy, network, source)
         check_labels(a.repo, network)
     else:
         result("SKIP", "no --repo: wall not checked")
