@@ -1031,7 +1031,7 @@ def check_codeql_policy(repo: str, branch: str, tools: list[dict], policy: dict[
 
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
-               source: int | None = None) -> None:
+               sources: dict[str, int | None] | None = None) -> None:
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("SKIP", "wall not checked (offline)")
         return
@@ -1115,20 +1115,36 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # Which app may report each check is part of the wall. Without the pin, a
     # commit status of the same name, which anyone with write access can post,
     # satisfies the requirement.
-    if source is None:
+    # Each check is compared with its own expected app, so a ruleset that pins
+    # checks to different apps is still compared check by check.
+    if sources is None:
         result("INFO", f"{branch}: the source of each required check is not compared (no --ruleset)")
     else:
-        pinned_right = {c for c in expected if c in live and source in live[c]}
-        unpinned = [c for c in expected if c in live and c not in pinned_right and None in live[c]]
-        moved = [f"{c} comes from app {', '.join(str(i) for i in sorted(i for i in live[c] if i is not None))}, not {source}"
-                 for c in expected if c in live and c not in pinned_right and None not in live[c]]
-        for c in unpinned:
-            result("FAIL", f"{branch}: required check {c} accepts a status from any source "
-                           f"(expected app {source}); anyone with write access can satisfy it")
-        for m in moved:
-            result("FAIL", f"{branch}: required check {m}")
-        if not unpinned and not moved:
-            result("PASS", f"{branch}: required checks come from the expected app ({source})")
+        bad = unknown = 0
+        for c in expected:
+            if c not in live:
+                unknown += 1   # reported above as dropped; the PASS cannot speak for it
+                continue
+            want = sources.get(c)
+            if want is None:
+                result("SKIP", f"{branch}: the expected app for required check {c} is not known "
+                               "(not pinned in --ruleset); its source is not compared")
+                unknown += 1
+                continue
+            if want in live[c]:
+                continue
+            bad += 1
+            if None in live[c]:
+                result("FAIL", f"{branch}: required check {c} accepts a status from any source "
+                               f"(expected app {want}); anyone with write access can satisfy it")
+            else:
+                got = ", ".join(str(i) for i in sorted(i for i in live[c] if i is not None))
+                result("FAIL", f"{branch}: required check {c} comes from app {got}, not {want}")
+        apps = sorted({v for v in sources.values() if v is not None})
+        # A PASS speaks for every expected check; with one uncompared it would not.
+        if not bad and not unknown and apps:
+            label = "app" if len(apps) == 1 else "apps"
+            result("PASS", f"{branch}: required checks come from the expected {label} ({', '.join(map(str, apps))})")
 
     # CodeQL is part of the floor whatever the ruleset names: the door requires
     # it through a code_scanning rule (blocks with a reason, and on the alerts
@@ -1259,23 +1275,31 @@ def main() -> int:
         expected: list[str] = []
         merge_methods = {"squash"}
         policy = None
-        source: int | None = None
+        sources: dict[str, int | None] | None = None
+        pinned: dict[str, int] = {}
+        common: int | None = None
         if a.ruleset:
             data = ruleset_for(json.loads(read(Path(a.ruleset))), archetype)
             policy = codeql_policy(data)
             expected = [c["context"] for r in data["rules"] if r["type"] == "required_status_checks"
                         for c in r["parameters"]["required_status_checks"]]
-            # The ruleset pins every check to one app; that app is the expected
-            # source for the checks named here or by --expect-checks.
-            ids = {c.get("integration_id") for r in data["rules"] if r["type"] == "required_status_checks"
-                   for c in r["parameters"]["required_status_checks"]}
-            source = ids.pop() if len(ids) == 1 and None not in ids else None
+            # Each check's expected app is the one the ruleset pins it to. A name
+            # only --expect-checks gives takes the app every ruleset check shares,
+            # and is left uncompared (SKIP) when they do not share one.
+            pinned = {c["context"]: c["integration_id"] for r in data["rules"]
+                      if r["type"] == "required_status_checks"
+                      for c in r["parameters"]["required_status_checks"] if c.get("integration_id") is not None}
+            all_ids = {c.get("integration_id") for r in data["rules"] if r["type"] == "required_status_checks"
+                       for c in r["parameters"]["required_status_checks"]}
+            common = next(iter(all_ids)) if len(all_ids) == 1 and None not in all_ids else None
             merge_methods = {m for r in data["rules"] if r["type"] == "pull_request"
                              for m in r["parameters"].get("allowed_merge_methods", [])} or merge_methods
         if a.expect_checks:
             expected = [c.strip() for c in a.expect_checks.split(",") if c.strip()]
+        if a.ruleset:
+            sources = {c: pinned.get(c, common) for c in expected}
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
-        check_wall(a.repo, expected, merge_methods, policy, network, source)
+        check_wall(a.repo, expected, merge_methods, policy, network, sources)
         check_labels(a.repo, network)
     else:
         result("SKIP", "no --repo: wall not checked")
