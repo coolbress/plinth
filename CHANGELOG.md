@@ -101,6 +101,12 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.5.7. Its only change: the
+  generated `.claude/settings.json` denies `gh repo delete`, and `AGENTS.md`
+  names it among what the settings deny. The recommended login can delete any
+  repository the person owns, and no required check can undo that. From the
+  pre-1.0 review. `/plinth:floor-check` now reports a repository on v1.5.6 as
+  one tag behind.
 - `/plinth:new-project` renders plinth-template v1.5.6. Its only change: the
   generated `AGENTS.md` says that Claude Code's automatic memory stays on the
   machine it ran on, so a decision, an unverified item or a next step the
