@@ -28,6 +28,11 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `docs/how-to/run-a-project.md` no longer says a plain-words request for a
+  typed skill "gets the work done by hand". The agent may do it without the
+  skill's confirmations and rollback, or not at all. And agreed words go
+  into `CONTEXT.md`, while a hard-to-undo decision goes under `docs/adr/`,
+  not one file for both. Both are from the reviewer's last round on #306.
 - The generated `AGENTS.md` has told the agent, since the template was
   rebuilt, to report "in the five-item shape plinth's guidance defines
   (`/plinth:arsenal`)". The arsenal never defined it. It does now, from #68's
