@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `ci / diff-size` names each change to the checks that the pull request
+  description does not: a deleted test file, a test moved out of the test
+  paths, an edited workflow, a changed check configuration file (`conftest.py`,
+  `pytest.ini`, `ruff.toml`, `.gitleaks.toml`, `ruleset.json` and others) or a
+  changed `[tool.*]` table in `pyproject.toml`. Naming the path or the file
+  name in the description is enough. It is a WARN in the log and the job
+  summary, never a red: the description is read when the run starts and an
+  edit does not re-run CI, so a failure could only be cleared by a push, and a
+  text match should not block a merge. It does not see a weakened assertion
+  inside a kept test, a skip marker, or a threshold the caller passes as an
+  input. A repository gets it when its `python-ci.yml` pin reaches this
+  release. No check name changes.
+
 ## [1.0.0] - 2026-09-28
 
 By 2026, AI agents write code well; checking it has not kept up. Research and

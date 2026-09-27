@@ -39,6 +39,9 @@ jobs:
       - name: ci / pr-title verdicts
         run: ./tests/pr-title-cases.sh
 
+      - name: ci / diff-size names changes to the checks the description does not
+        run: ./tests/weakened-checks-cases.sh
+
       - name: Every if-gated workflow input is passed by a caller
         run: ./tests/inputs-are-exercised.sh
 
