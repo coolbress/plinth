@@ -69,6 +69,28 @@ else
   echo "  PASS  a missing commit stops and says so"
 fi
 
+echo "-- a caller that names another instruction file or heading is refused, not ignored"
+# The reviewer reads AGENTS.md whatever the caller passes; guarding another
+# file would leave AGENTS.md unguarded, so the workflow stops instead (#312's
+# review found the inputs ignored).
+for pair in "REQ_FILE=REVIEW.md" "REQ_HEADING=## Review"; do
+  if ( cd "$repo" && env "$pair" BASE_SHA="$BASE" HEAD_SHA="$BASE" \
+         POLICY_FILE=AGENTS.md POLICY_HEADING='## Code Review Rules' \
+         bash "$tmp/step.sh" ) >"$tmp/log" 2>&1; then
+    echo "  FAIL  $pair passed: the input would be silently ignored" >&2; fails=$((fails+1))
+  elif grep -q "not supported" "$tmp/log"; then
+    echo "  PASS  $pair stops and says the input is not supported"
+  else
+    echo "  FAIL  $pair stopped without saying why" >&2; cat "$tmp/log" >&2; fails=$((fails+1))
+  fi
+done
+if ( cd "$repo" && REQ_FILE=AGENTS.md REQ_HEADING='## Code Review Rules' BASE_SHA="$BASE" HEAD_SHA="$BASE" \
+       POLICY_FILE=AGENTS.md POLICY_HEADING='## Code Review Rules' bash "$tmp/step.sh" ) >"$tmp/log" 2>&1; then
+  echo "  PASS  the default values pass"
+else
+  echo "  FAIL  the default values were refused" >&2; cat "$tmp/log" >&2; fails=$((fails+1))
+fi
+
 echo "-- must pass"
 echo "code changed" > app.py && git commit -qam "code only"
 try "instructions unchanged, code changed" 0
