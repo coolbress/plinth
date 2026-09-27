@@ -111,6 +111,13 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.5.8. A repository it creates
+  now calls plinth's reusable workflows at `2673947`, which carries this
+  release's checker fixes, instead of a commit from 2026-09-11. With the old
+  default a new repository's `ci / floor-check` would have run the old
+  checker, which misses a removed source pin, until Dependabot raised the
+  pin. From the second pre-1.0 review. `/plinth:floor-check` now reports a
+  repository on v1.5.7 as one tag behind.
 - `/plinth:new-project` renders plinth-template v1.5.7. Its only change: the
   generated `.claude/settings.json` denies `gh repo delete`, and `AGENTS.md`
   names it among what the settings deny. The recommended login can delete any
