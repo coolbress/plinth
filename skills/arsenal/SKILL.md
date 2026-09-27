@@ -11,7 +11,17 @@ it costs. Nothing here is enforced; the required checks on GitHub are the only
 enforcement.
 
 For the planning-to-review flow (grill, spec, tickets, implement, review) do not
-route by hand: run `/ask-matt` and let it pick the skill.
+route by hand: run `/ask-matt` and let it pick the skill. The person's
+walk-through, stage by stage, is `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`:
+point them to it when they ask what to type next.
+
+## Reporting
+
+At four moments only (the start of a task, an important choice, a failure, the
+end or a resume) report five items: the goal now; the next action and why;
+what the person decides or confirms; the evidence of progress or completion;
+where to return when stuck and where the record lives. Not every turn. A
+request for an explanation is not approval of a change.
 
 `/plinth:new-project` and `/plinth:template-update` are user-only, typed by
 the user as `/` plus a pick from the list, invisible to the agent: when a pasted line drew "not installed", the

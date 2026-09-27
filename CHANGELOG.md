@@ -11,6 +11,30 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `docs/how-to/run-a-project.md`: the user's loop, stage by stage, from an
+  idea to a merged change, a bug and a resume. It covers what you type and
+  what runs by itself, sizing a job, "say what proves it", three questions
+  before a merge, and common mistakes. Most flow skills (`/grill-with-docs`,
+  `/to-spec`, `/to-tickets`, `/implement`, `/triage`) run only when typed, and
+  a plain-words request gets the work done by hand instead. #231 left the
+  situations page out until a record asked for it. The owner asked for it,
+  and RC1 recorded `/plinth:template-update` going unused for a plain
+  request. It draws on the retired playbook guide, #68's accepted design,
+  plinth-lab#12, and a September 2026 review of practice.
+- `docs/explanation/concepts.md` opens with how the pieces fit: GitHub, the
+  repository and Claude Code, and what each part does and does not promise.
+
+### Fixed
+
+- The generated `AGENTS.md` has told the agent, since the template was
+  rebuilt, to report "in the five-item shape plinth's guidance defines
+  (`/plinth:arsenal`)". The arsenal never defined it. It does now, from #68's
+  design: at four moments, five items.
+- The tutorial said nobody can push past the checks; it now says nothing
+  merges past them, including your own merge.
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.5.6. Its only change: the
