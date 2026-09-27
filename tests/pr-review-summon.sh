@@ -269,7 +269,8 @@ fi
 with_limit() {  # seconds, command...
   local secs="$1"; shift
   "$@" & local pid=$!
-  ( sleep "$secs"; kill "$pid" 2>/dev/null ) & local watch=$!
+  # /bin/sleep, not sleep: this file puts an instant mock sleep first on PATH.
+  ( /bin/sleep "$secs"; kill "$pid" 2>/dev/null ) & local watch=$!
   wait "$pid"; local rc=$?
   kill "$watch" 2>/dev/null; wait "$watch" 2>/dev/null
   return "$rc"
