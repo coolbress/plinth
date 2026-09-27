@@ -91,8 +91,8 @@ looks up the facts itself and brings you only the decisions.
 
 It asks you to confirm that you both understand the same thing before it
 acts. The words you agreed on go into `CONTEXT.md`, so later sessions use the
-same names; a decision that is hard to undo is written up separately under
-`docs/adr/`.
+same names. A decision that is hard to reverse, surprising without its
+context, and a real trade-off is written up separately under `docs/adr/`.
 
 ### 3. Plan a big job: `/to-spec`, then `/to-tickets`
 
