@@ -29,7 +29,9 @@ need `python3` 3.10 or later that can make a venv (on Debian and Ubuntu, the
 `python3-venv` package): zizmor, ruff and mypy install into a venv from
 `tests/lint-tools.txt`, every file checked against its hash, with network the
 first time; a missing tool is a FAIL that names the install command, never a
-skip. Everything else runs offline in seconds.
+skip. `tests/weakened-checks-cases.sh` needs `python3` 3.11 or later, the
+version whose standard library parses TOML, as the runner's does. Everything
+else runs offline in seconds.
 
 That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
 one, the link check. CodeQL and the `canary` jobs run only on GitHub.

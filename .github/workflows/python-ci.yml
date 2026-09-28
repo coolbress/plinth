@@ -469,26 +469,28 @@ jobs:
                     ".mypy.ini", "ruff.toml", ".ruff.toml", ".coveragerc",
                     ".pre-commit-config.yaml", ".gitleaks.toml", ".gitleaksignore",
                     "ruleset.json"}
-          # `tool` bare or quoted, spaces allowed around the dot: TOML accepts
-          # `[tool.ruff]`, `['tool'.ruff]` and `[ tool . ruff ]` alike, and a
-          # `tool.` key before the first header belongs to the same table.
-          TOOL_KEY = r"""\s*(?:tool|"tool"|'tool')\s*"""
-          TOOL = re.compile(r"^\s*\[\[?" + TOOL_KEY + r"[.\]]")
-          ROOT_TOOL = re.compile(r"^" + TOOL_KEY + r"[.=]")
-          HEADER = re.compile(r"^\s*\[")
-
           mb = git("merge-base", base, head).strip()
 
-          def tool_tables(rev, path):
+          # A parser, not a line scan: a multiline string can hold a line that
+          # looks like a header, and TOML spells `[tool.x]` several ways.
+          try:
+              import tomllib
+          except ImportError:   # Python < 3.11: no parser, so any edit counts
+              tomllib = None
+
+          def tool_table(rev, path):
+              """pyproject.toml's `tool` table at rev; None when the file is
+              absent; its whole text when it cannot be parsed."""
               r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
-              text = r.stdout.decode("utf-8", "replace") if r.returncode == 0 else ""
-              keep, root, out = False, True, []
-              for line in text.splitlines():
-                  if HEADER.match(line):
-                      root, keep = False, bool(TOOL.match(line))
-                  if keep or (root and ROOT_TOOL.match(line)):
-                      out.append(line)
-              return out
+              if r.returncode != 0:
+                  return None
+              text = r.stdout.decode("utf-8", "replace")
+              if tomllib is None:
+                  return text
+              try:
+                  return tomllib.loads(text).get("tool")
+              except tomllib.TOMLDecodeError:
+                  return text
 
           def what(status, old, new):
               """Why this path touches the checks, or None."""
@@ -501,7 +503,10 @@ jobs:
                   return "a test file deleted"
               if status == "R" and TEST.search(old) and not TEST.search(new):
                   return "a test file moved out of the test paths"
-              if name == "pyproject.toml" and tool_tables(mb, old) != tool_tables(head, new):
+              was = old.rsplit("/", 1)[-1] == "pyproject.toml"
+              if (was or name == "pyproject.toml") and (
+                      (tool_table(mb, old) if was else None)
+                      != (tool_table(head, new) if name == "pyproject.toml" else None)):
                   return "its [tool.*] tables changed (ruff, mypy, pytest configuration)"
               return None
 

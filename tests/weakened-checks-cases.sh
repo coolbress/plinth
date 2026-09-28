@@ -28,6 +28,8 @@ for l in lines[i + 1:]:
         break
     print(l[indent:] if l.strip() else "")
 PY
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
+  || { echo "  FAIL  needs python3 3.11 or later (tomllib), as the runner has; got $(python3 --version 2>&1)"; exit 1; }
 [ -s "$tmp/step.py" ] || { echo "  FAIL  step '$step' not found in python-ci.yml"; exit 1; }
 grep -q 'shell: python' <(sed -n "/- name: $step/,/run: |/p" "$wf") \
   || { echo "  FAIL  step '$step' does not run under shell: python"; exit 1; }
@@ -168,6 +170,26 @@ new_repo; printf 'tool.ruff.line-length = 88\n\n[project]\nname = "p"\n' > "$r/p
 printf 'tool.ruff.line-length = 200\n\n[project]\nname = "p"\n' > "$r/pyproject.toml"; commit
 run "Refactor."
 expect "pyproject.toml, a dotted tool. key in the root table changed: WARN" 1 "pyproject.toml"
+
+new_repo; git -C "$r" mv pyproject.toml pyproject.disabled; commit
+run "Refactor."
+expect "pyproject.toml renamed away: WARN (its [tool.*] tables are gone)" 1 "pyproject.toml"
+
+new_repo; printf '[project]\nname = "p"\n\n[tool.mypy]\nexclude = """\n[foo]\nbuild/\n"""\n' > "$r/pyproject.toml"; git -C "$r" add -A; git -C "$r" commit -qm ml; base="$(git -C "$r" rev-parse HEAD)"
+printf '[project]\nname = "p"\n\n[tool.mypy]\nexclude = """\n[foo]\nsrc/\n"""\n' > "$r/pyproject.toml"; commit
+run "Refactor."
+expect "pyproject.toml, a multiline [tool.*] value with a [ line changed: WARN" 1 "pyproject.toml"
+
+new_repo; printf '[project]\nname = "p"\n' > "$r/pyproject.toml"; git -C "$r" add -A; git -C "$r" commit -qm notool; base="$(git -C "$r" rev-parse HEAD)"
+printf '[project]\nname = "p"\ndependencies = ["a"\n' > "$r/pyproject.toml"; commit
+run "Refactor."
+expect "pyproject.toml that does not parse: WARN (a change it cannot read counts)" 1 "pyproject.toml"
+
+new_repo; printf '[project]\nname = "p"\ndependencies = ["a", "b"]\n\n[tool.ruff]\nline-length = 88\n' > "$r/pyproject.toml"; commit
+out="$(cd "$r" && BASE_SHA="$base" HEAD_SHA="$(git rev-parse HEAD)" BODY="Adds b." GITHUB_STEP_SUMMARY="$tmp/summary" \
+  python3 -c 'import sys; sys.modules["tomllib"] = None; exec(compile(open(sys.argv[1]).read(), sys.argv[1], "exec"))' "$tmp/step.py" 2>&1)"; rc=$?
+warns="$(printf '%s\n' "$out" | grep '^::warning' || true)"
+expect "no TOML parser (Python < 3.11): any pyproject.toml edit is a WARN, never a silent pass" 1 "pyproject.toml"
 
 echo "-- the three-dot base: what main did after the branch point is not the PR's"
 new_repo; git -C "$r" checkout -q -b pr; printf 'x = 3\n' > "$r/src/m.py"; commit
