@@ -534,8 +534,22 @@ jobs:
               if why:
                   found.append((new if status != "D" else old, old, why))
 
+          # What may stand next to a name that is not part of it: whitespace
+          # and Markdown punctuation. Any other character (`-`, `.`, `~`, `\`,
+          # a letter) makes a longer name, which names nothing.
+          EDGE = r"\s`'\"()\[\]{}<>*,;:!?"
+
           def named(path, old):
-              return any(p in body for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
+              """A path or file name standing whole in the body, with an EDGE
+              character or the start or end on each side; a full stop may end
+              it. So `python-ci.yml` does not name `ci.yml`. A `/` may also come
+              before a path (a link to the file) but not before a bare name:
+              `docs/ci.yml` does not name `.github/workflows/ci.yml`."""
+              def whole(p):
+                  before = "(?<![^" + EDGE + ("/" if "/" in p else "") + "])"
+                  after = r"(?=\Z|[" + EDGE + r"]|\.(?:\Z|[" + EDGE + "]))"
+                  return re.search(before + re.escape(p) + after, body)
+              return any(whole(p) for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
 
           def command_safe(s):   # a path must not end the warning and start another command
               return s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
