@@ -535,16 +535,16 @@ jobs:
                   found.append((new if status != "D" else old, old, why))
 
           def named(path, old):
-              """A path or file name standing whole in the body, not part of
+              r"""A path or file name standing whole in the body, not part of
               a longer name: no letter, digit, `_`, `.` or `-` before it; no
-              letter, digit, `_`, `-` or `/` after it, nor `.` and a letter,
-              digit or `_` (a full stop may end it). So `python-ci.yml` does
+              letter, digit, `_`, `-`, `/` or `\` after it, nor `.` and a
+              letter, digit or `_` (a full stop may end it). So `python-ci.yml` does
               not name `ci.yml`. A `/` may come before a path (a link to the
-              file) but not before a bare name: `docs/ci.yml` does not name
-              `.github/workflows/ci.yml`."""
+              file) but not before a bare name, nor `\`: `docs/ci.yml` and
+              `docs\ci.yml` do not name `.github/workflows/ci.yml`."""
               def whole(p):
-                  before = r"(?<![\w.-])" if "/" in p else r"(?<![\w./-])"
-                  return re.search(before + re.escape(p) + r"(?![\w/-]|\.\w)", body)
+                  before = r"(?<![\w.-])" if "/" in p else r"(?<![\w./\\-])"
+                  return re.search(before + re.escape(p) + r"(?![\w/\\-]|\.\w)", body)
               return any(whole(p) for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
 
           def command_safe(s):   # a path must not end the warning and start another command

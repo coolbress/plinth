@@ -120,6 +120,8 @@ edit_ci; run "Edits [the caller](https://github.com/o/r/blob/main/.github/workfl
 expect "a link to the file names it" 0
 edit_ci; run "Also see docs/examples/ci.yml for reference."
 expect "the same name under another directory does not name it: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run 'Also see docs\examples\ci.yml for reference.'
+expect "the same name under a Windows-style directory does not name it: WARN" 1 ".github/workflows/ci.yml"
 edit_ci; run "Edits ci.yml to run on pull requests."
 expect "the name alone names it" 0
 edit_ci; run 'Edits `ci.yml` to run on pull requests.'
