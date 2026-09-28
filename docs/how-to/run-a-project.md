@@ -102,11 +102,13 @@ first pull request is merged, give the agent a token of its own without it:
 4. Keep SSH out of the agent's reach. Over SSH the refusal does not happen: a
    deploy key with write access pushed a workflow change in the same
    measurement. In the project, `git remote -v` should show
-   `https://github.com/…`; and since the agent could switch the remote itself,
-   `ssh -T git@github.com` should answer `Permission denied (publickey)`. If it
-   greets you by name, an SSH key on this machine can push: remove that key
-   from your GitHub account (**Settings → SSH and GPG keys**) or from this
-   machine. The token protects only pushes that go over HTTPS.
+   `https://github.com/…`, but the agent could switch the remote itself and
+   use any SSH key it can read, under any file name. So check on GitHub, not
+   on the machine: **Settings → SSH and GPG keys** on your account should list
+   no authentication key this machine holds, and the repository's **Settings →
+   Deploy keys** none with write access. (`ssh -T git@github.com` answering
+   `Permission denied (publickey)` tests only the keys SSH picks by itself.)
+   The token protects only pushes that go over HTTPS.
 
 What it costs: the agent cannot push a change under `.github/workflows/`, so
 a template update, or a fix `/plinth:floor-check` asks for in `ci.yml`, stops
