@@ -465,10 +465,21 @@ jobs:
               return r.stdout.decode("utf-8", "surrogateescape")
 
           TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")
-          CONFIG = {"conftest.py", "pytest.ini", "tox.ini", "setup.cfg", "mypy.ini",
-                    ".mypy.ini", "ruff.toml", ".ruff.toml", ".coveragerc",
-                    ".pre-commit-config.yaml", ".gitleaks.toml", ".gitleaksignore",
-                    "ruleset.json"}
+          # By the tool each name configures. pytest's are the files its
+          # locator reads (pyproject.toml is compared by its [tool.*] tables
+          # below): src/_pytest/config/findpaths.py at pytest 9.1.1,
+          # cf470ec0bf7eb89cd97dd56df4859eae5db46447.
+          CONFIG = {
+              "conftest.py", "pytest.toml", ".pytest.toml",                # pytest
+              "pytest.ini", ".pytest.ini",                                 # pytest
+              "tox.ini", "setup.cfg",                                      # pytest, others
+              "mypy.ini", ".mypy.ini",                                     # mypy
+              "ruff.toml", ".ruff.toml",                                   # ruff
+              ".coveragerc",                                               # coverage
+              ".pre-commit-config.yaml",                                   # pre-commit
+              ".gitleaks.toml", ".gitleaksignore",                         # gitleaks
+              "ruleset.json",                                              # the ruleset
+          }
           mb = git("merge-base", base, head).strip()
 
           # A parser, not a line scan: a multiline string can hold a line that
