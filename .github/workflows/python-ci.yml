@@ -469,7 +469,12 @@ jobs:
                     ".mypy.ini", "ruff.toml", ".ruff.toml", ".coveragerc",
                     ".pre-commit-config.yaml", ".gitleaks.toml", ".gitleaksignore",
                     "ruleset.json"}
-          TOOL = re.compile(r'^\s*\[\[?\s*"?tool["\].]')
+          # `tool` bare or quoted, spaces allowed around the dot: TOML accepts
+          # `[tool.ruff]`, `['tool'.ruff]` and `[ tool . ruff ]` alike, and a
+          # `tool.` key before the first header belongs to the same table.
+          TOOL_KEY = r"""\s*(?:tool|"tool"|'tool')\s*"""
+          TOOL = re.compile(r"^\s*\[\[?" + TOOL_KEY + r"[.\]]")
+          ROOT_TOOL = re.compile(r"^" + TOOL_KEY + r"[.=]")
           HEADER = re.compile(r"^\s*\[")
 
           mb = git("merge-base", base, head).strip()
@@ -477,11 +482,11 @@ jobs:
           def tool_tables(rev, path):
               r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
               text = r.stdout.decode("utf-8", "replace") if r.returncode == 0 else ""
-              keep, out = False, []
+              keep, root, out = False, True, []
               for line in text.splitlines():
                   if HEADER.match(line):
-                      keep = bool(TOOL.match(line))
-                  if keep:
+                      root, keep = False, bool(TOOL.match(line))
+                  if keep or (root and ROOT_TOOL.match(line)):
                       out.append(line)
               return out
 

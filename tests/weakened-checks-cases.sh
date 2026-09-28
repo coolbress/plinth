@@ -157,6 +157,18 @@ new_repo; printf '[project]\nname = "p"\ndependencies = ["a"]\n' > "$r/pyproject
 run "Refactor."
 expect "pyproject.toml, a [tool.*] table removed: WARN" 1 "pyproject.toml"
 
+for spelling in "['tool'.pytest.ini_options]" '["tool".pytest.ini_options]' '[ tool . pytest . ini_options ]'; do
+  new_repo; printf '[project]\nname = "p"\n\n%s\naddopts = "-q"\n' "$spelling" > "$r/pyproject.toml"; git -C "$r" add -A; git -C "$r" commit -qm quoted; base="$(git -C "$r" rev-parse HEAD)"
+  printf '[project]\nname = "p"\n\n%s\naddopts = "-k not slow"\n' "$spelling" > "$r/pyproject.toml"; commit
+  run "Refactor."
+  expect "pyproject.toml, a change under $spelling: WARN" 1 "pyproject.toml"
+done
+
+new_repo; printf 'tool.ruff.line-length = 88\n\n[project]\nname = "p"\n' > "$r/pyproject.toml"; git -C "$r" add -A; git -C "$r" commit -qm dotted; base="$(git -C "$r" rev-parse HEAD)"
+printf 'tool.ruff.line-length = 200\n\n[project]\nname = "p"\n' > "$r/pyproject.toml"; commit
+run "Refactor."
+expect "pyproject.toml, a dotted tool. key in the root table changed: WARN" 1 "pyproject.toml"
+
 echo "-- the three-dot base: what main did after the branch point is not the PR's"
 new_repo; git -C "$r" checkout -q -b pr; printf 'x = 3\n' > "$r/src/m.py"; commit
 git -C "$r" checkout -q main; printf 'def test_c():\n    assert 1\n' > "$r/tests/test_c.py"; commit; base="$(git -C "$r" rev-parse HEAD)"
