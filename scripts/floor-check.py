@@ -27,6 +27,14 @@ the index, not contents or history), action pins (`uses:` lines of
 service archetype's src/, never what the process prints). What each reads and
 does not read is in its docstring and in skills/floor-check/SKILL.md.
 
+The caller is a FAIL item (#325): the `ci` job in .github/workflows/ci.yml
+calls plinth's python-ci.yml at a full commit SHA, read with --repo from the
+default branch through the API. Only a run from outside the pull request's
+own workflows sees a pull request that removes the call, after the merge:
+`ci / floor-check` is a job of the workflow that call starts, so such a pull
+request removes it, and before the merge the default branch still has the
+call.
+
 One more is WARN-only and reads no network beyond one GitHub compare call
 (#219): whether the template tag this repository was rendered from
 (.copier-answers.yml's _commit) is behind the tag plinth is tested with
@@ -39,6 +47,7 @@ template-update skill (#232), which runs it.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import json
 import os
@@ -442,13 +451,11 @@ def action_is_pinned(value: str) -> bool:
     return re.fullmatch(r"[^@]+@[0-9a-fA-F]{40}", value) is not None
 
 
-def iter_uses(text: str):
-    """Yield (line, value, readable) for every apparent `uses:` in workflow
-    YAML text. Lines, not a YAML parser (standard library only): comments and
-    the interior of a block scalar (`run: |`) are skipped. `readable` is False
-    for a `uses` the line pattern cannot parse (flow style, an anchored or
-    explicit key); `value` is None in that case. Shared by check_action_pins
-    and #219's plinth-pin lookup, so both skip the same ground the same way."""
+def yaml_lines(text: str):
+    """Yield (line number, indent, line) for each line of workflow YAML text
+    that is syntax: blank lines, comments and the interior of a block scalar
+    (`run: |`) are skipped. The line reader iter_uses and the caller item
+    share, so both skip the same ground the same way."""
     block = None
     for n, line in enumerate(text.splitlines(), 1):
         if not line.strip():
@@ -463,6 +470,17 @@ def iter_uses(text: str):
         if re.search(r":\s*[|>][-+0-9]*\s*(?:#.*)?$", line):
             # The scalar's lines sit deeper than its key, and after `- ` the key starts past the dash.
             block = cast("re.Match[str]", re.match(r"\s*(?:-\s+)*", line)).end()  # matches every string, if only empty
+        yield n, indent, line
+
+
+def iter_uses(text: str):
+    """Yield (line, value, readable) for every apparent `uses:` in workflow
+    YAML text. Lines, not a YAML parser (standard library only): comments and
+    the interior of a block scalar (`run: |`) are skipped. `readable` is False
+    for a `uses` the line pattern cannot parse (flow style, an anchored or
+    explicit key); `value` is None in that case. Shared by check_action_pins
+    and #219's plinth-pin lookup, so both skip the same ground the same way."""
+    for n, _, line in yaml_lines(text):
         m = USES_LINE.match(line)
         if m:
             yield n, m.group(2), True
@@ -520,6 +538,166 @@ def check_action_pins(root: Path) -> None:
                            "mentions uses in a form this checker does not read")
     if clean:
         result("PASS", f"every action in {len(files)} workflow file{'s' * (len(files) != 1)} is pinned to a commit ({total} uses)")
+
+
+# The reusable workflow a consumer's `ci` job calls (#325). Its jobs report as
+# `ci / <job>`, the names the ruleset requires, so a `ci` job that stops calling
+# it can put plain jobs of the same names in its place and every required check
+# goes green.
+CALLER_WORKFLOW = f"{PLINTH_REPO}/.github/workflows/python-ci.yml"
+# One `key:` line: a plain or quoted key, then nothing but an optional comment
+# (a mapping follows) or a value.
+KEY_LINE = re.compile(r"""^\s*([A-Za-z_][\w-]*|'[^']*'|"[^"]*")\s*:(?:\s+(.*?))?\s*$""")
+
+
+def key_line(line: str) -> tuple[str, str] | None:
+    """(key, value) of a plain `key: value` line, quotes and a trailing
+    comment dropped from both; None for any other form (flow style, an
+    anchor, an alias, an explicit `? key`)."""
+    m = KEY_LINE.match(line)
+    if not m:
+        return None
+    key, value = m.group(1).strip("'\""), (m.group(2) or "")
+    value = "" if value.startswith("#") else value
+    if key == "<<" or value[:1] in {"&", "*", "{", "["}:
+        return None
+    return key, value
+
+
+def caller_job(text: str) -> tuple[str, str]:
+    """What the `ci` job of a ci.yml calls: ("uses", value), ("missing", why)
+    or ("unread", why). A line reader, not a YAML parser (standard library
+    only): a top-level `jobs:` block, its `ci:` key, and a `uses:` key directly
+    under it. Anything in those three places it cannot read -- flow style, an
+    anchor, an alias, a merge key, a duplicate key -- is unread, never a pass:
+    it could hold or hide the call."""
+    lines = list(yaml_lines(text))
+    tops = [(i, line) for i, (_, indent, line) in enumerate(lines) if indent == 0]
+    jobs = [i for i, line in tops if (key_line(line) or ("", ""))[0] == "jobs"]
+    if any(key_line(line) is None and "jobs" in line for _, line in tops) or len(jobs) > 1:
+        return "unread", "the jobs key is written in a form this checker does not read"
+    if not jobs:
+        return "missing", "no `ci` job (no jobs at all)"
+    start = jobs[0]
+    if key_line(lines[start][2]) != ("jobs", ""):
+        return "unread", "jobs is not a block mapping"
+    body = []
+    for _, indent, line in lines[start + 1:]:
+        if indent == 0:
+            break
+        body.append((indent, line))
+    if not body:
+        return "missing", "no `ci` job (jobs is empty)"
+    col = body[0][0]
+    found = []
+    for k, (indent, line) in enumerate(body):
+        if indent < col:
+            return "unread", "the jobs block is indented unevenly"
+        if indent > col:
+            continue
+        kv = key_line(line)
+        if kv is None:
+            return "unread", f"a job key is written in a form this checker does not read: {line.strip()}"
+        if kv[0] == "ci":
+            if kv[1]:
+                return "unread", f"the ci job is not a block mapping: {line.strip()}"
+            found.append(k)
+    if len(found) > 1:
+        return "unread", "jobs has more than one ci key"
+    if not found:
+        return "missing", "no `ci` job"
+    job = []
+    for indent, line in body[found[0] + 1:]:
+        if indent <= col:
+            break
+        job.append((indent, line))
+    if not job:
+        return "missing", "the `ci` job is empty"
+    inner = job[0][0]
+    uses = []
+    for indent, line in job:
+        if indent != inner:
+            continue
+        kv = key_line(line)
+        if kv is None:
+            return "unread", f"a key of the ci job is written in a form this checker does not read: {line.strip()}"
+        if kv[0] == "uses":
+            m = USES_LINE.match(line)
+            if not m:
+                return "unread", f"the ci job's uses is written in a form this checker does not read: {line.strip()}"
+            uses.append(m.group(2))
+    if len(uses) > 1:
+        return "unread", "the ci job has more than one uses key"
+    if not uses:
+        return "missing", "the `ci` job calls no reusable workflow; it runs its own steps"
+    return "uses", uses[0]
+
+
+def check_caller(root: Path, repo: str | None, network: bool) -> None:
+    """The `ci` job in .github/workflows/ci.yml calls plinth's python-ci.yml at
+    a full commit SHA (#325). With --repo and the network, read from the
+    default branch through the API (no ref), so a stale or feature-branch
+    checkout does not hide a change that merged; otherwise from the checkout,
+    and the line says so. coolbress/plinth calls its own workflows by local
+    path, and only it. A signal only where it runs from outside the pull
+    request's own workflows: `ci / floor-check` reads the default branch too,
+    but it is a job of the workflow the `ci` job calls, so a pull request that
+    replaces the call has no `ci / floor-check`, and before the merge the
+    default branch still has the call."""
+    rel = ".github/workflows/ci.yml"
+    if repo and network:
+        where = "on the default branch"
+        data = api(f"repos/{repo}/contents/{rel}", network)
+        if data is ABSENT:
+            # A 404 is also what a repository that does not exist, or that
+            # this token cannot see, answers for every file in it.
+            if not isinstance(api(f"repos/{repo}", network), dict):
+                result("SKIP", f"the ci job on the default branch not verified: repos/{repo} could not be read")
+            else:
+                result("FAIL", f"no {rel} on the default branch of {repo}: no `ci` job calls {CALLER_WORKFLOW}")
+            return
+        text = None
+        if isinstance(data, dict) and data.get("encoding") == "base64" and isinstance(data.get("content"), str):
+            try:
+                text = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+            except ValueError:
+                text = None
+        if text is None:
+            result("SKIP", f"the ci job on the default branch not verified (the API did not return {rel} as a file)")
+            return
+    else:
+        why = "--no-network" if not network else "no --repo"
+        where = f"in the checkout, not the default branch ({why})"
+        p = root / rel
+        if not p.is_file():
+            result("SKIP", f"the ci job not verified: no {rel} in the checkout, and the default branch was not read ({why})")
+            return
+        text = read(p)
+    kind, value = caller_job(text)
+    if kind == "unread":
+        result("SKIP", f"the ci job {where} not verified: {value}")
+        return
+    then = f"then set the ci job's uses: to {CALLER_WORKFLOW}@<that SHA>"
+    latest = (f'gh api "repos/{PLINTH_REPO}/commits/$(gh api repos/{PLINTH_REPO}/releases/latest --jq .tag_name)" '
+              f"--jq .sha   (plinth's latest release; {then})")
+    if kind == "missing":
+        result("FAIL", f"{rel} {where}: {value}, so nothing calls {CALLER_WORKFLOW} and plain jobs could report its check names")
+        result("INFO", f"  {latest}")
+        return
+    if repo and repo.lower() == PLINTH_REPO and value.startswith("./.github/workflows/"):
+        result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflows by local path)")
+        return
+    m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@(.*)", value)
+    if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
+        if re.fullmatch(r"[0-9a-fA-F]{40}", m.group(3)):
+            result("PASS", f"the ci job {where} calls {value}")
+            return
+        result("FAIL", f"the ci job {where} calls {value}: not pinned to a full commit SHA, so what runs can change without a pull request")
+        # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
+        result("INFO", f"  gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})")
+    else:
+        result("FAIL", f"the ci job {where} calls {value}, not {CALLER_WORKFLOW}")
+        result("INFO", f"  {latest}")
 
 
 def new_project_pin() -> tuple[str, str, str, str] | None:
@@ -1270,6 +1448,8 @@ def main() -> int:
     check_project(project, root, archetype)
     if archetype in CONDITIONAL_ARCHETYPES:
         check_image_job(root)
+
+    check_caller(root, a.repo, network)
 
     if a.repo:
         expected: list[str] = []

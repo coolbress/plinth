@@ -97,6 +97,29 @@ covers only what is listed here.
 | Action pins | Every `uses:` line in `.github/workflows/*.yml` and `*.yaml`: `owner/repo@<40-hex SHA>`, `docker://…@sha256:<digest>` or a local `./` path. Comments and block scalars (`run: \|`) are skipped | Composite actions under `.github/actions`, whether the SHA exists upstream, what the pinned action itself calls. A `uses` written in a form the line pattern cannot read (flow style, a quoted, anchored or explicit `?` key: any `uses` in key position that is not a plain `uses: value`) is a SKIP naming the line |
 | JSON logs | For a service archetype (`backend`, `data-ml`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
 
+## The ci job
+
+One item reads `.github/workflows/ci.yml` and asks whether its `ci` job still
+calls `coolbress/plinth/.github/workflows/python-ci.yml` pinned to a full
+commit SHA (#325). The `ci / <job>` check names come from that call; a pull
+request that replaces it with plain jobs of the same names turns every
+required check green without running them. With a repository name it reads
+the file from the default branch through the API, not from the checkout, so
+the answer is about what merged. Offline or without one it reads the
+checkout and says so in the line. A `ci` job that is missing, runs its own
+steps, calls another repository, a fork or a local file, or pins a tag or a
+branch is a FAIL. The INFO line under it is a `gh api` command that prints
+the SHA to pin: the pinned tag's or branch's commit, or otherwise the commit
+of plinth's latest release. A file or job the line reader cannot
+read (flow style, an anchor, an alias, a merge key) is a SKIP. plinth itself
+calls its own workflows by `./` path, accepted for `coolbress/plinth` only.
+
+This signal comes after the merge. Run here, by a person, it is from outside
+the pull request. `ci / floor-check` runs the same item and reads the default
+branch too, but it is a job of the workflow the `ci` job calls: a pull request
+that replaces the call has no `ci / floor-check` at all, and before the merge
+the default branch still has the call.
+
 ## Template drift
 
 One item compares the template tag this repository was rendered from

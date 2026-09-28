@@ -293,6 +293,10 @@ good_rules='[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 mkdir -p "$api/repos/o/r/code-scanning"
+# The default branch's ci.yml (#325), read through the contents API in any run with the network.
+mkdir -p "$api/repos/o/r/contents/.github/workflows"
+jq -n --arg c "$(base64 < "$good/.github/workflows/ci.yml" | tr -d '\n')" '{type: "file", encoding: "base64", content: $c}' \
+  > "$api/repos/o/r/contents/.github/workflows/ci.yml.json"
 good_setup='{"state":"configured","languages":["actions","python"],"query_suite":"default"}'
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
@@ -874,6 +878,110 @@ out="$(python3 "$selfdir2/floor-check.py" --root "$good" --no-network 2>&1)"
 if grep -q "SKIP  template drift not verified (scripts/new-project.sh not found beside the checker" <<<"$out"
 then ok "no new-project.sh beside the checker: not verified, not passed"
 else bad "a missing new-project.sh"; printf '%s\n' "$out" | grep template | sed 's/^/        /'; fi
+
+# The caller (#325): the `ci` job in ci.yml calls plinth's python-ci.yml at a
+# full commit SHA. A pull request that swaps that call for plain jobs of the
+# same check names turns every required check green; this item sees it from
+# outside the pull request, on the default branch.
+echo "-- the ci job calls plinth's workflow (#325)"
+caller() { # <description> <ci.yml content> <expected line regex> [<checker args>...]
+  local desc="$1" body="$2" want="$3"; shift 3
+  local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
+  printf '%s' "$body" > "$copy/.github/workflows/ci.yml"
+  local out; out="$(python3 "$checker" --root "$copy" --archetype cli --no-network "$@" 2>&1)"
+  if grep -qE "$want" <<<"$out"; then ok "$desc"; else bad "$desc (expected /$want/)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml|failed' | sed 's/^/        /'; fi
+}
+tmpl_ci="$(printf 'name: CI\non:\n  pull_request:\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s # v1.0.0\n    permissions:\n      contents: read\n' "$sha40")"
+caller "the template's ci.yml passes, read from the checkout offline and saying so" "$tmpl_ci" \
+  "PASS  the ci job in the checkout, not the default branch \(--no-network\) calls coolbress/plinth/\.github/workflows/python-ci\.yml@$sha40"
+caller "the ci job replaced by plain jobs of the same check names is a FAIL" \
+  "$(printf 'jobs:\n  install:\n    name: ci / install\n    runs-on: ubuntu-latest\n    steps:\n      - run: "true"\n  tools:\n    name: ci / tools\n    runs-on: ubuntu-latest\n    steps:\n      - run: "true"\n')" \
+  "FAIL  .*no \`ci\` job"
+caller "a ci job that runs its own steps is a FAIL" \
+  "$(printf 'jobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
+  "FAIL  .*ci\` job.*calls no reusable workflow"
+caller "another repository's python-ci.yml is a FAIL" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/other/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
+  "FAIL  .*calls coolbress/other/"
+caller "a fork's python-ci.yml is a FAIL" \
+  "$(printf 'jobs:\n  ci:\n    uses: someone/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
+  "FAIL  .*calls someone/plinth/"
+caller "a local workflow is a FAIL outside coolbress/plinth" \
+  "$(printf 'jobs:\n  ci:\n    uses: ./.github/workflows/python-ci.yml\n')" \
+  "FAIL  .*calls \./\.github/workflows/python-ci\.yml"
+caller "plinth's workflow pinned to a tag is a FAIL" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@v1.0.0\n')" \
+  "FAIL  .*python-ci\.yml@v1\.0\.0.*full commit SHA"
+caller "a tag pin's fix line looks up that tag's commit" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@v1.0.0\n')" \
+  "INFO    gh api repos/coolbress/plinth/commits/v1\.0\.0 --jq \.sha   \(then set the ci job's uses: to"
+caller "a missing call's fix line looks up plinth's latest release" \
+  "$(printf 'jobs:\n  install:\n    name: ci / install\n    steps:\n      - run: "true"\n')" \
+  "INFO    gh api \"repos/coolbress/plinth/commits/\\\$\(gh api repos/coolbress/plinth/releases/latest --jq \.tag_name\)\" --jq \.sha   \(plinth's latest release; then set the ci job's uses: to"
+caller "plinth's workflow pinned to a branch is a FAIL" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@main\n')" \
+  "FAIL  .*python-ci\.yml@main.*full commit SHA"
+caller "another of plinth's workflows is a FAIL" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/third-party.yml@%s\n' "$sha40")" \
+  "FAIL  .*calls coolbress/plinth/\.github/workflows/third-party\.yml"
+caller "a quoted ci key and a quoted value are read" \
+  "$(printf 'jobs:\n  "ci":\n    uses: "coolbress/plinth/.github/workflows/python-ci.yml@%s"\n' "$sha40")" \
+  "PASS  .*ci job"
+caller "a flow-style jobs mapping is a SKIP, not a pass" \
+  "$(printf 'jobs: {ci: {uses: coolbress/plinth/.github/workflows/python-ci.yml@%s}}\n' "$sha40")" \
+  "SKIP  .*ci job.*not verified"
+caller "a ci job that is an alias is a SKIP, not a pass" \
+  "$(printf 'x: &c\n  uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\njobs:\n  ci: *c\n' "$sha40")" \
+  "SKIP  .*ci job.*not verified"
+caller "a merge key inside the ci job is a SKIP, not a pass" \
+  "$(printf 'x: &c\n  uses: coolbress/other/.github/workflows/python-ci.yml@%s\njobs:\n  ci:\n    <<: *c\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40" "$sha40")" \
+  "SKIP  .*ci job.*not verified"
+caller "two ci keys are a SKIP, not a pass" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  ci:\n    runs-on: x\n' "$sha40")" \
+  "SKIP  .*ci job.*not verified"
+# Counted: a SKIP here is one more "not verified" in the summary.
+# The baseline offline run without --repo has one: the unchecked wall.
+skipcount() { # <description> <expected not-verified count> <shell to change the copy>
+  local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"; ( cd "$copy" && eval "$3" )
+  local out; out="$(python3 "$checker" --root "$copy" --archetype cli --no-network 2>&1)"
+  if grep -q -- "-- 0 failed, $2 not verified" <<<"$out" && grep -q 'SKIP  .*ci job' <<<"$out"; then ok "$1"
+  else bad "$1"; printf '%s\n' "$out" | grep -E 'SKIP|failed' | sed 's/^/        /'; fi
+}
+skipcount "an unreadable ci.yml is counted as not verified (with the action-pin item's own SKIP)" 3 \
+  "printf 'jobs: {ci: {uses: coolbress/plinth/.github/workflows/python-ci.yml@%s}}\n' '$sha40' > .github/workflows/ci.yml"
+skipcount "no ci.yml in the checkout under --no-network is a SKIP counted as not verified" 2 \
+  "rm .github/workflows/ci.yml"
+
+# With --repo and the network, the file comes from the default branch through
+# the API, whatever the checkout holds.
+capi="$work/api-caller"; mkdir -p "$capi/repos/o/r/contents/.github/workflows" "$capi/repos/coolbress/plinth/contents/.github/workflows"
+printf '{"default_branch":"main"}' > "$capi/repos/o/r.json"
+contents() { jq -n --arg c "$(printf '%s' "$1" | base64 | tr -d '\n')" '{type: "file", encoding: "base64", content: $c}'; }
+from_api() { # <description> <default-branch ci.yml or __404__ or raw JSON after "json:"> <checkout ci.yml> <expected regex> [<repo>]
+  local desc="$1" remote="$2" local_ci="$3" want="$4" repo="${5:-o/r}"
+  local f="$capi/repos/$repo/contents/.github/workflows/ci.yml.json"; rm -f "$f"
+  case "$remote" in __404__) ;; json:*) printf '%s' "${remote#json:}" > "$f" ;; *) contents "$remote" > "$f" ;; esac
+  local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
+  printf '%s' "$local_ci" > "$copy/.github/workflows/ci.yml"
+  local out; out="$(FLOOR_CHECK_API_DIR="$capi" python3 "$checker" --root "$copy" --archetype cli --repo "$repo" 2>&1)"
+  if grep -qE "$want" <<<"$out"; then ok "$desc"; else bad "$desc (expected /$want/)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml' | sed 's/^/        /'; fi
+}
+plain_ci="$(printf 'jobs:\n  install:\n    name: ci / install\n    steps:\n      - run: "true"\n')"
+from_api "a default branch without the call is a FAIL, though the checkout has it" "$plain_ci" "$tmpl_ci" \
+  "FAIL  .*default branch.*no \`ci\` job"
+from_api "a default branch with the call passes, though the checkout lost it" "$tmpl_ci" "$plain_ci" \
+  "PASS  .*ci job.*default branch"
+from_api "no ci.yml on the default branch is a FAIL" "__404__" "$tmpl_ci" \
+  "FAIL  .*no \.github/workflows/ci\.yml on the default branch"
+from_api "a repository the API cannot see at all is a SKIP, not a missing ci.yml" "__404__" "$tmpl_ci" \
+  "SKIP  .*ci job.*not verified.*repos/x/gone" x/gone
+from_api "an API answer that is not a file is a SKIP, not a pass" "json:[]" "$tmpl_ci" \
+  "SKIP  .*ci job.*not verified"
+own="$(cat "$root/.github/workflows/ci.yml")"
+from_api "coolbress/plinth's own ci.yml passes for coolbress/plinth" "$own" "$own" \
+  "PASS  .*ci job.*\./\.github/workflows/plinth-ci\.yml" coolbress/plinth
+from_api "the same file under any other --repo is a FAIL" "$own" "$own" \
+  "FAIL  .*calls \./\.github/workflows/plinth-ci\.yml"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

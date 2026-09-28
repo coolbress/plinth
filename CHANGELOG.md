@@ -26,6 +26,20 @@ pull requests and have no tag.
   assertion inside a kept test, a skip marker, or a threshold the caller passes
   as an input. A repository gets it when its `python-ci.yml` pin reaches this
   release. No check name changes.
+- `/plinth:floor-check` fails when the `ci` job in `.github/workflows/ci.yml`
+  does not call `coolbress/plinth/.github/workflows/python-ci.yml` at a full
+  commit SHA: missing, running its own steps, calling another repository, a
+  fork or a local file, or pinned to a tag or a branch. With `--repo` it reads
+  the file from the default branch through the API, not the checkout; offline
+  it reads the checkout and says so. A file it cannot read is not verified,
+  never a pass. It is the signal from outside the pull request the entry
+  below points to, and it comes after the merge: `ci / floor-check` runs the
+  same item, but it is a job of plinth's workflow, so a pull request that
+  replaces the call has no `ci / floor-check`, and before the merge the
+  default branch still has the call. A repository whose `ci` job already calls
+  plinth's workflow at a SHA, as the template's does, is unchanged. One that
+  calls it another way gets a new FAIL in `ci / floor-check` once its
+  `python-ci.yml` pin reaches this release. No check name changes.
 
 ### Fixed
 

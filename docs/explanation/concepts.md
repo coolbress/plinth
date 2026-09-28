@@ -111,8 +111,18 @@ This needs no administration, only the ordinary write access an agent
 has. The change is visible in the pull request's diff, and nothing blocks
 it. `ci / diff-size` warns about a workflow edit the description does not
 name, but that warning runs inside plinth's workflow: a pull request that
-stops calling it removes the warning too. A signal from outside the pull
-request is #325. Pinning a
+stops calling it removes the warning too.
+
+The signal comes after the merge, from outside the pull request.
+`/plinth:floor-check` reads `ci.yml` on the default branch through the API
+and fails when its `ci` job no longer calls plinth's `python-ci.yml` at a
+full commit SHA. Only a run from outside the pull request's own workflows
+sees this: the skill a person runs, or the e2e runner. `ci / floor-check`
+runs the same item and reads the default branch too, but it is a job of
+plinth's workflow: a pull request that replaces the call has no
+`ci / floor-check`, and before the merge the default branch still has the
+call. Nothing a pull request runs can refuse its own `ci.yml` before the
+merge. Pinning a
 workflow so that a pull request cannot change it takes GitHub's required
 workflows, an organization feature.
 
