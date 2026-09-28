@@ -932,6 +932,9 @@ for key in 'name: decoy' 'strategy:' 'concurrency: x' 'timeout-minutes: 1'; do
     "$(printf 'jobs:\n  ci:\n    %s\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$key" "$sha40")" \
     "FAIL  .*ci job.*has ${key%%:*}:"
 done
+caller "a continuation line under uses: (YAML folds it into the value) is a SKIP, not a pass" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n      extra\n' "$sha40")" \
+  "SKIP  .*ci job.*not verified.*continues"
 caller "with:, secrets: and permissions: on the ci job still pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n      if: x\n    secrets: inherit\n    permissions:\n      contents: read\n' "$sha40")" \
   "PASS  .*ci job"

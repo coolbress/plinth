@@ -635,7 +635,7 @@ def caller_job(text: str) -> tuple[str, str]:
         return "missing", "the `ci` job is empty"
     inner = job[0][0]
     uses, gates = [], []
-    for indent, line in job:
+    for k, (indent, line) in enumerate(job):
         if indent != inner:
             continue
         kv = key_line(line)
@@ -647,6 +647,10 @@ def caller_job(text: str) -> tuple[str, str]:
             m = USES_LINE.match(line)
             if not m:
                 return "unread", f"the ci job's uses is written in a form this checker does not read: {line.strip()}"
+            # A deeper line right under it continues the plain scalar: YAML
+            # folds it into the value, which is then not the one read here.
+            if k + 1 < len(job) and job[k + 1][0] > inner:
+                return "unread", f"the ci job's uses continues on the next line: {job[k + 1][1].strip()}"
             uses.append(m.group(2))
     if len(uses) > 1:
         return "unread", "the ci job has more than one uses key"
