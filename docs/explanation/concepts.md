@@ -119,11 +119,10 @@ and fails when its `ci` job no longer calls plinth's `python-ci.yml` at a
 full commit SHA (plinth itself calls its own `plinth-ci.yml` by local path,
 accepted for plinth only). Only a run from outside the pull request's own workflows
 sees this: the skill a person runs, or the e2e runner. `ci / floor-check`
-runs the same item and reads the default branch too, but it is a job of
-plinth's workflow: a pull request that replaces the call has no
-`ci / floor-check`, and before the merge the default branch still has the
-call. Nothing a pull request runs can refuse its own `ci.yml` before the
-merge. Pinning a
+runs the same item on the pull request's own `ci.yml`, so a pull request that
+keeps the call but weakens it (a tag instead of a SHA, an `if:`) fails before
+the merge. One that replaces the call removes `ci / floor-check` with it.
+Nothing a pull request runs can refuse its own `ci.yml` before the merge. Pinning a
 workflow so that a pull request cannot change it takes GitHub's required
 workflows, an organization feature.
 

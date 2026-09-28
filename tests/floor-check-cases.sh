@@ -1011,6 +1011,20 @@ from_api "a repository the API cannot see at all is a SKIP, not a missing ci.yml
   "SKIP  .*ci job.*not verified.*repos/x/gone" x/gone
 from_api "an API answer that is not a file is a SKIP, not a pass" "json:[]" "$tmpl_ci" \
   "SKIP  .*ci job.*not verified"
+# ci / floor-check passes --caller-from-checkout: it reads the pull request's
+# own ci.yml, so a pull request that repairs a broken default branch can merge,
+# and one that keeps the call but weakens it fails before the merge.
+from_checkout() { # <description> <default-branch ci.yml> <checkout ci.yml> <expected regex>
+  local f="$capi/repos/o/r/contents/.github/workflows/ci.yml.json"; contents "$2" > "$f"
+  local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"; printf '%s' "$3" > "$copy/.github/workflows/ci.yml"
+  local out; out="$(FLOOR_CHECK_API_DIR="$capi" python3 "$checker" --root "$copy" --archetype cli --repo o/r --caller-from-checkout 2>&1)"
+  if grep -qE "$4" <<<"$out"; then ok "$1"; else bad "$1 (expected /$4/)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml' | sed 's/^/        /'; fi
+}
+tag_ci="$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@v1.0.0\n')"
+from_checkout "--caller-from-checkout: a pull request repairing a broken default branch passes (no deadlock)" "$tag_ci" "$tmpl_ci" \
+  "PASS  the ci job in the checkout \(--caller-from-checkout\) calls coolbress/plinth/"
+from_checkout "--caller-from-checkout: a pull request weakening the call fails before the merge" "$tmpl_ci" "$tag_ci" \
+  "FAIL  the ci job in the checkout \(--caller-from-checkout\) calls .*@v1\.0\.0"
 own="$(cat "$root/.github/workflows/ci.yml")"
 from_api "coolbress/plinth's own ci.yml passes for coolbress/plinth" "$own" "$own" \
   "PASS  .*ci job.*\./\.github/workflows/plinth-ci\.yml" coolbress/plinth

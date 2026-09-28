@@ -120,11 +120,12 @@ quoted `key: …` (a tag, an explicit `?` key, a `---` marker). plinth itself
 calls `./.github/workflows/plinth-ci.yml`, accepted for `coolbress/plinth`
 only; no other local workflow is.
 
-This signal comes after the merge. Run here, by a person, it is from outside
-the pull request. `ci / floor-check` runs the same item and reads the default
-branch too, but it is a job of the workflow the `ci` job calls: a pull request
-that replaces the call has no `ci / floor-check` at all, and before the merge
-the default branch still has the call.
+`ci / floor-check` runs the same item on the pull request's own `ci.yml`
+(`--caller-from-checkout`): a pull request that keeps the call but weakens it
+fails there, before the merge, and one that repairs a broken default branch
+can merge. A pull request that removes the call removes `ci / floor-check`
+with it, so that one is seen only after the merge, from outside the pull
+request: here, run by a person, or by the e2e runner.
 
 ## Template drift
 

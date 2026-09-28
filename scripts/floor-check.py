@@ -29,11 +29,12 @@ does not read is in its docstring and in skills/floor-check/SKILL.md.
 
 The caller is a FAIL item (#325): the `ci` job in .github/workflows/ci.yml
 calls plinth's python-ci.yml at a full commit SHA, read with --repo from the
-default branch through the API. Only a run from outside the pull request's
-own workflows sees a pull request that removes the call, after the merge:
-`ci / floor-check` is a job of the workflow that call starts, so such a pull
-request removes it, and before the merge the default branch still has the
-call.
+default branch through the API. `ci / floor-check` passes
+--caller-from-checkout and reads the pull request's own ci.yml instead: a
+pull request that keeps the call but weakens it fails before the merge, and
+one that repairs a broken default branch can merge. A pull request that
+removes the call removes `ci / floor-check` with it, so only a run from
+outside the pull request's own workflows sees that, after the merge.
 
 One more is WARN-only and reads no network beyond one GitHub compare call
 (#219): whether the template tag this repository was rendered from
@@ -661,20 +662,21 @@ def caller_job(text: str) -> tuple[str, str]:
     return "uses", uses[0]
 
 
-def check_caller(root: Path, repo: str | None, network: bool) -> None:
+def check_caller(root: Path, repo: str | None, network: bool, from_checkout: bool = False) -> None:
     """The `ci` job in .github/workflows/ci.yml calls plinth's python-ci.yml at
     a full commit SHA (#325). With --repo and the network, read from the
     default branch through the API (no ref), so a stale or feature-branch
     checkout does not hide a change that merged; otherwise from the checkout,
-    and the line says so. coolbress/plinth calls its own plinth-ci.yml by
-    local path; that one path is accepted, for that repository only. A
-    signal only where it runs from outside the pull request's own workflows:
-    `ci / floor-check` reads the default branch too, but it is a job of the
-    workflow the `ci` job calls, so a pull request that replaces the call has
-    no `ci / floor-check`, and before the merge the default branch still has
-    the call."""
+    and the line says so. from_checkout (--caller-from-checkout, what
+    `ci / floor-check` passes) reads the checkout even then: in a pull
+    request that is the pull request's own ci.yml, so a pull request that
+    repairs a broken default branch is not failed by the file it repairs.
+    coolbress/plinth calls its own plinth-ci.yml by local path; that one path
+    is accepted, for that repository only. A pull request that removes the
+    call removes `ci / floor-check` with it: only a run from outside the pull
+    request's own workflows sees that, after the merge."""
     rel = ".github/workflows/ci.yml"
-    if repo and network:
+    if repo and network and not from_checkout:
         where = "on the default branch"
         data = api(f"repos/{repo}/contents/{rel}", network)
         if data is ABSENT:
@@ -695,8 +697,8 @@ def check_caller(root: Path, repo: str | None, network: bool) -> None:
             result("SKIP", f"the ci job on the default branch not verified (the API did not return {rel} as a file)")
             return
     else:
-        why = "--no-network" if not network else "no --repo"
-        where = f"in the checkout, not the default branch ({why})"
+        why = "--caller-from-checkout" if from_checkout else "--no-network" if not network else "no --repo"
+        where = f"in the checkout ({why})" if from_checkout else f"in the checkout, not the default branch ({why})"
         p = root / rel
         if not p.is_file():
             result("SKIP", f"the ci job not verified: no {rel} in the checkout, and the default branch was not read ({why})")
@@ -1452,6 +1454,9 @@ def main() -> int:
     ap.add_argument("--expect-checks", help="required check names, comma separated; overrides --ruleset")
     ap.add_argument("--archetype", help="override the archetype in .copier-answers.yml")
     ap.add_argument("--no-network", action="store_true", help="skip everything that needs api.github.com")
+    ap.add_argument("--caller-from-checkout", action="store_true",
+                    help="read the ci job from the checkout, not the default branch: what `ci / floor-check` passes, "
+                         "so a pull request that repairs the caller can merge")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-update-command", action="store_true",
@@ -1483,7 +1488,7 @@ def main() -> int:
     if archetype in CONDITIONAL_ARCHETYPES:
         check_image_job(root)
 
-    check_caller(root, a.repo, network)
+    check_caller(root, a.repo, network, a.caller_from_checkout)
 
     if a.repo:
         expected: list[str] = []

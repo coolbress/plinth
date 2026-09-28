@@ -37,13 +37,15 @@ pull requests and have no tag.
   the file from the default branch through the API, not the checkout; offline
   it reads the checkout and says so. A file it cannot read is not verified,
   never a pass. It is the signal from outside the pull request the entry
-  below points to, and it comes after the merge: `ci / floor-check` runs the
-  same item, but it is a job of plinth's workflow, so a pull request that
-  replaces the call has no `ci / floor-check`, and before the merge the
-  default branch still has the call. A repository whose `ci` job already calls
-  plinth's workflow at a SHA, as the template's does, is unchanged. One that
-  calls it another way gets a new FAIL in `ci / floor-check` once its
-  `python-ci.yml` pin reaches this release. It reads the `ci` job, not
+  below points to, and it comes after the merge: a pull request that removes
+  the call removes `ci / floor-check` with it. `ci / floor-check` runs the
+  same item on the pull request's own `ci.yml` (`--caller-from-checkout`), so
+  a pull request that keeps the call but weakens it fails before the merge,
+  and one that repairs a broken caller can merge. A repository whose `ci` job
+  already calls plinth's workflow at a SHA, as the template's does, is
+  unchanged. One that calls it another way gets a new FAIL in
+  `ci / floor-check` once its `python-ci.yml` pin reaches this release, fixed
+  in that same pull request. It reads the `ci` job, not
   `ci.yml`'s `on:` triggers: a `ci.yml` that no longer runs on pull requests
   still passes (#333), and whether another workflow reporting the same check
   names satisfies the ruleset is #329's question. No check name changes.
