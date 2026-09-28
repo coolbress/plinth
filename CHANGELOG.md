@@ -26,6 +26,29 @@ pull requests and have no tag.
   assertion inside a kept test, a skip marker, or a threshold the caller passes
   as an input. A repository gets it when its `python-ci.yml` pin reaches this
   release. No check name changes.
+- `/plinth:floor-check` fails when the `ci` job in `.github/workflows/ci.yml`
+  does not call `coolbress/plinth/.github/workflows/python-ci.yml` at a full
+  commit SHA: missing, running its own steps, calling another repository, a
+  fork or a local file, pinned to a tag or a branch, or carrying any key but
+  `uses:`, `with:`, `secrets:` and `permissions:` (an `if:`, `needs:` or
+  `name:` can get it skipped or its checks renamed). plinth itself is the
+  one exception: for `coolbress/plinth` its own
+  `./.github/workflows/plinth-ci.yml` passes. With `--repo` it reads
+  the file from the default branch through the API, not the checkout; offline
+  it reads the checkout and says so. A file it cannot read is not verified,
+  never a pass. It is the signal from outside the pull request the entry
+  below points to, and it comes after the merge: a pull request that removes
+  the call removes `ci / floor-check` with it. `ci / floor-check` runs the
+  same item on the pull request's own `ci.yml` (`--caller-from-checkout`), so
+  a pull request that keeps the call but weakens it fails before the merge,
+  and one that repairs a broken caller can merge. A repository whose `ci` job
+  already calls plinth's workflow at a SHA, as the template's does, is
+  unchanged. One that calls it another way gets a new FAIL in
+  `ci / floor-check` once its `python-ci.yml` pin reaches this release, fixed
+  in that same pull request. It reads the `ci` job, not
+  `ci.yml`'s `on:` triggers: a `ci.yml` that no longer runs on pull requests
+  still passes (#333), and whether another workflow reporting the same check
+  names satisfies the ruleset is #329's question. No check name changes.
 
 ### Fixed
 

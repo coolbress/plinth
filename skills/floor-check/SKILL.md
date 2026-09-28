@@ -97,6 +97,36 @@ covers only what is listed here.
 | Action pins | Every `uses:` line in `.github/workflows/*.yml` and `*.yaml`: `owner/repo@<40-hex SHA>`, `docker://…@sha256:<digest>` or a local `./` path. Comments and block scalars (`run: \|`) are skipped | Composite actions under `.github/actions`, whether the SHA exists upstream, what the pinned action itself calls. A `uses` written in a form the line pattern cannot read (flow style, a quoted, anchored or explicit `?` key: any `uses` in key position that is not a plain `uses: value`) is a SKIP naming the line |
 | JSON logs | For a service archetype (`backend`, `data-ml`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
 
+## The ci job
+
+One item reads `.github/workflows/ci.yml` and asks whether its `ci` job still
+calls `coolbress/plinth/.github/workflows/python-ci.yml` pinned to a full
+commit SHA (#325). The `ci / <job>` check names come from that call; a pull
+request that replaces it with plain jobs of the same names turns every
+required check green without running them. With a repository name it reads
+the file from the default branch through the API, not from the checkout, so
+the answer is about what merged. Offline or without one it reads the
+checkout and says so in the line. A `ci` job that is missing, runs its own
+steps, calls another repository, a fork or a local file, pins a tag or a
+branch, or carries any key but `uses:`, `with:`, `secrets:` and
+`permissions:` (an `if:`, `needs:`, `name:` or `strategy:` can get it
+skipped, renamed or cut short while plain jobs report its check names) is a
+FAIL. The INFO line under it is a `gh api` command that prints
+the SHA to pin: the pinned tag's or branch's commit, or otherwise the commit
+of plinth's latest release. A file or job the line reader cannot
+read is a SKIP: flow style, an anchor, an alias, a merge key, a
+double-quoted key with an escape, or any top-level line that is not a plain or
+quoted `key: …` (a tag, an explicit `?` key, a `---` marker). plinth itself
+calls `./.github/workflows/plinth-ci.yml`, accepted for `coolbress/plinth`
+only; no other local workflow is.
+
+`ci / floor-check` runs the same item on the pull request's own `ci.yml`
+(`--caller-from-checkout`): a pull request that keeps the call but weakens it
+fails there, before the merge, and one that repairs a broken default branch
+can merge. A pull request that removes the call removes `ci / floor-check`
+with it, so that one is seen only after the merge, from outside the pull
+request: here, run by a person, or by the e2e runner.
+
 ## Template drift
 
 One item compares the template tag this repository was rendered from
