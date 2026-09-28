@@ -26,6 +26,15 @@ pull requests and have no tag.
   input. A repository gets it when its `python-ci.yml` pin reaches this
   release. No check name changes.
 
+### Fixed
+
+- `docs/explanation/concepts.md` and the 1.0.0 notes below said the check
+  above would flag a pull request that replaces the call to plinth's workflow
+  with jobs that do nothing. It cannot: the warning runs inside that workflow,
+  so such a pull request removes it. It flags a workflow edit only while the
+  caller still calls plinth's workflow. A signal from outside the pull request
+  is #325.
+
 ## [1.0.0] - 2026-09-28
 
 By 2026, AI agents write code well; checking it has not kept up. Research and
