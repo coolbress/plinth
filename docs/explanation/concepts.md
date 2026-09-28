@@ -107,13 +107,25 @@ of the repository, so a pull request that replaces the call to plinth's
 workflow with jobs of the same names that do nothing gets every required
 check green. GitHub reports each check from the file on the pull request's
 branch, and the ruleset pins the check's name and app, not what it runs.
-This needs no administration, only the ordinary write access an agent
-has. The change is visible in the pull request's diff, and nothing blocks
+This needs no administration, only write access and workflow permission,
+both of which the setup's login gives an agent. The change is visible in the pull request's diff, and nothing blocks
 it. `ci / diff-size` warns about a workflow edit the description does not
 name, but that warning runs inside plinth's workflow: a pull request that
 stops calling it removes the warning too.
 
-The signal comes after the merge, from outside the pull request.
+The control that acts first is on the push, before any pull request exists.
+GitHub refuses a push that adds or changes a file under `.github/workflows/`
+when the token lacks workflow permission: a fine-grained token without
+Workflows, a classic one without the `workflow` scope. Measured on both with a
+push adding one (#328); GitHub's refusal names creating and updating alike.
+An agent pushing with such a token cannot get a rewrite of the checks onto a
+branch at all ([the agent's own token](../how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks)).
+It does not cover three cases: a push over SSH (a deploy key with write access
+pushed a workflow change in the same measurement), a token that has the
+permission (the browser login plinth's setup uses, and what `gh auth login`
+asks for by default over HTTPS), and a person who pushes the change.
+
+Past the push, the next signal comes after the merge, from outside the pull request.
 `/plinth:floor-check` reads `ci.yml` on the default branch through the API
 and fails when its `ci` job no longer calls plinth's `python-ci.yml` at a
 full commit SHA (plinth itself calls its own `plinth-ci.yml` by local path,

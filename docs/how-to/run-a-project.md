@@ -12,7 +12,9 @@ plinth has two halves, and it helps to know which is which:
   administration cannot switch them off; one working with administration,
   as after the browser login, can change them. Either can rewrite the CI file
   inside a pull request, which the pull request's diff shows
-  ([what green means](../explanation/concepts.md#about-what-green-means)).
+  ([what green means](../explanation/concepts.md#about-what-green-means)),
+  unless its token lacks workflow permission
+  ([the agent's own token](#give-the-agent-a-token-that-cannot-change-the-checks)).
 - **Inside the agent, made by others:** the skills you type or the agent
   picks up, such as `/grill-with-docs` and `/implement` from
   [mattpocock/skills](https://github.com/mattpocock/skills). plinth does not
@@ -69,6 +71,44 @@ it checks. Ask for it in the interview, find it in each ticket, and look for it
 in the pull request before you merge. For example: *"Done means: with my
 sample file, it prints 33,000 won for September, and the next payment dates in
 order."*
+
+## Give the agent a token that cannot change the checks
+
+The browser login from Getting started holds `workflow`, and so does the one
+`gh auth login` asks for by default over HTTPS: an agent working with it can
+push a change under `.github/workflows/`, including one that replaces
+plinth's checks with jobs that do nothing and turns every check green
+([what green means](../explanation/concepts.md#about-what-green-means)).
+GitHub refuses a push that adds or changes a file there when the token lacks
+workflow permission, for fine-grained and classic tokens alike. So once the
+first pull request is merged, give the agent a token of its own without it:
+
+1. On GitHub: **Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate new token**. Repository access: **Only
+   select repositories**, this one. Repository permissions: **Contents**,
+   **Issues** and **Pull requests** at **Read and write**. Leave
+   **Workflows** and **Administration** at **No access**. If a `gh` command
+   later answers 403, add the permission it needed, but never those two.
+2. In a separate terminal window, not with `!` in Claude Code, run
+   `gh auth login`: GitHub.com, HTTPS, **Yes** to authenticating Git, then
+   **Paste an authentication token**. It replaces the browser login.
+3. In the project, `git remote -v` should show `https://github.com/…`. Over
+   SSH the refusal does not happen: a deploy key with write access pushed a
+   workflow change in the same measurement.
+
+What it costs: the agent cannot push a change under `.github/workflows/`, so
+a template update, or a fix `/plinth:floor-check` asks for in `ci.yml`, stops
+at a commit. You push that branch from a separate terminal with a credential
+that has the permission, the way the generator's admin-token path runs
+([Getting started](../tutorials/getting-started.md#create-the-repository)).
+Dependabot's updates to the pinned workflow are not affected: Dependabot
+pushes with its own credential. Creating another repository with
+`/plinth:new-project` needs the permission again; the generator stops, says
+so and prints the fix.
+
+This token was measured on one push each way, not through a whole loop: that
+Contents, Issues and Pull requests are enough for every step on this page is
+not verified.
 
 ## The loop
 
