@@ -42,7 +42,10 @@ pull requests and have no tag.
   default branch still has the call. A repository whose `ci` job already calls
   plinth's workflow at a SHA, as the template's does, is unchanged. One that
   calls it another way gets a new FAIL in `ci / floor-check` once its
-  `python-ci.yml` pin reaches this release. No check name changes.
+  `python-ci.yml` pin reaches this release. It reads the `ci` job, not
+  `ci.yml`'s `on:` triggers: a `ci.yml` that no longer runs on pull requests
+  still passes (#333), and whether another workflow reporting the same check
+  names satisfies the ruleset is #329's question. No check name changes.
 
 ### Fixed
 
