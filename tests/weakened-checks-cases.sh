@@ -135,6 +135,17 @@ new_repo; printf '[pytest]\naddopts = -k "not slow"\n' > "$r/pytest.ini"; commit
 run "Refactor."
 expect "a check configuration file added: WARN" 1 "pytest.ini"
 
+# pytest's other configuration files (#324): an edit to one that already exists.
+for f in .pytest.ini pytest.toml .pytest.toml; do
+  new_repo
+  case "$f" in *.ini) printf '[pytest]\naddopts = -q\n' > "$r/$f" ;; *) printf '[pytest]\naddopts = ["-q"]\n' > "$r/$f" ;; esac
+  commit; base="$(git -C "$r" rev-parse HEAD)"
+  case "$f" in *.ini) printf '[pytest]\naddopts = -k "not slow"\n' > "$r/$f" ;; *) printf '[pytest]\naddopts = ["-k", "not slow"]\n' > "$r/$f" ;; esac
+  commit
+  run "Refactor."
+  expect "$f edited: WARN" 1 "$f"
+done
+
 new_repo; printf '[allowlist]\npaths = ["src"]\n' > "$r/.gitleaks.toml"; commit
 run "Refactor."
 expect ".gitleaks.toml added: WARN" 1 ".gitleaks.toml"
