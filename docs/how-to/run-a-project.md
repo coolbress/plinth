@@ -92,7 +92,14 @@ first pull request is merged, give the agent a token of its own without it:
 2. In a separate terminal window, not with `!` in Claude Code, run
    `gh auth login`: GitHub.com, HTTPS, **Yes** to authenticating Git, then
    **Paste an authentication token**. It replaces the browser login.
-3. In the project, `git remote -v` should show `https://github.com/…`. Over
+3. Make sure nothing overrides it. `gh`, and the `git push` it serves, use
+   `GH_TOKEN` or `GITHUB_TOKEN` before any stored login, and a running Claude
+   Code keeps the environment it started with. If either is set in a shell
+   startup file (`~/.zshrc`, `~/.bashrc`, `~/.zshenv`), remove it there, then
+   restart Claude Code. In the new session, `gh auth status` should show a
+   `github_pat_` token, stored in the keyring or gh's config file; after your
+   account it should not say `(GH_TOKEN)` or `(GITHUB_TOKEN)`.
+4. In the project, `git remote -v` should show `https://github.com/…`. Over
    SSH the refusal does not happen: a deploy key with write access pushed a
    workflow change in the same measurement.
 
