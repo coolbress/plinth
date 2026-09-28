@@ -534,17 +534,21 @@ jobs:
               if why:
                   found.append((new if status != "D" else old, old, why))
 
+          # What may stand next to a name that is not part of it: whitespace
+          # and Markdown punctuation. Any other character (`-`, `.`, `~`, `\`,
+          # a letter) makes a longer name, which names nothing.
+          EDGE = r"\s`'\"()\[\]{}<>*,;:!?"
+
           def named(path, old):
-              r"""A path or file name standing whole in the body, not part of
-              a longer name: no letter, digit, `_`, `.` or `-` before it; no
-              letter, digit, `_`, `-`, `/` or `\` after it, nor `.` and a
-              letter, digit or `_` (a full stop may end it). So `python-ci.yml` does
-              not name `ci.yml`. A `/` may come before a path (a link to the
-              file) but not before a bare name, nor `\`: `docs/ci.yml` and
-              `docs\ci.yml` do not name `.github/workflows/ci.yml`."""
+              """A path or file name standing whole in the body, with an EDGE
+              character or the start or end on each side; a full stop may end
+              it. So `python-ci.yml` does not name `ci.yml`. A `/` may also come
+              before a path (a link to the file) but not before a bare name:
+              `docs/ci.yml` does not name `.github/workflows/ci.yml`."""
               def whole(p):
-                  before = r"(?<![\w.-])" if "/" in p else r"(?<![\w./\\-])"
-                  return re.search(before + re.escape(p) + r"(?![\w/\\-]|\.\w)", body)
+                  before = "(?<![^" + EDGE + ("/" if "/" in p else "") + "])"
+                  after = r"(?=\Z|[" + EDGE + r"]|\.(?:\Z|[" + EDGE + "]))"
+                  return re.search(before + re.escape(p) + after, body)
               return any(whole(p) for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
 
           def command_safe(s):   # a path must not end the warning and start another command

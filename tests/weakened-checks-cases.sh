@@ -122,6 +122,8 @@ edit_ci; run "Also see docs/examples/ci.yml for reference."
 expect "the same name under another directory does not name it: WARN" 1 ".github/workflows/ci.yml"
 edit_ci; run 'Also see docs\examples\ci.yml for reference.'
 expect "the same name under a Windows-style directory does not name it: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run "Restores ci.yml~ and ci.yml#2 and ~ci.yml."
+expect "any other character next to it makes a longer name (ci.yml~): WARN" 1 ".github/workflows/ci.yml"
 edit_ci; run "Edits ci.yml to run on pull requests."
 expect "the name alone names it" 0
 edit_ci; run 'Edits `ci.yml` to run on pull requests.'
@@ -132,6 +134,10 @@ edit_ci; run "The trigger moved: ci.yml."
 expect "the name ending the description with a full stop names it" 0
 edit_ci; run "Edits .github/workflows/ci.yml, the caller."
 expect "the full path names it" 0
+for d in '[ci.yml]' '*ci.yml*' '"ci.yml"' "'ci.yml'" '<ci.yml>' '{ci.yml}' 'ci.yml!' 'ci.yml?' 'ci.yml;' 'ci.yml:'; do
+  edit_ci; run "Changed $d here."
+  expect "  $d names it" 0
+done
 
 new_repo; printf '[pytest]\naddopts = -q\n' > "$r/pytest.ini"; commit
 run "Edits .pytest.ini only."
