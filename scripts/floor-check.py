@@ -545,6 +545,9 @@ def check_action_pins(root: Path) -> None:
 # it can put plain jobs of the same names in its place and every required check
 # goes green.
 CALLER_WORKFLOW = f"{PLINTH_REPO}/.github/workflows/python-ci.yml"
+# What coolbress/plinth's own `ci` job calls instead, by local path; accepted
+# for that repository only, and no other local workflow is.
+PLINTH_OWN_CALLER = "./.github/workflows/plinth-ci.yml"
 # One `key:` line: a plain or quoted key, then nothing but an optional comment
 # (a mapping follows) or a value.
 KEY_LINE = re.compile(r"""^\s*([A-Za-z_][\w-]*|'[^']*'|"[^"]*")\s*:(?:\s+(.*?))?\s*$""")
@@ -638,12 +641,13 @@ def check_caller(root: Path, repo: str | None, network: bool) -> None:
     a full commit SHA (#325). With --repo and the network, read from the
     default branch through the API (no ref), so a stale or feature-branch
     checkout does not hide a change that merged; otherwise from the checkout,
-    and the line says so. coolbress/plinth calls its own workflows by local
-    path, and only it. A signal only where it runs from outside the pull
-    request's own workflows: `ci / floor-check` reads the default branch too,
-    but it is a job of the workflow the `ci` job calls, so a pull request that
-    replaces the call has no `ci / floor-check`, and before the merge the
-    default branch still has the call."""
+    and the line says so. coolbress/plinth calls its own plinth-ci.yml by
+    local path; that one path is accepted, for that repository only. A
+    signal only where it runs from outside the pull request's own workflows:
+    `ci / floor-check` reads the default branch too, but it is a job of the
+    workflow the `ci` job calls, so a pull request that replaces the call has
+    no `ci / floor-check`, and before the merge the default branch still has
+    the call."""
     rel = ".github/workflows/ci.yml"
     if repo and network:
         where = "on the default branch"
@@ -684,8 +688,8 @@ def check_caller(root: Path, repo: str | None, network: bool) -> None:
         result("FAIL", f"{rel} {where}: {value}, so nothing calls {CALLER_WORKFLOW} and plain jobs could report its check names")
         result("INFO", f"  {latest}")
         return
-    if repo and repo.lower() == PLINTH_REPO and value.startswith("./.github/workflows/"):
-        result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflows by local path)")
+    if repo and repo.lower() == PLINTH_REPO and value == PLINTH_OWN_CALLER:
+        result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflow by local path)")
         return
     m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@(.*)", value)
     if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:

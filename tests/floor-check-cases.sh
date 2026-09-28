@@ -980,6 +980,9 @@ from_api "an API answer that is not a file is a SKIP, not a pass" "json:[]" "$tm
 own="$(cat "$root/.github/workflows/ci.yml")"
 from_api "coolbress/plinth's own ci.yml passes for coolbress/plinth" "$own" "$own" \
   "PASS  .*ci job.*\./\.github/workflows/plinth-ci\.yml" coolbress/plinth
+from_api "another local workflow is a FAIL even for coolbress/plinth" \
+  "$(printf 'jobs:\n  ci:\n    uses: ./.github/workflows/no-checks.yml\n')" "$own" \
+  "FAIL  .*calls \./\.github/workflows/no-checks\.yml" coolbress/plinth
 from_api "the same file under any other --repo is a FAIL" "$own" "$own" \
   "FAIL  .*calls \./\.github/workflows/plinth-ci\.yml"
 
