@@ -18,13 +18,14 @@ pull requests and have no tag.
   paths, an edited workflow, a changed check configuration file (`conftest.py`,
   each file pytest reads its configuration from, `ruff.toml`, `.gitleaks.toml`,
   `ruleset.json` and others) or a changed `[tool.*]` table in `pyproject.toml`.
-  Naming the path or the file name in the description is enough. It is a WARN
-  in the log and the job summary, never a red: the description is read when the
-  run starts and an edit does not re-run CI, so a failure could only be cleared
-  by a push, and a text match should not block a merge. It does not see a
-  weakened assertion inside a kept test, a skip marker, or a threshold the
-  caller passes as an input. A repository gets it when its `python-ci.yml` pin
-  reaches this release. No check name changes.
+  Naming the path or the file name in the description is enough, where it
+  stands whole: `python-ci.yml` does not name `ci.yml`. It is a WARN in the log
+  and the job summary, never a red: the description is read when the run starts
+  and an edit does not re-run CI, so a failure could only be cleared by a push,
+  and a text match should not block a merge. It does not see a weakened
+  assertion inside a kept test, a skip marker, or a threshold the caller passes
+  as an input. A repository gets it when its `python-ci.yml` pin reaches this
+  release. No check name changes.
 
 ### Fixed
 
