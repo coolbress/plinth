@@ -107,8 +107,9 @@ required check green without running them. With a repository name it reads
 the file from the default branch through the API, not from the checkout, so
 the answer is about what merged. Offline or without one it reads the
 checkout and says so in the line. A `ci` job that is missing, runs its own
-steps, calls another repository, a fork or a local file, or pins a tag or a
-branch is a FAIL. The INFO line under it is a `gh api` command that prints
+steps, calls another repository, a fork or a local file, pins a tag or a
+branch, or carries an `if:` or a `needs:` (either lets it be skipped while
+plain jobs report its check names) is a FAIL. The INFO line under it is a `gh api` command that prints
 the SHA to pin: the pinned tag's or branch's commit, or otherwise the commit
 of plinth's latest release. A file or job the line reader cannot
 read (flow style, an anchor, an alias, a merge key) is a SKIP. plinth itself

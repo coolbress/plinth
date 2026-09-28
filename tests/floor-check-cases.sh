@@ -921,6 +921,15 @@ caller "a missing call's fix line looks up plinth's latest release" \
 caller "plinth's workflow pinned to a branch is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@main\n')" \
   "FAIL  .*python-ci\.yml@main.*full commit SHA"
+caller "a ci job with an if: condition is a FAIL: it can be skipped" \
+  "$(printf "jobs:\n  ci:\n    if: github.head_ref == 'bootstrap'\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n" "$sha40")" \
+  "FAIL  .*ci job.*if:.*skipped"
+caller "a ci job with needs: is a FAIL: it is skipped with what it needs" \
+  "$(printf 'jobs:\n  gate:\n    if: false\n    runs-on: x\n    steps:\n      - run: "true"\n  ci:\n    needs: gate\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
+  "FAIL  .*ci job.*needs:.*skipped"
+caller "with:, secrets: and permissions: on the ci job still pass" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n      if: x\n    secrets: inherit\n    permissions:\n      contents: read\n' "$sha40")" \
+  "PASS  .*ci job"
 caller "another of plinth's workflows is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/third-party.yml@%s\n' "$sha40")" \
   "FAIL  .*calls coolbress/plinth/\.github/workflows/third-party\.yml"

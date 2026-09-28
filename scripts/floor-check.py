@@ -568,8 +568,10 @@ def key_line(line: str) -> tuple[str, str] | None:
 
 
 def caller_job(text: str) -> tuple[str, str]:
-    """What the `ci` job of a ci.yml calls: ("uses", value), ("missing", why)
-    or ("unread", why). A line reader, not a YAML parser (standard library
+    """What the `ci` job of a ci.yml calls: ("uses", value), ("missing", why),
+    ("skippable", keys) or ("unread", why). Skippable is an `if:` or a
+    `needs:` on the job: either lets it be skipped (a needed job that is
+    skipped skips it too) while plain jobs report its check names. A line reader, not a YAML parser (standard library
     only): a top-level `jobs:` block, its `ci:` key, and a `uses:` key directly
     under it. Anything in those three places it cannot read -- flow style, an
     anchor, an alias, a merge key, a duplicate key -- is unread, never a pass:
@@ -617,13 +619,15 @@ def caller_job(text: str) -> tuple[str, str]:
     if not job:
         return "missing", "the `ci` job is empty"
     inner = job[0][0]
-    uses = []
+    uses, gates = [], []
     for indent, line in job:
         if indent != inner:
             continue
         kv = key_line(line)
         if kv is None:
             return "unread", f"a key of the ci job is written in a form this checker does not read: {line.strip()}"
+        if kv[0] in ("if", "needs"):
+            gates.append(f"{kv[0]}:")
         if kv[0] == "uses":
             m = USES_LINE.match(line)
             if not m:
@@ -633,6 +637,8 @@ def caller_job(text: str) -> tuple[str, str]:
         return "unread", "the ci job has more than one uses key"
     if not uses:
         return "missing", "the `ci` job calls no reusable workflow; it runs its own steps"
+    if gates:
+        return "skippable", " and ".join(gates)
     return "uses", uses[0]
 
 
@@ -687,6 +693,10 @@ def check_caller(root: Path, repo: str | None, network: bool) -> None:
     if kind == "missing":
         result("FAIL", f"{rel} {where}: {value}, so nothing calls {CALLER_WORKFLOW} and plain jobs could report its check names")
         result("INFO", f"  {latest}")
+        return
+    if kind == "skippable":
+        result("FAIL", f"the ci job {where} has {value}: it can be skipped while plain jobs report its check names")
+        result("INFO", f"  remove {value} from the `ci` job; a job that must not run fails, it is not skipped")
         return
     if repo and repo.lower() == PLINTH_REPO and value == PLINTH_OWN_CALLER:
         result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflow by local path)")

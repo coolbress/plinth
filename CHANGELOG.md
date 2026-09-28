@@ -29,7 +29,8 @@ pull requests and have no tag.
 - `/plinth:floor-check` fails when the `ci` job in `.github/workflows/ci.yml`
   does not call `coolbress/plinth/.github/workflows/python-ci.yml` at a full
   commit SHA: missing, running its own steps, calling another repository, a
-  fork or a local file, or pinned to a tag or a branch. plinth itself is the
+  fork or a local file, pinned to a tag or a branch, or carrying an `if:` or a
+  `needs:`, which let it be skipped. plinth itself is the
   one exception: for `coolbress/plinth` its own
   `./.github/workflows/plinth-ci.yml` passes. With `--repo` it reads
   the file from the default branch through the API, not the checkout; offline
