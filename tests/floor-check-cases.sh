@@ -945,6 +945,12 @@ caller "a ci job that is an alias is a SKIP, not a pass" \
 caller "a merge key inside the ci job is a SKIP, not a pass" \
   "$(printf 'x: &c\n  uses: coolbress/other/.github/workflows/python-ci.yml@%s\njobs:\n  ci:\n    <<: *c\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40" "$sha40")" \
   "SKIP  .*ci job.*not verified"
+caller "an escaped quoted key (a second jobs YAML decodes) is a SKIP, not a pass" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n"jo\\u0062s":\n  install:\n    runs-on: x\n' "$sha40")" \
+  "SKIP  .*ci job.*not verified.*escape"
+caller "an escaped quoted ci key is a SKIP, not a pass" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  "c\\x69":\n    runs-on: x\n' "$sha40")" \
+  "SKIP  .*ci job.*not verified.*escape"
 caller "two ci keys are a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  ci:\n    runs-on: x\n' "$sha40")" \
   "SKIP  .*ci job.*not verified"

@@ -574,9 +574,13 @@ def caller_job(text: str) -> tuple[str, str]:
     skipped skips it too) while plain jobs report its check names. A line reader, not a YAML parser (standard library
     only): a top-level `jobs:` block, its `ci:` key, and a `uses:` key directly
     under it. Anything in those three places it cannot read -- flow style, an
-    anchor, an alias, a merge key, a duplicate key -- is unread, never a pass:
-    it could hold or hide the call."""
+    anchor, an alias, a merge key, a duplicate key, a double-quoted key with
+    an escape -- is unread, never a pass: it could hold or hide the call."""
     lines = list(yaml_lines(text))
+    # A double-quoted key may spell another key with an escape (`"jo\u0062s"`
+    # is `jobs` to YAML): a second jobs or ci this reader would not see.
+    if any(re.match(r'^\s*(?:-\s+)?"[^"]*\\', line) for _, _, line in lines):
+        return "unread", "a double-quoted key holds an escape, which can spell jobs or ci"
     tops = [(i, line) for i, (_, indent, line) in enumerate(lines) if indent == 0]
     jobs = [i for i, line in tops if (key_line(line) or ("", ""))[0] == "jobs"]
     if any(key_line(line) is None and "jobs" in line for _, line in tops) or len(jobs) > 1:

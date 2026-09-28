@@ -112,7 +112,8 @@ branch, or carries an `if:` or a `needs:` (either lets it be skipped while
 plain jobs report its check names) is a FAIL. The INFO line under it is a `gh api` command that prints
 the SHA to pin: the pinned tag's or branch's commit, or otherwise the commit
 of plinth's latest release. A file or job the line reader cannot
-read (flow style, an anchor, an alias, a merge key) is a SKIP. plinth itself
+read (flow style, an anchor, an alias, a merge key, a double-quoted key with
+an escape) is a SKIP. plinth itself
 calls `./.github/workflows/plinth-ci.yml`, accepted for `coolbress/plinth`
 only; no other local workflow is.
 
