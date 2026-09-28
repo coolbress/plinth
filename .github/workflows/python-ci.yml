@@ -422,6 +422,135 @@ jobs:
 
           echo "OK: ${total} lines / limit ${MAX_LINES}"
 
+      # An agent that cannot make a check pass can make it weaker: delete a
+      # test, loosen a threshold, edit the workflow (#301). This step names
+      # each such change the description does not, as a WARN: it never fails
+      # the check. Why not FAIL: the description is read from the event, and
+      # an edited description does not re-run CI (#322), so the only fix a
+      # FAIL could accept is a push; and "the description names the path" is
+      # a text match, which would block every consumer on a wording miss.
+      # What it cannot see: a weakened assertion inside a kept test file, a
+      # skip marker, a threshold passed as a workflow input by the caller.
+      # It makes a change visible; whether the change is justified is the
+      # reviewer's call.
+      - name: Name changes to the checks the description does not
+        if: ${{ !cancelled() }}
+        shell: python
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          import os, re, subprocess, sys
+
+          base, head = os.environ.get("BASE_SHA", ""), os.environ.get("HEAD_SHA", "")
+          body = os.environ.get("BODY") or ""
+          summary = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
+
+          def emit(*lines):
+              with open(summary, "a", encoding="utf-8") as f:
+                  f.write("\n".join(lines) + "\n")
+
+          if not base or not head:
+              print("Not a pull request: no description to compare.")
+              emit("### Changes to the checks: not a pull request, nothing compared")
+              sys.exit(0)
+
+          def git(*args):
+              r = subprocess.run(["git", *args], capture_output=True)
+              if r.returncode != 0:
+                  err = r.stderr.decode("utf-8", "replace").strip().replace("\n", " ")
+                  print(f"::error::git {args[0]} failed (base={base} head={head}): {err}")
+                  sys.exit(1)
+              return r.stdout.decode("utf-8", "surrogateescape")
+
+          TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")
+          CONFIG = {"conftest.py", "pytest.ini", "tox.ini", "setup.cfg", "mypy.ini",
+                    ".mypy.ini", "ruff.toml", ".ruff.toml", ".coveragerc",
+                    ".pre-commit-config.yaml", ".gitleaks.toml", ".gitleaksignore",
+                    "ruleset.json"}
+          mb = git("merge-base", base, head).strip()
+
+          # A parser, not a line scan: a multiline string can hold a line that
+          # looks like a header, and TOML spells `[tool.x]` several ways.
+          try:
+              import tomllib
+          except ImportError:   # Python < 3.11: no parser, so any edit counts
+              tomllib = None
+
+          def tool_table(rev, path):
+              """pyproject.toml's `tool` table at rev; None when the file is
+              absent; its whole text when it cannot be parsed."""
+              r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
+              if r.returncode != 0:
+                  return None
+              text = r.stdout.decode("utf-8", "replace")
+              if tomllib is None:
+                  return text
+              try:
+                  return tomllib.loads(text).get("tool")
+              except tomllib.TOMLDecodeError:
+                  return text
+
+          def what(status, old, new):
+              """Why this path touches the checks, or None."""
+              name = new.rsplit("/", 1)[-1]
+              if new.startswith(".github/workflows/") or old.startswith(".github/workflows/"):
+                  return "a workflow changed"
+              if name in CONFIG or old.rsplit("/", 1)[-1] in CONFIG:
+                  return "check configuration changed"
+              if status == "D" and TEST.search(old):
+                  return "a test file deleted"
+              if status == "R" and TEST.search(old) and not TEST.search(new):
+                  return "a test file moved out of the test paths"
+              was = old.rsplit("/", 1)[-1] == "pyproject.toml"
+              if (was or name == "pyproject.toml") and (
+                      (tool_table(mb, old) if was else None)
+                      != (tool_table(head, new) if name == "pyproject.toml" else None)):
+                  return "its [tool.*] tables changed (ruff, mypy, pytest configuration)"
+              return None
+
+          fields = git("diff", "--name-status", "-M", "-z", f"{base}...{head}").split("\0")
+          found, i = [], 0
+          while i < len(fields) and fields[i]:
+              status = fields[i][0]
+              if status == "R":
+                  old, new, i = fields[i + 1], fields[i + 2], i + 3
+              else:
+                  old = new = fields[i + 1]
+                  i += 2
+              why = what(status, old, new)
+              if why:
+                  found.append((new if status != "D" else old, old, why))
+
+          def named(path, old):
+              return any(p in body for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
+
+          def command_safe(s):   # a path must not end the warning and start another command
+              return s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          def cell(s):
+              return "`" + s.replace("`", "'").replace("|", "\\|").replace("\n", " ") + "`"
+
+          rows, unnamed = [], 0
+          for path, old, why in found:
+              label = path if path == old else f"{old} -> {path}"
+              if named(path, old):
+                  print(f"named in the description: {label}: {why}")
+                  rows.append(f"| {cell(label)} | {why} | named |")
+              else:
+                  unnamed += 1
+                  print(command_safe(f"::warning::{label}: {why}, and the description does not name it."))
+                  rows.append(f"| {cell(label)} | {why} | **not named** |")
+
+          print(f"{len(found)} change(s) to the checks, {unnamed} not named in the description.")
+          if found:
+              emit("", "### Changes to the checks", "",
+                   "| Path | Change | Description |", "|---|---|---|", *rows)
+          if unnamed:
+              emit("", "A WARN, not a failure. Name each path in the description and say why;",
+                   "the description is read when the run starts, so push to re-check it.")
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
