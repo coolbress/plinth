@@ -951,6 +951,17 @@ caller "an escaped quoted key (a second jobs YAML decodes) is a SKIP, not a pass
 caller "an escaped quoted ci key is a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  "c\\x69":\n    runs-on: x\n' "$sha40")" \
   "SKIP  .*ci job.*not verified.*escape"
+caller "an alias as a top-level key (a second jobs) is a SKIP, not a pass" \
+  "$(printf 'name: x\nrun-name:\n  - &j jobs\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n*j :\n  ci:\n    uses: someone/else/.github/workflows/x.yml@%s\n' "$sha40" "$sha40")" \
+  "SKIP  .*ci job.*not verified.*top-level"
+for top in '!!str jobs:' '? jobs' '<<: *base' '---'; do
+  caller "  a top-level line written as '$top' is a SKIP" \
+    "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n%s\n' "$sha40" "$top")" \
+    "SKIP  .*ci job.*not verified.*top-level"
+done
+caller "a flow value on a top-level key (on: [push, pull_request]) still reads" \
+  "$(printf 'on: [push, pull_request]\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
+  "PASS  .*ci job"
 caller "two ci keys are a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  ci:\n    runs-on: x\n' "$sha40")" \
   "SKIP  .*ci job.*not verified"

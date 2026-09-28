@@ -582,9 +582,15 @@ def caller_job(text: str) -> tuple[str, str]:
     if any(re.match(r'^\s*(?:-\s+)?"[^"]*\\', line) for _, _, line in lines):
         return "unread", "a double-quoted key holds an escape, which can spell jobs or ci"
     tops = [(i, line) for i, (_, indent, line) in enumerate(lines) if indent == 0]
-    jobs = [i for i, line in tops if (key_line(line) or ("", ""))[0] == "jobs"]
-    if any(key_line(line) is None and "jobs" in line for _, line in tops) or len(jobs) > 1:
-        return "unread", "the jobs key is written in a form this checker does not read"
+    jobs = [i for i, line in tops if (m := KEY_LINE.match(line)) and m.group(1).strip("'\"") == "jobs"]
+    # Every top-level line has to be a plain or quoted `key: ...`, whatever its
+    # value: an alias key (`*j:`), a merge key, a tag, an explicit `? key`, a
+    # flow mapping or a document marker can each supply a second jobs.
+    odd = next((line for _, line in tops if not KEY_LINE.match(line)), None)
+    if odd is not None:
+        return "unread", f"a top-level line is written in a form this checker does not read: {odd.strip()}"
+    if len(jobs) > 1:
+        return "unread", "more than one top-level jobs key"
     if not jobs:
         return "missing", "no `ci` job (no jobs at all)"
     start = jobs[0]
