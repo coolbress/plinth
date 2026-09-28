@@ -116,7 +116,8 @@ stops calling it removes the warning too.
 The signal comes after the merge, from outside the pull request.
 `/plinth:floor-check` reads `ci.yml` on the default branch through the API
 and fails when its `ci` job no longer calls plinth's `python-ci.yml` at a
-full commit SHA. Only a run from outside the pull request's own workflows
+full commit SHA (plinth itself calls its own `plinth-ci.yml` by local path,
+accepted for plinth only). Only a run from outside the pull request's own workflows
 sees this: the skill a person runs, or the e2e runner. `ci / floor-check`
 runs the same item and reads the default branch too, but it is a job of
 plinth's workflow: a pull request that replaces the call has no
