@@ -927,6 +927,11 @@ caller "a ci job with an if: condition is a FAIL: it can be skipped" \
 caller "a ci job with needs: is a FAIL: it is skipped with what it needs" \
   "$(printf 'jobs:\n  gate:\n    if: false\n    runs-on: x\n    steps:\n      - run: "true"\n  ci:\n    needs: gate\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
   "FAIL  .*ci job.*needs:.*skipped"
+for key in 'name: decoy' 'strategy:' 'concurrency: x' 'timeout-minutes: 1'; do
+  caller "  a ci job with '$key' is a FAIL: only uses, with, secrets and permissions are allowed" \
+    "$(printf 'jobs:\n  ci:\n    %s\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$key" "$sha40")" \
+    "FAIL  .*ci job.*has ${key%%:*}:"
+done
 caller "with:, secrets: and permissions: on the ci job still pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n      if: x\n    secrets: inherit\n    permissions:\n      contents: read\n' "$sha40")" \
   "PASS  .*ci job"

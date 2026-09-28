@@ -548,6 +548,12 @@ CALLER_WORKFLOW = f"{PLINTH_REPO}/.github/workflows/python-ci.yml"
 # What coolbress/plinth's own `ci` job calls instead, by local path; accepted
 # for that repository only, and no other local workflow is.
 PLINTH_OWN_CALLER = "./.github/workflows/plinth-ci.yml"
+# The keys a `ci` job that calls the workflow may carry: the ones the
+# template's does. Any other key a caller job can take (`if`, `needs`, `name`,
+# `strategy`, `concurrency`) can get it skipped, rename its checks or cut it
+# short while plain jobs report the `ci / <job>` names. A list of what is
+# allowed, not of what is not: each review round found one more (#332).
+CALLER_KEYS = {"uses", "with", "secrets", "permissions"}
 # One `key:` line: a plain or quoted key, then nothing but an optional comment
 # (a mapping follows) or a value.
 KEY_LINE = re.compile(r"""^\s*([A-Za-z_][\w-]*|'[^']*'|"[^"]*")\s*:(?:\s+(.*?))?\s*$""")
@@ -569,9 +575,8 @@ def key_line(line: str) -> tuple[str, str] | None:
 
 def caller_job(text: str) -> tuple[str, str]:
     """What the `ci` job of a ci.yml calls: ("uses", value), ("missing", why),
-    ("skippable", keys) or ("unread", why). Skippable is an `if:` or a
-    `needs:` on the job: either lets it be skipped (a needed job that is
-    skipped skips it too) while plain jobs report its check names. A line reader, not a YAML parser (standard library
+    ("skippable", keys) or ("unread", why). Skippable is any key on the job
+    outside CALLER_KEYS. A line reader, not a YAML parser (standard library
     only): a top-level `jobs:` block, its `ci:` key, and a `uses:` key directly
     under it. Anything in those three places it cannot read -- flow style, an
     anchor, an alias, a merge key, a duplicate key, a double-quoted key with
@@ -636,7 +641,7 @@ def caller_job(text: str) -> tuple[str, str]:
         kv = key_line(line)
         if kv is None:
             return "unread", f"a key of the ci job is written in a form this checker does not read: {line.strip()}"
-        if kv[0] in ("if", "needs"):
+        if kv[0] not in CALLER_KEYS:
             gates.append(f"{kv[0]}:")
         if kv[0] == "uses":
             m = USES_LINE.match(line)
@@ -705,8 +710,9 @@ def check_caller(root: Path, repo: str | None, network: bool) -> None:
         result("INFO", f"  {latest}")
         return
     if kind == "skippable":
-        result("FAIL", f"the ci job {where} has {value}: it can be skipped while plain jobs report its check names")
-        result("INFO", f"  remove {value} from the `ci` job; a job that must not run fails, it is not skipped")
+        result("FAIL", f"the ci job {where} has {value}: only uses:, with:, secrets: and permissions: are allowed; "
+                       "another key can get it skipped, renamed or cut short while plain jobs report its check names")
+        result("INFO", f"  remove {value} from the `ci` job")
         return
     if repo and repo.lower() == PLINTH_REPO and value == PLINTH_OWN_CALLER:
         result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflow by local path)")
