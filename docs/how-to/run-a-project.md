@@ -99,9 +99,14 @@ first pull request is merged, give the agent a token of its own without it:
    restart Claude Code. In the new session, `gh auth status` should show a
    `github_pat_` token, stored in the keyring or gh's config file; after your
    account it should not say `(GH_TOKEN)` or `(GITHUB_TOKEN)`.
-4. In the project, `git remote -v` should show `https://github.com/…`. Over
-   SSH the refusal does not happen: a deploy key with write access pushed a
-   workflow change in the same measurement.
+4. Keep SSH out of the agent's reach. Over SSH the refusal does not happen: a
+   deploy key with write access pushed a workflow change in the same
+   measurement. In the project, `git remote -v` should show
+   `https://github.com/…`; and since the agent could switch the remote itself,
+   `ssh -T git@github.com` should answer `Permission denied (publickey)`. If it
+   greets you by name, an SSH key on this machine can push: remove that key
+   from your GitHub account (**Settings → SSH and GPG keys**) or from this
+   machine. The token protects only pushes that go over HTTPS.
 
 What it costs: the agent cannot push a change under `.github/workflows/`, so
 a template update, or a fix `/plinth:floor-check` asks for in `ci.yml`, stops
