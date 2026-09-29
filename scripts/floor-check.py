@@ -1459,7 +1459,9 @@ def check_sandbox() -> None:
 # gh's own git helper, whatever path it was installed under, and nothing else:
 # a `!` helper that also calls gh may answer with its own token first. A path
 # with a space comes single-quoted from `gh auth setup-git` (gh 2.101.0).
-GH_HELPER = re.compile(r"!?('[^']*/gh(\.exe)?'|(\S*/)?gh(\.exe)?)\s+auth\s+git-credential")
+# Without `!`, git runs `git credential-gh ...`, another program; an absolute
+# path without `!` does run gh, but is reported as another helper all the same.
+GH_HELPER = re.compile(r"!('[^']*/gh(\.exe)?'|(\S*/)?gh(\.exe)?)\s+auth\s+git-credential")
 
 
 def github_https(url: str | None) -> bool | None:

@@ -559,6 +559,11 @@ printf '[credential "https://github.com"]\n\thelper =\n\thelper = !'"'"'/Applica
 out="$(credrun FAKE_GH="$one")"
 grep -q "PASS  git asks only gh for github.com" <<<"$out" && ok "--credentials: gh's helper under a quoted path with a space is gh's" \
   || { bad "--credentials quoted gh path"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+# Without `!`, git runs `git credential-gh auth git-credential`, not gh.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = gh auth git-credential\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's: gh" <<<"$out" && ! grep -q "PASS  git asks" <<<"$out" \
+  && ok "--credentials: gh auth git-credential without \`!\` is another helper (git-credential-gh)" || { bad "--credentials helper without !"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 # A `!` helper that calls gh after answering itself is not gh's helper.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !f() { echo password=tok-value-6; gh auth git-credential "$@"; }; f\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
