@@ -134,6 +134,38 @@ edit_ci; run "The trigger moved: ci.yml."
 expect "the name ending the description with a full stop names it" 0
 edit_ci; run "Edits .github/workflows/ci.yml, the caller."
 expect "the full path names it" 0
+# Common Markdown around a name (#334): a link's line anchor, emphasis and
+# strikethrough wrapping it, a typographic apostrophe after it.
+edit_ci; run "Edits [the caller](.github/workflows/ci.yml#L3)."
+expect "a link to the file with a line anchor names it" 0
+edit_ci; run "Edits [the caller](https://github.com/o/r/blob/main/.github/workflows/ci.yml#L3-L5 \"title\")."
+expect "a link with a line range and a title names it" 0
+edit_ci; run "$(printf 'Edits [the caller][c].\n\n[c]: .github/workflows/ci.yml#L3')"
+expect "a reference-style link definition with a line anchor names it" 0
+edit_ci; run "$(printf 'Edits [the caller][c].\n\n  [c]: <.github/workflows/ci.yml#L3> "title"')"
+expect "an indented, bracketed definition with a title names it" 0
+edit_ci; run "See <https://github.com/o/r/blob/main/.github/workflows/ci.yml#L3>."
+expect "an autolink with a line anchor names it" 0
+edit_ci; run "$(printf 'Edits [x][c].\n\n[c]: docs/ci.yml.bak#L3')"
+expect "a definition pointing at a longer name does not name it: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run "Restores <ci.yml#2>, not a link."
+expect "angle brackets with no scheme are not an autolink: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run "Restores <.github/workflows/ci.yml#L3>, not a link."
+expect "  nor with a path and no scheme: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run "Restores <ci.yml#2 and ci.yml#3>, not links."
+expect "a # inside angle brackets that are not one target still makes a longer name: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run "Restores ci.yml#2, not a link."
+expect "a # after the name outside a link still makes a longer name: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run "Edits [x](docs/ci.yml.bak#L3)."
+expect "a link to a longer name with an anchor does not name it: WARN" 1 ".github/workflows/ci.yml"
+for d in '_ci.yml_' '__ci.yml__' '~~ci.yml~~' '~ci.yml~' "ci.yml’s" '“ci.yml”' "‘ci.yml’"; do
+  edit_ci; run "Changed $d trigger."
+  expect "  $d names it" 0
+done
+for d in 'my_ci.yml_' '_ci.yml_x' 'ci.yml_' '_ci.yml' 'ci.yml~~' '~~ci.yml' "python-ci.yml’s"; do
+  edit_ci; run "Changed $d trigger."
+  expect "  $d does not name it: WARN" 1 ".github/workflows/ci.yml"
+done
 for d in '[ci.yml]' '*ci.yml*' '"ci.yml"' "'ci.yml'" '<ci.yml>' '{ci.yml}' 'ci.yml!' 'ci.yml?' 'ci.yml;' 'ci.yml:'; do
   edit_ci; run "Changed $d here."
   expect "  $d names it" 0

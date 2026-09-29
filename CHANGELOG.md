@@ -29,6 +29,20 @@ pull requests and have no tag.
   that no longer calls plinth's workflow at a commit SHA. `/plinth:floor-check`
   now reports a repository on v1.5.8 as one tag behind.
 
+### Fixed
+
+- `/plinth:floor-check` reads a `ci.yml` that opens with `---`, the line
+  yamllint's `document-start` rule asks for, instead of reporting its `ci` job
+  as not verified; a second `---` is still not verified. A `: |` or `: >`
+  inside a trailing comment (`jobs:  # note: |`) no longer hides the lines
+  below it, which had reported `no ci job` and could miss an unpinned `uses:`.
+- `ci / diff-size` counts a path as named when a link to it carries a line
+  anchor (`[x](.github/workflows/ci.yml#L3)`, a reference definition or an
+  autolink), when a run of `_` or `~`
+  stands on each side of it (`_ci.yml_`, `~~ci.yml~~`), and next to a typographic quote or apostrophe
+  (`ci.yml’s`). `python-ci.yml`, `ci.yml.bak` and `ci.yml~` still do not name
+  `ci.yml`.
+
 ## [1.1.0] - 2026-09-29
 
 The first release after 1.0 is about a pull request that weakens the checks

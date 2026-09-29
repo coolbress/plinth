@@ -216,6 +216,11 @@ warns "a docker action pinned to a tag is unpinned" "wf '- uses: docker://alpine
 quiet "SHA pins, a local action, a docker digest, a comment and a run block are not findings" \
   "wf '- uses: actions/checkout@$sha40 # v4' '- uses: ./.github/actions/x' '- uses: docker://alpine@sha256:$sha64' '# - uses: old/one@v1' '- run: |' '    uses: not/yaml@v1' '  env:' '    A: b' > .github/workflows/t.yml" "pinned|workflow"
 quiet "the word uses inside a run line is not a uses key" "wf '- run: grep -rn \"uses:\" .github/workflows' > .github/workflows/t.yml" "pins not verified"
+# A `: |` inside a trailing comment is not a block scalar (#334); one ending the key's value is.
+warns "a comment ending in ': |' does not hide the uses below it" "printf 'jobs:  # note: |\n  t:\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "line 4 actions/checkout@v4$"
+warns "a comment ending in ': >' does not hide it either" "printf 'jobs:\n  t:  # a: >-\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "line 4 actions/checkout@v4$"
+quiet "an explicit-key run block (? run, then : |) is still a block" "wf '- ? run' '  : |' '    uses: not/yaml@v1' > .github/workflows/t.yml" "pinned|workflow"
+quiet "a run block with a trailing comment is still a block" "wf '- run: |  # note: |' '    uses: not/yaml@v1' '- \"a # b\": |' '    uses: not/yaml@v1' > .github/workflows/t.yml" "pinned|workflow"
 says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
 says  "an explicit-key uses is not verified either" "wf '- ? uses' '  : actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
 says  "an anchored uses key is not verified either" "wf '- &step uses: actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
@@ -967,6 +972,26 @@ for top in '!!str jobs:' '? jobs' '<<: *base' '---'; do
     "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n%s\n' "$sha40" "$top")" \
     "SKIP  .*ci job.*not verified.*top-level"
 done
+# A document marker opening the file is what yamllint's document-start rule
+# asks for (#334); a second one starts another document and is still unread.
+caller "a ci.yml opening with --- reads like the same file without it" "$(printf -- '---\n%s\n' "$tmpl_ci")" \
+  "PASS  .*ci job.*calls coolbress/plinth/\.github/workflows/python-ci\.yml@$sha40"
+caller "a --- with a comment, after a comment, also opens it" "$(printf -- '# c\n--- # start\n%s\n' "$tmpl_ci")" \
+  "PASS  .*ci job"
+caller "a leading --- and a second one (two documents) is a SKIP, not a pass" \
+  "$(printf -- '---\n%s\n---\njobs:\n  ci:\n    runs-on: x\n' "$tmpl_ci")" \
+  "SKIP  .*ci job.*not verified.*top-level.*---"
+caller "a --- carrying content on its line is a SKIP, not a pass" "$(printf -- '--- !!map\n%s\n' "$tmpl_ci")" \
+  "SKIP  .*ci job.*not verified.*top-level"
+# A `: |` in a trailing comment opens no block scalar (#334); a real one still does.
+for c in '# note: |' '# note: >' '# a: |-'; do
+  caller "  a jobs: line whose comment ends '$c' still shows the jobs" \
+    "$(printf 'jobs:  %s\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$c" "$sha40")" \
+    "PASS  .*ci job"
+done
+caller "a run: | with a trailing comment is still a block scalar" \
+  "$(printf 'jobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |  # note\n          uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
+  "FAIL  .*ci\` job.*calls no reusable workflow"
 caller "a flow value on a top-level key (on: [push, pull_request]) still reads" \
   "$(printf 'on: [push, pull_request]\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
   "PASS  .*ci job"

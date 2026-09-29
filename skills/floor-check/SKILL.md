@@ -116,7 +116,8 @@ the SHA to pin: the pinned tag's or branch's commit, or otherwise the commit
 of plinth's latest release. A file or job the line reader cannot
 read is a SKIP: flow style, an anchor, an alias, a merge key, a
 double-quoted key with an escape, or any top-level line that is not a plain or
-quoted `key: …` (a tag, an explicit `?` key, a `---` marker). plinth itself
+quoted `key: …` (a tag, an explicit `?` key, a `---` marker that starts a
+second document; one opening the file is read past). plinth itself
 calls `./.github/workflows/plinth-ci.yml`, accepted for `coolbress/plinth`
 only; no other local workflow is.
 

@@ -452,6 +452,15 @@ def action_is_pinned(value: str) -> bool:
     return re.fullmatch(r"[^@]+@[0-9a-fA-F]{40}", value) is not None
 
 
+# A line whose value is a block scalar indicator (`run: |`, `key: >-`), a
+# comment after it allowed. The key is matched from the line's start, so a
+# `: |` inside a trailing comment (`jobs:  # note: |`) is not one (#334): a
+# plain key holds no `: ` and no ` #`, a quoted one runs to its closing quote.
+# The key is optional: an explicit key's value line (`? run` then `: |`) has none.
+BLOCK_LINE = re.compile(r"""^\s*(?:-\s+)*(?:'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|[^\s#'"](?:[^\s:#]|:(?=\S)|(?<=\S)#|\s+(?=[^\s:#]))*)?"""
+                        r"""\s*:\s*[|>][-+0-9]*\s*(?:#.*)?$""")
+
+
 def yaml_lines(text: str):
     """Yield (line number, indent, line) for each line of workflow YAML text
     that is syntax: blank lines, comments and the interior of a block scalar
@@ -468,7 +477,7 @@ def yaml_lines(text: str):
             block = None
         if line.lstrip().startswith("#"):
             continue
-        if re.search(r":\s*[|>][-+0-9]*\s*(?:#.*)?$", line):
+        if BLOCK_LINE.match(line):
             # The scalar's lines sit deeper than its key, and after `- ` the key starts past the dash.
             block = cast("re.Match[str]", re.match(r"\s*(?:-\s+)*", line)).end()  # matches every string, if only empty
         yield n, indent, line
@@ -583,6 +592,10 @@ def caller_job(text: str) -> tuple[str, str]:
     anchor, an alias, a merge key, a duplicate key, a double-quoted key with
     an escape -- is unread, never a pass: it could hold or hide the call."""
     lines = list(yaml_lines(text))
+    # A document marker opening the file (yamllint's document-start rule asks
+    # for it) starts the one document; any later one is a second (#334).
+    if lines and re.fullmatch(r"---\s*(?:#.*)?", lines[0][2]):
+        lines = lines[1:]
     # A double-quoted key may spell another key with an escape (`"jo\u0062s"`
     # is `jobs` to YAML): a second jobs or ci this reader would not see.
     if any(re.match(r'^\s*(?:-\s+)?"[^"]*\\', line) for _, _, line in lines):
