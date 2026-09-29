@@ -37,7 +37,8 @@ pull requests and have no tag.
   inside a trailing comment (`jobs:  # note: |`) no longer hides the lines
   below it, which had reported `no ci job` and could miss an unpinned `uses:`.
 - `ci / diff-size` counts a path as named when a link to it carries a line
-  anchor (`[x](.github/workflows/ci.yml#L3)`), when a run of `_` or `~`
+  anchor (`[x](.github/workflows/ci.yml#L3)`, a reference definition or an
+  autolink), when a run of `_` or `~`
   stands on each side of it (`_ci.yml_`, `~~ci.yml~~`), and next to a typographic quote or apostrophe
   (`ci.yml’s`). `python-ci.yml`, `ci.yml.bak` and `ci.yml~` still do not name
   `ci.yml`.

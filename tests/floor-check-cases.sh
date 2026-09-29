@@ -219,6 +219,7 @@ quiet "the word uses inside a run line is not a uses key" "wf '- run: grep -rn \
 # A `: |` inside a trailing comment is not a block scalar (#334); one ending the key's value is.
 warns "a comment ending in ': |' does not hide the uses below it" "printf 'jobs:  # note: |\n  t:\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "line 4 actions/checkout@v4$"
 warns "a comment ending in ': >' does not hide it either" "printf 'jobs:\n  t:  # a: >-\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "line 4 actions/checkout@v4$"
+quiet "an explicit-key run block (? run, then : |) is still a block" "wf '- ? run' '  : |' '    uses: not/yaml@v1' > .github/workflows/t.yml" "pinned|workflow"
 quiet "a run block with a trailing comment is still a block" "wf '- run: |  # note: |' '    uses: not/yaml@v1' '- \"a # b\": |' '    uses: not/yaml@v1' > .github/workflows/t.yml" "pinned|workflow"
 says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
 says  "an explicit-key uses is not verified either" "wf '- ? uses' '  : actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"

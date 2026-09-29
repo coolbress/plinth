@@ -550,8 +550,12 @@ jobs:
               it. So `python-ci.yml` does not name `ci.yml`. A `/` may also come
               before a path (a link to the file) but not before a bare name:
               `docs/ci.yml` does not name `.github/workflows/ci.yml`. A link
-              target's `#fragment` (`[x](ci.yml#L3)`) is dropped first."""
+              target's `#fragment` is dropped first: inline (`[x](ci.yml#L3)`),
+              a reference definition (`[x]: ci.yml#L3`) or an autolink
+              (`<https://…/ci.yml#L3>`)."""
               text = re.sub(r"(\]\([^()\s#]*)#[^()\s]*", r"\1", body)
+              text = re.sub(r"(?m)^( {0,3}\[[^\]]+\]:[ \t]*<?[^\s<>#]*)#[^\s<>]*", r"\1", text)
+              text = re.sub(r"(<[^<>\s#]*)#[^<>\s]*(?=>)", r"\1", text)
               def whole(p):
                   before = "(?<![^" + EDGE + ("/" if "/" in p else "") + "])"
                   after = r"(?=\Z|[" + EDGE + r"]|\.(?:\Z|[" + EDGE + "]))"

@@ -140,6 +140,16 @@ edit_ci; run "Edits [the caller](.github/workflows/ci.yml#L3)."
 expect "a link to the file with a line anchor names it" 0
 edit_ci; run "Edits [the caller](https://github.com/o/r/blob/main/.github/workflows/ci.yml#L3-L5 \"title\")."
 expect "a link with a line range and a title names it" 0
+edit_ci; run "$(printf 'Edits [the caller][c].\n\n[c]: .github/workflows/ci.yml#L3')"
+expect "a reference-style link definition with a line anchor names it" 0
+edit_ci; run "$(printf 'Edits [the caller][c].\n\n  [c]: <.github/workflows/ci.yml#L3> "title"')"
+expect "an indented, bracketed definition with a title names it" 0
+edit_ci; run "See <https://github.com/o/r/blob/main/.github/workflows/ci.yml#L3>."
+expect "an autolink with a line anchor names it" 0
+edit_ci; run "$(printf 'Edits [x][c].\n\n[c]: docs/ci.yml.bak#L3')"
+expect "a definition pointing at a longer name does not name it: WARN" 1 ".github/workflows/ci.yml"
+edit_ci; run "Restores <ci.yml#2 and ci.yml#3>, not links."
+expect "a # inside angle brackets that are not one target still makes a longer name: WARN" 1 ".github/workflows/ci.yml"
 edit_ci; run "Restores ci.yml#2, not a link."
 expect "a # after the name outside a link still makes a longer name: WARN" 1 ".github/workflows/ci.yml"
 edit_ci; run "Edits [x](docs/ci.yml.bak#L3)."

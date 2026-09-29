@@ -456,7 +456,8 @@ def action_is_pinned(value: str) -> bool:
 # comment after it allowed. The key is matched from the line's start, so a
 # `: |` inside a trailing comment (`jobs:  # note: |`) is not one (#334): a
 # plain key holds no `: ` and no ` #`, a quoted one runs to its closing quote.
-BLOCK_LINE = re.compile(r"""^\s*(?:-\s+)*(?:'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|[^\s#'"](?:[^\s:#]|:(?=\S)|(?<=\S)#|\s+(?=[^\s:#]))*)"""
+# The key is optional: an explicit key's value line (`? run` then `: |`) has none.
+BLOCK_LINE = re.compile(r"""^\s*(?:-\s+)*(?:'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|[^\s#'"](?:[^\s:#]|:(?=\S)|(?<=\S)#|\s+(?=[^\s:#]))*)?"""
                         r"""\s*:\s*[|>][-+0-9]*\s*(?:#.*)?$""")
 
 
