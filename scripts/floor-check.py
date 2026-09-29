@@ -1457,8 +1457,9 @@ def check_sandbox() -> None:
 
 
 # gh's own git helper, whatever path it was installed under, and nothing else:
-# a `!` helper that also calls gh may answer with its own token first.
-GH_HELPER = re.compile(r"!?(\S*/)?gh(\.exe)?\s+auth\s+git-credential")
+# a `!` helper that also calls gh may answer with its own token first. A path
+# with a space comes single-quoted from `gh auth setup-git` (gh 2.101.0).
+GH_HELPER = re.compile(r"!?('[^']*/gh(\.exe)?'|(\S*/)?gh(\.exe)?)\s+auth\s+git-credential")
 
 
 def github_https(url: str | None) -> bool | None:
@@ -1555,7 +1556,9 @@ def check_credentials(root: Path) -> None:
 
     netrc = Path(os.environ.get("HOME") or Path.home()) / ".netrc"
     try:
-        words = read(netrc).split() if netrc.exists() else []
+        # A line opening with `#` is a comment to netrc's readers.
+        words = [w for line in read(netrc).splitlines() if not line.lstrip().startswith("#")
+                 for w in line.split()] if netrc.exists() else []
     except OSError:
         words = None
     if words is None:

@@ -554,6 +554,11 @@ printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-c
 out="$(credrun FAKE_GH="$one")"
 if grep -q "WARN  git has 2 credential helpers for github.com besides gh's: store, a \`!\` shell command" <<<"$out" && ! grep -q "tok-value-2\|cache" <<<"$out"
 then ok "--credentials: a helper after gh's and one for a path on github.com are WARNs, other hosts are not, and no helper text is printed"; else bad "--credentials helpers"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; fi
+# gh 2.101.0's `gh auth setup-git`, run from a path with a space, single-quotes it.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = !'"'"'/Applications/my tools/gh'"'"' auth git-credential\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "PASS  git asks only gh for github.com" <<<"$out" && ok "--credentials: gh's helper under a quoted path with a space is gh's" \
+  || { bad "--credentials quoted gh path"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 # A `!` helper that calls gh after answering itself is not gh's helper.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !f() { echo password=tok-value-6; gh auth git-credential "$@"; }; f\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
@@ -567,9 +572,9 @@ printf 'machine github.com login me password tok-value-4\n' > "$cred/home/.netrc
 out="$(credrun FAKE_GH="$one")"
 grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok-value-4" <<<"$out" \
   && ok "--credentials: a github.com login in ~/.netrc is a WARN, its value unprinted" || { bad "--credentials netrc"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
-printf 'machine example.com login me password x\n' > "$cred/home/.netrc"
+printf '# machine github.com login old password tok-value-7\nmachine example.com login me password x\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "PASS  no github.com login in" <<<"$out" && ok "--credentials: a .netrc for another host is not a WARN" || bad "--credentials netrc other host"
+grep -q "PASS  no github.com login in" <<<"$out" && ok "--credentials: a .netrc for another host, and a commented github.com line, are not a WARN" || bad "--credentials netrc other host or comment"
 if [ "$(id -u)" != 0 ]; then
   chmod 000 "$cred/home/.netrc"; out="$(credrun FAKE_GH="$one")"; chmod 600 "$cred/home/.netrc"
   grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ok "--credentials: an unreadable .netrc is not verified" || { bad "--credentials netrc unreadable"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
