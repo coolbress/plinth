@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.5.9. A repository it creates
+  now calls plinth's reusable workflows at `8e96702`, plinth v1.1.0, instead
+  of `2673947` from before 1.0, so its `ci / diff-size` names a change to the
+  checks the description does not, and its `ci / floor-check` fails a `ci` job
+  that no longer calls plinth's workflow at a commit SHA. `/plinth:floor-check`
+  now reports a repository on v1.5.8 as one tag behind.
+
 ## [1.1.0] - 2026-09-29
 
 The first release after 1.0 is about a pull request that weakens the checks
