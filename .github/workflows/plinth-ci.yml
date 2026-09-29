@@ -137,6 +137,9 @@ jobs:
       - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit
         run: ./tests/make-release-guards.sh
 
+      - name: No merge while a check is red, the reviewer has not answered the head, or an inline comment has no reply
+        run: ./tests/merge-when-green-cases.sh
+
       - name: The e2e driver deletes what it made on every failure, and names what it could not
         run: ./tests/e2e-driver.sh
 
