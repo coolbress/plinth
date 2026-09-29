@@ -637,8 +637,9 @@ created=0; trap - EXIT
 # `permissions.admin` is the account's role, not the token's reach: a
 # fine-grained token with Administration at No access answered `true` for the
 # owner, and a read needing Administration answered it 403 (measured
-# 2026-09-29). So the role decides only when it is a standard one below admin;
-# under admin, a classic token's `repo` scope carries the role, and a
+# 2026-09-29). So the role decides only when it is a standard one below admin
+# on a personal account's repository (in an organization, an organization role
+# can grant "Edit repository rules" beside it); under admin, a classic token's `repo` scope carries the role, and a
 # fine-grained one is asked that read. A 200 there is read access at least,
 # and whether it can write, which editing the ruleset needs, cannot be read.
 guide="https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks"
@@ -654,7 +655,7 @@ fi
 role="$(as_agent api "repos/$repo" --jq '"\(.permissions.admin) \(.role_name)"' 2>/dev/null)" || role=""
 reach=unknown
 case "$role" in
-  "false read"|"false triage"|"false write"|"false maintain") reach=none ;;
+  "false read"|"false triage"|"false write"|"false maintain") [ "$kind" = Organization ] || reach=none ;;
   "true "*)
     if agent_scopes="$(awk 'tolower($1)=="x-oauth-scopes:"{sub(/^[^:]*: ?/,""); print; found=1; exit} END{exit !found}' <<<"$agent_headers")"; then
       grep -qE "(^|,) *(repo|public_repo) *(,|$)" <<<"$agent_scopes" && reach="admin"

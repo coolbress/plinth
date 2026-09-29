@@ -697,6 +697,12 @@ then bad none "a classic token was asked the Administration read its scopes alre
 else ok none "a classic token's reach is its scopes; no Administration read"; fi
 # A role that is not admin: the standard ones cannot edit a ruleset; a custom
 # organization role might ("Edit repository rules"), so it is not verified.
+# In an organization a standard repository role is not the whole answer: an
+# organization role can grant "Edit repository rules" on its own (Codex on #343).
+E="MOCK_ADMIN=false MOCK_ROLE=write" run admin-org-write ok yes no "administration: not verified" -- someorg/probe
+if grep -qE "administration: .* has (it|none) on" "$work/home-admin-org-write/out"
+then bad admin-org-write "an organization's write role was read as no administration"
+else ok admin-org-write "a standard role below admin in an organization is not verified"; fi
 E="MOCK_ADMIN=false MOCK_ROLE=custom-rules" run admin-custom-role ok yes no "administration: not verified" -- probe
 if grep -qE "administration: .* has (it|none) on" "$work/home-admin-custom-role/out"
 then bad admin-custom-role "a custom role was read as no administration"
