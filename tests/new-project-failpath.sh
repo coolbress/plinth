@@ -49,6 +49,7 @@ case "$all" in
   *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "api repos/"*" --jq .default_branch"*)         step=default-branch ;;
+  "api repos/"*" --jq .permissions.admin"*)      step=admin ;;
   *"default_branch=main"*)                       step=set-default ;;
   "repo create"*)                                step=create ;;
   "repo delete"*)                                step=delete ;;
@@ -119,6 +120,13 @@ case "$step" in
                   else echo "${MOCK_DEFAULT_BRANCH:-$(cat "$FIRST_PUSHED_FILE" 2>/dev/null)}"; fi ;;
   set-default)   : > "$FIRST_PUSHED_FILE.patched" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
+  # What the credential may do on the new repository, as `permissions.admin`
+  # answers; the log says whether an environment token was in reach of the call.
+  admin)         printf 'admin-read GH_TOKEN=%s\n' "${GH_TOKEN:+set}" >> "$GH_LOG"
+                 case "${MOCK_ADMIN-true}" in
+                   error) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                   *)     echo "${MOCK_ADMIN-true}" ;;
+                 esac ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
   # The door pipes the archetype's ruleset in (`--input -`); keep it for the checks.
   ruleset)       [ -t 0 ] || cat > "$HOME/ruleset-posted.json" ;;
@@ -626,6 +634,35 @@ check "a backend ruleset is the wall plus image, from the same app (check-rulese
   '"$root/scripts/check-ruleset.sh" "$work/home-backend/ruleset-posted.json" image >/dev/null'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
   'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.5.9 in " "$work/home-none/out"'
+
+# The end says whether the credential the agent inherits can change the wall
+# (#300): `permissions.admin` on the new repository, read once setup is done.
+# Only `true` and `false` are answers; anything else is not verified, never
+# "no administration".
+guide='https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks'
+check "an admin credential is said to have administration, with the guide's section to switch" \
+  'grep -q "^  administration: the gh credential this ran with has it on tester/probe" "$work/home-none/out" && grep -qF "$guide" "$work/home-none/out"'
+check "the administration line comes after setup, not before the wall" \
+  '[ "$(grep -n "admin-read" "$log" | cut -d: -f1)" -gt "$(grep -n "^gh pr create" "$log" | cut -d: -f1)" ]'
+E="MOCK_ADMIN=false" run admin-false ok yes no "administration: the gh credential this ran with has none on tester/probe" -- probe
+if grep -qF "$guide" "$work/home-admin-false/out"; then bad admin-false "a credential without administration is still sent to the guide"
+else ok admin-false "no pointer to the guide when there is nothing to switch"; fi
+for answer in error null ''; do
+  E="MOCK_ADMIN=$answer" run "admin-unread-${answer:-empty}" ok yes no "administration: not verified" -- probe
+  out="$work/home-admin-unread-${answer:-empty}/out"
+  if grep -qF "$guide" "$out" && ! grep -qE "has (it|none) on" "$out"
+  then ok "admin-unread-${answer:-empty}" "an unreadable answer is not verified, never no administration, and names the guide"
+  else bad "admin-unread-${answer:-empty}" "an unreadable answer was read as one"; grep -F "administration" "$out" | sed 's/^/        /'; fi
+done
+# Through with-admin-token.sh the typed token ran setup and is gone; the agent
+# inherits gh's own login, so that is the one asked, without the typed token.
+if grep -qx "admin-read GH_TOKEN=" "$work/home-env-token-admin/calls.log" \
+   && grep -q "^  administration: gh's own login (not the token typed for this run) has it on tester/probe" "$work/home-env-token-admin/out"
+then ok env-token-admin "the admin-token path asks about gh's own login, not the typed token"
+else bad env-token-admin "the admin-token path reported the typed token"; grep -E "admin-read|administration" "$work/home-env-token-admin/calls.log" "$work/home-env-token-admin/out" | sed 's/^/        /'; fi
+if grep -qx "admin-read GH_TOKEN=set" "$work/home-env-token/calls.log"
+then ok env-token "outside the admin-token path the credential it ran with is the one asked"
+else bad env-token "the environment token was dropped from the administration read"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

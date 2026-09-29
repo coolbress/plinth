@@ -39,7 +39,8 @@ What to do with the output:
   or in a file, and never ask the user to paste one into the chat.
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
-- **It finished** (exit 0): show the final lines. The next step for the user is
-  to open the pull request URL, wait for the checks, and merge with squash.
+- **It finished** (exit 0): show the final lines, the `administration:` line
+  among them. The next step for the user is to open the pull request URL,
+  wait for the checks, and merge with squash.
 
 Do not edit the generated repository in this session.

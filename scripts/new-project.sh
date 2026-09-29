@@ -18,7 +18,8 @@
 # default branch the ruleset will target, labels, ruleset, secret scanning,
 # Dependabot, Actions allowlist, squash only, CodeQL (once GitHub has detected
 # the languages, and waited for until its first analysis of main is done), and
-# the first pull request, whose workflow must start.
+# the first pull request, whose workflow must start. Last, whether the gh
+# credential the agent inherits has administration on the new repository.
 #
 # fail-closed: after the repository is created, a fatal exit before setup
 # completes attempts a best-effort deletion -- the trap fires on `created=1`
@@ -627,6 +628,25 @@ while :; do
 done
 
 created=0; trap - EXIT
+# The wall holds only against a credential without administration: with it, an
+# agent can edit or delete the ruleset (#300). Asked of the new repository once
+# setup is done, and after the rollback is off, so an unreadable answer costs a
+# line, not the repository. Through with-admin-token.sh the typed token ran the
+# setup and goes with this process; the agent inherits gh's own login, so that
+# is the one asked. Only `true` and `false` are answers.
+guide="https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks"
+if [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
+  who="gh's own login (not the token typed for this run)"
+  admin="$(env -u GH_TOKEN -u GITHUB_TOKEN gh api "repos/$repo" --jq .permissions.admin 2>/dev/null)" || admin=""
+else
+  who="the gh credential this ran with"
+  admin="$(gh api "repos/$repo" --jq .permissions.admin 2>/dev/null)" || admin=""
+fi
+case "$admin" in
+  true)  admin_line="  administration: $who has it on $repo, so an agent using it can edit or delete the ruleset. After the first merge, give the agent a token without it: $guide" ;;
+  false) admin_line="  administration: $who has none on $repo, so an agent using it cannot edit the ruleset" ;;
+  *)     admin_line="  administration: not verified for $who (repos/$repo's permissions.admin could not be read). Check: gh api repos/$repo --jq .permissions.admin, which should print false for the agent's token: $guide" ;;
+esac
 cat <<EOF
 done: $url (public, $spdx, $arch, $template_repo@$template_ref)
   local: $dir
@@ -634,6 +654,7 @@ done: $url (public, $spdx, $arch, $template_repo@$template_ref)
     wait for every check to turn green, then merge (squash). A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
 ${repush:+$repush
 }  the recovery push, the token line and what to do with Dependabot's pull requests are in the pull request's body and in README.md under "First day"
+$admin_line
   next: cd $dir && claude
 EOF
 [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ] || \
