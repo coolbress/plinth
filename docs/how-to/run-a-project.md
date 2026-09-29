@@ -89,6 +89,9 @@ first pull request is merged, give the agent a token of its own without it:
    **Issues** and **Pull requests** at **Read and write**. Leave
    **Workflows** and **Administration** at **No access**. If a `gh` command
    later answers 403, add the permission it needed, but never those two.
+   Without Administration the token cannot edit or delete the ruleset
+   either; the browser login can, because its `repo` scope includes
+   administration.
 2. In a separate terminal window, not with `!` in Claude Code, run
    `gh auth login`: GitHub.com, HTTPS, **Yes** to authenticating Git, then
    **Paste an authentication token**. It replaces the browser login.
@@ -98,7 +101,13 @@ first pull request is merged, give the agent a token of its own without it:
    startup file (`~/.zshrc`, `~/.bashrc`, `~/.zshenv`), remove it there, then
    restart Claude Code. In the new session, `gh auth status` should show a
    `github_pat_` token, stored in the keyring or gh's config file; after your
-   account it should not say `(GH_TOKEN)` or `(GITHUB_TOKEN)`.
+   account it should not say `(GH_TOKEN)` or `(GITHUB_TOKEN)`. Then
+   `gh api repos/<owner>/<name>/actions/permissions` should answer
+   `Resource not accessible by personal access token (HTTP 403)`: that read
+   needs Administration, so the token has none. (`permissions.admin` on the
+   repository says `true` for you either way: it is your account's role, not
+   the token's.) `/plinth:new-project` asks the same when it finishes, for the
+   login the agent inherits, and prints the answer.
 4. Keep SSH out of the agent's reach. Over SSH the refusal does not happen: a
    deploy key with write access pushed a workflow change in the same
    measurement. In the project, `git remote -v` should show
