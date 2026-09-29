@@ -1456,8 +1456,9 @@ def check_sandbox() -> None:
     result("INFO", "  Linux, WSL2 and native Windows: not measured")
 
 
-# gh's own git helper, whatever path it was installed under.
-GH_HELPER = re.compile(r"(^|[\s/!])gh(\.exe)?\s+auth\s+git-credential\b")
+# gh's own git helper, whatever path it was installed under, and nothing else:
+# a `!` helper that also calls gh may answer with its own token first.
+GH_HELPER = re.compile(r"!?(\S*/)?gh(\.exe)?\s+auth\s+git-credential")
 
 
 def github_https(url: str | None) -> bool | None:
@@ -1481,7 +1482,9 @@ def check_credentials(root: Path) -> None:
     gh's collects the credential of every push that succeeds. Presence only:
     no value is read or printed. An item that could not be read is not
     verified; SSH is never read here, since the key that counts is the one
-    GitHub accepts."""
+    GitHub accepts. `gh auth status` checks each stored token with GitHub, so
+    this item goes online even under --no-network; offline, gh's answer is
+    what it is, and one that is not its JSON is not verified."""
     for var in ("GH_TOKEN", "GITHUB_TOKEN"):
         if os.environ.get(var):
             result("WARN", f"{var} is set in this environment: gh, and the git push it serves, use it before any stored login")
@@ -1536,13 +1539,13 @@ def check_credentials(root: Path) -> None:
                 helpers = []
         # Named by its first word only: a `!` helper is a shell command that may carry the token itself.
         others = ["a `!` shell command" if h.startswith("!") else h.split()[0]
-                  for h in helpers if not GH_HELPER.search(h)]
+                  for h in helpers if not GH_HELPER.fullmatch(h)]
         if others:
             result("WARN", f"git has {len(others)} credential helper{'s' if len(others) > 1 else ''} for github.com "
                    f"besides gh's: {', '.join(others)} (`git config --show-origin --get-regexp 'credential.*helper'` "
                    "shows where)")
             result("INFO", "  one listed before gh's, or any while gh has no login, answers the push; one listed after "
-                   "gh's stores every credential that pushed. Delete its github.com entry, then clear the list with an "
+                   "gh's was seen storing the credential a push succeeded with. Delete its github.com entry, then clear the list with an "
                    "empty `helper =` before gh's under `[credential \"https://github.com\"]` in ~/.gitconfig")
         else:
             result("PASS", f"git asks {'only gh' if helpers else 'no credential helper'} for github.com")

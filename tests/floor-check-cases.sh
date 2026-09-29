@@ -533,6 +533,9 @@ rm -f "$cred/saw"
 out="$(credrun GH_TOKEN=secret-value-1 FAKE_GH="$one")"
 if grep -q "WARN  GH_TOKEN is set" <<<"$out" && ! grep -q "secret-value-1" <<<"$out" && [ ! -e "$cred/saw" ] && grep -q "PASS  gh stores 1 account" <<<"$out"
 then ok "--credentials: GH_TOKEN is named, not printed, and the stored accounts are read without it"; else bad "--credentials GH_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(credrun GITHUB_TOKEN=secret-value-5 FAKE_GH="$one")"
+grep -q "WARN  GITHUB_TOKEN is set" <<<"$out" && ! grep -q "secret-value-5" <<<"$out" \
+  && ok "--credentials: GITHUB_TOKEN is named, not printed" || { bad "--credentials GITHUB_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; }
 skipped=0
 for bad_gh in "" "not json" '{"nohosts":1}'; do
   out="$(credrun FAKE_GH="$bad_gh")"
@@ -551,6 +554,11 @@ printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-c
 out="$(credrun FAKE_GH="$one")"
 if grep -q "WARN  git has 2 credential helpers for github.com besides gh's: store, a \`!\` shell command" <<<"$out" && ! grep -q "tok-value-2\|cache" <<<"$out"
 then ok "--credentials: a helper after gh's and one for a path on github.com are WARNs, other hosts are not, and no helper text is printed"; else bad "--credentials helpers"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; fi
+# A `!` helper that calls gh after answering itself is not gh's helper.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = !f() { echo password=tok-value-6; gh auth git-credential "$@"; }; f\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's: a \`!\` shell command" <<<"$out" && ! grep -q "PASS  git asks" <<<"$out" \
+  && ok "--credentials: a shell helper that merely calls gh's is still another helper" || { bad "--credentials wrapped gh helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 printf '[http "https://github.com/"]\n\textraHeader = Authorization: basic tok-value-3\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
 grep -q "WARN  git config sends an Authorization header to github.com" <<<"$out" && ! grep -q "tok-value-3" <<<"$out" \
