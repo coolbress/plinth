@@ -15,10 +15,9 @@ pull requests and have no tag.
 
 - `scripts/merge-when-green.sh <n>`, for whoever merges plinth's own pull
   requests: it runs CONTRIBUTING's squash-merge command only when every check
-  on the head is green, the third-party reviewer has given a verdict on that
-  head, and every top-level inline comment has a reply; otherwise it stops and
-  says why. On a repository with no `third-party / review` it stops unless
-  `--no-reviewer` is passed. `tests/merge-when-green-cases.sh` runs it against
+  on the head is green, `third-party / review` among them, and every top-level
+  inline comment has a reply; otherwise it stops and says why. On a repository
+  with no `third-party / review` it stops unless `--no-reviewer` is passed. `tests/merge-when-green-cases.sh` runs it against
   a fake `gh`.
 
 ### Changed

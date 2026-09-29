@@ -175,11 +175,12 @@ release needs a green run on the commit it tags
    step 4, not after.
 
    `scripts/merge-when-green.sh <n>` runs that command once nothing is left to
-   read, and stops otherwise: every check on the head green, the reviewer's
-   verdict on that head when it carries `third-party / review`, and a reply
-   under every top-level inline comment, on any commit. On a repository with
-   no reviewer it stops unless you pass `--no-reviewer`, since merging without
-   one is your call. It takes the head when it starts and passes it as
+   read, and stops otherwise: every check on the head green, and a reply
+   under every top-level inline comment, on any commit. A green
+   `third-party / review` is the reviewer's verdict, since the check already
+   binds it to the head and its push; on a repository with no such check it
+   stops unless you pass `--no-reviewer`, since merging without a reviewer is
+   your call. It takes the head when it starts and passes it as
    `--match-head-commit`. Merging on a count that was printed but not checked
    let two unread findings through once (#306); this is the check.
 

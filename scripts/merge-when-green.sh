@@ -7,11 +7,13 @@
 #
 # It stops, and merges nothing, when:
 #   - a check on the head is not SUCCESS once they have all finished;
-#   - the head carries `third-party / review` and the reviewer has given no
-#     verdict on that head (a review on the commit, or a +1 reaction newer
-#     than the push) within MERGE_REVIEW_WAIT seconds (default 1200);
 #   - the head has no `third-party / review` and --no-reviewer was not given:
-#     whether to merge without a reviewer is the person's call, not a default;
+#     whether to merge without a reviewer is the person's call, not a default.
+#     Where it is there, its green is the reviewer's verdict: the check binds
+#     each signal to this head and to the head's push in the activity log
+#     (scripts/pr-review/attest.py), which this script does not redo. It also
+#     passes, by the repository's policy, on its Dependabot and release
+#     exceptions, with no review;
 #   - any top-level inline comment, on any commit, has no reply: every finding
 #     ends as fixed, answered or moved to an issue, and the reply says which.
 # Then it squash-merges with the description as the body and
@@ -34,8 +36,6 @@ done
 [ -n "$pr" ] || { echo "$usage" >&2; exit 2; }
 [ -n "$repo" ] || repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || stop "cannot tell the repository; pass --repo owner/name"
 
-bot="${MERGE_REVIEWER_LOGIN:-chatgpt-codex-connector[bot]}"
-wait_review="${MERGE_REVIEW_WAIT:-1200}"
 poll="${MERGE_POLL:-20}"
 
 state="$(gh pr view "$pr" -R "$repo" --json state --jq .state)" || stop "cannot read pull request $pr in $repo"
@@ -52,19 +52,9 @@ bad="$(awk -F'\t' '$1!="SUCCESS"' <<<"$checks")"
 [ -z "$bad" ] || stop "checks not green:" "$bad"
 echo "checks: $(wc -l <<<"$checks" | tr -d ' ') green"
 
-# -- the reviewer's verdict on this head -------------------------------------
+# -- the reviewer ----------------------------------------------------------
 if grep -qxF "SUCCESS	third-party / review" <<<"$checks"; then
-  pushed="$(gh api "repos/$repo/commits/$head" --jq .commit.committer.date)" || stop "cannot read the head's date"
-  waited=0; verdict=""
-  while :; do
-    reviews="$(gh api "repos/$repo/pulls/$pr/reviews" --jq "[.[]|select(.user.login==\"$bot\" and .commit_id==\"$head\")]|length")" || stop "cannot read reviews"
-    ups="$(gh api "repos/$repo/issues/$pr/reactions" --jq "[.[]|select(.user.login==\"$bot\" and .content==\"+1\" and .created_at>=\"$pushed\")]|length")" || stop "cannot read reactions"
-    if [ "$reviews" -gt 0 ]; then verdict="a review on $head"; break; fi
-    if [ "$ups" -gt 0 ]; then verdict="a +1 after the push"; break; fi
-    [ "$waited" -lt "$wait_review" ] || stop "no verdict from $bot on $head after ${wait_review}s"
-    sleep "$poll"; waited=$((waited + poll))
-  done
-  echo "reviewer: $verdict"
+  echo "reviewer: third-party / review is green on this head"
 elif [ "$reviewer" = none ]; then
   echo "reviewer: none on this repository (--no-reviewer)"
 else

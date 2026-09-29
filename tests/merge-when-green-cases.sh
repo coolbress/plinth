@@ -27,9 +27,6 @@ case "$1 $2" in
   "pr merge") printf '%s\n' "$*" >"$fx/merged"; exit "$(cat "$fx/merge_rc" 2>/dev/null || echo 0)" ;;
   api*)
     case "$*" in
-      *"/commits/"*) out "$fx/commit.json" ;;
-      *"/reviews"*) out "$fx/reviews.json" ;;
-      *"/reactions"*) out "$fx/reactions.json" ;;
       *"/comments"*) out "$fx/comments.json" ;;
       *) echo "fake gh: unexpected api $*" >&2; exit 1 ;;
     esac ;;
@@ -39,8 +36,6 @@ EOF
 chmod +x "$work/bin/gh"
 
 H=1111111111111111111111111111111111111111
-OLD=2222222222222222222222222222222222222222
-BOT='chatgpt-codex-connector[bot]'
 green='[{"name":"ci / install","state":"SUCCESS"},{"name":"third-party / review","state":"SUCCESS"}]'
 
 # setup <case-dir>: a pull request that should merge; each case then breaks one thing.
@@ -49,9 +44,6 @@ setup() {
   printf '{"state":"OPEN","headRefOid":"%s","body":"## What and why\\n\\nx"}' "$H" >"$FX/pr.json"
   printf '{"state":"MERGED","mergeCommit":{"oid":"abc"}}' >"$FX/after.json"
   printf '%s' "$green" >"$FX/checks.json"
-  printf '{"commit":{"committer":{"date":"2026-09-29T00:00:00Z"}}}' >"$FX/commit.json"
-  printf '[{"user":{"login":"%s"},"commit_id":"%s"}]' "$BOT" "$H" >"$FX/reviews.json"
-  printf '[]' >"$FX/reactions.json"
   printf '[]' >"$FX/comments.json"
 }
 
@@ -59,7 +51,7 @@ pass=0; fail=0
 run() { # <merge|stop> <label> [script args...]
   local want="$1" label="$2"; shift 2
   local got rc
-  PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_REVIEW_WAIT=0 bash "$script" 7 --repo o/r "$@" >"$FX/out" 2>&1; rc=$?
+  PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r "$@" >"$FX/out" 2>&1; rc=$?
   if [ -f "$FX/merged" ]; then got=merge; else got=stop; fi
   # A merge exits 0; a stop exits non-zero and leaves no merge call behind.
   local ok=no
@@ -73,15 +65,12 @@ run() { # <merge|stop> <label> [script args...]
 }
 
 echo "-- merges"
-setup ok; run merge "green, a review on the head, no comments"
+setup ok; run merge "every check green, third-party / review among them, no comments"
 if grep -q -- "--match-head-commit $H" "$FX/merged" && grep -q -- "--squash" "$FX/merged"; then
   pass=$((pass+1)); echo "  PASS  merge  pins the head and squashes"
 else
   fail=$((fail+1)); echo "  FAIL  merge  pins the head and squashes: $(cat "$FX/merged")"
 fi
-setup up; printf '[]' >"$FX/reviews.json"
-printf '[{"user":{"login":"%s"},"content":"+1","created_at":"2026-09-29T00:01:00Z"}]' "$BOT" >"$FX/reactions.json"
-run merge "a +1 after the push counts as the verdict"
 setup answered
 printf '[{"id":1,"in_reply_to_id":null,"path":"a","line":3,"body":"P2 x"},{"id":2,"in_reply_to_id":1,"path":"a","line":3,"body":"Fixed"}]' >"$FX/comments.json"
 run merge "an inline comment with a reply"
@@ -101,13 +90,9 @@ run stop "an inline comment with no reply"
 setup oldopen
 printf '[{"id":1,"in_reply_to_id":null,"path":"a","line":3,"body":"P1 old"},{"id":2,"in_reply_to_id":1,"path":"a","line":3,"body":"Fixed"},{"id":3,"in_reply_to_id":null,"path":"b","line":null,"original_line":9,"body":"P2 older, unanswered"}]' >"$FX/comments.json"
 run stop "one answered and one unanswered comment"
-setup stale; printf '[{"user":{"login":"%s"},"commit_id":"%s"}]' "$BOT" "$OLD" >"$FX/reviews.json"
-run stop "a review on an older commit only"
-setup oldup; printf '[]' >"$FX/reviews.json"
-printf '[{"user":{"login":"%s"},"content":"+1","created_at":"2026-09-28T23:59:00Z"}]' "$BOT" >"$FX/reactions.json"
-run stop "a +1 from before the push"
-setup other; printf '[{"user":{"login":"someone"},"commit_id":"%s"}]' "$H" >"$FX/reviews.json"
-run stop "a review on the head by someone else"
+setup revred; printf '[{"name":"ci / install","state":"SUCCESS"},{"name":"third-party / review","state":"FAILURE"}]' >"$FX/checks.json"
+run stop "third-party / review red"
+run stop "third-party / review red, even with --no-reviewer" --no-reviewer
 setup noflag; printf '[{"name":"ci / install","state":"SUCCESS"}]' >"$FX/checks.json"
 run stop "no reviewer check and no --no-reviewer"
 setup closed; printf '{"state":"MERGED","headRefOid":"%s","body":"x"}' "$H" >"$FX/pr.json"
@@ -115,7 +100,7 @@ run stop "a pull request that is not open"
 setup nobody; printf '{"state":"OPEN","headRefOid":"%s","body":""}' "$H" >"$FX/pr.json"
 run stop "an empty description"
 setup refused; echo 1 >"$FX/merge_rc"
-if PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_REVIEW_WAIT=0 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; then
+if PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; then
   fail=$((fail+1)); echo "  FAIL  stop  gh pr merge refusing (for example a newer head) exits non-zero"
 else
   pass=$((pass+1)); echo "  PASS  stop  gh pr merge refusing (for example a newer head) exits non-zero"
