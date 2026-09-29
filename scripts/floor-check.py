@@ -58,6 +58,7 @@ import shutil
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import cast
@@ -1455,6 +1456,118 @@ def check_sandbox() -> None:
     result("INFO", "  Linux, WSL2 and native Windows: not measured")
 
 
+# gh's own git helper, whatever path it was installed under.
+GH_HELPER = re.compile(r"(^|[\s/!])gh(\.exe)?\s+auth\s+git-credential\b")
+
+
+def github_https(url: str | None) -> bool | None:
+    """Does a config subsection (`credential.<url>.helper`) apply to a push to
+    https://github.com? True when it names the host and nothing narrower, None
+    when it names a path on it (it may apply: counted, but its empty value is
+    not taken as clearing the list), False otherwise."""
+    if url is None:
+        return True
+    u = urllib.parse.urlsplit(url if "://" in url else "https://" + url)
+    if u.scheme != "https" or (u.hostname or "") != "github.com":
+        return False
+    return True if u.path.strip("/") == "" else None
+
+
+def check_credentials(root: Path) -> None:
+    """What on this machine can push to github.com besides the token the agent
+    was given (#336). Measured with gh 2.101.0 and git 2.55.0: a second account
+    stored in gh is one `gh auth switch` away, and a git helper other than gh's
+    answers whenever it comes first or gh has no login, and one listed after
+    gh's collects the credential of every push that succeeds. Presence only:
+    no value is read or printed. An item that could not be read is not
+    verified; SSH is never read here, since the key that counts is the one
+    GitHub accepts."""
+    for var in ("GH_TOKEN", "GITHUB_TOKEN"):
+        if os.environ.get(var):
+            result("WARN", f"{var} is set in this environment: gh, and the git push it serves, use it before any stored login")
+            result("INFO", f"  remove {var} where it is set (a shell startup file), then restart Claude Code")
+
+    env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
+    try:
+        r = subprocess.run(["gh", "auth", "status", "--hostname", "github.com", "--json", "hosts"],
+                           capture_output=True, text=True, timeout=30, check=False, env=env)
+        accounts = json.loads(r.stdout)["hosts"].get("github.com", []) if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError, AttributeError):
+        accounts = None
+    if not isinstance(accounts, list):
+        result("SKIP", "accounts stored in gh not verified: `gh auth status --json hosts` could not be read")
+    else:
+        logins = [str(acct.get("login", "?")) if isinstance(acct, dict) else "?" for acct in accounts]
+        active = [str(acct.get("login", "?")) for acct in accounts if isinstance(acct, dict) and acct.get("active")]
+        if len(logins) > 1:
+            result("WARN", f"gh stores {len(logins)} accounts for github.com (active: {', '.join(active) or 'none'}): "
+                   "each is one `gh auth switch` away")
+            for login in logins:
+                if login not in active:
+                    result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
+        else:
+            result("PASS", f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
+                   + (f": {logins[0]}" if logins else ""))
+
+    g: subprocess.CompletedProcess[str] | None
+    try:
+        g = subprocess.run(["git", "-C", str(root), "config", "--null", "--get-regexp",
+                            r"^(credential\..*helper|http\..*extraheader)$"],
+                           capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        g = None
+    if g is None or g.returncode not in (0, 1):   # 1: no such key
+        result("SKIP", "git credential helpers not verified: `git config` could not be read")
+    else:
+        helpers: list[str] = []
+        headers = 0
+        for entry in filter(None, g.stdout.split("\0")):
+            key, _, value = entry.partition("\n")
+            section, _, rest = key.partition(".")
+            sub = rest.rpartition(".")[0]
+            applies = github_https(sub or None)
+            if applies is False:
+                continue
+            if section == "http":
+                headers += value.strip().lower().startswith("authorization")
+            elif value.strip():
+                helpers.append(value.strip())
+            elif applies:   # an empty helper clears the list read so far, as git does
+                helpers = []
+        # Named by its first word only: a `!` helper is a shell command that may carry the token itself.
+        others = ["a `!` shell command" if h.startswith("!") else h.split()[0]
+                  for h in helpers if not GH_HELPER.search(h)]
+        if others:
+            result("WARN", f"git has {len(others)} credential helper{'s' if len(others) > 1 else ''} for github.com "
+                   f"besides gh's: {', '.join(others)} (`git config --show-origin --get-regexp 'credential.*helper'` "
+                   "shows where)")
+            result("INFO", "  one listed before gh's, or any while gh has no login, answers the push; one listed after "
+                   "gh's stores every credential that pushed. Delete its github.com entry, then clear the list with an "
+                   "empty `helper =` before gh's under `[credential \"https://github.com\"]` in ~/.gitconfig")
+        else:
+            result("PASS", f"git asks {'only gh' if helpers else 'no credential helper'} for github.com")
+        if headers:
+            result("WARN", "git config sends an Authorization header to github.com (http.extraHeader): "
+                   "`git config --show-origin --get-regexp extraheader` shows where")
+
+    netrc = Path(os.environ.get("HOME") or Path.home()) / ".netrc"
+    try:
+        words = read(netrc).split() if netrc.exists() else []
+    except OSError:
+        words = None
+    if words is None:
+        result("SKIP", f"{netrc} not verified: it exists and could not be read")
+    elif any(w == "default" or (w == "machine" and i + 1 < len(words) and words[i + 1] == "github.com")
+             for i, w in enumerate(words)):
+        result("WARN", f"{netrc} holds a login for github.com (or a default one): git over HTTPS uses it")
+    else:
+        result("PASS", f"no github.com login in {netrc}")
+
+    result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
+           "say which keys push; see docs/how-to/run-a-project.md")
+    result("INFO", "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file")
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 
 
@@ -1471,6 +1584,8 @@ def main() -> int:
                     help="read the ci job from the checkout, not the default branch: what `ci / floor-check` passes, "
                          "so a pull request that repairs the caller can merge")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
+    ap.add_argument("--credentials", action="store_true",
+                    help="also report what else on this machine can push to github.com: gh accounts, git helpers, ~/.netrc")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
@@ -1538,6 +1653,8 @@ def main() -> int:
 
     if a.sandbox:
         check_sandbox()
+    if a.credentials:
+        check_credentials(root)
 
     print(f"-- {fails} failed, {skips} not verified")
     return 1 if fails else 0

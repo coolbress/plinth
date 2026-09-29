@@ -31,6 +31,7 @@ base="[/plugin/scripts/floor-check.py]
 [--root]
 [.]
 [--sandbox]
+[--credentials]
 [--ruleset]
 [/plugin/ruleset.json]"
 
