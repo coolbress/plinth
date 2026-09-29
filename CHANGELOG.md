@@ -42,6 +42,10 @@ pull requests and have no tag.
   stands on each side of it (`_ci.yml_`, `~~ci.yml~~`), and next to a typographic quote or apostrophe
   (`ci.yml’s`). `python-ci.yml`, `ci.yml.bak` and `ci.yml~` still do not name
   `ci.yml`.
+- `/plinth:new-project` with `PLINTH_FIRST_PR_WAIT` under 90 seconds no longer
+  ends the wait for CodeQL without its one empty-commit re-push when a second
+  passes between setting the deadline and the re-push time; both now come from
+  one clock reading. The default wait of 300 seconds was not affected.
 
 ## [1.1.0] - 2026-09-29
 
