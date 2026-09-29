@@ -551,11 +551,11 @@ jobs:
               before a path (a link to the file) but not before a bare name:
               `docs/ci.yml` does not name `.github/workflows/ci.yml`. A link
               target's `#fragment` is dropped first: inline (`[x](ci.yml#L3)`),
-              a reference definition (`[x]: ci.yml#L3`) or an autolink
-              (`<https://…/ci.yml#L3>`)."""
+              a reference definition (`[x]: ci.yml#L3`) or an autolink, which
+              has a scheme (`<https://…/ci.yml#L3>`; `<ci.yml#2>` is not one)."""
               text = re.sub(r"(\]\([^()\s#]*)#[^()\s]*", r"\1", body)
               text = re.sub(r"(?m)^( {0,3}\[[^\]]+\]:[ \t]*<?[^\s<>#]*)#[^\s<>]*", r"\1", text)
-              text = re.sub(r"(<[^<>\s#]*)#[^<>\s]*(?=>)", r"\1", text)
+              text = re.sub(r"(<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s#]*)#[^<>\s]*(?=>)", r"\1", text)
               def whole(p):
                   before = "(?<![^" + EDGE + ("/" if "/" in p else "") + "])"
                   after = r"(?=\Z|[" + EDGE + r"]|\.(?:\Z|[" + EDGE + "]))"
