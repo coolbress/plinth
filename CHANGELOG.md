@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-29
+
+Fixes to 1.1's new readers, and the first release a new repository starts
+on 1.1. `/plinth:floor-check` read a `ci.yml` opening with `---`, yamllint's
+recommended first line, as not verified, and a trailing comment ending in
+`: |` hid the lines under it, so a correct `ci` job could be reported missing
+in `ci / floor-check`. `ci / diff-size` warned about a path the description
+did name inside a link with a line anchor or common Markdown emphasis.
+`/plinth:new-project` with a first-PR wait under 90 seconds could end without
+its CodeQL re-push. And `/plinth:new-project` now renders plinth-template
+v1.5.9, whose repositories call plinth v1.1.0 from their first pull request.
+
+A patch: no check name, job, input or secret changes, and no skill is added,
+removed or renamed; `/plinth:floor-check`'s page now says a leading `---`
+is read. The one `Added`
+entry is `scripts/merge-when-green.sh`, which plinth's own maintainers run to
+merge; nothing a consumer calls or installs uses it.
+
+tested with plinth-template v1.5.9
+
 ### Added
 
 - `scripts/merge-when-green.sh <n>`, for whoever merges plinth's own pull
@@ -1587,7 +1607,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/coolbress/plinth/releases/tag/v1.1.1
 [1.1.0]: https://github.com/coolbress/plinth/releases/tag/v1.1.0
 [1.0.0]: https://github.com/coolbress/plinth/releases/tag/v1.0.0
 [0.5.31]: https://github.com/coolbress/plinth/releases/tag/v0.5.31
