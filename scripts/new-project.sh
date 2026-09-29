@@ -633,19 +633,42 @@ created=0; trap - EXIT
 # setup is done, and after the rollback is off, so an unreadable answer costs a
 # line, not the repository. Through with-admin-token.sh the typed token ran the
 # setup and goes with this process; the agent inherits gh's own login, so that
-# is the one asked. Only `true` and `false` are answers.
+# is the one asked.
+# `permissions.admin` is the account's role, not the token's reach: a
+# fine-grained token with Administration at No access answered `true` for the
+# owner, and a read needing Administration answered it 403 (measured
+# 2026-09-29). So the role decides only when it is a standard one below admin;
+# under admin, a classic token's `repo` scope carries the role, and a
+# fine-grained one is asked that read. A 200 there is read access at least,
+# and whether it can write, which editing the ruleset needs, cannot be read.
 guide="https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks"
 if [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   who="gh's own login (not the token typed for this run)"
-  admin="$(env -u GH_TOKEN -u GITHUB_TOKEN gh api "repos/$repo" --jq .permissions.admin 2>/dev/null)" || admin=""
+  as_agent() { env -u GH_TOKEN -u GITHUB_TOKEN gh "$@"; }
+  agent_headers="$(as_agent api -i user 2>/dev/null | tr -d '\r' | sed '/^$/q')" || agent_headers=""
 else
   who="the gh credential this ran with"
-  admin="$(gh api "repos/$repo" --jq .permissions.admin 2>/dev/null)" || admin=""
+  as_agent() { gh "$@"; }
+  agent_headers="$headers"
 fi
-case "$admin" in
-  true)  admin_line="  administration: $who has it on $repo, so an agent using it can edit or delete the ruleset. After the first merge, give the agent a token without it: $guide" ;;
-  false) admin_line="  administration: $who has none on $repo, so an agent using it cannot edit the ruleset" ;;
-  *)     admin_line="  administration: not verified for $who (repos/$repo's permissions.admin could not be read). Check: gh api repos/$repo --jq .permissions.admin, which should print false for the agent's token: $guide" ;;
+role="$(as_agent api "repos/$repo" --jq '"\(.permissions.admin) \(.role_name)"' 2>/dev/null)" || role=""
+reach=unknown
+case "$role" in
+  "false read"|"false triage"|"false write"|"false maintain") reach=none ;;
+  "true "*)
+    if agent_scopes="$(awk 'tolower($1)=="x-oauth-scopes:"{sub(/^[^:]*: ?/,""); print; found=1; exit} END{exit !found}' <<<"$agent_headers")"; then
+      grep -qE "(^|,) *(repo|public_repo) *(,|$)" <<<"$agent_scopes" && reach="admin"
+    elif probe="$(as_agent api "repos/$repo/actions/permissions" --silent 2>&1)"; then
+      reach="read"
+    else
+      case "$probe" in *"HTTP 403"*"not accessible"*|*"not accessible"*"HTTP 403"*) reach=none ;; esac
+    fi ;;
+esac
+case "$reach" in
+  admin) admin_line="  administration: $who has it on $repo, so an agent using it can edit or delete the ruleset. After the first merge, give the agent a token without it: $guide" ;;
+  none)  admin_line="  administration: $who has none on $repo, so an agent using it cannot edit the ruleset" ;;
+  read)  admin_line="  administration: not verified for $who: it reads Administration on $repo, and whether it can also write it (edit the ruleset) cannot be read. The agent's token should have Administration at No access: $guide" ;;
+  *)     admin_line="  administration: not verified for $who (its reach on $repo could not be read). The agent's token should have Administration at No access: $guide" ;;
 esac
 cat <<EOF
 done: $url (public, $spdx, $arch, $template_repo@$template_ref)

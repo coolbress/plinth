@@ -14,13 +14,15 @@ pull requests and have no tag.
 ### Added
 
 - `/plinth:new-project` ends with one line saying whether the `gh`
-  credential the agent inherits has administration on the new repository
-  (`permissions.admin`), which is what lets an agent edit or delete the
-  ruleset. With it, the line points to "Give the agent a token that cannot
-  change the checks"; an answer it cannot read is said to be not verified.
-  Through `with-admin-token.sh` it asks about `gh`'s own login, not the
-  typed token (#300). That guide section now says the token without
-  Administration cannot edit the ruleset, and how to check it.
+  credential the agent inherits can administer the new repository, which is
+  what lets an agent edit or delete the ruleset. A classic token's `repo`
+  scope can; a fine-grained token is asked a read that needs Administration,
+  and a refusal means it cannot. With administration, the line points to
+  "Give the agent a token that cannot change the checks"; a fine-grained
+  token that can read Administration, and an answer it cannot read, are said
+  to be not verified. Through `with-admin-token.sh` it asks about `gh`'s own
+  login, not the typed token (#300). That guide section now says the token
+  without Administration cannot edit the ruleset, and how to check it.
 
 ## [1.1.1] - 2026-09-29
 

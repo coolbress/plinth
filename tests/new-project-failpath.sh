@@ -49,7 +49,8 @@ case "$all" in
   *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "api repos/"*" --jq .default_branch"*)         step=default-branch ;;
-  "api repos/"*" --jq .permissions.admin"*)      step=admin ;;
+  "api repos/"*" --jq "*"permissions.admin"*)    step=admin ;;
+  "api repos/"*"/actions/permissions --silent"*) step=admin-probe ;;
   *"default_branch=main"*)                       step=set-default ;;
   "repo create"*)                                step=create ;;
   "repo delete"*)                                step=delete ;;
@@ -120,12 +121,22 @@ case "$step" in
                   else echo "${MOCK_DEFAULT_BRANCH:-$(cat "$FIRST_PUSHED_FILE" 2>/dev/null)}"; fi ;;
   set-default)   : > "$FIRST_PUSHED_FILE.patched" ;;
   delete)        [ "${MOCK_DELETE_FAILS:-0}" = 1 ] && exit 1 ;;
-  # What the credential may do on the new repository, as `permissions.admin`
-  # answers; the log says whether an environment token was in reach of the call.
+  # The account's role on the new repository, as `permissions.admin` and
+  # `role_name` answer; the log says whether an environment token was in reach
+  # of the call. It is the role, not the token: a fine-grained token with
+  # Administration at No access still answers `true` for the owner (measured
+  # 2026-09-29, #300).
   admin)         printf 'admin-read GH_TOKEN=%s\n' "${GH_TOKEN:+set}" >> "$GH_LOG"
                  case "${MOCK_ADMIN-true}" in
                    error) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
-                   *)     echo "${MOCK_ADMIN-true}" ;;
+                   *)     echo "${MOCK_ADMIN-true} ${MOCK_ROLE-admin}" ;;
+                 esac ;;
+  # A read that needs Administration: a fine-grained token without it gets this
+  # 403 (measured, the same token as above); with it, even read-only, a 200.
+  admin-probe)   printf 'admin-probe GH_TOKEN=%s\n' "${GH_TOKEN:+set}" >> "$GH_LOG"
+                 case "${MOCK_ADMIN_PROBE:-ok}" in
+                   denied) echo "gh: Resource not accessible by personal access token (HTTP 403)" >&2; exit 1 ;;
+                   error)  echo "gh: HTTP 502" >&2; exit 1 ;;
                  esac ;;
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
   # The door pipes the archetype's ruleset in (`--input -`); keep it for the checks.
@@ -636,9 +647,10 @@ check "the summary line names owner, visibility, license, archetype, role and th
   'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.5.9 in " "$work/home-none/out"'
 
 # The end says whether the credential the agent inherits can change the wall
-# (#300): `permissions.admin` on the new repository, read once setup is done.
-# Only `true` and `false` are answers; anything else is not verified, never
-# "no administration".
+# (#300), read once setup is done. `permissions.admin` is the account's role,
+# not the token's reach: a classic token's `repo` scope carries the role, and a
+# fine-grained token is asked a read that needs Administration. Whatever cannot
+# be read is not verified, never "no administration".
 guide='https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks'
 check "the guide's anchor is a heading in docs/how-to/run-a-project.md" \
   'grep -qx "## Give the agent a token that cannot change the checks" "$root/docs/how-to/run-a-project.md"'
@@ -646,7 +658,7 @@ check "an admin credential is said to have administration, with the guide's sect
   'grep -q "^  administration: the gh credential this ran with has it on tester/probe" "$work/home-none/out" && grep -qF "$guide" "$work/home-none/out"'
 check "the administration line comes after setup, not before the wall" \
   '[ "$(grep -n "admin-read" "$log" | cut -d: -f1)" -gt "$(grep -n "^gh pr create" "$log" | cut -d: -f1)" ]'
-E="MOCK_ADMIN=false" run admin-false ok yes no "administration: the gh credential this ran with has none on tester/probe" -- probe
+E="MOCK_ADMIN=false MOCK_ROLE=write" run admin-false ok yes no "administration: the gh credential this ran with has none on tester/probe" -- probe
 if grep -qF "$guide" "$work/home-admin-false/out"; then bad admin-false "a credential without administration is still sent to the guide"
 else ok admin-false "no pointer to the guide when there is nothing to switch"; fi
 for answer in error null ''; do
@@ -665,6 +677,30 @@ else bad env-token-admin "the admin-token path reported the typed token"; grep -
 if grep -qx "admin-read GH_TOKEN=set" "$work/home-env-token/calls.log"
 then ok env-token "outside the admin-token path the credential it ran with is the one asked"
 else bad env-token "the environment token was dropped from the administration read"; fi
+# A fine-grained stored login under an admin role: the role says nothing about
+# the token, so only the Administration read decides, and a 200 there still
+# leaves write unknown.
+E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt MOCK_ADMIN_PROBE=denied" run fine-no-admin ok yes no \
+  "administration: gh's own login (not the token typed for this run) has none on tester/probe" -- probe
+if grep -qx "admin-probe GH_TOKEN=" "$work/home-fine-no-admin/calls.log"
+then ok fine-no-admin "the Administration read is asked of gh's own login too"
+else bad fine-no-admin "the Administration read used the typed token"; fi
+if grep -q "administration: not verified" "$work/home-fine-admin/out" && ! grep -qE "administration: .* has (it|none) on" "$work/home-fine-admin/out"
+then ok fine-admin "a fine-grained token that reads Administration is not verified: write cannot be read"
+else bad fine-admin "a fine-grained token's Administration read was taken as an answer"; grep -F "administration" "$work/home-fine-admin/out" | sed 's/^/        /'; fi
+E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt MOCK_ADMIN_PROBE=error" run fine-probe-error ok yes no "administration: not verified" -- probe
+if grep -qE "administration: .* has (it|none) on" "$work/home-fine-probe-error/out"
+then bad fine-probe-error "a failed Administration read was taken as an answer"
+else ok fine-probe-error "a failed Administration read, not a 403 refusal, is not verified"; fi
+if grep -q "admin-probe" "$work/home-none/calls.log"
+then bad none "a classic token was asked the Administration read its scopes already answer"
+else ok none "a classic token's reach is its scopes; no Administration read"; fi
+# A role that is not admin: the standard ones cannot edit a ruleset; a custom
+# organization role might ("Edit repository rules"), so it is not verified.
+E="MOCK_ADMIN=false MOCK_ROLE=custom-rules" run admin-custom-role ok yes no "administration: not verified" -- probe
+if grep -qE "administration: .* has (it|none) on" "$work/home-admin-custom-role/out"
+then bad admin-custom-role "a custom role was read as no administration"
+else ok admin-custom-role "a custom role without admin is not verified"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
