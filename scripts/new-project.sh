@@ -577,8 +577,11 @@ pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "doc
 # later, #62 #120 #117); the first push is the one it can miss, and the user
 # should not have to know that. Ninety seconds: CodeQL appeared on a head
 # within 11 s of its push when it did at all.
-deadline=$((SECONDS + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""; seen_head_codeql=""
-repush_at=$((SECONDS + (first_pr_wait < 90 ? first_pr_wait : 90))); repushed=0
+# One read of $SECONDS for both: two reads can straddle a tick, which put the
+# re-push a second after the deadline and let a short wait end without it (#315).
+now=$SECONDS
+deadline=$((now + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""; seen_head_codeql=""
+repush_at=$((now + (first_pr_wait < 90 ? first_pr_wait : 90))); repushed=0
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
     --jq '.workflow_runs[] | "\(.path) \(.status) \(.conclusion)"' 2>/dev/null || true)"
