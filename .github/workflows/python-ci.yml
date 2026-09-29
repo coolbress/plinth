@@ -535,20 +535,29 @@ jobs:
                   found.append((new if status != "D" else old, old, why))
 
           # What may stand next to a name that is not part of it: whitespace
-          # and Markdown punctuation. Any other character (`-`, `.`, `~`, `\`,
-          # a letter) makes a longer name, which names nothing.
-          EDGE = r"\s`'\"()\[\]{}<>*,;:!?"
+          # and Markdown punctuation, typographic quotes included. Any other
+          # character (`-`, `.`, `~`, `\`, a letter) makes a longer name, which
+          # names nothing.
+          EDGE = r"\s`'\"()\[\]{}<>*,;:!?\u2018\u2019\u201c\u201d"
+          # A run of `_` or `~` counts only with a run on each side of the
+          # name, as emphasis or strikethrough has: `_ci.yml_`, `~~ci.yml~~`
+          # (#334). One side alone (`ci.yml~`, `my_ci.yml`) is a longer name.
+          WRAP = "[_~]+"
 
           def named(path, old):
               """A path or file name standing whole in the body, with an EDGE
               character or the start or end on each side; a full stop may end
               it. So `python-ci.yml` does not name `ci.yml`. A `/` may also come
               before a path (a link to the file) but not before a bare name:
-              `docs/ci.yml` does not name `.github/workflows/ci.yml`."""
+              `docs/ci.yml` does not name `.github/workflows/ci.yml`. A link
+              target's `#fragment` (`[x](ci.yml#L3)`) is dropped first."""
+              text = re.sub(r"(\]\([^()\s#]*)#[^()\s]*", r"\1", body)
               def whole(p):
                   before = "(?<![^" + EDGE + ("/" if "/" in p else "") + "])"
                   after = r"(?=\Z|[" + EDGE + r"]|\.(?:\Z|[" + EDGE + "]))"
-                  return re.search(before + re.escape(p) + after, body)
+                  before_run = "(?<![^" + EDGE + "])"
+                  return re.search(before + re.escape(p) + after, text) \
+                      or re.search(before_run + WRAP + re.escape(p) + WRAP + after, text)
               return any(whole(p) for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
 
           def command_safe(s):   # a path must not end the warning and start another command
