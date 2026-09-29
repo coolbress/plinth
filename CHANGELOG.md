@@ -49,6 +49,18 @@ pull requests and have no tag.
   `ci.yml`'s `on:` triggers: a `ci.yml` that no longer runs on pull requests
   still passes (#333), and whether another workflow reporting the same check
   names satisfies the ruleset is #329's question. No check name changes.
+- `docs/how-to/run-a-project.md` has a new section, "Give the agent a token
+  that cannot change the checks": after the first merge, a fine-grained token
+  for the one repository with Contents, Issues and Pull requests at Read and
+  write, and no Workflows or Administration. GitHub refuses a push that adds
+  or changes a file under `.github/workflows/` without workflow permission,
+  measured for fine-grained and classic tokens (#328), so the agent cannot get
+  a rewrite of the checks onto a branch. The setup's browser login, and
+  `gh auth login` over HTTPS by default, hold that permission; a push over SSH
+  is not refused. A change under `.github/workflows/`, a template update
+  included, is then pushed by the person. The getting-started tutorial points
+  to it, and `docs/explanation/concepts.md` ("About what green means") names
+  it as the control before the pull request, with those limits.
 
 ### Fixed
 

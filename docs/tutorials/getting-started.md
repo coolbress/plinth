@@ -133,6 +133,11 @@ install, create, merge.
 - [Run a project](../how-to/run-a-project.md): the loop from an idea to a
   merged change, what to type at each stage, and what to check before you
   merge.
+- Before the agent works on its own, give it a token without workflow
+  permission ([Run a project](../how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks)).
+  The login above holds `workflow`, so an agent working with it can push a
+  change to `.github/workflows/`, the checks included. Changes there then go
+  through a credential that has it, pushed by you.
 - `cd my-app && claude`, then `/plinth:floor-check` to read the wall from
   the inside.
 - To move plinth to a new version later: `claude plugin update plinth`, then
