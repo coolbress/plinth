@@ -11,6 +11,32 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-29
+
+The first release after 1.0 is about a pull request that weakens the checks
+instead of passing them. `ci / diff-size` now names each change to the checks
+the description does not: a deleted test, an edited workflow, a check
+configuration file, a changed `[tool.*]` table. `/plinth:floor-check` fails
+when the `ci` job no longer calls plinth's workflow at a commit SHA, and
+`ci / floor-check` runs the same item on the pull request's own `ci.yml`. The
+guide shows how to give the agent a token without workflow permission, so
+GitHub refuses the push that would rewrite the checks: measured for both
+token kinds on a push adding a workflow file; a change to an existing one,
+such as `ci.yml`, falls under the same refusal by GitHub's message ("create or
+update") and was not pushed. The guide states SSH as a limit; it does not yet cover other
+credentials stored on the machine, such as a second `gh` account one
+`gh auth switch` away or a git credential helper (#336).
+
+A minor version, not a patch: a repository whose `ci` job calls plinth's
+workflow at a tag, or gives that job any key but `uses:`, `with:`, `secrets:`
+and `permissions:` (an `if:` or a `name:`, say), gets a new FAIL in
+`ci / floor-check` when its `python-ci.yml` pin reaches this release. The
+template's `ci.yml` already calls it at a SHA and is unchanged. Repositories
+`/plinth:new-project` creates still pin an earlier plinth commit until the
+template's pin is raised, so they get the new warning and item then.
+
+tested with plinth-template v1.5.8
+
 ### Added
 
 - `ci / diff-size` names each change to the checks that the pull request
@@ -1525,7 +1551,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/coolbress/plinth/releases/tag/v1.1.0
 [1.0.0]: https://github.com/coolbress/plinth/releases/tag/v1.0.0
 [0.5.31]: https://github.com/coolbress/plinth/releases/tag/v0.5.31
 [0.5.30]: https://github.com/coolbress/plinth/releases/tag/v0.5.30
