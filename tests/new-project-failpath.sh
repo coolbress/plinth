@@ -640,6 +640,8 @@ check "the summary line names owner, visibility, license, archetype, role and th
 # Only `true` and `false` are answers; anything else is not verified, never
 # "no administration".
 guide='https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks'
+check "the guide's anchor is a heading in docs/how-to/run-a-project.md" \
+  'grep -qx "## Give the agent a token that cannot change the checks" "$root/docs/how-to/run-a-project.md"'
 check "an admin credential is said to have administration, with the guide's section to switch" \
   'grep -q "^  administration: the gh credential this ran with has it on tester/probe" "$work/home-none/out" && grep -qF "$guide" "$work/home-none/out"'
 check "the administration line comes after setup, not before the wall" \
