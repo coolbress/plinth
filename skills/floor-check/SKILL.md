@@ -47,7 +47,7 @@ credential helpers for github.com other than gh's, an `Authorization`
 `http.extraHeader`, and a github.com login in `~/.netrc`, each a WARN with no
 value printed. Finding none is an INFO saying so, best effort, never a PASS:
 a credential in a form the rules do not recognise is not reported, so do not
-tell the user the machine is clean. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` or a `GIT_CONFIG_*`
+tell the user the machine is clean. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `GIT_CONFIG` or a `GIT_CONFIG_*`
 variable, when set, is a SKIP naming it: the configuration it hides is not
 read. SSH keys are a SKIP every time, the other one with no way to
 verify it here: GitHub's settings say which keys push, not this machine.

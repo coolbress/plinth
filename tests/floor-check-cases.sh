@@ -520,7 +520,7 @@ two='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success"},{"lo
 # is reported as a SKIP, which no case below asserts is absent.
 ln -s ../gitconfig "$cred/home/.gitconfig"
 credrun() {   # extra env assignments as arguments; prints the checker's output
-  env -u GH_TOKEN -u GITHUB_TOKEN -u GH_CONFIG_DIR -u XDG_CONFIG_HOME -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+  env -u GH_TOKEN -u GITHUB_TOKEN -u GIT_CONFIG -u GH_CONFIG_DIR -u XDG_CONFIG_HOME -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
     -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS PATH="$cred/bin:$PATH" HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 \
     FAKE_GH_SAW="$cred/saw" "$@" python3 "$checker" --root "$good" --no-network --credentials 2>&1
 }
@@ -645,6 +645,84 @@ printf '#!/bin/sh\nexit 128\n' > "$cred/bin/git"; chmod +x "$cred/bin/git"
 out="$(credrun FAKE_GH="$one")"; rm -f "$cred/bin/git"
 grep -q "SKIP  git credential helpers not verified" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
   && ok "--credentials: git config failing is not verified" || { bad "--credentials git failing"; printf '%s\n' "$out" | grep -i git | sed 's/^/        /'; }
+# git matches a credential.<url> entry on username and port too (#349): one
+# scoped to either does not apply to a plain https://github.com push, so its
+# empty value clears nothing; one naming a helper is still counted. :443 is
+# the default port and applies.
+for scope in 'https://restricted@github.com' 'https://github.com:8443'; do
+  printf '[credential]\n\thelper = store\n[credential "%s"]\n\thelper =\n[credential "https://github.com"]\n\thelper = !gh auth git-credential\n' "$scope" > "$cred/gitconfig"
+  out="$(credrun FAKE_GH="$one")"
+  grep -q "WARN  git has 1 credential helper for github.com besides gh's: store" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+    || { bad "--credentials: an empty helper under $scope cleared the list"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+done
+grep -q "WARN  git has 1 credential helper" <<<"$out" && ok "--credentials: an empty helper scoped by a username or a port does not clear the list"
+printf '[credential]\n\thelper = store\n[credential "https://github.com:443"]\n\thelper =\n\thelper = !gh auth git-credential\n[credential "https://me@github.com"]\n\thelper = cache\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's: cache" <<<"$out" \
+  && ok "--credentials: an empty helper at :443 clears the list, and a username-scoped helper is counted" || { bad "--credentials :443 and username helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+# A subsection URL urlsplit rejects is named (userinfo hidden) and not
+# verified; the rest of the report and the summary still print.
+printf '[credential "https://u:tok-value-10@[bad"]\n\thelper = cache\n[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"; rc=$?
+if [ "$rc" = 0 ] && grep -q 'SKIP  git config \[credential "…@\[bad"\] not verified' <<<"$out" && ! grep -q "tok-value-10\|Traceback" <<<"$out" \
+   && grep -q "INFO  no github.com login in" <<<"$out" && grep -q "SKIP  SSH keys not verified here" <<<"$out" && grep -q "^-- [0-9]* failed, [0-9]* not verified" <<<"$out"
+then ok "--credentials: a credential subsection URL that cannot be parsed is a SKIP naming it, and the run goes on"; else bad "--credentials unparseable subsection"; printf '%s\n' "$out" | tail -n 12 | sed 's/^/        /'; fi
+for sub in 'user:tok-value-12@[bad' 'https://u:tok-value-13@github.com:abc' 'https://github.com:abc'; do
+  printf '[credential "%s"]\n\thelper = cache\n' "$sub" > "$cred/gitconfig"
+  out="$(credrun FAKE_GH="$one")"; rc=$?
+  [ "$rc" = 0 ] && grep -q "SKIP  git config \[credential \"\(…@\[bad\|…@github.com:abc\|https://github.com:abc\)\"\] not verified" <<<"$out" \
+    && ! grep -q "tok-value-1[23]" <<<"$out" && grep -q "^-- [0-9]* failed" <<<"$out" \
+    || { bad "--credentials: unparseable '$sub'"; printf '%s\n' "$out" | grep -v PASS | tail -n 8 | sed 's/^/        /'; }
+done
+grep -q "SKIP  git config" <<<"$out" && ok "--credentials: an unparseable subsection, with or without a scheme or a user, is a SKIP that prints no user or password"
+# The same reading, checked against git itself: `git credential fill` for a
+# push to https://github.com/o/r, with a harmless `!echo` helper, shows which
+# entries git applies. Wherever git runs a helper, the checker must count one:
+# a helper under the entry, or one read before an empty helper under it that
+# git did not take as clearing the list.
+askgit() { printf 'protocol=https\nhost=github.com\npath=o/r\n\n' | env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+  HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS= SSH_ASKPASS= git -C "$good" credential fill 2>&1 | grep -c RAN-349; }
+disagree=0 ran=0
+for scope in 'https://github.com' 'https://GitHub.com/' 'https://github.com:443' 'https://github.com:8443' 'https://restricted@github.com' \
+             'https://github.com/o' 'https://github.com/o/r' 'https://github.com/other' 'https://*.github.com' 'github.com' 'https://[bad' \
+             'http://github.com' 'https://github.com.evil' 'https://@github.com' 'https://github.com?x' 'https://github.com#f' \
+             'https://github.com:abc'; do
+  printf '[credential "%s"]\n\thelper = %s\n' "$scope" '!echo RAN-349 >&2' > "$cred/gitconfig"
+  n="$(askgit)"; ran=$((ran + n))
+  if [ "$n" != 0 ] && ! grep -q "WARN  git has 1 credential helper" <<<"$(credrun FAKE_GH="$one")"; then
+    bad "--credentials: git applies a helper under $scope and the checker does not count it"; disagree=1; fi
+  printf '[credential]\n\thelper = %s\n[credential "%s"]\n\thelper =\n' '!echo RAN-349 >&2' "$scope" > "$cred/gitconfig"
+  n="$(askgit)"; ran=$((ran + n))
+  if [ "$n" != 0 ] && ! grep -q "WARN  git has 1 credential helper" <<<"$(credrun FAKE_GH="$one")"; then
+    bad "--credentials: git keeps a helper past an empty one under $scope and the checker takes it as cleared"; disagree=1; fi
+done
+[ "$ran" -gt 0 ] || { bad "--credentials: git credential fill never ran a helper, so the comparison with git proves nothing"; disagree=1; }
+[ "$disagree" = 0 ] && ok "--credentials: every helper git itself applies to a push to github.com/o/r is counted (17 subsection URLs)"
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' > "$cred/gitconfig"
+# `default` opens a .netrc entry only where a keyword stands; as a value it is
+# a value. A sequence the reader cannot place is not verified.
+printf 'machine example.com login default password x\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "INFO  no github.com login in" <<<"$out" && ok "--credentials: \`default\` as a .netrc value is not a default entry" \
+  || { bad "--credentials netrc default as value"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+printf 'machine example.com login me password x\ndefault\n  login me password tok-value-11\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok-value-11" <<<"$out" \
+  && ok "--credentials: \`default\` where a keyword stands is a default entry" || { bad "--credentials netrc default entry"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+for n in 'machine example.com login me stray x' 'machine example.com login' 'login me machine example.com' 'machine example.com macdef m'; do
+  printf '%s\n' "$n" > "$cred/home/.netrc"
+  out="$(credrun FAKE_GH="$one")"
+  grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ! grep -q "INFO  no github.com login" <<<"$out" \
+    || { bad "--credentials: .netrc '$n' was placed"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+done
+grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ok "--credentials: a .netrc token sequence that cannot be placed is not verified"
+rm -f "$cred/home/.netrc"
+# GIT_CONFIG makes git read that file instead of the repository's .git/config.
+for v in "$cred/elsewhere" ''; do
+  out="$(credrun GIT_CONFIG="$v" FAKE_GH="$one")"
+  grep -q "SKIP  GIT_CONFIG is set" <<<"$out" || { bad "--credentials: GIT_CONFIG='$v' is not named"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
+done
+grep -q "SKIP  GIT_CONFIG is set" <<<"$out" && ok "--credentials: GIT_CONFIG, set or empty, is named as hiding a configuration"
 
 # The source of each required check is part of the wall: a required
 # `ci / test` with no integration_id is satisfied by a commit status anyone
