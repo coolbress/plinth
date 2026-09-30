@@ -500,6 +500,152 @@ if grep -q "^  INFO  sandbox.enabled is true in .*settings.local.json" <<<"$out"
    && grep -q 'Read(~/.config/gh' <<<"$out" && grep -q 'uvx --from copier copier' <<<"$out"
 then ok "--sandbox: sandbox.enabled true is an INFO, and the measured macOS lines still follow it"; else bad "--sandbox on"; printf '%s\n' "$out" | grep -iE 'sandbox|gh|uvx' | sed 's/^/        /'; fi
 
+# --credentials lists what else on this machine can push to github.com (#336):
+# stored gh accounts, git helpers besides gh's, an Authorization header, ~/.netrc,
+# GH_TOKEN/GITHUB_TOKEN. Presence only, never a value; what it cannot read is a
+# SKIP. A fake gh prints $FAKE_GH (or fails when it is unset) and records
+# whether it saw GH_TOKEN; git reads only $work/cred/gitconfig.
+cred="$work/cred"; mkdir -p "$cred/bin" "$cred/home"
+cat > "$cred/bin/gh" <<'SH'
+#!/usr/bin/env bash
+[ -n "${GH_TOKEN:-}" ] && : > "$FAKE_GH_SAW"
+[ -n "${FAKE_GH:-}" ] || { echo "not logged in" >&2; exit 1; }
+printf '%s\n' "$FAKE_GH"
+SH
+chmod +x "$cred/bin/gh"
+one='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success"}]}}'
+two='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success"},{"login":"other","active":false,"state":"success"}]}}'
+# git reads the fixture as ~/.gitconfig: GIT_CONFIG_GLOBAL would be reported as
+# masking it. GIT_CONFIG_NOSYSTEM keeps this machine's system config out, and
+# is reported as a SKIP, which no case below asserts is absent.
+ln -s ../gitconfig "$cred/home/.gitconfig"
+credrun() {   # extra env assignments as arguments; prints the checker's output
+  env -u GH_TOKEN -u GITHUB_TOKEN -u GH_CONFIG_DIR -u XDG_CONFIG_HOME -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS PATH="$cred/bin:$PATH" HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 \
+    FAKE_GH_SAW="$cred/saw" "$@" python3 "$checker" --root "$good" --no-network --credentials 2>&1
+}
+printf '[credential]\n\thelper = osxkeychain\n[credential "https://github.com"]\n\thelper =\n\thelper = !/opt/homebrew/bin/gh auth git-credential\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"; rc=$?
+if [ "$rc" = 0 ] && grep -q "INFO  gh stores 1 account for github.com: me" <<<"$out" && grep -q "INFO  git asks only gh for github.com" <<<"$out" \
+   && grep -q "INFO  no github.com login in" <<<"$out" && grep -q "SKIP  SSH keys not verified here" <<<"$out" && ! grep -q WARN <<<"$out" \
+   && [ "$(grep -c "no other credential found by these rules; best effort, see the guide's list" <<<"$out")" = 3 ] \
+   && ! grep -qE "PASS  (gh stores|git asks|no github.com login)" <<<"$out"
+then ok "--credentials: nothing found is an INFO with the best-effort note, never a PASS; SSH still not verified"; else bad "--credentials clean"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A variable that points gh or git elsewhere hides the default configuration,
+# and the agent can unset it: not verified, named, never read as clean.
+for var in GH_CONFIG_DIR XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS; do
+  out="$(credrun "$var=$cred/elsewhere" FAKE_GH="$one")"
+  grep -q "SKIP  $var is set" <<<"$out" || { bad "--credentials: $var set is not reported"; printf '%s\n' "$out" | sed 's/^/        /'; }
+done
+# Exported but empty still hides the default file: `GIT_CONFIG_GLOBAL=` reads no global config.
+for var in GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GH_CONFIG_DIR; do
+  out="$(credrun "$var=" FAKE_GH="$one")"
+  grep -q "SKIP  $var is set" <<<"$out" || { bad "--credentials: $var set but empty is not reported"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
+done
+out="$(credrun FAKE_GH="$one")"
+grep -q "SKIP  GIT_CONFIG_NOSYSTEM is set" <<<"$out" && ! grep -qE "SKIP  (GH_CONFIG_DIR|GIT_CONFIG_GLOBAL) is set" <<<"$out" \
+  && ok "--credentials: GH_CONFIG_DIR, XDG_CONFIG_HOME and the GIT_CONFIG_* overrides are each not verified; unset, not named" \
+  || { bad "--credentials masking variables"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
+out="$(credrun FAKE_GH="$two")"
+# The checker cannot tell which account holds the agent's token, active or
+# not: the repair names every account and leaves the choice to the person.
+if grep -q "WARN  gh stores 2 accounts for github.com (active: me)" <<<"$out" && grep -q "gh auth logout --hostname github.com --user other" <<<"$out" \
+   && grep -q "gh auth logout --hostname github.com --user me" <<<"$out" && grep -q "keep only the account that holds the agent's token" <<<"$out"
+then ok "--credentials: a second stored gh account is a WARN, with a logout line for every account and the choice left to the person"; else bad "--credentials two accounts"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; fi
+rm -f "$cred/saw"
+out="$(credrun GH_TOKEN=secret-value-1 FAKE_GH="$one")"
+if grep -q "WARN  GH_TOKEN is set" <<<"$out" && ! grep -q "secret-value-1" <<<"$out" && [ ! -e "$cred/saw" ] && grep -q "gh stores 1 account" <<<"$out"
+then ok "--credentials: GH_TOKEN is named, not printed, and the stored accounts are read without it"; else bad "--credentials GH_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# With an environment token, even one stored account is another credential:
+# the agent can unset the variable, and the stored login answers.
+out="$(credrun GH_TOKEN=secret-value-9 FAKE_GH="$one")"
+grep -q "WARN  gh stores 1 account for github.com (me) besides GH_TOKEN" <<<"$out" && ! grep -q "INFO  gh stores" <<<"$out" \
+  && ok "--credentials: one stored account beside GH_TOKEN is a WARN" || { bad "--credentials env token plus one stored"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; }
+out="$(credrun GH_TOKEN=secret-value-9 FAKE_GH='{"hosts":{}}')"
+grep -q "INFO  gh stores no accounts for github.com" <<<"$out" && ok "--credentials: GH_TOKEN with nothing stored leaves the stored item an INFO" || { bad "--credentials env token, none stored"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; }
+out="$(credrun GITHUB_TOKEN=secret-value-5 FAKE_GH="$one")"
+grep -q "WARN  GITHUB_TOKEN is set" <<<"$out" && ! grep -q "secret-value-5" <<<"$out" \
+  && ok "--credentials: GITHUB_TOKEN is named, not printed" || { bad "--credentials GITHUB_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; }
+skipped=0
+for bad_gh in "" "not json" '{"nohosts":1}'; do
+  out="$(credrun FAKE_GH="$bad_gh")"
+  if grep -q "SKIP  accounts stored in gh not verified" <<<"$out" && ! grep -q "INFO  gh stores" <<<"$out"; then skipped=$((skipped+1))
+  else bad "--credentials: gh answering '${bad_gh:-(failure)}' is not a SKIP"; printf '%s\n' "$out" | grep gh | sed 's/^/        /'; fi
+done
+[ "$skipped" = 3 ] && ok "--credentials: gh failing, or answering what is not its JSON, is not verified"
+# Helpers: the macOS default with no empty helper before gh's; one listed after
+# gh's; an inline `!` helper, named without its text; other hosts and plain
+# http ignored; an empty helper for a path on github.com clears nothing.
+printf '[credential]\n\thelper = osxkeychain\n[credential "https://github.com"]\n\thelper = !gh auth git-credential\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's: osxkeychain" <<<"$out" \
+  && ok "--credentials: osxkeychain not cleared before gh's helper is a WARN" || { bad "--credentials osxkeychain"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n\thelper = store --file /x\n[credential "https://example.com"]\n\thelper = cache\n[credential "http://github.com"]\n\thelper = cache\n[credential "https://github.com/o/r"]\n\thelper =\n\thelper = !f() { echo password=tok-value-2; }; f\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+if grep -q "WARN  git has 2 credential helpers for github.com besides gh's: store, a \`!\` shell command" <<<"$out" && ! grep -q "tok-value-2\|cache" <<<"$out"
+then ok "--credentials: a helper after gh's and one for a path on github.com are WARNs, other hosts are not, and no helper text is printed"; else bad "--credentials helpers"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; fi
+# gh 2.101.0's `gh auth setup-git`, run from a path with a space, single-quotes it.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = !'"'"'/Applications/my tools/gh'"'"' auth git-credential\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "INFO  git asks only gh for github.com" <<<"$out" && ok "--credentials: gh's helper under a quoted path with a space is gh's" \
+  || { bad "--credentials quoted gh path"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+# Without `!`, git runs `git credential-gh auth git-credential`, not gh.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = gh auth git-credential\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's: gh" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+  && ok "--credentials: gh auth git-credential without \`!\` is another helper (git-credential-gh)" || { bad "--credentials helper without !"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+# A shell command glued before gh's path runs first: not gh's helper either.
+for h in '!/tmp/steal;/usr/bin/gh auth git-credential' '!/tmp/steal&&/usr/bin/gh auth git-credential' '!$(/tmp/steal)/gh auth git-credential' '!/a|/usr/bin/gh auth git-credential'; do
+  printf '[credential "https://github.com"]\n\thelper =\n\thelper = "%s"\n' "$h" > "$cred/gitconfig"
+  out="$(credrun FAKE_GH="$one")"
+  grep -q "WARN  git has 1 credential helper for github.com besides gh's" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+    || { bad "--credentials: '$h' passed as gh's helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+done
+grep -q "WARN  git has 1 credential helper" <<<"$out" && ok "--credentials: a shell command before gh's path (; && \$() |) is another helper"
+# A newline is a command separator to the shell: `!/usr/bin/gh` then `auth ...` runs two commands.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = "!/usr/bin/gh\\nauth git-credential"\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+  && ok "--credentials: a newline inside gh's helper line makes it another helper" || { bad "--credentials newline in helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+# A `!` helper that calls gh after answering itself is not gh's helper.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = !f() { echo password=tok-value-6; gh auth git-credential "$@"; }; f\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's: a \`!\` shell command" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+  && ok "--credentials: a shell helper that merely calls gh's is still another helper" || { bad "--credentials wrapped gh helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+printf '[http "https://github.com/"]\n\textraHeader = Authorization: basic tok-value-3\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git config sends an Authorization header to github.com" <<<"$out" && ! grep -q "tok-value-3" <<<"$out" \
+  && ok "--credentials: an Authorization extraHeader for github.com is a WARN, its value unprinted" || { bad "--credentials extraHeader"; printf '%s\n' "$out" | sed 's/^/        /'; }
+printf 'machine github.com login me password tok-value-4\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok-value-4" <<<"$out" \
+  && ok "--credentials: a github.com login in ~/.netrc is a WARN, its value unprinted" || { bad "--credentials netrc"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+# curl reads a quoted token (8.5.0 sent a quoted github.com entry's login):
+# the quotes are not part of the name. One it cannot tokenise is not verified.
+printf 'machine "github.com" login me password "tok value-8"\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok value-8" <<<"$out" \
+  && ok "--credentials: a quoted github.com in ~/.netrc is a WARN" || { bad "--credentials netrc quoted"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+printf 'machine GitHub.COM login me password x\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" \
+  && ok "--credentials: github.com in ~/.netrc in any case is a WARN" || { bad "--credentials netrc case"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+printf 'machine "github.com login me password x\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ! grep -q "INFO  no github.com login" <<<"$out" \
+  && ok "--credentials: an unterminated quote in ~/.netrc is not verified" || { bad "--credentials netrc unterminated"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+printf '# machine github.com login old password tok-value-7\nmachine example.com login me password x\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "INFO  no github.com login in" <<<"$out" && ok "--credentials: a .netrc for another host, and a commented github.com line, are not a WARN" || bad "--credentials netrc other host or comment"
+if [ "$(id -u)" != 0 ]; then
+  chmod 000 "$cred/home/.netrc"; out="$(credrun FAKE_GH="$one")"; chmod 600 "$cred/home/.netrc"
+  grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ok "--credentials: an unreadable .netrc is not verified" || { bad "--credentials netrc unreadable"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+fi
+printf '#!/bin/sh\nexit 128\n' > "$cred/bin/git"; chmod +x "$cred/bin/git"
+out="$(credrun FAKE_GH="$one")"; rm -f "$cred/bin/git"
+grep -q "SKIP  git credential helpers not verified" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+  && ok "--credentials: git config failing is not verified" || { bad "--credentials git failing"; printf '%s\n' "$out" | grep -i git | sed 's/^/        /'; }
+
 # The source of each required check is part of the wall: a required
 # `ci / test` with no integration_id is satisfied by a commit status anyone
 # with write access can post. The shipped ruleset pins GitHub Actions (15368);

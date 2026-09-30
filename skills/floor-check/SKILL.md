@@ -19,7 +19,7 @@ the argument if the user gave one (`$ARGUMENTS`), otherwise the remote:
 
 ```bash
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"   # or the argument
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox \
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox --credentials \
   --ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset.json" ${repo:+--repo} ${repo:+"$repo"}
 ```
 
@@ -36,9 +36,25 @@ through the floor's own `Read(~/.config/gh/**)` deny, with no fix a
 repository's settings can make (anthropics/claude-code#95135,
 anthropics/claude-code#67105), and `/plinth:new-project`'s copier step.
 Relay those lines as they are and do not tell the user to turn the sandbox
-on or off; on Linux and WSL2 nothing was measured. This SKIP is the one the
+on or off; on Linux and WSL2 nothing was measured. This SKIP is one the
 not-verified line below names without a way to verify it: nothing plinth
 reads can.
+
+`--credentials` adds the other item of this machine: what can push to
+github.com besides the agent's token. It names `GH_TOKEN` or `GITHUB_TOKEN`
+when set, counts the accounts `gh auth status` stores, and lists git
+credential helpers for github.com other than gh's, an `Authorization`
+`http.extraHeader`, and a github.com login in `~/.netrc`, each a WARN with no
+value printed. Finding none is an INFO saying so, best effort, never a PASS:
+a credential in a form the rules do not recognise is not reported, so do not
+tell the user the machine is clean. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` or a `GIT_CONFIG_*`
+variable, when set, is a SKIP naming it: the configuration it hides is not
+read. SSH keys are a SKIP every time, the other one with no way to
+verify it here: GitHub's settings say which keys push, not this machine.
+Relay the WARN lines with the fix from
+"Give the agent a token that cannot change the checks" in
+`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`; never run a logout or
+delete a credential yourself.
 
 `--ruleset` expects the wall
 `/plinth:new-project` raises, the CodeQL alert thresholds of its

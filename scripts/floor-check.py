@@ -58,6 +58,7 @@ import shutil
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import cast
@@ -1455,6 +1456,167 @@ def check_sandbox() -> None:
     result("INFO", "  Linux, WSL2 and native Windows: not measured")
 
 
+# gh's own git helper, whatever path it was installed under, and nothing else:
+# a `!` helper that also calls gh may answer with its own token first. A path
+# with a space comes single-quoted from `gh auth setup-git` (gh 2.101.0).
+# Without `!`, git runs `git credential-gh ...`, another program; an absolute
+# path without `!` does run gh, but is reported as another helper all the same.
+# An unquoted path takes no shell character: `!/x;/usr/bin/gh ...` runs /x first.
+# Only spaces and tabs separate the words: a newline starts another command.
+GH_HELPER = re.compile(r"!('[^']*/gh(\.exe)?'|([\w./~+@%:,-]*/)?gh(\.exe)?)[ \t]+auth[ \t]+git-credential")
+
+
+# One ~/.netrc token: a double-quoted one (group 1), a bare one (group 2), or a
+# quote left open (group 3).
+NETRC_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([^\s"]\S*)|("\S*)')
+
+
+# Variables that change which gh or git configuration is read (third-party
+# review round 8 on #344).
+CONFIG_MASKS = ("GH_CONFIG_DIR", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+                "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS")
+
+
+def github_https(url: str | None) -> bool | None:
+    """Does a config subsection (`credential.<url>.helper`) apply to a push to
+    https://github.com? True when it names the host and nothing narrower, None
+    when it names a path on it (it may apply: counted, but its empty value is
+    not taken as clearing the list), False otherwise."""
+    if url is None:
+        return True
+    u = urllib.parse.urlsplit(url if "://" in url else "https://" + url)
+    if u.scheme != "https" or (u.hostname or "") != "github.com":
+        return False
+    return True if u.path.strip("/") == "" else None
+
+
+def none_found(what: str) -> None:
+    """Finding nothing is not a pass: these rules read gh's and git's formats
+    as far as they go, and a credential they do not recognise is not reported
+    (#344's review found one after another). A WARN is what they found."""
+    result("INFO", f"{what}; no other credential found by these rules; best effort, see the guide's list")
+
+
+def check_credentials(root: Path) -> None:
+    """What on this machine can push to github.com besides the token the agent
+    was given (#336). Measured with gh 2.101.0 and git 2.55.0: a second account
+    stored in gh is one `gh auth switch` away, and a git helper other than gh's
+    answers whenever it comes first or gh has no login, and one listed after
+    gh's collects the credential of every push that succeeds. Presence only:
+    no value is read or printed. An item that could not be read is not
+    verified; SSH is never read here, since the key that counts is the one
+    GitHub accepts. `gh auth status` checks each stored token with GitHub, so
+    this item goes online even under --no-network; offline, gh's answer is
+    what it is, and one that is not its JSON is not verified."""
+    env_tokens = [var for var in ("GH_TOKEN", "GITHUB_TOKEN") if os.environ.get(var)]
+    for var in env_tokens:
+        result("WARN", f"{var} is set in this environment: gh, and the git push it serves, use it before any stored login")
+        result("INFO", f"  remove {var} where it is set (a shell startup file), then restart Claude Code")
+
+    # Each points gh or git away from, or adds to, the configuration read by
+    # default; that one is not read here, and the agent can unset the variable.
+    for var in CONFIG_MASKS:
+        if var in os.environ:   # set but empty counts: `GIT_CONFIG_GLOBAL=` reads no global file
+            result("SKIP", f"{var} is set: the gh or git configuration read without it was not read, "
+                   "and the agent can unset it")
+
+    env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
+    try:
+        r = subprocess.run(["gh", "auth", "status", "--hostname", "github.com", "--json", "hosts"],
+                           capture_output=True, text=True, timeout=30, check=False, env=env)
+        accounts = json.loads(r.stdout)["hosts"].get("github.com", []) if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError, AttributeError):
+        accounts = None
+    if not isinstance(accounts, list):
+        result("SKIP", "accounts stored in gh not verified: `gh auth status --json hosts` could not be read")
+    else:
+        logins = [str(acct.get("login", "?")) if isinstance(acct, dict) else "?" for acct in accounts]
+        active = [str(acct.get("login", "?")) for acct in accounts if isinstance(acct, dict) and acct.get("active")]
+        if len(logins) > 1:
+            result("WARN", f"gh stores {len(logins)} accounts for github.com (active: {', '.join(active) or 'none'}): "
+                   "each is one `gh auth switch` away")
+            # Which account holds the agent's token is not known here, active or
+            # not (third-party review round 9 on #344): the person chooses.
+            result("INFO", "  keep only the account that holds the agent's token; log out each of the others:")
+            for login in logins:
+                result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
+        elif logins and env_tokens:
+            # The agent can unset the variable itself, and the stored login answers.
+            result("WARN", f"gh stores 1 account for github.com ({logins[0]}) besides {' and '.join(env_tokens)}: "
+                   "unsetting the variable uses it")
+            result("INFO", "  keep one: the agent's token stored in gh with the variable removed, or "
+                   f"gh auth logout --hostname github.com --user {shlex.quote(logins[0])}")
+        else:
+            none_found(f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
+                       + (f": {logins[0]}" if logins else ""))
+
+    g: subprocess.CompletedProcess[str] | None
+    try:
+        g = subprocess.run(["git", "-C", str(root), "config", "--null", "--get-regexp",
+                            r"^(credential\..*helper|http\..*extraheader)$"],
+                           capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        g = None
+    if g is None or g.returncode not in (0, 1):   # 1: no such key
+        result("SKIP", "git credential helpers not verified: `git config` could not be read")
+    else:
+        helpers: list[str] = []
+        headers = 0
+        for entry in filter(None, g.stdout.split("\0")):
+            key, _, value = entry.partition("\n")
+            section, _, rest = key.partition(".")
+            sub = rest.rpartition(".")[0]
+            applies = github_https(sub or None)
+            if applies is False:
+                continue
+            if section == "http":
+                headers += value.strip().lower().startswith("authorization")
+            elif value.strip():
+                helpers.append(value.strip())
+            elif applies:   # an empty helper clears the list read so far, as git does
+                helpers = []
+        # Named by its first word only: a `!` helper is a shell command that may carry the token itself.
+        others = ["a `!` shell command" if h.startswith("!") else h.split()[0]
+                  for h in helpers if not GH_HELPER.fullmatch(h)]
+        if others:
+            result("WARN", f"git has {len(others)} credential helper{'s' if len(others) > 1 else ''} for github.com "
+                   f"besides gh's: {', '.join(others)} (`git config --show-origin --get-regexp 'credential.*helper'` "
+                   "shows where)")
+            result("INFO", "  one listed before gh's, or any while gh has no login, answers the push; one listed after "
+                   "gh's was seen storing the credential a push succeeded with. Delete its github.com entry, then clear the list with an "
+                   "empty `helper =` before gh's under `[credential \"https://github.com\"]` in ~/.gitconfig")
+        else:
+            none_found(f"git asks {'only gh' if helpers else 'no credential helper'} for github.com")
+        if headers:
+            result("WARN", "git config sends an Authorization header to github.com (http.extraHeader): "
+                   "`git config --show-origin --get-regexp extraheader` shows where")
+
+    netrc = Path(os.environ.get("HOME") or Path.home()) / ".netrc"
+    try:
+        # A line opening with `#` is a comment to netrc's readers.
+        lines = [line for line in read(netrc).splitlines() if not line.lstrip().startswith("#")] if netrc.exists() else []
+    except OSError:
+        lines = None
+    # curl takes a token in double quotes, backslash escapes inside, as one
+    # word without the quotes; a quote left open is not guessed at.
+    tokens = [m for line in lines or [] for m in NETRC_TOKEN.finditer(line)]
+    words = [re.sub(r"\\(.)", r"\1", m.group(1)) if m.group(1) is not None else m.group(2) or "" for m in tokens]
+    if lines is None:
+        result("SKIP", f"{netrc} not verified: it exists and could not be read")
+    elif any(m.group(3) is not None for m in tokens):
+        result("SKIP", f"{netrc} not verified: a quoted token is not closed")
+    # Host names and keywords in any case: curl 8.5.0 matched `GITHUB.COM` (third-party review on #344).
+    elif any(w.lower() == "default" or (w.lower() == "machine" and i + 1 < len(words) and words[i + 1].lower() == "github.com")
+             for i, w in enumerate(words)):
+        result("WARN", f"{netrc} holds a login for github.com (or a default one): git over HTTPS uses it")
+    else:
+        none_found(f"no github.com login in {netrc}")
+
+    result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
+           "say which keys push; see docs/how-to/run-a-project.md")
+    result("INFO", "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file")
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 
 
@@ -1471,6 +1633,8 @@ def main() -> int:
                     help="read the ci job from the checkout, not the default branch: what `ci / floor-check` passes, "
                          "so a pull request that repairs the caller can merge")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
+    ap.add_argument("--credentials", action="store_true",
+                    help="also report what else on this machine can push to github.com: gh accounts, git helpers, ~/.netrc")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
@@ -1538,6 +1702,8 @@ def main() -> int:
 
     if a.sandbox:
         check_sandbox()
+    if a.credentials:
+        check_credentials(root)
 
     print(f"-- {fails} failed, {skips} not verified")
     return 1 if fails else 0

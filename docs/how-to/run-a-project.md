@@ -118,6 +118,50 @@ first pull request is merged, give the agent a token of its own without it:
    Deploy keys** none with write access. (`ssh -T git@github.com` answering
    `Permission denied (publickey)` tests only the keys SSH picks by itself.)
    The token protects only pushes that go over HTTPS.
+5. Leave no other credential for github.com on the machine. The first two
+   pushed a workflow change past the token in a measurement with gh 2.101.0
+   and git 2.55.0; the others are what gh and git document, not measured:
+   - **Another account stored in `gh`.** `gh auth login` adds an account
+     beside those already stored and makes it the active one; the agent can
+     run `gh auth switch`. See them with `gh auth status`; remove each one
+     that is not the token's with
+     `gh auth logout --hostname github.com --user <login>`.
+   - **Another git credential helper.** Git asks its helpers in the order
+     `git config --show-origin --get-regexp 'credential.*helper'` lists them.
+     One listed before gh's answers first; one listed after gh's answers when
+     gh has no login, and in one run it stored the credential a push had
+     just succeeded with, so it held that token afterwards. The macOS
+     keychain helper is the usual one: git installed on macOS often lists it
+     for every host in its system config. Delete its github.com entry (**Keychain
+     Access**, search `github.com`), then keep it out with an empty
+     `helper =` line before gh's, which is what `gh auth setup-git` writes:
+
+     ```ini
+     [credential "https://github.com"]
+         helper =
+         helper = !/opt/homebrew/bin/gh auth git-credential
+     ```
+
+   - **A `machine github.com` line in `~/.netrc`**, or an `Authorization`
+     header in git's `http.extraHeader`: git over HTTPS sends either. Remove
+     the line.
+   - **`GH_TOKEN` or `GITHUB_TOKEN`**: `gh auth status` names it after the
+     account; remove it as step 3 says. While one is set, an account stored
+     in `gh` is a second credential even when it is the only one: the agent
+     can unset the variable, and the stored login answers.
+
+   `/plinth:floor-check` lists these on the machine it runs on and prints
+   only whether each is there, never its value. Its rules are best effort:
+   what they find is a warning, and finding nothing is a note, not a pass,
+   since a credential written in a form they do not recognise is not
+   reported. Go through this list yourself as well. What it could not read
+   is not verified. So is a configuration hidden behind `GH_CONFIG_DIR`,
+   `XDG_CONFIG_HOME` or a `GIT_CONFIG_*` variable: the agent can unset the
+   variable, so give it its own token in the configuration read without one.
+   It does not read SSH keys (step 4, on GitHub), a program named by
+   `GIT_ASKPASS` or `core.askPass`, or a token saved anywhere else.
+   The macOS keychain helper itself was not in the measurement; a credential
+   store file in its place was. Every run lists SSH keys as not verified.
 
 What it costs: the agent cannot push a change under `.github/workflows/`, so
 a template update, or a fix `/plinth:floor-check` asks for in `ci.yml`, stops
