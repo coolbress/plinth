@@ -68,6 +68,13 @@ esac
 # `codeql-langs` refuses only the list.
 if [ "$step" = "${FAIL_AT:-}" ] || { [ "$step" = codeql-langs ] && [ "${FAIL_AT:-}" = codeql ]; }; then
   echo "mock gh: failing at $step on purpose" >&2; exit 1; fi
+# A server error at one step: MOCK_5XX=<step>:<code>:<times> answers `gh: HTTP
+# <code>` that many times, then succeeds (#356); `times` of 9 never succeeds.
+if [ -n "${MOCK_5XX:-}" ] && [ "$step" = "${MOCK_5XX%%:*}" ]; then
+  code="${MOCK_5XX#*:}"; times="${code#*:}"; code="${code%%:*}"
+  n="$(cat "$HOME/5xx-count" 2>/dev/null || echo 0)"
+  if [ "$n" -lt "$times" ]; then echo $((n + 1)) > "$HOME/5xx-count"; echo "gh: Server Error (HTTP $code)" >&2; exit 1; fi
+fi
 case "$step" in
   auth)          [ "${MOCK_NOAUTH:-0}" = 1 ] && exit 1 ;;
   headers)       printf 'HTTP/2.0 200 OK\n'
@@ -441,6 +448,26 @@ echo "after creation: any failure deletes"
 for at in copier push default-branch codeql ruleset secret dependabot actions allowlist merge pr; do
   E="FAIL_AT=$at" run "$at" err yes yes "" -- probe
 done
+# A failing setup call names itself (#356), whatever the error.
+for at in secret:"secret scanning and push protection" dependabot:"Dependabot alerts" actions:"the Actions permissions" allowlist:"the Actions allowlist" merge:"the merge settings"; do
+  if grep -qF "could not set ${at#*:}" "$work/home-${at%%:*}/out"; then ok "${at%%:*}-named" "the failure names ${at#*:}"
+  else bad "${at%%:*}-named" "the failure does not name ${at#*:}"; sed 's/^/        /' "$work/home-${at%%:*}/out"; fi
+done
+echo "after creation: a GitHub server error on a setup call is tried again (#356)"
+E="MOCK_5XX=secret:502:1" run 5xx-once      ok  yes no "secret scanning and push protection: GitHub answered HTTP 502; trying again (1 of 2)" -- probe
+E="MOCK_5XX=actions:503:2" run 5xx-twice    ok  yes no "the Actions permissions: GitHub answered HTTP 503; trying again (2 of 2)" -- probe
+E="MOCK_5XX=merge:504:1" run 5xx-merge      ok  yes no "trying again (1 of 2)" -- probe
+E="MOCK_5XX=dependabot:502:9" run 5xx-stays err yes yes "could not set Dependabot alerts" -- probe
+E="MOCK_5XX=allowlist:500:1" run 5xx-500    err yes yes "could not set the Actions allowlist" -- probe
+if [ "$(grep -c 'selected-actions' "$work/home-5xx-500/calls.log")" = 1 ]
+then ok 5xx-500 "an HTTP 500 is not tried again: one call"
+else bad 5xx-500 "an HTTP 500 was tried again"; fi
+if [ "$(grep -c 'vulnerability-alerts' "$work/home-5xx-stays/calls.log")" = 3 ]
+then ok 5xx-stays "a 502 that persists is tried three times in all, then stops"
+else bad 5xx-stays "a persistent 502 was not tried exactly three times: $(grep -c 'vulnerability-alerts' "$work/home-5xx-stays/calls.log")"; fi
+# The ruleset is a POST: sending it again could create a second ruleset, so it
+# is not retried, and its failure keeps its own message.
+E="MOCK_5XX=ruleset:502:1" run 5xx-ruleset err yes yes "could not apply the ruleset" -- probe
 # The push's hint follows what git said (#271): a GitHub server error is not
 # the token, and the fix is to run the door again; an authentication or
 # permission refusal keeps the token hint; anything else names both, as
