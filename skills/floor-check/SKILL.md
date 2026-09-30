@@ -45,10 +45,13 @@ github.com besides the agent's token. It names `GH_TOKEN` or `GITHUB_TOKEN`
 when set, counts the accounts `gh auth status` stores, and lists git
 credential helpers for github.com other than gh's, an `Authorization`
 `http.extraHeader`, and a github.com login in `~/.netrc`, each a WARN with no
-value printed. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` or a `GIT_CONFIG_*`
+value printed. Finding none is an INFO saying so, best effort, never a PASS:
+a credential in a form the rules do not recognise is not reported, so do not
+tell the user the machine is clean. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` or a `GIT_CONFIG_*`
 variable, when set, is a SKIP naming it: the configuration it hides is not
 read. SSH keys are a SKIP every time, the other one with no way to
-verify it here: GitHub's settings say which keys push, not this machine. Relay the WARN lines with the fix from
+verify it here: GitHub's settings say which keys push, not this machine.
+Relay the WARN lines with the fix from
 "Give the agent a token that cannot change the checks" in
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`; never run a logout or
 delete a credential yourself.

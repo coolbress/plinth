@@ -1490,6 +1490,13 @@ def github_https(url: str | None) -> bool | None:
     return True if u.path.strip("/") == "" else None
 
 
+def none_found(what: str) -> None:
+    """Finding nothing is not a pass: these rules read gh's and git's formats
+    as far as they go, and a credential they do not recognise is not reported
+    (#344's review found one after another). A WARN is what they found."""
+    result("INFO", f"{what}; no other credential found by these rules; best effort, see the guide's list")
+
+
 def check_credentials(root: Path) -> None:
     """What on this machine can push to github.com besides the token the agent
     was given (#336). Measured with gh 2.101.0 and git 2.55.0: a second account
@@ -1540,8 +1547,8 @@ def check_credentials(root: Path) -> None:
             result("INFO", "  keep one: the agent's token stored in gh with the variable removed, or "
                    f"gh auth logout --hostname github.com --user {shlex.quote(logins[0])}")
         else:
-            result("PASS", f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
-                   + (f": {logins[0]}" if logins else ""))
+            none_found(f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
+                       + (f": {logins[0]}" if logins else ""))
 
     g: subprocess.CompletedProcess[str] | None
     try:
@@ -1579,7 +1586,7 @@ def check_credentials(root: Path) -> None:
                    "gh's was seen storing the credential a push succeeded with. Delete its github.com entry, then clear the list with an "
                    "empty `helper =` before gh's under `[credential \"https://github.com\"]` in ~/.gitconfig")
         else:
-            result("PASS", f"git asks {'only gh' if helpers else 'no credential helper'} for github.com")
+            none_found(f"git asks {'only gh' if helpers else 'no credential helper'} for github.com")
         if headers:
             result("WARN", "git config sends an Authorization header to github.com (http.extraHeader): "
                    "`git config --show-origin --get-regexp extraheader` shows where")
@@ -1603,7 +1610,7 @@ def check_credentials(root: Path) -> None:
              for i, w in enumerate(words)):
         result("WARN", f"{netrc} holds a login for github.com (or a default one): git over HTTPS uses it")
     else:
-        result("PASS", f"no github.com login in {netrc}")
+        none_found(f"no github.com login in {netrc}")
 
     result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
            "say which keys push; see docs/how-to/run-a-project.md")
