@@ -583,6 +583,10 @@ printf 'machine "github.com" login me password "tok value-8"\n' > "$cred/home/.n
 out="$(credrun FAKE_GH="$one")"
 grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok value-8" <<<"$out" \
   && ok "--credentials: a quoted github.com in ~/.netrc is a WARN" || { bad "--credentials netrc quoted"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+printf 'machine GitHub.COM login me password x\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" \
+  && ok "--credentials: github.com in ~/.netrc in any case is a WARN" || { bad "--credentials netrc case"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 printf 'machine "github.com login me password x\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
 grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ! grep -q "PASS  no github.com login" <<<"$out" \

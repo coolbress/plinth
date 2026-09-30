@@ -1575,7 +1575,8 @@ def check_credentials(root: Path) -> None:
         result("SKIP", f"{netrc} not verified: it exists and could not be read")
     elif any(m.group(3) is not None for m in tokens):
         result("SKIP", f"{netrc} not verified: a quoted token is not closed")
-    elif any(w == "default" or (w == "machine" and i + 1 < len(words) and words[i + 1] == "github.com")
+    # Host names and keywords in any case: curl 8.5.0 matched `GITHUB.COM` (third-party review on #344).
+    elif any(w.lower() == "default" or (w.lower() == "machine" and i + 1 < len(words) and words[i + 1].lower() == "github.com")
              for i, w in enumerate(words)):
         result("WARN", f"{netrc} holds a login for github.com (or a default one): git over HTTPS uses it")
     else:
