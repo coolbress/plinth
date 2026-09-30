@@ -11,6 +11,28 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-30
+
+Knowing what the agent can reach. 1.1 showed that GitHub refuses a push that
+changes a workflow when the token lacks workflow permission; this release
+helps a person make sure the agent works with such a token and nothing
+else. `/plinth:new-project` now ends by saying whether the credential the
+agent inherits has administration on the new repository, which the ruleset
+cannot hold against, and points to the guide's agent-token section when it
+does. `/plinth:floor-check` now also lists what else on the machine can
+push to github.com: another account stored in `gh`, a git credential helper
+other than gh's, a login in `~/.netrc`, an `Authorization` header in git's
+config, `GH_TOKEN` or `GITHUB_TOKEN`. It names each one, never its value.
+It is a best-effort local report, not a defence: finding nothing is an INFO
+that says so, and known gaps in how it reads git's and netrc's formats are
+tracked in #349.
+
+A minor version: two additions, and no check name, job, input, secret or
+skill name changes. `docs/agents/issue-tracker.md` also asks that public
+records be written in the product's voice.
+
+tested with plinth-template v1.5.9
+
 ### Added
 
 - `/plinth:new-project` ends with one line saying whether the `gh`
@@ -1631,7 +1653,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/coolbress/plinth/releases/tag/v1.2.0
 [1.1.1]: https://github.com/coolbress/plinth/releases/tag/v1.1.1
 [1.1.0]: https://github.com/coolbress/plinth/releases/tag/v1.1.0
 [1.0.0]: https://github.com/coolbress/plinth/releases/tag/v1.0.0
