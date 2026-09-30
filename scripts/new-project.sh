@@ -402,23 +402,43 @@ if ! err="$(gh api "repos/$repo/rulesets" -X POST --input - <<<"$ruleset_body" 2
   printf 'could not apply the ruleset:\n%s\n' "$err" >&2
   exit 1
 fi
-gh api "repos/$repo" -X PATCH \
+# The calls from here to the merge settings set values, so sending one again
+# changes nothing. GitHub answers them 502, 503 or 504 now and then (e2e run
+# 36690626984, twice in a row, #356): such an answer is tried again, twice,
+# after a pause. Any other failure, or one that persists, stops as before and
+# the trap deletes the repository; either way the message names the call.
+setup_call() { # <what> <gh api arguments...>
+  local what="$1" err tries=1; shift
+  while :; do
+    err="$(gh api "$@" 2>&1 >/dev/null)" && return 0
+    case "$err" in
+      *"HTTP 502"*|*"HTTP 503"*|*"HTTP 504"*)
+        if [ "$tries" -lt 3 ]; then
+          printf '  %s: GitHub answered %s; trying again (%d of 2)\n' "$what" "$(grep -oE 'HTTP 50[234]' <<<"$err" | head -1)" "$tries" >&2
+          sleep $((tries * 5)); tries=$((tries + 1)); continue
+        fi ;;
+    esac
+    printf 'could not set %s (gh api %s):\n%s\n' "$what" "$*" "$err" >&2
+    exit 1
+  done
+}
+setup_call "secret scanning and push protection" "repos/$repo" -X PATCH \
   -f 'security_and_analysis[secret_scanning][status]=enabled' \
-  -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled' >/dev/null
-gh api -X PUT "repos/$repo/vulnerability-alerts" >/dev/null
-gh api -X PUT "repos/$repo/automated-security-fixes" >/dev/null
+  -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
+setup_call "Dependabot alerts" -X PUT "repos/$repo/vulnerability-alerts"
+setup_call "Dependabot security updates" -X PUT "repos/$repo/automated-security-fixes"
 # Actions: SHA pins required, and only GitHub-owned actions plus plinth's own
 # reusable workflow may run. Without `coolbress/plinth/*` the first CI run dies
 # with startup_failure, no check name ever reports, and the repository is locked.
-gh api -X PUT "repos/$repo/actions/permissions" -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true >/dev/null
-gh api -X PUT "repos/$repo/actions/permissions/selected-actions" \
+setup_call "the Actions permissions" -X PUT "repos/$repo/actions/permissions" -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true
+setup_call "the Actions allowlist" -X PUT "repos/$repo/actions/permissions/selected-actions" \
   -F github_owned_allowed=true -F verified_allowed=false \
-  -f 'patterns_allowed[]=coolbress/plinth/*' >/dev/null
+  -f 'patterns_allowed[]=coolbress/plinth/*'
 # Merge settings agree with the ruleset, or there is no merge button at all.
 # The squash commit is the pull request: its title (checked by ci / pr-title)
 # and its description, not a list of the branch's commits (#72).
-gh api "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=false -F delete_branch_on_merge=true \
-  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY >/dev/null
+setup_call "the merge settings" "repos/$repo" -X PATCH -F allow_merge_commit=false -F allow_rebase_merge=false -F delete_branch_on_merge=true \
+  -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
 
 # CodeQL: the ruleset requires its results through a code_scanning rule, so
 # nothing merges until CodeQL has analysed the pull request, and default setup

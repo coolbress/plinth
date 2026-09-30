@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:new-project` tries a setup call again when GitHub answers 502, 503
+  or 504, twice after a short pause, instead of deleting the repository it
+  had just created. The calls are the ones after the ruleset (secret scanning
+  and push protection, Dependabot, the Actions permissions and allowlist, the
+  merge settings), each of which sets a value, so sending it again changes
+  nothing; the ruleset's own `POST` is not retried. Any other failure, or a
+  server error that persists, still stops and deletes the repository, and the
+  message now names the call and GitHub's answer instead of printing only
+  `gh: Server Error (HTTP 502)` (#356).
+
 ## [1.2.0] - 2026-09-30
 
 Knowing what the agent can reach. 1.1 showed that GitHub refuses a push that
