@@ -571,6 +571,14 @@ printf '[credential "https://github.com"]\n\thelper =\n\thelper = gh auth git-cr
 out="$(credrun FAKE_GH="$one")"
 grep -q "WARN  git has 1 credential helper for github.com besides gh's: gh" <<<"$out" && ! grep -q "PASS  git asks" <<<"$out" \
   && ok "--credentials: gh auth git-credential without \`!\` is another helper (git-credential-gh)" || { bad "--credentials helper without !"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+# A shell command glued before gh's path runs first: not gh's helper either.
+for h in '!/tmp/steal;/usr/bin/gh auth git-credential' '!/tmp/steal&&/usr/bin/gh auth git-credential' '!$(/tmp/steal)/gh auth git-credential' '!/a|/usr/bin/gh auth git-credential'; do
+  printf '[credential "https://github.com"]\n\thelper =\n\thelper = "%s"\n' "$h" > "$cred/gitconfig"
+  out="$(credrun FAKE_GH="$one")"
+  grep -q "WARN  git has 1 credential helper for github.com besides gh's" <<<"$out" && ! grep -q "PASS  git asks" <<<"$out" \
+    || { bad "--credentials: '$h' passed as gh's helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
+done
+grep -q "WARN  git has 1 credential helper" <<<"$out" && ok "--credentials: a shell command before gh's path (; && \$() |) is another helper"
 # A `!` helper that calls gh after answering itself is not gh's helper.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !f() { echo password=tok-value-6; gh auth git-credential "$@"; }; f\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
