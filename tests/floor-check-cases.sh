@@ -515,16 +515,30 @@ SH
 chmod +x "$cred/bin/gh"
 one='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success"}]}}'
 two='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success"},{"login":"other","active":false,"state":"success"}]}}'
+# git reads the fixture as ~/.gitconfig: GIT_CONFIG_GLOBAL would be reported as
+# masking it. GIT_CONFIG_NOSYSTEM keeps this machine's system config out, and
+# is reported as a SKIP, which no case below asserts is absent.
+ln -s ../gitconfig "$cred/home/.gitconfig"
 credrun() {   # extra env assignments as arguments; prints the checker's output
-  env -u GH_TOKEN -u GITHUB_TOKEN PATH="$cred/bin:$PATH" HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 \
-    GIT_CONFIG_GLOBAL="$cred/gitconfig" FAKE_GH_SAW="$cred/saw" "$@" \
-    python3 "$checker" --root "$good" --no-network --credentials 2>&1
+  env -u GH_TOKEN -u GITHUB_TOKEN -u GH_CONFIG_DIR -u XDG_CONFIG_HOME -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS PATH="$cred/bin:$PATH" HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 \
+    FAKE_GH_SAW="$cred/saw" "$@" python3 "$checker" --root "$good" --no-network --credentials 2>&1
 }
 printf '[credential]\n\thelper = osxkeychain\n[credential "https://github.com"]\n\thelper =\n\thelper = !/opt/homebrew/bin/gh auth git-credential\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"; rc=$?
 if [ "$rc" = 0 ] && grep -q "PASS  gh stores 1 account for github.com: me" <<<"$out" && grep -q "PASS  git asks only gh for github.com" <<<"$out" \
    && grep -q "PASS  no github.com login in" <<<"$out" && grep -q "SKIP  SSH keys not verified here" <<<"$out" && ! grep -q WARN <<<"$out"
 then ok "--credentials: one gh account, gh's helper after an empty one, no .netrc: PASS lines, SSH still not verified"; else bad "--credentials clean"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A variable that points gh or git elsewhere hides the default configuration,
+# and the agent can unset it: not verified, named, never read as clean.
+for var in GH_CONFIG_DIR XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS; do
+  out="$(credrun "$var=$cred/elsewhere" FAKE_GH="$one")"
+  grep -q "SKIP  $var is set" <<<"$out" || { bad "--credentials: $var set is not reported"; printf '%s\n' "$out" | sed 's/^/        /'; }
+done
+out="$(credrun FAKE_GH="$one")"
+grep -q "SKIP  GIT_CONFIG_NOSYSTEM is set" <<<"$out" && ! grep -qE "SKIP  (GH_CONFIG_DIR|GIT_CONFIG_GLOBAL) is set" <<<"$out" \
+  && ok "--credentials: GH_CONFIG_DIR, XDG_CONFIG_HOME and the GIT_CONFIG_* overrides are each not verified; unset, not named" \
+  || { bad "--credentials masking variables"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
 out="$(credrun FAKE_GH="$two")"
 if grep -q "WARN  gh stores 2 accounts for github.com (active: me)" <<<"$out" && grep -q "gh auth logout --hostname github.com --user other" <<<"$out" \
    && ! grep -q "user me" <<<"$out"

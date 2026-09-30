@@ -152,7 +152,9 @@ first pull request is merged, give the agent a token of its own without it:
 
    `/plinth:floor-check` lists these on the machine it runs on and prints
    only whether each is there, never its value; what it could not read is
-   not verified. It does not read SSH keys (step 4, on GitHub), a program
+   not verified. So is a configuration hidden behind `GH_CONFIG_DIR`,
+   `XDG_CONFIG_HOME` or a `GIT_CONFIG_*` variable: the agent can unset the
+   variable, so give it its own token in the configuration read without one. It does not read SSH keys (step 4, on GitHub), a program
    named by `GIT_ASKPASS` or `core.askPass`, or a token saved anywhere else.
    The macOS keychain helper itself was not in the measurement; a credential
    store file in its place was. Every run lists SSH keys as not verified.

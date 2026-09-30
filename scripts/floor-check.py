@@ -1471,6 +1471,12 @@ GH_HELPER = re.compile(r"!('[^']*/gh(\.exe)?'|([\w./~+@%:,-]*/)?gh(\.exe)?)[ \t]
 NETRC_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([^\s"]\S*)|("\S*)')
 
 
+# Variables that change which gh or git configuration is read (third-party
+# review round 8 on #344).
+CONFIG_MASKS = ("GH_CONFIG_DIR", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+                "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS")
+
+
 def github_https(url: str | None) -> bool | None:
     """Does a config subsection (`credential.<url>.helper`) apply to a push to
     https://github.com? True when it names the host and nothing narrower, None
@@ -1499,6 +1505,13 @@ def check_credentials(root: Path) -> None:
     for var in env_tokens:
         result("WARN", f"{var} is set in this environment: gh, and the git push it serves, use it before any stored login")
         result("INFO", f"  remove {var} where it is set (a shell startup file), then restart Claude Code")
+
+    # Each points gh or git away from, or adds to, the configuration read by
+    # default; that one is not read here, and the agent can unset the variable.
+    for var in CONFIG_MASKS:
+        if os.environ.get(var):
+            result("SKIP", f"{var} is set: the gh or git configuration read without it was not read, "
+                   "and the agent can unset it")
 
     env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
     try:

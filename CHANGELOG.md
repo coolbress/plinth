@@ -29,7 +29,9 @@ pull requests and have no tag.
   set), a git credential helper other than gh's (the macOS
   keychain helper included), an `Authorization` header in git's config, and a
   github.com login in `~/.netrc`. Each is a warning that says only whether it
-  is there; one it cannot read is not verified, and SSH keys always are. The
+  is there; one it cannot read is not verified, as is a configuration a
+  `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` or `GIT_CONFIG_*` variable hides, and
+  SSH keys always are. The
   guide section gains the same list, with how to see and remove each (#336).
 
 ## [1.1.1] - 2026-09-29
