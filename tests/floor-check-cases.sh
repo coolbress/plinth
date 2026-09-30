@@ -577,6 +577,16 @@ printf 'machine github.com login me password tok-value-4\n' > "$cred/home/.netrc
 out="$(credrun FAKE_GH="$one")"
 grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok-value-4" <<<"$out" \
   && ok "--credentials: a github.com login in ~/.netrc is a WARN, its value unprinted" || { bad "--credentials netrc"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+# curl reads a quoted token (8.5.0 sent a quoted github.com entry's login):
+# the quotes are not part of the name. One it cannot tokenise is not verified.
+printf 'machine "github.com" login me password "tok value-8"\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok value-8" <<<"$out" \
+  && ok "--credentials: a quoted github.com in ~/.netrc is a WARN" || { bad "--credentials netrc quoted"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+printf 'machine "github.com login me password x\n' > "$cred/home/.netrc"
+out="$(credrun FAKE_GH="$one")"
+grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ! grep -q "PASS  no github.com login" <<<"$out" \
+  && ok "--credentials: an unterminated quote in ~/.netrc is not verified" || { bad "--credentials netrc unterminated"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 printf '# machine github.com login old password tok-value-7\nmachine example.com login me password x\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
 grep -q "PASS  no github.com login in" <<<"$out" && ok "--credentials: a .netrc for another host, and a commented github.com line, are not a WARN" || bad "--credentials netrc other host or comment"

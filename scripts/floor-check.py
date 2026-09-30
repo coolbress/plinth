@@ -1464,6 +1464,11 @@ def check_sandbox() -> None:
 GH_HELPER = re.compile(r"!('[^']*/gh(\.exe)?'|(\S*/)?gh(\.exe)?)\s+auth\s+git-credential")
 
 
+# One ~/.netrc token: a double-quoted one (group 1), a bare one (group 2), or a
+# quote left open (group 3).
+NETRC_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([^\s"]\S*)|("\S*)')
+
+
 def github_https(url: str | None) -> bool | None:
     """Does a config subsection (`credential.<url>.helper`) apply to a push to
     https://github.com? True when it names the host and nothing narrower, None
@@ -1559,12 +1564,17 @@ def check_credentials(root: Path) -> None:
     netrc = Path(os.environ.get("HOME") or Path.home()) / ".netrc"
     try:
         # A line opening with `#` is a comment to netrc's readers.
-        words = [w for line in read(netrc).splitlines() if not line.lstrip().startswith("#")
-                 for w in line.split()] if netrc.exists() else []
+        lines = [line for line in read(netrc).splitlines() if not line.lstrip().startswith("#")] if netrc.exists() else []
     except OSError:
-        words = None
-    if words is None:
+        lines = None
+    # curl takes a token in double quotes, backslash escapes inside, as one
+    # word without the quotes; a quote left open is not guessed at.
+    tokens = [m for line in lines or [] for m in NETRC_TOKEN.finditer(line)]
+    words = [re.sub(r"\\(.)", r"\1", m.group(1)) if m.group(1) is not None else m.group(2) or "" for m in tokens]
+    if lines is None:
         result("SKIP", f"{netrc} not verified: it exists and could not be read")
+    elif any(m.group(3) is not None for m in tokens):
+        result("SKIP", f"{netrc} not verified: a quoted token is not closed")
     elif any(w == "default" or (w == "machine" and i + 1 < len(words) and words[i + 1] == "github.com")
              for i, w in enumerate(words)):
         result("WARN", f"{netrc} holds a login for github.com (or a default one): git over HTTPS uses it")
