@@ -25,7 +25,8 @@ pull requests and have no tag.
   without Administration cannot edit the ruleset, and how to check it.
 - `/plinth:floor-check` lists what else on the machine can push to
   github.com past the agent's token: `GH_TOKEN` or `GITHUB_TOKEN`, a second
-  account stored in `gh`, a git credential helper other than gh's (the macOS
+  account stored in `gh` (or any stored account while one of those two is
+  set), a git credential helper other than gh's (the macOS
   keychain helper included), an `Authorization` header in git's config, and a
   github.com login in `~/.netrc`. Each is a warning that says only whether it
   is there; one it cannot read is not verified, and SSH keys always are. The

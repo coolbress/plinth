@@ -1462,7 +1462,8 @@ def check_sandbox() -> None:
 # Without `!`, git runs `git credential-gh ...`, another program; an absolute
 # path without `!` does run gh, but is reported as another helper all the same.
 # An unquoted path takes no shell character: `!/x;/usr/bin/gh ...` runs /x first.
-GH_HELPER = re.compile(r"!('[^']*/gh(\.exe)?'|([\w./~+@%:,-]*/)?gh(\.exe)?)\s+auth\s+git-credential")
+# Only spaces and tabs separate the words: a newline starts another command.
+GH_HELPER = re.compile(r"!('[^']*/gh(\.exe)?'|([\w./~+@%:,-]*/)?gh(\.exe)?)[ \t]+auth[ \t]+git-credential")
 
 
 # One ~/.netrc token: a double-quoted one (group 1), a bare one (group 2), or a

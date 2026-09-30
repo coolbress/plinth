@@ -579,6 +579,11 @@ for h in '!/tmp/steal;/usr/bin/gh auth git-credential' '!/tmp/steal&&/usr/bin/gh
     || { bad "--credentials: '$h' passed as gh's helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 done
 grep -q "WARN  git has 1 credential helper" <<<"$out" && ok "--credentials: a shell command before gh's path (; && \$() |) is another helper"
+# A newline is a command separator to the shell: `!/usr/bin/gh` then `auth ...` runs two commands.
+printf '[credential "https://github.com"]\n\thelper =\n\thelper = "!/usr/bin/gh\\nauth git-credential"\n' > "$cred/gitconfig"
+out="$(credrun FAKE_GH="$one")"
+grep -q "WARN  git has 1 credential helper for github.com besides gh's" <<<"$out" && ! grep -q "PASS  git asks" <<<"$out" \
+  && ok "--credentials: a newline inside gh's helper line makes it another helper" || { bad "--credentials newline in helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 # A `!` helper that calls gh after answering itself is not gh's helper.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !f() { echo password=tok-value-6; gh auth git-credential "$@"; }; f\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
