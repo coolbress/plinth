@@ -146,7 +146,9 @@ first pull request is merged, give the agent a token of its own without it:
      header in git's `http.extraHeader`: git over HTTPS sends either. Remove
      the line.
    - **`GH_TOKEN` or `GITHUB_TOKEN`**: `gh auth status` names it after the
-     account; remove it as step 3 says.
+     account; remove it as step 3 says. While one is set, an account stored
+     in `gh` is a second credential even when it is the only one: the agent
+     can unset the variable, and the stored login answers.
 
    `/plinth:floor-check` lists these on the machine it runs on and prints
    only whether each is there, never its value; what it could not read is

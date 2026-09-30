@@ -531,8 +531,15 @@ if grep -q "WARN  gh stores 2 accounts for github.com (active: me)" <<<"$out" &&
 then ok "--credentials: a second stored gh account is a WARN with the logout line for it alone"; else bad "--credentials two accounts"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; fi
 rm -f "$cred/saw"
 out="$(credrun GH_TOKEN=secret-value-1 FAKE_GH="$one")"
-if grep -q "WARN  GH_TOKEN is set" <<<"$out" && ! grep -q "secret-value-1" <<<"$out" && [ ! -e "$cred/saw" ] && grep -q "PASS  gh stores 1 account" <<<"$out"
+if grep -q "WARN  GH_TOKEN is set" <<<"$out" && ! grep -q "secret-value-1" <<<"$out" && [ ! -e "$cred/saw" ] && grep -q "gh stores 1 account" <<<"$out"
 then ok "--credentials: GH_TOKEN is named, not printed, and the stored accounts are read without it"; else bad "--credentials GH_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# With an environment token, even one stored account is another credential:
+# the agent can unset the variable, and the stored login answers.
+out="$(credrun GH_TOKEN=secret-value-9 FAKE_GH="$one")"
+grep -q "WARN  gh stores 1 account for github.com (me) besides GH_TOKEN" <<<"$out" && ! grep -q "PASS  gh stores" <<<"$out" \
+  && ok "--credentials: one stored account beside GH_TOKEN is a WARN" || { bad "--credentials env token plus one stored"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; }
+out="$(credrun GH_TOKEN=secret-value-9 FAKE_GH='{"hosts":{}}')"
+grep -q "PASS  gh stores no accounts for github.com" <<<"$out" && ok "--credentials: GH_TOKEN with nothing stored leaves the stored item a PASS" || { bad "--credentials env token, none stored"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; }
 out="$(credrun GITHUB_TOKEN=secret-value-5 FAKE_GH="$one")"
 grep -q "WARN  GITHUB_TOKEN is set" <<<"$out" && ! grep -q "secret-value-5" <<<"$out" \
   && ok "--credentials: GITHUB_TOKEN is named, not printed" || { bad "--credentials GITHUB_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; }

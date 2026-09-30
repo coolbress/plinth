@@ -1493,10 +1493,10 @@ def check_credentials(root: Path) -> None:
     GitHub accepts. `gh auth status` checks each stored token with GitHub, so
     this item goes online even under --no-network; offline, gh's answer is
     what it is, and one that is not its JSON is not verified."""
-    for var in ("GH_TOKEN", "GITHUB_TOKEN"):
-        if os.environ.get(var):
-            result("WARN", f"{var} is set in this environment: gh, and the git push it serves, use it before any stored login")
-            result("INFO", f"  remove {var} where it is set (a shell startup file), then restart Claude Code")
+    env_tokens = [var for var in ("GH_TOKEN", "GITHUB_TOKEN") if os.environ.get(var)]
+    for var in env_tokens:
+        result("WARN", f"{var} is set in this environment: gh, and the git push it serves, use it before any stored login")
+        result("INFO", f"  remove {var} where it is set (a shell startup file), then restart Claude Code")
 
     env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
     try:
@@ -1516,6 +1516,12 @@ def check_credentials(root: Path) -> None:
             for login in logins:
                 if login not in active:
                     result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
+        elif logins and env_tokens:
+            # The agent can unset the variable itself, and the stored login answers.
+            result("WARN", f"gh stores 1 account for github.com ({logins[0]}) besides {' and '.join(env_tokens)}: "
+                   "unsetting the variable uses it")
+            result("INFO", "  keep one: the agent's token stored in gh with the variable removed, or "
+                   f"gh auth logout --hostname github.com --user {shlex.quote(logins[0])}")
         else:
             result("PASS", f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
                    + (f": {logins[0]}" if logins else ""))
