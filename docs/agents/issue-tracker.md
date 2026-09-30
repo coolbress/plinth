@@ -70,6 +70,12 @@ states. A project term such as the everyday token is not personal and stays. An
 issue body's edit history is public too: text taken out later is still in the
 earlier revisions until the owner deletes them.
 
+Outside users read these records, so write them in the product's voice, not
+as a person's story. A decision reads "Decided: …", not "the owner decided";
+someone doing a task is "a maintainer" or the role they have, not a person
+the reader has to know; a circumstance is written as the condition it sets
+("no one outside the project has run it yet"), not as who could not do what.
+
 A filled-in section is not value and an edited file is not completion. Judge by
 what the record says happened, not by whether the headings are all present.
 
