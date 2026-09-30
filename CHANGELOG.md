@@ -11,6 +11,24 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-01
+
+Two fixes to what 1.2 shipped. `/plinth:new-project` no longer loses the
+repository it has just created when GitHub answers a setup call with a
+server error: on 2026-09-30 the call that sets the Actions allowlist answered
+502 to most requests for hours, which held up 1.2.0's own release check
+through five attempts. The six calls after the ruleset now try again on 502,
+503 or 504, up to four times with growing pauses, and a failure that stays
+names the call and GitHub's answer. `/plinth:floor-check`'s list of other
+credentials on the machine now reads git's helper configuration and
+`~/.netrc` the way git and netrc do, checked against `git credential fill`,
+so a helper git would use is no longer missed in the configurations the
+earlier reading got wrong.
+
+A patch: no check name, job, input, secret or skill changes.
+
+tested with plinth-template v1.5.9
+
 ### Fixed
 
 - `/plinth:new-project` tries a setup call again when GitHub answers 502, 503
@@ -24,7 +42,7 @@ pull requests and have no tag.
   server error that persists, still stops and deletes the repository, and the
   message now names the call and GitHub's answer instead of printing only
   `gh: Server Error (HTTP 502)` (#356).
-- `/plinth:floor-check --credentials` reads git's helper list and `~/.netrc`
+- `/plinth:floor-check` reads git's helper list and `~/.netrc`
   closer to how git and netrc do (#349). An empty `helper =` under a
   `credential.<url>` that names a username, a port, a query or a fragment
   no longer hides the helpers listed before it: git does not apply that entry to a plain
@@ -1681,7 +1699,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/coolbress/plinth/releases/tag/v1.2.1
 [1.2.0]: https://github.com/coolbress/plinth/releases/tag/v1.2.0
 [1.1.1]: https://github.com/coolbress/plinth/releases/tag/v1.1.1
 [1.1.0]: https://github.com/coolbress/plinth/releases/tag/v1.1.0
