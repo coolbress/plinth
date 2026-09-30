@@ -12,10 +12,13 @@ types="$(sed -nE "s/^[[:space:]]*types='([^']+)'.*/\1/p" "$wf" | head -1)"
 shape="$(sed -nE 's/^.*grep -qE "([^"]+)".*$/\1/p' "$wf" | head -1)"
 [ -n "$shape" ] || { echo "  FAIL  the grep pattern was not found in python-ci.yml"; exit 1; }
 re="${shape//\$types/$types}"
+# The trailing-number rule (#360), from the line the workflow marks with it.
+trail="$(sed -nE "s/^.*grep -qE '([^']+)'.*# trailing-number$/\1/p" "$wf" | head -1)"
+[ -n "$trail" ] || { echo "  FAIL  the trailing-number pattern was not found in python-ci.yml"; exit 1; }
 
 pass=0; fail=0
 check() { # <ok|no> <title>
-  if printf '%s' "$2" | grep -qE "$re"; then got=ok; else got=no; fi
+  if printf '%s' "$2" | grep -qE "$re" && ! printf '%s' "$2" | grep -qE "$trail"; then got=ok; else got=no; fi
   if [ "$got" = "$1" ]; then pass=$((pass+1)); printf '  PASS  %-3s %s\n' "$1" "$2"
   else fail=$((fail+1)); printf '  FAIL  %-3s %s  (got %s)\n' "$1" "$2" "$got"; fi
 }
@@ -45,5 +48,16 @@ check no "feat:"
 check no "feat add a thing"
 check no "Feat: capitalised"
 check no "feat(scope) missing colon"
+echo "-- must fail: a trailing number the squash merge would repeat (#360)"
+check no "fix: x (#12)"
+check no "feat(a): y (#3)"
+check no "fix: x (#12) "
+check no "docs(research): add a note (#349)"
+echo "-- must pass: a number that is not at the end"
+check ok "fix: handle #12's case"
+check ok "fix: x (see #12) more"
+check ok "docs: #12 moved"
+check ok "fix: x (12)"
+check ok "feat: support issue #12"
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

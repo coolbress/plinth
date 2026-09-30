@@ -104,8 +104,11 @@ release needs a green run on the commit it tags
    `origin/main`, a bare `git push` refuses and the fix git prints first is
    `git push origin HEAD:main` — a push to `main`, not to your branch.
 2. Commit with a Conventional Commits title, `type(scope): summary`, using one
-   of the eleven standard types. A commit made with AI carries the trailer
-   `Assisted-by: <agent>:<model>` (see `AGENTS.md`).
+   of the eleven standard types. The pull request title follows the same rule
+   and does not end in `(#N)`: the squash merge adds the pull request's own
+   number, and `ci / pr-title` refuses a title that would carry two. A commit
+   made with AI carries the trailer `Assisted-by: <agent>:<model>` (see
+   `AGENTS.md`).
 3. Open a pull request as a draft; mark it ready when it is. The description
    becomes the body of the squash commit, so write it as one, in this shape:
 

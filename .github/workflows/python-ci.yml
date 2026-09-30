@@ -260,6 +260,25 @@ jobs:
 
           types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
           if printf '%s' "$TITLE" | grep -qE "^($types)(\([a-zA-Z0-9_.,/ -]+\))?!?: .+"; then
+            # A squash merge appends the pull request's own number to its
+            # title, so a title that already ends in one lands on main with
+            # two: `fix: x (#349) (#359)`. The issue belongs on the
+            # description's closing or `Part of` line instead.
+            if printf '%s' "$TITLE" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
+              echo "::error::PR title ends in a number: ${TITLE}. The squash merge adds this pull request's own number; name the issue in the description instead."
+              {
+                echo "### PR title ends in a number"
+                echo
+                echo "\`\`\`"
+                echo "$TITLE"
+                echo "\`\`\`"
+                echo
+                echo "A squash merge appends this pull request's own number, so the commit on the"
+                echo "default branch would carry two. Drop the trailing \`(#N)\` and name the issue"
+                echo "in the description: \`Closes #N\` when this completes it, \`Part of #N\` otherwise."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
             echo "OK: $TITLE"
             echo "### PR title follows the convention" >> "$GITHUB_STEP_SUMMARY"
             exit 0

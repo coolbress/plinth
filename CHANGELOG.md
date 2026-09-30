@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `ci / pr-title` fails a title that ends in `(#N)`: a squash merge appends
+  the pull request's own number, so the commit on the default branch would
+  carry two, as `fix(floor-check): … (#349) (#359)` did. The job summary says
+  where the issue number goes instead (the description's `Closes` or
+  `Part of` line). A `#N` elsewhere in the title still passes. A repository
+  gets this when its `python-ci.yml` pin reaches this release; the check's
+  name is unchanged (#360).
+- plinth's own `ci.yml` also runs on the `edited` pull-request event, so a
+  retitled pull request re-runs the title check, and an edited description
+  re-reads `ci / diff-size`'s warning, without a push. The template's
+  `ci.yml` is unchanged here (#322).
+
 ## [1.2.1] - 2026-10-01
 
 Two fixes to what 1.2 shipped. `/plinth:new-project` no longer loses the
