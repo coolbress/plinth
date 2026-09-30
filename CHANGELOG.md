@@ -24,6 +24,20 @@ pull requests and have no tag.
   server error that persists, still stops and deletes the repository, and the
   message now names the call and GitHub's answer instead of printing only
   `gh: Server Error (HTTP 502)` (#356).
+- `/plinth:floor-check --credentials` reads git's helper list and `~/.netrc`
+  closer to how git and netrc do (#349). An empty `helper =` under a
+  `credential.<url>` that names a username, a port, a query or a fragment
+  no longer hides the helpers listed before it: git does not apply that entry to a plain
+  github.com push, and the report said only gh's helper was left. A
+  subsection URL that cannot be parsed is now a SKIP naming it (without any
+  user or password in it) instead of stopping the run. `default` counts as a
+  `~/.netrc` entry only where a keyword stands, not as a login or password,
+  and a token sequence the reader cannot place is not verified. `GIT_CONFIG`,
+  which makes git read another file in place of `.git/config`, is named when
+  set, as `GIT_CONFIG_GLOBAL` is. git cannot report its helper list without
+  running the helpers, so the checker still reads the config itself; its
+  tests now run `git credential fill` for 17 subsection URLs and fail when
+  git applies a helper the checker does not count.
 
 ## [1.2.0] - 2026-09-30
 

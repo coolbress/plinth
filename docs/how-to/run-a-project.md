@@ -156,7 +156,7 @@ first pull request is merged, give the agent a token of its own without it:
    since a credential written in a form they do not recognise is not
    reported. Go through this list yourself as well. What it could not read
    is not verified. So is a configuration hidden behind `GH_CONFIG_DIR`,
-   `XDG_CONFIG_HOME` or a `GIT_CONFIG_*` variable: the agent can unset the
+   `XDG_CONFIG_HOME`, `GIT_CONFIG` or a `GIT_CONFIG_*` variable: the agent can unset the
    variable, so give it its own token in the configuration read without one.
    It does not read SSH keys (step 4, on GitHub), a program named by
    `GIT_ASKPASS` or `core.askPass`, or a token saved anywhere else.

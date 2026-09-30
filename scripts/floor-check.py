@@ -1472,22 +1472,51 @@ NETRC_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([^\s"]\S*)|("\S*)')
 
 
 # Variables that change which gh or git configuration is read (third-party
-# review round 8 on #344).
-CONFIG_MASKS = ("GH_CONFIG_DIR", "XDG_CONFIG_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+# review round 8 on #344). GIT_CONFIG makes git read that file in place of
+# the repository's .git/config (#349).
+CONFIG_MASKS = ("GH_CONFIG_DIR", "XDG_CONFIG_HOME", "GIT_CONFIG", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
                 "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS")
 
 
 def github_https(url: str | None) -> bool | None:
     """Does a config subsection (`credential.<url>.helper`) apply to a push to
-    https://github.com? True when it names the host and nothing narrower, None
-    when it names a path on it (it may apply: counted, but its empty value is
-    not taken as clearing the list), False otherwise."""
+    https://github.com? git applies every entry whose URL matches the request,
+    in config order, and an empty helper clears the list read so far
+    (`credential_apply_config`, git 2.55.0; #349). True when it names the host
+    and nothing narrower; None when it also names a path, a username, a port, a
+    query or a fragment, which git applies to some requests or to none (counted, but its empty value is not taken
+    as clearing the list); False otherwise. A scheme-less `github.com` applies:
+    git matches it as a partial URL. Raises ValueError for a URL that cannot
+    be parsed."""
     if url is None:
         return True
     u = urllib.parse.urlsplit(url if "://" in url else "https://" + url)
     if u.scheme != "https" or (u.hostname or "") != "github.com":
         return False
-    return True if u.path.strip("/") == "" else None
+    port = u.port   # raises ValueError for a port that is not a number
+    if u.username is not None or port not in (None, 443) or u.path.strip("/") or u.query or u.fragment or "?" in url or "#" in url:
+        return None
+    return True
+
+
+def netrc_github(words: list[str]) -> bool | None:
+    """Does ~/.netrc hold an entry for github.com, or a default one? A keyword
+    opens an entry (`machine <host>`, `default`) or takes one value inside it
+    (`login`, `password`, `account`), so `default` counts only where a keyword
+    stands. Any other sequence (a stray word, a keyword without its value,
+    `macdef`) is not placed: None."""
+    found, entry, i = False, False, 0
+    while i < len(words):
+        w = words[i].lower()
+        if w == "default":
+            found, entry, i = True, True, i + 1
+        elif w == "machine" and i + 1 < len(words):
+            found, entry, i = found or words[i + 1].lower() == "github.com", True, i + 2
+        elif w in ("login", "password", "account") and entry and i + 1 < len(words):
+            i += 2
+        else:
+            return None
+    return found
 
 
 def none_found(what: str) -> None:
@@ -1566,7 +1595,16 @@ def check_credentials(root: Path) -> None:
             key, _, value = entry.partition("\n")
             section, _, rest = key.partition(".")
             sub = rest.rpartition(".")[0]
-            applies = github_https(sub or None)
+            try:
+                applies = github_https(sub or None)
+            except ValueError:
+                # Named by what follows its last `@` only: a user or password
+                # before it, with or without a scheme, is never printed.
+                shown = "…@" + sub.rpartition("@")[2] if "@" in sub else sub
+                shown = shown if shown.isprintable() else "a URL with a control character"
+                result("SKIP", f'git config [{section} "{shown}"] not verified: its URL could not be parsed, '
+                       "so whether it applies to github.com is unknown")
+                continue
             if applies is False:
                 continue
             if section == "http":
@@ -1601,13 +1639,16 @@ def check_credentials(root: Path) -> None:
     # word without the quotes; a quote left open is not guessed at.
     tokens = [m for line in lines or [] for m in NETRC_TOKEN.finditer(line)]
     words = [re.sub(r"\\(.)", r"\1", m.group(1)) if m.group(1) is not None else m.group(2) or "" for m in tokens]
+    github = netrc_github(words)
     if lines is None:
         result("SKIP", f"{netrc} not verified: it exists and could not be read")
     elif any(m.group(3) is not None for m in tokens):
         result("SKIP", f"{netrc} not verified: a quoted token is not closed")
     # Host names and keywords in any case: curl 8.5.0 matched `GITHUB.COM` (third-party review on #344).
-    elif any(w.lower() == "default" or (w.lower() == "machine" and i + 1 < len(words) and words[i + 1].lower() == "github.com")
-             for i, w in enumerate(words)):
+    elif github is None:
+        result("SKIP", f"{netrc} not verified: a token sequence this reader does not place (a stray word, "
+               "a keyword without its value, or macdef)")
+    elif github:
         result("WARN", f"{netrc} holds a login for github.com (or a default one): git over HTTPS uses it")
     else:
         none_found(f"no github.com login in {netrc}")
