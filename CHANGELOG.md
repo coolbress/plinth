@@ -14,8 +14,10 @@ pull requests and have no tag.
 ### Fixed
 
 - `/plinth:new-project` tries a setup call again when GitHub answers 502, 503
-  or 504, twice after a short pause, instead of deleting the repository it
-  had just created. The calls are the ones after the ruleset (secret scanning
+  or 504, up to four times after 5, 10, 20 and 40 seconds, instead of
+  deleting the repository it had just created. On 2026-09-30 the Actions
+  allowlist call answered 502 to 7 of 11 requests in two probes, with no
+  pattern in which ones. The calls are the ones after the ruleset (secret scanning
   and push protection, Dependabot, the Actions permissions and allowlist, the
   merge settings), each of which sets a value, so sending it again changes
   nothing; the ruleset's own `POST` is not retried. Any other failure, or a
