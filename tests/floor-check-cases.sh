@@ -540,9 +540,11 @@ grep -q "SKIP  GIT_CONFIG_NOSYSTEM is set" <<<"$out" && ! grep -qE "SKIP  (GH_CO
   && ok "--credentials: GH_CONFIG_DIR, XDG_CONFIG_HOME and the GIT_CONFIG_* overrides are each not verified; unset, not named" \
   || { bad "--credentials masking variables"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
 out="$(credrun FAKE_GH="$two")"
+# The checker cannot tell which account holds the agent's token, active or
+# not: the repair names every account and leaves the choice to the person.
 if grep -q "WARN  gh stores 2 accounts for github.com (active: me)" <<<"$out" && grep -q "gh auth logout --hostname github.com --user other" <<<"$out" \
-   && ! grep -q "user me" <<<"$out"
-then ok "--credentials: a second stored gh account is a WARN with the logout line for it alone"; else bad "--credentials two accounts"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; fi
+   && grep -q "gh auth logout --hostname github.com --user me" <<<"$out" && grep -q "keep only the account that holds the agent's token" <<<"$out"
+then ok "--credentials: a second stored gh account is a WARN, with a logout line for every account and the choice left to the person"; else bad "--credentials two accounts"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; fi
 rm -f "$cred/saw"
 out="$(credrun GH_TOKEN=secret-value-1 FAKE_GH="$one")"
 if grep -q "WARN  GH_TOKEN is set" <<<"$out" && ! grep -q "secret-value-1" <<<"$out" && [ ! -e "$cred/saw" ] && grep -q "gh stores 1 account" <<<"$out"

@@ -1528,9 +1528,11 @@ def check_credentials(root: Path) -> None:
         if len(logins) > 1:
             result("WARN", f"gh stores {len(logins)} accounts for github.com (active: {', '.join(active) or 'none'}): "
                    "each is one `gh auth switch` away")
+            # Which account holds the agent's token is not known here, active or
+            # not (third-party review round 9 on #344): the person chooses.
+            result("INFO", "  keep only the account that holds the agent's token; log out each of the others:")
             for login in logins:
-                if login not in active:
-                    result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
+                result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
         elif logins and env_tokens:
             # The agent can unset the variable itself, and the stored login answers.
             result("WARN", f"gh stores 1 account for github.com ({logins[0]}) besides {' and '.join(env_tokens)}: "
