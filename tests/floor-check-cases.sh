@@ -535,6 +535,11 @@ for var in GH_CONFIG_DIR XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT
   out="$(credrun "$var=$cred/elsewhere" FAKE_GH="$one")"
   grep -q "SKIP  $var is set" <<<"$out" || { bad "--credentials: $var set is not reported"; printf '%s\n' "$out" | sed 's/^/        /'; }
 done
+# Exported but empty still hides the default file: `GIT_CONFIG_GLOBAL=` reads no global config.
+for var in GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GH_CONFIG_DIR; do
+  out="$(credrun "$var=" FAKE_GH="$one")"
+  grep -q "SKIP  $var is set" <<<"$out" || { bad "--credentials: $var set but empty is not reported"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
+done
 out="$(credrun FAKE_GH="$one")"
 grep -q "SKIP  GIT_CONFIG_NOSYSTEM is set" <<<"$out" && ! grep -qE "SKIP  (GH_CONFIG_DIR|GIT_CONFIG_GLOBAL) is set" <<<"$out" \
   && ok "--credentials: GH_CONFIG_DIR, XDG_CONFIG_HOME and the GIT_CONFIG_* overrides are each not verified; unset, not named" \

@@ -1509,7 +1509,7 @@ def check_credentials(root: Path) -> None:
     # Each points gh or git away from, or adds to, the configuration read by
     # default; that one is not read here, and the agent can unset the variable.
     for var in CONFIG_MASKS:
-        if os.environ.get(var):
+        if var in os.environ:   # set but empty counts: `GIT_CONFIG_GLOBAL=` reads no global file
             result("SKIP", f"{var} is set: the gh or git configuration read without it was not read, "
                    "and the agent can unset it")
 
