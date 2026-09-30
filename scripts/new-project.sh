@@ -403,19 +403,22 @@ if ! err="$(gh api "repos/$repo/rulesets" -X POST --input - <<<"$ruleset_body" 2
   exit 1
 fi
 # The calls from here to the merge settings set values, so sending one again
-# changes nothing. GitHub answers them 502, 503 or 504 now and then (e2e run
-# 36690626984, twice in a row, #356): such an answer is tried again, twice,
-# after a pause. Any other failure, or one that persists, stops as before and
-# the trap deletes the repository; either way the message names the call.
+# changes nothing. GitHub answers them 502, 503 or 504 now and then (#356):
+# on 2026-09-30 the Actions allowlist call answered 502 on three tries in a
+# row in e2e, and 7 of 11 calls to it in two probes, with no pattern in which
+# ones. Such an answer is tried again, four times, after 5, 10, 20 and 40
+# seconds. Any other failure, or one that persists, stops as before and the
+# trap deletes the repository; either way the message names the call.
+setup_retries=4
 setup_call() { # <what> <gh api arguments...>
   local what="$1" err tries=1; shift
   while :; do
     err="$(gh api "$@" 2>&1 >/dev/null)" && return 0
     case "$err" in
       *"HTTP 502"*|*"HTTP 503"*|*"HTTP 504"*)
-        if [ "$tries" -lt 3 ]; then
-          printf '  %s: GitHub answered %s; trying again (%d of 2)\n' "$what" "$(grep -oE 'HTTP 50[234]' <<<"$err" | head -1)" "$tries" >&2
-          sleep $((tries * 5)); tries=$((tries + 1)); continue
+        if [ "$tries" -le "$setup_retries" ]; then
+          printf '  %s: GitHub answered %s; trying again (%d of %d)\n' "$what" "$(grep -oE 'HTTP 50[234]' <<<"$err" | head -1)" "$tries" "$setup_retries" >&2
+          sleep $((5 << (tries - 1))); tries=$((tries + 1)); continue
         fi ;;
     esac
     printf 'could not set %s (gh api %s):\n%s\n' "$what" "$*" "$err" >&2

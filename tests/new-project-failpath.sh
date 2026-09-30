@@ -224,7 +224,7 @@ done
 exec "$REAL_GIT" "$@"
 MOCK
 printf '#!/usr/bin/env bash\nexit 0\n' > "$work/bin/uv"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$work/bin/sleep"   # the poll's pause, skipped
+printf '#!/usr/bin/env bash\nprintf "sleep %%s\\n" "$*" >> "${GH_LOG:-/dev/null}"\nexit 0\n' > "$work/bin/sleep"   # the pause is skipped, and logged
 printf '#!/usr/bin/env bash\n[ "${MOCK_CLAUDE_OLD:-0}" = 1 ] && { echo "2.0.0 (Claude Code)"; exit 0; }\necho "2.1.290 (Claude Code)"\n' > "$work/bin/claude"
 chmod +x "$work/bin/"*
 mkdir -p "$work/bin-nouv"; for f in gh git uvx claude sleep; do cp "$work/bin/$f" "$work/bin-nouv/"; done
@@ -454,17 +454,21 @@ for at in secret:"secret scanning and push protection" dependabot:"Dependabot al
   else bad "${at%%:*}-named" "the failure does not name ${at#*:}"; sed 's/^/        /' "$work/home-${at%%:*}/out"; fi
 done
 echo "after creation: a GitHub server error on a setup call is tried again (#356)"
-E="MOCK_5XX=secret:502:1" run 5xx-once      ok  yes no "secret scanning and push protection: GitHub answered HTTP 502; trying again (1 of 2)" -- probe
-E="MOCK_5XX=actions:503:2" run 5xx-twice    ok  yes no "the Actions permissions: GitHub answered HTTP 503; trying again (2 of 2)" -- probe
-E="MOCK_5XX=merge:504:1" run 5xx-merge      ok  yes no "trying again (1 of 2)" -- probe
+E="MOCK_5XX=secret:502:1" run 5xx-once      ok  yes no "secret scanning and push protection: GitHub answered HTTP 502; trying again (1 of 4)" -- probe
+E="MOCK_5XX=actions:503:2" run 5xx-twice    ok  yes no "the Actions permissions: GitHub answered HTTP 503; trying again (2 of 4)" -- probe
+E="MOCK_5XX=allowlist:502:4" run 5xx-four   ok  yes no "the Actions allowlist: GitHub answered HTTP 502; trying again (4 of 4)" -- probe
+E="MOCK_5XX=merge:504:1" run 5xx-merge      ok  yes no "trying again (1 of 4)" -- probe
 E="MOCK_5XX=dependabot:502:9" run 5xx-stays err yes yes "could not set Dependabot alerts" -- probe
 E="MOCK_5XX=allowlist:500:1" run 5xx-500    err yes yes "could not set the Actions allowlist" -- probe
 if [ "$(grep -c 'selected-actions' "$work/home-5xx-500/calls.log")" = 1 ]
 then ok 5xx-500 "an HTTP 500 is not tried again: one call"
 else bad 5xx-500 "an HTTP 500 was tried again"; fi
-if [ "$(grep -c 'vulnerability-alerts' "$work/home-5xx-stays/calls.log")" = 3 ]
-then ok 5xx-stays "a 502 that persists is tried three times in all, then stops"
-else bad 5xx-stays "a persistent 502 was not tried exactly three times: $(grep -c 'vulnerability-alerts' "$work/home-5xx-stays/calls.log")"; fi
+if [ "$(grep '^sleep ' "$work/home-5xx-four/calls.log" | head -4 | tr '\n' ' ')" = "sleep 5 sleep 10 sleep 20 sleep 40 " ]
+then ok 5xx-four "the pauses before the retries are 5, 10, 20 and 40 seconds"
+else bad 5xx-four "the pauses were: $(grep '^sleep ' "$work/home-5xx-four/calls.log" | head -4 | tr '\n' ' ')"; fi
+if [ "$(grep -c 'vulnerability-alerts' "$work/home-5xx-stays/calls.log")" = 5 ]
+then ok 5xx-stays "a 502 that persists is tried five times in all, then stops"
+else bad 5xx-stays "a persistent 502 was not tried exactly five times: $(grep -c 'vulnerability-alerts' "$work/home-5xx-stays/calls.log")"; fi
 # The ruleset is a POST: sending it again could create a second ruleset, so it
 # is not retried, and its failure keeps its own message.
 E="MOCK_5XX=ruleset:502:1" run 5xx-ruleset err yes yes "could not apply the ruleset" -- probe
