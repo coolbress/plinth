@@ -1146,9 +1146,13 @@ def check_image_job(root: Path) -> None:
        "ci.yml has no `image` job that builds and runs the container; the ruleset requires that check for this archetype")
 
 
-def ruleset_for(data: dict, archetype: str | None) -> dict:
-    """ruleset.json as the door applies it: with the image check for a service archetype."""
+def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -> dict:
+    """ruleset.json as the door applies it: with the image check for a service
+    archetype, and without the code_scanning rule for a private repository
+    that has no GitHub Code Security (#350); every check name stays."""
     data = copy.deepcopy(data)
+    if not code_scanning:
+        data["rules"] = [r for r in data["rules"] if r["type"] != "code_scanning"]
     if archetype in CONDITIONAL_ARCHETYPES:
         for r in data["rules"]:
             if r["type"] == "required_status_checks":
@@ -1734,15 +1738,20 @@ def main() -> int:
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
+    ap.add_argument("--without-code-scanning", action="store_true",
+                    help="with --print-ruleset: leave the code_scanning rule out, as the door does for a private "
+                         "repository without GitHub Code Security")
     a = ap.parse_args()
 
     if a.print_conditional_archetypes:
         print(" ".join(CONDITIONAL_ARCHETYPES))
         return 0
+    if a.without_code_scanning and not a.print_ruleset:
+        ap.error("--without-code-scanning needs --print-ruleset")
     if a.print_ruleset:
         if not a.ruleset:
             ap.error("--print-ruleset needs --ruleset")
-        print(json.dumps(ruleset_for(json.loads(read(Path(a.ruleset))), a.archetype), indent=2))
+        print(json.dumps(ruleset_for(json.loads(read(Path(a.ruleset))), a.archetype, code_scanning=not a.without_code_scanning), indent=2))
         return 0
 
     root = Path(a.root).resolve()

@@ -2,7 +2,7 @@
 # The door: create a repository with the wall already up, or create nothing.
 #
 #   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
-#                  [--force-defaults]
+#                  [--private] [--force-defaults]
 #
 # Preflight, in order; the first miss stops with the one line that fixes it,
 # before anything exists:
@@ -12,7 +12,11 @@
 #                 without it rollback is off. Fine-grained: the admin path, because
 #                 its reach over a repository that does not exist yet cannot be read.
 #   3 owner       exists; your own login or an organization you belong to
-#   4 visibility  public only; the repository must not exist yet
+#   4 visibility  the repository must not exist yet. --private: an owner on
+#                 GitHub Free stops (no ruleset stands on its private repository),
+#                 and so does a classic token that could read your plan with
+#                 read:user and lacks it; a plan no scope would show is said, and
+#                 the ruleset call decides
 # Then: create, render the box (copier, one tested tag), push main (the baseline,
 # before the wall, and the proof the token can push), confirm main is the
 # default branch the ruleset will target, labels, ruleset, secret scanning,
@@ -20,6 +24,10 @@
 # the languages, and waited for until its first analysis of main is done), and
 # the first pull request, whose workflow must start. Last, whether the gh
 # credential the agent inherits has administration on the new repository.
+# A private repository gets the same ruleset and check names; its code_scanning
+# rule and CodeQL only where GitHub Code Security reads enabled on it, push
+# protection only where GitHub Secret Protection does, and the end names each
+# part left out (#350). Neither product is turned on here: each is billed.
 #
 # fail-closed: after the repository is created, a fatal exit before setup
 # completes attempts a best-effort deletion -- the trap fires on `created=1`
@@ -45,7 +53,7 @@ copier_newer="2026-09-09"
 claude_floor="2.1.274"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--force-defaults]"
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private] [--force-defaults]"
 target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0
 for a in "$@"; do case "$a" in
   --private)     private=1 ;;
@@ -57,19 +65,9 @@ for a in "$@"; do case "$a" in
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
 [ -n "$target" ] || { echo "$usage" >&2; exit 2; }
-# The wall requires CodeQL, and CodeQL on a private repository needs a GitHub
-# Code Security license; a ruleset requiring a check that never reports locks
-# the repository on its first PR. Refused here, before any call, so nobody
-# types an admin token for a request that cannot be served.
-if [ "$private" = 1 ]; then
-  cat >&2 <<'EOF'
-private repositories are not supported yet: the wall requires CodeQL, and private CodeQL needs a GitHub Code Security license (org on Team+).
-  now:   create it public (drop --private)
-  free:  GitLab Free has protected branches + pipelines-must-succeed (no CodeQL, no push protection) — see https://github.com/coolbress/plinth/blob/main/docs/explanation/concepts.md#about-private-repositories
-  later: a lower wall for private repos (Semgrep OSS instead of CodeQL — the original standards decision, not built) is a v1.1 candidate
-EOF
-  exit 2
-fi
+# The same request as a public one, for the stops that offer it.
+public_cmd="/plinth:new-project"
+for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' "$a")"; done
 
 stop() { printf '%s\n' "$@" >&2; exit 2; }
 warn() { printf 'warning: %s\n' "$1" >&2; }
@@ -191,6 +189,50 @@ fi
 if gh api "repos/$repo" --jq .html_url >/dev/null 2>&1; then
   stop "$url already exists; the door creates new repositories only" "  fix: /plinth:floor-check $repo reads what it has"
 fi
+# A private repository carries a ruleset on GitHub Pro, Team and Enterprise
+# only (GitHub Docs, "About rulesets", read 2026-09-30; #320). An owner whose
+# plan reads `free` stops here. The plan is often not readable: `GET /user`
+# carries it for a classic token with read:user or user (GitHub Docs, REST
+# "Get the authenticated user", read 2026-10-01), which gh's default login
+# does not ask for; a fine-grained token's answer has no `plan` at all
+# (measured 2026-10-01); an organization's is shown to its owners. Where one
+# scope would show it, the stop names that scope: a Free account is then
+# stopped here, not created and deleted. Where nothing would, unread is not
+# free and not paid: it is said, the door goes on, and the ruleset call is the
+# judge, with the rollback behind it. That GitHub refuses a ruleset on a Free
+# account's private repository is its documented availability, not a refusal
+# measured here. The judgment needs the rollback, so without delete_repo it
+# stops here instead.
+visibility=public; plan=""; needs=""
+if [ "$private" = 1 ]; then
+  visibility=private
+  if [ "$kind" = Organization ]; then
+    plan_of="orgs/$owner"; needs="GitHub Team or Enterprise"; refresh_scopes="delete_repo"
+    plan_why="an organization's plan is shown to its owners (a classic token: with admin:org)"
+  else
+    plan_of="user"; needs="GitHub Pro"; refresh_scopes="read:user,delete_repo"
+    plan_why="a classic token reads it with the read:user scope; a fine-grained token's answer carries none"
+  fi
+  plan="$(gh api "$plan_of" --jq '.plan.name // empty' 2>/dev/null)" || plan=""
+  case "$plan" in
+    free) stop "$owner is on GitHub Free, and a ruleset on a private repository needs $needs: no required check could be enforced on $repo" \
+            "  public instead, with the whole wall: $public_cmd" ;;
+    "") if [ "$kind" != Organization ] && grep -qi '^x-oauth-scopes:' <<<"$headers" && ! has_scope read:user && ! has_scope user; then
+          stop "the plan of $owner could not be read: gh's token lacks the read:user scope, and a ruleset on a private repository needs $needs" \
+            ${env_first:+"  $env_first"} \
+            "  fix: gh auth refresh -h github.com -s read:user   (a token typed at a prompt: one with read:user beside its other scopes)" \
+            "  public instead, with the whole wall: $public_cmd"
+        fi
+        case "$rollback" in off*)
+          stop "the plan of $owner could not be read, and this token cannot delete what it creates (no delete_repo scope): if the plan is GitHub Free, $repo would be left private with no wall" \
+            "  a ruleset on a private repository needs $needs; $plan_why" \
+            ${env_first:+"  $env_first"} \
+            "  fix: gh auth refresh -h github.com -s $refresh_scopes" \
+            "  public instead, with the whole wall: $public_cmd" ;;
+        esac
+        echo "plan: not verified for $owner ($plan_why). A ruleset on a private repository needs $needs: if GitHub refuses the ruleset, the repository is deleted again" ;;
+  esac
+fi
 # An empty directory is where the user wants the project (`mkdir ~/x; cd ~/x;
 # claude`, then the door), not a collision; anything in it is (#125). A listing
 # that fails (a file, an unreadable directory) is not an empty one.
@@ -224,6 +266,14 @@ fi
 # here and expects it of the wall in CI (#127). Shaped before anything exists.
 ruleset_body="$(python3 "$here/floor-check.py" --print-ruleset --ruleset "$here/../ruleset.json" --archetype "$arch")" \
   || stop "could not shape the ruleset for the archetype $arch (scripts/floor-check.py --print-ruleset)"
+# The same wall without its code_scanning rule, for a private repository where
+# CodeQL cannot run. Which of the two is posted is known only once the
+# repository exists; both are shaped here, before it does.
+ruleset_noscan=""
+if [ "$private" = 1 ]; then
+  ruleset_noscan="$(python3 "$here/floor-check.py" --print-ruleset --without-code-scanning --ruleset "$here/../ruleset.json" --archetype "$arch")" \
+    || stop "could not shape the ruleset without code scanning for the archetype $arch (scripts/floor-check.py --print-ruleset --without-code-scanning)"
+fi
 
 # The owner's shared community-health files. GitHub applies `<owner>/.github`'s
 # copy to a repository that carries none of its own, so writing ours would
@@ -293,7 +343,9 @@ own_note=""
 [ "$has_forms" = yes ] && own_note="${own_note} issue forms"
 [ -n "$own_note" ] && echo "$owner/.github already publishes:${own_note}; the box will not write over them"
 
-echo "create $repo (public, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: ruleset + CodeQL; then the first pull request. rollback: $rollback"
+wall_words="ruleset + CodeQL"
+[ "$private" = 0 ] || wall_words="ruleset, with CodeQL and push protection only where the repository has GitHub Code Security and Secret Protection enabled (plan: ${plan:-not verified})"
+echo "create $repo ($visibility, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
 created=0
@@ -311,7 +363,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-gh repo create "$repo" --public >/dev/null
+gh repo create "$repo" "--$visibility" >/dev/null
 created=1
 
 # Render. Name, owner, license and package directory are settled here: the
@@ -398,8 +450,46 @@ grep -vE '^[[:space:]]*(#|$)' "$here/../labels.txt" | while IFS='|' read -r lbl 
 done
 
 # ── the wall ─────────────────────────────────────────────────────────────
+# A public repository has CodeQL and push protection free. A private one has
+# them only with GitHub Code Security and GitHub Secret Protection, which Team
+# and Enterprise can buy and GitHub Pro cannot (GitHub Docs, read 2026-09-30;
+# #320). Read from the new repository rather than tried: enabling either one
+# is a purchase under metered billing, and that is the person's to make. So
+# `enabled` is the only answer that raises the part; `disabled` leaves it out
+# and names the product; anything else (no key, a failed read, a token that
+# does not see the block) is not verified, and leaves it out too. A
+# code_scanning rule on a repository CodeQL never analyses would block every
+# merge, which is why an unread answer is never taken as present. What a
+# private repository answers on each plan is not measured yet (#352): a public
+# repository's block carries no code_security key at all, so a missing key is
+# read as no status, not as a product that is missing.
+# The earlier GitHub Advanced Security licence includes code scanning, so its
+# status counts beside code_security's. One line: tests/new-project-failpath.sh
+# reads the expression out of this file and runs it on GitHub's shapes.
+sec_jq='.security_and_analysis // {} | [([.code_security.status, .advanced_security.status] | if index("enabled") then "enabled" elif index("disabled") then "disabled" else "unread" end), (.secret_scanning.status // "unread")] | join(" ")'
+scan=on; push_protection=on; gaps=""
+if [ "$private" = 1 ]; then
+  sec="$(gh api "repos/$repo" --jq "$sec_jq" 2>/dev/null)" || sec=""
+  read -r code_security secret_protection _ <<<"$sec" || true
+  in_place_scan="In its place: ci / lint's security rules."
+  in_place_push="In its place: ci / secrets, which finds a secret after the push, when it has to be revoked."
+  case "${code_security:-}" in
+    enabled)  ;;
+    disabled) scan=off;    gaps="${gaps}Not raised: code scanning. GitHub Code Security is not enabled on $repo (a paid product for Team and Enterprise), so CodeQL is not set up and the ruleset has no code_scanning rule. $in_place_scan"$'\n' ;;
+    *)        scan=unread; gaps="${gaps}Not verified: code scanning. GitHub gave no status for GitHub Code Security on $repo, so CodeQL is not set up and the code_scanning rule is left out. $in_place_scan"$'\n' ;;
+  esac
+  case "${secret_protection:-}" in
+    enabled)  ;;
+    disabled) push_protection=off;    gaps="${gaps}Not raised: push protection. GitHub Secret Protection is not enabled on $repo (a paid product for Team and Enterprise), so a push that carries a secret is not refused. $in_place_push"$'\n' ;;
+    *)        push_protection=unread; gaps="${gaps}Not verified: push protection. GitHub gave no status for GitHub Secret Protection on $repo, so push protection was not turned on. $in_place_push"$'\n' ;;
+  esac
+  [ "$scan" = on ] || ruleset_body="$ruleset_noscan"
+fi
 if ! err="$(gh api "repos/$repo/rulesets" -X POST --input - <<<"$ruleset_body" 2>&1 >/dev/null)"; then
   printf 'could not apply the ruleset:\n%s\n' "$err" >&2
+  # The judge the unread plan was left to (step 4): the likeliest refusal.
+  [ "$private" = 0 ] || [ -n "$plan" ] ||
+    printf '  the plan of %s was not verified: a ruleset on a private repository needs %s. public instead, with the whole wall: %s\n' "$owner" "$needs" "$public_cmd" >&2
   exit 1
 fi
 # The calls from here to the merge settings set values, so sending one again
@@ -425,9 +515,10 @@ setup_call() { # <what> <gh api arguments...>
     exit 1
   done
 }
-setup_call "secret scanning and push protection" "repos/$repo" -X PATCH \
-  -f 'security_and_analysis[secret_scanning][status]=enabled' \
-  -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
+[ "$push_protection" != on ] ||
+  setup_call "secret scanning and push protection" "repos/$repo" -X PATCH \
+    -f 'security_and_analysis[secret_scanning][status]=enabled' \
+    -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
 setup_call "Dependabot alerts" -X PUT "repos/$repo/vulnerability-alerts"
 setup_call "Dependabot security updates" -X PUT "repos/$repo/automated-security-fixes"
 # Actions: SHA pins required, and only GitHub-owned actions plus plinth's own
@@ -453,23 +544,26 @@ setup_call "the merge settings" "repos/$repo" -X PATCH -F allow_merge_commit=fal
 # the detection is waited for, and the list is spelled out: the box is Python
 # in every archetype, and its workflows are Actions. Detection that never lists
 # Python is a warning, not a stop: the wall stands either way, and the fix is
-# the one command below.
-deadline=$((SECONDS + first_pr_wait))
-while ! gh api "repos/$repo/languages" --jq 'keys[]' 2>/dev/null | grep -qx Python; do
-  if [ "$SECONDS" -ge "$deadline" ]; then
-    warn "GitHub has not detected Python in $url after $first_pr_wait s; enabling CodeQL default setup with actions and python anyway"
-    break
-  fi
-  sleep 5
-done
-codeql_fix="gh api -X PATCH repos/$repo/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'"
-gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default \
-  -f 'languages[]=actions' -f 'languages[]=python' >/dev/null ||
-  # Refused with the list (only measured after detection): enabled bare, which
-  # analyses what GitHub has detected so far, and the fix is named.
-  { warn "CodeQL default setup refused the language list; enabling it without one. Once it is configured, run: $codeql_fix"
-    gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default >/dev/null; }
-codeql_enabled="$(date -u +%H:%M:%SZ)"
+# the one command below. A private repository without Code Security has no
+# CodeQL to enable: this and the waits for it below are passed over (#350).
+if [ "$scan" = on ]; then
+  deadline=$((SECONDS + first_pr_wait))
+  while ! gh api "repos/$repo/languages" --jq 'keys[]' 2>/dev/null | grep -qx Python; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      warn "GitHub has not detected Python in $url after $first_pr_wait s; enabling CodeQL default setup with actions and python anyway"
+      break
+    fi
+    sleep 5
+  done
+  codeql_fix="gh api -X PATCH repos/$repo/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'"
+  gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default \
+    -f 'languages[]=actions' -f 'languages[]=python' >/dev/null ||
+    # Refused with the list (only measured after detection): enabled bare, which
+    # analyses what GitHub has detected so far, and the fix is named.
+    { warn "CodeQL default setup refused the language list; enabling it without one. Once it is configured, run: $codeql_fix"
+      gh api -X PATCH "repos/$repo/code-scanning/default-setup" -f state=configured -f query_suite=default >/dev/null; }
+  codeql_enabled="$(date -u +%H:%M:%SZ)"
+fi
 
 # ── the first pull request ───────────────────────────────────────────────
 # One README section, the one the tutorial names. Its workflow must start: a run that
@@ -519,7 +613,7 @@ for v in updated run analysis; do printf -v "seen_$v" '%s' ''; done
 api_first() { # <path> <jq>: the first line, or nothing on any failure (a 404 body is not a value)
   local out; out="$(gh api "$1" --jq "$2" 2>/dev/null)" || return 0; head -1 <<<"$out"
 }
-while :; do
+while [ "$scan" = on ]; do
   setup="$(gh api "repos/$repo/code-scanning/default-setup" \
     --jq '"\(.state) \(.languages // [] | join(",") | if . == "" then "-" else . end) \(.updated_at)"' 2>/dev/null || true)"
   main_run="$(gh api -X GET "repos/$repo/actions/runs" -f branch=main -F per_page=20 \
@@ -535,10 +629,12 @@ while :; do
   sleep 5
 done
 [ -z "$main_run" ] || sleep 60
-read -r setup_state codeql_langs _ <<<"$setup"
-echo "CodeQL default setup: enabled $codeql_enabled, ${setup_state:-unreadable} with languages [${codeql_langs:-}], first run on main completed ${main_run:-never}, analysis of main listed ${seen_analysis:-never}, first pull request pushed $(date -u +%H:%M:%SZ)"
-[ -n "$codeql_langs" ] && ! grep -qw python <<<"$codeql_langs" &&
-  warn "CodeQL default setup analyses [$codeql_langs] and not the Python under src/. fix: $codeql_fix"
+if [ "$scan" = on ]; then
+  read -r setup_state codeql_langs _ <<<"$setup"
+  echo "CodeQL default setup: enabled $codeql_enabled, ${setup_state:-unreadable} with languages [${codeql_langs:-}], first run on main completed ${main_run:-never}, analysis of main listed ${seen_analysis:-never}, first pull request pushed $(date -u +%H:%M:%SZ)"
+  [ -n "$codeql_langs" ] && ! grep -qw python <<<"$codeql_langs" &&
+    warn "CodeQL default setup analyses [$codeql_langs] and not the Python under src/. fix: $codeql_fix"
+fi
 branch="docs/first-pr"
 git -C "$dir" switch -q -c "$branch"
 # What the door used to print only at the end goes into the repository too:
@@ -549,10 +645,22 @@ git -C "$dir" switch -q -c "$branch"
 # request's body and in README.md, where a person reads before the first
 # session. The token line is unconditional here: the reader may not be the
 # person who ran the door.
+# Without CodeQL (a private repository with no Code Security) the sentences
+# about it would send the reader after a check that never comes: they are left
+# out, and what the wall lacks there is said in their place (#350).
 recovery="git commit --allow-empty -m 'ci: trigger code scanning' && git push"
-first_day="- If the merge stays blocked on CodeQL, push once more: \`$recovery\`.
-- If your everyday gh token is fine-grained with selected repositories, add \`$name\` to it: https://github.com/settings/personal-access-tokens
-- Dependabot opens pull requests from the first minute: merge one when every required check is green, or close it. CodeQL does not analyse a head Dependabot pushed; \`ci / deps\` and the tests run on it, and \`main\` is analysed after the merge. Its first one usually lands while the door waits for CodeQL, so the door's own pull request is #2. After \"Update branch\" the merge stays blocked for a minute or two while the required checks and CodeQL run on the new head, and a merge tried then is refused with \"the base branch policy prohibits the merge\": wait for the state to read clean rather than adding an approval, which a person's own branch update did not need."
+day_recovery=""; day_dependabot=""; day_update="the required checks run"; day_private=""; day_names="the token line"
+if [ "$scan" = on ]; then
+  day_recovery="- If the merge stays blocked on CodeQL, push once more: \`$recovery\`."$'\n'
+  day_dependabot=" CodeQL does not analyse a head Dependabot pushed; \`ci / deps\` and the tests run on it, and \`main\` is analysed after the merge. Its first one usually lands while the door waits for CodeQL, so the door's own pull request is #2."
+  day_update="the required checks and CodeQL run"
+  day_names="the recovery push, the token line"
+fi
+private_note="CI runs on the plan's Actions minutes"
+[ "$private" = 0 ] || day_private=$'\n'"- This repository is private: $private_note."
+[ -z "$gaps" ] || day_private="$day_private"$'\n'"$(printf '%s' "$gaps" | sed 's/^/- /')"
+first_day="${day_recovery}- If your everyday gh token is fine-grained with selected repositories, add \`$name\` to it: https://github.com/settings/personal-access-tokens
+- Dependabot opens pull requests from the first minute: merge one when every required check is green, or close it.$day_dependabot After \"Update branch\" the merge stays blocked for a minute or two while $day_update on the new head, and a merge tried then is refused with \"the base branch policy prohibits the merge\": wait for the state to read clean rather than adding an approval, which a person's own branch update did not need.$day_private"
 printf '\n## First day\n\n%s\n\nMade with [plinth](https://github.com/coolbress/plinth).\n' "$first_day" >> "$dir/README.md"
 git -C "$dir" commit -q -am "docs: first pull request through the wall"
 git -C "$dir" push -q -u origin "$branch"
@@ -605,6 +713,7 @@ pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "doc
 # re-push a second after the deadline and let a short wait end without it (#315).
 now=$SECONDS
 deadline=$((now + first_pr_wait)); seen=0; ever_seen=0; codeql=0; repush=""; seen_head_codeql=""
+[ "$scan" = on ] || codeql=1   # where CodeQL is not set up there is none to wait for
 repush_at=$((now + (first_pr_wait < 90 ? first_pr_wait : 90))); repushed=0
 while :; do
   runs="$(gh api -X GET "repos/$repo/actions/runs" -f "branch=$branch" -F per_page=20 \
@@ -694,13 +803,18 @@ case "$reach" in
   read)  admin_line="  administration: not verified for $who: it reads Administration on $repo, and whether it can also write it (edit the ruleset) cannot be read. The agent's token should have Administration at No access: $guide" ;;
   *)     admin_line="  administration: not verified for $who (its reach on $repo could not be read). The agent's token should have Administration at No access: $guide" ;;
 esac
+# A private repository: said once, then each part of the public wall it does
+# not carry, with the reason and what stands in its place.
+private_lines=""
+[ "$private" = 0 ] || private_lines="  private: $private_note"$'\n'
+[ -z "$gaps" ] || private_lines="$private_lines$(printf '%s' "$gaps" | sed -e 's/^Not raised/  not raised/' -e 's/^Not verified/  not verified/')"$'\n'
 cat <<EOF
-done: $url (public, $spdx, $arch, $template_repo@$template_ref)
-  local: $dir
+done: $url ($visibility, $spdx, $arch, $template_repo@$template_ref)
+${private_lines}  local: $dir
   first pull request: $pr_url
     wait for every check to turn green, then merge (squash). A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
 ${repush:+$repush
-}  the recovery push, the token line and what to do with Dependabot's pull requests are in the pull request's body and in README.md under "First day"
+}  $day_names and what to do with Dependabot's pull requests are in the pull request's body and in README.md under "First day"
 $admin_line
   next: cd $dir && claude
 EOF

@@ -8,6 +8,13 @@
 # not "is it valid JSON" (jq empty does that) but "does it still enforce".
 set -euo pipefail
 
+# --without-code-scanning: the variant the door posts to a private repository
+# that has no GitHub Code Security (#350). CodeQL cannot run there, so the rule
+# must be absent, not merely allowed to be: every other invariant, the check
+# names first, is the same. Without the flag the rule is required, so
+# ruleset.json itself cannot lose it.
+scan=1
+[ "${1:-}" = "--without-code-scanning" ] && { scan=0; shift; }
 f="${1:-ruleset.json}"
 # Optional: contexts a shaped ruleset adds to the nine, comma separated. The
 # door posts ruleset.json plus `image` for a service archetype
@@ -61,11 +68,19 @@ chk 'every required check comes from the GitHub Actions app (15368)' \
 # reports (default setup off, or enabled after the first push) locks the
 # repository with no reason shown; the rule blocks with one, and it also blocks
 # on the alerts themselves. Measured on coolbress/plinth#5 (#41).
-chk 'CodeQL is required through the code_scanning rule' \
-    '[.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[].tool]' '["CodeQL"]'
-chk 'code scanning blocks on error-level alerts and high or critical security alerts' \
-    '.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[0]|{alerts_threshold,security_alerts_threshold}' \
-    '{"alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}'
+if [ "$scan" = 1 ]; then
+  chk 'CodeQL is required through the code_scanning rule' \
+      '[.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[].tool]' '["CodeQL"]'
+  chk 'code scanning blocks on error-level alerts and high or critical security alerts' \
+      '.rules[]|select(.type=="code_scanning").parameters.code_scanning_tools[0]|{alerts_threshold,security_alerts_threshold}' \
+      '{"alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}'
+else
+  chk 'no code_scanning rule (a private repository without GitHub Code Security)' \
+      '[.rules[]|select(.type=="code_scanning")]|length' '0'
+  # CodeQL as a required check name would never report there and lock the repository.
+  chk 'CodeQL is not required as a check name either' \
+      '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context|select(test("CodeQL"))]|length' '0'
+fi
 # Per-language jobs (`Analyze (python)`) are never required: languages differ
 # per repository and a missing one never reports, which locks the repository.
 chk 'no per-language Analyze job is required' \

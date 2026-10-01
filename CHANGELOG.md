@@ -11,6 +11,35 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:new-project --private` creates a private repository where the
+  owner's plan lets a ruleset stand on one, instead of stopping for every
+  private request. An owner whose plan reads GitHub Free still stops before
+  anything is created, with the reason and the same command for a public
+  repository. Elsewhere the ruleset is the public one with the same check
+  names. Its `code_scanning` rule and CodeQL are set up only when GitHub Code
+  Security reads enabled on the new repository, and push protection only when
+  GitHub Secret Protection does; the door turns neither product on, since
+  each is billed. The end summary and the README's First day section say the
+  repository is private, that CI runs on the plan's Actions minutes, and name
+  each part left out with what stands in its place: `ci / lint`'s security
+  rules, and `ci / secrets` after the push. A setting the token does not read
+  is reported as not verified and its part is left out. A classic token
+  reads its own plan with the `read:user` scope, which `gh auth login` does
+  not ask for: without it `--private` stops and names
+  `gh auth refresh -h github.com -s read:user`. A plan no scope would show
+  (an organization's to a member who is not an owner, a fine-grained token's)
+  is said before creating; the ruleset call then decides, and a refusal
+  deletes the repository, so without the `delete_repo` scope that case stops
+  first. Not yet usable end to end: `ci / floor-check` still fails a
+  repository without the CodeQL rule until `floor-check` reads a private
+  repository's wall (#351); the README and the docs pages still describe
+  private repositories as unsupported, and no run on a real private
+  repository is recorded yet (#352). `scripts/check-ruleset.sh
+  --without-code-scanning` checks the variant without the rule. No check name
+  changes (#350).
+
 ## [1.4.0] - 2026-10-01
 
 Secrets stopped at the push, and issues closed only on purpose.
