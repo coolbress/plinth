@@ -72,7 +72,7 @@ jobs:
 ```
 
 Keep the job name `third-party`; the check name comes from it. To accept a
-different reviewer, or wait longer than 15 minutes, pass `reviewer-logins` or
+different reviewer, or wait longer than 20 minutes, pass `reviewer-logins` or
 `wait-seconds` under `with:`; `ask-comment` changes the summons text, which is
 posted only with a token ([below](#summoning-the-reviewer)).
 `reviewer-logins` says whose signal counts; it does not check that the
@@ -189,7 +189,7 @@ When it asks, with a token:
   works it shows within seconds (on #195 its summary comment came two seconds
   after the time its row gives as `Running since`), so a stall is plain long
   before the wait is over.
-- A third of the way into `wait-seconds` (300 seconds at the default 900), the
+- A third of the way into `wait-seconds` (400 seconds at the default 1200), the
   summons goes out if no accepted reviewer has started.
 - Two thirds of the way in, it goes out once more if no accepted reviewer has
   been active since the first of those points, whether or not the first
@@ -269,6 +269,30 @@ asking for an environment. And skipping the summons skips nothing the toggle
 does not already give: on the first Dependabot pull request here (#178) the
 reviewer had nothing to say about the bump and one correct comment about this
 repository's text next to it.
+
+### When the verdict lands after the check gave up
+
+The check fails when its wait ends without a signal. A review with findings
+is a `pull_request_review` event, which starts the check again by itself. A
+zero-finding verdict is often only an issue comment and a `+1` reaction on the
+pull request (#362: both landed a minute after a 900-second wait had ended),
+and neither starts a workflow, so the check stays red until someone re-runs it:
+`gh run rerun <run-id> --failed`, by a person whose token can re-run jobs.
+
+plinth's own repository does that re-run on a schedule
+(`.github/workflows/review-rerun.yml`, #363). Every 15 minutes it reads, for
+each open pull request, the newest run of `third-party.yml` on the head; when
+that run failed and an accepted reviewer has left a review, an issue comment
+(created or edited) or a reaction since it ended, it re-runs the failed job
+with the workflow's own token (`actions: write` on that job only). The re-run
+decides, by the rules above; the schedule only asks again. It asks once per
+new signal, since a re-run that fails again needs a signal newer than its own
+end, and never past the third attempt, manual re-runs included. A reviewer
+that never starts leaves nothing to find, so that pull request ends as
+before: a failed check and a person's decision. The decision is
+`scripts/review-rerun.py`; each run's log has one line per open pull
+request saying what it re-ran or why not. It is not offered to calling
+repositories yet: that is decided once it has run here.
 
 ## What to do with the findings
 

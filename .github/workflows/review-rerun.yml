@@ -1,0 +1,80 @@
+# Asks a failed `third-party / review` again once the reviewer has answered
+# (#363). The check waits `wait-seconds` for the reviewer's signal and fails.
+# A review with findings is a `pull_request_review` event, which third-party.yml
+# listens to, so that case recovers by itself. A zero-finding verdict is often a
+# `+1` reaction on the pull request alone (#362), and a reaction starts no
+# workflow: the check stayed red until a person re-ran it.
+#
+# Every 15 minutes this lists the open pull requests and, for each, reads the
+# newest run of third-party.yml on the head. When that run failed and an
+# accepted reviewer has left a review, an issue comment or a reaction since it
+# ended, it re-runs the failed job. The re-run decides, with the check's own
+# binding rules (scripts/pr-review/attest.py); this only asks again. The
+# decision is scripts/review-rerun.py: once per new signal, never past the
+# third attempt. A reviewer that never starts ends as before: a failed check
+# and a person's decision.
+#
+# plinth's own workflow; whether consumers get it is decided after it has run
+# here (#363). It makes no check on a pull request.
+name: review-rerun
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: review-rerun
+  cancel-in-progress: false
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read         # the checkout, for review-rerun.py
+      pull-requests: read    # open pull requests, their reviews, comments and reactions
+      actions: write         # re-running a failed job; this job's token only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Re-run a failed third-party / review the reviewer has answered since
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # third-party.yml passes no `reviewer-logins`, so pr-review.yml's
+          # default applies; keep the two the same.
+          LOGINS: "chatgpt-codex-connector[bot]"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP"
+          # A failed call leaves `null`, which review-rerun.py reads as nothing: no
+          # re-run, so the failure stays the one a person sees today.
+          get() { gh api "repos/$REPO/$1" --paginate > "$d/$2" 2>/dev/null || echo 'null' > "$d/$2"; }
+          prs="$(gh api "repos/$REPO/pulls?state=open&per_page=100" --paginate --jq '.[] | "\(.number) \(.head.sha)"')"
+          [ -n "$prs" ] || { echo "no open pull requests."; exit 0; }
+          failed=0
+          while read -r n sha; do
+            # One page, newest first: only the newest run is read.
+            gh api "repos/$REPO/actions/workflows/third-party.yml/runs?head_sha=$sha&per_page=100" --jq '.workflow_runs' \
+              > "$d/runs.json" 2>/dev/null || echo 'null' > "$d/runs.json"
+            get "pulls/$n/reviews"    reviews.json
+            get "issues/$n/comments"  icomments.json
+            get "issues/$n/reactions" reactions.json
+            if why="$(python3 scripts/review-rerun.py "$LOGINS" "$d/runs.json" "$d/reviews.json" "$d/icomments.json" "$d/reactions.json")"; then
+              id="${why#re-run }"; id="${id%%:*}"
+              if gh run rerun "$id" --failed --repo "$REPO"; then
+                echo "#$n ${sha:0:8}: $why"
+              else
+                echo "::error::#$n ${sha:0:8}: could not re-run $id ($why)"
+                failed=1
+              fi
+            else
+              echo "#$n ${sha:0:8}: $why"
+            fi
+          done <<< "$prs"
+          exit "$failed"
