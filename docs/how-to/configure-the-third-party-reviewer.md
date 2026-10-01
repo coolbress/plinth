@@ -289,7 +289,12 @@ decides, by the rules above; the schedule only asks again. It asks once per
 new signal, since a re-run that fails again needs a signal newer than its own
 end, and never past the third attempt, manual re-runs included. A reviewer
 that never starts leaves nothing to find, so that pull request ends as
-before: a failed check and a person's decision. The decision is
+before: a failed check and a person's decision. A reaction asks for a re-run
+but is not a signal the check counts: it names no commit. On #359 and #362 a
+completion comment arrived with the `+1` and the re-run passes on that; a
+`+1` alone would be re-run and fail again. Any failure of the newest run is
+re-run, a failed instruction check included, which then fails again; three
+attempts bound both. The decision is
 `scripts/review-rerun.py`; each run's log has one line per open pull
 request saying what it re-ran or why not. It is not offered to calling
 repositories yet: that is decided once it has run here.
