@@ -33,15 +33,14 @@ line arrived as text, and this catalog being open shows plinth is installed.
 | --- | --- | --- | --- | --- |
 | `mattpocock-skills` | Planning, specs, tickets, TDD, code review, domain modelling | Any change bigger than a typo; start with `/ask-matt` | ~0.85k tokens always on (11 skills listed) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
 | `taste-skill` | Frontend design that does not look templated: landing pages, portfolios, redesigns | Any page a person will look at, server-rendered HTML included, from its first version; the user will not ask for styling. It reads the brief, decides direction, and asks at most one question | ~1.7k tokens always on (13 skills), ~34k when `taste-skill` fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
-| `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions. Not for deciding; verify with `/research` | ~90 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail-skills` | Write the least code that works; review and audit for over-engineering | While implementing, and when a diff feels bigger than the task | ~0.9k tokens always on (6 skills), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 
 "Always on" is each plugin's share of the skill listing, as `/context`
-reports it with a 1M-context model on a fresh install (#255). With plinth's
-own two listed skills (~0.2k) the set comes to ~3.75k. Claude Code caps the
-listing, built-in skills included, at 1% of the context window. At 1M that
-leaves room for all of it. At 200k the cap is ~2k, and on the two 200k
-models measured, 25 of these 33 descriptions were cut to the skill's name.
+reports it with a 1M-context model on a fresh install (#255, again for #354).
+With plinth's own two listed skills (~0.2k) the set comes to ~3.65k. Claude
+Code caps the listing, built-in skills included, at 1% of the context window.
+At 1M that leaves room for all of it. At 200k the cap is ~2k, and on the two
+200k models measured, 26 of these 32 descriptions were cut to the skill's name.
 
 Built into Claude Code, nothing to install: `/design` for screen mockups and
 layouts before building, `/dataviz` for charts, `/security-review` for a
@@ -54,10 +53,13 @@ Carbon, Atlassian, Polaris).
 
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
+| `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions, when you want that research. Not for deciding; verify with `/research` | ~90 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail` | The full ponytail plugin with its hooks | Only if you want ponytail enforced every turn | 3 hooks, ~1k tokens | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `impeccable` | A design with a point of view; writes a product record (`PRODUCT.md`) and a design record (`DESIGN.md`) | A page that should be remembered, when you will answer its questions: five of them and 43 minutes on the page where `taste-skill` asked none and took five (one measurement, 2026-09-12) | Hooks, agents and skills written into the repository (`.claude/`, `.github/`); no plinth pin | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) |
 
-`ponytail` installs with `claude plugin install ponytail@plinth`. Impeccable is
+`last30days` installs with `claude plugin install last30days@plinth` and
+`ponytail` with `claude plugin install ponytail@plinth`; nothing in the default
+set runs a hook, and both of these do. Impeccable is
 not in plinth's marketplace: run `npx impeccable install` from the project
 root, which writes the hooks, agents and skills above into the repository. Its
 own marketplace plugin loaded hooks and agents but did not register its skill

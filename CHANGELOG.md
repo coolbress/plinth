@@ -13,6 +13,34 @@ pull requests and have no tag.
 
 ### Changed
 
+- `last30days` is no longer installed with plinth; it stays in plinth's
+  marketplace at the same pin, and `claude plugin install last30days@plinth`
+  installs it. It was the only plugin in the default set that ran a hook (a
+  `SessionStart` check in every session), and one call costs about 90k
+  tokens. The default set is now `mattpocock-skills`, `taste-skill` and
+  `ponytail-skills`, and none of them runs a hook; `tests/install-smoke.sh`
+  reads the hook count of every dependency after the install and fails on
+  one that is not zero. The README, `/plinth:arsenal` and the marketplace
+  descriptions list `last30days` as available, not installed. The skill
+  listing figures there were measured again without it, on Claude Code
+  2.1.286: 32 skills listed, about 3,650 tokens with a 1M-context model, 26
+  of the 32 cut to their name on the two 200k models.
+
+  An existing install keeps it. Measured once, on Claude Code 2.1.286, with
+  plinth installed from a local copy of the marketplace before this change
+  and `claude plugin update plinth` run after it: the update printed only
+  plinth's own version change, and `last30days` stayed installed and
+  enabled, hook included. To remove it, run
+  `claude plugin uninstall last30days@plinth`. `claude plugin prune` also
+  offered it, as an auto-installed plugin no longer needed, and removed it;
+  after an explicit `claude plugin install last30days@plinth` it offered
+  nothing. Not measured: a marketplace added from GitHub rather than from a
+  directory, the Claude Code floor (2.1.274), and an install at project
+  scope.
+
+  This makes the next release a minor version, not a patch: a new install
+  gets one plugin, one skill and one hook fewer. No check name, job, input,
+  secret, ruleset or plinth skill name changes (#354).
 - `ci / pr-title` fails a title that ends in `(#N)`: a squash merge appends
   the pull request's own number, so the commit on the default branch would
   carry two, as `fix(floor-check): … (#349) (#359)` did. The job summary says

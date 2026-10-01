@@ -26,8 +26,8 @@ from stay in the lab.
 - **lab**: `plinth-lab`, the evidence behind the rules. Optional reading; the
   product is written to be understood without it.
 - **profile**: an opt-in plugin that adds hooks on top of the default install
-  (`plinth-hooks`, not part of this version). plinth itself has no hooks; of
-  the default set, `last30days` adds a `SessionStart` hook.
+  (`plinth-hooks`, not part of this version). plinth itself has no hooks, and
+  neither does any plugin in the default set.
 
 Terms not defined here (agent, harness, session, context window, automated
 check, automated review, human review, skill) follow the
