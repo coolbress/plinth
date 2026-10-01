@@ -11,6 +11,25 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-01
+
+A lighter default set and fewer stalled pull requests. `last30days` is no
+longer installed with plinth, so the default set runs no hook; it stays in
+the catalog for anyone who wants it, and an existing install is left in place
+until removed by hand. `ci / pr-title` refuses a title ending in `(#N)`,
+which a squash merge would number twice. `third-party / review` waits 20
+minutes by default instead of 15, since reviews on 2026-09-30 and 2026-10-01
+finished just after the old window.
+
+A minor version: what a new install gets changes, and `ci / pr-title` has a
+new way to fail in every repository whose `python-ci.yml` pin reaches this
+release. No check name, job, input, secret or skill name changes. Two
+changes apply to plinth's own repository only: its checks re-run when a pull
+request is edited, and a failed review check is re-run once the reviewer's
+answer arrives.
+
+tested with plinth-template v1.5.9
+
 ### Changed
 
 - `last30days` is no longer installed with plinth; it stays in plinth's
@@ -1758,7 +1777,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/coolbress/plinth/releases/tag/v1.3.0
 [1.2.1]: https://github.com/coolbress/plinth/releases/tag/v1.2.1
 [1.2.0]: https://github.com/coolbress/plinth/releases/tag/v1.2.0
 [1.1.1]: https://github.com/coolbress/plinth/releases/tag/v1.1.1
