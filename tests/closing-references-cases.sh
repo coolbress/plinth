@@ -126,6 +126,8 @@ setup "$what"$'\n\n'"$how"$'\n\nCloses Coolbress/Plinth#12\n\n'"$by" "12"
 check "the repository in another letter case"                  0
 setup "$what"$'\n\n'"$how"$'\n\nCloses https://github.com/coolbress/plinth/issues/12\n\n'"$by" "12"
 check "the issue as a URL"                                     0
+setup "$what"$'\n\n'"$how"$'\n\nCloses https://GitHub.com/Coolbress/Plinth/issues/12\n\n'"$by" "12"
+check "the URL in another letter case"                         0
 setup "$what"$'\n\n'"$how"$'\n\nCloses GH-12\n\n'"$by" "12"
 check "the issue as GH-12"                                     0
 setup "$what"$'\n\n'"$how"$'\n\nPart of #13\nCloses #12\n\n'"$by" "12"

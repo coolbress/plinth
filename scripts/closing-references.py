@@ -63,7 +63,7 @@ def refs(text: str, repo: str) -> list[Issue]:
     out = []
     for ref in re.findall(REF, text, re.IGNORECASE):
         where, number = re.split(r"/issues/|#|GH-", ref, flags=re.IGNORECASE)
-        where = where.replace("https://github.com/", "") or repo
+        where = re.sub(r"^https://github\.com/", "", where, flags=re.IGNORECASE) or repo
         out.append((where.lower(), int(number)))
     return out
 
