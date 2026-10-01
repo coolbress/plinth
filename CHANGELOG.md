@@ -24,6 +24,21 @@ pull requests and have no tag.
   retitled pull request re-runs the title check, and an edited description
   re-reads `ci / diff-size`'s warning, without a push. The template's
   `ci.yml` is unchanged here (#322).
+- `third-party / review` waits 1200 seconds by default instead of 900, still
+  inside the job's 25-minute timeout: two zero-finding reviews landed a few
+  minutes after the 900-second wait had ended. A repository that passes
+  `wait-seconds` keeps its own value (#363).
+
+### Added
+
+- plinth's own repository re-runs a failed `third-party / review` once the
+  reviewer has answered since: a scheduled workflow, every 15 minutes, re-runs
+  the failed job when an accepted reviewer's review, review comment or issue
+  comment is newer than the failed run, once per new signal and never past
+  the third attempt. A reaction alone does not re-run it: the check does not
+  count one. A zero-finding verdict (a comment and a `+1`) starts no workflow, so
+  the check used to stay red until a person re-ran it. Calling repositories do
+  not get this yet (#363).
 
 ## [1.2.1] - 2026-10-01
 

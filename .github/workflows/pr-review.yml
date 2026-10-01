@@ -107,9 +107,9 @@ on:
         type: string
         default: "@codex review"
       wait-seconds:
-        description: "How long to wait for the review; reviews are asynchronous. The security review has taken over 30 minutes."
+        description: "How long to wait for the review; reviews are asynchronous. The security review has taken over 30 minutes. 1200 since #363: two zero-finding reviews landed minutes after a 900-second wait had ended."
         type: number
-        default: 900
+        default: 1200
       policy-file:
         description: |
           The file the reviewer reads its instructions from. It lives inside the
@@ -293,7 +293,7 @@ jobs:
         run: |
           set -euo pipefail
           PR_REVIEW="$RUNNER_TEMP/plinth/scripts/pr-review"   # the fetch step above
-          # Each look makes about four API calls. Below 10 s a 900 s wait spends
+          # Each look makes about four API calls. Below 10 s a 1200 s wait spends
           # hundreds of calls a minute from the repository's shared quota, and a
           # fetch that hits the limit reads as no review; refuse it before the
           # loop starts.

@@ -134,6 +134,9 @@ jobs:
       - name: The reviewer's instructions cannot be softened inside a reviewed pull request
         run: ./tests/pr-review-policy-pin.sh
 
+      - name: A failed review check is asked again once per new reviewer signal, three attempts at most
+        run: ./tests/pr-review-rerun.sh
+
       - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit
         run: ./tests/make-release-guards.sh
 
