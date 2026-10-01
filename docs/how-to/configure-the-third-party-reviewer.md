@@ -282,17 +282,18 @@ and neither starts a workflow, so the check stays red until someone re-runs it:
 plinth's own repository does that re-run on a schedule
 (`.github/workflows/review-rerun.yml`, #363). Every 15 minutes it reads, for
 each open pull request, the newest run of `third-party.yml` on the head; when
-that run failed and an accepted reviewer has left a review, an issue comment
-(created or edited) or a reaction since it ended, it re-runs the failed job
+that run failed and an accepted reviewer has left a review, a review comment
+or an issue comment (created or edited) since it ended, it re-runs the failed job
 with the workflow's own token (`actions: write` on that job only). The re-run
 decides, by the rules above; the schedule only asks again. It asks once per
 new signal, since a re-run that fails again needs a signal newer than its own
 end, and never past the third attempt, manual re-runs included. A reviewer
 that never starts leaves nothing to find, so that pull request ends as
-before: a failed check and a person's decision. A reaction asks for a re-run
-but is not a signal the check counts: it names no commit. On #359 and #362 a
-completion comment arrived with the `+1` and the re-run passes on that; a
-`+1` alone would be re-run and fail again. Any failure of the newest run is
+before: a failed check and a person's decision. A reaction alone asks for
+nothing: the check does not count it, since it names no commit, so a re-run
+would only fail again and spend an attempt; the log says `only a reaction
+since`. On #359 and #362 a completion comment arrived with the `+1`, and that
+comment is what asks. Any failure of the newest run is
 re-run, a failed instruction check included, which then fails again; three
 attempts bound both. The decision is
 `scripts/review-rerun.py`; each run's log has one line per open pull

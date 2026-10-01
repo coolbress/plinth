@@ -3,12 +3,15 @@
 # A review with findings is a `pull_request_review` event, which third-party.yml
 # listens to, so that case recovers by itself. A zero-finding verdict is often a
 # `+1` reaction on the pull request alone (#362), and a reaction starts no
-# workflow: the check stayed red until a person re-ran it.
+# workflow; the reviewer's completion comment beside it does not either (an
+# issue comment). The check stayed red until a person re-ran it.
 #
 # Every 15 minutes this lists the open pull requests and, for each, reads the
 # newest run of third-party.yml on the head. When that run failed and an
-# accepted reviewer has left a review, an issue comment or a reaction since it
-# ended, it re-runs the failed job. The re-run decides, with the check's own
+# accepted reviewer has left a review, a review comment or an issue comment since it
+# ended, it re-runs the failed job. A reaction alone does not: the check does
+# not count it (it names no commit), so that re-run would only fail again.
+# The re-run decides, with the check's own
 # binding rules (scripts/pr-review/attest.py); this only asks again. The
 # decision is scripts/review-rerun.py: once per new signal, never past the
 # third attempt. A reviewer that never starts ends as before: a failed check
@@ -63,9 +66,10 @@ jobs:
             gh api "repos/$REPO/actions/workflows/third-party.yml/runs?head_sha=$sha&per_page=100" --jq '.workflow_runs' \
               > "$d/runs.json" 2>/dev/null || echo 'null' > "$d/runs.json"
             get "pulls/$n/reviews"    reviews.json
+            get "pulls/$n/comments"   rcomments.json
             get "issues/$n/comments"  icomments.json
             get "issues/$n/reactions" reactions.json
-            if why="$(python3 scripts/review-rerun.py "$LOGINS" "$d/runs.json" "$d/reviews.json" "$d/icomments.json" "$d/reactions.json")"; then
+            if why="$(python3 scripts/review-rerun.py "$LOGINS" "$d/runs.json" "$d/reviews.json" "$d/rcomments.json" "$d/icomments.json" "$d/reactions.json")"; then
               id="${why#re-run }"; id="${id%%:*}"
               if gh run rerun "$id" --failed --repo "$REPO"; then
                 echo "#$n ${sha:0:8}: $why"

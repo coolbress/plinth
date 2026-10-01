@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # The decision of .github/workflows/review-rerun.yml (#363), a pure function
 # of files it fetched for one open pull request:
-# review-rerun.py <logins> <runs> <reviews> <issue-comments> <reactions>.
+# review-rerun.py <logins> <runs> <reviews> <review-comments> <issue-comments> <reactions>.
 # Exit 0 with `re-run <id>: <why>` when the failed run is to be asked again,
 # 1 with why not. tests/pr-review-rerun.sh runs this file against fixtures.
 """Has an accepted reviewer done something on this pull request since
@@ -10,12 +10,17 @@
 The check waits `wait-seconds` and fails. A review with findings is a
 `pull_request_review` event and starts the check again by itself; a
 zero-finding verdict is often a `+1` reaction on the pull request alone
-(measured on #362), and a reaction starts no workflow. So the check
-stays red although the reviewer has answered. This asks it again; the
-re-run decides, with attest.py's binding rules. Loose on purpose, as
-started.py is: any review, issue comment (created or edited) or
-reaction of an accepted login newer than the end of the failed
-attempt counts, because a re-run that finds nothing only fails again.
+is an issue comment and a `+1` reaction on the pull request (measured
+on #362), and neither starts a workflow. So the check stays red
+although the reviewer has answered. This asks it again; the re-run
+decides, with attest.py's binding rules. What asks is what the check
+can count: a review, a review comment or an issue comment (created or
+edited: the summary row is an edit) of an accepted login, newer than
+the end of the failed attempt. Loose on purpose, as started.py is:
+which comment it is, and which commit it names, the re-run reads. A
+reaction is not one of them: it names no commit and attest.py does
+not read it, so a re-run on a reaction alone would only fail again
+and spend an attempt. Its log line says so.
 
 Bounded twice. A signal counts only when it is newer than the end of
 the newest attempt, so a re-run that fails again needs another new
@@ -34,7 +39,7 @@ import sys
 
 MAX_ATTEMPTS = 3
 
-logins_csv, runs_p, reviews_p, icomments_p, reactions_p = sys.argv[1:6]
+logins_csv, runs_p, reviews_p, rcomments_p, icomments_p, reactions_p = sys.argv[1:7]
 logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}
 #: GitHub's times, UTC to the second: they compare as text.
 STAMP = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
@@ -65,18 +70,24 @@ if not STAMP.match(end):
 if attempt >= MAX_ATTEMPTS:
     skip(f"run {rid} failed on attempt {attempt} of {MAX_ATTEMPTS}: a person decides")
 
-signals = []
-for what, path, fields in (("review", reviews_p, ("submitted_at",)),
-                           ("comment", icomments_p, ("created_at", "updated_at")),
-                           ("reaction", reactions_p, ("created_at",))):
+def since(what, path, fields):
+    """(time, description) of each item of an accepted login newer than `end`."""
+    found = []
     for it in load(path):
         who = (it.get("user") or {}).get("login") or ""
-        if who.lower() not in logins:
-            continue
         times = [t for t in (str(it.get(f) or "") for f in fields) if STAMP.match(t)]
-        if times and max(times) > end:
-            label = f"{what} {it['content']}" if what == "reaction" and it.get("content") else what
-            signals.append((max(times), f"{label} by {who} at {max(times)}"))
+        if who.lower() in logins and times and max(times) > end:
+            label = f"{what} {it['content']}" if it.get("content") else what
+            found.append((max(times), f"{label} by {who} at {max(times)}"))
+    return found
+
+signals = (since("review", reviews_p, ("submitted_at",))
+           + since("review comment", rcomments_p, ("created_at", "updated_at"))
+           + since("comment", icomments_p, ("created_at", "updated_at")))
 if not signals:
+    reactions = since("reaction", reactions_p, ("created_at",))
+    if reactions:
+        skip(f"run {rid} attempt {attempt} ended {end}; only a reaction since ({min(reactions)[1]}),"
+             " which the check does not count: it names no commit")
     skip(f"run {rid} attempt {attempt} ended {end}; nothing from an accepted reviewer since")
 print(f"re-run {rid}: attempt {attempt} ended {end}; since then: {min(signals)[1]}")
