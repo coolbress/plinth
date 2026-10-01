@@ -95,6 +95,11 @@ check "\`Closes #309\` between two sections"                   1 "move it"
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12 and the docs half of #13\n\n'"$by" "12"
 check "a last line that says more than the closing"            1 "#12"
 
+setup "$what"$'\n\n'"$how"$'\n\nPart of this work includes two\nfixes #65\n\n'"$by" "65"
+check "a wrapped sentence that starts with \"Part of\""         1 "#65"
+setup "$what"$'\n\n'"$how"$'\n\nfixes #65\nRelated to what the release decided.\n\n'"$by" "65"
+check "a sentence that starts with \"Related to\" below the keyword line" 1 "#65"
+
 echo "-- an issue GitHub closes that no line names"
 setup "$what"$'\n\n'"$how"$'\n\n'"$by" "70"
 check "linked by hand in the sidebar"                          1 "Development"
@@ -125,6 +130,8 @@ setup "$what"$'\n\n'"$how"$'\n\nCloses GH-12\n\n'"$by" "12"
 check "the issue as GH-12"                                     0
 setup "$what"$'\n\n'"$how"$'\n\nPart of #13\nCloses #12\n\n'"$by" "12"
 check "\`Part of\` above the closing line, in its paragraph"   0
+setup "$what"$'\n\n'"$how"$'\n\nCloses #12\nRelated to #13, #14 and coolbress/plinth-template#31.\n\n'"$by" "12"
+check "\`Related to\` with several issues and a full stop"     0
 setup "$what"$'\n\n'"$how"$'\n\nCloses other/repo#5\n\n'"$by" "other/repo#5"
 check "an issue of another repository, named with it"          0
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12\nPart of #13\n\n'"$by" "12"

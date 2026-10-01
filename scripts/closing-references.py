@@ -19,9 +19,9 @@ closing keyword and an issue (`Closes #12`, a full stop allowed; more
 issues after a comma or `and`, of which GitHub closes those with a
 keyword of their own), standing in the closing position. That position
 is the end of the description: below it come only blank lines, other
-closing lines, `Part of` and `Related to` lines, and trailers
-(`Assisted-by: ...`); above it, in its own paragraph, only closing and
-link lines. So the last line of a wrapped sentence that happens to read
+closing lines, `Part of` and `Related to` lines that hold issues only,
+and trailers (`Assisted-by: ...`); above it, in its own paragraph, only
+closing and such link lines. So the last line of a wrapped sentence that happens to read
 `fixes #65` is not a closing line, and neither is the same line further
 up with text after it; the message says to move that one.
 
@@ -45,7 +45,13 @@ CLOSING_LINE = re.compile(
     rf"^\s*{KEYWORD}:?\s+{REF}(?:\s*(?:,\s*and|,|and)\s*(?:{KEYWORD}:?\s+)?{REF})*\s*\.?\s*$",
     re.IGNORECASE,
 )
-LINK_LINE = re.compile(r"^\s*(?:part of|related to)\s", re.IGNORECASE)
+# `Part of #12`, `Related to #12, #13.`: issues only. A sentence that starts
+# with the same words is prose, and would let the line below it pass as a
+# closing line (#368's review).
+LINK_LINE = re.compile(
+    rf"^\s*(?:part of|related to)\s+{REF}(?:\s*(?:,\s*and|,|and)\s*{REF})*\s*\.?\s*$",
+    re.IGNORECASE,
+)
 TRAILER = re.compile(r"^[A-Za-z][A-Za-z0-9-]*: \S")
 KEYWORD_BEFORE_REF = re.compile(rf"\b{KEYWORD}:?\s+({REF})", re.IGNORECASE)
 
