@@ -11,6 +11,30 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-01
+
+Secrets stopped at the push, and issues closed only on purpose.
+`/plinth:floor-check` now reports GitHub's push protection, which refuses a
+push carrying a known secret format before the secret lands in the
+repository (the pusher can still choose to bypass it, and the refused push
+has reached GitHub's scanner), and names the command that turns it on when
+it is off; `ci / floor-check` says in one line
+that the Actions token cannot read it, instead of counting a check it could
+never make. The reference docs name push protection and the paid rule that
+blocks merging a pull request with an exposed secret, without promising
+either.
+
+Two changes apply to plinth's own repository: a pull request whose
+description would close an issue outside its closing line fails before the
+merge, after a sentence in one closed the 1.0 plan early; and the merge
+script reads each check by its newest run, so a review that lands late no
+longer needs a manual re-run.
+
+A minor version: `floor-check` gains an item, and no check name, job,
+input, secret or skill name changes.
+
+tested with plinth-template v1.5.9
+
 ### Fixed
 
 - `scripts/merge-when-green.sh` reads each check name by the run started last
@@ -1812,7 +1836,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/coolbress/plinth/releases/tag/v1.4.0
 [1.3.0]: https://github.com/coolbress/plinth/releases/tag/v1.3.0
 [1.2.1]: https://github.com/coolbress/plinth/releases/tag/v1.2.1
 [1.2.0]: https://github.com/coolbress/plinth/releases/tag/v1.2.0
