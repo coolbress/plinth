@@ -58,7 +58,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   merges writes it; measured 2026-09-23, 23 of 86 closed issues had no
   ending. A closing keyword before `#N` anywhere in the description closes
   that issue too: "the two fixes #65 decided" closed #65 on merge (#284).
-  Word the prose another way.
+  Word the prose another way; `ci / docs` fails a description that would (#293).
 - Changing behaviour: verify the boundaries and partial failures of the inputs
   and states it touches, record which paths you exercised and which you did
   not, and do not widen a few cases into a guarantee about all of them.
