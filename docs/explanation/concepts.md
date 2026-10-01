@@ -94,6 +94,11 @@ hold, not that the code is right. `ci / test` passing says the tests that
 exist pass, not that they test the right things. `ci / secrets` passing says
 gitleaks found nothing it knows, and even a red one arrives after the push:
 by then the secret is on GitHub and has to be revoked, not just removed.
+What stops a secret before it lands is GitHub's push protection, a
+repository setting and not a check: the door turns it on,
+`/plinth:floor-check` reports whether it still is, and by default it stops
+the formats of known providers, not every secret. [Secrets at the push](../reference/required-checks.md#secrets-at-the-push)
+names it and the paid rule that blocks the merge.
 
 Some gaps are measured rather than assumed. CodeQL does not analyse a pull
 request head that Dependabot pushed, and the code scanning rule passes it;

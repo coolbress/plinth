@@ -38,6 +38,13 @@
 | `CodeQL` | CodeQL analysed the head with no alert at the thresholds above | An alert, or no analysis: default setup is off, or the first push of a new repository was not analysed | Fix the alert the check links to; with no analysis, turn default setup on or push the recovery commit `/plinth:new-project` prints |
 | `CodeQL` | On a head Dependabot pushed, nothing: default setup starts no analysis, the check lands `neutral` and the rule passes | Not applicable | `ci / deps` and the tests still run on that head, and `main` is analysed after the merge |
 
+## Secrets at the push
+
+| Setting | Does | Needs | Where plinth stands |
+| --- | --- | --- | --- |
+| Push protection | GitHub refuses a push that carries a secret in a format it knows. The person pushing can still let it through, and a secret in a format it does not block by default passes; `ci / secrets` reports those after the push | Free on a public repository; on a private one, GitHub Secret Protection | `/plinth:new-project` turns it on. `/plinth:floor-check` reports it on, off (a WARN with the call that turns it on, never a red), or not verified when the token does not read the repository's security settings or GitHub reports no status. `ci / floor-check` runs on the Actions token, which does not read them, and says so in an INFO: the skill, with a person's login, is the run that reads it. It is a setting, not a required check |
+| Ruleset rule "require secret scanning alerts are resolved" | Blocks the merge of a pull request while an alert is open for a secret its commits introduced | GitHub Secret Protection or GitHub Advanced Security, both paid; in [public preview since 2026-09-09](https://github.blog/changelog/2026-09-09-block-pull-requests-with-exposed-secrets-from-merging/) | plinth does not set it and does not read it. With the licence, add it to the ruleset in the repository's settings |
+
 ## Optional
 
 | Check | Asserts | A red means | The fix |

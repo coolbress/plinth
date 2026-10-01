@@ -293,7 +293,11 @@ inherit "no templates anywhere is still caught" "FAIL  issue forms neither local
 
 # The wall, against a fixture API laid out like api.github.com paths.
 api="$work/api"; mkdir -p "$api/repos/o/r/rules/branches" "$api/repos/o/r/rulesets"
-printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
+# What an admin token reads from repos/o/r: push protection is under
+# security_and_analysis, which a token without administration does not get (#303).
+repo_meta='"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"'
+good_meta="{$repo_meta,\"security_and_analysis\":{\"secret_scanning\":{\"status\":\"enabled\"},\"secret_scanning_push_protection\":{\"status\":\"enabled\"}}}"
+printf '%s' "$good_meta" > "$api/repos/o/r.json"
 good_rules='[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1},{"type":"non_fast_forward","ruleset_source_type":"Repository","ruleset_id":1},{"type":"pull_request","parameters":{"allowed_merge_methods":["squash"]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"ci / a","integration_id":15368},{"context":"ci / b","integration_id":15368},{"context":"CodeQL"}]},"ruleset_source_type":"Repository","ruleset_id":1},{"type":"code_scanning","parameters":{"code_scanning_tools":[{"tool":"CodeQL","alerts_threshold":"errors","security_alerts_threshold":"high_or_higher"}]},"ruleset_source_type":"Repository","ruleset_id":1}]'
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
@@ -312,7 +316,7 @@ wall() { # <description> <expected substring in output> [shell that edits the fi
   if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
   else bad "$1 (expected '$2', SKIP lines=$n)"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP|failed' | sed 's/^/        /'; fi
   printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
-  printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"
   printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 }
 wall "intact wall passes" "-- 0 failed"
@@ -339,7 +343,7 @@ else bad "a wrong default branch changed the exit code (rc=$rc_db) or produced a
 if grep -q "the wall is checked on __push-probe, the repository's default branch" <<<"$out_db"; then ok "the branch the wall was checked on is stated once, not only as a prefix"
 else bad "the output never states which branch the wall was checked on"; fi
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
-printf '{"default_branch":"main","squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}' > "$api/repos/o/r.json"
+printf '%s' "$good_meta" > "$api/repos/o/r.json"
 rm -f "$api/repos/o/r/rules/branches/__push-probe.json"
 # The default branch is read from the repository, so a token or an API that does
 # not report it must not be read as "main, fine": not verified, like every other
@@ -415,6 +419,76 @@ wall "default setup without python is caught, with the fix" "WARN  CodeQL defaul
 wall "the fix for a missing language is the one PATCH" "gh api -X PATCH repos/o/r/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=python'" "printf '{\"state\":\"configured\",\"languages\":[\"actions\"]}' > \"$api/repos/o/r/code-scanning/default-setup.json\""
 wall "unreadable default setup is SKIP, not a pass" "SKIP  CodeQL default setup languages not verified" "rm \"$api/repos/o/r/code-scanning/default-setup.json\""
 wall "unreadable default setup is counted as not verified" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/code-scanning/default-setup.json\""
+# Push protection (#303): GitHub refuses a push carrying a secret in a format
+# it knows, where `ci / secrets` reports one only after it is on GitHub. The
+# door turns it on; a repository the door did not make, or one where it was
+# switched off, is named with the call that turns it on. A WARN, never a FAIL:
+# `ci / floor-check` is a required check, and a repository that passed before
+# this item existed still passes. Each state has its fixture; a token that
+# does not get `security_and_analysis` is not verified, never a pass.
+security() { # <json for security_and_analysis, or nothing to leave the key out> -- the repository as that token reads it
+  printf '{%s%s}' "$repo_meta" "${1:+,\"security_and_analysis\":$1}" > "$api/repos/o/r.json"
+}
+pp_off='{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"disabled"}}'
+wall "push protection on is a PASS" "PASS  push protection is on"
+wall "push protection off is a WARN" "WARN  push protection is off" "security '$pp_off'"
+wall "push protection off carries the call that turns it on, and says what the call needs" \
+  "INFO    gh api -X PATCH repos/o/r --input - <<<'{\"security_and_analysis\": {\"secret_scanning\": {\"status\": \"enabled\"}, \"secret_scanning_push_protection\": {\"status\": \"enabled\"}}}'   (needs repository administration; on a private repository, GitHub Secret Protection too)" "security '$pp_off'"
+wall "push protection off never fails the floor, and is not counted as not verified" "-- 0 failed, 1 not verified" "security '$pp_off'"
+wall "security settings the token does not get are SKIP, not a pass" "SKIP  push protection not verified (this token does not read the repository's security settings" "security"
+wall "security settings the token does not get are counted as not verified" "-- 0 failed, 2 not verified" "security"
+wall "security settings GitHub answers as null are SKIP" "SKIP  push protection not verified (this token does not read" "security null"
+wall "security settings without a push protection entry are SKIP, not read as off" "SKIP  push protection not verified (GitHub reports no push protection status for this repository)" "security '{\"secret_scanning\":{\"status\":\"enabled\"}}'"
+wall "a push protection status that is neither enabled nor disabled is SKIP" "SKIP  push protection not verified (GitHub reports no push protection status" "security '{\"secret_scanning_push_protection\":{\"status\":\"paused\"}}'"
+wall "security settings that are not an object are SKIP, and not blamed on the token" "SKIP  push protection not verified (GitHub reports no push protection status" "security '[]'"
+wall "a push protection entry that is not an object is SKIP, not a crash" "SKIP  push protection not verified (GitHub reports no push protection status" "security '{\"secret_scanning_push_protection\":\"enabled\"}'"
+for state in "$pp_off" "" null '{"secret_scanning":{"status":"enabled"}}'; do
+  security "$state"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+  if [ "$(grep -cE '^  (PASS|WARN|FAIL|SKIP) +push protection' <<<"$out")" = 1 ] && ! grep -qE '^  (PASS|FAIL) +push protection' <<<"$out"; then ok "push protection ${state:-left out} gets one verdict, neither a PASS nor a FAIL"
+  else bad "push protection ${state:-left out} got a PASS, a FAIL, or not exactly one verdict"; grep 'push protection' <<<"$out" | sed 's/^/        /'; fi
+done
+printf '%s' "$good_meta" > "$api/repos/o/r.json"
+# The item belongs to the repository, not to the rules: it is reported where no
+# rule governs the branch too.
+wall "push protection is reported when the wall is down" "PASS  push protection is on" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
+# `ci / floor-check` runs on the Actions token, which never gets the security
+# settings: a SKIP there is one no consumer can clear, in every run. The step
+# passes --actions-token, and only the read that token cannot make changes: an
+# INFO that says who reads it, outside the not-verified count. What the token
+# does read is judged as ever, and so is every run without the flag: the
+# skill, and the e2e runner, which reads the door's own work with it.
+in_ci() { # <description> <expected substring> [json for security_and_analysis]
+  security ${3+"$3"}
+  local out; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
+  local n want; n="$(grep -c '^  SKIP ' <<<"$out")"; want="${2##*failed, }"; want="${want%% *}"
+  if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
+  else bad "$1 (expected '$2', SKIP lines=$n)"; grep -E 'push protection|failed' <<<"$out" | sed 's/^/        /'; fi
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"
+}
+in_ci "--actions-token: security settings the token does not get are an INFO naming who reads them" \
+  "INFO  push protection is not read here: the Actions token does not get the repository's security settings; /plinth:floor-check reads it with a person's login"
+in_ci "--actions-token: that INFO is not counted as not verified" "-- 0 failed, 1 not verified"
+in_ci "--actions-token: null is the same unread answer" "INFO  push protection is not read here" null
+in_ci "--actions-token: off is still a WARN when the token does read it" "WARN  push protection is off" "$pp_off"
+in_ci "--actions-token: on is still a PASS when the token does read it" "PASS  push protection is on" '{"secret_scanning_push_protection":{"status":"enabled"}}'
+in_ci "--actions-token: settings read but with no status are still a SKIP" "SKIP  push protection not verified (GitHub reports no push protection status" '{"secret_scanning":{"status":"enabled"}}'
+in_ci "--actions-token: that SKIP is still counted" "-- 0 failed, 2 not verified" '{"secret_scanning":{"status":"enabled"}}'
+security; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
+printf '%s' "$good_meta" > "$api/repos/o/r.json"
+if ! grep -qE '^  (PASS|SKIP) +push protection' <<<"$out"; then ok "--actions-token: the unread setting is neither a PASS nor a SKIP"
+else bad "--actions-token: the unread setting printed a PASS or a SKIP"; grep 'push protection' <<<"$out" | sed 's/^/        /'; fi
+# Who passes the flag is the whole of it: the CI step and nobody else. Each
+# call is read out of the file that makes it, not copied here.
+ci_call="$(awk '/python3 "\$RUNNER_TEMP\/plinth\/floor-check.py"/{f=1} f{print} f&&!/\\$/{exit}' "$root/.github/workflows/python-ci.yml")"
+e2e_call="$(grep -E '^python3 "\$here/floor-check.py"' "$root/scripts/e2e.sh")"
+skill_call="$(awk '/^python3 "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/floor-check.py"/{f=1} f{print} f&&!/\\$/{exit}' "$root/skills/floor-check/SKILL.md")"
+if [ -n "$ci_call" ] && grep -q -- '--actions-token' <<<"$ci_call"; then ok "python-ci.yml's floor-check step passes --actions-token"
+else bad "python-ci.yml's floor-check step does not pass --actions-token (or its call was not found)"; fi
+if [ -n "$e2e_call" ] && ! grep -q -- '--actions-token' <<<"$e2e_call"; then ok "scripts/e2e.sh calls the checker without --actions-token: its token administers the repository the door made, and the item is judged"
+else bad "scripts/e2e.sh passes --actions-token, or its checker call was not found"; fi
+if [ -n "$skill_call" ] && ! grep -q -- '--actions-token' <<<"$skill_call"; then ok "the skill's Run block calls the checker without --actions-token"
+else bad "the skill's Run block passes --actions-token, or its call was not found"; fi
 
 # Through gh: on the owner's machine the token is in gh's keychain, not the
 # environment, and only that token sees bypass actors. A mock gh serves the
