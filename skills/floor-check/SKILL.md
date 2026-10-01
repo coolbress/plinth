@@ -144,6 +144,22 @@ can merge. A pull request that removes the call removes `ci / floor-check`
 with it, so that one is seen only after the merge, from outside the pull
 request: here, run by a person, or by the e2e runner.
 
+## Push protection
+
+One item reads whether GitHub's push protection is on (#303): it refuses a
+push that carries a secret in a format GitHub knows, where `ci / secrets`
+reports one only after it is on GitHub. On is a PASS that says that much and
+no more: the person pushing can let a secret through, and a format GitHub
+does not know passes. Off is a WARN, never a FAIL, and the INFO line under it
+is one `gh api` call that sends what the door sends. It needs repository
+administration, and on a private repository GitHub Secret Protection too:
+relay it as printed for the user to run, behind `with-admin-token.sh` in a
+separate terminal when their login cannot administer the repository, and
+never run it. The status
+sits in the repository's security settings, which a token without repository
+administration does not get: that is a SKIP, and so is a repository GitHub
+reports no status for.
+
 ## Template drift
 
 One item compares the template tag this repository was rendered from

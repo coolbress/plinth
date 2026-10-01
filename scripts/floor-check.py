@@ -36,6 +36,9 @@ one that repairs a broken default branch can merge. A pull request that
 removes the call removes `ci / floor-check` with it, so only a run from
 outside the pull request's own workflows sees that, after the merge.
 
+Push protection is WARN-only too (#303): on, off with the call that turns it
+on, or a SKIP when the token does not get the repository's security settings.
+
 One more is WARN-only and reads no network beyond one GitHub compare call
 (#219): whether the template tag this repository was rendered from
 (.copier-answers.yml's _commit) is behind the tag plinth is tested with
@@ -1258,6 +1261,40 @@ def check_codeql_policy(repo: str, branch: str, tools: list[dict], policy: dict[
                        f"(expected {policy['alerts_threshold']} / {policy['security_alerts_threshold']})")
 
 
+def check_push_protection(repo: str, meta: dict) -> None:
+    """Is push protection on (#303)? `ci / secrets` reports a secret after the
+    push, when it is already on GitHub; push protection refuses the push, for
+    the secret formats GitHub knows. The door turns it on.
+
+    Read from `security_and_analysis` in the repository itself, which a token
+    without repository administration does not get: that is a SKIP, and so is
+    an object with no readable status for it. Off is a WARN, never a FAIL:
+    `ci / floor-check` is a required check in every consumer's CI, and a
+    repository that passed before this item existed still passes."""
+    security = meta.get("security_and_analysis")
+    if security is None:
+        result("SKIP", "push protection not verified (this token does not read the repository's security settings; "
+                       "one with repository administration does)")
+        return
+    entry = security.get("secret_scanning_push_protection") if isinstance(security, dict) else None
+    status = entry.get("status") if isinstance(entry, dict) else None
+    if status == "enabled":
+        result("PASS", "push protection is on: GitHub refuses a push that carries a secret in a format it knows")
+    elif status == "disabled":
+        result("WARN", "push protection is off: a push that carries a secret reaches GitHub, "
+                       "and `ci / secrets` reports it only afterwards")
+        # The body the door sends, both fields: push protection is a part of
+        # secret scanning. As JSON on stdin, the form set-security-setting.sh
+        # writes and reads back, so it does not depend on how a gh version
+        # reads `-f a[b][c]=v`.
+        body = json.dumps({"security_and_analysis": {k: {"status": "enabled"}
+                                                     for k in ("secret_scanning", "secret_scanning_push_protection")}})
+        result("INFO", f"  gh api -X PATCH repos/{repo} --input - <<<'{body}'"
+                       "   (needs repository administration; on a private repository, GitHub Secret Protection too)")
+    else:
+        result("SKIP", "push protection not verified (GitHub reports no push protection status for this repository)")
+
+
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
                sources: dict[str, int | None] | None = None) -> None:
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
@@ -1303,6 +1340,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         ok(title == "PR_TITLE" and msg == "PR_BODY",
            "squash commits carry the pull request title and description",
            f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
+    check_push_protection(repo, meta)
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
     if rules is ERROR:
         result("SKIP", f"could not read the rules of {branch} (API error)")

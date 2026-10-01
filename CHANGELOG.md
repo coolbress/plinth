@@ -13,6 +13,17 @@ pull requests and have no tag.
 
 ### Added
 
+- `floor-check` reports GitHub's push protection, the setting that refuses a
+  push carrying a secret in a format GitHub knows; `ci / secrets` reports a
+  secret only after it is on GitHub. On is a PASS. Off is a WARN with the
+  call that turns it on, never a FAIL, so no repository that passed before
+  goes red. A token that does not get the repository's security settings
+  gives a SKIP, which adds one to `N not verified` in that run. The door
+  already turned push protection on; this reads it in a repository the door
+  did not make, or where it was switched off since.
+  [Required checks](docs/reference/required-checks.md#secrets-at-the-push)
+  names it, and the paid ruleset rule that blocks a merge with an exposed
+  secret, which plinth neither sets nor reads (#303).
 - plinth's own `ci / docs` fails a pull request whose description would close
   an issue outside its closing line. GitHub closes an issue when a closing
   keyword stands directly before its number anywhere in a merged description,
