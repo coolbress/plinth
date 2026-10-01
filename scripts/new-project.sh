@@ -471,16 +471,20 @@ scan=on; push_protection=on; gaps=""
 if [ "$private" = 1 ]; then
   sec="$(gh api "repos/$repo" --jq "$sec_jq" 2>/dev/null)" || sec=""
   read -r code_security secret_protection _ <<<"$sec" || true
+  # `disabled` is a product that is off, which is not a product that cannot be
+  # had: where the owner has the licence, a person can turn it on. Said with
+  # its cost, since the door does not make that choice for them.
+  turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Code security, and may be billed."
   in_place_scan="In its place: ci / lint's security rules."
   in_place_push="In its place: ci / secrets, which finds a secret after the push, when it has to be revoked."
   case "${code_security:-}" in
     enabled)  ;;
-    disabled) scan=off;    gaps="${gaps}Not raised: code scanning. GitHub Code Security is not enabled on $repo (a paid product for Team and Enterprise), so CodeQL is not set up and the ruleset has no code_scanning rule. $in_place_scan"$'\n' ;;
+    disabled) scan=off;    gaps="${gaps}Not raised: code scanning. GitHub Code Security is not enabled on $repo (a paid product for Team and Enterprise), so CodeQL is not set up and the ruleset has no code_scanning rule. $turn_on $in_place_scan"$'\n' ;;
     *)        scan=unread; gaps="${gaps}Not verified: code scanning. GitHub gave no status for GitHub Code Security on $repo, so CodeQL is not set up and the code_scanning rule is left out. $in_place_scan"$'\n' ;;
   esac
   case "${secret_protection:-}" in
     enabled)  ;;
-    disabled) push_protection=off;    gaps="${gaps}Not raised: push protection. GitHub Secret Protection is not enabled on $repo (a paid product for Team and Enterprise), so a push that carries a secret is not refused. $in_place_push"$'\n' ;;
+    disabled) push_protection=off;    gaps="${gaps}Not raised: push protection. GitHub Secret Protection is not enabled on $repo (a paid product for Team and Enterprise), so a push that carries a secret is not refused. $turn_on $in_place_push"$'\n' ;;
     *)        push_protection=unread; gaps="${gaps}Not verified: push protection. GitHub gave no status for GitHub Secret Protection on $repo, so push protection was not turned on. $in_place_push"$'\n' ;;
   esac
   [ "$scan" = on ] || ruleset_body="$ruleset_noscan"

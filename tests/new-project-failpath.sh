@@ -814,6 +814,12 @@ hasnt $c "secret scanning and push protection are not turned on" log 'security_a
 has   $c "Dependabot, the Actions allowlist and the merge settings are set as for a public repository" log 'allow_merge_commit=false'
 has   $c "the summary names the code scanning gap, its reason and what stands in its place" out "^  not raised: code scanning\. GitHub Code Security is not enabled on tester/probe.*ci / lint's security rules"
 has   $c "the summary names the push protection gap, its reason and what stands in its place" out '^  not raised: push protection\. GitHub Secret Protection is not enabled on tester/probe.*ci / secrets.*after the push.*revoked'
+# Disabled is off, not unobtainable: both lines say where a person can turn
+# the product on and that it may be billed; the door itself turns nothing on.
+turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Code security, and may be billed\\."
+has   $c "the code scanning gap says where it can be turned on, and that it may be billed" out "^  not raised: code scanning\\..*$turn_on"
+has   $c "the push protection gap says the same"             out "^  not raised: push protection\\..*$turn_on"
+has   $c "README's gaps carry the same guidance"             readme "^- Not raised: code scanning\\..*$turn_on"
 if [ "$(grep -c "Actions minutes" "$work/home-$c/out")" = 1 ]; then ok $c "the summary says once that CI runs on the plan's Actions minutes"
 else bad $c "the Actions minutes line is missing or repeated: $(grep -c "Actions minutes" "$work/home-$c/out")"; fi
 hasnt $c "nothing is called not verified when everything was read" out 'not verified: (code scanning|push protection)|plan: not verified'
@@ -835,7 +841,7 @@ else bad $c "the ruleset posted is not ruleset.json"; fi
 has   $c "push protection is turned on"                      log 'security_and_analysis\[secret_scanning_push_protection\]\[status\]=enabled'
 has   $c "CodeQL default setup is enabled with the languages" log 'default-setup -f state=configured -f query_suite=default -f languages\[\]=actions -f languages\[\]=python'
 has   $c "CodeQL is waited for, as on a public repository"   out '^CodeQL default setup: enabled'
-hasnt $c "no gap is named"                                   out 'not raised|not verified: (code scanning|push protection)'
+hasnt $c "no gap is named, and nothing is offered to turn on" out 'not raised|not verified: (code scanning|push protection)|can be turned on'
 has   $c "the Actions minutes line is still said"            out "^  private: CI runs on the plan's Actions minutes\$"
 has   $c "README says the repository is private and where CI's minutes come from" readme "^- This repository is private: CI runs on the plan's Actions minutes\.\$"
 has   $c "README keeps the CodeQL recovery line"             readme 'If the merge stays blocked on CodeQL, push once more'
@@ -858,6 +864,8 @@ E="MOCK_PLAN=team MOCK_SECURITY=enabled,disabled" run $c ok yes no "not raised: 
 if full_posted $c; then ok $c "Code Security alone: the code_scanning rule is in"; else bad $c "Code Security alone lost the rule"; fi
 hasnt $c "Code Security alone: push protection is not turned on" log 'security_and_analysis\[secret_scanning'
 hasnt $c "Code Security alone: no code scanning gap"         out '(not raised|not verified): code scanning'
+if [ "$(grep -c 'can be turned on' "$work/home-$c/out")" = 1 ]; then ok $c "the guidance is on the one disabled product's line only"
+else bad $c "the turn-on guidance is not on exactly one line: $(grep -c 'can be turned on' "$work/home-$c/out")"; fi
 c=private-push-only
 E="MOCK_PLAN=team MOCK_SECURITY=disabled,enabled" run $c ok yes no "not raised: code scanning" -- someorg/probe --private
 if noscan_posted $c; then ok $c "Secret Protection alone: no code_scanning rule"; else bad $c "Secret Protection alone kept the rule"; fi
@@ -875,6 +883,7 @@ for how in failed:FAIL_AT=security-read no-key:MOCK_SECURITY=unread,unread empty
   hasnt "$c" "an unread setting is not reported as a missing product" out 'not raised'
   hasnt "$c" "nothing is turned on from an unread setting"   log 'security_and_analysis\[secret_scanning|code-scanning'
   has   "$c" "README says not verified too"                  readme '^- Not verified: code scanning\.'
+  hasnt "$c" "a setting with no status is not said to be something to turn on" out 'can be turned on'
 done
 # A plan the token does not read: said before anything exists, and the door
 # goes on with the ruleset call as the judge.

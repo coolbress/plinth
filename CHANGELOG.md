@@ -24,7 +24,8 @@ pull requests and have no tag.
   each is billed. The end summary and the README's First day section say the
   repository is private, that CI runs on the plan's Actions minutes, and name
   each part left out with what stands in its place: `ci / lint`'s security
-  rules, and `ci / secrets` after the push. A setting the token does not read
+  rules, and `ci / secrets` after the push. Where a product reads disabled,
+  the line also says where a person can turn it on and that it may be billed. A setting the token does not read
   is reported as not verified and its part is left out. A classic token
   reads its own plan with the `read:user` scope, which `gh auth login` does
   not ask for: without it `--private` stops and names
