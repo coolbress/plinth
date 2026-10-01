@@ -279,13 +279,21 @@ pull request (#362: both landed a minute after a 900-second wait had ended),
 and neither starts a workflow, so the check stays red until someone re-runs it:
 `gh run rerun <run-id> --failed`, by a person whose token can re-run jobs.
 
-plinth's own repository does that re-run on a schedule
-(`.github/workflows/review-rerun.yml`, #363). Every 15 minutes it reads, for
-each open pull request, the newest run of `third-party.yml` on the head; when
+plinth's own repository does that re-run itself
+(`.github/workflows/review-rerun.yml`, #363), on two triggers. The reviewer's
+comment starts it at once: any comment in the repository does, and it stops
+without a single API call unless an accepted reviewer wrote it on a pull
+request; then it reads that pull request alone. A schedule, every 15 minutes,
+reads every open pull request as a safety net. It is not the main path because
+scheduled runs start hours late here: the nightly e2e, due at 03:17 UTC,
+started between 5 h 19 min and 6 h 33 min late on 2026-09-26 to 2026-09-30.
+Neither trigger checks out or runs the pull request's code; both run from the
+default branch and read the pull request through the API. For the pull
+request it reads, it takes the newest run of `third-party.yml` on the head; when
 that run failed and an accepted reviewer has left a review, a review comment
 or an issue comment (created or edited) since it ended, it re-runs the failed job
 with the workflow's own token (`actions: write` on that job only). The re-run
-decides, by the rules above; the schedule only asks again. It asks once per
+decides, by the rules above; the workflow only asks again. It asks once per
 new signal, since a re-run that fails again needs a signal newer than its own
 end, and never past the third attempt, manual re-runs included. A reviewer
 that never starts leaves nothing to find, so that pull request ends as
@@ -296,8 +304,10 @@ since`. On #359 and #362 a completion comment arrived with the `+1`, and that
 comment is what asks. Any failure of the newest run is
 re-run, a failed instruction check included, which then fails again; three
 attempts bound both. The decision is
-`scripts/review-rerun.py`; each run's log has one line per open pull
-request saying what it re-ran or why not. It is not offered to calling
+`scripts/review-rerun.py` and the step `scripts/review-rerun.sh`; each run's log has one line per open pull
+request it read saying what it re-ran or why not. When the comment and the
+schedule both re-run the same failed run, the second is refused and its log
+says the run is already running again. It is not offered to calling
 repositories yet: that is decided once it has run here.
 
 ## What to do with the findings

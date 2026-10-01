@@ -137,6 +137,9 @@ jobs:
       - name: A failed review check is asked again once per new reviewer signal, three attempts at most
         run: ./tests/pr-review-rerun.sh
 
+      - name: The re-run step does nothing on a comment unless the reviewer wrote it on a pull request
+        run: ./tests/review-rerun-step.sh
+
       - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit
         run: ./tests/make-release-guards.sh
 
