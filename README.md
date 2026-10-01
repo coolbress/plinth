@@ -41,16 +41,16 @@ lives. A fresh configuration does not have it until Claude Code's first
 interactive run, and without it plinth fails to load. Where it is already
 added, the line only says so.
 
-The default set runs one hook: `last30days` adds a `SessionStart` hook
-(about 0.4 s) that checks its own configuration. Its skills cost context too.
-Claude Code lists 33 of them for the model and caps the whole skill listing,
-its own built-in skills included, at 1% of the model's context window. As
-`/context` estimates it on a fresh install, with a 1M-context model all 33
-keep their descriptions, about 3,750 tokens. With the two 200k-context models
-measured (Haiku 4.5, Sonnet 4.5) the listing is cut to about 2,000 tokens and
-25 of the 33 keep only their name: they still run when called by name, but
-Claude is less likely to pick them on its own. The
-`skillListingBudgetFraction` setting raises the cap (#255).
+The default set runs no hook. Its skills cost context: Claude Code lists 32
+of them for the model and caps the whole skill listing, its own built-in
+skills included, at 1% of the model's context window. As `/context` estimates
+it on a fresh install, with a 1M-context model all 32 keep their
+descriptions, about 3,650 tokens. With the two 200k-context models measured
+(Haiku 4.5, Sonnet 4.5) the listing is cut to about 2,000 tokens and 26 of
+the 32 keep only their name: they still run when called by name, but Claude
+is less likely to pick them on its own. The `skillListingBudgetFraction`
+setting raises the cap (#255; measured again for #354, on Claude Code
+2.1.286).
 
 Third-party marketplaces do not auto-update. To move to a new version, run
 `claude plugin update plinth`, then `/reload-plugins`.
@@ -74,13 +74,17 @@ marketplace serves; CI checks that version against the tested range
 ([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (frontend design that
-does not look templated),
-[last30days](https://github.com/mvanhorn/last30days-skill) and
+does not look templated) and
 [ponytail-skills](https://github.com/DietrichGebert/ponytail) (the ponytail
-skills without its hooks). Listed but not installed: `ponytail`, the full
-plugin with hooks, and [Impeccable](https://github.com/pbakaus/impeccable),
-whose installer writes hooks, agents and skills into the repository. Run
-`/plinth:arsenal` for the catalog; licenses are in [NOTICE](NOTICE).
+skills without its hooks). Listed but not installed:
+[last30days](https://github.com/mvanhorn/last30days-skill) (what people said
+about a topic in the last 30 days; about 90k tokens per call, and a
+`SessionStart` hook), `ponytail`, the full plugin with hooks, and
+[Impeccable](https://github.com/pbakaus/impeccable), whose installer writes
+hooks, agents and skills into the repository. The first two install from
+plinth's marketplace: `claude plugin install last30days@plinth`,
+`claude plugin install ponytail@plinth`. Run `/plinth:arsenal` for the
+catalog; licenses are in [NOTICE](NOTICE).
 
 Nothing in the plugin enforces anything. Enforcement is the ruleset on GitHub,
 which `/plinth:new-project` raises and which owners cannot bypass; anyone

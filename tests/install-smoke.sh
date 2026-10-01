@@ -12,7 +12,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
-  CLAUDE_CONFIG_DIR="$(mktemp -d)"; trap 'rm -rf "$CLAUDE_CONFIG_DIR"' EXIT
+  CLAUDE_CONFIG_DIR="$(mktemp -d)"; trap 'rm -rf "$CLAUDE_CONFIG_DIR"' EXIT; fresh=yes
 fi
 export CLAUDE_CONFIG_DIR
 echo "config dir: $CLAUDE_CONFIG_DIR"
@@ -71,19 +71,36 @@ for line in "${lines[@]}"; do
 done
 
 echo "-- claude plugin list --json"
-python3 - "$(claude plugin list --json)" "$matt_min" "$matt_max_exclusive" <<'PY'
+# The default set is plinth plus plugin.json's dependencies, read here so the
+# list below and the hook check after it follow the manifest.
+deps=()
+while IFS= read -r d; do deps+=("$d"); done < <(python3 - "$root/.claude-plugin/plugin.json" <<'PY'
+import json, sys
+for d in json.load(open(sys.argv[1]))["dependencies"]:
+    print(f"{d['name']}@{d['marketplace']}" if isinstance(d, dict) else f"{d}@plinth")
+PY
+)
+[ "${#deps[@]}" -gt 0 ] || { echo "  FAIL  no dependencies read from plugin.json"; exit 1; }
+
+python3 - "$(claude plugin list --json)" "$matt_min" "$matt_max_exclusive" "${fresh:-no}" plinth@plinth "${deps[@]}" <<'PY'
 import json, sys
 plugins = {p["id"]: p for p in json.loads(sys.argv[1])}
 range_min, range_max = (tuple(int(x) for x in v.split(".")) for v in sys.argv[2:4])
-want = ["plinth@plinth", "taste-skill@plinth", "last30days@plinth", "ponytail-skills@plinth",
-        "mattpocock-skills@claude-plugins-official"]
+fresh, want = sys.argv[4] == "yes", sys.argv[5:]
 for i, p in sorted(plugins.items()):
     print(f"  {i:45} {str(p.get('version')):12} enabled={p.get('enabled')} errors={p.get('errors', [])}")
 missing = [w for w in want if w not in plugins]
 bad = [i for i, p in plugins.items() if not p.get("enabled") or p.get("errors")]
-if missing or bad:
-    print(f"  FAIL  missing={missing} not-clean={bad}"); sys.exit(1)
-print("  PASS  everything installed, enabled, no errors")
+# A catalog entry that is not a dependency (last30days, ponytail) arriving
+# anyway would bring its hook with it. Only a configuration this run created
+# can say so: a kept one may hold what its owner installed, and an update
+# leaves a dropped dependency in place.
+extra = [i for i in plugins if i.endswith("@plinth") and i not in want]
+if missing or bad or (fresh and extra):
+    print(f"  FAIL  missing={missing} not-clean={bad} installed-but-not-a-dependency={extra if fresh else 'not checked'}"); sys.exit(1)
+print("  PASS  everything installed, enabled, no errors" + (
+    ", and nothing else from plinth's marketplace" if fresh
+    else f"; a kept configuration, so what else it holds is not checked: {extra}"))
 matt_version = plugins["mattpocock-skills@claude-plugins-official"]["version"]
 matt_tuple = tuple(int(x) for x in matt_version.split(".")[:3])
 if not (range_min <= matt_tuple < range_max):
@@ -100,5 +117,9 @@ expect() {  # expect <plugin> <needle>...
   echo "  PASS  $1: ${*:2}"
 }
 expect plinth@plinth "Skills (4)" "arsenal" "floor-check" "new-project" "template-update" "Hooks (0)"
-expect ponytail-skills@plinth "Skills (6)" "Hooks (0)"
-expect taste-skill@plinth "Skills (13)" "Hooks (0)"
+expect ponytail-skills@plinth "Skills (6)"
+expect taste-skill@plinth "Skills (13)"
+# The default set runs no hook (#354): every dependency, whatever the list
+# holds, reports none once installed. This reads Claude Code's inventory of the
+# installed plugin, so a hook that inventory does not list is not seen here.
+for dep in "${deps[@]}"; do expect "$dep" "Hooks (0)"; done

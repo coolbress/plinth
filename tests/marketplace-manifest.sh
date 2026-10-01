@@ -30,15 +30,25 @@ check(market.get("version") == plugin["version"], f"marketplace.json version equ
 
 deps = plugin["dependencies"]
 names = [d["name"] if isinstance(d, dict) else d for d in deps]
-check(names == ["mattpocock-skills", "taste-skill", "last30days", "ponytail-skills"],
-      f"dependencies are exactly the default four: {names}")
+check(names == ["mattpocock-skills", "taste-skill", "ponytail-skills"],
+      f"dependencies are exactly the default three: {names}")
 matt = deps[0]
 # No "version" range here: Claude Code resolves a range against {name}--v* tags on the
 # dependency's own repository, mattpocock/skills has none, and install then fails with
 # no-matching-tag (measured 2026-09-04). tests/install-smoke.sh checks the tested range instead.
 check(isinstance(matt, dict) and matt.get("marketplace") == "claude-plugins-official" and "version" not in matt,
       "mattpocock-skills is resolved cross-marketplace, without a version range (see comment)")
-check("ponytail" in entries and "ponytail" not in names, "ponytail is in the catalog and not a dependency")
+# Listed, not installed: in the catalog (so `claude plugin install <name>@plinth`
+# resolves) and not a dependency. Both run hooks, and the default set runs none
+# (#354); tests/install-smoke.sh reads each dependency's hook count once installed.
+listed = ["last30days", "ponytail"]
+for n in listed:
+    check(n in entries and n not in names, f"{n} is in the catalog and not a dependency")
+    check("Not installed by default" in entries.get(n, {}).get("description", ""),
+          f"{n}: the catalog description says it is not installed by default")
+plinth_says = entries["plinth"]["description"]
+check("No hooks in the default set." in plinth_says and "hook" not in plinth_says.replace("No hooks in the default set.", "").lower(),
+      "plinth entry: the description says the default set has no hooks, and names none")
 # One tool per slot: frontend-design and taste-skill are never both on (#68, from #149).
 # Impeccable is listed in the arsenal with its own installer and is not a marketplace entry.
 for n in ("frontend-design", "impeccable", "i-have-adhd", "playbook", "review"):
@@ -75,8 +85,27 @@ check(re.search(r"^allowed-tools:", fm, re.M) is None, "floor-check: allowed-too
 fm = frontmatter("arsenal")
 check("disable-model-invocation" not in fm, "arsenal: the model may open the catalog on its own")
 body = (root / "skills/arsenal/SKILL.md").read_text()
-check(all(f"`{n}`" in body for n in names + ["ponytail", "impeccable"]),
-      "arsenal lists the default four and the two catalog entries")
+# Where each one lives is said in three places (the catalog descriptions above,
+# the arsenal's two tables, the README's default-set paragraph); they follow
+# the dependency list, so a plugin moved in one is moved in all.
+installed, _, not_installed = body.partition("## Listed, not installed")
+def rows(text):
+    return re.findall(r"^\| `([^`]+)` \|", text, re.M)
+check(rows(installed) == names, f"arsenal: 'Installed by default' lists exactly the dependencies: {rows(installed)}")
+check(rows(not_installed) == listed + ["impeccable"],
+      f"arsenal: 'Listed, not installed' lists the catalog entries and impeccable: {rows(not_installed)}")
+check(all(f"claude plugin install {n}@plinth" in " ".join(not_installed.split()) for n in listed),
+      "arsenal gives the install line of each catalog entry")
+readme = (root / "README.md").read_text()
+para = re.search(r"^Installed with plinth as dependencies.*?(?=\n\n)", readme, re.M | re.S)
+default_part, _, listed_part = (para.group(0) if para else "").partition("Listed but not installed")
+def linked(text):
+    return re.findall(r"\[([a-z0-9-]+)\]\(https://github\.com/", text)
+check(sorted(linked(default_part)) == sorted(names),
+      f"README: the default-set sentence links exactly the dependencies: {linked(default_part)}")
+check(all(f"claude plugin install {n}@plinth" in " ".join(listed_part.split()) for n in listed),
+      "README: each catalog entry is under 'Listed but not installed', with its install line")
+check("default set runs no hook" in " ".join(readme.split()), "README says the default set runs no hook")
 
 print(f"-- {fails} failed")
 sys.exit(1 if fails else 0)
