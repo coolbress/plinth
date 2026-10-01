@@ -46,7 +46,15 @@ echo "pull request $repo#$pr, head $head"
 
 # -- checks ----------------------------------------------------------------
 gh pr checks "$pr" -R "$repo" --watch --interval "$poll" >/dev/null 2>&1
-checks="$(gh pr checks "$pr" -R "$repo" --json name,state --jq '.[]|"\(.state)\t\(.name)"')" || stop "cannot read the checks"
+# One line per check name. A name can carry several runs on the head: a
+# review that lands after the review check gave up starts a new run that
+# passes beside the failed one (#369, #363). The newest finished run speaks
+# for the name, and an unfinished one, if any, holds it.
+checks="$(gh pr checks "$pr" -R "$repo" --json name,state,completedAt --jq '
+  def pending: .state | IN("PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED");
+  group_by(.name)
+  | map(if any(.[]; pending) then (map(select(pending)) | .[0]) else max_by(.completedAt // "") end)
+  | .[] | "\(.state)\t\(.name)"')" || stop "cannot read the checks"
 [ -n "$checks" ] || stop "no checks reported on $head"
 bad="$(awk -F'\t' '$1!="SUCCESS"' <<<"$checks")"
 [ -z "$bad" ] || stop "checks not green:" "$bad"
