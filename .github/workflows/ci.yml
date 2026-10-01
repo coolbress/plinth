@@ -7,8 +7,13 @@ name: CI
 on:
   push:
     branches: [main]
+  # `edited` besides the default types: a retitled pull request re-runs the
+  # title check, and an edited description re-reads the diff-size warning,
+  # without a push (#322). The whole workflow re-runs; concurrency cancels the
+  # run the edit replaces.
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
