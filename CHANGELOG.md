@@ -32,8 +32,10 @@ pull requests and have no tag.
 ### Added
 
 - plinth's own repository re-runs a failed `third-party / review` once the
-  reviewer has answered since: a scheduled workflow, every 15 minutes, re-runs
-  the failed job when an accepted reviewer's review, review comment or issue
+  reviewer has answered since: when the reviewer's comment arrives (any other
+  author's comment, or a comment on an issue, does nothing), and every 15
+  minutes as a safety net, since scheduled runs start hours late here. It
+  re-runs the failed job when an accepted reviewer's review, review comment or issue
   comment is newer than the failed run, once per new signal and never past
   the third attempt. A reaction alone does not re-run it: the check does not
   count one. A zero-finding verdict (a comment and a `+1`) starts no workflow, so
