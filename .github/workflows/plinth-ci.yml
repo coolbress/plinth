@@ -140,6 +140,9 @@ jobs:
       - name: The re-run step does nothing on a comment unless the reviewer wrote it on a pull request
         run: ./tests/review-rerun-step.sh
 
+      - name: A description that would close an issue outside its closing line fails, and so does one that cannot be read
+        run: ./tests/closing-references-cases.sh
+
       - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit
         run: ./tests/make-release-guards.sh
 
@@ -174,14 +177,31 @@ jobs:
         run: ./tests/python-lint.sh
 
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
-  # and the README install block is the one the tutorial shows.
+  # the README install block is the one the tutorial shows, and the pull
+  # request's own description closes no issue outside its closing line.
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read   # the description and the issues its merge will close (#293)
+      issues: read          # those issues' numbers
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # First, so a description that would close the wrong issue is red
+      # before the link check's download. A keyword in a sentence closes an
+      # issue as `Closes #N` does: "the two fixes #65 decided" closed #65 on
+      # merge (#284). Not a pull request: a pass, reported by the script.
+      - name: The description closes no issue outside its closing line
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: ./scripts/closing-references.sh
 
       # The version is pinned in the test, so a local run lints with what runs here.
       - name: markdownlint

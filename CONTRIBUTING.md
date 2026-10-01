@@ -130,7 +130,13 @@ release needs a green run on the commit it tags
    attribution. `Closes #N` only when the pull request completes that issue;
    partial work links with `Part of #N`, related work with `Related to #N`.
    `Closes` drives GitHub's auto-close, so the wrong verb closes an unfinished
-   issue. With no issue to link, omit the line. Existing attribution is
+   issue. So does a closing keyword (close, fix, resolve and their `-s` and
+   `-d` forms) directly before `#N` in a sentence: "the two fixes #65
+   decided" closed #65 on merge. `ci / docs` asks GitHub which issues the
+   merge will close and fails on any the closing line does not name; reword
+   the sentence ("the two fixes that #65 decided"). It reads the description
+   when it runs: not the title, and not an issue linked in the sidebar
+   afterwards. With no issue to link, omit the line. Existing attribution is
    preserved: several trailers form one contiguous block at the end. From
    another repository, include this one: `Closes coolbress/plinth#N`.
 

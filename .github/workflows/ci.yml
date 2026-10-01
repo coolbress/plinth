@@ -24,6 +24,13 @@ concurrency:
 
 jobs:
   ci:
+    # A called workflow cannot widen what its caller grants. `ci / docs` reads
+    # the pull request's description and the issues its merge will close
+    # (#293); plinth-ci.yml's other jobs keep `contents: read` alone.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
     uses: ./.github/workflows/plinth-ci.yml
 
   # The canary calls the reusable workflow for real: a workflow that parses is

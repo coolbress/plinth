@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- plinth's own `ci / docs` fails a pull request whose description would close
+  an issue outside its closing line. GitHub closes an issue when a closing
+  keyword stands directly before its number anywhere in a merged description,
+  in a sentence too: "the two fixes #65 decided" closed #65 with every
+  criterion open. The step reads GitHub's own list of the issues the merge
+  will close and compares it with the `Closes #N` line directly above the
+  attribution; the failure quotes the line and says how to reword it.
+  `Part of #N` and `Related to #N` close nothing and pass. It runs in plinth's
+  repository only: no consumer check, check name or input changes (#293).
+
 ## [1.3.0] - 2026-10-01
 
 A lighter default set and fewer stalled pull requests. `last30days` is no
