@@ -192,7 +192,7 @@ release needs a green run on the commit it tags
    your call. It takes the head when it starts and passes it as
    `--match-head-commit`. A check name with several runs on the head (a review
    check that failed and then passed on the reviewer's late review) counts
-   by its newest finished run; one still running holds the merge. Merging on a count that was printed but not checked
+   by the run started last; one still running holds the merge. Merging on a count that was printed but not checked
    let two unread findings through once (#306); this is the check.
 
 ## Cut a release

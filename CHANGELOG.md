@@ -13,8 +13,9 @@ pull requests and have no tag.
 
 ### Fixed
 
-- `scripts/merge-when-green.sh` reads each check name by its newest finished
-  run on the head. A review that arrived after `third-party / review` gave up
+- `scripts/merge-when-green.sh` reads each check name by the run started last
+  on the head, not the one finished last, since overlapping runs can finish
+  out of order. A review that arrived after `third-party / review` gave up
   started a new run that passed beside the failed one, and the script stopped
   on the old failure until it was re-run by hand (#369). A run still in
   progress under a name holds the merge as before (#363).
