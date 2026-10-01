@@ -452,6 +452,43 @@ printf '%s' "$good_meta" > "$api/repos/o/r.json"
 # The item belongs to the repository, not to the rules: it is reported where no
 # rule governs the branch too.
 wall "push protection is reported when the wall is down" "PASS  push protection is on" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
+# `ci / floor-check` runs on the Actions token, which never gets the security
+# settings: a SKIP there is one no consumer can clear, in every run. The step
+# passes --actions-token, and only the read that token cannot make changes: an
+# INFO that says who reads it, outside the not-verified count. What the token
+# does read is judged as ever, and so is every run without the flag: the
+# skill, and the e2e runner, which reads the door's own work with it.
+in_ci() { # <description> <expected substring> [json for security_and_analysis]
+  security ${3+"$3"}
+  local out; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
+  local n want; n="$(grep -c '^  SKIP ' <<<"$out")"; want="${2##*failed, }"; want="${want%% *}"
+  if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
+  else bad "$1 (expected '$2', SKIP lines=$n)"; grep -E 'push protection|failed' <<<"$out" | sed 's/^/        /'; fi
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"
+}
+in_ci "--actions-token: security settings the token does not get are an INFO naming who reads them" \
+  "INFO  push protection is not read here: the Actions token does not get the repository's security settings; /plinth:floor-check reads it with a person's login"
+in_ci "--actions-token: that INFO is not counted as not verified" "-- 0 failed, 1 not verified"
+in_ci "--actions-token: null is the same unread answer" "INFO  push protection is not read here" null
+in_ci "--actions-token: off is still a WARN when the token does read it" "WARN  push protection is off" "$pp_off"
+in_ci "--actions-token: on is still a PASS when the token does read it" "PASS  push protection is on" '{"secret_scanning_push_protection":{"status":"enabled"}}'
+in_ci "--actions-token: settings read but with no status are still a SKIP" "SKIP  push protection not verified (GitHub reports no push protection status" '{"secret_scanning":{"status":"enabled"}}'
+in_ci "--actions-token: that SKIP is still counted" "-- 0 failed, 2 not verified" '{"secret_scanning":{"status":"enabled"}}'
+security; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
+printf '%s' "$good_meta" > "$api/repos/o/r.json"
+if ! grep -qE '^  (PASS|SKIP) +push protection' <<<"$out"; then ok "--actions-token: the unread setting is neither a PASS nor a SKIP"
+else bad "--actions-token: the unread setting printed a PASS or a SKIP"; grep 'push protection' <<<"$out" | sed 's/^/        /'; fi
+# Who passes the flag is the whole of it: the CI step and nobody else. Each
+# call is read out of the file that makes it, not copied here.
+ci_call="$(awk '/python3 "\$RUNNER_TEMP\/plinth\/floor-check.py"/{f=1} f{print} f&&!/\\$/{exit}' "$root/.github/workflows/python-ci.yml")"
+e2e_call="$(grep -E '^python3 "\$here/floor-check.py"' "$root/scripts/e2e.sh")"
+skill_call="$(awk '/^python3 "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/floor-check.py"/{f=1} f{print} f&&!/\\$/{exit}' "$root/skills/floor-check/SKILL.md")"
+if [ -n "$ci_call" ] && grep -q -- '--actions-token' <<<"$ci_call"; then ok "python-ci.yml's floor-check step passes --actions-token"
+else bad "python-ci.yml's floor-check step does not pass --actions-token (or its call was not found)"; fi
+if [ -n "$e2e_call" ] && ! grep -q -- '--actions-token' <<<"$e2e_call"; then ok "scripts/e2e.sh calls the checker without --actions-token: its token administers the repository the door made, and the item is judged"
+else bad "scripts/e2e.sh passes --actions-token, or its checker call was not found"; fi
+if [ -n "$skill_call" ] && ! grep -q -- '--actions-token' <<<"$skill_call"; then ok "the skill's Run block calls the checker without --actions-token"
+else bad "the skill's Run block passes --actions-token, or its call was not found"; fi
 
 # Through gh: on the owner's machine the token is in gh's keychain, not the
 # environment, and only that token sees bypass actors. A mock gh serves the

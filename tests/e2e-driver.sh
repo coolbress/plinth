@@ -179,6 +179,10 @@ is "said which branch"     said "probe"
 is "no merge on a wrong default branch" not saw "^gh pr merge"
 is "deleted"               deletes 2
 run FLOOR_RC=1;            check "a floor check that fails fails the journey" no $?
+# The checker judges push protection only without --actions-token (#303): the
+# e2e run is where the door's own call is read back, with a token that can.
+is "the checker is called for the repository" said "stub floor check.*'--repo'"
+is "and without --actions-token" not said "stub floor check.*--actions-token"
 is "no merge on a failed floor check" not saw "^gh pr merge"
 is "deleted"               deletes 2
 

@@ -18,9 +18,12 @@ pull requests and have no tag.
   secret only after it is on GitHub. On is a PASS. Off is a WARN with the
   call that turns it on, never a FAIL, so no repository that passed before
   goes red. A token that does not get the repository's security settings
-  gives a SKIP, which adds one to `N not verified` in that run. The door
-  already turned push protection on; this reads it in a repository the door
-  did not make, or where it was switched off since.
+  gives a SKIP. `ci / floor-check` runs on the Actions token, which never
+  gets them, so its step passes `--actions-token` and prints an INFO there
+  that names `/plinth:floor-check` as the run that reads it: no consumer's
+  `N not verified` grows by a line nobody can clear. The door already turned
+  push protection on; this reads it in a repository the door did not make,
+  or where it was switched off since.
   [Required checks](docs/reference/required-checks.md#secrets-at-the-push)
   names it, and the paid ruleset rule that blocks a merge with an exposed
   secret, which plinth neither sets nor reads (#303).

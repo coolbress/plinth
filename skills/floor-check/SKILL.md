@@ -158,7 +158,10 @@ separate terminal when their login cannot administer the repository, and
 never run it. The status
 sits in the repository's security settings, which a token without repository
 administration does not get: that is a SKIP, and so is a repository GitHub
-reports no status for.
+reports no status for. `ci / floor-check` passes `--actions-token`, which
+turns the first of those into an INFO, because the Actions token never gets
+them and no consumer could clear that SKIP: this skill, with the user's
+login, is the run that reads the item. Never pass that flag here.
 
 ## Template drift
 
