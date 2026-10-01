@@ -816,10 +816,11 @@ has   $c "the summary names the code scanning gap, its reason and what stands in
 has   $c "the summary names the push protection gap, its reason and what stands in its place" out '^  not raised: push protection\. GitHub Secret Protection is not enabled on tester/probe.*ci / secrets.*after the push.*revoked'
 # Disabled is off, not unobtainable: both lines say where a person can turn
 # the product on and that it may be billed; the door itself turns nothing on.
-turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Code security, and may be billed\\."
+turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Advanced Security, and may be billed\\."
 has   $c "the code scanning gap says where it can be turned on, and that it may be billed" out "^  not raised: code scanning\\..*$turn_on"
 has   $c "the push protection gap says the same"             out "^  not raised: push protection\\..*$turn_on"
 has   $c "README's gaps carry the same guidance"             readme "^- Not raised: code scanning\\..*$turn_on"
+hasnt $c "the menu is GitHub.com's name, not GitHub Enterprise Server's" out 'Settings → Code security'
 if [ "$(grep -c "Actions minutes" "$work/home-$c/out")" = 1 ]; then ok $c "the summary says once that CI runs on the plan's Actions minutes"
 else bad $c "the Actions minutes line is missing or repeated: $(grep -c "Actions minutes" "$work/home-$c/out")"; fi
 hasnt $c "nothing is called not verified when everything was read" out 'not verified: (code scanning|push protection)|plan: not verified'

@@ -473,8 +473,11 @@ if [ "$private" = 1 ]; then
   read -r code_security secret_protection _ <<<"$sec" || true
   # `disabled` is a product that is off, which is not a product that cannot be
   # had: where the owner has the licence, a person can turn it on. Said with
-  # its cost, since the door does not make that choice for them.
-  turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Code security, and may be billed."
+  # its cost, since the door does not make that choice for them. The menu is
+  # GitHub.com's name ("Security and quality" in the sidebar, then "Advanced
+  # Security"; GitHub Docs, "Managing security and analysis settings for your
+  # repository", read 2026-10-02); "Code security" is GitHub Enterprise Server's.
+  turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Advanced Security, and may be billed."
   in_place_scan="In its place: ci / lint's security rules."
   in_place_push="In its place: ci / secrets, which finds a secret after the push, when it has to be revoked."
   case "${code_security:-}" in
