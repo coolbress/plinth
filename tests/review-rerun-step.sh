@@ -24,7 +24,7 @@ for ((i=0; i<${#args[@]}; i++)); do [ "${args[$i]}" = --jq ] && jqf="${args[$((i
 out() { if [ -n "$jqf" ]; then jq -r "$jqf" "$1"; else cat "$1"; fi; }
 case "$1 $2" in
   "run rerun") exit "$(cat "$fx/rerun_rc" 2>/dev/null || echo 0)" ;;
-  "run view") out "$fx/run_now.json" ;;
+  "run view") [ -f "$fx/view_fails" ] && { echo "HTTP 502" >&2; exit 1; }; out "$fx/run_now.json" ;;
   api*)
     case "$2" in
       */pulls\?state=open*)        out "$fx/open.json" ;;
@@ -116,6 +116,12 @@ check "already running again (the other trigger got there first): not an error" 
 grep -qF "already" "$FX/out" || { echo "  FAIL  the log does not say the run was already going" >&2; fail=$((fail + 1)); }
 setup refused;   comment "$BOT"; echo 1 >"$FX/rerun_rc"
 check "refused and still finished: the job fails"       1 rerun
+setup unread;    comment "$BOT"; echo 1 >"$FX/rerun_rc"; : >"$FX/view_fails"
+check "refused, and its status cannot be read: the job fails" 1 rerun
+setup oddstate;  comment "$BOT"; echo 1 >"$FX/rerun_rc"; echo '{"status":""}' >"$FX/run_now.json"
+check "refused, and the status read is empty: the job fails" 1 rerun
+setup queued;    comment "$BOT"; echo 1 >"$FX/rerun_rc"; echo '{"status":"queued"}' >"$FX/run_now.json"
+check "refused, and the run is queued again: not an error" 0 rerun
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -57,14 +57,20 @@ while read -r n sha; do
     id="${why#re-run }"; id="${id%%:*}"
     if gh run rerun "$id" --failed --repo "$REPO"; then
       echo "#$n ${sha:0:8}: $why"
-    elif [ "$(gh run view "$id" --repo "$REPO" --json status --jq .status 2>/dev/null)" != completed ]; then
-      # The comment and the schedule can both decide on the same run; the
-      # second is refused because the first already started it.
-      echo "#$n ${sha:0:8}: run $id is already running again; nothing to do ($why)"
-    else
-      echo "::error::#$n ${sha:0:8}: could not re-run $id ($why)"
-      failed=1
+      continue
     fi
+    # The comment and the schedule can both decide on the same run; the
+    # second is refused because the first already started it. Only a status
+    # read back as active says so: a lookup that fails or reads anything else
+    # is a re-run nobody asked for, and the job fails (#365's review).
+    now="$(gh run view "$id" --repo "$REPO" --json status --jq .status 2>/dev/null)" || now="unread"
+    case "$now" in
+      queued|in_progress|waiting|requested|pending)
+        echo "#$n ${sha:0:8}: run $id is already running again ($now); nothing to do ($why)" ;;
+      *)
+        echo "::error::#$n ${sha:0:8}: could not re-run $id, its status reads ${now:-empty} ($why)"
+        failed=1 ;;
+    esac
   else
     echo "#$n ${sha:0:8}: $why"
   fi
