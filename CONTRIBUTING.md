@@ -150,10 +150,12 @@ release needs a green run on the commit it tags
    job runs the reusable workflow against `canary/`. `third-party / review`
    waits for a review by the Codex reviewer once the pull request is ready; it
    is optional and does not block the merge.
-4. Before merging, read the description against the final diff: what changed
-   and why, what was verified and what was not, as of the last commit. A
-   review fix that changed the scope changes the description too, because
-   the description is what lands on `main`.
+4. Before merging, read the title and the description against the final
+   diff: what changed and why, what was verified and what was not, as of the
+   last commit. A review fix that changed the scope or the approach changes
+   both, because the title becomes the squash commit's subject and the
+   description its body; #370 merged under a title its last fix had made
+   wrong.
 
    Say what was actually run, and name what was not. A review you ran in the
    same session that wrote the change is not an independent review, and must
