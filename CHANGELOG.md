@@ -11,6 +11,30 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:floor-check` and `ci / floor-check` read a private repository's
+  wall against its licences (#351). Where the repository answers
+  `"private": true`: a missing CodeQL `code_scanning` rule is a FAIL only
+  where GitHub Code Security (or the earlier Advanced Security licence) is
+  enabled on it, and push protection that is off is a WARN only where secret
+  scanning is enabled. Where the product is disabled, the item is an INFO
+  naming the gap and what stands in its place (`ci / lint`'s security rules;
+  `ci / secrets`), outside the failed and not-verified counts, and default
+  setup's languages are not read. Where the repository's security settings
+  give no answer for the product, a missing rule is a SKIP, and so is push
+  protection that is off. `ci / floor-check` reads with the Actions token,
+  which does not get those settings: on a private repository without the
+  rule it counts one more `not verified` and that item does not fail the
+  run, whether or not the repository has Code Security. So a private
+  repository that has the licence and lost its rule is a FAIL in
+  `/plinth:floor-check`, run with a login that administers it, and not in
+  CI; before this change CI failed every private repository without the
+  rule. A rule that is present, the required check names and every other item are read as
+  on a public repository, and a public repository's report does not change.
+  Not measured on GitHub: what a private repository's security settings
+  answer on each plan (#352).
+
 ## [1.4.0] - 2026-10-01
 
 Secrets stopped at the push, and issues closed only on purpose.

@@ -41,6 +41,12 @@ on, or a SKIP when the token does not get the repository's security settings.
 `ci / floor-check` passes --actions-token, which makes that one SKIP an INFO:
 the Actions token never gets them, and the skill, run by a person, does.
 
+A private repository's wall is read against its licences (#351): the
+code_scanning rule is expected only where GitHub Code Security is enabled on
+it, push protection only where GitHub Secret Protection is. Off is an INFO
+naming the gap and what stands in its place; a licence state the API does not
+answer is a SKIP. Every other item is expected as on a public repository.
+
 One more is WARN-only and reads no network beyond one GitHub compare call
 (#219): whether the template tag this repository was rendered from
 (.copier-answers.yml's _commit) is behind the tag plinth is tested with
@@ -1263,6 +1269,33 @@ def check_codeql_policy(repo: str, branch: str, tools: list[dict], policy: dict[
                        f"(expected {policy['alerts_threshold']} / {policy['security_alerts_threshold']})")
 
 
+# A private repository's wall is read against what its licences allow (#351,
+# decided in #320): the code_scanning rule needs GitHub Code Security and push
+# protection needs GitHub Secret Protection, both paid products that Team and
+# Enterprise can buy and GitHub Pro cannot. Only `"private": true` in the
+# repository's own answer counts: anything else is read as a public
+# repository, where both are free and both are expected.
+TURN_ON = ("On Team or Enterprise it can be turned on in the repository's Settings > Advanced Security, "
+           "and may be billed")
+
+
+def is_private(meta: dict) -> bool:
+    return meta.get("private") is True
+
+
+def product_status(meta: dict, *keys: str) -> str | None:
+    """`enabled` or `disabled` as `security_and_analysis` answers for the
+    product under any of `keys`, enabled first; None when it answers neither.
+    None is not `disabled`: a token without repository administration gets no
+    block at all, and a public repository's block has no code_security entry,
+    so a missing answer says nothing about the product. What a private
+    repository answers on each plan is not measured yet (#352)."""
+    security = meta.get("security_and_analysis")
+    entries = [security.get(k) for k in keys] if isinstance(security, dict) else []
+    statuses = [e.get("status") for e in entries if isinstance(e, dict)]
+    return next((s for s in ("enabled", "disabled") if s in statuses), None)
+
+
 def check_push_protection(repo: str, meta: dict, actions_token: bool = False) -> None:
     """Is push protection on (#303)? `ci / secrets` reports a secret after the
     push, when it is already on GitHub; push protection refuses the push, for
@@ -1277,7 +1310,13 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
     `ci / floor-check` runs on the Actions token, which never administers the
     repository, so there the unread settings would be a SKIP no consumer can
     clear, in every run. With --actions-token that one answer is an INFO
-    naming who does read it; what the token does read is judged as ever."""
+    naming who does read it; what the token does read is judged as ever.
+
+    On a private repository it is expected only where GitHub Secret Protection
+    is enabled (#351), read from the secret scanning status. Disabled there
+    is an INFO naming the gap and `ci / secrets` in its place, with no call:
+    turning it on is a purchase. Off with no secret scanning status is not
+    verified."""
     security = meta.get("security_and_analysis")
     if security is None and actions_token:
         result("INFO", "push protection is not read here: the Actions token does not get the repository's security "
@@ -1289,8 +1328,17 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
         return
     entry = security.get("secret_scanning_push_protection") if isinstance(security, dict) else None
     status = entry.get("status") if isinstance(entry, dict) else None
+    protection = product_status(meta, "secret_scanning") if is_private(meta) else "enabled"
     if status == "enabled":
         result("PASS", "push protection is on: GitHub refuses a push that carries a secret in a format it knows")
+    elif protection == "disabled":
+        result("INFO", "push protection is not expected here: GitHub Secret Protection is not enabled on this private "
+                       "repository (a paid product for Team and Enterprise), so a push that carries a secret is not "
+                       "refused. In its place: `ci / secrets`, which finds a secret after the push, when it has to "
+                       f"be revoked. {TURN_ON}")
+    elif status == "disabled" and protection is None:
+        result("SKIP", "push protection not verified (it is off, and GitHub reports no secret scanning status for this "
+                       "private repository: whether GitHub Secret Protection is enabled there was not read)")
     elif status == "disabled":
         result("WARN", "push protection is off: a push that carries a secret reaches GitHub, "
                        "and `ci / secrets` reports it only afterwards")
@@ -1432,9 +1480,28 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     tools = [dict(t, ruleset_id=r.get("ruleset_id")) for r in rules if r.get("type") == "code_scanning"
              for t in r.get("parameters", {}).get("code_scanning_tools", []) if t.get("tool") == "CodeQL"]
     by_name = "CodeQL" in have
-    ok(bool(tools) or by_name,
-       f"{branch}: CodeQL enforced ({'rule' if tools else 'check name'})",
-       f"{branch}: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name")
+    # On a private repository the rule is expected only where GitHub Code
+    # Security is enabled (#351); the earlier Advanced Security licence
+    # includes code scanning and counts beside it. A rule that is there is
+    # read as ever. One that is missing is a FAIL with the licence, a named
+    # gap without it, and not verified where GitHub did not answer: the
+    # Actions token in `ci / floor-check` never gets that answer, so there a
+    # private repository's missing rule is counted, not failed and not passed.
+    scanning = product_status(meta, "code_security", "advanced_security") if is_private(meta) else "enabled"
+    if tools or by_name or scanning == "enabled":
+        ok(bool(tools) or by_name,
+           f"{branch}: CodeQL enforced ({'rule' if tools else 'check name'})",
+           f"{branch}: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name")
+    elif scanning == "disabled":
+        result("INFO", f"{branch}: CodeQL is not expected here: GitHub Code Security is not enabled on this private "
+                       "repository (a paid product for Team and Enterprise), so no code_scanning rule for CodeQL and "
+                       f"no scan. In its place: `ci / lint`'s security rules. {TURN_ON}")
+    else:
+        why = ("this token does not read the repository's security settings; one with repository administration does"
+               if meta.get("security_and_analysis") is None else
+               "GitHub reports no Code Security status for this repository")
+        result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
+                       f"which on a private repository is a defect only where GitHub Code Security is enabled ({why})")
     if tools:
         check_codeql_policy(repo, branch, tools, policy)
     elif by_name:
@@ -1447,15 +1514,18 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # and the Python under src/ was never scanned while this line said
     # "enforced" (#120 finding I). Readable by an admin-read token; the Actions
     # token in `ci / floor-check` cannot, and says so rather than pass.
-    setup = api(f"repos/{repo}/code-scanning/default-setup", network)
-    langs = setup.get("languages") if isinstance(setup, dict) else None
-    if not isinstance(langs, list):
-        result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
-    elif "python" in langs:
-        result("PASS", f"CodeQL default setup analyses {langs}")
-    else:
-        result("WARN", f"CodeQL default setup analyses {langs}, not the Python under src/")
-        result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'")
+    # Without Code Security and without a rule there is no default setup to
+    # read: the gap is already named above, and a SKIP here would count it twice.
+    if tools or by_name or scanning != "disabled":
+        setup = api(f"repos/{repo}/code-scanning/default-setup", network)
+        langs = setup.get("languages") if isinstance(setup, dict) else None
+        if not isinstance(langs, list):
+            result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
+        elif "python" in langs:
+            result("PASS", f"CodeQL default setup analyses {langs}")
+        else:
+            result("WARN", f"CodeQL default setup analyses {langs}, not the Python under src/")
+            result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'")
 
     ids = {r.get("ruleset_id") for r in rules if r.get("ruleset_source_type") == "Repository"}
     for rid in sorted(i for i in ids if i):
