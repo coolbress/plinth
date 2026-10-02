@@ -45,7 +45,8 @@ A private repository's wall is read against its licences (#351): the
 code_scanning rule is expected only where GitHub Code Security is enabled on
 it, push protection only where GitHub Secret Protection is. Off is an INFO
 naming the gap and what stands in its place; a licence state the API does not
-answer is a SKIP. Every other item is expected as on a public repository.
+answer is a SKIP, or with --actions-token an INFO naming the run that judges
+it. Every other item is expected as on a public repository.
 
 One more is WARN-only and reads no network beyond one GitHub compare call
 (#219): whether the template tag this repository was rendered from
@@ -1484,9 +1485,11 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # Security is enabled (#351); the earlier Advanced Security licence
     # includes code scanning and counts beside it. A rule that is there is
     # read as ever. One that is missing is a FAIL with the licence, a named
-    # gap without it, and not verified where GitHub did not answer: the
-    # Actions token in `ci / floor-check` never gets that answer, so there a
-    # private repository's missing rule is counted, not failed and not passed.
+    # gap without it, and not verified where GitHub did not answer. The
+    # Actions token in `ci / floor-check` never gets that answer, so with
+    # --actions-token the unread settings are an INFO naming the run that
+    # judges it, as for push protection: a SKIP there is one no consumer can
+    # clear, and with or without the licence that run cannot fail the item.
     scanning = product_status(meta, "code_security", "advanced_security") if is_private(meta) else "enabled"
     if tools or by_name or scanning == "enabled":
         ok(bool(tools) or by_name,
@@ -1496,6 +1499,11 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         result("INFO", f"{branch}: CodeQL is not expected here: GitHub Code Security is not enabled on this private "
                        "repository (a paid product for Team and Enterprise), so no code_scanning rule for CodeQL and "
                        f"no scan. In its place: `ci / lint`'s security rules. {TURN_ON}")
+    elif meta.get("security_and_analysis") is None and actions_token:
+        result("INFO", f"{branch}: CodeQL is not judged here: no code_scanning rule for CodeQL and no CodeQL check "
+                       "name, which on a private repository is a defect only where GitHub Code Security is enabled, "
+                       "and the Actions token does not get the repository's security settings. The licence state is "
+                       "judged when /plinth:floor-check is run with a login that administers the repository")
     else:
         why = ("this token does not read the repository's security settings; one with repository administration does"
                if meta.get("security_and_analysis") is None else
@@ -1794,7 +1802,8 @@ def main() -> int:
                          "so a pull request that repairs the caller can merge")
     ap.add_argument("--actions-token", action="store_true",
                     help="the run's token is the Actions token, which does not get a repository's security settings: "
-                         "push protection it cannot read is an INFO naming who reads it, not a SKIP. What "
+                         "push protection it cannot read is an INFO naming who reads it, not a SKIP, and so is "
+                         "a private repository's missing CodeQL rule, which only the licence state can judge. What "
                          "`ci / floor-check` passes; the skill and the e2e runner do not")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--credentials", action="store_true",

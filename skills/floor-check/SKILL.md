@@ -187,8 +187,11 @@ the token did not read the security settings; the repository's Settings >
 Advanced Security page when GitHub gave no status for the product, because
 no login changes that answer. What a private repository answers on each plan
 is not measured yet (#352). `ci / floor-check` reads a private
-repository with the Actions token, so a missing rule is counted there as not
-verified in every run, and this skill is the run that judges it.
+repository with the Actions token, which never gets the security settings: a
+missing rule is an INFO there, outside the not-verified count, saying the
+licence state is judged when this skill is run with a login that administers
+the repository. So a private repository that has Code Security and lost its
+rule fails here and not in CI. Never pass `--actions-token` here.
 
 ## Template drift
 

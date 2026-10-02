@@ -25,13 +25,15 @@ pull requests and have no tag.
   give no answer for the product, a missing rule is a SKIP, and so is push
   protection that is off. `ci / floor-check` reads with the Actions token,
   which does not get those settings: on a private repository without the
-  rule it counts one more `not verified` and that item does not fail the
-  run, whether or not the repository has Code Security. So a private
-  repository that has the licence and lost its rule is a FAIL in
-  `/plinth:floor-check`, run with a login that administers it, and not in
+  rule it prints an INFO saying the licence state is judged when
+  `/plinth:floor-check` is run with a login that administers the
+  repository, outside the not-verified count, as it does for push
+  protection. That item does not fail the run there, whether or not the
+  repository has Code Security. So a private repository that has the
+  licence and lost its rule is a FAIL in `/plinth:floor-check` and not in
   CI; before this change CI failed every private repository without the
-  rule. A rule that is present, the required check names and every other item are read as
-  on a public repository, and a public repository's report does not change.
+  rule. A rule that is present, the required check names and every other
+  item are read as on a public repository, and a public repository's report does not change.
   Not measured on GitHub: what a private repository's security settings
   answer on each plan (#352).
 

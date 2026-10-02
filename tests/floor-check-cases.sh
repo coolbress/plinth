@@ -567,19 +567,46 @@ unread_codeql "private, a Code Security entry that is not an object" '{"code_sec
 private "" "$good_rules"
 has   "private, unread security settings, the rule present: PASS from the rule" '^  PASS  main: CodeQL enforced \(rule\)'
 # `ci / floor-check` reads a private repository with the Actions token, which
-# never gets the licence state. A missing rule there is counted as not
-# verified, not turned into an INFO: unlike push protection, it is a FAIL item
-# elsewhere, and the run did not check it. It does not fail the run, so a
-# private repository made without the rule can merge.
+# never gets the licence state. A SKIP there is one no consumer can clear, in
+# every run of every private repository without the rule, and it buys
+# nothing: with or without the licence the run cannot fail the item. So with
+# --actions-token the unread settings are an INFO outside the count, naming
+# the run that does judge it, as for push protection (#351's Decisions). It
+# does not fail the run, so a private repository made without the rule can
+# merge. Only the read that token cannot make changes: settings it did read
+# are judged as ever, and so is every run without the flag.
 private "" "$rules_neither" --actions-token
-has     "--actions-token, private, no rule: CodeQL is not verified" '^  SKIP  main: CodeQL not verified: no code_scanning rule'
+has     "--actions-token, private, no rule: an INFO names the run that judges the licence state" '^  INFO  main: CodeQL is not judged here: no code_scanning rule for CodeQL and no CodeQL check name.*The licence state is judged when /plinth:floor-check is run with a login that administers the repository'
+lacks   "--actions-token, private, no rule: CodeQL gets no PASS, FAIL, SKIP or gap line" '^  (PASS|FAIL|SKIP|WARN) .*CodeQL (enforced|not enforced|not verified)|CodeQL is not expected here'
 has     "--actions-token, private: push protection is still the INFO naming who reads it" '^  INFO  push protection is not read here'
-counted "--actions-token, private, no rule: counted as not verified, exit 0" 0 2 0
-# As that token reads such a repository: no default setup either.
+counted "--actions-token, private, no rule: outside the not-verified count, exit 0" 0 1 0
+private null "$rules_neither" --actions-token
+has     "--actions-token, private, null security settings: the same unread answer" '^  INFO  main: CodeQL is not judged here'
+# As that token reads such a repository: no default setup either. That SKIP
+# is the one a public repository's CI run carries too.
 rm "$api/repos/o/r/code-scanning/default-setup.json"
 private "" "$rules_neither" --actions-token
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
-counted "--actions-token, private, no rule, default setup unreadable: exit 0, each unread item counted" 0 3 0
+counted "--actions-token, private, no rule, default setup unreadable: exit 0, the default setup read alone is added" 0 2 0
+has     "--actions-token, private, no rule, default setup unreadable: its usual SKIP" '^  SKIP  CodeQL default setup languages not verified'
+# What the token did read is judged with the flag as without it.
+private "$(sec enabled enabled enabled)" "$rules_neither" --actions-token
+has     "--actions-token, private, Code Security read as enabled, no rule: still a FAIL" '^  FAIL  main: CodeQL not enforced'
+counted "--actions-token, private, Code Security read as enabled, no rule: the run fails" 1 1 1
+private "$(sec disabled disabled disabled)" "$rules_neither" --actions-token
+has     "--actions-token, private, Code Security read as disabled: still the gap line" '^  INFO  main: CodeQL is not expected here'
+private "$(sec - enabled enabled)" "$rules_neither" --actions-token
+has     "--actions-token, private, settings read but no Code Security status: still a SKIP" '^  SKIP  main: CodeQL not verified: no code_scanning rule.*GitHub reports no Code Security status'
+counted "--actions-token, private, settings read but no Code Security status: still counted" 0 2 0
+private "" "$good_rules" --actions-token
+has     "--actions-token, private, the rule present: PASS from the rule" '^  PASS  main: CodeQL enforced \(rule\)'
+# A public repository is not relaxed by the flag: the missing rule fails in CI as before.
+printf '{%s}' "$repo_meta" > "$api/repos/o/r.json"; printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"; rc=$?
+printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+has     "--actions-token, not private, unread settings, no rule: FAIL, as before" '^  FAIL  main: CodeQL not enforced'
+lacks   "--actions-token, not private: no line that defers the judgement" 'CodeQL is not judged here'
+counted "--actions-token, not private, no rule: the run fails" 1 1 1
 # Push protection on a private repository: expected only with Secret Protection.
 private "$(sec enabled enabled disabled)" "$good_rules"
 has   "private with Secret Protection, push protection off: WARN, as for a public repository" '^  WARN  push protection is off'

@@ -665,7 +665,9 @@ jobs:
   # admin-read token, which the Actions token never is; CI reports SKIP there
   # and the skill sees them. Push protection is behind the same token: with
   # --actions-token the checker says so in an INFO, not a SKIP, and judges it
-  # wherever the token does read it (#303).
+  # wherever the token does read it (#303). A private repository's missing
+  # CodeQL rule is behind it too: a defect only with GitHub Code Security,
+  # which this token does not read, so an INFO names the skill as its judge (#351).
   floor-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
