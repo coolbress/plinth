@@ -11,6 +11,24 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-03
+
+The checker learns private repositories, ahead of the generator. A private
+repository can carry the same required checks as a public one on GitHub Pro,
+Team or Enterprise, but code scanning and push protection there need paid
+licences. `/plinth:floor-check` and `ci / floor-check` now read such a
+repository's wall against what it has: a missing CodeQL rule is a failure
+only where Code Security is on, and otherwise a gap named with what stands
+in its place. This release exists so that repositories `/plinth:new-project`
+will create as private, in a later release, run a checker that lets their
+first pull request merge.
+
+A minor version: a public repository's report does not change, and no check
+name, job, input, secret or skill name changes. What a private repository's
+security settings answer on each plan has not been measured on GitHub yet.
+
+tested with plinth-template v1.5.9
+
 ### Changed
 
 - `/plinth:floor-check` and `ci / floor-check` read a private repository's
@@ -1862,7 +1880,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/coolbress/plinth/releases/tag/v1.5.0
 [1.4.0]: https://github.com/coolbress/plinth/releases/tag/v1.4.0
 [1.3.0]: https://github.com/coolbress/plinth/releases/tag/v1.3.0
 [1.2.1]: https://github.com/coolbress/plinth/releases/tag/v1.2.1
