@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-03
+
+Private repositories, where the plan can hold a wall. `/plinth:new-project
+--private` used to stop for every request. On GitHub Pro, Team or
+Enterprise it now creates a private repository with the same required checks
+as a public one; the CodeQL rule and push protection go on only where the
+repository has the Code Security and Secret Protection licences, and the
+door names each part it left out and what stands in its place. It never
+turns a paid product on. A personal Free account still stops before
+anything is created: a ruleset cannot stand on its private repository.
+Repositories it creates use plinth-template v1.6.0, whose checks run again
+when a pull request is edited.
+
+A minor version: no check name, job, input, secret or skill name changes.
+Nothing here has run against a real private repository yet; the README and
+the docs pages still describe private repositories as unsupported until a
+recorded run on a Pro account updates them (#352).
+
+tested with plinth-template v1.6.0
+
 ### Added
 
 - `/plinth:new-project --private` creates a private repository where the
@@ -1922,7 +1942,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/coolbress/plinth/releases/tag/v1.6.0
 [1.5.0]: https://github.com/coolbress/plinth/releases/tag/v1.5.0
 [1.4.0]: https://github.com/coolbress/plinth/releases/tag/v1.4.0
 [1.3.0]: https://github.com/coolbress/plinth/releases/tag/v1.3.0
