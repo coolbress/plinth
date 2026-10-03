@@ -490,6 +490,152 @@ else bad "scripts/e2e.sh passes --actions-token, or its checker call was not fou
 if [ -n "$skill_call" ] && ! grep -q -- '--actions-token' <<<"$skill_call"; then ok "the skill's Run block calls the checker without --actions-token"
 else bad "the skill's Run block passes --actions-token, or its call was not found"; fi
 
+# A private repository's wall is read against what its licences allow (#351,
+# decided in #320): the code_scanning rule is expected only where GitHub Code
+# Security is enabled on the repository, push protection only where GitHub
+# Secret Protection is. A product that is off is an INFO naming the gap and
+# what stands in its place, neither a FAIL nor a PASS; a licence state the API
+# does not answer is not verified. Only `"private": true` changes anything: a
+# repository whose answer carries no such key is read as before.
+private() { # <json for security_and_analysis, or nothing to leave the key out> <rules json> [checker args...] -- sets out, rc
+  local settings="${1:-}" rules="$2"; shift 2
+  printf '{%s,"private":true%s}' "$repo_meta" "${settings:+,\"security_and_analysis\":$settings}" > "$api/repos/o/r.json"
+  printf '%s' "$rules" > "$api/repos/o/r/rules/branches/main.json"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "$@" 2>&1)"; rc=$?
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+}
+has()  { if grep -qE -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$2')"; grep -E 'CodeQL|push protection|failed' <<<"$out" | sed 's/^/        /'; fi; }
+lacks() { if ! grep -qE -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (a line matches '$2')"; grep -E -- "$2" <<<"$out" | sed 's/^/        /'; fi; }
+counted() { # <description> <fails> <not verified> <exit code>
+  if [ "$rc" = "$4" ] && grep -q -- "^-- $2 failed, $3 not verified" <<<"$out" && [ "$(grep -c '^  SKIP ' <<<"$out")" = "$3" ] && [ "$(grep -c '^  FAIL ' <<<"$out")" = "$2" ]; then ok "$1"
+  else bad "$1 (rc=$rc, expected exit $4 and '-- $2 failed, $3 not verified')"; grep -E 'FAIL|SKIP|failed' <<<"$out" | sed 's/^/        /'; fi
+}
+sec() { # <code security status|-> <secret scanning status|-> <push protection status|-> [key for the first: code_security]
+  jq -cn --arg c "$1" --arg s "$2" --arg p "$3" --arg k "${4:-code_security}" \
+    '[{key: $k, value: $c}, {key: "secret_scanning", value: $s}, {key: "secret_scanning_push_protection", value: $p}]
+     | map(select(.value != "-") | .value = {status: .value}) | from_entries'
+}
+# Without either product, and without the rule: the gaps are named, nothing fails.
+private "$(sec disabled disabled disabled)" "$rules_neither"
+has   "private, no Code Security, no rule: an INFO names the gap" '^  INFO  main: CodeQL is not expected here: GitHub Code Security is not enabled on this private repository'
+has   "private, no Code Security: the INFO names what stands in its place" "^  INFO  main: CodeQL is not expected here.*In its place: \`ci / lint\`'s security rules"
+lacks "private, no Code Security, no rule: CodeQL gets neither a FAIL nor a PASS nor a SKIP" '^  (FAIL|PASS|SKIP|WARN) .*(CodeQL|code_scanning)'
+has   "private, no Secret Protection: an INFO names the gap and what stands in its place" '^  INFO  push protection is not expected here: GitHub Secret Protection is not enabled on this private repository.*In its place: `ci / secrets`'
+lacks "private, no Secret Protection: push protection gets neither a WARN nor a PASS nor a SKIP" '^  (FAIL|PASS|SKIP|WARN) +push protection'
+lacks "private, no Secret Protection: no call that would turn on a product that is not there" 'gh api -X PATCH repos/o/r --input'
+counted "private without either product: nothing fails, and the two gaps are not counted as not verified" 0 1 0
+has   "private: the required check names are expected as on a public repository" '^  PASS  main: all 2 expected checks are required'
+has   "private: the other rules are expected as on a public repository" '^  PASS  main: pull_request rule active'
+rm "$api/repos/o/r/code-scanning/default-setup.json"
+private "$(sec disabled disabled disabled)" "$rules_neither"
+printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+counted "private, no Code Security: default setup, which cannot exist there, is not read and not counted" 0 1 0
+# The rest of the wall is still a FAIL on a private repository.
+private "$(sec disabled disabled disabled)" "$(jq -c 'map(if .type=="required_status_checks" then .parameters.required_status_checks |= map(select(.context!="ci / a")) else . end)' <<<"$rules_neither")"
+has   "private: a dropped required check is still a FAIL" "^  FAIL  main: required checks dropped: \['ci / a'\]"
+counted "private: a dropped required check still fails the run" 1 1 1
+# With the licence, a missing rule is the defect it is on a public repository.
+for key in code_security advanced_security; do
+  private "$(sec enabled enabled enabled "$key")" "$rules_neither"
+  has     "private, $key enabled, no rule: FAIL, as for a public repository" '^  FAIL  main: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name'
+  counted "private, $key enabled, no rule: the run fails" 1 1 1
+done
+private '{"code_security":{"status":"disabled"},"advanced_security":{"status":"enabled"}}' "$rules_neither"
+has   "private, one licence off and the other on: on is what counts, the missing rule is a FAIL" '^  FAIL  main: CodeQL not enforced'
+private "$(sec enabled enabled enabled)" "$rules_other_tool"
+has   "private with Code Security: a code_scanning rule for another tool is still a FAIL" '^  FAIL  main: CodeQL not enforced'
+private "$(sec enabled enabled enabled)" "$good_rules"
+has   "private with Code Security and the rule: PASS" '^  PASS  main: CodeQL enforced \(rule\)'
+has   "private with Secret Protection and push protection on: PASS" '^  PASS  push protection is on'
+counted "private with both products and the whole wall: as an intact public wall" 0 1 0
+# A licence state the API does not answer is not verified, never a pass and
+# never the gap line: the gap is said only where GitHub said `disabled`.
+unread_codeql() { # <description> <json for security_and_analysis, or nothing> <reason in the SKIP>
+  private "$2" "$rules_neither"
+  has   "$1: CodeQL is not verified" "^  SKIP  main: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name.*\($3"
+  lacks "$1: no PASS, no FAIL and no gap line for CodeQL" '^  (PASS|FAIL) .*CodeQL (enforced|not enforced)|CodeQL is not expected here'
+  if [ "$rc" = 0 ]; then ok "$1: the run does not fail"; else bad "$1: the run failed (rc=$rc)"; fi
+}
+unread_codeql "private, security settings the token does not get" "" "this token does not read the repository's security settings"
+counted "private, unread security settings, no rule: CodeQL and push protection are both counted as not verified" 0 3 0
+unread_codeql "private, security settings answered as null" null "this token does not read the repository's security settings"
+unread_codeql "private, security settings with no Code Security entry" "$(sec - enabled enabled)" "GitHub reports no Code Security status for this repository"
+unread_codeql "private, a Code Security status that is neither enabled nor disabled" "$(sec pending enabled enabled)" "GitHub reports no Code Security status"
+unread_codeql "private, security settings that are not an object" '[]' "GitHub reports no Code Security status"
+unread_codeql "private, a Code Security entry that is not an object" '{"code_security":"disabled"}' "GitHub reports no Code Security status"
+# The rule itself is read from the rules, whatever the licence read says.
+private "" "$good_rules"
+has   "private, unread security settings, the rule present: PASS from the rule" '^  PASS  main: CodeQL enforced \(rule\)'
+# `ci / floor-check` reads a private repository with the Actions token, which
+# never gets the licence state. A SKIP there is one no consumer can clear, in
+# every run of every private repository without the rule, and it buys
+# nothing: with or without the licence the run cannot fail the item. So with
+# --actions-token the unread settings are an INFO outside the count, naming
+# the run that does judge it, as for push protection (#351's Decisions). It
+# does not fail the run, so a private repository made without the rule can
+# merge. Only the read that token cannot make changes: settings it did read
+# are judged as ever, and so is every run without the flag.
+private "" "$rules_neither" --actions-token
+has     "--actions-token, private, no rule: an INFO names the run that judges the licence state" '^  INFO  main: CodeQL is not judged here: no code_scanning rule for CodeQL and no CodeQL check name.*The licence state is judged when /plinth:floor-check is run with a login that administers the repository'
+lacks   "--actions-token, private, no rule: CodeQL gets no PASS, FAIL, SKIP or gap line" '^  (PASS|FAIL|SKIP|WARN) .*CodeQL (enforced|not enforced|not verified)|CodeQL is not expected here'
+has     "--actions-token, private: push protection is still the INFO naming who reads it" '^  INFO  push protection is not read here'
+counted "--actions-token, private, no rule: outside the not-verified count, exit 0" 0 1 0
+private null "$rules_neither" --actions-token
+has     "--actions-token, private, null security settings: the same unread answer" '^  INFO  main: CodeQL is not judged here'
+# As that token reads such a repository: no default setup either. That SKIP
+# is the one a public repository's CI run carries too.
+rm "$api/repos/o/r/code-scanning/default-setup.json"
+private "" "$rules_neither" --actions-token
+printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+counted "--actions-token, private, no rule, default setup unreadable: exit 0, the default setup read alone is added" 0 2 0
+has     "--actions-token, private, no rule, default setup unreadable: its usual SKIP" '^  SKIP  CodeQL default setup languages not verified'
+# What the token did read is judged with the flag as without it.
+private "$(sec enabled enabled enabled)" "$rules_neither" --actions-token
+has     "--actions-token, private, Code Security read as enabled, no rule: still a FAIL" '^  FAIL  main: CodeQL not enforced'
+counted "--actions-token, private, Code Security read as enabled, no rule: the run fails" 1 1 1
+private "$(sec disabled disabled disabled)" "$rules_neither" --actions-token
+has     "--actions-token, private, Code Security read as disabled: still the gap line" '^  INFO  main: CodeQL is not expected here'
+private "$(sec - enabled enabled)" "$rules_neither" --actions-token
+has     "--actions-token, private, settings read but no Code Security status: still a SKIP" '^  SKIP  main: CodeQL not verified: no code_scanning rule.*GitHub reports no Code Security status'
+counted "--actions-token, private, settings read but no Code Security status: still counted" 0 2 0
+private "" "$good_rules" --actions-token
+has     "--actions-token, private, the rule present: PASS from the rule" '^  PASS  main: CodeQL enforced \(rule\)'
+# A public repository is not relaxed by the flag: the missing rule fails in CI as before.
+printf '{%s}' "$repo_meta" > "$api/repos/o/r.json"; printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"; rc=$?
+printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+has     "--actions-token, not private, unread settings, no rule: FAIL, as before" '^  FAIL  main: CodeQL not enforced'
+lacks   "--actions-token, not private: no line that defers the judgement" 'CodeQL is not judged here'
+counted "--actions-token, not private, no rule: the run fails" 1 1 1
+# Push protection on a private repository: expected only with Secret Protection.
+private "$(sec enabled enabled disabled)" "$good_rules"
+has   "private with Secret Protection, push protection off: WARN, as for a public repository" '^  WARN  push protection is off'
+has   "private with Secret Protection, push protection off: the call that turns it on" "^  INFO    gh api -X PATCH repos/o/r --input - <<<'"
+private "$(sec enabled disabled -)" "$good_rules"
+has   "private, no Secret Protection, no push protection entry: the gap, from the licence GitHub did answer" '^  INFO  push protection is not expected here'
+counted "private, no Secret Protection, no push protection entry: not counted as not verified" 0 1 0
+private "$(sec enabled - disabled)" "$good_rules"
+has   "private, push protection off and no secret scanning status: not verified" '^  SKIP  push protection not verified \(it is off, and GitHub reports no secret scanning status for this private repository'
+lacks "private, push protection off and no secret scanning status: neither a WARN nor a PASS nor the gap line" '^  (WARN|PASS) +push protection|push protection is not expected here'
+private "$(sec enabled disabled enabled)" "$good_rules"
+has   "private, push protection answered on: PASS, whatever the secret scanning status says" '^  PASS  push protection is on'
+# Public repositories: read as before. `private` false, absent or not a
+# boolean never relaxes anything, whatever the licence entries say.
+public() { # <description> <json fragment for the private key, or nothing>
+  printf '{%s%s,"security_and_analysis":%s}' "$repo_meta" "${2:+,$2}" "$(sec disabled disabled disabled)" > "$api/repos/o/r.json"
+  printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+  has     "$1, no rule: FAIL" '^  FAIL  main: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name'
+  has     "$1, push protection off: WARN" '^  WARN  push protection is off'
+  lacks   "$1: no gap line" 'is not expected here'
+  counted "$1: the run fails" 1 1 1
+}
+public "public (\"private\": false)" '"private":false'
+public "no private key in the answer" ""
+public "a private key that is not a boolean" '"private":"true"'
+public "a private key answered as null" '"private":null'
+
 # Through gh: on the owner's machine the token is in gh's keychain, not the
 # environment, and only that token sees bypass actors. A mock gh serves the
 # fixture (404 for what is not there); no FLOOR_CHECK_API_DIR, so the checker

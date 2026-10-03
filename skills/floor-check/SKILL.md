@@ -163,6 +163,36 @@ turns the first of those into an INFO, because the Actions token never gets
 them and no consumer could clear that SKIP: this skill, with the user's
 login, is the run that reads the item. Never pass that flag here.
 
+## A private repository
+
+A private repository's wall is read against what its licences allow (#351).
+The `code_scanning` rule is expected only where GitHub Code Security is
+enabled on the repository, and push protection only where GitHub Secret
+Protection is: both are paid products for Team and Enterprise. Every other
+item, the required check names first, is expected as on a public repository.
+
+| The repository's security settings say | CodeQL rule missing | Push protection off |
+| --- | --- | --- |
+| The product is enabled | FAIL, as on a public repository | WARN with its call, as on a public repository |
+| The product is disabled | INFO naming the gap; `ci / lint`'s security rules stand in its place | INFO naming the gap; `ci / secrets` stands in its place |
+| No answer (a token without repository administration, or no status in the answer) | SKIP | SKIP |
+
+The two gap lines are INFO at the normal indent: facts about the plan, not
+defects. Leave them out of the FAIL and WARN list and write no fix under
+them. They say where the product is turned on and that it may be billed;
+that is the user's purchase to make, never a step to run or to recommend as
+a repair. A SKIP here goes in the not-verified line with what verifies it,
+which the line itself names: a login that administers the repository when
+the token did not read the security settings; the repository's Settings >
+Advanced Security page when GitHub gave no status for the product, because
+no login changes that answer. What a private repository answers on each plan
+is not measured yet (#352). `ci / floor-check` reads a private
+repository with the Actions token, which never gets the security settings: a
+missing rule is an INFO there, outside the not-verified count, saying the
+licence state is judged when this skill is run with a login that administers
+the repository. So a private repository that has Code Security and lost its
+rule fails here and not in CI. Never pass `--actions-token` here.
+
 ## Template drift
 
 One item compares the template tag this repository was rendered from

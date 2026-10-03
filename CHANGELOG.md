@@ -33,13 +33,69 @@ pull requests and have no tag.
   (an organization's to a member who is not an owner, a fine-grained token's)
   is said before creating; the ruleset call then decides, and a refusal
   deletes the repository, so without the `delete_repo` scope that case stops
-  first. Not yet usable end to end: `ci / floor-check` still fails a
-  repository without the CodeQL rule until `floor-check` reads a private
-  repository's wall (#351); the README and the docs pages still describe
-  private repositories as unsupported, and no run on a real private
-  repository is recorded yet (#352). `scripts/check-ruleset.sh
+  first. A repository it creates runs `ci / floor-check` from plinth v1.5.0
+  (through plinth-template v1.6.0), which reads a private repository's wall
+  against its licences, so its first pull request can merge without the
+  CodeQL rule. The README and the docs pages still describe private
+  repositories as unsupported, and no run on a real private repository is
+  recorded yet (#352). `scripts/check-ruleset.sh
   --without-code-scanning` checks the variant without the rule. No check name
   changes (#350).
+
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.6.0. A repository it creates
+  now calls plinth's reusable workflows at `8f4edfc`, plinth v1.5.0, instead
+  of `8e96702` (v1.1.0), so its `ci / floor-check` reads a private
+  repository's wall against its licences and reports push protection, and
+  `ci / pr-title` refuses a title ending in `(#N)`. Its `ci.yml` runs on the
+  `edited` pull-request event too, so a retitled pull request re-runs its
+  checks without a push (#322). `/plinth:floor-check` now reports a
+  repository on v1.5.9 as one tag behind.
+
+## [1.5.0] - 2026-10-03
+
+The checker learns private repositories, ahead of the generator. A private
+repository can carry the same required checks as a public one on GitHub Pro,
+Team or Enterprise, but code scanning and push protection there need paid
+licences. `/plinth:floor-check` and `ci / floor-check` now read such a
+repository's wall against what it has: a missing CodeQL rule is a failure
+only where Code Security is on, and otherwise a gap named with what stands
+in its place. This release exists so that repositories `/plinth:new-project`
+will create as private, in a later release, run a checker that lets their
+first pull request merge.
+
+A minor version: a public repository's report does not change, and no check
+name, job, input, secret or skill name changes. What a private repository's
+security settings answer on each plan has not been measured on GitHub yet.
+
+tested with plinth-template v1.5.9
+
+### Changed
+
+- `/plinth:floor-check` and `ci / floor-check` read a private repository's
+  wall against its licences (#351). Where the repository answers
+  `"private": true`: a missing CodeQL `code_scanning` rule is a FAIL only
+  where GitHub Code Security (or the earlier Advanced Security licence) is
+  enabled on it, and push protection that is off is a WARN only where secret
+  scanning is enabled. Where the product is disabled, the item is an INFO
+  naming the gap and what stands in its place (`ci / lint`'s security rules;
+  `ci / secrets`), outside the failed and not-verified counts, and default
+  setup's languages are not read. Where the repository's security settings
+  give no answer for the product, a missing rule is a SKIP, and so is push
+  protection that is off. `ci / floor-check` reads with the Actions token,
+  which does not get those settings: on a private repository without the
+  rule it prints an INFO saying the licence state is judged when
+  `/plinth:floor-check` is run with a login that administers the
+  repository, outside the not-verified count, as it does for push
+  protection. That item does not fail the run there, whether or not the
+  repository has Code Security. So a private repository that has the
+  licence and lost its rule is a FAIL in `/plinth:floor-check` and not in
+  CI; before this change CI failed every private repository without the
+  rule. A rule that is present, the required check names and every other
+  item are read as on a public repository, and a public repository's report does not change.
+  Not measured on GitHub: what a private repository's security settings
+  answer on each plan (#352).
 
 ## [1.4.0] - 2026-10-01
 
@@ -1866,7 +1922,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/coolbress/plinth/releases/tag/v1.5.0
 [1.4.0]: https://github.com/coolbress/plinth/releases/tag/v1.4.0
 [1.3.0]: https://github.com/coolbress/plinth/releases/tag/v1.3.0
 [1.2.1]: https://github.com/coolbress/plinth/releases/tag/v1.2.1
