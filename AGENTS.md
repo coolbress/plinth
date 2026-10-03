@@ -62,6 +62,10 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 - Changing behaviour: verify the boundaries and partial failures of the inputs
   and states it touches, record which paths you exercised and which you did
   not, and do not widen a few cases into a guarantee about all of them.
+- Closing an issue that carried a confidence-bearing judgement (a `/code-review`
+  CONFIRMED/PLAUSIBLE finding, a `ready-for-agent` call judged on what triage
+  knew): say in `## Outcome`, or `## Decision` for a record, whether later
+  evidence supports it, contradicts it, or leaves it unresolved.
 
 ## Ask first
 
