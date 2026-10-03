@@ -54,6 +54,8 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   `## Outcome`, saying which of completed, cancelled, superseded or moved to a
   follow-up it is, and what was verified (a record ends in `## Decision`
   instead: a `wayfinder:research`, `:prototype` or `:grilling` child).
+  Tick each acceptance criterion that was met; one left unticked is named in
+  the Outcome with why (#294 closed with all five met and none ticked).
   `Closes #N` closes it through GitHub without asking anyone, so whoever
   merges writes it; measured 2026-09-23, 23 of 86 closed issues had no
   ending. A closing keyword before `#N` anywhere in the description closes
