@@ -28,6 +28,9 @@ echo "$*" >>"$STUB_LOG"
 case "$*" in
   --version) echo "$STUB_VERSION (Claude Code)" ;;
   "plugin marketplace add "*)
+    # Only the first add clones; a later one returns, so a script that goes
+    # on after Ctrl-C reaches the end instead of hanging here.
+    [ -e "$STUB_READY" ] && exit 0
     # The clone: its arguments name the config dir, as git clone's do.
     bash -c 'trap "" INT TERM; while :; do mkdir -p "$1"; sleep 0.1; done' \
       clone "$CLAUDE_CONFIG_DIR/plugins/marketplaces/x..clone" &

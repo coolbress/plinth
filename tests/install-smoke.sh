@@ -17,7 +17,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Only the fresh dir: what names a caller's own dir is the caller's.
 cleanup() {
   local pat
-  pat="${CLAUDE_CONFIG_DIR//./\\.}(\$|[ /])"
+  pat="$(printf '%s' "$CLAUDE_CONFIG_DIR" | sed 's/[][\\.*^$+?(){}|]/\\&/g')(\$|[ /])"
   pkill -P $$ || true; pkill -f -- "$pat" || true
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     pgrep -P $$ >/dev/null || pgrep -f -- "$pat" >/dev/null || break

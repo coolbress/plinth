@@ -30,8 +30,9 @@ need `python3` 3.10 or later that can make a venv (on Debian and Ubuntu, the
 `tests/lint-tools.txt`, every file checked against its hash, with network the
 first time; a missing tool is a FAIL that names the install command, never a
 skip. `tests/weakened-checks-cases.sh` needs `python3` 3.11 or later, the
-version whose standard library parses TOML, as the runner's does. Everything
-else runs offline in seconds.
+version whose standard library parses TOML, as the runner's does.
+`tests/install-smoke-interrupt.sh` needs `perl`, `pkill` and `pgrep` and takes
+about 15 seconds. Everything else runs offline in seconds.
 
 That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
 one, the link check. CodeQL and the `canary` jobs run only on GitHub.
