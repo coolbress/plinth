@@ -152,6 +152,9 @@ jobs:
       - name: The e2e driver deletes what it made on every failure, and names what it could not
         run: ./tests/e2e-driver.sh
 
+      - name: An interrupted install smoke leaves nothing writing into the dir it removes, and Ctrl-C stops it
+        run: ./tests/install-smoke-interrupt.sh
+
       # Official release binary, checksum verified: rhysd/actionlint has no
       # action of its own, and a third-party wrapper would need allowlisting.
       # The version and the checksum are read from tests/workflow-lint.sh, the

@@ -11,9 +11,27 @@
 # because there is no TTY.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Before removing the fresh dir, stop what still writes into it: a `claude` this
+# script started, and the `git clone` under it, whose arguments name the dir.
+# Left running after a TERM or HUP, they recreate it once it is gone (#345).
+# Only the fresh dir: what names a caller's own dir is the caller's.
+cleanup() {
+  local pat
+  pat="$(printf '%s' "$CLAUDE_CONFIG_DIR" | sed 's/[][\\.*^$+?(){}|]/\\&/g')(\$|[ /])"
+  pkill -P $$ || true; pkill -f -- "$pat" || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -P $$ >/dev/null || pgrep -f -- "$pat" >/dev/null || break
+    sleep 0.2
+  done
+  pkill -KILL -P $$ || true; pkill -KILL -f -- "$pat" || true
+  rm -rf "$CLAUDE_CONFIG_DIR"
+}
 if [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
-  CLAUDE_CONFIG_DIR="$(mktemp -d)"; trap 'rm -rf "$CLAUDE_CONFIG_DIR"' EXIT; fresh=yes
+  CLAUDE_CONFIG_DIR="$(mktemp -d)"; trap cleanup EXIT; fresh=yes
 fi
+# claude catches Ctrl-C and ends without a signal status, so bash would go on
+# to the next line; the trap runs once that claude returns and stops here.
+trap 'exit 130' INT
 export CLAUDE_CONFIG_DIR
 echo "config dir: $CLAUDE_CONFIG_DIR"
 

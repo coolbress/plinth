@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `tests/install-smoke.sh`, interrupted, stops what it started before it
+  removes its temporary config dir. A `TERM` or `HUP` to the script used to
+  leave `claude` and its marketplace clone running, and they recreated the
+  dir after it was removed. Ctrl-C used to end only the `claude` step, and
+  the script ran the remaining README lines and ended in a misleading FAIL;
+  it now exits 130 there. A config dir the caller set is still left alone.
+  `tests/install-smoke-interrupt.sh` covers each signal with a stub `claude`
+  and no network (#345).
+
 ## [1.6.0] - 2026-10-03
 
 Private repositories, where the plan can hold a wall. `/plinth:new-project
