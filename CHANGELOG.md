@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.6.0. A repository it creates
+  now calls plinth's reusable workflows at `8f4edfc`, plinth v1.5.0, instead
+  of `8e96702` (v1.1.0), so its `ci / floor-check` reads a private
+  repository's wall against its licences and reports push protection, and
+  `ci / pr-title` refuses a title ending in `(#N)`. Its `ci.yml` runs on the
+  `edited` pull-request event too, so a retitled pull request re-runs its
+  checks without a push (#322). `/plinth:floor-check` now reports a
+  repository on v1.5.9 as one tag behind.
+
 ## [1.5.0] - 2026-10-03
 
 The checker learns private repositories, ahead of the generator. A private
