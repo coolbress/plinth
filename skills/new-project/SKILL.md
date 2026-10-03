@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced. User-invoked only; creates a remote repository, and if a check cannot be raised, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>]"
+argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>] [--private]"
 disable-model-invocation: true
 ---
 
@@ -20,7 +20,12 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL, and
-opens the first pull request. If a step it cannot go on without fails after
+opens the first pull request. With `--private` the repository is private: an
+owner on GitHub Free stops before anything is created, and elsewhere the same
+ruleset goes up, with CodeQL and push protection only where GitHub Code
+Security and GitHub Secret Protection are already enabled on the new
+repository. The script turns neither product on, and its last lines name each
+part it left out. If a step it cannot go on without fails after
 creation, it deletes the repository when its token can and names it when it
 cannot; a label that fails is named and left. If the create's own answer is
 lost, it does neither.
@@ -40,7 +45,8 @@ What to do with the output:
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
 - **It finished** (exit 0): show the final lines, the `administration:` line
-  among them. The next step for the user is to open the pull request URL,
-  wait for the checks, and merge with squash.
+  among them, and for a private repository every `private:`, `not raised:`
+  and `not verified:` line as printed. The next step for the user is to open
+  the pull request URL, wait for the checks, and merge with squash.
 
 Do not edit the generated repository in this session.

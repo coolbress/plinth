@@ -32,6 +32,7 @@ case "$all" in
   "api -i user"*)                                step=headers ;;
   "api user --jq .login"*)                       step=login ;;
   "api users/"*)                                 step=owner ;;
+  "api user --jq .plan"*|"api orgs/"*" --jq .plan"*) step=plan ;;
   "api orgs/"*"/memberships/"*)                  step=membership ;;
   "api /licenses/"*".spdx_id"*)                  step=license-check ;;
   *"/contents/copier.yml"*)                      step=choices ;;
@@ -47,6 +48,7 @@ case "$all" in
   "api repos/"*"/.github --jq .visibility"*)     step=shared-visibility ;;
   *"/contents/.github/ISSUE_TEMPLATE/"*)         step=shared-form-body ;;
   *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
+  "api repos/"*" --jq "*security_and_analysis*)  step=security-read ;;
   "api repos/"*" --jq .html_url"*)               step=exists ;;
   "api repos/"*" --jq .default_branch"*)         step=default-branch ;;
   "api repos/"*" --jq "*"permissions.admin"*)    step=admin ;;
@@ -83,6 +85,14 @@ case "$step" in
   login)         echo tester ;;
   owner)         case "$all" in *users/nobody*) exit 1 ;; *users/someorg*) echo Organization ;; *) echo User ;; esac ;;
   membership)    [ "${MOCK_MEMBER:-1}" = 1 ] || exit 1; echo member ;;
+  # The owner's plan, as the door's jq leaves it: a name, or nothing when the
+  # token does not read it (measured 2026-10-01: a fine-grained token's
+  # `GET /user` carries no `plan`). FAIL_AT=plan is a read that fails.
+  plan)          [ "${MOCK_PLAN:-none}" = none ] || echo "$MOCK_PLAN" ;;
+  # The new repository's security settings, as the door's jq leaves them: Code
+  # Security, then Secret Protection (a comma here, since E= splits on spaces).
+  # FAIL_AT=security-read is a read that fails.
+  security-read) tr ',' ' ' <<<"${MOCK_SECURITY-disabled,disabled}" ;;
   license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *licenses/gpl-3.0*) echo GPL-3.0 ;; *) exit 1 ;; esac ;;
   choices)       printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nplinth_sha:\n' | base64 ;;
   # The owner's shared community-health files: present, absent (404) or
@@ -359,8 +369,40 @@ if grep -qF "the API said: docs/PULL_REQUEST_TEMPLATE.md: mock gh: HTTP 500" "$w
 then ok shared-unreadable "the stop carries the path and the API's own words, not a placeholder"
 else bad shared-unreadable "the stop does not say what failed"; grep -A2 "cannot read" "$work/home-shared-unreadable/out" | sed 's/^/        /'; fi
 E="MOCK_SHARED_FORMS=error" run shared-forms-error err no no "--force-defaults"                             -- probe
-run private        err no no "private repositories are not supported yet"                   -- probe --private
-run private-first  err no no "private repositories are not supported yet"                   -- --private probe
+# A private repository carries a ruleset only on GitHub Pro, Team or Enterprise
+# (#320, #350): an owner whose plan reads free stops here, with the reason and
+# the public command, whichever side of the name the flag was typed on.
+E="MOCK_PLAN=free"    run private        err no no "tester is on GitHub Free"                -- probe --private
+E="MOCK_PLAN=free"    run private-first  err no no "tester is on GitHub Free"                -- --private probe --archetype=backend
+if grep -qF "needs GitHub Pro" "$work/home-private/out" && grep -qxF "  public instead, with the whole wall: /plinth:new-project probe" "$work/home-private/out" \
+   && grep -qxF "  public instead, with the whole wall: /plinth:new-project probe --archetype=backend" "$work/home-private-first/out"
+then ok private "the stop gives the reason and the public command, with the other arguments kept"
+else bad private "the stop lacks the reason or the public command"; sed 's/^/        /' "$work/home-private/out" "$work/home-private-first/out"; fi
+E="MOCK_PLAN=free"    run private-org-free err no no "needs GitHub Team or Enterprise"       -- someorg/probe --private
+# A classic token reads its own plan with read:user, which gh's default login
+# does not carry: asking for it stops a Free account here, where otherwise the
+# repository would be created and deleted. The mock's default scopes are that login.
+run private-no-read-user err no no "gh's token lacks the read:user scope" -- probe --private
+if grep -qxF "  fix: gh auth refresh -h github.com -s read:user   (a token typed at a prompt: one with read:user beside its other scopes)" "$work/home-private-no-read-user/out" \
+   && grep -qxF "  public instead, with the whole wall: /plinth:new-project probe" "$work/home-private-no-read-user/out"
+then ok private-no-read-user "the stop names the one scope and the public command"
+else bad private-no-read-user "the stop does not name the fix"; sed 's/^/        /' "$work/home-private-no-read-user/out"; fi
+E="GH_TOKEN=x" run private-no-read-user-env err no no "unset GH_TOKEN" -- probe --private
+E="FAIL_AT=plan" run private-plan-failed-no-scope err no no "gh's token lacks the read:user scope" -- probe --private
+# A plan no scope would show (the scope is there and the answer still carries
+# none; an organization's, shown to its owners) is not "free" and not "paid":
+# the door goes on and the ruleset call decides (below). Without delete_repo
+# that judgment would leave a private repository with no wall behind, so that
+# one stops here.
+E="MOCK_PLAN=none MOCK_SCOPES=repo,workflow,read:user" run private-unread-no-delete err no no "cannot delete what it creates" -- probe --private
+E="FAIL_AT=plan MOCK_SCOPES=repo,workflow,user"        run private-plan-error-no-delete err no no "cannot delete what it creates" -- probe --private
+E="MOCK_PLAN=none MOCK_SCOPES=repo,workflow,read:org"  run private-org-unread-no-delete err no no "cannot delete what it creates" -- someorg/probe --private
+if grep -qF "gh auth refresh -h github.com -s read:user,delete_repo" "$work/home-private-unread-no-delete/out" \
+   && grep -qF "gh auth refresh -h github.com -s delete_repo" "$work/home-private-org-unread-no-delete/out"
+then ok private-unread-no-delete "the stop names the scopes that read the plan and delete"
+else bad private-unread-no-delete "the stop does not name the fix"; sed 's/^/        /' "$work/home-private-unread-no-delete/out"; fi
+# A plan that reads as paid needs no delete_repo to go on: rollback off is said, as for a public one.
+E="MOCK_PLAN=pro MOCK_SCOPES=repo,workflow" run private-pro-no-delete ok yes no "rollback: off (no delete_repo scope" -- probe --private
 run two-names      err no no "one name only"                                                -- probe other
 run bad-option     err no no "unknown option: --nope"                                       -- probe --nope
 E="MOCK_EXISTS=1"     run repo-exists   err no no "already exists; the door creates new"     -- probe
@@ -382,9 +424,6 @@ run dir-unreadable err no no "already exists and is not an empty directory"     
 chmod 755 "$work/home-dir-unreadable/probe"
 mkdir -p "$work/home-nested" && ( cd "$work/home-nested" && "$real_git" init -q -b main )
 run nested         err no no "inside the repository"                                        -- probe
-# --private is refused before any gh call at all.
-if [ ! -s "$work/home-private/calls.log" ]; then ok private-no-call "no gh call before the refusal"
-else bad private-no-call "gh was called before refusing --private"; fi
 
 echo "warnings: continue, and say so"
 E="GH_TOKEN=x"        run env-token     ok yes no "warning: GH_TOKEN is set in the environment" -- probe
@@ -738,6 +777,170 @@ E="MOCK_ADMIN=false MOCK_ROLE=custom-rules" run admin-custom-role ok yes no "adm
 if grep -qE "administration: .* has (it|none) on" "$work/home-admin-custom-role/out"
 then bad admin-custom-role "a custom role was read as no administration"
 else ok admin-custom-role "a custom role without admin is not verified"; fi
+
+
+echo "private: the wall the plan and the licences allow, each gap named (#350)"
+# has <case> <description> <file: out|log|readme> <grep -E pattern>; hasnt is the
+# reverse, and a file that is not there is a failure, not an absence.
+file_of() { case "$2" in out) echo "$work/home-$1/out" ;; log) echo "$work/home-$1/calls.log" ;; readme) echo "$work/home-$1/probe/README.md" ;; esac; }
+has()   { if grep -qE -- "$4" "$(file_of "$1" "$3")"; then ok "$1" "$2"; else bad "$1" "$2"; grep -nE 'private|not raised|not verified|done:' "$work/home-$1/out" | sed 's/^/        /'; fi; }
+hasnt() { local f; f="$(file_of "$1" "$3")"
+  if [ ! -s "$f" ]; then bad "$1" "$2 (no $3 to read)"
+  elif grep -qE -- "$4" "$f"; then bad "$1" "$2"; grep -nE -- "$4" "$f" | head -3 | sed 's/^/        /'; else ok "$1" "$2"; fi; }
+# The two reads a private run makes, as the mock logs them; the public case
+# below must show neither, and these patterns are shown to match here first.
+plan_read='^gh api (user|orgs/[^ ]+) --jq \.plan'
+security_read='^gh api repos/[^ ]+ --jq \.security_and_analysis //'
+noscan_posted() { # <case>: what was posted is the wall minus the code_scanning rule, and passes as that variant
+  "$root/scripts/check-ruleset.sh" --without-code-scanning "$work/home-$1/ruleset-posted.json" >/dev/null &&
+    cmp -s <(jq -S . "$work/home-$1/ruleset-posted.json") <(jq -S 'del(.rules[] | select(.type == "code_scanning"))' "$root/ruleset.json"); }
+full_posted() { cmp -s <(jq -S . "$work/home-$1/ruleset-posted.json") <(jq -S . "$root/ruleset.json"); }
+
+# GitHub Pro: rulesets stand on a private repository, Code Security and Secret
+# Protection cannot be bought. The ruleset goes up without code_scanning,
+# CodeQL is not set up or waited for, push protection is left off, and the
+# summary names both gaps and what stands in each one's place.
+c=private-pro
+E="MOCK_PLAN=pro" run $c ok yes no "done: https://github.com/tester/probe (private, MIT, cli, " -- probe --private
+has   $c "the repository is created private"                 log '^gh repo create tester/probe --private$'
+has   $c "the line before creating says private and the plan" out '^create tester/probe \(private, MIT, cli, as owner\) .*plan: pro'
+has   $c "the plan is read"                                  log "$plan_read"
+has   $c "the new repository's security settings are read"   log "$security_read"
+if noscan_posted $c; then ok $c "the ruleset posted is the public wall minus the code_scanning rule: every check name stays"
+else bad $c "the ruleset posted is not the wall minus code_scanning"; fi
+hasnt $c "CodeQL default setup is not enabled, read or waited for" log 'code-scanning|/languages|check-runs|^sleep 60'
+hasnt $c "nothing about CodeQL is promised or warned"        out 'warning: CodeQL|CodeQL default setup:'
+hasnt $c "secret scanning and push protection are not turned on" log 'security_and_analysis\[secret_scanning'
+has   $c "Dependabot, the Actions allowlist and the merge settings are set as for a public repository" log 'allow_merge_commit=false'
+has   $c "the summary names the code scanning gap, its reason and what stands in its place" out "^  not raised: code scanning\. GitHub Code Security is not enabled on tester/probe.*ci / lint's security rules"
+has   $c "the summary names the push protection gap, its reason and what stands in its place" out '^  not raised: push protection\. GitHub Secret Protection is not enabled on tester/probe.*ci / secrets.*after the push.*revoked'
+# Disabled is off, not unobtainable: both lines say where a person can turn
+# the product on and that it may be billed; the door itself turns nothing on.
+turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Advanced Security, and may be billed\\."
+has   $c "the code scanning gap says where it can be turned on, and that it may be billed" out "^  not raised: code scanning\\..*$turn_on"
+has   $c "the push protection gap says the same"             out "^  not raised: push protection\\..*$turn_on"
+has   $c "README's gaps carry the same guidance"             readme "^- Not raised: code scanning\\..*$turn_on"
+hasnt $c "the menu is GitHub.com's name, not GitHub Enterprise Server's" out 'Settings → Code security'
+if [ "$(grep -c "Actions minutes" "$work/home-$c/out")" = 1 ]; then ok $c "the summary says once that CI runs on the plan's Actions minutes"
+else bad $c "the Actions minutes line is missing or repeated: $(grep -c "Actions minutes" "$work/home-$c/out")"; fi
+hasnt $c "nothing is called not verified when everything was read" out 'not verified: (code scanning|push protection)|plan: not verified'
+# The next session reads the repository, not the terminal (#126): the gaps are
+# under First day too, and the CodeQL lines that do not apply are not.
+has   $c "README's First day names both gaps"                readme '^- Not raised: code scanning\.'
+has   $c "README's First day names push protection"          readme '^- Not raised: push protection\.'
+hasnt $c "README does not tell a repository without CodeQL to push again for it" readme 'push once more|waits for CodeQL|CodeQL does not analyse'
+has   $c "README keeps the token line and the Dependabot note" readme '^- Dependabot opens pull requests from the first minute: merge one when every required check is green, or close it\. After "Update branch"'
+hasnt $c "the terminal does not point at a recovery push that is not there" out 'the recovery push'
+has   $c "the first pull request body carries the gaps"      log '^- Not raised: code scanning\.'
+
+# An organization with both products enabled on the new repository: the wall
+# of a public repository, and the private line alone.
+c=private-licensed
+E="MOCK_PLAN=team MOCK_SECURITY=enabled,enabled" run $c ok yes no "done: https://github.com/someorg/probe (private, MIT, cli, " -- someorg/probe --private
+if full_posted $c; then ok $c "the ruleset posted is ruleset.json, code_scanning included"
+else bad $c "the ruleset posted is not ruleset.json"; fi
+has   $c "push protection is turned on"                      log 'security_and_analysis\[secret_scanning_push_protection\]\[status\]=enabled'
+has   $c "CodeQL default setup is enabled with the languages" log 'default-setup -f state=configured -f query_suite=default -f languages\[\]=actions -f languages\[\]=python'
+has   $c "CodeQL is waited for, as on a public repository"   out '^CodeQL default setup: enabled'
+hasnt $c "no gap is named, and nothing is offered to turn on" out 'not raised|not verified: (code scanning|push protection)|can be turned on'
+has   $c "the Actions minutes line is still said"            out "^  private: CI runs on the plan's Actions minutes\$"
+has   $c "README says the repository is private and where CI's minutes come from" readme "^- This repository is private: CI runs on the plan's Actions minutes\.\$"
+has   $c "README keeps the CodeQL recovery line"             readme 'If the merge stays blocked on CodeQL, push once more'
+hasnt $c "README names no gap"                               readme 'Not raised|Not verified'
+has   $c "the plan asked about is the organization's"        log '^gh api orgs/someorg --jq \.plan'
+
+# A block that is readable and carries no Code Security key (what a public
+# repository answers; a private one on Pro is not measured yet, #352): no
+# status is not verified for code scanning, while push protection, which did
+# answer, is named as not raised. The rule is left out either way.
+c=private-no-scan-key
+E="MOCK_PLAN=pro MOCK_SECURITY=unread,disabled" run $c ok yes no "not verified: code scanning. GitHub gave no status for GitHub Code Security on tester/probe" -- probe --private
+if noscan_posted $c; then ok $c "no Code Security key: the code_scanning rule is left out"; else bad $c "no Code Security key: the rule was assumed"; fi
+has   $c "push protection, which answered, is not raised"    out '^  not raised: push protection\.'
+hasnt $c "nothing is turned on"                              log 'security_and_analysis\[secret_scanning|code-scanning'
+
+# One product and not the other: each is decided on its own.
+c=private-scan-only
+E="MOCK_PLAN=team MOCK_SECURITY=enabled,disabled" run $c ok yes no "not raised: push protection" -- someorg/probe --private
+if full_posted $c; then ok $c "Code Security alone: the code_scanning rule is in"; else bad $c "Code Security alone lost the rule"; fi
+hasnt $c "Code Security alone: push protection is not turned on" log 'security_and_analysis\[secret_scanning'
+hasnt $c "Code Security alone: no code scanning gap"         out '(not raised|not verified): code scanning'
+if [ "$(grep -c 'can be turned on' "$work/home-$c/out")" = 1 ]; then ok $c "the guidance is on the one disabled product's line only"
+else bad $c "the turn-on guidance is not on exactly one line: $(grep -c 'can be turned on' "$work/home-$c/out")"; fi
+c=private-push-only
+E="MOCK_PLAN=team MOCK_SECURITY=disabled,enabled" run $c ok yes no "not raised: code scanning" -- someorg/probe --private
+if noscan_posted $c; then ok $c "Secret Protection alone: no code_scanning rule"; else bad $c "Secret Protection alone kept the rule"; fi
+has   $c "Secret Protection alone: push protection is turned on" log 'security_and_analysis\[secret_scanning_push_protection\]\[status\]=enabled'
+hasnt $c "Secret Protection alone: no push protection gap"   out '(not raised|not verified): push protection'
+
+# What the door cannot read is not verified, and the rule is left out: never
+# assumed present, and never reported as a product that is missing.
+for how in failed:FAIL_AT=security-read no-key:MOCK_SECURITY=unread,unread empty:MOCK_SECURITY= other:MOCK_SECURITY=maybe,maybe; do
+  c="private-unread-${how%%:*}"; how="${how#*:}"
+  E="MOCK_PLAN=pro $how" run "$c" ok yes no "not verified: code scanning" -- probe --private
+  if noscan_posted "$c"; then ok "$c" "unread security settings ($how): the code_scanning rule is left out"
+  else bad "$c" "unread security settings ($how): the rule was assumed"; fi
+  has   "$c" "push protection is not verified"               out '^  not verified: push protection\.'
+  hasnt "$c" "an unread setting is not reported as a missing product" out 'not raised'
+  hasnt "$c" "nothing is turned on from an unread setting"   log 'security_and_analysis\[secret_scanning|code-scanning'
+  has   "$c" "README says not verified too"                  readme '^- Not verified: code scanning\.'
+  hasnt "$c" "a setting with no status is not said to be something to turn on" out 'can be turned on'
+done
+# A plan the token does not read: said before anything exists, and the door
+# goes on with the ruleset call as the judge.
+for how in unread:MOCK_PLAN=none failed:FAIL_AT=plan; do
+  c="private-plan-${how%%:*}"; how="${how#*:} MOCK_SCOPES=repo,workflow,delete_repo,read:user"
+  E="$how" run "$c" ok yes no "plan: not verified" -- probe --private
+  if [ "$(grep -n 'plan: not verified' "$work/home-$c/out" | head -1 | cut -d: -f1)" -lt "$(grep -n '^create tester/probe' "$work/home-$c/out" | cut -d: -f1)" ] \
+     && grep -q '^create tester/probe (private, .*plan: not verified' "$work/home-$c/out"
+  then ok "$c" "the unread plan is said before the repository is created ($how)"
+  else bad "$c" "the unread plan is not said before creating ($how)"; fi
+done
+# The ruleset refused with the plan unread: the likely reason is named, and the
+# private repository is deleted like any other the door could not finish.
+# An organization member and the fine-grained admin path have no scope to add: both go on.
+E="MOCK_PLAN=none" run private-plan-org-unread ok yes no "plan: not verified for someorg (an organization's plan is shown to its owners" -- someorg/probe --private
+E="MOCK_PLAN=none MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run private-plan-fine-unread ok yes no "plan: not verified for tester" -- probe --private
+E="MOCK_PLAN=none MOCK_SCOPES=repo,workflow,delete_repo,read:user FAIL_AT=ruleset" run private-ruleset-refused err yes yes "the plan of tester was not verified" -- probe --private
+has   private-ruleset-refused "the refusal names what a private ruleset needs and the public command" out 'needs GitHub Pro.*/plinth:new-project probe$'
+E="MOCK_PLAN=pro FAIL_AT=ruleset" run private-ruleset-fails err yes yes "could not apply the ruleset" -- probe --private
+hasnt private-ruleset-fails "a verified plan is not blamed for a ruleset failure" out 'was not verified'
+for at in copier push dependabot actions allowlist merge pr; do
+  E="MOCK_PLAN=pro FAIL_AT=$at" run "private-fails-$at" err yes yes "" -- probe --private
+done
+E="MOCK_PLAN=team MOCK_SECURITY=enabled,enabled FAIL_AT=secret" run private-fails-secret err yes yes "could not set secret scanning and push protection" -- someorg/probe --private
+E="MOCK_PLAN=team MOCK_SECURITY=enabled,enabled FAIL_AT=codeql" run private-fails-codeql err yes yes "" -- someorg/probe --private
+E="MOCK_PLAN=pro FAIL_AT=ruleset MOCK_DELETE_FAILS=1" run private-delete-fails err yes yes "ROLLBACK FAILED: https://github.com/tester/probe EXISTS WITHOUT A WALL" -- probe --private
+E="MOCK_PLAN=pro MOCK_RUNS=none PLINTH_FIRST_PR_WAIT=1" run private-run-never err yes yes "its checks would never report" -- probe --private
+# With no CodeQL to wait for, a first pull request whose run started ends the wait
+# at once: no empty commit, no CodeQL warning, even with the wait spent.
+E="MOCK_PLAN=pro MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=0" run private-no-codeql-wait ok yes no "" -- probe --private
+hasnt private-no-codeql-wait "no CodeQL warning and no re-push on a repository without it" out 'CodeQL has not picked up|allow-empty'
+hasnt private-no-codeql-wait "no empty commit is pushed"     log 'push -q$'
+
+# A public repository is as it was: created public, never asked for a plan or
+# its security settings, and nothing private in what it prints or writes.
+has   none "a public repository is created public"           log '^gh repo create tester/probe --public$'
+hasnt none "a public repository's plan is not read"           log "$plan_read"
+hasnt none "a public repository's security settings are not read" log "$security_read"
+has   none "a public README is there to be read"             readme '^## First day$'
+hasnt none "a public summary says nothing about private"     out 'private|Actions minutes|not raised'
+hasnt none "a public README says nothing about private"      readme 'Not raised|Not verified|private'
+
+# The two reads' jq, run on what GitHub answers (the mock above only prints
+# what they would leave). Read out of the door, so the test cannot drift.
+sec_jq="$(sed -nE "s/^sec_jq='(.*)'$/\1/p" "$root/scripts/new-project.sh")"
+sec() { jq -r "$sec_jq" <<<"$1" 2>&1; }
+is() { if [ "$2" = "$3" ]; then ok sec-jq "$1"; else bad sec-jq "$1: want '$2', got '$3'"; fi; }
+is "the door carries its security jq on one line" yes "$([ -n "$sec_jq" ] && echo yes)"
+is "both products enabled"            "enabled enabled"   "$(sec '{"security_and_analysis":{"code_security":{"status":"enabled"},"secret_scanning":{"status":"enabled"}}}')"
+is "both products disabled"           "disabled disabled" "$(sec '{"security_and_analysis":{"code_security":{"status":"disabled"},"secret_scanning":{"status":"disabled"}}}')"
+is "the earlier Advanced Security licence counts as Code Security" "enabled disabled" "$(sec '{"security_and_analysis":{"advanced_security":{"status":"enabled"},"code_security":{"status":"disabled"},"secret_scanning":{"status":"disabled"}}}')"
+is "Advanced Security disabled and no code_security key is disabled" "disabled enabled" "$(sec '{"security_and_analysis":{"advanced_security":{"status":"disabled"},"secret_scanning":{"status":"enabled"}}}')"
+is "no code security key at all is unread, not disabled" "unread disabled" "$(sec '{"security_and_analysis":{"secret_scanning":{"status":"disabled"},"dependabot_security_updates":{"status":"enabled"}}}')"
+is "security_and_analysis null is unread"   "unread unread" "$(sec '{"security_and_analysis":null}')"
+is "security_and_analysis absent is unread" "unread unread" "$(sec '{"name":"probe"}')"
+is "push protection on is not Secret Protection on" "unread unread" "$(sec '{"security_and_analysis":{"secret_scanning_push_protection":{"status":"enabled"}}}')"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

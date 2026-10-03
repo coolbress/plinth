@@ -1147,6 +1147,27 @@ for arch in backend data-ml; do
   then ok "--print-ruleset for $arch is the wall plus image, from one app (check-ruleset.sh passes with image)"
   else bad "--print-ruleset for $arch fails the wall's invariants:"; "$root/scripts/check-ruleset.sh" "$work/$arch-ruleset.json" image | grep FAIL -A2 | sed 's/^/        /'; fi
 done
+# A private repository without GitHub Code Security gets the wall without the
+# code_scanning rule and with nothing else changed (#350): the same check
+# names, per archetype. Each form of check-ruleset.sh refuses the other's file,
+# so neither variant can pass as the other.
+for arch in cli backend; do
+  extra=""; [ "$arch" = cli ] || extra=image
+  python3 "$checker" --print-ruleset --without-code-scanning --ruleset "$root/ruleset.json" --archetype "$arch" > "$work/$arch-noscan.json"
+  if "$root/scripts/check-ruleset.sh" --without-code-scanning "$work/$arch-noscan.json" $extra >/dev/null 2>&1 \
+     && cmp -s <(jq -S . "$work/$arch-noscan.json") <(jq -S 'del(.rules[] | select(.type == "code_scanning"))' "$work/$arch-ruleset.json")
+  then ok "--print-ruleset --without-code-scanning for $arch is the same wall minus the code_scanning rule"
+  else bad "--print-ruleset --without-code-scanning for $arch is not the wall minus one rule"; fi
+  if "$root/scripts/check-ruleset.sh" "$work/$arch-noscan.json" $extra >/dev/null 2>&1
+  then bad "check-ruleset.sh passes a ruleset without code_scanning as the public wall ($arch)"
+  else ok "check-ruleset.sh without the flag refuses a ruleset that lost code_scanning ($arch)"; fi
+  if "$root/scripts/check-ruleset.sh" --without-code-scanning "$work/$arch-ruleset.json" $extra >/dev/null 2>&1
+  then bad "check-ruleset.sh --without-code-scanning passes a ruleset that carries the rule ($arch)"
+  else ok "check-ruleset.sh --without-code-scanning refuses a ruleset that carries the rule ($arch)"; fi
+done
+if python3 "$checker" --without-code-scanning --root "$work" --no-network >/dev/null 2>&1
+then bad "--without-code-scanning was accepted outside --print-ruleset"
+else ok "--without-code-scanning is refused outside --print-ruleset"; fi
 plant "a buildx build in the image job is a build" "sed -i.bak 's/docker build/docker buildx build/' .github/workflows/ci.yml" "__none__" || true
 plant "docker words outside the image job do not count" "printf 'jobs:\n  ci:\n    uses: x\n  image:\n    steps:\n      - run: echo\n  other:\n    steps:\n      - run: docker build . \&\& docker run t\n' > .github/workflows/ci.yml" "no \`image\` job"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
