@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-04
+
+The third-party review, harder to skip and plainer about its limits.
+`pass-release-pull-requests` used to pass any pull request on its title alone,
+and an author chooses the title; a release pull request now passes only when
+its diff is the one `scripts/make-release.sh` writes. When the review times
+out, the log names a used-up usage limit as a possible cause, and the how-to
+says that Codex is the only reviewer verified end to end and what to do when
+the reviewer does not come. No check name, job, input or secret changes; a
+caller with the release option on whose release pull requests differ from
+plinth's is summoned on them.
+
+tested with plinth-template v1.7.0
+
 ### Changed
 
 - When `third-party / review` times out, its log names a used-up usage limit
@@ -1999,7 +2013,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/coolbress/plinth/releases/tag/v1.7.1
 [1.7.0]: https://github.com/coolbress/plinth/releases/tag/v1.7.0
 [1.6.0]: https://github.com/coolbress/plinth/releases/tag/v1.6.0
 [1.5.0]: https://github.com/coolbress/plinth/releases/tag/v1.5.0
