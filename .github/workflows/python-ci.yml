@@ -326,9 +326,13 @@ jobs:
       # GitHub Code Security; without it the comparison the action asks for is
       # a bare 403 `{"message":"Forbidden"}` (recorded 2026-10-04 on a Pro
       # account, tests/fixtures/dependency-review-403-private.json), and the
-      # action fails every pull request (#395). That answer, on a private
-      # repository, is reported as not checked; any other answer, an error or
-      # a public repository runs the review as before, so it still fails.
+      # action fails every pull request (#395). A disabled dependency graph
+      # answers the same 403 (actions/dependency-review-action#164), and then
+      # nothing else watches the dependencies either; so the graph is asked
+      # too, through its SBOM export, which answered 200 on the same
+      # repository. Both, on a private repository, are reported as not
+      # checked; any other answer, an error or a public repository runs the
+      # review as before, so it still fails.
       - name: Is dependency review served on this repository?
         id: served
         if: github.event_name == 'pull_request'
@@ -346,9 +350,21 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
             "$API/repos/$REPO/dependency-graph/compare/$BASE...$HEAD" 2>/dev/null)" || code=000
           message="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("message",""))' "$body" 2>/dev/null || true)"
+          graph=no
           if [ "$PRIVATE" = "true" ] && [ "$code" = 403 ] && [ "$message" = "Forbidden" ]; then
+            sbom="$RUNNER_TEMP/dependency-sbom.json"
+            sbom_code="$(curl -sS -o "$sbom" -w '%{http_code}' \
+              -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$API/repos/$REPO/dependency-graph/sbom" 2>/dev/null)" || sbom_code=000
+            if [ "$sbom_code" = 200 ] && python3 -c 'import json,sys; sys.exit(0 if isinstance(json.load(open(sys.argv[1])).get("sbom"), dict) else 1)' "$sbom" 2>/dev/null; then
+              graph=yes
+            else
+              echo "dependency review: 403 Forbidden, and the dependency graph did not answer (HTTP $sbom_code): is it enabled in Settings? Running the review."
+            fi
+          fi
+          if [ "$graph" = yes ]; then
             echo "review=refused" >> "$GITHUB_OUTPUT"
-            echo "GitHub refuses dependency review on this private repository (HTTP 403 Forbidden): it needs GitHub Code Security."
+            echo "GitHub refuses dependency review on this private repository (HTTP 403 Forbidden) while its dependency graph answers: it needs GitHub Code Security."
           else
             echo "review=run" >> "$GITHUB_OUTPUT"
             echo "dependency review: GitHub answered HTTP $code; running it."

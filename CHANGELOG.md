@@ -17,9 +17,10 @@ pull requests and have no tag.
   without GitHub Code Security. GitHub refuses dependency review there with a
   bare 403, and the action failed on it, so a private repository
   `/plinth:new-project` created on GitHub Pro could merge nothing. Where a
-  private repository gets that answer, the job now passes with a warning and a
-  summary saying nothing was checked, and why; any other answer runs the
-  review as before. The door names the gap beside code scanning, in its
+  private repository gets that answer while its dependency graph answers, the
+  job now passes with a warning and a summary saying nothing was checked, and
+  why; a disabled graph gives the same 403 and still fails, as does any other
+  answer. The door names the gap beside code scanning, in its
   summary, the README's First day section and the first pull request (#395).
 
 ## [1.7.1] - 2026-10-04
