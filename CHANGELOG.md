@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-04
+
+Acceptance criteria tied to evidence. A repository `/plinth:new-project`
+creates now renders plinth-template v1.7.0: its task form introduces the
+acceptance criteria as a "Done means" checklist, ticked when the issue closes,
+and its pull request template and `AGENTS.md` ask a pull request to name, for
+each criterion it meets, the test that checks it or why none does. A required
+check can show that the existing tests pass, not that the work did what was
+asked; this asks for the second in writing. No check enforces it, and no check
+name changes. Also: an interrupted `tests/install-smoke.sh` stops what it
+started, and this repository's agent rules ask whoever closes an issue to tick
+the criteria that were met and to say whether a stated judgement held.
+
+tested with plinth-template v1.7.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.7.0. A repository it creates
@@ -1963,7 +1978,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/coolbress/plinth/releases/tag/v1.7.0
 [1.6.0]: https://github.com/coolbress/plinth/releases/tag/v1.6.0
 [1.5.0]: https://github.com/coolbress/plinth/releases/tag/v1.5.0
 [1.4.0]: https://github.com/coolbress/plinth/releases/tag/v1.4.0
