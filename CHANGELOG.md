@@ -13,6 +13,10 @@ pull requests and have no tag.
 
 ### Changed
 
+- The third-party reviewer how-to says Codex is the only reviewer verified end
+  to end: another reviewer counts when it leaves a review on the current
+  commit, and one that reports a clean review only as a comment, in a shape
+  other than Codex's, fails after the wait (#387).
 - `pass-release-pull-requests` passes a pull request titled
   `chore(release): vX.Y.Z` only when its diff is the one plinth's
   `scripts/make-release.sh` run 1 writes: exactly `.claude-plugin/plugin.json`,
