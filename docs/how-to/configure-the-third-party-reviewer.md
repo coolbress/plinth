@@ -362,11 +362,14 @@ comment was already there.
 
 Where `third-party / review` is required, a pull request with no accepted
 review on its head does not merge, from the web interface or from `gh pr
-merge` alike. The check asks twice and the re-run picks up a late verdict, so
-most gaps close on their own; when one does not:
+merge` alike. Two things close most gaps on their own, and neither is there
+by default: the summons needs a `summons-token`, and the re-run of a late
+verdict is `review-rerun.yml`, which plinth runs on its own repository only.
+Without them, or when they do not help:
 
 1. Read the check's log: it says whether the summons was posted and why not.
-2. Comment the summons yourself, from the repository owner's account.
+2. Comment the summons yourself, from the repository owner's account. When
+   the verdict arrives only as a comment, re-run the check from its page.
 3. If the reviewer stays silent (an outage, or its usage limit), the pull
    request waits. An admin can take `third-party / review` out of the ruleset
    in Settings and add it back afterwards with `scripts/upgrade-ruleset.sh`;
