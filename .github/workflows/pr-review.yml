@@ -42,7 +42,7 @@ name: pr-review
 #   no   a review on a draft or on a pull request Dependabot opened and only
 #        Dependabot pushed to, nor,
 #        when the caller sets `pass-release-pull-requests`, on one titled
-#        `chore(release): vX.Y.Z`: on those the second step passes without a
+#        `chore(release): vX.Y.Z` whose diff is a release's (#384): on those the second step passes without a
 #        summons and without looking for a review, and its log says which
 #        (#167). The first step, on the instructions, still runs on them. A
 #        pull request opened by any other bot, a coding agent included, is
@@ -127,9 +127,12 @@ on:
         description: |
           Off by default. When true, a pull request titled exactly
           `chore(release): vX.Y.Z` passes without a summons and without a
-          review. A title is chosen by the pull request's author, so turning
-          this on lets anyone skip the review by choosing that title; do not
-          turn it on where this check is required.
+          review, but only when its diff is the one plinth's
+          `scripts/make-release.sh` run 1 writes: `.claude-plugin/plugin.json`,
+          `.claude-plugin/marketplace.json` and `CHANGELOG.md`, the manifests
+          changing only their `"version"` to the title's, CHANGELOG.md only
+          adding lines (#384). Any other diff under that title is summoned.
+          The release note's own text is not reviewed.
         type: boolean
         default: false
       poll-seconds:
@@ -320,7 +323,13 @@ jobs:
           # Pass without summoning, or go on? scripts/pr-review/gate.sh prints the
           # reason when the check passes here and nothing when the reviewer is to
           # be looked for.
-          why="$(ACTIVITY_JSON="$RUNNER_TEMP/activity.json" bash "$PR_REVIEW/gate.sh")"
+          # The changed files, for a release title only (#384). A failed call
+          # leaves `null`, which the gate reads as "not a release's diff".
+          if [ "${PASS_RELEASE:-}" = "true" ]; then
+            gh api --method GET "repos/$REPO/pulls/$NUMBER/files" -F per_page=100 \
+              > "$RUNNER_TEMP/files.json" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/files.json"
+          fi
+          why="$(ACTIVITY_JSON="$RUNNER_TEMP/activity.json" FILES_JSON="$RUNNER_TEMP/files.json" bash "$PR_REVIEW/gate.sh")"
           if [ -n "$why" ]; then
             echo "$why"
             exit 0

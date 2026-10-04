@@ -98,8 +98,49 @@ gate ''     'a full page of pushes is summoned: more may follow'  "$D" ACTIVITY_
 gate ''     'a short head sha is summoned'                        "$D" HEAD_SHA=0253f94
 gate ''     'no head sha is summoned'                             "$D" HEAD_SHA=
 
+# A release title passes only with the diff make-release.sh run 1 writes
+# (#384): the title is the author's choice, the diff is checked. The fixture is
+# the files list of the real v1.7.0 release commit (b6f425a), as
+# `pulls/:n/files` gives it. The cases that must NOT pass come first.
+real="$root/tests/fixtures/release-v1.7.0-files.json"
+mutate() {  # <out> <python expression over `files`, a list it may change>
+  python3 - "$real" "$1" "$2" <<'PY'
+import json, sys
+files = json.load(open(sys.argv[1]))
+exec(sys.argv[3])
+json.dump(files, open(sys.argv[2], "w"))
+PY
+}
+mutate "$tmp/f-extra.json"   'files.append({"filename": "scripts/new-project.sh", "status": "modified", "patch": "@@ -1 +1 @@\n-a\n+b"})'
+mutate "$tmp/f-missing.json" 'files[:] = [f for f in files if f["filename"] != "CHANGELOG.md"]'
+mutate "$tmp/f-pin.json"     'm = files[0]; m["patch"] += "\n-      \"sha\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n+      \"sha\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\""'
+mutate "$tmp/f-otherver.json" 'f = files[1]; f["patch"] = f["patch"].replace("+  \"version\": \"1.7.0\"", "+  \"version\": \"1.8.0\"")'
+mutate "$tmp/f-cldel.json"   'c = files[2]; c["patch"] += "\n-## [0.1.0] - 2026-09-01"'
+mutate "$tmp/f-nopatch.json" 'files[2].pop("patch")'
+mutate "$tmp/f-renamed.json" 'files[1]["status"] = "renamed"'
+python3 -c 'import json,sys; json.dump([{"filename": "x%d" % i, "status": "added", "patch": "+x"} for i in range(100)], open(sys.argv[1], "w"))' "$tmp/f-fullpage.json"
+R='TITLE=chore(release): v1.7.0'
+gate ''     'a release title with a file beyond the three is summoned'         PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-extra.json"
+gate ''     'a release title without CHANGELOG.md is summoned'                 PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-missing.json"
+gate ''     "a release title that also moves a marketplace entry's pin is summoned" PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-pin.json"
+gate ''     'a release title whose manifest version differs from the title is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-otherver.json"
+gate ''     'a release title that removes a CHANGELOG line is summoned'        PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-cldel.json"
+gate ''     'a release title with a file GitHub gave no patch for is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-nopatch.json"
+gate ''     'a release title with a renamed manifest is summoned'              PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-renamed.json"
+gate ''     'a release title with a full page of files is summoned'            PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fullpage.json"
+gate ''     'a release title with an unreadable files list is summoned'        PASS_RELEASE=true "$R" FILES_JSON="$tmp/broken.json"
+gate ''     'a release title with no files list is summoned'                   PASS_RELEASE=true "$R" FILES_JSON=
+gate ''     'a release title with the list of another version is summoned'     PASS_RELEASE=true 'TITLE=chore(release): v1.6.1' FILES_JSON="$real"
+gate "$REL" 'the real v1.7.0 release diff passes under its title'              PASS_RELEASE=true "$R" FILES_JSON="$real"
+if out="$(env -i PATH="$PATH" DRAFT=false MERGED=false PR_STATE=open PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-extra.json" \
+            ACTIVITY_JSON="$tmp/dependabot.json" HEAD_SHA="$HEAD" AUTHOR_LOGIN=coolbress bash "$gate_sh" 2>&1 >/dev/null)" \
+   && printf '%s' "$out" | grep -q 'scripts/new-project.sh'; then
+  echo "  PASS  the log names why a release title was summoned"
+else
+  echo "  FAIL  the log does not name why a release title was summoned: '$out'" >&2; fails=$((fails+1))
+fi
+
 # The title scripts/make-release.sh writes, and two that only resemble it.
-gate "$REL" 'chore(release): v0.5.12 passes where the caller turned it on' PASS_RELEASE=true 'TITLE=chore(release): v0.5.12'
 gate ''     'the same title is summoned where the caller did not'          'TITLE=chore(release): v0.5.12'
 gate ''     'the same title is summoned when the input is anything but true' PASS_RELEASE=yes 'TITLE=chore(release): v0.5.12'
 gate ''     'chore(release-notes): … is summoned'       PASS_RELEASE=true 'TITLE=chore(release-notes): v0.5.12 wording'

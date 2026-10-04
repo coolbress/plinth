@@ -172,6 +172,7 @@ case "$*" in
   */activity*)   # only the pushes made by the clock's time: a log that changes during the run
     awk -v c="$(cat "$MOCK/clock")" 'BEGIN { printf "[" } $1 <= c { sub(/^[0-9]+ /, ""); printf "%s%s", (n++ ? "," : ""), $0 } END { print "]" }' "$MOCK/pushes" ;;
   */issues/7/comments*) cat "$MOCK/icomments.json" ;;
+  */pulls/7/files*) echo "$*" > "$MOCK/files-call"; cat "$MOCK/files.json" 2>/dev/null || exit 1 ;;
   *) echo '[]' ;;
 esac
 SH
@@ -244,6 +245,32 @@ if ! grep -qF "$REPLACED ($B): not asking" "$tmp/out" \
    || ! grep -qF "nothing from an accepted reviewer since the push (2026-09-18T10:20:15Z): asking (1/2)" "$tmp/out"; then
   echo "  FAIL  the log does not say replaced at 1/3 and asking at 2/3" >&2; fails=$((fails + 1))
 fi
+
+# A release title, through the whole step (#384): the step reads the changed
+# files and hands them to the gate. The real v1.7.0 release diff passes at
+# once; a forged title over another diff, or a files call that fails, goes on
+# to the wait and the summons.
+release_step() {  # name, files fixture ("" = the call fails), expected exit, expected log line
+  rm -rf "$tmp/m"; mkdir -p "$tmp/m"
+  echo "$T0" > "$tmp/m/clock"; printf '%s %s\n' "$T0" "$(push "$HEAD" "$(stamp "$T0")")" > "$tmp/m/pushes"
+  printf '[]' > "$tmp/m/icomments.json"
+  [ -n "$2" ] && cp "$2" "$tmp/m/files.json"
+  PATH="$tmp/bin:$PATH" MOCK="$tmp/m" RUNNER_TEMP="$tmp/rt" REPO=o/r NUMBER=7 HEAD_SHA="$HEAD" HEAD_REF=b \
+    AUTHOR_LOGIN=coolbress TITLE='chore(release): v1.7.0' PASS_RELEASE=true LOGINS="$BOT" ASK="@codex review" \
+    SUMMONS_TOKEN=tok OWNER=coolbress WAIT=30 POLL=10 bash "$tmp/step.sh" >"$tmp/out" 2>&1
+  got=$?
+  if [ "$got" -eq "$3" ] && grep -qF "$4" "$tmp/out" && grep -q -- '--method GET' "$tmp/m/files-call" 2>/dev/null; then
+    echo "  PASS  $1"
+  else
+    echo "  FAIL  $1: exit $got (wanted $3), log lacks '$4' or the files call was not a GET" >&2
+    sed 's/^/        /' "$tmp/out" | head -20 >&2; fails=$((fails + 1))
+  fi
+}
+echo "-- a release title through the whole step (#384)"
+python3 -c 'import json,sys; json.dump([{"filename":"scripts/x.sh","status":"modified","patch":"@@ -1 +1 @@\n-a\n+b"}], open(sys.argv[1],"w"))' "$tmp/forged.json"
+release_step "the real release diff passes without a summons" "$root/tests/fixtures/release-v1.7.0-files.json" 0 "release pull request: not summoned"
+release_step "a forged release title waits and summons"       "$tmp/forged.json" 1 "release title, but not a release's diff"
+release_step "a files call that fails waits and summons"      ""                 1 "the changed files could not be read"
 
 echo "-- the workflow itself: read permission only, and the post goes out with the token"
 if grep -q 'pull-requests: write' "$wf"; then
