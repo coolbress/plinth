@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-10-05
+
+Private repositories without GitHub Code Security can merge again. On such a
+repository GitHub refuses dependency review with a bare 403, and `ci / deps`
+failed every pull request on it, so a private repository created on GitHub Pro
+could merge nothing; a recorded run on a Pro account found it. `ci / deps` now
+passes there with a warning that nothing was checked, but only on a private
+repository that is not a fork and whose dependency graph still accepts an
+SBOM report request; any other answer runs the review and fails as before.
+`/plinth:new-project` names the gap beside code scanning. plinth-template pins
+this release next, so repositories it creates pick the fix up.
+
+tested with plinth-template v1.7.0
+
 ### Fixed
 
 - `ci / deps` no longer fails every pull request on a private repository
@@ -2025,7 +2039,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/coolbress/plinth/releases/tag/v1.7.2
 [1.7.1]: https://github.com/coolbress/plinth/releases/tag/v1.7.1
 [1.7.0]: https://github.com/coolbress/plinth/releases/tag/v1.7.0
 [1.6.0]: https://github.com/coolbress/plinth/releases/tag/v1.6.0
