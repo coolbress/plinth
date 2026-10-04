@@ -122,6 +122,9 @@ jobs:
       - name: Security settings are read back after the write
         run: ./tests/security-setting.sh
 
+      - name: ci / deps says not checked only where GitHub refuses dependency review on a private repository
+        run: ./tests/deps-served-cases.sh
+
       - name: Third-party review check blocks on presence, never on the verdict
         run: ./tests/pr-review-attest.sh
 
