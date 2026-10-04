@@ -51,10 +51,10 @@ mkdir -p "$work/bin"
 cat > "$work/bin/curl" <<'SH'
 #!/bin/sh
 # -o <file> -w '%{http_code}': write the body, print the code. The comparison
-# answers from STUB_CODE/STUB_BODY, the SBOM export from SBOM_CODE/SBOM_BODY;
+# answers from STUB_CODE/STUB_BODY, the SBOM report request from SBOM_CODE/SBOM_BODY;
 # a code of "fail" exits 7, as curl does with no answer.
 out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; http*) url="$1" ;; esac; shift; done
-case "$url" in */sbom) code="$SBOM_CODE"; body="$SBOM_BODY" ;; *) code="$STUB_CODE"; body="$STUB_BODY" ;; esac
+case "$url" in */sbom/generate-report) code="$SBOM_CODE"; body="$SBOM_BODY" ;; *) code="$STUB_CODE"; body="$STUB_BODY" ;; esac
 [ "$code" = fail ] && exit 7
 cp "$body" "$out"; printf '%s' "$code"
 SH
@@ -65,14 +65,15 @@ printf '%s' '{"message":"Resource not accessible by integration","status":"403"}
 printf '%s' '[]' > "$work/empty-diff.json"
 printf '%s' '' > "$work/nobody.json"
 printf '%s' '{"message":"Server Error"}' > "$work/500.json"
-printf '%s' '{"sbom":{"name":"com.github.o/r","packages":[]}}' > "$work/sbom.json"
+# The answer recorded on the probe repository, 2026-10-05.
+printf '%s' '{"sbom_url":"https://api.github.com/repos/o/r/dependency-graph/sbom/fetch-report/07fd6b0a-58ee-47a4-80c6-35564ff07211"}' > "$work/sbom.json"
 printf '%s' '{"message":"Not Found"}' > "$work/notfound.json"
 
-served() {  # <want: refused|run> <name> <private> <code> <body> [<sbom code> <sbom body>]
+served() {  # <want: refused|run> <name> <private> <code> <body> [<sbom code> <sbom body>]; FORK from the environment, default false
   local out="$work/out" log="$work/log"; : > "$out"
   PATH="$work/bin:$PATH" GITHUB_OUTPUT="$out" RUNNER_TEMP="$work" GH_TOKEN=t REPO=o/r BASE=b HEAD=h \
-    PRIVATE="$3" API=https://api.github.com STUB_CODE="$4" STUB_BODY="$5" \
-    SBOM_CODE="${6:-200}" SBOM_BODY="${7:-$work/sbom.json}" bash "$work/step.sh" >"$log" 2>&1
+    PRIVATE="$3" FORK="${FORK-false}" API=https://api.github.com STUB_CODE="$4" STUB_BODY="$5" \
+    SBOM_CODE="${6:-201}" SBOM_BODY="${7:-$work/sbom.json}" bash "$work/step.sh" >"$log" 2>&1
   local rc=$? got; got="$(sed -n 's/^review=//p' "$out")"
   if [ "$rc" -eq 0 ] && [ "$got" = "$1" ]; then ok "$2"; else bad "$2: exit $rc, review='$got', wanted '$1'"; sed 's/^/        /' "$log" >&2; fi
 }
@@ -86,11 +87,16 @@ served run     'a private repository answered 404 Forbidden-shaped runs it'     
 served run     'curl failing (no answer) runs it'                                   true  fail "$real"
 served run     'a private repository with the review served (200) runs it'          true  200 "$work/empty-diff.json"
 served run     'an unset private flag runs it'                                      ""    403 "$real"
+# GitHub answers a fork's comparison 403 as well (its REST docs): a fork runs
+# the review, private or not, and an unset flag is not "false".
+FORK=true served run 'a private fork answered the recorded 403, its graph answering, runs it' true 403 "$real"
+FORK='' served run 'an unset fork flag runs it'                                       true 403 "$real"
 # The graph is asked too: a disabled graph answers the same 403 (#395 review).
 served run     'the recorded 403 with the graph answering 404 runs it'              true  403 "$real" 404 "$work/notfound.json"
 served run     'the recorded 403 with the graph answering 403 runs it'              true  403 "$real" 403 "$real"
 served run     'the recorded 403 with the graph not answering runs it'              true  403 "$real" fail "$work/sbom.json"
-served run     'the recorded 403 with a graph 200 that is not an SBOM runs it'      true  403 "$real" 200 "$work/notfound.json"
+served run     'the recorded 403 with a 201 that carries no sbom_url runs it'       true  403 "$real" 201 "$work/notfound.json"
+served run     'the recorded 403 with the old export answer (200) runs it'         true  403 "$real" 200 "$work/sbom.json"
 served refused 'the recorded answer on a private repository, the graph answering, is refused' true 403 "$real"
 
 # The two steps around it are gated on the output, and the job is never skipped.

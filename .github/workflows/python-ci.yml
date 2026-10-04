@@ -329,9 +329,11 @@ jobs:
       # action fails every pull request (#395). A disabled dependency graph
       # answers the same 403 (actions/dependency-review-action#164), and then
       # nothing else watches the dependencies either; so the graph is asked
-      # too, through its SBOM export, which answered 200 on the same
-      # repository. Both, on a private repository, are reported as not
-      # checked; any other answer, an error or a public repository runs the
+      # too: it accepts an SBOM report request (`sbom/generate-report`, 201
+      # with an `sbom_url` on the same repository; the synchronous export
+      # closes on 2026-11-13). A fork's comparison is answered 403 as well
+      # (GitHub's REST docs), so a fork is never refused. Both answers, on a
+      # private repository that is not a fork, are reported as not checked; any other answer, an error or a public repository runs the
       # review as before, so it still fails.
       - name: Is dependency review served on this repository?
         id: served
@@ -342,6 +344,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           PRIVATE: ${{ github.event.repository.private }}
+          FORK: ${{ github.event.repository.fork }}   # the comparison answers a fork 403 too
           API: ${{ github.api_url }}
         run: |
           set -uo pipefail
@@ -351,12 +354,12 @@ jobs:
             "$API/repos/$REPO/dependency-graph/compare/$BASE...$HEAD" 2>/dev/null)" || code=000
           message="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("message",""))' "$body" 2>/dev/null || true)"
           graph=no
-          if [ "$PRIVATE" = "true" ] && [ "$code" = 403 ] && [ "$message" = "Forbidden" ]; then
+          if [ "$PRIVATE" = "true" ] && [ "$FORK" = "false" ] && [ "$code" = 403 ] && [ "$message" = "Forbidden" ]; then
             sbom="$RUNNER_TEMP/dependency-sbom.json"
             sbom_code="$(curl -sS -o "$sbom" -w '%{http_code}' \
               -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "$API/repos/$REPO/dependency-graph/sbom" 2>/dev/null)" || sbom_code=000
-            if [ "$sbom_code" = 200 ] && python3 -c 'import json,sys; sys.exit(0 if isinstance(json.load(open(sys.argv[1])).get("sbom"), dict) else 1)' "$sbom" 2>/dev/null; then
+              "$API/repos/$REPO/dependency-graph/sbom/generate-report" 2>/dev/null)" || sbom_code=000
+            if [ "$sbom_code" = 201 ] && python3 -c 'import json,sys; sys.exit(0 if str(json.load(open(sys.argv[1])).get("sbom_url","")).startswith("http") else 1)' "$sbom" 2>/dev/null; then
               graph=yes
             else
               echo "dependency review: 403 Forbidden, and the dependency graph did not answer (HTTP $sbom_code): is it enabled in Settings? Running the review."
