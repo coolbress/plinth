@@ -480,10 +480,15 @@ if [ "$private" = 1 ]; then
   turn_on="On Team or Enterprise it can be turned on in the repository's Settings → Advanced Security, and may be billed."
   in_place_scan="In its place: ci / lint's security rules."
   in_place_push="In its place: ci / secrets, which finds a secret after the push, when it has to be revoked."
+  # Dependency review needs Code Security on a private repository too: GitHub
+  # refuses it there, and `ci / deps` reports that as not checked (#395).
+  in_place_deps="In its place: Dependabot alerts, after the merge."
   case "${code_security:-}" in
     enabled)  ;;
-    disabled) scan=off;    gaps="${gaps}Not raised: code scanning. GitHub Code Security is not enabled on $repo (a paid product for Team and Enterprise), so CodeQL is not set up and the ruleset has no code_scanning rule. $turn_on $in_place_scan"$'\n' ;;
-    *)        scan=unread; gaps="${gaps}Not verified: code scanning. GitHub gave no status for GitHub Code Security on $repo, so CodeQL is not set up and the code_scanning rule is left out. $in_place_scan"$'\n' ;;
+    disabled) scan=off;    gaps="${gaps}Not raised: code scanning. GitHub Code Security is not enabled on $repo (a paid product for Team and Enterprise), so CodeQL is not set up and the ruleset has no code_scanning rule. $turn_on $in_place_scan"$'\n'
+              gaps="${gaps}Not raised: dependency review. Without GitHub Code Security, GitHub refuses it on a private repository, so ci / deps reports each pull request's dependencies as not checked. $turn_on $in_place_deps"$'\n' ;;
+    *)        scan=unread; gaps="${gaps}Not verified: code scanning. GitHub gave no status for GitHub Code Security on $repo, so CodeQL is not set up and the code_scanning rule is left out. $in_place_scan"$'\n'
+              gaps="${gaps}Not verified: dependency review. Without GitHub Code Security, GitHub refuses it on a private repository; where it does, ci / deps reports each pull request's dependencies as not checked. $in_place_deps"$'\n' ;;
   esac
   case "${secret_protection:-}" in
     enabled)  ;;

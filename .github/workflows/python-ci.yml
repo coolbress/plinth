@@ -309,7 +309,9 @@ jobs:
 
   # A wall, not a net. Dependabot reports what already got in; this job
   # blocks what a PR is bringing in. The dependency graph must be enabled
-  # (it is by default on public repositories).
+  # (it is by default on public repositories). On a private repository
+  # without GitHub Code Security GitHub refuses the review, and the job says
+  # it checked nothing (#395).
   deps:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -320,8 +322,40 @@ jobs:
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
 
-      - name: Dependency review, blocks vulnerable versions a PR introduces
+      # On a private repository GitHub serves dependency review only with
+      # GitHub Code Security; without it the comparison the action asks for is
+      # a bare 403 `{"message":"Forbidden"}` (recorded 2026-10-04 on a Pro
+      # account, tests/fixtures/dependency-review-403-private.json), and the
+      # action fails every pull request (#395). That answer, on a private
+      # repository, is reported as not checked; any other answer, an error or
+      # a public repository runs the review as before, so it still fails.
+      - name: Is dependency review served on this repository?
+        id: served
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PRIVATE: ${{ github.event.repository.private }}
+          API: ${{ github.api_url }}
+        run: |
+          set -uo pipefail
+          body="$RUNNER_TEMP/dependency-compare.json"
+          code="$(curl -sS -o "$body" -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$API/repos/$REPO/dependency-graph/compare/$BASE...$HEAD" 2>/dev/null)" || code=000
+          message="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("message",""))' "$body" 2>/dev/null || true)"
+          if [ "$PRIVATE" = "true" ] && [ "$code" = 403 ] && [ "$message" = "Forbidden" ]; then
+            echo "review=refused" >> "$GITHUB_OUTPUT"
+            echo "GitHub refuses dependency review on this private repository (HTTP 403 Forbidden): it needs GitHub Code Security."
+          else
+            echo "review=run" >> "$GITHUB_OUTPUT"
+            echo "dependency review: GitHub answered HTTP $code; running it."
+          fi
+
+      - name: Dependency review, blocks vulnerable versions a PR introduces
+        if: github.event_name == 'pull_request' && steps.served.outputs.review != 'refused'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: ${{ inputs.deps-fail-on-severity }}
@@ -329,6 +363,16 @@ jobs:
           # No `deny-licenses` here: outbound licences differ per project and a
           # wrong list blocks legitimate dependencies. A project sets it in its
           # own call if it needs one.
+
+      - name: Dependency review refused here, nothing checked
+        if: github.event_name == 'pull_request' && steps.served.outputs.review == 'refused'
+        run: |
+          echo "::warning::Not checked: GitHub refuses dependency review on this private repository without GitHub Code Security, so no dependency this pull request adds was compared with the advisory database. In its place: Dependabot alerts, after the merge."
+          {
+            echo "### Dependency review: not checked"
+            echo "GitHub refuses dependency review on this private repository without GitHub Code Security (HTTP 403)."
+            echo "No dependency this pull request adds was compared with the advisory database. In its place: Dependabot alerts, after the merge."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Not a PR: report a pass instead of skipping the job (see pr-title).
       - name: Not a pull request, no diff to review

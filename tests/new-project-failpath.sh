@@ -813,6 +813,8 @@ hasnt $c "nothing about CodeQL is promised or warned"        out 'warning: CodeQ
 hasnt $c "secret scanning and push protection are not turned on" log 'security_and_analysis\[secret_scanning'
 has   $c "Dependabot, the Actions allowlist and the merge settings are set as for a public repository" log 'allow_merge_commit=false'
 has   $c "the summary names the code scanning gap, its reason and what stands in its place" out "^  not raised: code scanning\. GitHub Code Security is not enabled on tester/probe.*ci / lint's security rules"
+has   $c "the summary names the dependency review gap, what ci / deps does and what stands in its place (#395)" out "^  not raised: dependency review\\..*ci / deps reports.*not checked.*Dependabot alerts"
+has   $c "README's First day names the dependency review gap" readme '^- Not raised: dependency review\.'
 has   $c "the summary names the push protection gap, its reason and what stands in its place" out '^  not raised: push protection\. GitHub Secret Protection is not enabled on tester/probe.*ci / secrets.*after the push.*revoked'
 # Disabled is off, not unobtainable: both lines say where a person can turn
 # the product on and that it may be billed; the door itself turns nothing on.
@@ -842,6 +844,7 @@ else bad $c "the ruleset posted is not ruleset.json"; fi
 has   $c "push protection is turned on"                      log 'security_and_analysis\[secret_scanning_push_protection\]\[status\]=enabled'
 has   $c "CodeQL default setup is enabled with the languages" log 'default-setup -f state=configured -f query_suite=default -f languages\[\]=actions -f languages\[\]=python'
 has   $c "CodeQL is waited for, as on a public repository"   out '^CodeQL default setup: enabled'
+hasnt $c "with Code Security, no dependency review gap is named (#395)" out 'dependency review'
 hasnt $c "no gap is named, and nothing is offered to turn on" out 'not raised|not verified: (code scanning|push protection)|can be turned on'
 has   $c "the Actions minutes line is still said"            out "^  private: CI runs on the plan's Actions minutes\$"
 has   $c "README says the repository is private and where CI's minutes come from" readme "^- This repository is private: CI runs on the plan's Actions minutes\.\$"
@@ -884,6 +887,7 @@ for how in failed:FAIL_AT=security-read no-key:MOCK_SECURITY=unread,unread empty
   hasnt "$c" "an unread setting is not reported as a missing product" out 'not raised'
   hasnt "$c" "nothing is turned on from an unread setting"   log 'security_and_analysis\[secret_scanning|code-scanning'
   has   "$c" "README says not verified too"                  readme '^- Not verified: code scanning\.'
+  has   "$c" "dependency review is named not verified too (#395)" out '^  not verified: dependency review\..*ci / deps reports'
   hasnt "$c" "a setting with no status is not said to be something to turn on" out 'can be turned on'
 done
 # A plan the token does not read: said before anything exists, and the door
