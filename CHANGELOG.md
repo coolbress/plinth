@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.7.0. A repository it creates
+  ties each acceptance criterion to its evidence: the task form introduces the
+  criteria as a "Done means" checklist, ticked when the issue closes; the pull
+  request template asks the description to name, for each criterion it meets,
+  the test that checks it or why none does; and its `AGENTS.md` says both and
+  has a resume read an issue's unticked criteria. No check enforces it (#299).
+  `/plinth:floor-check` now reports a repository on v1.6.0 as one tag behind.
+
 ### Fixed
 
 - `tests/install-smoke.sh`, interrupted, stops what it started before it
