@@ -117,7 +117,8 @@ other.
   marketplace entry's pin or removes a changelog line is summoned, and the log
   says why; so is one whose file list cannot be read. What it does not cover
   is the release note's own text. It is off by default, and fits only a
-  repository released with plinth's script. This repository turns it on.
+  repository released with plinth's script. This repository turns it on, and
+  requires `third-party / review` on `main` (#385).
 
 On these the check is no evidence that anyone looked. If `third-party /
 review` is one of your required checks, such a pull request meets it with no
@@ -356,6 +357,25 @@ request, every head and every author. The pull request description then says
 what happened to each one: fixed, answered with the reason, or moved to an
 issue. On #180 the summary comment still read `running` when the inline
 comment was already there.
+
+## When the reviewer does not come
+
+Where `third-party / review` is required, a pull request with no accepted
+review on its head does not merge, from the web interface or from `gh pr
+merge` alike. Two things close most gaps on their own, and neither is there
+by default: the summons needs a `summons-token`, and the re-run of a late
+verdict is `review-rerun.yml`, which plinth runs on its own repository only.
+Without them, or when they do not help:
+
+1. Read the check's log: it says whether the summons was posted and why not.
+2. Comment the summons yourself, from the account connected to the reviewer
+   (on a repository a person owns, usually the owner's). When
+   the verdict arrives only as a comment, re-run the check from its page.
+3. If the reviewer stays silent (an outage, or its usage limit), the pull
+   request waits. An admin can take `third-party / review` out of the ruleset
+   in Settings and add it back afterwards with `scripts/upgrade-ruleset.sh`;
+   say so on the pull request. Never merge with `--admin`: it bypasses every
+   other rule as well.
 
 ## When to stop
 
