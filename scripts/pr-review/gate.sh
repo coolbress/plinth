@@ -68,7 +68,7 @@ esac
 # the title, so the title alone passed any pull request that took it;
 # the diff is checked too: exactly the two manifests and CHANGELOG.md,
 # modified; in each manifest its one `"version"` line replaced by the
-# title's version; in CHANGELOG.md lines added, the `[Unreleased]` link aside.
+# title's version, a higher one; in CHANGELOG.md lines added, the `[Unreleased]` link aside.
 # FILES_JSON is `pulls/:n/files`; one that is missing, unreadable, a full
 # page or lacks a patch counts as "not a release's diff". What this does
 # not cover: the release note's own text.
@@ -107,6 +107,10 @@ def why():
             if not all(ver.match(l) for l in lines) or len(added) != 1 \
                or len(removed) != 1 or f'"{version}"' not in added[0]:
                 return f"{name} does not replace its one version line with {version}"
+            # Forward only, as make-release.sh moves it.
+            num = lambda l: tuple(int(x) for x in re.findall(r"[0-9]+", l.split(":", 1)[1]))
+            if num(added[0]) <= num(removed[0]):
+                return f"{name} does not move its version forward to {version}"
         elif any(l.startswith("-") and not l.startswith("-[Unreleased]: ") for l in lines):
             return "CHANGELOG.md removes a line other than the [Unreleased] link"
     return ""

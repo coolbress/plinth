@@ -17,7 +17,7 @@ pull requests and have no tag.
   `chore(release): vX.Y.Z` only when its diff is the one plinth's
   `scripts/make-release.sh` run 1 writes: exactly `.claude-plugin/plugin.json`,
   `.claude-plugin/marketplace.json` and `CHANGELOG.md`, each manifest replacing
-  its one `"version"` line with the title's, `CHANGELOG.md` only adding lines. The
+  its one `"version"` line with the title's, a higher one, `CHANGELOG.md` only adding lines. The
   title alone used to pass, and an author chooses the title; any other diff
   under it is now summoned, with the reason in the log, and so is one whose
   file list cannot be read. A caller with the option on whose release pull
