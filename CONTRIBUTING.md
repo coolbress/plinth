@@ -149,8 +149,11 @@ release needs a green run on the commit it tags
 
    CI runs `ci / install`, `ci / tools`, `ci / docs` and `CodeQL`; the canary
    job runs the reusable workflow against `canary/`. `third-party / review`
-   waits for a review by the Codex reviewer once the pull request is ready; it
-   is optional and does not block the merge.
+   waits for a review by the Codex reviewer once the pull request is ready,
+   and it is required on `main`: a pull request without an accepted review on
+   its head does not merge, a draft, a Dependabot pull request and a release
+   pull request whose diff is a release's aside. When the review does not come, follow
+   [When the reviewer does not come](docs/how-to/configure-the-third-party-reviewer.md#when-the-reviewer-does-not-come).
 4. Before merging, read the title and the description against the final
    diff: what changed and why, what was verified and what was not, as of the
    last commit. A review fix that changed the scope or the approach changes

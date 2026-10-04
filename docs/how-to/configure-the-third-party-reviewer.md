@@ -360,9 +360,13 @@ comment was already there.
 
 ## When the reviewer does not come
 
-Where `third-party / review` is required, a pull request with no accepted
-review on its head does not merge, from the web interface or from `gh pr
-merge` alike. Two things close most gaps on their own, and neither is there
+Where `third-party / review` is required, a pull request the check does not
+exempt and with no accepted review on its head does not merge, from the web
+interface or from `gh pr merge` alike. The exemptions pass with no review:
+a draft, a pull request only Dependabot pushed to, and, where the caller turned
+it on, a release pull request whose diff is a release's
+([above](#pull-requests-it-passes-without-summoning)); none of this section
+applies to them. Two things close most gaps on their own, and neither is there
 by default: the summons needs a `summons-token`, and the re-run of a late
 verdict is `review-rerun.yml`, which plinth runs on its own repository only.
 Without them, or when they do not help:
