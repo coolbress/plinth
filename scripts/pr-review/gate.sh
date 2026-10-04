@@ -67,8 +67,8 @@ esac
 # it accepts, and the diff its run 1 writes (#384). The author chooses
 # the title, so the title alone passed any pull request that took it;
 # the diff is checked too: exactly the two manifests and CHANGELOG.md,
-# modified; in the manifests only a `"version"` line, set to the title's
-# version; in CHANGELOG.md lines added, the `[Unreleased]` link aside.
+# modified; in each manifest its one `"version"` line replaced by the
+# title's version; in CHANGELOG.md lines added, the `[Unreleased]` link aside.
 # FILES_JSON is `pulls/:n/files`; one that is missing, unreadable, a full
 # page or lacks a patch counts as "not a release's diff". What this does
 # not cover: the release note's own text.
@@ -100,10 +100,13 @@ def why():
             return f"{name} is not a plain modification with a patch"
         lines = [l for l in patch.split("\n") if l[:1] in "+-" and l]
         if name in manifests:
+            # One version line out, one in: an added line beside the old one
+            # would leave two `"version"` keys, read differently by parsers.
             added = [l for l in lines if l.startswith("+")]
+            removed = [l for l in lines if l.startswith("-")]
             if not all(ver.match(l) for l in lines) or len(added) != 1 \
-               or f'"{version}"' not in added[0]:
-                return f"{name} changes more than its version, or not to {version}"
+               or len(removed) != 1 or f'"{version}"' not in added[0]:
+                return f"{name} does not replace its one version line with {version}"
         elif any(l.startswith("-") and not l.startswith("-[Unreleased]: ") for l in lines):
             return "CHANGELOG.md removes a line other than the [Unreleased] link"
     return ""

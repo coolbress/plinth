@@ -130,7 +130,7 @@ on:
           review, but only when its diff is the one plinth's
           `scripts/make-release.sh` run 1 writes: `.claude-plugin/plugin.json`,
           `.claude-plugin/marketplace.json` and `CHANGELOG.md`, the manifests
-          changing only their `"version"` to the title's, CHANGELOG.md only
+          each replacing its one `"version"` line with the title's, CHANGELOG.md only
           adding lines (#384). Any other diff under that title is summoned.
           The release note's own text is not reviewed.
         type: boolean

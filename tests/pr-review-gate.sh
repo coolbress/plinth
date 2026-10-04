@@ -115,6 +115,7 @@ mutate "$tmp/f-extra.json"   'files.append({"filename": "scripts/new-project.sh"
 mutate "$tmp/f-missing.json" 'files[:] = [f for f in files if f["filename"] != "CHANGELOG.md"]'
 mutate "$tmp/f-pin.json"     'm = files[0]; m["patch"] += "\n-      \"sha\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n+      \"sha\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\""'
 mutate "$tmp/f-otherver.json" 'f = files[1]; f["patch"] = f["patch"].replace("+  \"version\": \"1.7.0\"", "+  \"version\": \"1.8.0\"")'
+mutate "$tmp/f-dupver.json"  'for f in files[:2]: f["patch"] = "@@ -2,3 +2,4 @@\n   \"name\": \"plinth\",\n+  \"version\": \"1.7.0\",\n   \"version\": \"1.6.0\","'
 mutate "$tmp/f-cldel.json"   'c = files[2]; c["patch"] += "\n-## [0.1.0] - 2026-09-01"'
 mutate "$tmp/f-nopatch.json" 'files[2].pop("patch")'
 mutate "$tmp/f-renamed.json" 'files[1]["status"] = "renamed"'
@@ -124,6 +125,7 @@ gate ''     'a release title with a file beyond the three is summoned'         P
 gate ''     'a release title without CHANGELOG.md is summoned'                 PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-missing.json"
 gate ''     "a release title that also moves a marketplace entry's pin is summoned" PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-pin.json"
 gate ''     'a release title whose manifest version differs from the title is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-otherver.json"
+gate ''     'a release title that adds a second version line beside the old one is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-dupver.json"
 gate ''     'a release title that removes a CHANGELOG line is summoned'        PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-cldel.json"
 gate ''     'a release title with a file GitHub gave no patch for is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-nopatch.json"
 gate ''     'a release title with a renamed manifest is summoned'              PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-renamed.json"

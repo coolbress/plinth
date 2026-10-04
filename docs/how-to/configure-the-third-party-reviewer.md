@@ -110,8 +110,8 @@ other.
   so the title is not enough (#384): the diff must also be the one that
   script's run 1 writes. The changed files are exactly
   `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and
-  `CHANGELOG.md`; the manifests change only their `"version"` line, to the
-  title's version; `CHANGELOG.md` only adds lines, the `[Unreleased]` link
+  `CHANGELOG.md`; each manifest replaces its one `"version"` line with the
+  title's version, so no second version line is added beside the old one; `CHANGELOG.md` only adds lines, the `[Unreleased]` link
   aside. A pull request under that title that also touches a script, moves a
   marketplace entry's pin or removes a changelog line is summoned, and the log
   says why; so is one whose file list cannot be read. What it does not cover
