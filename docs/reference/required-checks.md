@@ -49,4 +49,4 @@
 
 | Check | Asserts | A red means | The fix |
 | --- | --- | --- | --- |
-| `third-party / review` | An accepted reviewer reviewed the pull request's current commit; required only once added to the ruleset | No review arrived on the current commit within the wait | [Configure the third-party reviewer](../how-to/configure-the-third-party-reviewer.md) |
+| `third-party / review` | An accepted reviewer reviewed the pull request's current commit; required only once added to the ruleset, as plinth's own `main` has it | No review arrived on the current commit within the wait | [Configure the third-party reviewer](../how-to/configure-the-third-party-reviewer.md) |

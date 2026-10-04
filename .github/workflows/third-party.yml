@@ -3,8 +3,10 @@
 # `third-party / review`. It is evidence of participation, not a verdict and
 # not proof that the findings were handled; see the how-to for that.
 #
-# It is an optional check: not in this repository's required checks until it
-# has reported once and an admin adds it (scripts/upgrade-ruleset.sh).
+# This repository requires it on `main` (#385), added by an admin with
+# scripts/upgrade-ruleset.sh; for a consumer it stays optional until added.
+# When the reviewer does not come for longer than the wait, the pull request
+# waits; see the how-to's "When the reviewer does not come".
 #
 # Why its own file and not ci.yml: this check must also run on
 # `pull_request_review`, because the review arrives asynchronously and the
