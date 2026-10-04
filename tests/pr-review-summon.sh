@@ -222,6 +222,13 @@ echo "-- the whole step on a moved clock: when it asks"
 step "token, no reviewer: nothing at the start, then at 1/3 and 2/3"  tok ""  "10 20"
 grep -qF "nothing from an accepted reviewer since the first ask point (2026-09-18T10:20:10Z): asking (2/2)" "$tmp/out" \
   || { echo "  FAIL  the second ask's log does not say why" >&2; fails=$((fails + 1)); }
+# A used-up usage limit ends in the same silence: the red log names it as a
+# possible cause, without claiming it (#386).
+if grep -qF "usage limit" "$tmp/out" && grep -qF "possible" "$tmp/out"; then
+  echo "  PASS  the red log names a used-up usage limit as a possible cause"
+else
+  echo "  FAIL  the red log does not name a used-up usage limit as a possible cause" >&2; fails=$((fails + 1))
+fi
 step "token, reviewer started after the push: only the second ask"     tok "$AFTER" "20"
 grep -qF "reviewer active since the push (2026-09-18T10:20:00Z): $BOT, comment updated 2026-09-18T10:20:05Z: not asking" "$tmp/out" \
   || { echo "  FAIL  the first ask point's log does not say why it did not ask" >&2; fails=$((fails + 1)); }

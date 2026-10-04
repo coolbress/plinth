@@ -13,6 +13,11 @@ pull requests and have no tag.
 
 ### Changed
 
+- When `third-party / review` times out, its log names a used-up usage limit
+  on the reviewer's account as a possible cause: Codex cloud reviews share one
+  limit with interactive Codex use, and a used-up limit can end in silence.
+  The check still fails; no limit message from Codex is recognised, since none
+  has been captured (#386).
 - The third-party reviewer how-to says Codex is the only reviewer verified end
   to end: another reviewer counts when it leaves a review on the current
   commit, and one that reports a clean review only as a comment, in a shape

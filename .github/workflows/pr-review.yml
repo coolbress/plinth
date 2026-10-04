@@ -455,6 +455,9 @@ jobs:
 
           echo "::error::no third-party review is attached to this commit ($HEAD_SHA)."
           echo "  - is the reviewer's automatic review on for this repository? https://chatgpt.com/codex/settings/code-review"
+          echo "  - a possible cause, not a known one: the reviewer's account has used up its usage limit."
+          echo "    Codex cloud reviews share one limit with interactive Codex use, and a used-up limit"
+          echo "    can end in silence; check what is left in Codex's settings before re-running (#386)."
           echo "  - comment '$ASK' on the pull request yourself and re-run this job: a person's comment"
           echo "    starts the review, this job's does not unless the caller gives summons-token."
           echo "    What summons-token does and what it costs: https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer"
