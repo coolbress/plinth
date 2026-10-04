@@ -76,7 +76,11 @@ different reviewer, or wait longer than 20 minutes, pass `reviewer-logins` or
 `wait-seconds` under `with:`; `ask-comment` changes the summons text, which is
 posted only with a token ([below](#summoning-the-reviewer)).
 `reviewer-logins` says whose signal counts; it does not check that the
-reviewer is independent of the author. The reviewer reads its instructions
+reviewer is independent of the author. Codex is the only reviewer verified
+end to end. Another reviewer counts when it leaves a review on the current
+commit; one that reports a review with no findings only as a comment is not
+recognised, so its clean pull requests fail after the wait. Which other
+reviewers work, and what each needs, is #387. The reviewer reads its instructions
 from `## Code Review Rules` in the repository's `AGENTS.md`. The check fails a
 pull request that changes that section together with other files, so a rule
 change arrives on its own and is visible; it compares only that section and
