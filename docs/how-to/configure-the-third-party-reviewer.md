@@ -368,7 +368,8 @@ verdict is `review-rerun.yml`, which plinth runs on its own repository only.
 Without them, or when they do not help:
 
 1. Read the check's log: it says whether the summons was posted and why not.
-2. Comment the summons yourself, from the repository owner's account. When
+2. Comment the summons yourself, from the account connected to the reviewer
+   (on a repository a person owns, usually the owner's). When
    the verdict arrives only as a comment, re-run the check from its page.
 3. If the reviewer stays silent (an outage, or its usage limit), the pull
    request waits. An admin can take `third-party / review` out of the ruleset
