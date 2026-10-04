@@ -107,10 +107,17 @@ other.
   `chore(release): vX.Y.Z`, the one `scripts/make-release.sh` writes; one that
   only resembles it (`chore(release-notes): …`, `chore(release): v2 docs
   only`) is summoned as usual. The author of a pull request chooses its title,
-  so with this on anyone who can open a pull request, an agent included, can
-  skip the review by choosing that title. It is off by default; leave it off
-  where `third-party / review` is a required check. This repository turns it
-  on: the check is optional here and a release is four generated lines.
+  so the title is not enough (#384): the diff must also be the one that
+  script's run 1 writes. The changed files are exactly
+  `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and
+  `CHANGELOG.md`; each manifest replaces its one `"version"` line with the
+  title's version, higher than the old one, so no second version line is added
+  beside it and the version does not go back; `CHANGELOG.md` only adds lines, the `[Unreleased]` link
+  aside. A pull request under that title that also touches a script, moves a
+  marketplace entry's pin or removes a changelog line is summoned, and the log
+  says why; so is one whose file list cannot be read. What it does not cover
+  is the release note's own text. It is off by default, and fits only a
+  repository released with plinth's script. This repository turns it on.
 
 On these the check is no evidence that anyone looked. If `third-party /
 review` is one of your required checks, such a pull request meets it with no
