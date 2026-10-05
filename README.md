@@ -21,8 +21,9 @@ offers ([who can change the wall](docs/explanation/concepts.md#about-who-can-cha
 > install fails with `index.lock: File exists`; `brew install git`), `uv`.
 >
 > **Outside:** when a wall cannot be raised (no admin, no `gh` auth, a private
-> repository on GitHub Free, personal or organization) the tool stops before creating
-> anything and says why. A private repository on GitHub Pro, Team or Enterprise
+> repository on GitHub Free, personal or organization, where the token reads the
+> plan) the tool stops before creating anything and says why; a token that cannot
+> read the plan lets the ruleset call decide, and a refused one ends the run. A private repository on GitHub Pro, Team or Enterprise
 > gets the same required checks, with CodeQL, dependency review and push
 > protection only where GitHub Code Security and Secret Protection are
 > enabled; the door names each part it left out and what stands in its place
