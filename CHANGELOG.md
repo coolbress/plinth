@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.7.1. A repository it creates
+  calls plinth's reusable workflows at `e52e750`, plinth v1.7.2, instead of
+  `8f4edfc` (v1.5.0), so its `ci / deps` passes with a warning that nothing was
+  checked on a private repository where GitHub refuses dependency review,
+  instead of failing every pull request (#395). `/plinth:floor-check` now
+  reports a repository on v1.7.0 as one tag behind.
+
 ## [1.7.2] - 2026-10-05
 
 Private repositories without GitHub Code Security can merge again. On such a
