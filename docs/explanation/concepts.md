@@ -202,8 +202,8 @@ three of its parts are paid GitHub products, and `/plinth:new-project
 
 | Plan | What the door does |
 | --- | --- |
-| Personal GitHub Free | Stops before creating anything: GitHub does not enforce a ruleset on its private repositories |
-| GitHub Pro, Team or Enterprise | The same ruleset and required check names as a public repository |
+| GitHub Free, a personal account or an organization | Stops before creating anything: GitHub does not enforce a ruleset on its private repositories |
+| GitHub Pro, Team or Enterprise | A ruleset with the same required checks as a public repository; its `code_scanning` rule depends on GitHub Code Security, below |
 | With GitHub Code Security | CodeQL default setup and the `code_scanning` rule; `ci / deps` reviews each pull request's dependencies |
 | Without it | No CodeQL and no `code_scanning` rule (in its place, `ci / lint`'s security rules); GitHub refuses dependency review, so `ci / deps` passes saying nothing was checked (in its place, Dependabot alerts after the merge) |
 | With GitHub Secret Protection | Push protection on |
