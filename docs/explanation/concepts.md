@@ -202,7 +202,7 @@ three of its parts are paid GitHub products, and `/plinth:new-project
 
 | Plan | What the door does |
 | --- | --- |
-| GitHub Free, a personal account or an organization | Stops before creating anything: GitHub does not enforce a ruleset on its private repositories |
+| GitHub Free, a personal account or an organization | GitHub does not enforce a ruleset on its private repositories. Where the token reads the plan, the door stops before creating anything. Where it cannot (a fine-grained token), the ruleset call decides: the repository is created, the refused ruleset ends the run, and it is deleted again, or named for you to delete when the token cannot |
 | GitHub Pro, Team or Enterprise | A ruleset with the same required checks as a public repository; its `code_scanning` rule depends on GitHub Code Security, below |
 | With GitHub Code Security | CodeQL default setup and the `code_scanning` rule; `ci / deps` reviews each pull request's dependencies |
 | Without it | No CodeQL and no `code_scanning` rule (in its place, `ci / lint`'s security rules); GitHub refuses dependency review, so `ci / deps` passes saying nothing was checked (in its place, Dependabot alerts after the merge) |
