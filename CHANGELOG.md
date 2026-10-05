@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-10-05
+
+New repositories pick up the private-repository fix. `/plinth:new-project`
+renders plinth-template v1.7.1, whose CI calls plinth v1.7.2, so a private
+repository it creates on GitHub Pro without GitHub Code Security gets a
+`ci / deps` that passes with a warning that nothing was checked, where GitHub
+refuses dependency review, instead of failing every pull request. No check
+name, job, input or secret changes.
+
+tested with plinth-template v1.7.1
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.7.1. A repository it creates
@@ -2048,7 +2059,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.3...HEAD
+[1.7.3]: https://github.com/coolbress/plinth/releases/tag/v1.7.3
 [1.7.2]: https://github.com/coolbress/plinth/releases/tag/v1.7.2
 [1.7.1]: https://github.com/coolbress/plinth/releases/tag/v1.7.1
 [1.7.0]: https://github.com/coolbress/plinth/releases/tag/v1.7.0
