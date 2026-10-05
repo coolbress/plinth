@@ -20,8 +20,10 @@ and merge the pull request the generator opens for you.
   one-time code and a URL, and a browser finishes it. No terminal is needed
   and nothing secret is typed. Do not export `GH_TOKEN`; an agent session can
   read the environment.
-- The repository will be **public**. Private repositories are not supported
-  yet: the wall requires CodeQL, which needs a GitHub Code Security license there.
+- The repository will be **public**. `--private` works on GitHub Pro, Team or
+  Enterprise, with some parts of the wall left out unless the repository has
+  GitHub Code Security and Secret Protection
+  ([about private repositories](../explanation/concepts.md#about-private-repositories)).
 - The generated project is **Python (uv)**. Other languages are not produced
   by this version.
 - Claude Code's sandbox (`/sandbox`) is optional. On macOS, measured on Claude

@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The README, the getting-started tutorial, the concepts page and the
+  required-checks reference describe private repositories as supported on
+  GitHub Pro, Team and Enterprise, with the parts of the wall each plan and
+  licence allows, after a recorded run on a Pro account merged a private
+  repository's first pull request. They no longer call private repositories
+  unsupported (#352).
+
 ## [1.7.3] - 2026-10-05
 
 New repositories pick up the private-repository fix. `/plinth:new-project`

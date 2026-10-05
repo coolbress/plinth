@@ -196,10 +196,28 @@ commits keep working from there. Signed releases are not promised.
 
 ## About private repositories
 
-The wall needs CodeQL, and on a private repository CodeQL needs a GitHub Code
-Security license. Rather than raise a wall with a hole in it, the door stops
-before creating a private repository. It points to a public repository
-first. GitLab Free is the alternative for code that must stay private: it has
-protected branches and requires pipelines to pass, with no CodeQL and no push
-protection. A lower private wall, with another scanner in CodeQL's place, is
-a later option, not built.
+On a public repository the wall is whole on every plan. On a private one,
+three of its parts are paid GitHub products, and `/plinth:new-project
+--private` raises what the plan allows and names the rest:
+
+| Plan | What the door does |
+| --- | --- |
+| Personal GitHub Free | Stops before creating anything: GitHub does not enforce a ruleset on its private repositories |
+| GitHub Pro, Team or Enterprise | The same ruleset and required check names as a public repository |
+| With GitHub Code Security | CodeQL default setup and the `code_scanning` rule; `ci / deps` reviews each pull request's dependencies |
+| Without it | No CodeQL and no `code_scanning` rule (in its place, `ci / lint`'s security rules); GitHub refuses dependency review, so `ci / deps` passes saying nothing was checked (in its place, Dependabot alerts after the merge) |
+| With GitHub Secret Protection | Push protection on |
+| Without it | No push protection (in its place, `ci / secrets`, which finds a secret after the push) |
+
+The door turns no paid product on. Its summary, the README's First day section
+and the first pull request name each part left out. On a Pro account GitHub
+gives no status for either product, so the summary says "not verified" rather
+than "not raised" (recorded on #352, 2026-10-05).
+
+CI runs on the plan's Actions minutes. Measured on that run: each CI run is 9
+jobs, about 9 billed minutes with each job rounded up, and the first pull
+request took four CI runs.
+
+GitLab Free remains an alternative for code that must stay private on a free
+plan: it has protected branches and requires pipelines to pass, with no CodeQL
+and no push protection.
