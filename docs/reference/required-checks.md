@@ -35,7 +35,7 @@
 
 | Check | Asserts | A red means | The fix |
 | --- | --- | --- | --- |
-| `CodeQL` | CodeQL analysed the head with no alert at the thresholds above | An alert, or no analysis: default setup is off, or the first push of a new repository was not analysed | Fix the alert the check links to; with no analysis, turn default setup on or push the recovery commit `/plinth:new-project` prints |
+| `CodeQL` | CodeQL analysed the head with no alert at the thresholds above. On a private repository the rule is there only where GitHub Code Security is enabled ([about private repositories](../explanation/concepts.md#about-private-repositories)) | An alert, or no analysis: default setup is off, or the first push of a new repository was not analysed | Fix the alert the check links to; with no analysis, turn default setup on or push the recovery commit `/plinth:new-project` prints |
 | `CodeQL` | On a head Dependabot pushed, nothing: default setup starts no analysis, the check lands `neutral` and the rule passes | Not applicable | `ci / deps` and the tests still run on that head, and `main` is analysed after the merge |
 
 ## Secrets at the push
