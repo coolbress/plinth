@@ -102,9 +102,13 @@ chain, and also the agent's reach and the way back: which credentials and
 data an agent session can touch, whether a spend ceiling exists, and whether
 a restore has been tried once. For the first three, plinth has checks and
 settings: `ci / secrets` and push protection, `ci / deps` and Dependabot, and
-the pins. For the other three it has nothing today: no check reads
-what a session can touch, what it may spend, or whether a backup was ever
-restored, and the direction heading below says what is planned for them.
+the pins. For the other three it has one check at the edge and nothing
+behind it: `ci / floor-check` fails when `.claude/settings.json` drops a
+deny the template sets (a force push, `rm -rf`, `gh auth token`, reads of
+`.env` and of gh's own configuration), which bounds what the agent runs and
+reads on the machine it works on. No check reads what a session can touch in
+production, what it may spend, or whether a backup was ever restored, and
+the direction heading below says what is planned for those.
 
 ## About what plinth does now, and where it is going
 
@@ -293,7 +297,10 @@ test paths, or a skip marker shrinks what is asserted; a `# noqa` or a
 plinth's workflow set thresholds: `max-diff-lines: 0` turns the diff limit
 into a measurement that never fails, and `deps-fail-on-severity` raises the
 severity a vulnerable dependency needs to be red. Each is in the pull
-request's diff, and write access is enough to make it.
+request's diff. The test and configuration edits need only write access.
+The two input edits are a change to a workflow file, which the push refusal
+under condition 1 stops for a token without workflow permission and nothing
+stops for the browser login.
 
 What plinth has. `ci / diff-size` names, in its log and job summary, every
 change to the checks the description does not name: a workflow file, a
