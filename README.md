@@ -2,10 +2,11 @@
 
 The base a vibe-coded project stands on: required checks on GitHub that no
 change merges past while they are red, a curated set of agent skills, and a
-generator that starts a new repository with both already in place. The checks
-are established tools (ruff, pytest, gitleaks, CodeQL and others), and plinth
-configures the host (today GitHub) to require them before a merge, so the host,
-not plinth, refuses a merge while they are red. It is for someone who directs an
+generator that starts a new repository with both already in place. Most of
+the checks run established tools (ruff, pytest, gitleaks, CodeQL and others),
+a few are plinth's own, and plinth configures the host (today GitHub) to
+require them before a merge, so the host, not plinth, refuses a merge while
+they are red. It is for someone who directs an
 AI agent and does not read the diff. A green check means the properties that
 check asserts hold, not that the code is right, and a pull request can
 rewrite its own CI file so that its checks do nothing

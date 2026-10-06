@@ -65,12 +65,14 @@ and the checks still stand.
 Gated where a check can. Guided where it can't.
 
 The host refuses a merge while a required check is red, on the properties
-those checks assert and on nothing else. The checks are other people's tools:
-ruff, mypy, pytest, gitleaks, zizmor, GitHub's dependency review and CodeQL.
-plinth chooses them, wires all but CodeQL into a reusable workflow it
-maintains, turns on CodeQL's default setup, and configures the repository so
-that the host requires their results before a merge. What plinth itself wrote is that workflow (its pull-request title and
-diff-size checks among it), the floor checker and the guidance. The
+those checks assert and on nothing else. Most of the checks run other
+people's tools: ruff, mypy, pytest, gitleaks, zizmor, GitHub's dependency
+review and CodeQL. plinth chooses them, wires all but CodeQL into a
+reusable workflow it maintains, turns on CodeQL's default setup, and
+configures the repository so that the host requires their results before a
+merge. What plinth itself wrote is that workflow, the checks in it that run
+no outside tool (`ci / pr-title`, `ci / diff-size`, and `ci / floor-check`,
+which runs the floor checker), and the guidance. The
 [reference page](../reference/required-checks.md) says, check by check, what
 each one asserts. For some of what no check covers, the arsenal points at
 chosen tools: a planning skill, a design skill, a research skill. Pointing
