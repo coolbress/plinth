@@ -217,7 +217,8 @@ has against it today. Nothing listed closes a condition; each narrows it.
 
 The check names the ruleset requires come from the workflow files on the
 pull request's branch: `ci.yml`'s call to plinth's reusable workflow for the
-`ci / ` checks, and, where a repository also requires `third-party / review`,
+checks named `ci / <job>`, and, where a repository also requires
+`third-party / review`,
 the separate workflow that calls plinth's review workflow. What runs behind
 each name is decided by those files, and every file that supplies a required
 check is under this condition; what plinth has below reads `ci.yml` only.
