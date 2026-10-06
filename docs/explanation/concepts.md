@@ -281,7 +281,10 @@ the ruleset has a bypass actor, where its token reads them; where it cannot,
 that line is a SKIP. `ci / floor-check` runs the same read on every pull request with the
 Actions token, which never reads bypass actors, so that line is a SKIP there
 every time. A ruleset edited between two pull requests is seen on the next
-one, or when a person runs the skill, not when it happens.
+one only in the fields that run reads: the required checks, their source
+and the CodeQL thresholds. A bypass actor added then is seen only when a
+person runs the skill, and a field the checker does not compare is not seen
+at all. Nothing sees the edit when it happens.
 
 ### 3. The check configuration, the workflow inputs and the tests are the agreed standard (evidence)
 
@@ -339,8 +342,11 @@ read needs an admin-read token, which the Actions token never is.
 What plinth has. The ruleset's `required_status_checks` rule, with `strict`,
 asks for every required check reported on the pull request's head with the
 branch up to date, so a check that ran on an older commit does not count.
-`third-party / review`, where a ruleset requires it, passes only on a review
-of the pull request's current commit. `ci / deps` says nothing was checked
+`third-party / review`, where a ruleset requires it, passes on a review of
+the pull request's current commit, and without one in two cases its policy
+names: a pull request whose recorded pushes are all Dependabot's, and a
+release pull request whose diff is a release's, where the repository has
+turned that on; its log says which. `ci / deps` says nothing was checked
 where that is so. No job in plinth's workflows is skipped with `if:`: a
 check that does not apply, such as `ci / deps` outside a pull request,
 reports a pass that says so. A release is tagged only on a commit the e2e

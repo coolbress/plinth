@@ -31,8 +31,10 @@ from stay in the lab.
   confirmed. The floor checker's SKIP is a not yet confirmed; its WARN is a
   pass that names something to look at.
 - **reach**: what an agent session may touch, and the most it can destroy or
-  spend. One of the five things a project settles once. Outside every check
-  plinth runs: the wall gates a merge, not an agent's actions.
+  spend. One of the five things a project settles once. The wall gates a
+  merge, not an agent's actions: `ci / floor-check` reads only its edge, the
+  deny list in the agent settings, and no check reads what a session can
+  touch in production, what it may spend, or whether a restore was tried.
 - **evidence condition**: one of four conditions under which a green check is
   evidence of the property it asserts: the CI definition is unchanged; the
   check configuration, the workflow inputs and the tests are the agreed
