@@ -13,7 +13,7 @@ pull requests and have no tag.
 
 ## [1.7.4] - 2026-10-06
 
-A documentation release. It carries the direction work of 2026-10-05 and 2026-10-06 into the pages a user reads: the concepts page states what plinth is for, what it promises and the five conditions under which a green check means what it asserts; the glossary gains host, the service that holds the repository and refuses a merge while a required check is red, today GitHub.com; the explanation pages say that plinth configures the host to require checks, most of them established tools and a few plinth's own, rather than running them itself (#411); and the README opens with the person plinth is for, three questions, the install and the limits. No check, script or template changes.
+A documentation release. It carries the direction work of 2026-10-05 and 2026-10-06 into the pages a user reads: the concepts page states what plinth is for, what it promises and the five conditions under which a green check means what it asserts; the glossary gains host, the service that holds the repository and refuses a merge while a required check is red, today GitHub.com; the explanation pages say that plinth configures the host to require checks, most of them established tools and a few plinth's own, rather than running them itself (#411); the README opens with the person plinth is for, three questions, the install and the limits; and the pages describe private repositories as supported on GitHub Pro, Team and Enterprise, as a recorded run found them (#352). No check, script or template changes.
 
 tested with plinth-template v1.7.1
 
