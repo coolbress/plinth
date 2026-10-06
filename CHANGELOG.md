@@ -13,6 +13,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- The concepts page now says in one place what plinth is for (a good project
+  stands, and the five things a project settles once, the agent's reach
+  among them), what it promises (gated where a check can, guided where it
+  can't), what it covers, what it does not do (it gates a merge, not an
+  agent's actions, and names what is outside every check), and the five
+  conditions under which a green check means what it asserts, each with
+  what breaks it and what plinth has against it today; direction is kept
+  under its own heading. `CONTEXT.md` defines verdict, reach and the two
+  kinds of condition, and says a listed arsenal tool can be outside the
+  plugin system (#402).
 - The README, the getting-started tutorial, the concepts page and the
   required-checks reference describe private repositories as supported on
   GitHub Pro, Team and Enterprise, with the parts of the wall each plan and
