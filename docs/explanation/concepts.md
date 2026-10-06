@@ -215,9 +215,12 @@ has against it today. Nothing listed closes a condition; each narrows it.
 
 ### 1. The CI definition is unchanged (evidence)
 
-The check names the ruleset requires come from `ci.yml`'s call to plinth's
-reusable workflow, so what runs behind a name is decided by the file on the
-pull request's branch.
+The check names the ruleset requires come from the workflow files on the
+pull request's branch: `ci.yml`'s call to plinth's reusable workflow for the
+`ci / ` checks, and, where a repository also requires `third-party / review`,
+the separate workflow that calls plinth's review workflow. What runs behind
+each name is decided by those files, and every file that supplies a required
+check is under this condition; what plinth has below reads `ci.yml` only.
 
 What breaks it. A pull request can change the checks themselves. The CI file is part
 of the repository, so a pull request that replaces the call to plinth's
@@ -371,8 +374,9 @@ property can be passed by producing the shape it looks for.
 
 What plinth has. The reference page says, check by check, what each asserts,
 so that no green is read as more. `ci / diff-size` keeps a change small
-enough for a person to read, and `third-party / review`, once configured,
-adds a reader that is not the author: automated review, a filter and not a
+enough for a person to read where its limit is positive, docs and lockfiles
+outside the count, and `third-party / review`, once configured, adds a
+reader that is not the author: automated review, a filter and not a
 gate, as [the three review layers](#about-the-three-review-layers) say. Nothing in plinth today
 measures whether the tests look at the right thing, or whether a passed
 check was fitted to: the candidate checks for that, mutation testing and
