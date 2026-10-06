@@ -199,7 +199,8 @@ not been measured.
    bill.
 3. Restore once, on purpose, before it matters: roll back one merged change
    with a pull request that reverts it, and if there is a database, restore
-   it from a backup into a new, empty one and check your data is there.
+   it from a backup yourself, in a place the agent cannot reach, into a new,
+   empty database, check your data is there, then delete that database.
    Protects against finding out the way back does not work on the day you
    need it.
 4. If the app has a database, open it once from outside without logging in,
