@@ -1,19 +1,60 @@
 # plinth
 
+For someone who builds with an AI coding agent and does not read the diff:
+you direct the work, read the checks and the record, and need the checks to
+carry what a reader of the diff would otherwise carry.
+
+**What makes a project professional when you don't read the code?**
+Not the code you won't read: the setup around it, the checks the code has
+to pass and a record another person can read.
+
+**How do I get better code out of an agent?**
+Small steps the checks can answer, each with something you can see that
+proves it done.
+
+**Why not just tell the agent the rules?**
+A rule the agent is told holds only while the agent follows it. plinth
+sets the rules up outside the agent: GitHub refuses a merge while a required
+check is red.
+
+You decide. The checks answer. The record remembers.
+
+<!-- install-block:start -->
+```bash
+claude plugin marketplace add anthropics/claude-plugins-official
+claude plugin marketplace add coolbress/plinth
+claude plugin install plinth@plinth
+```
+<!-- install-block:end -->
+
+Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it creates
+a repository with the checks already required, or says why it could
+not. From there,
+[run a project](docs/how-to/run-a-project.md) is the loop, stage by stage.
+
+**The limits.** A green check means the properties it asserts hold, not that
+the code is right, and a pull request can rewrite its own CI file so that
+its checks do nothing ([what green means](docs/explanation/concepts.md#about-what-green-means)).
+Anyone whose token has administration on the repository can change the
+rules, an agent included when it works with such a token
+([who can change the wall](docs/explanation/concepts.md#about-who-can-change-the-wall)).
+GitHub refuses a merge, not an agent's actions: a production database, a
+credential or a deployed app an agent session can reach is outside every check
+([what plinth does not do](docs/explanation/concepts.md#about-what-plinth-does-not-do)).
+No one but the author has used plinth yet. It covers GitHub.com, Python
+projects managed with uv, and Claude Code as the harness; an existing
+repository is only read; a private repository needs a paid
+GitHub plan, and some protections need more ([about private repositories](docs/explanation/concepts.md#about-private-repositories)).
+
+## What plinth is
+
 The base a vibe-coded project stands on: required checks on GitHub that no
 change merges past while they are red, a curated set of agent skills, and a
 generator that starts a new repository with both already in place. Most of
 the checks run established tools (ruff, pytest, gitleaks, CodeQL and others),
 a few are plinth's own, and plinth configures the host (today GitHub) to
 require them before a merge, so the host, not plinth, refuses a merge while
-they are red. It is for someone who directs an
-AI agent and does not read the diff. A green check means the properties that
-check asserts hold, not that the code is right, and a pull request can
-rewrite its own CI file so that its checks do nothing
-([what green means](docs/explanation/concepts.md#about-what-green-means)). Anyone whose token has
-administration on the repository can change the rules, an agent included when
-it works with such a token, as it does after the browser login the generator
-offers ([who can change the wall](docs/explanation/concepts.md#about-who-can-change-the-wall)).
+they are red.
 
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
@@ -34,15 +75,7 @@ offers ([who can change the wall](docs/explanation/concepts.md#about-who-can-cha
 > ([about private repositories](docs/explanation/concepts.md#about-private-repositories)).
 > Other mismatches warn and continue.
 
-## Install
-
-<!-- install-block:start -->
-```bash
-claude plugin marketplace add anthropics/claude-plugins-official
-claude plugin marketplace add coolbress/plinth
-claude plugin install plinth@plinth
-```
-<!-- install-block:end -->
+## Install, in detail
 
 The first line adds Anthropic's official marketplace, where one dependency
 lives. A fresh configuration does not have it until Claude Code's first
