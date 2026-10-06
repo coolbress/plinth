@@ -177,6 +177,34 @@ This token was measured on one push each way, not through a whole loop: that
 Contents, Issues and Pull requests are enough for every step on this page is
 not verified.
 
+## Set four things by hand that no check covers
+
+Also once the first pull request is merged, settle four things outside the
+repository. They are guidance: plinth does not check them, and it cannot,
+because every check the host requires reads a pull request or the
+repository's settings, and these live somewhere else
+([what plinth does not do](../explanation/concepts.md#about-what-plinth-does-not-do)).
+The token above limits what the agent can do on GitHub; these are meant to
+limit what it, or anyone, can do elsewhere. Each is the safeguard whose
+absence a reported incident turned on; what writing them down changes has
+not been measured.
+
+1. Keep production credentials and the production database out of the
+   agent's session: make a development copy and give the agent that.
+   Protects against an agent deleting or changing live data.
+2. Give every paid service the project uses a spend ceiling that stops the
+   spending, not an alert that only tells you, for example a monthly limit
+   on each API key. Protects against a leaked or runaway key running up a
+   bill.
+3. Restore once, on purpose, before it matters: roll back one merged change
+   with a pull request that reverts it, and if there is a database, restore
+   it from a backup into a new, empty one and check your data is there.
+   Protects against finding out the way back does not work on the day you
+   need it.
+4. If the app has a database, open it once from outside without logging in,
+   for example from a private browser window; what you can read, anyone
+   can. Protects against data left open to everyone.
+
 ## The loop
 
 ```text
