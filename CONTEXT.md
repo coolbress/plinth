@@ -21,10 +21,28 @@ from stay in the lab.
 - **floor**: the minimum a repository must have to be considered set up: the
   wall, secret scanning, dependency updates, the document set. `/plinth:floor-check`
   reads an existing repository against it and changes nothing.
-- **arsenal**: the plugins plinth installs by default plus the ones it lists for
-  manual install. `/plinth:arsenal` is the catalog. Nothing in it is enforced.
+- **arsenal**: the tools plinth installs by default plus the ones it lists for
+  manual install. A listed tool can be outside the plugin system (a test
+  library, a scanner); listing one installs nothing. `/plinth:arsenal` is the
+  catalog. Nothing in it is enforced.
 - **lab**: `plinth-lab`, the evidence behind the rules. Optional reading; the
   product is written to be understood without it.
+- **verdict**: what plinth says about one property: pass, fail, or not yet
+  confirmed. The floor checker's SKIP is a not yet confirmed; its WARN is a
+  pass that names something to look at.
+- **reach**: what an agent session may touch, and the most it can destroy or
+  spend. One of the five things a project settles once. The wall gates a
+  merge, not an agent's actions: `ci / floor-check` reads only its edge, the
+  deny list in the agent settings, and no check reads what a session can
+  touch in production, what it may spend, or whether a restore was tried.
+- **evidence condition**: one of four conditions under which a green check is
+  evidence of the property it asserts: the CI definition is unchanged; the
+  check configuration, the workflow inputs and the tests are the agreed
+  standard; the checks ran on this commit; the check looks at the property.
+- **enforcement condition**: the one condition under which a red check can
+  stop a merge: the ruleset is unchanged. "Unchanged", for both kinds, means
+  a change is visible and was reviewed. All five:
+  [docs/explanation/concepts.md](docs/explanation/concepts.md#about-what-green-means).
 - **profile**: an opt-in plugin that adds hooks on top of the default install
   (`plinth-hooks`, not part of this version). plinth itself has no hooks, and
   neither does any plugin in the default set.
