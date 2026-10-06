@@ -86,9 +86,11 @@ remembers."
 
 ## About the scope
 
-plinth is for an agent's user who does not read the diff: someone who
-directs the work, reads the checks and the record, and needs the checks to
-carry what a reader of the diff would otherwise carry.
+plinth is for someone who runs a software project through an AI agent and
+leads it rather than reads it: someone who directs the work, reads the checks
+and the record, and needs to know what was confirmed without reading the
+code, so the checks have to carry what a reader of the diff would otherwise
+carry.
 
 It covers GitHub.com, Python projects managed with uv, and Claude Code as the
 harness. New repositories are created by `/plinth:new-project`. An existing
