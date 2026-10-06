@@ -121,8 +121,9 @@ behind it: `ci / floor-check` fails when `.claude/settings.json` drops a
 deny the template sets (a force push, `rm -rf`, `gh auth token`, reads of
 `.env` and of gh's own configuration), which bounds what the agent runs and
 reads on the machine it works on. No check reads what a session can touch in
-production, what it may spend, or whether a backup was ever restored, and
-the direction heading below says what is planned for those.
+production, what it may spend, or whether a backup was ever restored;
+[run a project](../how-to/run-a-project.md#set-four-things-by-hand-that-no-check-covers)
+lists four things to set by hand for those, as guidance, not checks.
 
 ## About what plinth does now, and where it is going
 
@@ -144,11 +145,6 @@ it shipped.
   answers, with written selection criteria (#407); finding which of the five
   things a project settles once go unrecorded, and asking for those (#408);
   a `verify` skill shipped in the template (#409).
-- Four guide lines at the start of a project, a follow-up task not yet
-  filed: production credentials and database outside the agent session; a
-  spend ceiling per service; one rehearsed restore; an anonymous probe of
-  any database the app uses. They are guidance, not gates, and their effect
-  on this user has not been measured anywhere.
 - GitLab, after those (#353).
 
 ## About how the pieces fit

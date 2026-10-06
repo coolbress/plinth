@@ -44,7 +44,9 @@ rules, an agent included when it works with such a token
 The host blocks the merge; plinth set it up that way; neither blocks an
 agent's actions. A production database, a credential, a spend ceiling and a
 deployed app are outside every check
-([what plinth does not do](docs/explanation/concepts.md#about-what-plinth-does-not-do)).
+([what plinth does not do](docs/explanation/concepts.md#about-what-plinth-does-not-do));
+[four things to set by hand](docs/how-to/run-a-project.md#set-four-things-by-hand-that-no-check-covers)
+cover them as guidance, not checks.
 No one but the author has used plinth yet. It covers GitHub.com, Python
 projects managed with uv, and Claude Code as the harness. An existing
 repository is only read, except that one made from plinth's template is
