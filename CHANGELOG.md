@@ -32,7 +32,10 @@ pull requests and have no tag.
 - The README opens for the person plinth is for: three questions a user
   arrives with, one answer each, the install, the first command, a link to
   the run-a-project guide, and the limits beside them. Supported versions,
-  install details and the skill-listing budget follow below it (#310).
+  install details and the skill-listing budget follow below it. The README
+  and the concepts page name that person by what they do: someone who runs
+  a software project through an AI agent and leads it rather than reads it
+  (#310).
 
 ## [1.7.3] - 2026-10-05
 

@@ -1,8 +1,10 @@
 # plinth
 
-For someone who builds with an AI coding agent and does not read the diff:
-you direct the work, read the checks and the record, and need the checks to
-carry what a reader of the diff would otherwise carry.
+For someone who runs a software project through an AI agent and leads it
+rather than reads it: you direct the work, read the checks and the record,
+and need to know what was confirmed without reading the code.
+
+Gated where a check can. Guided where it can't.
 
 **What makes a project professional when you don't read the code?**
 Not the code you won't read: the setup around it, the checks the code has
@@ -14,8 +16,9 @@ proves it done.
 
 **Why not just tell the agent the rules?**
 A rule the agent is told holds only while the agent follows it. plinth
-sets the rules up outside the agent: GitHub refuses a merge while a required
-check is red.
+configures the host (today GitHub) to require checks before a merge, most of
+them established tools and a few plinth's own, and the host refuses the merge
+while one is red.
 
 You decide. The checks answer. The record remembers.
 
@@ -38,8 +41,9 @@ its checks do nothing ([what green means](docs/explanation/concepts.md#about-wha
 Anyone whose token has administration on the repository can change the
 rules, an agent included when it works with such a token
 ([who can change the wall](docs/explanation/concepts.md#about-who-can-change-the-wall)).
-GitHub refuses a merge, not an agent's actions: a production database, a
-credential or a deployed app an agent session can reach is outside every check
+The host blocks the merge; plinth set it up that way; neither blocks an
+agent's actions. A production database, a credential, a spend ceiling and a
+deployed app are outside every check
 ([what plinth does not do](docs/explanation/concepts.md#about-what-plinth-does-not-do)).
 No one but the author has used plinth yet. It covers GitHub.com, Python
 projects managed with uv, and Claude Code as the harness; an existing
