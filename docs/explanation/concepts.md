@@ -16,9 +16,10 @@ outside it. They need rules the work must pass, kept somewhere the agent does
 not control, and a way of working that leaves evidence another person can
 read. Platforms are adding such gates, mostly on paid or enterprise plans.
 
-plinth fills that gap for a public repository: the rules live on GitHub, and
-the way of working comes from skills others already made well, with a guide
-to walking them. Its author's earlier attempts to keep the rules inside the
+plinth fills that gap for a public repository: the rules live on the host
+(today GitHub), the service that holds the repository and, outside the
+agent, refuses a merge; the way of working comes from skills others already
+made well, with a guide to walking them. Its author's earlier attempts to keep the rules inside the
 agent came to the same conclusion.
 
 ## About what plinth is
@@ -53,17 +54,23 @@ context, repeat small verifiable changes, and leave a repository another
 developer can take over.
 
 It is not a harness: Claude Code is. plinth adds two things around it. The
-first is required checks in the environment, on GitHub, where an agent without
-administration on the repository cannot switch them off. The second is skills the harness
-loads only when a task calls for them. Nothing in the plugin enforces
-anything; the plugin can be uninstalled and the checks still stand.
+first is a repository configured so that the host requires checks before a
+merge, where an agent without administration on the repository cannot switch
+them off. The second is skills the harness loads only when a task calls for
+them. Nothing in the plugin enforces anything; the plugin can be uninstalled
+and the checks still stand.
 
 ## About the promise
 
 Gated where a check can. Guided where it can't.
 
-The wall gates a merge on the properties its checks assert, and on nothing
-else: GitHub refuses the merge while a required check is red, and the
+The host refuses a merge while a required check is red, on the properties
+those checks assert and on nothing else. The checks are other people's tools:
+ruff, mypy, pytest, gitleaks, zizmor, GitHub's dependency review and CodeQL.
+plinth chooses them, wires all but CodeQL into a reusable workflow it
+maintains, turns on CodeQL's default setup, and configures the repository so
+that the host requires their results before a merge. What plinth itself wrote is that workflow (its pull-request title and
+diff-size checks among it), the floor checker and the guidance. The
 [reference page](../reference/required-checks.md) says, check by check, what
 each one asserts. For some of what no check covers, the arsenal points at
 chosen tools: a planning skill, a design skill, a research skill. Pointing
@@ -80,7 +87,7 @@ directs the work, reads the checks and the record, and needs the checks to
 carry what a reader of the diff would otherwise carry.
 
 It covers GitHub.com, Python projects managed with uv, and Claude Code as the
-host. New repositories are created by `/plinth:new-project`. An existing
+harness. New repositories are created by `/plinth:new-project`. An existing
 repository is only read: `/plinth:floor-check` reports what it is missing and
 changes nothing. A template update is proposed, as a draft pull request by
 `/plinth:template-update`, only for a repository made from plinth's template;
@@ -90,12 +97,13 @@ repositories](#about-private-repositories)).
 
 ## About what plinth does not do
 
-plinth gates a merge, not an agent's actions. Every check it runs reads a
-pull request or the repository's settings, and the only thing a red one
-stops is the merge of that pull request. A production database, a
-credential, a spend ceiling and a deployed app are outside every check it
-runs: an agent session that can reach them can act on them, and nothing
-plinth raises sees it happen.
+The host blocks the merge; plinth set it up that way; neither blocks an
+agent's actions. Every check the host requires reads a pull request or the
+repository's settings, and the only thing a red one stops is the merge of
+that pull request. A production database, a credential, a spend ceiling and
+a deployed app are outside every one of those checks: an agent session that
+can reach them can act on them, and nothing plinth configures sees it
+happen.
 
 Safety, as plinth uses the word, covers secrets, dependencies and the supply
 chain, and also the agent's reach and the way back: which credentials and
@@ -168,8 +176,8 @@ Each part promises something different:
 | --- | --- | --- | --- |
 | The agent is told | `AGENTS.md`, loaded every turn | Claude Code loads it | whether the agent follows it |
 | You choose | skills | you, or the model, pick one | when neither does |
-| The checks answer | the required checks | GitHub refuses the merge | what no check asserts; an administrator's edit |
-| The record remembers | issues and pull requests | they live on GitHub, not on one machine | what nobody wrote down |
+| The checks answer | the required checks | the host refuses the merge | what no check asserts; an administrator's edit |
+| The record remembers | issues and pull requests | they live on the host, not on one machine | what nobody wrote down |
 
 [Run a project](../how-to/run-a-project.md) walks the loop through these
 parts.
@@ -197,7 +205,7 @@ A check only catches what it asserts: green means the asserted properties
 hold, not that the code is right. `ci / test` passing says the tests that
 exist pass, not that they test the right things. `ci / secrets` passing says
 gitleaks found nothing it knows, and even a red one arrives after the push:
-by then the secret is on GitHub and has to be revoked, not just removed.
+by then the secret is on the host and has to be revoked, not just removed.
 What stops a secret before it lands is GitHub's push protection, a
 repository setting and not a check: the door turns it on,
 `/plinth:floor-check` reports whether it still is, and by default it stops
