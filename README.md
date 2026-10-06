@@ -46,8 +46,9 @@ agent's actions. A production database, a credential, a spend ceiling and a
 deployed app are outside every check
 ([what plinth does not do](docs/explanation/concepts.md#about-what-plinth-does-not-do)).
 No one but the author has used plinth yet. It covers GitHub.com, Python
-projects managed with uv, and Claude Code as the harness; an existing
-repository is only read; a private repository needs a paid
+projects managed with uv, and Claude Code as the harness. An existing
+repository is only read, except that one made from plinth's template is
+offered template updates as a draft pull request. A private repository needs a paid
 GitHub plan, and some protections need more ([about private repositories](docs/explanation/concepts.md#about-private-repositories)).
 
 ## What plinth is
