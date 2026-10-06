@@ -190,8 +190,9 @@ absence a reported incident turned on; what writing them down changes has
 not been measured.
 
 1. Keep production credentials and the production database out of the
-   agent's session: make a development copy and give the agent that.
-   Protects against an agent deleting or changing live data.
+   agent's session: give the agent a development database filled with
+   made-up or scrubbed data, not a copy of production's. Protects against
+   an agent deleting live data or reading real people's records.
 2. Give every paid service the project uses a spend ceiling that stops the
    spending, not an alert that only tells you, for example a monthly limit
    on each API key. Protects against a leaked or runaway key running up a

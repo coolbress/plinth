@@ -15,7 +15,8 @@ pull requests and have no tag.
 
 - `docs/how-to/run-a-project.md` lists four things to set by hand once the
   first pull request is merged: production credentials and the production
-  database kept out of the agent's session, a spend ceiling on every paid
+  database kept out of the agent's session, which gets made-up or scrubbed
+  data instead of a copy, a spend ceiling on every paid
   service, one restore tried on purpose, and the app's database opened once
   from outside without logging in. They are guidance: no check covers them,
   the page says so, and their effect has not been measured. The README's limits and the concepts page point at
