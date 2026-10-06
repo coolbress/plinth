@@ -2,7 +2,11 @@
 
 The base a vibe-coded project stands on: required checks on GitHub that no
 change merges past while they are red, a curated set of agent skills, and a
-generator that starts a new repository with both already in place. It is for someone who directs an
+generator that starts a new repository with both already in place. Most of
+the checks run established tools (ruff, pytest, gitleaks, CodeQL and others),
+a few are plinth's own, and plinth configures the host (today GitHub) to
+require them before a merge, so the host, not plinth, refuses a merge while
+they are red. It is for someone who directs an
 AI agent and does not read the diff. A green check means the properties that
 check asserts hold, not that the code is right, and a pull request can
 rewrite its own CI file so that its checks do nothing
@@ -14,7 +18,7 @@ offers ([who can change the wall](docs/explanation/concepts.md#about-who-can-cha
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
 > ones get a read-only `floor-check` · **Claude Code 2.1.274 or newer** as the
-> host (CI installs plinth on that version and on the stable channel; the
+> harness (CI installs plinth on that version and on the stable channel; the
 > user tasks ran on 2.1.282 and 2.1.283; skills follow the Agent Skills
 > format and may load elsewhere, but only Claude Code is tested) · macOS / Linux (Windows via WSL) · tools: `claude`,
 > `gh`, `git` (2.37 or newer: on an older one, the macOS system git included, the

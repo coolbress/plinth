@@ -10,6 +10,10 @@ from stay in the lab.
   administration on the repository can still edit it, as anyone with that
   access can. The checks, and what each asserts:
   [docs/reference/required-checks.md](docs/reference/required-checks.md).
+- **host**: the service that holds the repository and enforces the wall
+  outside the agent, by refusing a merge while a required check is red. Today
+  GitHub.com; GitLab.com Free is specified in #353 and not supported. plinth
+  configures the host; the host refuses the merge.
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
   the wall, opens the first pull request. If a step it cannot go on without
   fails after the create, it deletes the repository when its token can and
