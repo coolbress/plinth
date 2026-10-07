@@ -46,7 +46,7 @@ What to do with the output:
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
 - **It finished** (exit 0): show the final lines, the `administration:` line
-  and any `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
+  and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
   and `not verified:` line as printed. The next step for the user is to open
   the pull request URL, wait for the checks, and merge with squash.
 
