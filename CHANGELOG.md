@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The fourth thing `docs/how-to/run-a-project.md` says to set by hand, the
+  made-up row read from outside with only the public key and no login, is
+  shortened to the weight of the other three: it still names the database's
+  own address rather than the app's page, and no longer lists a hosted
+  database's routes (tables, views, functions), that a refusal covers only
+  the route asked, or that an empty table proves nothing. v1.7.5 shipped
+  the long one (#425).
+
 ## [1.7.5] - 2026-10-07
 
 A new repository renders plinth-template v1.8.0, whose agent hands a refused
