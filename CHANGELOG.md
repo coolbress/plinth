@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-10-07
+
+A new repository renders plinth-template v1.8.0, whose agent hands a refused
+workflow push to a person instead of widening its token and writes an issue's
+ending when a merge closes it (#417, #418). The run-a-project guide gains four
+things to set by hand that no check covers (#412), the last of which asks for
+a made-up row in each table that should be private through every route the
+app's public key reaches (#419). plinth's own AGENTS.md now states the review
+round budget in place instead of behind a link (#422).
+
+tested with plinth-template v1.8.0
+
 ### Added
 
 - `docs/how-to/run-a-project.md` lists four things to set by hand once the
@@ -2111,7 +2123,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.4...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.5...HEAD
+[1.7.5]: https://github.com/coolbress/plinth/releases/tag/v1.7.5
 [1.7.4]: https://github.com/coolbress/plinth/releases/tag/v1.7.4
 [1.7.3]: https://github.com/coolbress/plinth/releases/tag/v1.7.3
 [1.7.2]: https://github.com/coolbress/plinth/releases/tag/v1.7.2
