@@ -36,6 +36,9 @@ case "$all" in
   "api orgs/"*"/memberships/"*)                  step=membership ;;
   "api /licenses/"*".spdx_id"*)                  step=license-check ;;
   *"/contents/copier.yml"*)                      step=choices ;;
+  # The baseline's own CI run is asked for by its commit (#401), and re-run.
+  "api -X GET repos/"*"/actions/runs "*"head_sha="*) step=baseline-runs ;;
+  *"/rerun-failed-jobs"*)                        step=rerun ;;
   "api -X GET repos/"*"/actions/runs "*)          step=runs ;;
   "api repos/"*"/languages"*)                    step=languages ;;
   "api repos/"*"/code-scanning/default-setup"*)  step=setup-read ;;
@@ -171,6 +174,30 @@ case "$step" in
                    # No run at all: a real misconfiguration, and still fatal.
                    none)    printf '.github/workflows/label.yml completed success\n' ;;
                  esac ;;
+  # The baseline's CI run on main, as the door's jq leaves it: id, status,
+  # conclusion, attempt, page. It failed by default, as it does on GitHub: its
+  # floor-check ran before the wall (#401). Once the door has asked for the
+  # re-run, the answer is the second attempt, as MOCK_RERUN says it ended.
+  baseline-runs) url=https://github.com/tester/probe/actions/runs/77
+                 if [ -e "$HOME/rerun-asked" ]; then
+                   case "${MOCK_RERUN:-green}" in
+                     green)   echo "77 completed success 2 $url" ;;
+                     red)     echo "77 completed failure 2 $url" ;;
+                     running) echo "77 in_progress null 2 $url" ;;
+                     unlisted) echo "77 completed failure 1 $url" ;;
+                   esac
+                 else
+                   case "${MOCK_BASELINE:-failure}" in
+                     failure) echo "77 completed failure 1 $url" ;;
+                     success) echo "77 completed success 1 $url" ;;
+                     running) echo "77 in_progress null 1 $url" ;;
+                     error)   echo "gh: HTTP 502" >&2; exit 1 ;;
+                     action_required) echo "77 completed action_required 1 $url" ;;
+                     missing) ;;
+                   esac
+                 fi ;;
+  rerun)         [ "${MOCK_RERUN:-green}" = refused ] && { echo "gh: Must have admin rights to Repository. (HTTP 403)" >&2; exit 1; }
+                 : > "$HOME/rerun-asked" ;;
   # GitHub's language detection, some time after the first push; then default
   # setup's state and languages, as the door's jq joins them.
   languages)     [ "${MOCK_LANGUAGES:-python}" = python ] && printf 'Python\n' ;;
@@ -916,6 +943,44 @@ E="MOCK_PLAN=team MOCK_SECURITY=enabled,enabled FAIL_AT=secret" run private-fail
 E="MOCK_PLAN=team MOCK_SECURITY=enabled,enabled FAIL_AT=codeql" run private-fails-codeql err yes yes "" -- someorg/probe --private
 E="MOCK_PLAN=pro FAIL_AT=ruleset MOCK_DELETE_FAILS=1" run private-delete-fails err yes yes "ROLLBACK FAILED: https://github.com/tester/probe EXISTS WITHOUT A WALL" -- probe --private
 E="MOCK_PLAN=pro MOCK_RUNS=none PLINTH_FIRST_PR_WAIT=1" run private-run-never err yes yes "its checks would never report" -- probe --private
+
+# The baseline's CI run started before the wall and failed its floor-check
+# (#401): once the wall, the labels and the other settings stand, its failed
+# jobs are run again. Nothing about that re-run fails the door.
+check "the baseline's CI run is looked up by main's first commit" \
+  'grep -q "head_sha=$("$REAL_GIT" -C "$proj" rev-parse main)" "$log"'
+check "its failed jobs are re-run once, after the ruleset, the labels and the merge settings" \
+  '[ "$(grep -c "/rerun-failed-jobs" "$log")" = 1 ] && r="$(grep -n "/rerun-failed-jobs" "$log" | cut -d: -f1)" && for at in "/rulesets" "^gh label create" "allow_merge_commit"; do [ "$r" -gt "$(grep -nE "$at" "$log" | tail -1 | cut -d: -f1)" ] || exit 1; done'
+check "the re-run is asked for the run the lookup found" 'grep -q "repos/tester/probe/actions/runs/77/rerun-failed-jobs" "$log"'
+check "the summary says the re-run passed and names the run" \
+  'grep -qxF "  first commit on main: its CI run failed before the wall was up; its failed jobs were re-run and passed: https://github.com/tester/probe/actions/runs/77" "$work/home-none/out"'
+E="MOCK_BASELINE=success" run baseline-green ok yes no "" -- probe
+hasnt baseline-green "a baseline run that passed is not re-run"  log 'rerun-failed-jobs'
+hasnt baseline-green "and the summary says nothing about it"     out 'first commit on main'
+E="MOCK_RERUN=refused" run rerun-refused ok yes no \
+  "first commit on main: its CI run failed before the wall was up, and its failed jobs could not be re-run (gh: Must have admin rights to Repository. (HTTP 403)); re-run them: gh run rerun 77 --failed --repo tester/probe   https://github.com/tester/probe/actions/runs/77" -- probe
+E="MOCK_RERUN=red PLINTH_FIRST_PR_WAIT=1" run rerun-red ok yes no \
+  "first commit on main: its CI run failed before the wall was up, and the re-run of its failed jobs ended failure: https://github.com/tester/probe/actions/runs/77" -- probe
+E="MOCK_RERUN=running PLINTH_FIRST_PR_WAIT=1" run rerun-running ok yes no \
+  "first commit on main: its CI run failed before the wall was up; the re-run of its failed jobs was still in_progress after 1 s: https://github.com/tester/probe/actions/runs/77" -- probe
+E="MOCK_BASELINE=missing PLINTH_FIRST_PR_WAIT=1" run baseline-missing ok yes no \
+  "first commit on main: its CI run (.github/workflows/ci.yml) was not found within 1 s, so nothing was re-run; if it shows a red check, re-run its failed jobs: gh run list --repo tester/probe --branch main" -- probe
+# A read that fails is not a run that is missing: gh's own words are kept.
+E="MOCK_BASELINE=error PLINTH_FIRST_PR_WAIT=1" run baseline-error ok yes no \
+  "first commit on main: its CI run could not be read (gh: HTTP 502), so nothing was re-run; if it shows a red check, re-run its failed jobs: gh run list --repo tester/probe --branch main" -- probe
+# Only a failed check is the floor-check before the wall; another end is named.
+E="MOCK_BASELINE=action_required" run baseline-other ok yes no \
+  "first commit on main: its CI run ended action_required, not a failed check, so nothing was re-run: https://github.com/tester/probe/actions/runs/77" -- probe
+# Asked for, but the listing never moves past the first attempt.
+E="MOCK_RERUN=unlisted PLINTH_FIRST_PR_WAIT=1" run rerun-unlisted ok yes no \
+  "first commit on main: its CI run failed before the wall was up; the re-run of its failed jobs was asked for and not listed within 1 s: https://github.com/tester/probe/actions/runs/77" -- probe
+for b in missing error other; do hasnt "baseline-$b" "nothing is re-run" log 'rerun-failed-jobs'; done
+has none "the wait and the re-run are each said as they start" out "^  [0-9:]+Z main's first CI run: waiting.*\$" 
+has none "the re-run is said with the run as it starts" out "^  [0-9:]+Z main's first CI run failed before the wall was up; re-running its failed jobs \(up to 300 s\): https://github.com/tester/probe/actions/runs/77$"
+E="MOCK_BASELINE=running PLINTH_FIRST_PR_WAIT=1" run baseline-running ok yes no \
+  "first commit on main: its CI run was still in_progress after 1 s, so nothing was re-run; if it ends red, re-run its failed jobs: gh run rerun 77 --failed --repo tester/probe   https://github.com/tester/probe/actions/runs/77" -- probe
+hasnt baseline-running "a baseline run still going is not re-run" log 'rerun-failed-jobs'
+
 # With no CodeQL to wait for, a first pull request whose run started ends the wait
 # at once: no empty commit, no CodeQL warning, even with the wait spent.
 E="MOCK_PLAN=pro MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=0" run private-no-codeql-wait ok yes no "" -- probe --private
