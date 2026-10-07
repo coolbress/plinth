@@ -203,9 +203,14 @@ not been measured.
    empty database, check your data is there, then delete that database.
    Protects against finding out the way back does not work on the day you
    need it.
-4. If the app has a database, open it once from outside without logging in,
-   for example from a private browser window; what you can read, anyone
-   can. Protects against data left open to everyone.
+4. If the app has a database, put one made-up row in each table that should
+   be private and try to read it once from outside, with only the public key
+   every visitor gets and no login, through every route that key reaches (for a
+   hosted database, its REST routes for tables, views and functions, called
+   with the anonymous key the app ships to the browser); a refusal covers only
+   the route you asked, and an empty answer from an empty table means
+   nothing, while what you can read, anyone can. Protects against data left
+   open to everyone.
 
 ## The loop
 
