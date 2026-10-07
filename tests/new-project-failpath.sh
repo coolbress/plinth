@@ -312,11 +312,12 @@ E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"         
 if grep -qF "gh auth login -s repo,workflow,delete_repo" "$work/home-fine-grained/out"
 then ok fine-grained "the stop also names the browser-login fix"
 else bad fine-grained "the stop names only the admin-token fix"; fi
-# Fix 2's token can be pre-filled: a creation link for the owner with the four
+# Fix 2's token can be pre-filled: a creation link for the owner with the five
 # repository permissions at write, `members=read` only for an organization; the
-# repository selection has no parameter, so the stop names it (#285).
+# repository selection has no parameter, so the stop names it (#285). Actions
+# is the baseline's re-run of its failed jobs (#429).
 link='https://github.com/settings/personal-access-tokens/new?'
-perms='administration=write&contents=write&workflows=write&pull_requests=write'
+perms='administration=write&contents=write&workflows=write&pull_requests=write&actions=write'
 if grep -qF "$link" "$work/home-fine-grained/out" && grep -qF "target_name=tester&" "$work/home-fine-grained/out" \
    && grep -qF "$perms" "$work/home-fine-grained/out" && ! grep -qF "members=read" "$work/home-fine-grained/out" \
    && grep -qF '"All repositories"' "$work/home-fine-grained/out"

@@ -28,8 +28,8 @@
 # job summary, and the exit is 1 either way.
 #
 # The token is the one the door asks for (classic: repo, workflow,
-# delete_repo; fine-grained: Administration, Contents, Pull requests,
-# Workflows: write on the owner's repositories), typed through
+# delete_repo; fine-grained: Actions, Administration, Contents, Pull
+# requests, Workflows: write on the owner's repositories), typed through
 # with-admin-token.sh, which a CI step feeds from stdin:
 #   printf '%s\n' "$PLINTH_E2E_TOKEN" | scripts/with-admin-token.sh scripts/e2e.sh
 set -euo pipefail

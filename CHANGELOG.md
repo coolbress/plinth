@@ -20,6 +20,13 @@ pull requests and have no tag.
   database's routes (tables, views, functions), that a refusal covers only
   the route asked, or that an empty table proves nothing. v1.7.5 shipped
   the long one (#425).
+- The fine-grained admin-token link that `/plinth:new-project` prints when
+  `gh` holds a fine-grained token now asks for Actions: write as well as
+  Administration, Contents, Workflows and Pull requests: write. Without it
+  the door's re-run of `main`'s first CI run (#401) was always refused on
+  that path. A token made from the earlier link still runs the door, and ends
+  at the `could not be re-run` line when that run failed; the e2e secret
+  `PLINTH_E2E_TOKEN` needs the same permission (#429).
 
 ### Fixed
 
