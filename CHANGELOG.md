@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.7.6] - 2026-10-08
+
+`/plinth:new-project` no longer leaves a red `ci / floor-check` on a new
+repository's first commit: once the wall stands it re-runs that commit's
+failed CI jobs, and its summary always says how that run ended (#401, #428).
+The fine-grained admin-token link it prints now asks for Actions: write, which
+that re-run needs (#429). The run-a-project guide's anonymous-probe line is
+shortened to one sentence (#425).
+
+tested with plinth-template v1.8.0
+
 ### Changed
 
 - The fourth thing `docs/how-to/run-a-project.md` says to set by hand, the
@@ -2152,7 +2163,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.5...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.6...HEAD
+[1.7.6]: https://github.com/coolbress/plinth/releases/tag/v1.7.6
 [1.7.5]: https://github.com/coolbress/plinth/releases/tag/v1.7.5
 [1.7.4]: https://github.com/coolbress/plinth/releases/tag/v1.7.4
 [1.7.3]: https://github.com/coolbress/plinth/releases/tag/v1.7.3
