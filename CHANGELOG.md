@@ -17,8 +17,8 @@ pull requests and have no tag.
   first pull request is merged: production credentials and the production
   database kept out of the agent's session, which gets made-up or scrubbed
   data instead of a copy, a spend ceiling on every paid
-  service, one restore tried on purpose, and each table that should be
-  private asked for its rows from outside with only the public key the app
+  service, one restore tried on purpose, and a made-up row in each table that
+  should be private asked for from outside with only the public key the app
   ships and no login, not only the app's page. They are guidance: no check covers them,
   the page says so, and their effect has not been measured. The README's limits and the concepts page point at
   them, and the concepts page no longer lists them as direction (#412, #419).
