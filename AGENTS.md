@@ -40,8 +40,14 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   Whoever opens or merges a pull request reads the reviewer's inline comments
   (`gh api repos/<owner>/<repo>/pulls/<n>/comments`; the check's log lists their
   URLs), not only its summary, and the description says what was done with
-  each: fixed, answered with the reason, or moved to an issue. How many rounds:
-  [When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop).
+  each: fixed, answered with the reason, or moved to an issue. How many rounds
+  ([When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop)):
+  after the first review, two rounds of fixes; from the third, fix only what
+  the change itself makes irreversible or lets reach other people, answer the
+  rest or move it to an issue, and merge. Judge that by what the diff does,
+  not by the reviewer's P1: a how-to line that could say more exposes nothing,
+  so it is never that row (#420 ran six rounds on one). When a finding repeats
+  the last one's kind, rewrite once for the whole kind and stop.
   Never write the reviewer's summons text (its `@` mention) in a pull request
   description or comment: the reviewer reads it as a task and answers with
   noise (#184, #189). Describe it instead.
