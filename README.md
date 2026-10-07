@@ -161,7 +161,7 @@ and otherwise prints the repository to delete; a step it can go on without,
 such as a label, is named and left. If the create's own answer is lost, it
 does neither, so check whether the repository exists (its failure paths run in CI against a mocked
 `gh`). It renders
-[plinth-template v1.7.1](https://github.com/coolbress/plinth-template/releases/tag/v1.7.1),
+[plinth-template v1.8.0](https://github.com/coolbress/plinth-template/releases/tag/v1.8.0),
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its release commit, has
 created a repository on real GitHub, merged its first pull request and deleted
