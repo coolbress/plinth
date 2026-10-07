@@ -20,7 +20,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL, and
-opens the first pull request. With `--private` the repository is private: an
+opens the first pull request. Last, it re-runs the failed jobs of `main`'s
+first CI run, which ran before the wall and failed its floor check. With `--private` the repository is private: an
 owner on GitHub Free stops before anything is created, and elsewhere the same
 ruleset goes up, with CodeQL and push protection only where GitHub Code
 Security and GitHub Secret Protection are already enabled on the new
@@ -45,7 +46,7 @@ What to do with the output:
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
 - **It finished** (exit 0): show the final lines, the `administration:` line
-  among them, and for a private repository every `private:`, `not raised:`
+  and any `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
   and `not verified:` line as printed. The next step for the user is to open
   the pull request URL, wait for the checks, and merge with squash.
 

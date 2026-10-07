@@ -22,8 +22,10 @@
 # default branch the ruleset will target, labels, ruleset, secret scanning,
 # Dependabot, Actions allowlist, squash only, CodeQL (once GitHub has detected
 # the languages, and waited for until its first analysis of main is done), and
-# the first pull request, whose workflow must start. Last, whether the gh
-# credential the agent inherits has administration on the new repository.
+# the first pull request, whose workflow must start. Then the baseline's CI
+# run, red because it ran before the wall, has its failed jobs re-run (#401).
+# Last, whether the gh credential the agent inherits has administration on the
+# new repository.
 # A private repository gets the same ruleset and check names; its code_scanning
 # rule and CodeQL only where GitHub Code Security reads enabled on it, push
 # protection only where GitHub Secret Protection does, and the end names each
@@ -411,6 +413,7 @@ if ! err="$(git -C "$dir" push -q -u origin main 2>&1)"; then
   printf 'cannot push to %s:\n%s\n%s\n' "$url" "$err" "$hint" >&2
   exit 1
 fi
+base_sha="$(git -C "$dir" rev-parse HEAD)"
 # Read the default branch back rather than assume the push set it: the ruleset
 # below targets ~DEFAULT_BRANCH, so applying it while anything else is default
 # leaves main unprotected -- the one thing the door promises.
@@ -772,6 +775,66 @@ while :; do
 done
 
 created=0; trap - EXIT
+# The baseline's push started CI before there was a wall to check, so its
+# ci / floor-check failed ("no rules govern main", labels missing), and that
+# red X stayed on main's first commit, the first thing the repository's page
+# shows (#401, measured 2026-10-05). The wall stands now: the failed jobs are
+# run again, so the commit's latest status is the wall as it is. After the
+# rollback is off, because the repository is already right: a run not found, a
+# re-run refused or not green costs a line in the summary, never the repository.
+# One wait budget for the run to finish, and one for the re-run; each start is
+# printed, as the waits above are. Only a run that ended `failure` is re-run:
+# that is the floor-check before the wall. Any other end is named, not re-run.
+baseline_run() { # sets b_row to "<id> <status> <conclusion> <attempt> <page>" of the baseline's CI run (empty if not listed), b_err to gh's words on a failed read
+  b_err=""
+  b_row="$(gh api -X GET "repos/$repo/actions/runs" -f branch=main -f event=push -f "head_sha=$base_sha" -F per_page=20 \
+    --jq "first(.workflow_runs[] | select(.path == \"$template_ci\")) | \"\(.id) \(.status) \(.conclusion) \(.run_attempt) \(.html_url)\"" 2>&1)" \
+    || { b_err="$(tr '\n' ' ' <<<"$b_row" | sed 's/ *$//')"; b_row=""; }
+  return 0
+}
+wait_baseline() { # <attempt>: until that attempt or a later one is completed (0) or the wait ends (1); b_* hold the last answer
+  local end=$((SECONDS + first_pr_wait))
+  while :; do
+    baseline_run
+    b_id=""; b_status=""; b_conclusion=""; b_attempt=0; b_url=""
+    [ -z "$b_row" ] || read -r b_id b_status b_conclusion b_attempt b_url <<<"$b_row"
+    [ "$b_status" = completed ] && [ "$b_attempt" -ge "$1" ] 2>/dev/null && return 0
+    [ "$SECONDS" -ge "$end" ] && return 1
+    sleep 5
+  done
+}
+baseline_line=""; failed_before="its CI run failed before the wall was up"
+echo "  $(date -u +%H:%M:%SZ) main's first CI run: waiting for it to finish (up to $first_pr_wait s)"
+if ! wait_baseline 1; then
+  if [ -n "$b_id" ]; then
+    baseline_line="its CI run was still $b_status after $first_pr_wait s, so nothing was re-run; if it ends red, re-run its failed jobs: gh run rerun $b_id --failed --repo $repo   $b_url"
+  elif [ -n "$b_err" ]; then
+    baseline_line="its CI run could not be read ($b_err), so nothing was re-run; if it shows a red check, re-run its failed jobs: gh run list --repo $repo --branch main"
+  else
+    baseline_line="its CI run ($template_ci) was not found within $first_pr_wait s, so nothing was re-run; if it shows a red check, re-run its failed jobs: gh run list --repo $repo --branch main"
+  fi
+else
+  case "$b_conclusion" in
+    success|skipped|neutral) ;;
+    failure)
+      run_id="$b_id"; run_url="$b_url"
+      echo "  $(date -u +%H:%M:%SZ) main's first CI run failed before the wall was up; re-running its failed jobs (up to $first_pr_wait s): $run_url"
+      if ! err="$(gh api -X POST "repos/$repo/actions/runs/$run_id/rerun-failed-jobs" 2>&1 >/dev/null)"; then
+        baseline_line="$failed_before, and its failed jobs could not be re-run ($(tr '\n' ' ' <<<"$err" | sed 's/ *$//')); re-run them: gh run rerun $run_id --failed --repo $repo   $run_url"
+      elif ! wait_baseline 2; then
+        if [ "$b_attempt" -ge 2 ] 2>/dev/null; then
+          baseline_line="$failed_before; the re-run of its failed jobs was still $b_status after $first_pr_wait s: $run_url"
+        else
+          baseline_line="$failed_before; the re-run of its failed jobs was asked for and not listed within $first_pr_wait s: $run_url"
+        fi
+      elif [ "$b_conclusion" != success ]; then
+        baseline_line="$failed_before, and the re-run of its failed jobs ended $b_conclusion: $run_url"
+      else
+        baseline_line="$failed_before; its failed jobs were re-run and passed: $run_url"
+      fi ;;
+    *) baseline_line="its CI run ended $b_conclusion, not a failed check, so nothing was re-run: $b_url" ;;
+  esac
+fi
 # The wall holds only against a credential without administration: with it, an
 # agent can edit or delete the ruleset (#300). Asked of the new repository once
 # setup is done, and after the rollback is off, so an unreadable answer costs a
@@ -826,6 +889,7 @@ ${private_lines}  local: $dir
   first pull request: $pr_url
     wait for every check to turn green, then merge (squash). A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
 ${repush:+$repush
+}${baseline_line:+  first commit on main: $baseline_line
 }  $day_names and what to do with Dependabot's pull requests are in the pull request's body and in README.md under "First day"
 $admin_line
   next: cd $dir && claude

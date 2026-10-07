@@ -21,6 +21,17 @@ pull requests and have no tag.
   the route asked, or that an empty table proves nothing. v1.7.5 shipped
   the long one (#425).
 
+### Fixed
+
+- `/plinth:new-project` no longer leaves a red `ci / floor-check` on `main`'s
+  first commit. That commit is pushed before the wall, as the ruleset needs
+  `main` to exist, so its CI run fails with no ruleset and no labels to find.
+  Once the wall, the labels and the other settings are in place, the door
+  re-runs that run's failed jobs and waits for the result. A run it cannot
+  find or read, one that ended other than failed, a re-run it cannot start,
+  or one that does not pass is a `first commit on main:` line in the summary
+  naming the run, not a failure of the door (#401).
+
 ## [1.7.5] - 2026-10-07
 
 A new repository renders plinth-template v1.8.0, whose agent hands a refused
