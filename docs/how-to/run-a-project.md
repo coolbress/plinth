@@ -204,12 +204,12 @@ not been measured.
    Protects against finding out the way back does not work on the day you
    need it.
 4. If the app has a database, put one made-up row in each table that should
-   be private and ask for it once from outside, with only what every visitor
-   gets and no login, for example a hosted database's REST route for each
-   table called with the anonymous key the app ships to the browser; an empty
-   table answers nothing whether it is locked or open, and the app's page,
-   the API's root address or one locked table can refuse while another table
-   still answers; what you can read, anyone can. Protects against data left
+   be private and try to read it once from outside, with only the public key
+   every visitor gets and no login, through every route that key reaches (for a
+   hosted database, its REST routes for tables, views and functions, called
+   with the anonymous key the app ships to the browser); a refusal covers only
+   the route you asked, and an empty answer from an empty table means
+   nothing, while what you can read, anyone can. Protects against data left
    open to everyone.
 
 ## The loop
