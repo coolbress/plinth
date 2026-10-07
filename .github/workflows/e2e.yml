@@ -10,8 +10,8 @@ name: e2e
 # not be able to trigger.
 #
 # One secret, PLINTH_E2E_TOKEN: a fine-grained personal access token with
-# Administration, Contents, Pull requests and Workflows: write on all of the
-# owner's repositories (a repository that does not exist yet is not
+# Actions, Administration, Contents, Pull requests and Workflows: write on all
+# of the owner's repositories (a repository that does not exist yet is not
 # selectable), or a classic one with repo, workflow and delete_repo. Without
 # it the job fails at the token prompt: an empty token is refused, so a
 # missing secret is red, never a pass. No job is skipped with `if:`.

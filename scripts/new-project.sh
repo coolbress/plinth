@@ -146,9 +146,10 @@ elif [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
 else
   # A fine-grained admin token, pre-filled for this owner (GitHub's token-template
   # parameters); the repository selection has no parameter, so it is named.
-  # `members` only for an organization, whose membership step 3 reads.
+  # `members` only for an organization, whose membership step 3 reads. `actions`
+  # lets it re-run the baseline's failed jobs once the wall stands (#429).
   kind_now="$(gh api "users/$owner" --jq .type 2>/dev/null)" || kind_now=""
-  token_link="https://github.com/settings/personal-access-tokens/new?name=plinth+new-project&target_name=$owner&expires_in=7&administration=write&contents=write&workflows=write&pull_requests=write"
+  token_link="https://github.com/settings/personal-access-tokens/new?name=plinth+new-project&target_name=$owner&expires_in=7&administration=write&contents=write&workflows=write&pull_requests=write&actions=write"
   [ "$kind_now" = Organization ] && token_link="$token_link&members=read"
   # A lookup that failed is not "a personal account": an organization's token would
   # then lack Members and fail step 3, so the stop names it (#286 review).

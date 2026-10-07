@@ -86,8 +86,9 @@ first act is to create and delete a sibling name, `<name>-probe`, so a
 token that cannot delete stops before anything is left behind and the real
 name never collides with a deletion GitHub is still finishing. The `e2e` workflow
 runs it nightly and on demand from the secret `PLINTH_E2E_TOKEN` (a
-fine-grained token: Administration, Contents, Pull requests, Workflows: write
-on all of the owner's repositories; registered by a person, once). A run that
+fine-grained token: Actions, Administration, Contents, Pull requests,
+Workflows: write on all of the owner's repositories; registered by a person,
+once). A run that
 could not delete its repository names it in the job summary and is red. A
 release needs a green run on the commit it tags
 ([How to cut a release](docs/how-to/cut-a-release.md)).
