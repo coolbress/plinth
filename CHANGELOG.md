@@ -17,10 +17,10 @@ pull requests and have no tag.
   first pull request is merged: production credentials and the production
   database kept out of the agent's session, which gets made-up or scrubbed
   data instead of a copy, a spend ceiling on every paid
-  service, one restore tried on purpose, and the app's database opened once
-  from outside without logging in. They are guidance: no check covers them,
+  service, one restore tried on purpose, and the database's own address
+  requested once from outside with no key or password, not only the app's page. They are guidance: no check covers them,
   the page says so, and their effect has not been measured. The README's limits and the concepts page point at
-  them, and the concepts page no longer lists them as direction (#412).
+  them, and the concepts page no longer lists them as direction (#412, #419).
 
 ## [1.7.4] - 2026-10-06
 
