@@ -785,6 +785,7 @@ created=0; trap - EXIT
 # One wait budget for the run to finish, and one for the re-run; each start is
 # printed, as the waits above are. Only a run that ended `failure` is re-run:
 # that is the floor-check before the wall. Any other end is named, not re-run.
+# A green end is named too: every summary says how the baseline ended (#428).
 baseline_run() { # sets b_row to "<id> <status> <conclusion> <attempt> <page>" of the baseline's CI run (empty if not listed), b_err to gh's words on a failed read
   b_err=""
   b_row="$(gh api -X GET "repos/$repo/actions/runs" -f branch=main -f event=push -f "head_sha=$base_sha" -F per_page=20 \
@@ -815,7 +816,7 @@ if ! wait_baseline 1; then
   fi
 else
   case "$b_conclusion" in
-    success|skipped|neutral) ;;
+    success|skipped|neutral) baseline_line="its CI run ended $b_conclusion, so nothing was re-run: $b_url" ;;
     failure)
       run_id="$b_id"; run_url="$b_url"
       echo "  $(date -u +%H:%M:%SZ) main's first CI run failed before the wall was up; re-running its failed jobs (up to $first_pr_wait s): $run_url"

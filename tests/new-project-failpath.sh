@@ -189,7 +189,7 @@ case "$step" in
                  else
                    case "${MOCK_BASELINE:-failure}" in
                      failure) echo "77 completed failure 1 $url" ;;
-                     success) echo "77 completed success 1 $url" ;;
+                     success|skipped|neutral) echo "77 completed $MOCK_BASELINE 1 $url" ;;
                      running) echo "77 in_progress null 1 $url" ;;
                      error)   echo "gh: HTTP 502" >&2; exit 1 ;;
                      action_required) echo "77 completed action_required 1 $url" ;;
@@ -954,9 +954,12 @@ check "its failed jobs are re-run once, after the ruleset, the labels and the me
 check "the re-run is asked for the run the lookup found" 'grep -q "repos/tester/probe/actions/runs/77/rerun-failed-jobs" "$log"'
 check "the summary says the re-run passed and names the run" \
   'grep -qxF "  first commit on main: its CI run failed before the wall was up; its failed jobs were re-run and passed: https://github.com/tester/probe/actions/runs/77" "$work/home-none/out"'
-E="MOCK_BASELINE=success" run baseline-green ok yes no "" -- probe
-hasnt baseline-green "a baseline run that passed is not re-run"  log 'rerun-failed-jobs'
-hasnt baseline-green "and the summary says nothing about it"     out 'first commit on main'
+# A run that passed is not re-run, and the summary still says how it ended (#428).
+for c in success skipped neutral; do
+  E="MOCK_BASELINE=$c" run "baseline-$c" ok yes no \
+    "first commit on main: its CI run ended $c, so nothing was re-run: https://github.com/tester/probe/actions/runs/77" -- probe
+  hasnt "baseline-$c" "a baseline run that ended $c is not re-run" log 'rerun-failed-jobs'
+done
 E="MOCK_RERUN=refused" run rerun-refused ok yes no \
   "first commit on main: its CI run failed before the wall was up, and its failed jobs could not be re-run (gh: Must have admin rights to Repository. (HTTP 403)); re-run them: gh run rerun 77 --failed --repo tester/probe   https://github.com/tester/probe/actions/runs/77" -- probe
 E="MOCK_RERUN=red PLINTH_FIRST_PR_WAIT=1" run rerun-red ok yes no \

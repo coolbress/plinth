@@ -30,7 +30,8 @@ pull requests and have no tag.
   re-runs that run's failed jobs and waits for the result. A run it cannot
   find or read, one that ended other than failed, a re-run it cannot start,
   or one that does not pass is a `first commit on main:` line in the summary
-  naming the run, not a failure of the door (#401).
+  naming the run, not a failure of the door (#401). A run that passed is
+  named on that line too, with nothing re-run (#428).
 
 ## [1.7.5] - 2026-10-07
 
