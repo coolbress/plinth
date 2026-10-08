@@ -122,8 +122,10 @@ def result(kind: str, msg: str, *, deferred: bool = False) -> None:
         verdicts.append(f"fail: {msg}")
     elif kind == "SKIP":
         skips += 1
-        verdicts.append(f"not yet confirmed: {msg}; /plinth:floor-check, run with a login that administers "
-                        "the repository, reads it")
+        # The SKIP's own text says why; what reads it differs per item (an
+        # admin login, the network, a file the door writes), so the line says
+        # only what is true of all of them.
+        verdicts.append(f"not yet confirmed: {msg}; a run that can read it confirms it")
     if deferred:
         left += 1
         verdicts.append(f"not yet confirmed: {msg}")

@@ -607,7 +607,7 @@ if [ "$(grep -c . "$v")" = 4 ] && [ "$(head -1 "$v")" = "pass: the floor, no FAI
 else bad "--verdicts: expected 4 lines (1 pass, 3 not yet confirmed)"; sed 's/^/        /' "$v"; fi
 in_v()  { if grep -qE -- "$2" "$v"; then ok "$1"; else bad "$1 (expected a line in --verdicts matching '$2')"; sed 's/^/        /' "$v"; fi; }
 in_v    "--verdicts: the left-to-the-skill read keeps the checker's own why and judge" '^not yet confirmed: push protection is not read here: .*/plinth:floor-check reads it'
-in_v    "--verdicts: a SKIP says what reads it" '^not yet confirmed: .*not verified.*; /plinth:floor-check, run with a login that administers the repository, reads it$'
+in_v    "--verdicts: a SKIP keeps its own why and says what confirms it" '^not yet confirmed: .*not verified.*; a run that can read it confirms it$'
 rm -f "$v"; private "$(sec enabled enabled enabled)" "$rules_neither" --actions-token --verdicts "$v"
 in_v    "--verdicts: a FAIL is a fail line" '^fail: main: CodeQL not enforced'
 if ! grep -q '^pass: ' "$v"; then ok "--verdicts: no pass line beside a FAIL"; else bad "--verdicts: a pass line beside a FAIL"; fi
