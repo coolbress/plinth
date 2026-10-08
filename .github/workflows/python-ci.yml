@@ -722,7 +722,7 @@ jobs:
 
           # A test rewritten inside a kept file, and a marker that turns a
           # check off for one test or one line (#434).
-          MARKER = re.compile(r"\bmark\.(?:skipif|skip|xfail)\b|\bpytest\.skip\("
+          MARKER = re.compile(r"\bmark\s*\.\s*(?:skipif|skip|xfail)\b|\bpytest\s*\.\s*skip\s*\("
                               r"|#\s*noqa\b|#\s*type:\s*ignore\b|#\s*pragma:\s*no\s*cover\b",
                               re.IGNORECASE)
           lost, stat = set(), git("diff", "--numstat", "-M", "-z", f"{base}...{head}").split("\0")

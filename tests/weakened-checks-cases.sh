@@ -236,9 +236,9 @@ expect "a new test file with a skip, the file named: no WARN" 0
 new_repo; printf '# noqa\n' > "$r/src/notes.txt"; commit
 run "Refactor."
 expect "a marker in a file that is not Python: no WARN" 0
-new_repo; printf 'x = 1  # NOQA\ny = 2  #type:ignore\n' >> "$r/src/m.py"; commit
+new_repo; printf 'x = 1  # NOQA\ny = 2  #type:ignore\npytest.skip ("x")\npytest . mark . xfail\n' >> "$r/src/m.py"; commit
 run "Refactor."
-expect "markers in other cases and spacing still count, one row per file" 1 "src/m.py"
+expect "markers in other cases and spacing still count, one row per file" 1 "src/m.py" "pytest.skip (" "mark . xfail"
 
 new_repo; printf 'def test_c():\n    assert 1\n' > "$r/tests/test_c.py"; commit
 run "Adds a test."
