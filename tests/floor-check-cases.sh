@@ -582,6 +582,18 @@ has     "--actions-token, private: push protection is still the INFO naming who 
 counted "--actions-token, private, no rule: outside the not-verified count, exit 0" 0 1 0
 private null "$rules_neither" --actions-token
 has     "--actions-token, private, null security settings: the same unread answer" '^  INFO  main: CodeQL is not judged here'
+# Outside the not-verified count is not off the summary line (#436): a reader
+# of that line alone learns that the run left those two reads unread, and
+# which run reads them. Without the flag they are the two SKIPs they are, and
+# the line has no third part. The exit code is the FAIL count's alone.
+private "" "$rules_neither" --actions-token
+has     "--actions-token, private, both settings unread: the summary counts them as left to /plinth:floor-check" '^-- 0 failed, 1 not verified, 2 left to /plinth:floor-check$'
+counted "--actions-token, private, both settings unread: the not-verified count and the exit code do not move" 0 1 0
+private "" "$rules_neither"
+has     "private, both settings unread, no flag: no third part on the summary line" '^-- 0 failed, 3 not verified$'
+counted "private, both settings unread, no flag: both are SKIPs, exit 0" 0 3 0
+private "$(sec enabled enabled enabled)" "$rules_neither" --actions-token
+has     "--actions-token, private, settings read: nothing left, no third part, even when the run fails" '^-- 1 failed, 1 not verified$'
 # As that token reads such a repository: no default setup either. That SKIP
 # is the one a public repository's CI run carries too.
 rm "$api/repos/o/r/code-scanning/default-setup.json"
@@ -684,7 +696,7 @@ if ! grep -q "FAIL.*label" <<<"$out"; then ok "a missing label is never a FAIL"
 else bad "a missing label produced a FAIL"; fi
 # Every read answered (wall, bypass actors, labels): nothing is counted. A count
 # that includes a passed item is the defect in the other direction.
-if grep -q -- "-- 0 failed, 0 not verified" <<<"$out" && ! grep -q '^  SKIP ' <<<"$out"; then ok "a run whose every read was answered counts 0 not verified, and says so"
+if grep -qx -- "-- 0 failed, 0 not verified" <<<"$out" && ! grep -q '^  SKIP ' <<<"$out"; then ok "a run whose every read was answered counts 0 not verified, and says so"
 else bad "a fully read run still counts something as not verified"; printf '%s\n' "$out" | grep -E 'SKIP|failed' | sed 's/^/        /'; fi
 if grep -q -- "--paginate" "$work/gh-calls.log"; then ok "the label read is paginated (30 per page would report labels missing that are there)"
 else bad "the label read is not paginated"; sed 's/^/        /' "$work/gh-calls.log"; fi
