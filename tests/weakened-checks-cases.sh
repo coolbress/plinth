@@ -177,9 +177,68 @@ run "Edits .pytest.ini only."
 expect "a dot-prefixed name (.pytest.ini) does not name pytest.ini: WARN" 1 "pytest.ini"
 
 echo "-- what counts as a change to the checks"
-new_repo; printf 'x = 2\n' > "$r/src/m.py"; printf 'def test_a():\n    assert 2\n' > "$r/tests/test_a.py"; commit
+new_repo; printf 'x = 2\n' > "$r/src/m.py"; commit
 run "Refactor the parser."
-expect "source and a kept test edited: no WARN (a weakened assertion is not seen)" 0
+expect "source edited only: no WARN" 0
+
+echo "-- a kept test file that lost lines (#434)"
+# coolbress/plinth-reach#8's shape: the assertion replaced by a stubbed
+# lookup, one line out and lines in, the file kept.
+eight() { new_repo; printf 'def test_a(monkeypatch):\n    monkeypatch.setattr("m.lookup", lambda: "1")\n    assert version() == "1"\n' > "$r/tests/test_a.py"; commit; }
+eight; run "Refactor the parser."
+expect "#8's shape (a kept test file, lines removed and added), not named: WARN" 1 "tests/test_a.py" "a test file lost lines"
+eight; run "Rewrites tests/test_a.py to stub the lookup: the version comes from the stub."
+expect "#8's shape, named: no WARN" 0
+printf '%s\n' "$out" | grep -q '^named in the description: tests/test_a.py: a test file lost lines$' && ok "  and it is listed as named" \
+  || bad "  a named rewrite is not listed in the log" "$out"
+
+new_repo; printf 'def test_a():\n    assert 1\n\ndef test_a2():\n    assert 1\n' > "$r/tests/test_a.py"; commit
+run "Adds a test."
+expect "a kept test file that only gains lines: no WARN" 0
+printf '%s\n' "$out" | grep -q '^0 change(s) to the checks' && ok "  and it is not listed" || bad "  a test file that only gained lines is listed" "$out"
+
+new_repo; printf 'set -e\necho a\n' > "$r/tests/run.sh"; git -C "$r" add -A; git -C "$r" commit -qm sh; base="$(git -C "$r" rev-parse HEAD)"
+printf 'echo b\n' > "$r/tests/run.sh"; commit
+run "Refactor."
+expect "a shell file under tests/ that lost lines: no WARN (.py only)" 0
+
+new_repo; git -C "$r" mv tests/test_b.py tests/test_bb.py; printf 'def test_b():\n    pass\n' > "$r/tests/test_bb.py"; commit
+run "Rename."
+expect "a test renamed inside the test paths and rewritten: WARN on the new path" 1 "tests/test_b.py -> tests/test_bb.py" "a test file lost lines"
+
+new_repo; printf 'x = 1\ny = 2\nz = 3\nw = 4\n' > "$r/src/m.py"; git -C "$r" add -A; git -C "$r" commit -qm four; base="$(git -C "$r" rev-parse HEAD)"
+git -C "$r" mv src/m.py tests/test_m.py; printf 'x = 1\ny = 2\nz = 3\n' > "$r/tests/test_m.py"; commit
+run "Moves it."
+expect "a source file moved into the test paths and cut: no WARN (not a kept test file)" 0
+new_repo; printf 'import pytest\ncollect_ignore = ["test_a.py"]\n' > "$r/tests/conftest.py"; commit
+run "Refactor."
+expect "conftest.py edited with a line removed: one WARN carrying both reasons" 1 "tests/conftest.py" "check configuration changed; a test file lost lines"
+
+echo "-- a skip or a suppression added (#434)"
+markers=('@pytest.mark.skip' '@pytest.mark.skipif(True, reason="x")' '@pytest.mark.xfail' 'pytest.skip("x")' 'x = 1  # noqa: E501' 'x = 1  # type: ignore[assignment]' 'x = 1  # pragma: no cover')
+for m in "${markers[@]}"; do
+  new_repo; printf '%s\n' "$m" >> "$r/src/m.py"; commit
+  run "Refactor."
+  expect "added: $m: WARN" 1 "src/m.py" "a skip or a suppression added"
+done
+for m in "${markers[@]}"; do
+  new_repo; printf 'x = 1\n%s\n' "$m" > "$r/src/m.py"; git -C "$r" add -A; git -C "$r" commit -qm with; base="$(git -C "$r" rev-parse HEAD)"
+  printf 'x = 1\n%s\ny = 2\n' "$m" > "$r/src/m.py"; commit
+  run "Refactor."
+  expect "  unchanged: $m: no WARN" 0
+  printf 'x = 1\ny = 2\n' > "$r/src/m.py"; commit
+  run "Refactor."
+  expect "  removed: $m: no WARN" 0
+done
+new_repo; printf '@pytest.mark.skip\ndef test_c():\n    assert 1\n' > "$r/tests/test_c.py"; commit
+run "Adds test_c.py."
+expect "a new test file with a skip, the file named: no WARN" 0
+new_repo; printf '# noqa\n' > "$r/src/notes.txt"; commit
+run "Refactor."
+expect "a marker in a file that is not Python: no WARN" 0
+new_repo; printf 'x = 1  # NOQA\ny = 2  #type:ignore\npytest.skip ("x")\npytest . mark . xfail\n' >> "$r/src/m.py"; commit
+run "Refactor."
+expect "markers in other cases and spacing still count, one row per file" 1 "src/m.py" "pytest.skip (" "mark . xfail"
 
 new_repo; printf 'def test_c():\n    assert 1\n' > "$r/tests/test_c.py"; commit
 run "Adds a test."

@@ -46,6 +46,14 @@ pull requests and have no tag.
   annotations past ten with no notice. Without `--actions-token` the three
   reads are SKIPs as before; no exit code, check name, job or input changes
   (#441).
+- `ci / diff-size`'s list of changes to the checks gains two shapes: a kept
+  Python test file that lost at least one line, and an added line in a
+  Python file carrying `@pytest.mark.skip`, `skipif`, `xfail`,
+  `pytest.skip(`, `# noqa`, `# type: ignore` or `# pragma: no cover`. Each is
+  a WARN when the description does not name the path, as before; a test file
+  that only gains lines is not listed. The row says the shape changed, not
+  that the standard got weaker. No check name, job, input or conclusion
+  changes (#434).
 
 ## [1.7.6] - 2026-10-08
 
