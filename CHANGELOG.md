@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `ci / floor-check`'s summary line gains a third count,
+  `K left to /plinth:floor-check`, printed only when K is above 0: the INFO
+  lines for push protection and a private repository's missing CodeQL rule,
+  which the Actions token cannot read and `/plinth:floor-check` with a login
+  that administers the repository does. They stay INFO, outside the
+  not-verified count, and the exit code still depends on FAIL lines alone
+  (#436).
+
 ## [1.7.6] - 2026-10-08
 
 `/plinth:new-project` no longer leaves a red `ci / floor-check` on a new

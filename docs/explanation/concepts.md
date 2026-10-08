@@ -351,7 +351,10 @@ the Actions token cannot read: push protection, the ruleset's bypass actors.
 The checker behind `ci / floor-check` prints PASS, FAIL, WARN, INFO and SKIP
 lines; a SKIP is a not yet confirmed, never a PASS, and the summary counts
 them as not verified. In consumer CI that count is never 0: the bypass-actor
-read needs an admin-read token, which the Actions token never is.
+read needs an admin-read token, which the Actions token never is. Push
+protection, and on a private repository a missing CodeQL rule, are INFO
+there instead, outside that count; the summary line counts them on their
+own, as `left to /plinth:floor-check`, the run that reads them.
 
 What plinth has. The ruleset's `required_status_checks` rule, with `strict`,
 asks for every required check reported on the pull request's head with the

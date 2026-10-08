@@ -99,6 +99,11 @@ what would verify it (a network, a login, an admin-read token). An exit code
 of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
 not-verified count says what was not. In consumer CI that count is not 0:
 the bypass-actor read needs an admin-read token the Actions token never is.
+A third count, `K left to /plinth:floor-check`, appears only in a run with
+`--actions-token` (`ci / floor-check`) and only when K is above 0: INFO
+lines for reads that token cannot make and this skill, run with a login that
+administers the repository, does (push protection, and a private
+repository's missing CodeQL rule). This skill's own run never prints it.
 
 ## What three of the checks read, and what they do not
 

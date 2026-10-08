@@ -40,6 +40,8 @@ Push protection is WARN-only too (#303): on, off with the call that turns it
 on, or a SKIP when the token does not get the repository's security settings.
 `ci / floor-check` passes --actions-token, which makes that one SKIP an INFO:
 the Actions token never gets them, and the skill, run by a person, does.
+The summary line counts such INFOs on their own, `K left to
+/plinth:floor-check`, printed only when K is above 0 (#436).
 
 A private repository's wall is read against its licences (#351): the
 code_scanning rule is expected only where GitHub Code Security is enabled on
@@ -103,15 +105,21 @@ CONFIG_NAMES = {"config.yml", "config.yaml"}
 
 fails = 0
 skips = 0
+left = 0
 
 
-def result(kind: str, msg: str) -> None:
-    global fails, skips
+def result(kind: str, msg: str, *, deferred: bool = False) -> None:
+    """`deferred` marks an INFO for a read this run cannot make and a run with
+    a login that administers the repository does (#436): outside the
+    not-verified count (#303), counted on the summary line on its own."""
+    global fails, skips, left
     print(f"  {kind:5} {msg}")
     if kind == "FAIL":
         fails += 1
     elif kind == "SKIP":
         skips += 1
+    if deferred:
+        left += 1
 
 
 def ok(cond: bool, good: str, bad: str) -> bool:
@@ -1325,7 +1333,7 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
     security = meta.get("security_and_analysis")
     if security is None and actions_token:
         result("INFO", "push protection is not read here: the Actions token does not get the repository's security "
-                       "settings; /plinth:floor-check reads it with a person's login")
+                       "settings; /plinth:floor-check reads it with a person's login", deferred=True)
         return
     if security is None:
         result("SKIP", "push protection not verified (this token does not read the repository's security settings; "
@@ -1507,7 +1515,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         result("INFO", f"{branch}: CodeQL is not judged here: no code_scanning rule for CodeQL and no CodeQL check "
                        "name, which on a private repository is a defect only where GitHub Code Security is enabled, "
                        "and the Actions token does not get the repository's security settings. The licence state is "
-                       "judged when /plinth:floor-check is run with a login that administers the repository")
+                       "judged when /plinth:floor-check is run with a login that administers the repository", deferred=True)
     else:
         why = ("this token does not read the repository's security settings; one with repository administration does"
                if meta.get("security_and_analysis") is None else
@@ -1887,7 +1895,7 @@ def main() -> int:
     if a.credentials:
         check_credentials(root)
 
-    print(f"-- {fails} failed, {skips} not verified")
+    print(f"-- {fails} failed, {skips} not verified" + (f", {left} left to /plinth:floor-check" if left else ""))
     return 1 if fails else 0
 
 
