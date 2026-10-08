@@ -136,9 +136,7 @@ it shipped.
   permission, with Claude Code in its default auto mode, and recording what
   the agent could and could not do (#403).
 - Making a lowered standard visible: a check configuration, a workflow input
-  or a test set that no longer matches what was agreed (#404), and saying,
-  per check and per commit, what was actually checked and what was not
-  (#405).
+  or a test set that no longer matches what was agreed (#404).
 - Candidate checks specified and measured before any is adopted: mutation
   testing, changed-line coverage, and ruff's complexity, commented-out code
   and unused-argument rules (#406); an arsenal indexed by the concern a tool
@@ -368,8 +366,13 @@ where that is so. No job in plinth's workflows is skipped with `if:`: a
 check that does not apply, such as `ci / deps` outside a pull request,
 reports a pass that says so. A release is tagged only on a commit the e2e
 runner's green run covers (the door's whole journey on real GitHub, through
-the wall, then deleted). Saying, per check and per commit, what was actually
-checked is #405.
+the wall, then deleted). A conclusion cannot say what a job checked: the
+ruleset accepts `neutral` and `skipped` as it accepts `success`, so a third
+conclusion would change the icon and not the merge. Each job's summary
+opens with it in text instead, in three forms: pass, fail, and not yet
+confirmed, which is also a warning on the run;
+[required checks](../reference/required-checks.md#what-a-jobs-summary-says)
+lists the cases.
 
 ### 5. The check looks at the property, and a check the agent can see becomes a target the agent can fit (evidence)
 

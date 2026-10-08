@@ -18,6 +18,13 @@ name: python-ci
 # allowlist entry, `coolbress/plinth/*`, for this call itself. Without it the
 # run dies at startup and no check name ever reports.
 #
+# Each job opens its summary with one verdict line per standard it covers:
+# `pass:`, `fail:` or `not yet confirmed:`, the last also a `::warning::`
+# (#405, #437; the forms are in docs/reference/required-checks.md). The
+# conclusion does not carry it: the ruleset accepts neutral and skipped as it
+# accepts success. A verdict step runs `if: ${{ !cancelled() }}`, so it
+# reports after a failed step too; a step that did not run is not yet confirmed.
+#
 # Check names are `{caller job} / {job here}`. The caller job is named `ci`,
 # so rulesets require `ci / lint` and so on. Renaming a job here is a MAJOR
 # change: every consumer ruleset requires the old name forever.
@@ -114,9 +121,12 @@ jobs:
           echo "$d" >> "$GITHUB_PATH"
       # --locked fails when the lockfile is missing or disagrees with
       # pyproject. A committed lockfile is a precondition, not a check.
-      - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
+      - id: sync
+        run: uv sync --locked
+      - id: check
+        run: uv run ruff check .
+      - id: format
+        run: uv run ruff format --check .
 
       # Workflow security static analysis. actionlint checks correctness,
       # zizmor checks security: template injection, credential leaks, cache
@@ -124,9 +134,35 @@ jobs:
       # consumer CI red on an unrelated day. Only medium and above blocks here:
       # this runs in other people's repositories and low findings have low
       # confidence.
+      # No GitHub token reaches it, so zizmor runs offline and its online
+      # audits (impostor commits, known-vulnerable actions) do not run; the
+      # log says so, and the verdict below reads it from there.
       - name: Workflow security (zizmor, medium and above)
-        run: uvx zizmor@1.29.0 --no-progress --min-severity medium .github/workflows/
+        id: zizmor
+        run: |
+          set -o pipefail
+          uvx zizmor@1.29.0 --no-progress --min-severity medium .github/workflows/ 2>&1 | tee "$RUNNER_TEMP/zizmor.log"
         working-directory: ${{ github.workspace }}
+
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          SYNC: ${{ steps.sync.outcome }}
+          CHECK: ${{ steps.check.outcome }}
+          FORMAT: ${{ steps.format.outcome }}
+          ZIZMOR: ${{ steps.zizmor.outcome }}
+        run: |
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v "$SYNC" "uv sync --locked"
+          v "$CHECK" "ruff check"
+          v "$FORMAT" "ruff format --check"
+          if grep -q "running in offline mode" "$RUNNER_TEMP/zizmor.log" 2>/dev/null; then
+            v "$ZIZMOR" "zizmor's offline audits, nothing at medium or above"
+            say "not yet confirmed: zizmor's online audits, they did not run because this job gives zizmor no GitHub token; \`GH_TOKEN=\$(gh auth token) uvx zizmor@1.29.0 .github/workflows/\` run by hand confirms them"
+          else
+            v "$ZIZMOR" "zizmor, nothing at medium or above"
+          fi
 
   typecheck:
     runs-on: ubuntu-latest
@@ -151,8 +187,20 @@ jobs:
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
           echo "$d" >> "$GITHUB_PATH"
-      - run: uv sync --locked
-      - run: uv run mypy .
+      - id: sync
+        run: uv sync --locked
+      - id: mypy
+        run: uv run mypy .
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          SYNC: ${{ steps.sync.outcome }}
+          MYPY: ${{ steps.mypy.outcome }}
+        run: |
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v "$SYNC" "uv sync --locked"
+          v "$MYPY" "mypy"
 
   test:
     runs-on: ubuntu-latest
@@ -177,12 +225,15 @@ jobs:
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
           echo "$d" >> "$GITHUB_PATH"
-      - run: uv sync --locked
-      - run: uv run pytest
+      - id: sync
+        run: uv sync --locked
+      - id: pytest
+        run: uv run pytest
 
       # Exercise the declared range for real. Empty input: this step does
       # nothing. uv downloads the interpreter, so the runner needs no preinstall.
       - name: Also on the extra Python versions
+        id: extra
         if: inputs.extra-python-versions != ''
         env:
           VERSIONS: ${{ inputs.extra-python-versions }}
@@ -192,6 +243,21 @@ jobs:
             echo "── python $v"
             uv run --isolated --python "$v" --with pytest pytest -q
           done
+
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          SYNC: ${{ steps.sync.outcome }}
+          PYTEST: ${{ steps.pytest.outcome }}
+          EXTRA: ${{ steps.extra.outcome }}
+          VERSIONS: ${{ inputs.extra-python-versions }}
+        run: |
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v "$SYNC" "uv sync --locked"
+          v "$PYTEST" "pytest on .python-version"
+          if [ -n "$VERSIONS" ]; then v "$EXTRA" "pytest on $VERSIONS"
+          else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
 
   # Secret detection. Not a duplicate of push protection: push protection
   # blocks provider-format tokens only and lets private-key PEMs and generic
@@ -226,8 +292,17 @@ jobs:
       # and then scanning `dir` would look at nothing that was deleted, and a
       # deleted secret is still in history.
       - name: Secret detection, history included
+        id: gitleaks
         working-directory: ${{ inputs.working-directory }}
         run: gitleaks git . --no-banner --redact
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          GITLEAKS: ${{ steps.gitleaks.outcome }}
+        run: |
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v "$GITLEAKS" "gitleaks, no secret in the history"
 
   # PR title is Conventional Commits with the standard eleven types only.
   #
@@ -248,13 +323,14 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. A job skipped
           # with `if:` has no check name, and the day a ruleset requires that
           # name the repository quietly locks.
           if [ -z "${TITLE:-}" ]; then
             echo "Not a pull request: no title to check."
-            echo "### PR title: not a pull request, nothing checked" >> "$GITHUB_STEP_SUMMARY"
+            say "pass: PR title, does not apply (not a pull request: no title to check)"
             exit 0
           fi
 
@@ -266,6 +342,7 @@ jobs:
             # description's closing or `Part of` line instead.
             if printf '%s' "$TITLE" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
               echo "::error::PR title ends in a number: ${TITLE}. The squash merge adds this pull request's own number; name the issue in the description instead."
+              say "fail: PR title, it ends in a number"
               {
                 echo "### PR title ends in a number"
                 echo
@@ -280,11 +357,12 @@ jobs:
               exit 1
             fi
             echo "OK: $TITLE"
-            echo "### PR title follows the convention" >> "$GITHUB_STEP_SUMMARY"
+            say "pass: PR title follows the convention"
             exit 0
           fi
 
           echo "::error::PR title is not Conventional Commits: ${TITLE}"
+          say "fail: PR title, it is not Conventional Commits"
           {
             echo "### PR title does not follow the convention"
             echo
@@ -374,6 +452,7 @@ jobs:
           fi
 
       - name: Dependency review, blocks vulnerable versions a PR introduces
+        id: review
         if: github.event_name == 'pull_request' && steps.served.outputs.review != 'refused'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
@@ -383,22 +462,34 @@ jobs:
           # wrong list blocks legitimate dependencies. A project sets it in its
           # own call if it needs one.
 
-      - name: Dependency review refused here, nothing checked
-        if: github.event_name == 'pull_request' && steps.served.outputs.review == 'refused'
-        run: |
-          echo "::warning::Not checked: GitHub refuses dependency review on this private repository without GitHub Code Security, so no dependency this pull request adds was compared with the advisory database. In its place: Dependabot alerts, after the merge."
-          {
-            echo "### Dependency review: not checked"
-            echo "GitHub refuses dependency review on this private repository without GitHub Code Security (HTTP 403)."
-            echo "No dependency this pull request adds was compared with the advisory database. In its place: Dependabot alerts, after the merge."
-          } >> "$GITHUB_STEP_SUMMARY"
-
       # Not a PR: report a pass instead of skipping the job (see pr-title).
-      - name: Not a pull request, no diff to review
-        if: github.event_name != 'pull_request'
+      # Refused (#395): not yet confirmed. A head Dependabot pushed is not
+      # analysed by CodeQL, whose code_scanning rule then passes (#179): said
+      # here, read from who started the run, since CodeQL's own check cannot.
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          EVENT: ${{ github.event_name }}
+          SERVED: ${{ steps.served.outputs.review }}
+          REVIEW: ${{ steps.review.outcome }}
+          SEVERITY: ${{ inputs.deps-fail-on-severity }}
+          ACTOR: ${{ github.actor }}
         run: |
-          echo "Not a pull request: no base to compare dependencies against."
-          echo "### Dependency review: not a pull request, nothing checked" >> "$GITHUB_STEP_SUMMARY"
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          if [ "$EVENT" != pull_request ]; then
+            say "pass: dependency review, does not apply (not a pull request: no base to compare dependencies against)"
+          elif [ "$SERVED" = refused ]; then
+            say "not yet confirmed: dependency review, GitHub refuses it on this private repository without GitHub Code Security (HTTP 403), so no dependency this pull request adds was compared with the advisory database; Dependabot alerts report one after the merge"
+          elif [ "$REVIEW" = success ]; then
+            say "pass: dependency review, no added dependency version with an advisory at $SEVERITY or above"
+          elif [ "$REVIEW" = failure ]; then
+            say "fail: dependency review, an added dependency version has an advisory at $SEVERITY or above, or the review could not run"
+          else
+            say "not yet confirmed: dependency review, it did not run because an earlier step failed; a run that gets past that step confirms it"
+          fi
+          if [ "$EVENT" = pull_request ] && [ "$ACTOR" = "dependabot[bot]" ]; then
+            say "not yet confirmed: CodeQL on this head, Dependabot pushed it and CodeQL does not analyse a head Dependabot pushed; \`main\` is analysed after the merge"
+          fi
 
   # Diff size is a reviewability gate, not a correctness one: can a person
   # read this? A rule that lives only in an issue body never fires; a 400-line
@@ -430,13 +521,14 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. The condition
           # lives inside the step, not on the job, so the check name always
           # reports (see pr-title).
           if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
             echo "Not a pull request: no diff to measure."
-            echo "### Diff size: not a pull request, nothing measured" >> "$GITHUB_STEP_SUMMARY"
+            say "pass: diff size, does not apply (not a pull request: no diff to measure)"
             exit 0
           fi
 
@@ -461,6 +553,7 @@ jobs:
           # what GitHub shows on the PR.
           if ! numstat="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "${spec[@]}")"; then
             echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA})."
+            say "fail: diff size, the diff could not be computed"
             exit 1
           fi
 
@@ -475,7 +568,15 @@ jobs:
           done <<< "$numstat"
           total=$((added + removed))
 
+          if [ "$MAX_LINES" -le 0 ]; then
+            say "pass: diff size, measured and not enforced (max-diff-lines is 0): ${total} lines"
+          elif [ "$total" -gt "$MAX_LINES" ]; then
+            say "fail: diff size, ${total} lines, over the limit of ${MAX_LINES}"
+          else
+            say "pass: diff size, ${total} lines, within the limit of ${MAX_LINES}"
+          fi
           {
+            echo
             echo "### Diff size"
             echo
             echo "| | |"
@@ -694,13 +795,16 @@ jobs:
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
           echo "$d" >> "$GITHUB_PATH"
-      - run: uv sync --locked
-      - run: uv build
+      - id: sync
+        run: uv sync --locked
+      - id: build
+        run: uv build
 
       # `uv build` proves the files were produced. Whether they install and
       # import in a clean environment is a different sentence: missing package
       # data, a wrong package name, broken metadata only show up here.
       - name: Install smoke, wheel and sdist into a clean venv
+        id: smoke
         run: |
           set -euo pipefail
           name="$(uv run python -c 'import tomllib,pathlib;print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["name"])')"
@@ -718,6 +822,19 @@ jobs:
             fi
             echo "  OK $art"
           done
+
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          SYNC: ${{ steps.sync.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v "$SYNC" "uv sync --locked"
+          v "$BUILD" "uv build"
+          v "$SMOKE" "the wheel and the sdist install and import in a clean venv"
 
   # The floor: does this repository still have what /plinth:new-project gave
   # it, and does its wall still stand? The same checker the floor-check skill
@@ -765,10 +882,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           WORKDIR: ${{ inputs.working-directory }}
           EXPECT: ${{ inputs.floor-check-required-checks }}
+        # The verdict lines first, then the report; the exit code is the
+        # checker's. A checker that writes no verdict file fails the step.
         run: |
           set -euo pipefail
+          t="$RUNNER_TEMP/floor"; rc=0
           python3 "$RUNNER_TEMP/plinth/floor-check.py" \
             --root . --project "$WORKDIR" --repo "$GITHUB_REPOSITORY" \
             --ruleset "$RUNNER_TEMP/plinth/ruleset.json" --caller-from-checkout --actions-token \
-            ${EXPECT:+--expect-checks "$EXPECT"} \
-            | tee -a "$GITHUB_STEP_SUMMARY"
+            ${EXPECT:+--expect-checks "$EXPECT"} --verdicts "$t.verdicts" > "$t.txt" || rc=$?
+          cat "$t.txt"
+          while IFS= read -r l; do
+            case "$l" in "not yet confirmed: "*) l="${l//'%'/%25}"; echo "::warning::$l" ;; esac
+          done < "$t.verdicts"
+          { sed 's/^/- /' "$t.verdicts"; echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"

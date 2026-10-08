@@ -25,6 +25,27 @@
 | `ci / diff-size` | Added plus removed lines, docs and lockfiles excluded, are at most `max-diff-lines` (default 400); not a pull request: a pass | The change is too large to review in one pull request; the job summary gives the count | Split it into a stack of pull requests, each against the one below. A deleted test, an edited workflow or check configuration the description does not name is a WARN in the log and the job summary, never a red: name the path in the description, then push |
 | `ci / floor-check` | The repository still has the floor `/plinth:floor-check` reads: the document set, agent settings, the project files its archetype needs, a ruleset and CodeQL setup that still require these checks (on a private repository the CodeQL rule is expected only where GitHub Code Security is enabled, and this job, which does not read that, says in an INFO that `/plinth:floor-check`, run with a login that administers the repository, judges a missing rule), and a `ci` job on the default branch that calls plinth's `python-ci.yml` at a full commit SHA (for plinth itself, its own `./.github/workflows/plinth-ci.yml`). Here that item reads the pull request's own `ci.yml`: a pull request that keeps the call but weakens it fails, one that repairs it can merge, and one that removes the call removes this check too, which only a run from outside the pull request sees, after the merge | At least one FAIL line in the job summary | Run `/plinth:floor-check`: each FAIL comes with one fix |
 
+## What a job's summary says
+
+| Form | Means |
+| --- | --- |
+| `pass: <standard>` | It applies here, ran, and held |
+| `pass: <standard>, does not apply (<why>)` | It does not apply to this run |
+| `fail: <standard>` | It applies here, ran, and did not hold |
+| `not yet confirmed: <standard>, <why>; <what confirms it and when>` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. The same text is a `::warning::` annotation on the run |
+
+| Check | Opens its summary with | Not yet confirmed on a run that otherwise passes | Passes with `does not apply` |
+| --- | --- | --- | --- |
+| `ci / pr-title` | The title's line | Never | Not a pull request |
+| `ci / lint` | `uv sync --locked`, `ruff check`, `ruff format --check`, zizmor | zizmor's online audits, always today: the job gives zizmor no GitHub token, so it runs offline. A run with a token by hand confirms them | Never |
+| `ci / typecheck` | `uv sync --locked`, mypy | Never | Never |
+| `ci / test` | `uv sync --locked`, pytest on `.python-version`, pytest on the extra versions | Never | The extra versions, when `extra-python-versions` is empty |
+| `ci / build` | `uv sync --locked`, `uv build`, the install smoke | Never | Never |
+| `ci / secrets` | gitleaks | Never | Never |
+| `ci / deps` | The dependency review's line, after the review action's own summary on a pull request: a job's summary is its steps' summaries in step order | A private repository without GitHub Code Security, where GitHub refuses the review (#395); Dependabot alerts report a vulnerable dependency after the merge. A head Dependabot pushed: CodeQL does not analyse it, and `main` is analysed after the merge (#179) | Not a pull request |
+| `ci / diff-size` | The count against `max-diff-lines` | Never | Not a pull request. `max-diff-lines: 0` passes as measured and not enforced, with the count |
+| `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report | Each SKIP line, and each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does: push protection, a private repository's missing CodeQL rule. The bypass-actor read is a SKIP in every consumer's run | Never |
+
 ## Required for a service archetype
 
 | Check | Asserts | A red means | The fix |

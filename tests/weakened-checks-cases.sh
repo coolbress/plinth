@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Verdicts of the `ci / diff-size` step that names changes to the checks the
-# pull request description does not (#301). The step is not copied here; it is
-# extracted from python-ci.yml and run against fixture repositories, so the
-# rule tested is the rule shipped.
+# pull request description does not (#301), and the verdict lines python-ci's
+# jobs open their summaries with (#437). The steps are not copied here; they
+# are extracted from python-ci.yml and run against fixtures, so the rule
+# tested is the rule shipped.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
@@ -291,6 +292,120 @@ new_repo; mkdir -p "$r/.github/workflows"; printf 'on: push\n' > "$r/.github/wor
 run "Refactor."
 if printf '%s\n' "$out" | grep -q '^::error::forged'; then bad "a newline in a path started a new workflow command" "$out"
 else ok "a newline in a path stays inside its warning"; fi
+
+# The verdict lines each python-ci job opens its summary with (#437), run
+# from the steps themselves: extracted by job and step name, run as the
+# runner runs a `run:` block (bash -e), with the step's env given here.
+job_step() { # <job> <step name> -- prints the step's run block, dedented
+  python3 - "$wf" "$1" "$2" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+job, name = sys.argv[2], sys.argv[3]
+j = next((i for i, l in enumerate(lines) if l == f"  {job}:"), None)
+end = next((i for i in range(j + 1, len(lines)) if lines[i][:3].strip() and lines[i].startswith("  ") and not lines[i].startswith("   ")), len(lines)) if j is not None else 0
+at = next((i for i in range(j or 0, end) if lines[i].strip() == f"- name: {name}"), None)
+if j is None or at is None:
+    sys.exit(f"step not found: {job} / {name}")
+i = next(k for k in range(at, end) if lines[k].strip() == "run: |")
+indent = None
+for l in lines[i + 1:end]:
+    if l.strip() and indent is None:
+        indent = len(l) - len(l.lstrip())
+    if l.strip() and len(l) - len(l.lstrip()) < indent:
+        break
+    print(l[indent:] if l.strip() else "")
+PY
+}
+# verdict <job> <step> <env assignments...> -- sets $out (stdout+stderr), $rc, $sum (the summary)
+verdict() {
+  local job="$1" name="$2"; shift 2
+  job_step "$job" "$name" > "$tmp/v.sh" || { bad "$job / $name: step not found"; return; }
+  : > "$tmp/sum"
+  out="$(cd "${dir:-$tmp}" && env GITHUB_STEP_SUMMARY="$tmp/sum" RUNNER_TEMP="$tmp/rt" "$@" bash -e "$tmp/v.sh" 2>&1)"; rc=$?
+  sum="$(cat "$tmp/sum")"
+}
+first() { # <label> <expected first summary line, a regex>
+  if [ "$(head -1 <<<"$sum")" != "" ] && grep -qE -- "$2" <<<"$(head -1 <<<"$sum")"; then ok "$1"
+  else bad "$1 (first summary line does not match '$2')" "$sum"; fi
+}
+warned() { # <label> <n> -- each not yet confirmed line is a ::warning:: with the same text
+  local n; n="$(grep -c '^::warning::not yet confirmed: ' <<<"$out")"
+  if [ "$n" = "$2" ] && [ "$(grep -c '^- not yet confirmed: ' <<<"$sum")" = "$2" ] \
+    && diff <(sed -n 's/^::warning:://p' <<<"$out") <(sed -n 's/^- //p' <<<"$sum" | grep '^not yet confirmed: ') >/dev/null; then ok "$1"
+  else bad "$1 (expected $2 not yet confirmed lines, each also a ::warning::)" "$out"$'\n'"$sum"; fi
+}
+mkdir -p "$tmp/rt"
+
+echo "-- verdict lines: ci / diff-size"
+new_repo; printf 'y = 2\n' >> "$r/src/m.py"; commit; dir="$r"
+verdict diff-size "Measure the reviewable diff" MAX_LINES=400 EXCLUDE="" WORKDIR=. BASE_SHA="" HEAD_SHA=""
+first "not a pull request: pass, does not apply" '^- pass: diff size, does not apply \(not a pull request'
+verdict diff-size "Measure the reviewable diff" MAX_LINES=0 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "max-diff-lines 0: pass, measured and not enforced, with the count" '^- pass: diff size, measured and not enforced \(max-diff-lines is 0\): 1 lines$'
+[ "$rc" = 0 ] && ok "max-diff-lines 0: exit 0" || bad "max-diff-lines 0: exit $rc" "$out"
+verdict diff-size "Measure the reviewable diff" MAX_LINES=400 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "within the limit: pass with the count" '^- pass: diff size, 1 lines, within the limit of 400$'
+for i in 1 2 3; do printf 'z%s = 3\n' "$i" >> "$r/src/m.py"; done; commit
+verdict diff-size "Measure the reviewable diff" MAX_LINES=2 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "over the limit: fail, first" '^- fail: diff size, 4 lines, over the limit of 2$'
+[ "$rc" != 0 ] && ok "over the limit: the step still fails" || bad "over the limit: exit 0" "$out"
+dir=""
+
+echo "-- verdict lines: ci / deps"
+verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR=someone
+first "not a pull request: pass, does not apply" '^- pass: dependency review, does not apply \(not a pull request'
+warned "not a pull request: no warning" 0
+verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped SEVERITY=high ACTOR=someone
+first "refused on a private repository: not yet confirmed, Dependabot alerts after the merge" '^- not yet confirmed: dependency review, GitHub refuses it .*; Dependabot alerts report one after the merge$'
+warned "refused: one warning, the same text" 1
+verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=success SEVERITY=moderate ACTOR=someone
+first "reviewed: pass, at the input's severity" '^- pass: dependency review, no added dependency version with an advisory at moderate or above$'
+verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=failure SEVERITY=high ACTOR=someone
+first "review failed: fail" '^- fail: dependency review'
+verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=success SEVERITY=high ACTOR='dependabot[bot]'
+if grep -qE '^- not yet confirmed: CodeQL on this head, Dependabot pushed it .*`main` is analysed after the merge$' <<<"$sum"; then ok "a head Dependabot pushed: CodeQL not yet confirmed"
+else bad "a head Dependabot pushed: no CodeQL line" "$sum"; fi
+warned "a head Dependabot pushed: one warning" 1
+verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR='dependabot[bot]'
+warned "Dependabot outside a pull request: no CodeQL line" 0
+
+echo "-- verdict lines: ci / lint"
+printf ' WARN audit: zizmor: zizmor is running in offline mode by default; some audits and auto-fixes will not be available.\n' > "$tmp/rt/zizmor.log"
+verdict lint Verdict SYNC=success CHECK=success FORMAT=success ZIZMOR=success
+first "lint opens with uv sync" '^- pass: uv sync --locked$'
+if grep -qx -- "- pass: zizmor's offline audits, nothing at medium or above" <<<"$sum"; then ok "zizmor offline: its offline audits pass"
+else bad "zizmor offline: no pass line for its offline audits" "$sum"; fi
+warned "zizmor offline: its online audits are not yet confirmed, one warning" 1
+printf ' INFO zizmor: v1.29.0\n' > "$tmp/rt/zizmor.log"
+verdict lint Verdict SYNC=success CHECK=success FORMAT=success ZIZMOR=success
+warned "zizmor online: no warning" 0
+verdict lint Verdict SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=success
+first "a failed sync: fail" '^- fail: uv sync --locked$'
+warned "a failed sync: each step it stopped is not yet confirmed" 2
+
+echo "-- verdict lines: ci / test"
+verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
+if grep -qx -- "- pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)" <<<"$sum"; then ok "no extra versions: pass, does not apply, not a skipped step's not yet confirmed"
+else bad "no extra versions" "$sum"; fi
+warned "no extra versions: no warning" 0
+
+echo "-- verdict lines: ci / floor-check"
+mkdir -p "$tmp/rt/plinth"
+cat > "$tmp/rt/plinth/floor-check.py" <<'PY'
+import sys
+out = sys.argv[sys.argv.index("--verdicts") + 1]
+open(out, "w").write("fail: a\nnot yet confirmed: b 100%; c\n")
+print("  FAIL  a")
+sys.exit(1)
+PY
+verdict floor-check "Floor check" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r
+first "the checker's verdict lines open the summary" '^- fail: a$'
+[ "$rc" = 1 ] && ok "the step exits with the checker's code" || bad "the step exited $rc, not the checker's 1" "$out"
+if grep -qx '::warning::not yet confirmed: b 100%25; c' <<<"$out"; then ok "each not yet confirmed is a ::warning::, % escaped"; else bad "no escaped warning" "$out"; fi
+if grep -q '^  FAIL  a$' <<<"$sum"; then ok "the checker's report follows the verdict lines"; else bad "the report is not in the summary" "$sum"; fi
+printf 'import sys\nsys.exit(0)\n' > "$tmp/rt/plinth/floor-check.py"; rm -f "$tmp/rt/floor.verdicts"   # RUNNER_TEMP is fresh per job
+verdict floor-check "Floor check" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r
+[ "$rc" != 0 ] && ok "a checker that writes no verdict file fails the step" || bad "no verdict file, and the step passed" "$out"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
