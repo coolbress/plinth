@@ -321,11 +321,16 @@ What plinth has. `ci / diff-size` names, in its log and job summary, every
 change to the checks the description does not name: a workflow file, a
 check configuration file (`conftest.py`, `pytest.ini`, `ruff.toml`,
 `mypy.ini`, `.coveragerc`, `.gitleaks.toml`, `ruleset.json` and the others
-it lists), a deleted test file, one moved out of the test paths, and a
-change to `pyproject.toml`'s `[tool.*]` tables. It is a WARN, never a red:
-it makes the change visible, and whether the change is justified is the
-reviewer's call. It cannot see a weakened assertion inside a kept test, a
-skip marker, or a threshold passed as a workflow input by the caller.
+it lists), a deleted test file, one moved out of the test paths, a kept
+Python test file that lost at least one line, an added line in a Python file
+that carries a skip, `xfail`, `# noqa`, `# type: ignore` or
+`# pragma: no cover` marker, and a change to `pyproject.toml`'s `[tool.*]`
+tables. It is a WARN, never a red: it makes the change visible, and whether
+the change is justified is the reviewer's call. It cannot say whether a
+listed change lowers the standard: a rewritten test someone agreed to and
+one nobody agreed to look the same in a diff. It cannot see an assertion
+weakened with no line removed, a marker spelled another way, or a threshold passed as a workflow input by
+the caller.
 `ci / floor-check` accepts a `with:` block on the `ci` job and does not read
 its values. Nothing today compares a repository's configuration with what
 was agreed: that is #404, under the direction heading above.

@@ -617,16 +617,21 @@ jobs:
           echo "OK: ${total} lines / limit ${MAX_LINES}"
 
       # An agent that cannot make a check pass can make it weaker: delete a
-      # test, loosen a threshold, edit the workflow (#301). This step names
-      # each such change the description does not, as a WARN: it never fails
+      # test, loosen a threshold, edit the workflow, rewrite a test inside a
+      # kept file, skip a test or silence a line (#301, #434). This step
+      # names each such change the description does not, as a WARN: it never fails
       # the check. Why not FAIL: the description is read from the event, and
       # an edited description does not re-run CI (#322), so the only fix a
       # FAIL could accept is a push; and "the description names the path" is
       # a text match, which would block every consumer on a wording miss.
-      # What it cannot see: a weakened assertion inside a kept test file, a
-      # skip marker, a threshold passed as a workflow input by the caller.
-      # It makes a change visible; whether the change is justified is the
-      # reviewer's call.
+      # A kept Python test file is listed when it loses a line, and a Python
+      # file when an added line carries a skip, xfail, noqa, type: ignore or
+      # pragma: no cover marker. What it cannot see: an assertion weakened
+      # with no line removed (a line only added, such as an early return), a
+      # marker spelled another way, a threshold passed as a workflow input by
+      # the caller. Nor can it say whether a listed change lowers the
+      # standard: a rewrite someone agreed to looks the same. It makes a
+      # change visible; whether the change is justified is the reviewer's call.
       - name: Name changes to the checks the description does not
         if: ${{ !cancelled() }}
         shell: python
@@ -715,6 +720,45 @@ jobs:
                   return "its [tool.*] tables changed (ruff, mypy, pytest configuration)"
               return None
 
+          # A test rewritten inside a kept file, and a marker that turns a
+          # check off for one test or one line (#434).
+          MARKER = re.compile(r"\bmark\.(?:skipif|skip|xfail)\b|\bpytest\.skip\("
+                              r"|#\s*noqa\b|#\s*type:\s*ignore\b|#\s*pragma:\s*no\s*cover\b",
+                              re.IGNORECASE)
+          lost, stat = set(), git("diff", "--numstat", "-M", "-z", f"{base}...{head}").split("\0")
+          i = 0
+          while i < len(stat) and stat[i]:
+              _, d, path = stat[i].split("\t", 2)
+              if path:                     # a rename's paths follow in the next two fields
+                  new, i = path, i + 1
+              else:
+                  new, i = stat[i + 2], i + 3
+              if d not in ("-", "0"):
+                  lost.add(new)
+
+          def markers(status, old, new):
+              """The markers on lines this pull request adds to a Python file."""
+              if status not in ("A", "M", "R") or not new.endswith(".py"):
+                  return []
+              out, hunk = [], False
+              for line in git("diff", "-U0", "-M", "--no-color", "--no-ext-diff", "--no-textconv",
+                              f"{base}...{head}", "--",
+                              f":(literal){old}", f":(literal){new}").split("\n"):
+                  hunk = hunk or line.startswith("@@")
+                  if hunk and line.startswith("+"):
+                      out += [m.group(0) for m in MARKER.finditer(line)]
+              return sorted(set(out))
+
+          def shape(status, old, new):
+              whys = []
+              if status in ("M", "R") and new.endswith(".py") and TEST.search(old) \
+                      and TEST.search(new) and new in lost:
+                  whys.append("a test file lost lines")
+              found = markers(status, old, new)
+              if found:
+                  whys.append("a skip or a suppression added (" + ", ".join(found) + ")")
+              return whys
+
           fields = git("diff", "--name-status", "-M", "-z", f"{base}...{head}").split("\0")
           found, i = [], 0
           while i < len(fields) and fields[i]:
@@ -724,9 +768,9 @@ jobs:
               else:
                   old = new = fields[i + 1]
                   i += 2
-              why = what(status, old, new)
-              if why:
-                  found.append((new if status != "D" else old, old, why))
+              whys = [w for w in [what(status, old, new)] if w] + shape(status, old, new)
+              if whys:
+                  found.append((new if status != "D" else old, old, "; ".join(whys)))
 
           # What may stand next to a name that is not part of it: whitespace
           # and Markdown punctuation, typographic quotes included. Any other
