@@ -291,8 +291,8 @@ required check accepts a status from any source or from an app other than
 the expected one, when the CodeQL alert thresholds were weakened, and when
 the ruleset has a bypass actor, where its token reads them; where it cannot,
 that line is a SKIP. `ci / floor-check` runs the same read on every pull request with the
-Actions token, which never reads bypass actors, so that line is a SKIP there
-every time. A ruleset edited between two pull requests is seen on the next
+Actions token, which never reads bypass actors, so that line is an INFO left
+to `/plinth:floor-check` there every time. A ruleset edited between two pull requests is seen on the next
 one only in the fields that run reads: the required checks, their source
 and the CodeQL thresholds. A bypass actor added then is seen only when a
 person runs the skill, and a field the checker does not compare is not seen
@@ -345,14 +345,18 @@ bots push were not measured). On a private repository without GitHub Code
 Security, GitHub refuses dependency review, and `ci / deps` passes saying
 nothing was checked where the dependency graph still answers; where the
 graph is off, the review fails instead (#395). The third kind is a setting
-the Actions token cannot read: push protection, the ruleset's bypass actors.
+the Actions token cannot read: push protection, the ruleset's bypass actors,
+the CodeQL default setup languages, the squash commit settings.
 The checker behind `ci / floor-check` prints PASS, FAIL, WARN, INFO and SKIP
 lines; a SKIP is a not yet confirmed, never a PASS, and the summary counts
-them as not verified. In consumer CI that count is never 0: the bypass-actor
-read needs an admin-read token, which the Actions token never is. Push
-protection, and on a private repository a missing CodeQL rule, are INFO
-there instead, outside that count; the summary line counts them on their
-own, as `left to /plinth:floor-check`, the run that reads them.
+them as not verified. In consumer CI those four settings, and on a private
+repository a missing CodeQL rule, are INFO instead, outside that count; the
+summary line counts them on their own, as `left to /plinth:floor-check`,
+the run that reads them. Their verdict lines stay `not yet confirmed` in the
+job summary but are not annotated: they say the same in every run, about
+the repository rather than the commit. The other `not yet confirmed` lines,
+evidence about this commit that is missing, are annotations too, at most
+nine per step and then one saying how many more the summary has (#441).
 
 What plinth has. The ruleset's `required_status_checks` rule, with `strict`,
 asks for every required check reported on the pull request's head with the

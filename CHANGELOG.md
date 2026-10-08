@@ -33,6 +33,19 @@ pull requests and have no tag.
   `/plinth:floor-check` in `ci / floor-check`. No check name, job, input or
   conclusion changes. `scripts/floor-check.py` gains `--verdicts FILE`
   (#437).
+- `ci / floor-check` no longer annotates what the Actions token can never
+  read: the ruleset's bypass actors, the CodeQL default setup languages and
+  the squash commit settings join push protection as INFO lines left to
+  `/plinth:floor-check`, counted in `K left to /plinth:floor-check` instead
+  of `N not verified`, and their verdict lines end
+  `; left to /plinth:floor-check` and stay in the job summary only. They
+  said the same in every run of every consumer, about the repository rather
+  than the commit, and filled the run page's annotations. Every other
+  `not yet confirmed` line is still a `::warning::`, at most nine per step,
+  then one saying how many more the job summary has: GitHub drops a step's
+  annotations past ten with no notice. Without `--actions-token` the three
+  reads are SKIPs as before; no exit code, check name, job or input changes
+  (#441).
 
 ## [1.7.6] - 2026-10-08
 

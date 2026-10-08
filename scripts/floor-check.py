@@ -109,6 +109,7 @@ left = 0
 # One line per FAIL, SKIP and deferred INFO, in the three forms of
 # docs/reference/required-checks.md, for --verdicts (#437).
 verdicts: list[str] = []
+LEFT_TO_SKILL = "; left to /plinth:floor-check"
 
 
 def result(kind: str, msg: str, *, deferred: bool = False) -> None:
@@ -128,7 +129,9 @@ def result(kind: str, msg: str, *, deferred: bool = False) -> None:
         verdicts.append(f"not yet confirmed: {msg}; a run that can read it confirms it")
     if deferred:
         left += 1
-        verdicts.append(f"not yet confirmed: {msg}")
+        # The fixed ending is how `ci / floor-check` tells these from the
+        # per-commit lines it annotates (#441).
+        verdicts.append(f"not yet confirmed: {msg}{LEFT_TO_SKILL}")
 
 
 def ok(cond: bool, good: str, bad: str) -> bool:
@@ -1415,7 +1418,12 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # list of the branch's commits. The door sets it; a button merge in the
     # web UI uses it. The fields are visible to a token with push access.
     title, msg = meta.get("squash_merge_commit_title"), meta.get("squash_merge_commit_message")
-    if title is None and msg is None:
+    # The Actions token in `ci / floor-check` never sees them (#440): an INFO
+    # left to the skill there, as push protection below, not a SKIP no
+    # consumer can clear.
+    if title is None and msg is None and actions_token:
+        result("INFO", "squash commit settings not visible with this token; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+    elif title is None and msg is None:
         result("SKIP", "squash commit settings not visible with this token (a push-access token sees them)")
     else:
         ok(title == "PR_TITLE" and msg == "PR_BODY",
@@ -1548,7 +1556,10 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     if tools or by_name or scanning != "disabled":
         setup = api(f"repos/{repo}/code-scanning/default-setup", network)
         langs = setup.get("languages") if isinstance(setup, dict) else None
-        if not isinstance(langs, list):
+        if not isinstance(langs, list) and actions_token:
+            result("INFO", "CodeQL default setup languages not read here: the Actions token cannot read "
+                           "code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+        elif not isinstance(langs, list):
             result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
         elif "python" in langs:
             result("PASS", f"CodeQL default setup analyses {langs}")
@@ -1563,6 +1574,9 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         if actors is None:
             # Only visible with repository-administration read, which the
             # Actions token never has. The skill, run by the owner, sees it.
+            if actions_token:
+                result("INFO", f"ruleset {rid}: bypass actors not visible with this token; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+                continue
             result("SKIP", f"ruleset {rid}: bypass actors not visible with this token (an admin-read token sees them)")
         else:
             ok(actors == [], f"ruleset {rid}: no bypass actors", f"ruleset {rid}: bypass actors present: {actors}")
@@ -1822,9 +1836,10 @@ def main() -> int:
                     help="read the ci job from the checkout, not the default branch: what `ci / floor-check` passes, "
                          "so a pull request that repairs the caller can merge")
     ap.add_argument("--actions-token", action="store_true",
-                    help="the run's token is the Actions token, which does not get a repository's security settings: "
-                         "push protection it cannot read is an INFO naming who reads it, not a SKIP, and so is "
-                         "a private repository's missing CodeQL rule, which only the licence state can judge. What "
+                    help="the run's token is the Actions token, which does not get a repository's security settings, "
+                         "bypass actors, CodeQL default setup or squash commit settings: each one it cannot read is an "
+                         "INFO naming who reads it, not a SKIP, and so is a private repository's missing CodeQL rule, "
+                         "which only the licence state can judge. What "
                          "`ci / floor-check` passes; the skill and the e2e runner do not")
     ap.add_argument("--verdicts", metavar="FILE",
                     help="also write one verdict line per FAIL, SKIP and read left to /plinth:floor-check, "
