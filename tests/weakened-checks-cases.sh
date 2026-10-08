@@ -411,6 +411,46 @@ verdict floor-check "Floor check" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITO
 [ "$rc" != 0 ] && ok "a checker that writes no verdict file fails the step" || bad "no verdict file, and the step passed" "$out"
 first "a checker that writes no verdict file: a fail line opens the summary" '^- fail: the floor, the checker wrote no verdicts \(exit 0\)'
 if grep -q '^  PASS  partial$' <<<"$sum"; then ok "a checker that writes no verdict file: its report still reaches the summary"; else bad "the partial report is lost" "$sum"; fi
+# A read left to /plinth:floor-check is a setting the Actions token never
+# reads, in every run: summary only, no annotation (#440, #441). A step
+# annotates at most nine lines and says how many more the summary has:
+# GitHub drops a step's annotations past ten with no notice.
+fake_verdicts() { # <verdict lines...> -- a checker that writes them and passes
+  { echo 'import sys'; echo 'out = sys.argv[sys.argv.index("--verdicts") + 1]'
+    printf 'open(out, "w").write(%s)\n' "$(python3 -c 'import json, sys; print(json.dumps("".join(a + "\n" for a in sys.argv[1:])))' "$@")"
+    echo 'print("  PASS  x")'; } > "$tmp/rt/plinth/floor-check.py"
+  rm -f "$tmp/rt/floor.verdicts"
+}
+left=(); for s in "push protection" "ruleset 1: bypass actors" "CodeQL default setup languages" "squash commit settings"; do
+  left+=("not yet confirmed: $s not read here; left to /plinth:floor-check"); done
+fake_verdicts "pass: the floor, no FAIL in what this run read" "${left[@]}" "not yet confirmed: labels not verified; a run that can read it confirms it"
+verdict floor-check "Floor check" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r
+if [ "$(grep -c '^::warning::' <<<"$out")" = 1 ] && grep -qx '::warning::not yet confirmed: labels not verified; a run that can read it confirms it' <<<"$out"; then
+  ok "reads left to /plinth:floor-check: no annotation; the other not yet confirmed: one"
+else bad "expected exactly one ::warning::, the labels line" "$out"; fi
+if [ "$(grep -c '^- not yet confirmed: ' <<<"$sum")" = 5 ] && [ "$(grep -c '; left to /plinth:floor-check$' <<<"$sum")" = 4 ]; then ok "reads left to /plinth:floor-check: still in the summary, unchanged"
+else bad "the summary lost a line left to /plinth:floor-check" "$sum"; fi
+[ "$rc" = 0 ] && ok "reads left to /plinth:floor-check: the step passes" || bad "the step exited $rc" "$out"
+twelve=(); for i in $(seq 1 12); do twelve+=("not yet confirmed: item $i; a run that can read it confirms it"); done
+fake_verdicts "pass: the floor" "${twelve[@]}"
+verdict floor-check "Floor check" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r
+if [ "$(grep -c '^::warning::' <<<"$out")" = 10 ] && [ "$(grep -c '^::warning::not yet confirmed: item [1-9];' <<<"$out")" = 9 ] \
+  && [ "$(grep '^::warning::' <<<"$out" | tail -1)" = '::warning::3 more not yet confirmed lines are in the job summary' ]; then
+  ok "twelve not yet confirmed: nine annotated, then one that says three more are in the summary"
+else bad "twelve not yet confirmed: expected items 1-9 and '3 more'" "$out"; fi
+if [ "$(grep -c '^- not yet confirmed: item ' <<<"$sum")" = 12 ]; then ok "twelve not yet confirmed: the summary carries all twelve"
+else bad "twelve not yet confirmed: the summary does not carry all twelve" "$sum"; fi
+[ "$rc" = 0 ] && ok "twelve not yet confirmed: the step passes" || bad "the step exited $rc" "$out"
+# Every job's helper is the same text, so the cap and the marker hold in each.
+helpers="$(grep -E '^ +(nw=0;|say\(\) )' "$wf" | sed 's/^ *//' | sort | uniq -c)"
+if [ "$(wc -l <<<"$helpers" | tr -d ' ')" = 2 ] && [ "$(awk '{print $1}' <<<"$helpers" | sort -u | wc -l | tr -d ' ')" = 1 ] \
+  && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 9 ]; then
+  ok "every step that writes verdicts defines the same capped say helper ($(awk 'NR==1{print $1}' <<<"$helpers") steps)"
+else bad "the say helpers differ between steps, or a step lacks the cap" "$helpers"; fi
+fake_verdicts "fail: a" "${twelve[@]}"; sed -i.bak 's/^print("  PASS  x")$/print("  FAIL  a"); sys.exit(1)/' "$tmp/rt/plinth/floor-check.py"
+verdict floor-check "Floor check" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r
+[ "$rc" = 1 ] && ok "past the cap, the step still exits with the checker's code" || bad "past the cap, the step exited $rc, not 1" "$out"
+grep -qx '::warning::3 more not yet confirmed lines are in the job summary' <<<"$out" && ok "past the cap, a failing step still says how many more" || bad "a failing step lost the 'more' line" "$out"
 
 echo "-- verdict lines: ci / pr-title"
 verdict pr-title "Check the title" TITLE=""

@@ -21,9 +21,13 @@ name: python-ci
 # A job that runs to its checking step writes one verdict line per standard
 # it covers in its summary: `pass:`, `fail:` or `not yet confirmed:`, the
 # last also a `::warning::` (#405, #437; the forms are in
-# docs/reference/required-checks.md). A job cancelled or timed out, or one
-# that stops before that step (checkout, a tool install, floor-check's
-# fetch), writes none, and its red or cancelled conclusion is the verdict.
+# docs/reference/required-checks.md), except floor-check's reads left to
+# /plinth:floor-check, which no Actions token makes. The `say` helper writes
+# at most nine annotations per step, then one saying how many more the
+# summary has: GitHub drops the eleventh on with no notice (#441). A job
+# cancelled or timed out, or one that stops before that step (checkout, a
+# tool install, floor-check's fetch), writes none, and its red or cancelled
+# conclusion is the verdict.
 # In deps on a pull request the review action's own summary comes first. The
 # conclusion does not carry it: the ruleset accepts neutral and skipped as it
 # accepts success. Where the lines depend on earlier steps, a Verdict step
@@ -156,7 +160,8 @@ jobs:
           FORMAT: ${{ steps.format.outcome }}
           ZIZMOR: ${{ steps.zizmor.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$CHECK" "ruff check"
@@ -197,7 +202,8 @@ jobs:
           SYNC: ${{ steps.sync.outcome }}
           MYPY: ${{ steps.mypy.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$MYPY" "mypy"
@@ -252,7 +258,8 @@ jobs:
           EXTRA: ${{ steps.extra.outcome }}
           VERSIONS: ${{ inputs.extra-python-versions }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$PYTEST" "pytest on .python-version"
@@ -300,7 +307,8 @@ jobs:
         env:
           GITLEAKS: ${{ steps.gitleaks.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$GITLEAKS" "gitleaks, the history included"
 
@@ -323,7 +331,8 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. A job skipped
           # with `if:` has no check name, and the day a ruleset requires that
@@ -475,7 +484,8 @@ jobs:
           SEVERITY: ${{ inputs.deps-fail-on-severity }}
           ACTOR: ${{ github.actor }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           if [ "$EVENT" != pull_request ]; then
             say "pass: dependency review, does not apply (not a pull request: no base to compare dependencies against)"
           elif [ "$SERVED" = refused ]; then
@@ -521,7 +531,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. The condition
           # lives inside the step, not on the job, so the check name always
@@ -830,7 +841,8 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$BUILD" "uv build"
@@ -886,6 +898,8 @@ jobs:
         # checker's. A checker that wrote no verdict file (a crash) is a fail.
         run: |
           set -euo pipefail
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           t="$RUNNER_TEMP/floor"; rc=0
           python3 "$RUNNER_TEMP/plinth/floor-check.py" \
             --root . --project "$WORKDIR" --repo "$GITHUB_REPOSITORY" \
@@ -896,8 +910,6 @@ jobs:
             echo "fail: the floor, the checker wrote no verdicts (exit $rc); its report is below" > "$t.verdicts"
             [ "$rc" != 0 ] || rc=1
           fi
-          while IFS= read -r l; do
-            case "$l" in "not yet confirmed: "*) l="${l//'%'/%25}"; echo "::warning::${l//$'\r'/%0D}" ;; esac
-          done < "$t.verdicts"
-          { sed 's/^/- /' "$t.verdicts"; echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r l || [ -n "$l" ]; do say "$l"; done < "$t.verdicts"
+          { echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"

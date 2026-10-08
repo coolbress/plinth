@@ -32,7 +32,7 @@
 | `pass: <standard>` | It applies here, ran, and held |
 | `pass: <standard>, does not apply (<why>)` | It does not apply to this run |
 | `fail: <standard>` | It applies here, ran, and did not hold |
-| `not yet confirmed: <standard>, <why>; <what confirms it and when>` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. The same text is a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box or Files changed |
+| `not yet confirmed: <standard>, <why>; <what confirms it and when>` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. Evidence about this commit that is missing: the same text is also a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box or Files changed. A step annotates at most nine lines, then one more saying how many are in the job summary: GitHub drops a step's annotations past ten with no notice. A line ending `; left to /plinth:floor-check` is a repository setting the Actions token never reads, the same in every run: it is in the summary and counted on the checker's summary line, not annotated |
 | No line | The job was cancelled or timed out, or stopped before its checking step (checkout, a tool install, `ci / floor-check`'s fetch of the checker): the red or cancelled conclusion is the verdict |
 
 | Check | Opens its summary with | Not yet confirmed on a run that otherwise passes | Passes with `does not apply` |
@@ -45,7 +45,7 @@
 | `ci / secrets` | gitleaks | Never | Never |
 | `ci / deps` | The dependency review's line, after the review action's own summary on a pull request: a job's summary is its steps' summaries in step order | A private repository without GitHub Code Security, where GitHub refuses the review (#395); Dependabot alerts report a vulnerable dependency after the merge. A head Dependabot pushed: CodeQL does not analyse it, and `main` is analysed after the merge (#179) | Not a pull request |
 | `ci / diff-size` | The count against `max-diff-lines` | Never | Not a pull request. `max-diff-lines: 0` passes as measured and not enforced, with the count |
-| `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report | Each SKIP line, and each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does: push protection, a private repository's missing CodeQL rule. The bypass-actor read is a SKIP in every consumer's run | Never |
+| `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report | Each SKIP line, annotated. Each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does, ending `; left to /plinth:floor-check` and not annotated: push protection, the ruleset's bypass actors, the CodeQL default setup languages, the squash commit settings, and a private repository's missing CodeQL rule | Never |
 
 ## Required for a service archetype
 

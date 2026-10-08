@@ -618,8 +618,9 @@ if [ ! -e "$v" ]; then ok "without --verdicts no file is written"; else bad "wit
 rm "$api/repos/o/r/code-scanning/default-setup.json"
 private "" "$rules_neither" --actions-token
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
-counted "--actions-token, private, no rule, default setup unreadable: exit 0, the default setup read alone is added" 0 2 0
-has     "--actions-token, private, no rule, default setup unreadable: its usual SKIP" '^  SKIP  CodeQL default setup languages not verified'
+counted "--actions-token, private, no rule, default setup unreadable: exit 0, nothing added to not verified" 0 1 0
+has     "--actions-token, private, no rule, default setup unreadable: an INFO left to /plinth:floor-check (#441)" '^  INFO  CodeQL default setup languages not read here'
+has     "--actions-token, private, no rule, default setup unreadable: three reads left to /plinth:floor-check" '^-- 0 failed, 1 not verified, 3 left to /plinth:floor-check$'
 # What the token did read is judged with the flag as without it.
 private "$(sec enabled enabled enabled)" "$rules_neither" --actions-token
 has     "--actions-token, private, Code Security read as enabled, no rule: still a FAIL" '^  FAIL  main: CodeQL not enforced'
@@ -666,6 +667,38 @@ public "public (\"private\": false)" '"private":false'
 public "no private key in the answer" ""
 public "a private key that is not a boolean" '"private":"true"'
 public "a private key answered as null" '"private":null'
+
+# The Actions token reads none of the four settings below, in any consumer's
+# run (#440): push protection, the ruleset's bypass actors, the CodeQL default
+# setup languages and the squash commit settings. With --actions-token each is
+# an INFO left to /plinth:floor-check, outside the not-verified count, and its
+# verdict line ends with a fixed phrase the CI step reads so as not to annotate
+# it (#441). Without the flag they are the SKIPs they always were.
+unread_four() { # [checker args...] -- a public repository whose four settings are unread; sets out, rc
+  printf '{"default_branch":"main"}' > "$api/repos/o/r.json"; printf '{}' > "$api/repos/o/r/rulesets/1.json"
+  rm "$api/repos/o/r/code-scanning/default-setup.json"
+  # Every label the door makes, so that the labels read is no SKIP here.
+  grep -vE '^[[:space:]]*(#|$)' "$root/labels.txt" | cut -d'|' -f1 | jq -R '{name: .}' | jq -s . > "$api/repos/o/r/labels?per_page=100.json"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "$@" 2>&1)"; rc=$?
+  rm "$api/repos/o/r/labels?per_page=100.json"
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
+  printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+}
+v="$work/verdicts"; rm -f "$v"
+unread_four --actions-token --verdicts "$v"
+has     "--actions-token, four settings unread: all four are left to /plinth:floor-check, none is not verified" '^-- 0 failed, 0 not verified, 4 left to /plinth:floor-check$'
+counted "--actions-token, four settings unread: no SKIP, exit 0" 0 0 0
+has     "--actions-token: unread bypass actors are an INFO naming who reads them" '^  INFO  ruleset 1: bypass actors not visible with this token; /plinth:floor-check reads them with a login that administers the repository$'
+has     "--actions-token: unread default setup languages are an INFO naming who reads them" '^  INFO  CodeQL default setup languages not read here: the Actions token cannot read code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository$'
+has     "--actions-token: unread squash settings are an INFO naming who reads them" '^  INFO  squash commit settings not visible with this token; /plinth:floor-check reads them with a login that administers the repository$'
+if [ "$(grep -c '; left to /plinth:floor-check$' "$v")" = 4 ] && [ "$(grep -c '^not yet confirmed: .*; left to /plinth:floor-check$' "$v")" = 4 ]; then
+  ok "--verdicts: the four reads are not yet confirmed lines ending '; left to /plinth:floor-check'"
+else bad "--verdicts: expected four not yet confirmed lines ending '; left to /plinth:floor-check'"; sed 's/^/        /' "$v"; fi
+rm -f "$v"; unread_four --verdicts "$v"
+has     "no flag, four settings unread: four SKIPs, no third part" '^-- 0 failed, 4 not verified$'
+counted "no flag, four settings unread: all four are counted as not verified, exit 0" 0 4 0
+if ! grep -q 'left to /plinth:floor-check' "$v"; then ok "no flag: no verdict line ends '; left to /plinth:floor-check'"
+else bad "no flag: a verdict line is marked left to /plinth:floor-check"; sed 's/^/        /' "$v"; fi
 
 # Through gh: on the owner's machine the token is in gh's keychain, not the
 # environment, and only that token sees bypass actors. A mock gh serves the
