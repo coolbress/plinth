@@ -22,8 +22,10 @@ name: python-ci
 # `pass:`, `fail:` or `not yet confirmed:`, the last also a `::warning::`
 # (#405, #437; the forms are in docs/reference/required-checks.md). The
 # conclusion does not carry it: the ruleset accepts neutral and skipped as it
-# accepts success. A verdict step runs `if: ${{ !cancelled() }}`, so it
-# reports after a failed step too; a step that did not run is not yet confirmed.
+# accepts success. Where the lines depend on earlier steps, a Verdict step
+# runs `if: ${{ !cancelled() }}`, so it reports after a failed step too; a
+# step that did not run is not yet confirmed. pr-title, diff-size and
+# floor-check write theirs in the step that checks.
 #
 # Check names are `{caller job} / {job here}`. The caller job is named `ci`,
 # so rulesets require `ci / lint` and so on. Renaming a job here is a MAJOR
@@ -135,13 +137,11 @@ jobs:
       # this runs in other people's repositories and low findings have low
       # confidence.
       # No GitHub token reaches it, so zizmor runs offline and its online
-      # audits (impostor commits, known-vulnerable actions) do not run; the
-      # log says so, and the verdict below reads it from there.
+      # audits (impostor commits, known-vulnerable actions) never run here;
+      # the verdict says so in every run.
       - name: Workflow security (zizmor, medium and above)
         id: zizmor
-        run: |
-          set -o pipefail
-          uvx zizmor@1.29.0 --no-progress --min-severity medium .github/workflows/ 2>&1 | tee "$RUNNER_TEMP/zizmor.log"
+        run: uvx zizmor@1.29.0 --no-progress --min-severity medium .github/workflows/
         working-directory: ${{ github.workspace }}
 
       - name: Verdict
@@ -152,17 +152,13 @@ jobs:
           FORMAT: ${{ steps.format.outcome }}
           ZIZMOR: ${{ steps.zizmor.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$CHECK" "ruff check"
           v "$FORMAT" "ruff format --check"
-          if grep -q "running in offline mode" "$RUNNER_TEMP/zizmor.log" 2>/dev/null; then
-            v "$ZIZMOR" "zizmor's offline audits, nothing at medium or above"
-            say "not yet confirmed: zizmor's online audits, they did not run because this job gives zizmor no GitHub token; \`GH_TOKEN=\$(gh auth token) uvx zizmor@1.29.0 .github/workflows/\` run by hand confirms them"
-          else
-            v "$ZIZMOR" "zizmor, nothing at medium or above"
-          fi
+          v "$ZIZMOR" "zizmor's offline audits, medium and above"
+          say "not yet confirmed: zizmor's online audits, they did not run because this job gives zizmor no GitHub token; \`GH_TOKEN=\$(gh auth token) uvx zizmor@1.29.0 .github/workflows/\` run by hand confirms them"
 
   typecheck:
     runs-on: ubuntu-latest
@@ -197,7 +193,7 @@ jobs:
           SYNC: ${{ steps.sync.outcome }}
           MYPY: ${{ steps.mypy.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$MYPY" "mypy"
@@ -252,7 +248,7 @@ jobs:
           EXTRA: ${{ steps.extra.outcome }}
           VERSIONS: ${{ inputs.extra-python-versions }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$PYTEST" "pytest on .python-version"
@@ -300,9 +296,9 @@ jobs:
         env:
           GITLEAKS: ${{ steps.gitleaks.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
-          v "$GITLEAKS" "gitleaks, no secret in the history"
+          v "$GITLEAKS" "gitleaks, the history included"
 
   # PR title is Conventional Commits with the standard eleven types only.
   #
@@ -323,7 +319,7 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. A job skipped
           # with `if:` has no check name, and the day a ruleset requires that
@@ -475,7 +471,7 @@ jobs:
           SEVERITY: ${{ inputs.deps-fail-on-severity }}
           ACTOR: ${{ github.actor }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
           if [ "$EVENT" != pull_request ]; then
             say "pass: dependency review, does not apply (not a pull request: no base to compare dependencies against)"
           elif [ "$SERVED" = refused ]; then
@@ -521,7 +517,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. The condition
           # lives inside the step, not on the job, so the check name always
@@ -830,11 +826,11 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
         run: |
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) echo "::warning::$1" ;; esac; }
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "not yet confirmed: "*) w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}" ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$BUILD" "uv build"
-          v "$SMOKE" "the wheel and the sdist install and import in a clean venv"
+          v "$SMOKE" "install smoke, the wheel and the sdist in a clean venv"
 
   # The floor: does this repository still have what /plinth:new-project gave
   # it, and does its wall still stand? The same checker the floor-check skill
@@ -883,7 +879,7 @@ jobs:
           WORKDIR: ${{ inputs.working-directory }}
           EXPECT: ${{ inputs.floor-check-required-checks }}
         # The verdict lines first, then the report; the exit code is the
-        # checker's. A checker that writes no verdict file fails the step.
+        # checker's. A checker that wrote no verdict file (a crash) is a fail.
         run: |
           set -euo pipefail
           t="$RUNNER_TEMP/floor"; rc=0
@@ -892,8 +888,12 @@ jobs:
             --ruleset "$RUNNER_TEMP/plinth/ruleset.json" --caller-from-checkout --actions-token \
             ${EXPECT:+--expect-checks "$EXPECT"} --verdicts "$t.verdicts" > "$t.txt" || rc=$?
           cat "$t.txt"
+          if [ ! -f "$t.verdicts" ]; then
+            echo "fail: the floor, the checker wrote no verdicts (exit $rc); its report is below" > "$t.verdicts"
+            [ "$rc" != 0 ] || rc=1
+          fi
           while IFS= read -r l; do
-            case "$l" in "not yet confirmed: "*) l="${l//'%'/%25}"; echo "::warning::$l" ;; esac
+            case "$l" in "not yet confirmed: "*) l="${l//'%'/%25}"; echo "::warning::${l//$'\r'/%0D}" ;; esac
           done < "$t.verdicts"
           { sed 's/^/- /' "$t.verdicts"; echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"

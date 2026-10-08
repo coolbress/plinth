@@ -370,20 +370,23 @@ verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR='de
 warned "Dependabot outside a pull request: no CodeQL line" 0
 
 echo "-- verdict lines: ci / lint"
-printf ' WARN audit: zizmor: zizmor is running in offline mode by default; some audits and auto-fixes will not be available.\n' > "$tmp/rt/zizmor.log"
 verdict lint Verdict SYNC=success CHECK=success FORMAT=success ZIZMOR=success
 first "lint opens with uv sync" '^- pass: uv sync --locked$'
-if grep -qx -- "- pass: zizmor's offline audits, nothing at medium or above" <<<"$sum"; then ok "zizmor offline: its offline audits pass"
-else bad "zizmor offline: no pass line for its offline audits" "$sum"; fi
-warned "zizmor offline: its online audits are not yet confirmed, one warning" 1
-printf ' INFO zizmor: v1.29.0\n' > "$tmp/rt/zizmor.log"
-verdict lint Verdict SYNC=success CHECK=success FORMAT=success ZIZMOR=success
-warned "zizmor online: no warning" 0
-verdict lint Verdict SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=success
+if grep -qx -- "- pass: zizmor's offline audits, medium and above" <<<"$sum"; then ok "zizmor: its offline audits pass"
+else bad "zizmor: no pass line for its offline audits" "$sum"; fi
+warned "zizmor: its online audits are not yet confirmed in every run, one warning" 1
+verdict lint Verdict SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=skipped
 first "a failed sync: fail" '^- fail: uv sync --locked$'
-warned "a failed sync: each step it stopped is not yet confirmed" 2
+warned "a failed sync: each step it stopped is not yet confirmed, and zizmor's online audits" 4
 
 echo "-- verdict lines: ci / test"
+# A not yet confirmed line can carry an input's text (the extra versions):
+# it must not end its ::warning:: and start another command.
+job_step test Verdict | grep '^say()' > "$tmp/say.sh"
+printf '%s\n' '. "$1"' 'say "not yet confirmed: x%"$'"'"'\n'"'"'"::error::y"$'"'"'\r'"'"'' > "$tmp/say-call.sh"
+out="$(GITHUB_STEP_SUMMARY=/dev/null bash -e "$tmp/say-call.sh" "$tmp/say.sh")"
+if [ "$out" = '::warning::not yet confirmed: x%25%0A::error::y%0D' ]; then ok "a not yet confirmed line escapes %, a newline and a carriage return"
+else bad "say does not escape its text" "$out"; fi
 verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
 if grep -qx -- "- pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)" <<<"$sum"; then ok "no extra versions: pass, does not apply, not a skipped step's not yet confirmed"
 else bad "no extra versions" "$sum"; fi
@@ -403,9 +406,22 @@ first "the checker's verdict lines open the summary" '^- fail: a$'
 [ "$rc" = 1 ] && ok "the step exits with the checker's code" || bad "the step exited $rc, not the checker's 1" "$out"
 if grep -qx '::warning::not yet confirmed: b 100%25; c' <<<"$out"; then ok "each not yet confirmed is a ::warning::, % escaped"; else bad "no escaped warning" "$out"; fi
 if grep -q '^  FAIL  a$' <<<"$sum"; then ok "the checker's report follows the verdict lines"; else bad "the report is not in the summary" "$sum"; fi
-printf 'import sys\nsys.exit(0)\n' > "$tmp/rt/plinth/floor-check.py"; rm -f "$tmp/rt/floor.verdicts"   # RUNNER_TEMP is fresh per job
+printf 'import sys\nprint("  PASS  partial")\nsys.exit(0)\n' > "$tmp/rt/plinth/floor-check.py"; rm -f "$tmp/rt/floor.verdicts"   # RUNNER_TEMP is fresh per job
 verdict floor-check "Floor check" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r
 [ "$rc" != 0 ] && ok "a checker that writes no verdict file fails the step" || bad "no verdict file, and the step passed" "$out"
+first "a checker that writes no verdict file: a fail line opens the summary" '^- fail: the floor, the checker wrote no verdicts \(exit 0\)'
+if grep -q '^  PASS  partial$' <<<"$sum"; then ok "a checker that writes no verdict file: its report still reaches the summary"; else bad "the partial report is lost" "$sum"; fi
+
+echo "-- verdict lines: ci / pr-title"
+verdict pr-title "Check the title" TITLE=""
+first "not a pull request: pass, does not apply" '^- pass: PR title, does not apply \(not a pull request'
+verdict pr-title "Check the title" TITLE="feat(x): a thing"
+first "a conventional title: pass" '^- pass: PR title follows the convention$'
+verdict pr-title "Check the title" TITLE="feat: a thing (#12)"
+first "a trailing number: fail, first" '^- fail: PR title, it ends in a number$'
+verdict pr-title "Check the title" TITLE="Add a thing"
+first "not Conventional Commits: fail, first" '^- fail: PR title, it is not Conventional Commits$'
+[ "$rc" != 0 ] && ok "not Conventional Commits: the step still fails" || bad "a bad title passed" "$out"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
