@@ -18,9 +18,12 @@ name: python-ci
 # allowlist entry, `coolbress/plinth/*`, for this call itself. Without it the
 # run dies at startup and no check name ever reports.
 #
-# Each job opens its summary with one verdict line per standard it covers:
+# Each job writes one verdict line per standard it covers in its summary:
 # `pass:`, `fail:` or `not yet confirmed:`, the last also a `::warning::`
-# (#405, #437; the forms are in docs/reference/required-checks.md). The
+# (#405, #437; the forms are in docs/reference/required-checks.md). They
+# open the summary except in deps on a pull request, where the review
+# action's own summary comes first; floor-check writes none when its
+# checker could not be fetched (the job is red then). The
 # conclusion does not carry it: the ruleset accepts neutral and skipped as it
 # accepts success. Where the lines depend on earlier steps, a Verdict step
 # runs `if: ${{ !cancelled() }}`, so it reports after a failed step too; a
