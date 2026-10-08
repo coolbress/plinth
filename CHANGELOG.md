@@ -20,6 +20,19 @@ pull requests and have no tag.
   that administers the repository does. They stay INFO, outside the
   not-verified count, and the exit code still depends on FAIL lines alone
   (#436).
+- Each `python-ci.yml` job that runs to its checking step writes one line per
+  standard it covers in its job summary: `pass:`, `fail:` or
+  `not yet confirmed:`, the last also a `::warning::` annotation shown on the
+  run's page, not in the pull request's merge box. A job cancelled, timed
+  out or stopped before that step (checkout, a tool install) writes none,
+  and its red or cancelled conclusion says so. In `ci / deps` on a pull
+  request the review action's own summary comes first. Not yet confirmed today: zizmor's online audits
+  in `ci / lint`, which run offline; `ci / deps` on a private repository
+  without GitHub Code Security, and on a head Dependabot pushed, which
+  CodeQL does not analyse; and each SKIP or read left to
+  `/plinth:floor-check` in `ci / floor-check`. No check name, job, input or
+  conclusion changes. `scripts/floor-check.py` gains `--verdicts FILE`
+  (#437).
 
 ## [1.7.6] - 2026-10-08
 

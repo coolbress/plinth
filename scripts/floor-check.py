@@ -106,6 +106,9 @@ CONFIG_NAMES = {"config.yml", "config.yaml"}
 fails = 0
 skips = 0
 left = 0
+# One line per FAIL, SKIP and deferred INFO, in the three forms of
+# docs/reference/required-checks.md, for --verdicts (#437).
+verdicts: list[str] = []
 
 
 def result(kind: str, msg: str, *, deferred: bool = False) -> None:
@@ -116,10 +119,16 @@ def result(kind: str, msg: str, *, deferred: bool = False) -> None:
     print(f"  {kind:5} {msg}")
     if kind == "FAIL":
         fails += 1
+        verdicts.append(f"fail: {msg}")
     elif kind == "SKIP":
         skips += 1
+        # The SKIP's own text says why; what reads it differs per item (an
+        # admin login, the network, a file the door writes), so the line says
+        # only what is true of all of them.
+        verdicts.append(f"not yet confirmed: {msg}; a run that can read it confirms it")
     if deferred:
         left += 1
+        verdicts.append(f"not yet confirmed: {msg}")
 
 
 def ok(cond: bool, good: str, bad: str) -> bool:
@@ -1817,6 +1826,9 @@ def main() -> int:
                          "push protection it cannot read is an INFO naming who reads it, not a SKIP, and so is "
                          "a private repository's missing CodeQL rule, which only the licence state can judge. What "
                          "`ci / floor-check` passes; the skill and the e2e runner do not")
+    ap.add_argument("--verdicts", metavar="FILE",
+                    help="also write one verdict line per FAIL, SKIP and read left to /plinth:floor-check, "
+                         "or a pass line, to FILE (ci / floor-check's job summary)")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--credentials", action="store_true",
                     help="also report what else on this machine can push to github.com: gh accounts, git helpers, ~/.netrc")
@@ -1896,6 +1908,9 @@ def main() -> int:
         check_credentials(root)
 
     print(f"-- {fails} failed, {skips} not verified" + (f", {left} left to /plinth:floor-check" if left else ""))
+    if a.verdicts:
+        lines = verdicts if fails else ["pass: the floor, no FAIL in what this run read", *verdicts]
+        Path(a.verdicts).write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
     return 1 if fails else 0
 
 

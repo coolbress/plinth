@@ -99,14 +99,16 @@ served run     'the recorded 403 with a 201 that carries no sbom_url runs it'   
 served run     'the recorded 403 with the old export answer (200) runs it'         true  403 "$real" 200 "$work/sbom.json"
 served refused 'the recorded answer on a private repository, the graph answering, is refused' true 403 "$real"
 
-# The two steps around it are gated on the output, and the job is never skipped.
+# The review is gated on the output, the verdict step reads it (#437; its
+# lines are run in tests/weakened-checks-cases.sh), and the job is never skipped.
 review_step="$work/steps/Dependency-review-blocks-vulnerable-vers.txt"
-refused_step="$work/steps/Dependency-review-refused-here-nothing-c.txt"
+verdict_step="$work/steps/Verdict.txt"
 if ! grep -qE '^    if:' "$work/steps/job.txt" \
    && grep -qF "steps.served.outputs.review != 'refused'" "$review_step" 2>/dev/null \
-   && grep -qF "steps.served.outputs.review == 'refused'" "$refused_step" 2>/dev/null \
-   && grep -qF "Not checked" "$refused_step"
-then ok "the review runs unless refused, the refusal step says not checked, the job is never skipped"
+   && grep -qF 'SERVED: ${{ steps.served.outputs.review }}' "$verdict_step" 2>/dev/null \
+   && grep -qF '"$SERVED" = refused' "$verdict_step" \
+   && grep -qF "not yet confirmed: dependency review" "$verdict_step"
+then ok "the review runs unless refused, the verdict says not yet confirmed when refused, the job is never skipped"
 else bad "the steps around the probe are not gated as they should be"; fi
 
 echo "-- refused only on a private repository answered 403 Forbidden; everything else runs the review"
