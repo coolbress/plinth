@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:floor-check` and `ci / floor-check` warn when the workflow files
+  call plinth at more than one commit (`ci.yml` and `label.yml` apart after a
+  hand edit), naming each file with its SHA, with the `sed` line that moves
+  each lagging file to the SHA the `ci` job calls. It runs whatever the
+  template state; before, the disagreement was named only while the template
+  was behind. No exit code, check name, job or input changes (#447).
+
 ## [1.8.0] - 2026-10-09
 
 A green check now says what it checked. Each `python-ci.yml` job writes one
