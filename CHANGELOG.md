@@ -11,6 +11,23 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-09
+
+A green check now says what it checked. Each `python-ci.yml` job writes one
+line per standard in its job summary: `pass:`, `fail:` or `not yet confirmed:`
+with why and what confirms it later, the last also a `::warning::` on the run's
+page when it is about this commit (#437, #441). `ci / floor-check` counts the
+settings the Actions token can never read on their own, as
+`K left to /plinth:floor-check`, instead of warning about them in every run
+(#436, #441). A standard lowered without touching the CI file is made visible:
+`ci / diff-size` lists a kept test file that lost lines and an added skip or
+suppression marker (#434), and `/plinth:floor-check` warns on a `ci` job input
+looser than plinth's default (#435). All of it is text in summaries and
+annotations: no check name, job, input or conclusion changes, and the wall
+is the same.
+
+tested with plinth-template v1.8.0
+
 ### Changed
 
 - `ci / floor-check`'s summary line gains a third count,
@@ -2214,7 +2231,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.7.6...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/coolbress/plinth/releases/tag/v1.8.0
 [1.7.6]: https://github.com/coolbress/plinth/releases/tag/v1.7.6
 [1.7.5]: https://github.com/coolbress/plinth/releases/tag/v1.7.5
 [1.7.4]: https://github.com/coolbress/plinth/releases/tag/v1.7.4
