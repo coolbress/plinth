@@ -147,7 +147,7 @@ only; no other local workflow is.
 
 When the job calls plinth's workflow, the same item reads two values of its
 `with:` block, the inputs that set how much a check holds (#435):
-`max-diff-lines` of 0 (measured, never fails) or above plinth's default of
+`max-diff-lines` of 0 or less (measured, never fails) or above plinth's default of
 400, and `deps-fail-on-severity: critical` (plinth's default is `high`), are
 each a WARN naming the input, its value and the default, on every run. A
 project may choose the value; the line keeps the choice visible after the

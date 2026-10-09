@@ -1553,6 +1553,7 @@ python3 "$checker" --root "$copy" --archetype cli --no-network >/dev/null 2>&1; 
 loosened "max-diff-lines left absent: nothing" "" none
 loosened "max-diff-lines: 0 is a WARN naming the input, its value and the default" "      max-diff-lines: 0" WARN \
   "max-diff-lines: 0.*default.*400"
+loosened "max-diff-lines: -1 (the workflow treats it as 0) is a WARN" "      max-diff-lines: -1" WARN "max-diff-lines: -1.*never fails"
 loosened "max-diff-lines: 200 (a smaller limit, stricter): nothing" "      max-diff-lines: 200" none
 loosened "max-diff-lines: 400 (the default): nothing" "      max-diff-lines: 400" none
 loosened "max-diff-lines: 1000 (a larger limit lets a larger diff pass) is a WARN" "      max-diff-lines: 1000" WARN \

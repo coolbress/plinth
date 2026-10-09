@@ -331,7 +331,7 @@ listed change lowers the standard: a rewritten test someone agreed to and
 one nobody agreed to look the same in a diff. It cannot see an assertion
 weakened with no line removed, a marker spelled another way, or a threshold passed as a workflow input by
 the caller. That one `ci / floor-check` and `/plinth:floor-check` read on
-every run: a `ci` job whose `with:` passes `max-diff-lines` of 0 or above
+every run: a `ci` job whose `with:` passes `max-diff-lines` of 0 or less, or above
 400, or `deps-fail-on-severity: critical`, is a WARN naming the value and
 plinth's default, never a red; an expression is a SKIP. The other inputs
 are not read for direction. Nothing today compares a repository's configuration with what

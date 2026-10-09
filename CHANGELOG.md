@@ -55,7 +55,7 @@ pull requests and have no tag.
   that the standard got weaker. No check name, job, input or conclusion
   changes (#434).
 - `/plinth:floor-check` and `ci / floor-check` read two values of the `ci`
-  job's `with:` block: `max-diff-lines` of 0 or above plinth's default of
+  job's `with:` block: `max-diff-lines` of 0 or less or above plinth's default of
   400, and `deps-fail-on-severity: critical` (default `high`), are each a
   WARN naming the input, its value and the default, on every run rather than
   only in the pull request that set them. A stricter value or none prints
