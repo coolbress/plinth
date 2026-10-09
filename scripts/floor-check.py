@@ -873,6 +873,53 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
         result("INFO", f"  {latest}")
 
 
+def check_plinth_pins_agree(root: Path) -> None:
+    """Every `uses:` of coolbress/plinth across the checkout's workflow files
+    names the same full commit SHA (#447). ci.yml and label.yml are rendered
+    at one commit; a hand edit that moves one leaves them apart, and the
+    template-drift reason says so only while the template is behind. One SHA,
+    or none, prints nothing. A WARN, never a FAIL: label / label is not a
+    required check. A plinth `uses:` not on a full SHA is the action-pins
+    item's WARN and is not counted here; a `uses:` it cannot read is a SKIP
+    unless the readable ones already disagree, since it could be a plinth pin
+    at another commit."""
+    by_file: dict[str, list[str]] = {}
+    unread: list[str] = []
+    for p in workflow_files(root):
+        for n, value, readable in iter_uses(read(p)):
+            if not readable:
+                unread.append(f"{p.name} line {n}")
+            elif value.startswith(f"{PLINTH_REPO}/"):
+                ref = value.rpartition("@")[2]
+                if re.fullmatch(r"[0-9a-fA-F]{40}", ref) and ref not in by_file.setdefault(p.name, []):
+                    by_file[p.name].append(ref)
+    if len({s for shas in by_file.values() for s in shas}) < 2:
+        if unread:
+            result("SKIP", f"plinth workflow pins not compared: {', '.join(unread)} mentions uses in a form "
+                           "this checker does not read, and could pin coolbress/plinth at another commit")
+        return
+    # The ci job's file first: the fix moves the others to the SHA it calls.
+    names = sorted(by_file, key=lambda f: (f != "ci.yml", f))
+    parts = [f"{f} at {' and '.join(by_file[f])}" for f in names]
+    result("WARN", f"workflow pins disagree: {names[0]} calls plinth{parts[0][len(names[0]):]}"
+                   + "".join(f", {x}" for x in parts[1:]))
+    target = None
+    ci = root / ".github" / "workflows" / "ci.yml"
+    if ci.is_file():
+        kind, value, _ = caller_job(read(ci))
+        m = re.fullmatch(rf"{re.escape(CALLER_WORKFLOW)}@([0-9a-fA-F]{{40}})", value) if kind == "uses" else None
+        target = m.group(1) if m else None
+    if target is None:
+        result("INFO", f"  set every {PLINTH_REPO} uses: to the one commit the ci job should call")
+        return
+    for f in names:
+        for old in by_file[f]:
+            if old != target:
+                path = shlex.quote(f".github/workflows/{f}")
+                result("INFO", f"  sed -i.bak 's/{old}/{target}/' {path} && rm {path}.bak   "
+                               "(moves it to the SHA the ci job calls)")
+
+
 def new_project_pin() -> tuple[str, str, str, str] | None:
     """(template_repo, template_ref, copier_version, copier_newer) as
     scripts/new-project.sh pins them -- read from that file and nowhere else
@@ -1974,6 +2021,7 @@ def main() -> int:
         check_image_job(root)
 
     check_caller(root, a.repo, network, a.caller_from_checkout)
+    check_plinth_pins_agree(root)
 
     if a.repo:
         expected: list[str] = []
