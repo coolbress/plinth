@@ -32,6 +32,18 @@ to tracked files, and `gh` logged in with write access to the repository.
    `release/vX.Y.Z`.
 4. Push that branch and open a pull request titled `chore(release): vX.Y.Z`.
    Land it as [CONTRIBUTING.md](../../CONTRIBUTING.md#land-a-change) says.
+   It needs no third-party review: with `pass-release-pull-requests` on,
+   `third-party / review` passes a pull request with exactly that title and
+   a diff of run 1's shape (only the two manifests and `CHANGELOG.md`; each
+   manifest's `"version"` line replaced by the title's, higher than before;
+   `CHANGELOG.md` only adding lines, the replaced `[Unreleased]` link aside,
+   so an edited note still passes) without
+   summoning the reviewer, and its log says
+   `release pull request: not summoned`
+   ([what it passes without summoning](configure-the-third-party-reviewer.md#pull-requests-it-passes-without-summoning)).
+   Merge when the checks are green; do not wait for a review that was not
+   asked for. To have the release note read, a person posts the summons on
+   the pull request; an agent does not write it (`AGENTS.md`).
 5. Update `main`: `git switch main && git pull --ff-only`.
 6. Start the `e2e` workflow on the merged commit, and wait for it to pass:
 
