@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.8.1. A repository it creates
+  differs from v1.8.0 in one comment: `.github/dependabot.yml` says the plinth
+  workflow pins are bare commit SHAs that Dependabot resolves to a release on
+  its own and raises together after the default cooldown, instead of
+  promising a version comment the pins do not carry (#455).
+  `/plinth:floor-check` now reports a repository on v1.8.0 as one tag behind.
+
 ## [1.9.0] - 2026-10-09
 
 `ci / lint` now checks where a pinned `uses:` SHA comes from. The job gives
