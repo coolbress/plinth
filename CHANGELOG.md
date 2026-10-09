@@ -20,6 +20,17 @@ pull requests and have no tag.
   template state; before, the disagreement was named only while the template
   was behind. No exit code, check name, job or input changes (#447).
 
+### Changed
+
+- `ci / lint` gives zizmor the job's token, so its online audits run: a
+  consumer's lint job can now go red on an impostor commit or ref confusion in
+  a `uses:` line, which it could not before. `known-vulnerable-actions`, which
+  reads GitHub's advisory database live, never fails the job: each advisory
+  for a pinned action is a `not yet confirmed` line in the job summary, with
+  its annotation, naming the advisory, the action and its ref. The standing
+  `zizmor's online audits` line and its warning are gone from every run. The
+  job's permissions, steps and check name are unchanged (#450).
+
 ## [1.8.0] - 2026-10-09
 
 A green check now says what it checked. Each `python-ci.yml` job writes one
