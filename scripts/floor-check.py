@@ -65,6 +65,7 @@ import argparse
 import base64
 import copy
 import json
+import math
 import os
 import re
 import shlex
@@ -616,9 +617,12 @@ def key_line(line: str) -> tuple[str, str] | None:
     return key, value
 
 
-def caller_job(text: str) -> tuple[str, str]:
+def caller_job(text: str) -> tuple[str, str, dict[str, str | None]]:
     """What the `ci` job of a ci.yml calls: ("uses", value), ("missing", why),
-    ("skippable", keys) or ("unread", why). Skippable is any key on the job
+    ("skippable", keys) or ("unread", why), with the inputs its `with:` block
+    passes for ("uses", ...): name to plain value, None for one this reader
+    cannot read (a value that continues on the next line, a key it cannot
+    parse that names an input, a key given twice). Skippable is any key on the job
     outside CALLER_KEYS. A line reader, not a YAML parser (standard library
     only): a top-level `jobs:` block, its `ci:` key, and a `uses:` key directly
     under it. Anything in those three places it cannot read -- flow style, an
@@ -632,7 +636,7 @@ def caller_job(text: str) -> tuple[str, str]:
     # A double-quoted key may spell another key with an escape (`"jo\u0062s"`
     # is `jobs` to YAML): a second jobs or ci this reader would not see.
     if any(re.match(r'^\s*(?:-\s+)?"[^"]*\\', line) for _, _, line in lines):
-        return "unread", "a double-quoted key holds an escape, which can spell jobs or ci"
+        return "unread", "a double-quoted key holds an escape, which can spell jobs or ci", {}
     tops = [(i, line) for i, (_, indent, line) in enumerate(lines) if indent == 0]
     jobs = [i for i, line in tops if (m := KEY_LINE.match(line)) and m.group(1).strip("'\"") == "jobs"]
     # Every top-level line has to be a plain or quoted `key: ...`, whatever its
@@ -640,72 +644,157 @@ def caller_job(text: str) -> tuple[str, str]:
     # flow mapping or a document marker can each supply a second jobs.
     odd = next((line for _, line in tops if not KEY_LINE.match(line)), None)
     if odd is not None:
-        return "unread", f"a top-level line is written in a form this checker does not read: {odd.strip()}"
+        return "unread", f"a top-level line is written in a form this checker does not read: {odd.strip()}", {}
     if len(jobs) > 1:
-        return "unread", "more than one top-level jobs key"
+        return "unread", "more than one top-level jobs key", {}
     if not jobs:
-        return "missing", "no `ci` job (no jobs at all)"
+        return "missing", "no `ci` job (no jobs at all)", {}
     start = jobs[0]
     if key_line(lines[start][2]) != ("jobs", ""):
-        return "unread", "jobs is not a block mapping"
+        return "unread", "jobs is not a block mapping", {}
     body = []
     for _, indent, line in lines[start + 1:]:
         if indent == 0:
             break
         body.append((indent, line))
     if not body:
-        return "missing", "no `ci` job (jobs is empty)"
+        return "missing", "no `ci` job (jobs is empty)", {}
     col = body[0][0]
     found = []
     for k, (indent, line) in enumerate(body):
         if indent < col:
-            return "unread", "the jobs block is indented unevenly"
+            return "unread", "the jobs block is indented unevenly", {}
         if indent > col:
             continue
         kv = key_line(line)
         if kv is None:
-            return "unread", f"a job key is written in a form this checker does not read: {line.strip()}"
+            return "unread", f"a job key is written in a form this checker does not read: {line.strip()}", {}
         if kv[0] == "ci":
             if kv[1]:
-                return "unread", f"the ci job is not a block mapping: {line.strip()}"
+                return "unread", f"the ci job is not a block mapping: {line.strip()}", {}
             found.append(k)
     if len(found) > 1:
-        return "unread", "jobs has more than one ci key"
+        return "unread", "jobs has more than one ci key", {}
     if not found:
-        return "missing", "no `ci` job"
+        return "missing", "no `ci` job", {}
     job = []
     for indent, line in body[found[0] + 1:]:
         if indent <= col:
             break
         job.append((indent, line))
     if not job:
-        return "missing", "the `ci` job is empty"
+        return "missing", "the `ci` job is empty", {}
     inner = job[0][0]
-    uses, gates = [], []
+    uses, gates, withs = [], [], 0
+    inputs: dict[str, str | None] = {}
     for k, (indent, line) in enumerate(job):
         if indent != inner:
             continue
         kv = key_line(line)
         if kv is None:
-            return "unread", f"a key of the ci job is written in a form this checker does not read: {line.strip()}"
+            return "unread", f"a key of the ci job is written in a form this checker does not read: {line.strip()}", {}
         if kv[0] not in CALLER_KEYS:
             gates.append(f"{kv[0]}:")
+        if kv[0] == "with":
+            withs += 1
+            inputs = with_inputs(job[k + 1:], inner) if not kv[1] else {UNREAD_LINE: line.strip()}
         if kv[0] == "uses":
             m = USES_LINE.match(line)
             if not m:
-                return "unread", f"the ci job's uses is written in a form this checker does not read: {line.strip()}"
+                return "unread", f"the ci job's uses is written in a form this checker does not read: {line.strip()}", {}
             # A deeper line right under it continues the plain scalar: YAML
             # folds it into the value, which is then not the one read here.
             if k + 1 < len(job) and job[k + 1][0] > inner:
-                return "unread", f"the ci job's uses continues on the next line: {job[k + 1][1].strip()}"
+                return "unread", f"the ci job's uses continues on the next line: {job[k + 1][1].strip()}", {}
             uses.append(m.group(2))
     if len(uses) > 1:
-        return "unread", "the ci job has more than one uses key"
+        return "unread", "the ci job has more than one uses key", {}
+    if withs > 1:
+        return "unread", "the ci job has more than one with key", {}
     if not uses:
-        return "missing", "the `ci` job calls no reusable workflow; it runs its own steps"
+        return "missing", "the `ci` job calls no reusable workflow; it runs its own steps", {}
     if gates:
-        return "skippable", " and ".join(gates)
-    return "uses", uses[0]
+        return "skippable", " and ".join(gates), {}
+    return "uses", uses[0], inputs
+
+
+def with_inputs(lines: list[tuple[int, str]], parent: int) -> dict[str, str | None]:
+    """The inputs a `with:` block passes: the lines deeper than `parent` that
+    follow it, names in lower case. A key line carries its value; a deeper
+    line under it continues that value, which is then not the one read. A
+    line with no name this reader can take (`? key`, a merge key) is kept
+    under UNREAD_LINE: it could pass either input."""
+    out: dict[str, str | None] = {}
+    block = []
+    for indent, line in lines:
+        if indent <= parent:
+            break
+        block.append((indent, line))
+    if not block:
+        return out
+    col, last = block[0][0], None
+    for indent, line in block:
+        if indent > col:
+            if last is not None:
+                out[last] = None
+            continue
+        kv = key_line(line)
+        if kv is None:
+            name = re.match(r"""\s*['"]?([\w-]+)""", line)
+            last = name.group(1).lower() if name else UNREAD_LINE
+            out[last] = None if name else line.strip()
+            continue
+        last = kv[0].lower()
+        value = re.sub(r"\s+#.*$", "", kv[1]).strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        out[last] = None if last in out else value
+    return out
+
+
+UNREAD_LINE = "<unread>"
+# The inputs of python-ci.yml that set how much a check holds, and plinth's
+# defaults for them (#435). A `with:` that loosens one past its default is a
+# WARN every run: a project may choose the value, and the line keeps the choice
+# visible after the pull request that set it. The other inputs have no agreed
+# direction of "looser".
+DEFAULT_MAX_DIFF_LINES = 400
+DEFAULT_SEVERITY = "high"
+
+
+def check_inputs(inputs: dict[str, str | None], where: str) -> None:
+    """A WARN for each of the two inputs the `with:` loosens past plinth's
+    default, a SKIP for each it passes in a form not read, and a SKIP for a
+    line that could pass either."""
+    if UNREAD_LINE in inputs:
+        result("SKIP", f"the ci job {where} has a with: line this checker does not read: {inputs[UNREAD_LINE]}; "
+                       "max-diff-lines and deps-fail-on-severity not verified")
+    for name in ("max-diff-lines", "deps-fail-on-severity"):
+        if name not in inputs:
+            continue
+        value = inputs[name]
+        if value is None or "${{" in value:
+            result("SKIP", f"the ci job {where} passes {name}: its value is not read (an expression, or a form this checker does not read)")
+            continue
+        if name == "max-diff-lines":
+            try:
+                n = float(value)
+            except ValueError:
+                n = math.nan
+            if not math.isfinite(n) or n != int(n):
+                result("SKIP", f"the ci job {where} passes max-diff-lines: {value}: not read as a whole number")
+                continue
+            if n <= 0:
+                result("WARN", f"the ci job {where} passes max-diff-lines: {value}: ci / diff-size measures and never fails "
+                               f"(plinth's default is {DEFAULT_MAX_DIFF_LINES})")
+            elif n > DEFAULT_MAX_DIFF_LINES:
+                result("WARN", f"the ci job {where} passes max-diff-lines: {value}, above plinth's default of "
+                               f"{DEFAULT_MAX_DIFF_LINES}: a larger diff passes ci / diff-size")
+        elif value == "critical":
+            result("WARN", f"the ci job {where} passes deps-fail-on-severity: {value}: a high-severity advisory passes ci / deps "
+                           f"(plinth's default is {DEFAULT_SEVERITY})")
+        elif value not in {"high", "moderate", "low"}:
+            result("SKIP", f"the ci job {where} passes deps-fail-on-severity: {value}: not read as a severity")
 
 
 def check_caller(root: Path, repo: str | None, network: bool, from_checkout: bool = False) -> None:
@@ -750,7 +839,7 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
             result("SKIP", f"the ci job not verified: no {rel} in the checkout, and the default branch was not read ({why})")
             return
         text = read(p)
-    kind, value = caller_job(text)
+    kind, value, inputs = caller_job(text)
     if kind == "unread":
         result("SKIP", f"the ci job {where} not verified: {value}")
         return
@@ -768,15 +857,17 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
         return
     if repo and repo.lower() == PLINTH_REPO and value == PLINTH_OWN_CALLER:
         result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflow by local path)")
+        check_inputs(inputs, where)
         return
     m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@(.*)", value)
     if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
         if re.fullmatch(r"[0-9a-fA-F]{40}", m.group(3)):
             result("PASS", f"the ci job {where} calls {value}")
-            return
-        result("FAIL", f"the ci job {where} calls {value}: not pinned to a full commit SHA, so what runs can change without a pull request")
-        # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
-        result("INFO", f"  gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})")
+        else:
+            result("FAIL", f"the ci job {where} calls {value}: not pinned to a full commit SHA, so what runs can change without a pull request")
+            # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
+            result("INFO", f"  gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})")
+        check_inputs(inputs, where)
     else:
         result("FAIL", f"the ci job {where} calls {value}, not {CALLER_WORKFLOW}")
         result("INFO", f"  {latest}")

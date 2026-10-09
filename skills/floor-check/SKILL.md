@@ -145,6 +145,22 @@ second document; one opening the file is read past). plinth itself
 calls `./.github/workflows/plinth-ci.yml`, accepted for `coolbress/plinth`
 only; no other local workflow is.
 
+When the job calls plinth's workflow, the same item reads two values of its
+`with:` block, the inputs that set how much a check holds (#435):
+`max-diff-lines` of 0 (measured, never fails) or above plinth's default of
+400, and `deps-fail-on-severity: critical` (plinth's default is `high`), are
+each a WARN naming the input, its value and the default, on every run. A
+project may choose the value; the line keeps the choice visible after the
+pull request that set it. A stricter value or none prints nothing, and
+neither WARN changes the exit code. A value it cannot read (an expression
+such as `${{ vars.X }}`, a value continued on the next line, a limit that
+is not a whole number, a severity spelled other than `critical`, `high`,
+`moderate` or `low`) is a SKIP, and so is a `with:` line it cannot name (an
+explicit `?` key, a merge key) or a second `with:` on the job. The
+other inputs (`diff-size-exclude`, `extra-python-versions`,
+`working-directory`) are not judged: no direction of "looser" is agreed for
+them.
+
 `ci / floor-check` runs the same item on the pull request's own `ci.yml`
 (`--caller-from-checkout`): a pull request that keeps the call but weakens it
 fails there, before the merge, and one that repairs a broken default branch

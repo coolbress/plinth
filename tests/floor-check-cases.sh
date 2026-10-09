@@ -1527,6 +1527,71 @@ caller "a flow value on a top-level key (on: [push, pull_request]) still reads" 
 caller "two ci keys are a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  ci:\n    runs-on: x\n' "$sha40")" \
   "SKIP  .*ci job.*not verified"
+# Two inputs set how much a check holds (#435): a `with:` that loosens one
+# past plinth's default (max-diff-lines 0 or above 400, deps-fail-on-severity
+# critical) is a WARN every run, naming the input, its value and
+# the default; a stricter value or none prints nothing; an expression is a
+# SKIP. Neither changes the exit code.
+echo "-- the ci job's with: loosens a check past its default (#435)"
+with_ci() { # <with: lines, each indented six spaces>
+  printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n%s\n' "$sha40" "$1"
+}
+loosened() { # <description> <with: lines or ""> <expected: none|WARN|SKIP> [<regex the line matches>]
+  local desc="$1" body="$2" want="$3" re="${4:-}"
+  local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
+  if [ -n "$body" ]; then with_ci "$body" > "$copy/.github/workflows/ci.yml"; else printf '%s' "$tmpl_ci" > "$copy/.github/workflows/ci.yml"; fi
+  local out rc; out="$(python3 "$checker" --root "$copy" --archetype cli --no-network 2>&1)"; rc=$?
+  local lines; lines="$(grep -E '^  (WARN|SKIP|FAIL) .*(max-diff-lines|deps-fail-on-severity)' <<<"$out")"
+  local n; n="$(grep -c . <<<"$lines")"
+  if [ "$rc" != "$base_rc" ]; then bad "$desc (exit $rc, the same ci.yml without it exits $base_rc)"
+  elif [ "$want" = none ] && [ "$n" = 0 ]; then ok "$desc"
+  elif [ "$want" != none ] && [ "$n" = 1 ] && grep -qE "^  $want  .*${re}" <<<"$lines"; then ok "$desc"
+  else bad "$desc (expected $want${re:+ /$re/})"; printf '%s\n' "$out" | grep -iE 'ci job|max-diff|severity' | sed 's/^/        /'; fi
+}
+copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"; printf '%s' "$tmpl_ci" > "$copy/.github/workflows/ci.yml"
+python3 "$checker" --root "$copy" --archetype cli --no-network >/dev/null 2>&1; base_rc=$?
+loosened "max-diff-lines left absent: nothing" "" none
+loosened "max-diff-lines: 0 is a WARN naming the input, its value and the default" "      max-diff-lines: 0" WARN \
+  "max-diff-lines: 0.*default.*400"
+loosened "max-diff-lines: 200 (a smaller limit, stricter): nothing" "      max-diff-lines: 200" none
+loosened "max-diff-lines: 400 (the default): nothing" "      max-diff-lines: 400" none
+loosened "max-diff-lines: 1000 (a larger limit lets a larger diff pass) is a WARN" "      max-diff-lines: 1000" WARN \
+  "max-diff-lines: 1000.*above.*400"
+loosened "max-diff-lines quoted and with a comment is read: '0'" "      max-diff-lines: '0'   # measure only" WARN "max-diff-lines: 0"
+for v in nan inf -inf; do
+  loosened "  max-diff-lines: $v is a SKIP, not a pass" "      max-diff-lines: $v" SKIP "not read as a whole number"
+done
+loosened "  max-diff-lines: 0.5 is a SKIP (the workflow's integer test errors on it)" "      max-diff-lines: 0.5" SKIP "not read as a whole number"
+loosened "an explicit ? key in with: is a SKIP, not a pass" "$(printf '      ? max-diff-lines\n      : 0')" SKIP "with: line this checker does not read"
+loosened "a merge key in with: is a SKIP, not a pass" "      <<: *defaults" SKIP "with: line this checker does not read"
+loosened "an upper-case input name is read" "      MAX-DIFF-LINES: 0" WARN "max-diff-lines: 0"
+loosened "max-diff-lines as an expression is a SKIP" '      max-diff-lines: ${{ vars.MAX }}' SKIP "max-diff-lines.*not read"
+loosened "deps-fail-on-severity: critical is a WARN naming the default" "      deps-fail-on-severity: critical" WARN \
+  "deps-fail-on-severity: critical.*default.*high"
+loosened "deps-fail-on-severity: high (the default): nothing" "      deps-fail-on-severity: high" none
+loosened "deps-fail-on-severity: moderate (stricter): nothing" "      deps-fail-on-severity: moderate" none
+loosened "deps-fail-on-severity as an expression is a SKIP" '      deps-fail-on-severity: ${{ inputs.sev }}' SKIP "deps-fail-on-severity.*not read"
+loosened "deps-fail-on-severity: \"critical\" quoted is read" '      deps-fail-on-severity: "critical"' WARN "deps-fail-on-severity: critical"
+loosened "deps-fail-on-severity: CRITICAL, not a value the action lists, is a SKIP" '      deps-fail-on-severity: CRITICAL' SKIP "not read as a severity"
+loosened "an input that continues on the next line is a SKIP" "$(printf '      max-diff-lines:\n        0')" SKIP "max-diff-lines.*not read"
+loosened "other inputs are not judged" "$(printf '      working-directory: x\n      extra-python-versions: "3.12"\n      diff-size-exclude: "*"')" none
+copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
+with_ci "$(printf '      max-diff-lines: 0\n      deps-fail-on-severity: critical')" > "$copy/.github/workflows/ci.yml"
+out="$(python3 "$checker" --root "$copy" --archetype cli --no-network 2>&1)"; rc=$?
+if [ "$rc" = "$base_rc" ] && [ "$(grep -cE '^  WARN  .*(max-diff-lines|deps-fail-on-severity)' <<<"$out")" = 2 ]; then
+  ok "both loosened: two WARNs, the exit code unchanged ($rc)"
+else bad "both loosened: expected two WARNs and exit $base_rc, got exit $rc"; printf '%s\n' "$out" | grep -iE 'max-diff|severity' | sed 's/^/        /'; fi
+caller "two with: keys on the ci job are a SKIP, not a pass" \
+  "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n      max-diff-lines: 0\n    with:\n      max-diff-lines: 200\n' "$sha40")" \
+  "SKIP  .*ci job.*not verified.*more than one with"
+caller "a loosened input on a workflow that is not plinth's is not judged (the call is the FAIL)" \
+  "$(printf 'jobs:\n  ci:\n    uses: someone/else/.github/workflows/python-ci.yml@%s\n    with:\n      max-diff-lines: 0\n' "$sha40")" \
+  "FAIL  .*calls someone/else"
+copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
+printf 'jobs:\n  ci:\n    uses: someone/else/.github/workflows/python-ci.yml@%s\n    with:\n      max-diff-lines: 0\n' "$sha40" > "$copy/.github/workflows/ci.yml"
+if python3 "$checker" --root "$copy" --archetype cli --no-network 2>&1 | grep -q 'max-diff-lines'; then bad "  and no max-diff-lines line"
+else ok "  and no max-diff-lines line"; fi
+
 # Counted: a SKIP here is one more "not verified" in the summary.
 # The baseline offline run without --repo has one: the unchecked wall.
 skipcount() { # <description> <expected not-verified count> <shell to change the copy>
