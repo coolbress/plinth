@@ -742,7 +742,7 @@ check "a cli ruleset is ruleset.json, unchanged" \
 check "a backend ruleset is the wall plus image, from the same app (check-ruleset.sh passes with image)" \
   '"$root/scripts/check-ruleset.sh" "$work/home-backend/ruleset-posted.json" image >/dev/null'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.8.1 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.9.0 in " "$work/home-none/out"'
 
 # The end says whether the credential the agent inherits can change the wall
 # (#300), read once setup is done. `permissions.admin` is the account's role,
