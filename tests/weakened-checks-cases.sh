@@ -463,7 +463,7 @@ zz() {
   verdict lint Verdict SYNC=success CHECK=success FORMAT=success ZIZMOR="$([ "$zrc" = 0 ] && echo success || echo failure)"
 }
 rest="zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
-nokva="- pass: no published advisory for an action pinned here (zizmor known-vulnerable-actions)"
+nokva="- pass: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions)"
 
 zz '[]' 0
 [ "$zrc" = 0 ] && ok "zizmor, no findings: the step passes" || bad "zizmor, no findings: the step exited $zrc" "$zout"
@@ -496,9 +496,15 @@ zz '[]' 2
 [ "$zrc" != 0 ] && ok "exit 2, an argument error: the step fails" || bad "exit 2: the step passed" "$zout"
 zz 'not json' 0
 [ "$zrc" != 0 ] && ok "output that is not JSON: the step fails" || bad "not JSON: the step passed" "$zout"
-f="$(finding known-vulnerable-actions High 'GHSA-x' 'uses: a/b@v1\\n::error::forged' 1)"
+# A JSON \n decodes to a real newline: the annotation and the feature both carry one.
+f="$(finding known-vulnerable-actions High 'GHSA-x\n::error::forged' 'a/b@v1\n::error::forged' 1)"
 zz "[$f]" 14
-if grep -q '^::error::forged' <<<"$zout$out"; then bad "a newline in a feature started a workflow command" "$zout$out"; else ok "a newline in a feature stays on its line"; fi
+if grep -q '^::error::forged' <<<"$zout"$'\n'"$out"; then bad "a newline in a finding started a workflow command" "$zout"$'\n'"$out"; else ok "a newline in a finding stays on its line"; fi
+grep -q '^- not yet confirmed: GHSA-x ::error::forged for a/b@v1 (' <<<"$sum" && ok "a multi-line feature: the action is its first line" || bad "a multi-line feature" "$sum"
+zz '{}' 0
+[ "$zrc" != 0 ] && ok "output that is not a list: the step fails" || bad "a JSON object: the step passed" "$zout"
+zz - 0
+[ "$zrc" != 0 ] && grep -q '^- not yet confirmed: no published advisory' <<<"$sum" && ok "no output at exit 0: the step fails, no advisory pass" || bad "no output at exit 0" "$zout"$'\n'"$sum"
 
 echo "-- verdict lines: ci / test"
 # A not yet confirmed line can carry an input's text (the extra versions):

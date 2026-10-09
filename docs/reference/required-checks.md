@@ -38,7 +38,7 @@
 | Check | Opens its summary with | Not yet confirmed on a run that otherwise passes | Passes with `does not apply` |
 | --- | --- | --- | --- |
 | `ci / pr-title` | The title's line | Never | Not a pull request |
-| `ci / lint` | `uv sync --locked`, `ruff check`, `ruff format --check`, zizmor's audits except `known-vulnerable-actions`, and a pass for that one when no pinned action has a published advisory | One line per published advisory for an action pinned here, naming the advisory, the action and its ref: zizmor's `known-vulnerable-actions`, reported and never failing the job. A pin raised past the advisory's fixed version confirms it | Never |
+| `ci / lint` | `uv sync --locked`, `ruff check`, `ruff format --check`, zizmor's audits except `known-vulnerable-actions`, and a pass for that one when no pinned action has a published advisory at medium or above | One line per published advisory for an action pinned here, naming the advisory, the action and its ref: zizmor's `known-vulnerable-actions`, reported and never failing the job. A pin raised past the advisory's fixed version confirms it | Never |
 | `ci / typecheck` | `uv sync --locked`, mypy | Never | Never |
 | `ci / test` | `uv sync --locked`, pytest on `.python-version`, pytest on the extra versions | Never | The extra versions, when `extra-python-versions` is empty |
 | `ci / build` | `uv sync --locked`, `uv build`, the install smoke | Never | Never |

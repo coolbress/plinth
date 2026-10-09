@@ -158,17 +158,21 @@ jobs:
           rc=0
           uvx zizmor@1.29.0 --no-progress --min-severity medium --format json .github/workflows/ > "$RUNNER_TEMP/zizmor.json" || rc=$?
           case "$rc" in 0|1[1-4]) ;; *) echo "zizmor exited $rc: an error, not a finding"; exit 1 ;; esac
-          # One line per finding: ident, severity, file:line, annotation.
-          # Newlines are flattened so no text from a workflow starts a command.
-          jq -r '.[] | select(.ignored != true) | (.locations | (map(select(.symbolic.kind == "Primary")) + .)[0]) as $l
-            | "\(.ident) \(.determinations.severity) \($l.symbolic.key.Local.verbatim_path // $l.symbolic.key.Local.given_path // "?"):\(($l.concrete.location.start_point.row // -1) + 1) \($l.symbolic.annotation // "")"
-            | gsub("[\r\n]"; " ")' "$RUNNER_TEMP/zizmor.json"
-          # The advisories, one line each, for the Verdict step.
-          jq -r '.[] | select(.ignored != true and .ident == "known-vulnerable-actions") | (.locations | (map(select(.symbolic.kind == "Primary")) + .)[0]) as $l
-            | "\($l.symbolic.annotation // "an advisory") for \($l.concrete.feature // "?" | sub("^\\s*uses:\\s*"; "")) (\($l.symbolic.key.Local.verbatim_path // $l.symbolic.key.Local.given_path // "?"):\(($l.concrete.location.start_point.row // -1) + 1))"
-            | gsub("[\r\n]"; " ")' "$RUNNER_TEMP/zizmor.json" > "$RUNNER_TEMP/zizmor.kva.tmp"
+          jq -e 'type == "array"' "$RUNNER_TEMP/zizmor.json" > /dev/null || { echo "zizmor's output is not a JSON list of findings"; exit 1; }
+          # Each finding's primary location as file:line; newlines are
+          # flattened so no text from a workflow starts a command.
+          defs='def found: .[] | select(.ignored != true);
+            def loc: (.locations | (map(select(.symbolic.kind == "Primary")) + .)[0]);
+            def at: "\(.symbolic.key.Local.verbatim_path // .symbolic.key.Local.given_path // "?"):\((.concrete.location.start_point.row // -1) + 1)";
+            def line: gsub("[\r\n]"; " ");'
+          # One line per finding in the log: ident, severity, location, annotation.
+          jq -r "$defs"' found | loc as $l | "\(.ident) \(.determinations.severity) \($l | at) \($l.symbolic.annotation // "")" | line' "$RUNNER_TEMP/zizmor.json"
+          # The advisories, one line each, for the Verdict step: advisory, action@ref, location.
+          jq -r "$defs"' found | select(.ident == "known-vulnerable-actions") | loc
+            | "\(.symbolic.annotation // "an advisory") for \(.concrete.feature // "?" | split("\n")[0] | sub("^\\s*uses:\\s*"; "")) (\(at))" | line' \
+            "$RUNNER_TEMP/zizmor.json" > "$RUNNER_TEMP/zizmor.kva.tmp"
           mv "$RUNNER_TEMP/zizmor.kva.tmp" "$RUNNER_TEMP/zizmor.kva"
-          n="$(jq '[.[] | select(.ignored != true and .ident != "known-vulnerable-actions")] | length' "$RUNNER_TEMP/zizmor.json")"
+          n="$(jq "$defs"' [found | select(.ident != "known-vulnerable-actions")] | length' "$RUNNER_TEMP/zizmor.json")"
           echo "zizmor: $n finding(s) that block, $(wc -l < "$RUNNER_TEMP/zizmor.kva" | tr -d ' ') known-vulnerable-actions reported only"
           [ "$n" = 0 ]
         working-directory: ${{ github.workspace }}
@@ -189,8 +193,8 @@ jobs:
           v "$FORMAT" "ruff format --check"
           v "$ZIZMOR" "zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
           kva="$RUNNER_TEMP/zizmor.kva"
-          if [ ! -f "$kva" ]; then say "not yet confirmed: no published advisory for an action pinned here (zizmor known-vulnerable-actions), zizmor did not finish; a run where it does confirms it"
-          elif [ ! -s "$kva" ]; then say "pass: no published advisory for an action pinned here (zizmor known-vulnerable-actions)"
+          if [ ! -f "$kva" ]; then say "not yet confirmed: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions), zizmor did not finish; a run where it does confirms it"
+          elif [ ! -s "$kva" ]; then say "pass: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions)"
           else while IFS= read -r a; do say "not yet confirmed: $a, a published advisory (zizmor known-vulnerable-actions), reported and not blocking; a pin raised past the advisory's fixed version confirms it"; done < "$kva"; fi
 
   typecheck:
