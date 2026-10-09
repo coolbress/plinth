@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-09
+
+`ci / lint` now checks where a pinned `uses:` SHA comes from. The job gives
+zizmor its own token, so the online audits run: a consumer's lint job can go
+red on an impostor commit or a ref confusion in a `uses:` line, which no check
+caught before. The one audit that reads GitHub's advisory database live,
+`known-vulnerable-actions`, reports and never blocks, for the same reason the
+zizmor version is pinned: a new advisory must not turn CI red on a day nothing
+in the repository changed (#450). The standing `zizmor's online audits`
+warning is gone from every run. And `/plinth:floor-check` warns when the
+workflow files call plinth at more than one commit, with the line that fixes
+it (#447). No check name, job, input or conclusion changes.
+
+tested with plinth-template v1.8.0
+
 ### Added
 
 - `/plinth:floor-check` and `ci / floor-check` warn when the workflow files
@@ -2251,7 +2266,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/coolbress/plinth/releases/tag/v1.9.0
 [1.8.0]: https://github.com/coolbress/plinth/releases/tag/v1.8.0
 [1.7.6]: https://github.com/coolbress/plinth/releases/tag/v1.7.6
 [1.7.5]: https://github.com/coolbress/plinth/releases/tag/v1.7.5
