@@ -2,7 +2,9 @@
 # The judgement of .github/workflows/pr-review.yml, a pure function of files
 # the step fetched: attest.py <head> <logins> <reviews> <review-comments>
 # <issue-comments> [<activity>]. Exit 0 with the signal found, 1 with what
-# was seen. tests/pr-review-attest.sh runs this file against fixtures.
+# was seen. With `--round` first it only writes the review round line and
+# exits 0 (the step's red path). tests/pr-review-attest.sh runs this file
+# against fixtures.
 r"""Did an accepted reviewer account leave a signal on THIS commit?
 Participation evidence, no verdict.
 
@@ -82,6 +84,9 @@ import pathlib
 import re
 import sys
 
+only_round = len(sys.argv) > 1 and sys.argv[1] == "--round"
+if only_round:
+    del sys.argv[1]
 head, logins_csv = sys.argv[1:3]
 reviews_p, rcomments_p, icomments_p = sys.argv[3:6]
 activity_p = sys.argv[6] if len(sys.argv) > 6 else ""   # pushes to the head branch, newest first
@@ -136,6 +141,92 @@ for path in (reviews_p, rcomments_p, icomments_p):
     for it in load(path):
         seen.add((it.get("user") or {}).get("login") or "")
 
+WHEN_TO_STOP = ("https://github.com/coolbress/plinth/blob/main/docs/how-to/"
+                "configure-the-third-party-reviewer.md#when-to-stop")
+HEX = re.compile(r"^[0-9a-f]{7,40}$")
+
+def round_line():
+    """Which review round this head is (#456): the earlier commits of this
+    pull request with any accepted reviewer's signal, plus one. Every
+    signal counts here, unbound by time: the question is which earlier
+    heads were reviewed, not whether this one was. A prefix (signals 3
+    and 4) is resolved against the commits the activity log names; a
+    prefix of the head, or of a commit already counted, is not counted
+    again, and one the log cannot resolve counts once. It never changes
+    the verdict and never stops a round."""
+    full, prefixes = set(), []
+    def note(sha):
+        sha = str(sha or "").lower()
+        if not HEX.match(sha) or head.startswith(sha):
+            return
+        (full.add if len(sha) == 40 else prefixes.append)(sha)
+    for it in load(reviews_p):
+        if ours(it) and not COULD_NOT_REVIEW.match(it.get("body") or ""):
+            note(it.get("commit_id"))
+    for it in load(rcomments_p):
+        if ours(it):
+            note(it.get("original_commit_id"))
+    for it in load(icomments_p):
+        if not ours(it):
+            continue
+        body = it.get("body") or ""
+        for raw in MARK.findall(body):
+            try:
+                d = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(d, dict) and d.get("status") == "completed":
+                note(d.get("headSha"))
+        if DONE.search(body):
+            m = REVIEWED.search(body)
+            if m:
+                note(m.group(1))
+        if body.lstrip().startswith(SUMMARY):
+            for status, _, sha in ROW.findall(body):
+                if status == "Completed":
+                    note(sha)
+    tips = {str(p.get(k) or "").lower() for p in load(activity_p) if isinstance(p, dict)
+            for k in ("before", "after")}
+    once = []
+    for sha in sorted(prefixes, key=len, reverse=True):
+        match = [t for t in tips if t.startswith(sha)]
+        if len(match) == 1:
+            if match[0] != head:
+                full.add(match[0])
+        else:
+            once.append(sha)
+    # Longest first, so a seven-character row folds into the ten-character
+    # comment that names the same commit.
+    once = [sha for i, sha in enumerate(once)
+            if not any(f.startswith(sha) for f in full)
+            and not any(o.startswith(sha) for o in once[:i])]
+    m = len(full) + len(once)
+    unread = [os.path.basename(p) for p in (reviews_p, rcomments_p, icomments_p) if not readable(p)]
+    least = "at least " if unread else ""
+    line = (f"review round {least}{m + 1} on this pull request: {least}{m} earlier commit(s)"
+            " reviewed by an accepted reviewer, as read by this run")
+    if unread:
+        line += f"; {', '.join(unread)} could not be read, so this is a lower bound"
+    if m + 1 >= 3:
+        line += (". The review budget is spent (the first review and two rounds of fixes):"
+                 " fix only what is irreversible or reaches other people, answer the rest"
+                 f" or move it to an issue. {WHEN_TO_STOP}")
+    return line
+
+def say_round():
+    """The round line, in the log and the job summary, on a pass and on
+    a red alike. Not a verdict line and not a warning."""
+    line = round_line()
+    print(line)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a") as f:
+            f.write(line + "\n")
+
+if only_round:
+    say_round()
+    sys.exit(0)
+
 def looked(how, excerpt=None):
     """The verdict is yes. Say so, then list the accepted reviewer's
     inline comments made on this commit (`original_commit_id`, the
@@ -170,6 +261,7 @@ def looked(how, excerpt=None):
     if summary:
         with open(summary, "a") as f:
             f.write(line + "\n" + "".join(f"- {u}\n" for u in urls))
+    say_round()
     sys.exit(0)
 
 # 1 review objects and review comments: the commit must match.

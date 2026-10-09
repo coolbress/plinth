@@ -421,6 +421,73 @@ else
   echo "  FAIL  no summary file: expected a pass with the url in the log" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
 fi
 
+echo "-- the review round: earlier commits with a signal, plus one (#456); never the verdict"
+E1=1111111111111111111111111111111111111111
+E2=2222222222222222222222222222222222222222
+E3=3333333333333333333333333333333333333333
+joined() {  # JSON arrays -> one array
+  python3 -c 'import json,sys; print(json.dumps([x for a in sys.argv[1:] for x in json.loads(a)], ensure_ascii=False))' "$@"
+}
+LOG3="[$(push "$HEAD" "$T_PUSH" "$E2"),$(push "$E2" 2026-09-18T07:00:00Z "$E1")]"   # E1 -> E2 -> HEAD
+rnd() {  # name, reviews, issue comments, activity, mode (pass|red), want, [must not appear]
+  printf '%s' "$2" > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"; printf '%s' "$3" > "$tmp/i.json"
+  printf '%s' "$4" > "$tmp/a.json"; : > "$tmp/summary.md"
+  if [ "$5" = pass ]; then
+    GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$attest" "$HEAD" "$BOT" \
+      "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1
+  else
+    GITHUB_STEP_SUMMARY="$tmp/summary.md" python3 "$attest" --round "$HEAD" "$BOT" \
+      "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1
+  fi
+  got=$?
+  if [ "$got" -ne 0 ] || ! grep -qF "$6" "$tmp/log" || ! grep -qF "$6" "$tmp/summary.md" \
+     || { [ -n "${7:-}" ] && grep -qF "$7" "$tmp/log"; }; then
+    echo "  FAIL  $1: exit $got, wanted '$6' in log and summary${7:+, and not '$7'}" >&2
+    sed 's/^/        /' "$tmp/log" "$tmp/summary.md" >&2; fails=$((fails + 1))
+  else
+    echo "  PASS  $1"
+  fi
+}
+ON_HEAD="$(cmt "$BOT" "$HEAD" completed)"   # the verdict: a marker on this head
+rnd "no earlier signal: round 1" '[]' "$ON_HEAD" "$LOG3" pass \
+  "review round 1 on this pull request: 0 earlier commit(s)" "budget"
+rnd "two earlier heads (review object, completion comment of ten): round 3 and the budget" \
+  "$(rvw "$BOT" "$E1")" "$(joined "$ON_HEAD" "$(done_cmt "$BOT" "$D1" "${E2:0:10}")")" "$LOG3" pass \
+  "review round 3 on this pull request: 2 earlier commit(s)"
+grep -qF "The review budget is spent" "$tmp/summary.md" && grep -qF "#when-to-stop" "$tmp/log" \
+  || { echo "  FAIL  round 3 does not say the budget is spent, with the link" >&2; fails=$((fails + 1)); }
+rnd "a review object and a completion comment on one earlier head count once" \
+  "$(rvw "$BOT" "$E1")" "$(joined "$ON_HEAD" "$(done_cmt "$BOT" "$D1" "${E1:0:10}")")" "$LOG3" pass \
+  "review round 2 on this pull request: 1 earlier commit(s)" "budget"
+rnd "a could-not-review notice on an earlier head does not count" \
+  "[$(rv "$BOT" "$E1" "$NOTICE")]" "$ON_HEAD" "$LOG3" pass \
+  "review round 1 on this pull request: 0 earlier commit(s)"
+rnd "a prefix the log cannot resolve counts once (comment of ten, row of seven)" '[]' \
+  "$(joined "$ON_HEAD" "$(done_cmt "$BOT" "$D1" "${E3:0:10}")" "[$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1])[0]))' "$(sum_cmt "$BOT" "$SUM" "$(row "$DONE_ST" "${E3:0:7}")")")]")" \
+  "$LOG3" pass "review round 2 on this pull request: 1 earlier commit(s)"
+rnd "the head's own signals are not earlier rounds" \
+  "$(rvw "$BOT" "$HEAD")" "$(joined "$ON_HEAD" "$(done_cmt "$BOT" "$D1" "${HEAD:0:10}")")" "$LOG3" pass \
+  "review round 1 on this pull request: 0 earlier commit(s)"
+rnd "a failed fetch: a lower bound, not a number" 'null' "$ON_HEAD" "$LOG3" pass \
+  "review round at least 1 on this pull request: at least 0 earlier commit(s)"
+grep -qF "r.json could not be read, so this is a lower bound" "$tmp/log" \
+  || { echo "  FAIL  the lower-bound line does not name the file" >&2; fails=$((fails + 1)); }
+rnd "on a red (--round): the line is written too" "$(rvw "$BOT" "$E1")" \
+  "$(done_cmt "$BOT" "$D1" "${E2:0:10}")" "$LOG3" red "review round 3 on this pull request: 2 earlier commit(s)"
+printf '%s' "$(rvw "$BOT" "$E1")" > "$tmp/r.json"; echo '[]' > "$tmp/i.json"
+if python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1; then
+  echo "  FAIL  an earlier head's review passed this head" >&2; fails=$((fails + 1))
+elif grep -q "review round" "$tmp/log"; then
+  echo "  FAIL  every look of the wait prints the round; only the decision should" >&2; fails=$((fails + 1))
+else
+  echo "  PASS  an earlier head's review still does not pass this head, and a look does not print the round"
+fi
+if grep -vE '^[[:space:]]*#' "$wf" | grep -qF 'attest.py" --round "$HEAD_SHA"'; then
+  echo "  PASS  the step writes the round on its red path"
+else
+  echo "  FAIL  the step never calls attest.py --round; a red would carry no round line" >&2; fails=$((fails + 1))
+fi
+
 echo "-- when nothing matches, the log carries the clues (wrong name or commit: fix it in one go)"
 printf '%s' "$(cmt "$BOT" "$OLD" completed)" > "$tmp/i.json"
 echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
