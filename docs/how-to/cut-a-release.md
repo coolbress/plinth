@@ -34,7 +34,10 @@ to tracked files, and `gh` logged in with write access to the repository.
    Land it as [CONTRIBUTING.md](../../CONTRIBUTING.md#land-a-change) says.
    It needs no third-party review: with `pass-release-pull-requests` on,
    `third-party / review` passes a pull request with exactly that title and
-   run 1's diff without summoning the reviewer, and its log says
+   a diff of run 1's shape (only the two manifests and `CHANGELOG.md`; each
+   manifest's `"version"` line replaced by the title's, higher than before;
+   `CHANGELOG.md` only adding lines, so an edited note still passes) without
+   summoning the reviewer, and its log says
    `release pull request: not summoned`
    ([what it passes without summoning](configure-the-third-party-reviewer.md#pull-requests-it-passes-without-summoning)).
    Merge when the checks are green; do not wait for a review that was not
