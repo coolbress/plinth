@@ -53,6 +53,10 @@ name: pr-review
 #        URLs, once the check has decided (#176); a summary comment saying
 #        "no major issues" has arrived next to an unanswered inline finding
 #        (measured on #174).
+#   no   that a round stops. The log and the job summary say which review round
+#        this head is (earlier commits with an accepted reviewer's signal, plus
+#        one) and, from the third, that the budget in the how-to's When to stop
+#        is spent; the verdict, the wait and the summonses do not change (#456).
 #   no   that the reviewer is independent of the author: `reviewer-logins` is a
 #        trust setting, not an independence check.
 #   no   that a review gets started. The summons it can post reaches the
@@ -453,6 +457,9 @@ jobs:
             echo "   ... $(( deadline - $(date +%s) ))s left"
           done
 
+          # The review round, as on a pass (#456); it never changes this red.
+          python3 "$PR_REVIEW/attest.py" --round "$HEAD_SHA" "$LOGINS" \
+            "$RUNNER_TEMP/reviews.json" "$RUNNER_TEMP/rcomments.json" "$RUNNER_TEMP/icomments.json" "$RUNNER_TEMP/activity.json" || true
           echo "::error::no third-party review is attached to this commit ($HEAD_SHA)."
           echo "  - is the reviewer's automatic review on for this repository? https://chatgpt.com/codex/settings/code-review"
           echo "  - a possible cause, not a known one: the reviewer's account has used up its usage limit."

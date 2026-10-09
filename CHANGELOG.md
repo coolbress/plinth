@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `third-party / review` writes the review round to its log and job summary, on
+  a pass and on a red: `review round N on this pull request`, where N is one
+  more than the number of earlier commits of the pull request that carry an
+  accepted reviewer's signal. From round 3 it adds that the budget in
+  [When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop)
+  is spent. When a comments or reviews fetch failed, it says the count is a
+  lower bound. The verdict, the wait, the summonses and the check name do not
+  change (#456).
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.9.0. A repository it creates

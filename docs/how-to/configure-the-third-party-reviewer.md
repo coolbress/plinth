@@ -411,7 +411,10 @@ Budget: after the first review, two rounds of fixes. From the third round on,
 fix only the first row; the second row becomes an issue, answered on the
 thread with the link; the third row still gets its reply and nothing else; and
 the pull request merges. Say on the thread what was not changed and why, so
-the next reader does not reopen it.
+the next reader does not reopen it. `third-party / review` counts the rounds
+for you: its log and job summary say which review round the head is, and from
+the third that the budget is spent. It does not stop a round: the summons, the
+wait and the verdict are the same in every round.
 
 The same rule bounds the code: a script guards outcomes that cannot be undone
 and documents the states that can. A reviewer asking for a guard on a
