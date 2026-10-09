@@ -13,12 +13,16 @@ pull requests and have no tag.
 
 ### Changed
 
-- `/plinth:new-project` renders plinth-template v1.8.1. A repository it creates
-  differs from v1.8.0 in one comment: `.github/dependabot.yml` says the plinth
+- `/plinth:new-project` renders plinth-template v1.9.0. A repository it creates
+  differs from v1.8.0 in three places. `.github/dependabot.yml` says the plinth
   workflow pins are bare commit SHAs that Dependabot resolves to a release on
   its own and raises together after the default cooldown, instead of
-  promising a version comment the pins do not carry (#455).
-  `/plinth:floor-check` now reports a repository on v1.8.0 as one tag behind.
+  promising a version comment the pins do not carry (#455, template v1.8.1).
+  A project skill, `.claude/skills/verify/SKILL.md`, which Claude Code tells the
+  agent to run before a commit, points at the checks in `AGENTS.md` (#458).
+  The review-budget line in `AGENTS.md` says to judge what is still fixed after
+  two rounds by what the diff does, not by the reviewer's severity label (#457).
+  `/plinth:floor-check` now reports a repository on v1.8.x as behind.
 
 ## [1.9.0] - 2026-10-09
 
