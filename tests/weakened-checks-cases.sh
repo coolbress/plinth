@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Verdicts of the `ci / diff-size` step that names changes to the checks the
-# pull request description does not (#301), and the verdict lines python-ci's
-# jobs open their summaries with (#437). The steps are not copied here; they
-# are extracted from python-ci.yml and run against fixtures, so the rule
-# tested is the rule shipped.
+# pull request description does not (#301), the verdict lines python-ci's
+# jobs open their summaries with (#437), and the zizmor step's split (#450).
+# The steps are not copied here; they are extracted from python-ci.yml and
+# run against fixtures, so the rule tested is the rule shipped.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
@@ -431,12 +431,74 @@ warned "Dependabot outside a pull request: no CodeQL line" 0
 echo "-- verdict lines: ci / lint"
 verdict lint Verdict SYNC=success CHECK=success FORMAT=success ZIZMOR=success
 first "lint opens with uv sync" '^- pass: uv sync --locked$'
-if grep -qx -- "- pass: zizmor's offline audits, medium and above" <<<"$sum"; then ok "zizmor: its offline audits pass"
-else bad "zizmor: no pass line for its offline audits" "$sum"; fi
-warned "zizmor: its online audits are not yet confirmed in every run, one warning" 1
+warned "zizmor left no advisory list: its known-vulnerable-actions line is not yet confirmed" 1
 verdict lint Verdict SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=skipped
 first "a failed sync: fail" '^- fail: uv sync --locked$'
-warned "a failed sync: each step it stopped is not yet confirmed, and zizmor's online audits" 4
+warned "a failed sync: each step it stopped is not yet confirmed, known-vulnerable-actions too" 4
+if grep -q "online audits" <<<"$sum"; then bad "the standing online-audits line is still written" "$sum"; else ok "no standing online-audits line"; fi
+
+# The zizmor step, run against a fake uvx that prints a fixture JSON and exits
+# with a given code (zizmor 1.29.0's shape: 0 none, 11-14 findings by highest
+# severity, 1 an error during the audit). Then the Verdict step on its outcome.
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/uvx" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$FAKE_ARGS"
+[ -f "$FAKE_JSON" ] && cat "$FAKE_JSON"
+exit "$FAKE_RC"
+SH
+chmod +x "$tmp/bin/uvx"
+finding() { # <ident> <severity> <annotation> <feature> <row>
+  printf '{"ident":"%s","desc":"d","url":"u","ignored":false,"fixes":[],"determinations":{"confidence":"High","severity":"%s","persona":"Regular"},"locations":[{"symbolic":{"key":{"Local":{"verbatim_path":".github/workflows/a.yml"}},"annotation":"%s","route":{"route":[]},"feature_kind":"Normal","kind":"Primary"},"concrete":{"location":{"start_point":{"row":%s,"column":8},"end_point":{"row":%s,"column":40},"offset_span":{"start":0,"end":1}},"feature":"%s","comments":[]}}]}' \
+    "$1" "$2" "$3" "$5" "$5" "$4"
+}
+kva1="$(finding known-vulnerable-actions High GHSA-mrrh-fwg8-r2c3 'uses: tj-actions/changed-files@v35' 6)"
+kva2="$(finding known-vulnerable-actions High GHSA-mcph-m25j-8j63 'uses: tj-actions/changed-files@v35' 6)"
+imp="$(finding impostor-commit High 'uses a commit that does not belong to the repository' 'uses: actions/checkout@0123456789abcdef0123456789abcdef01234567' 9)"
+# zz <json or -> <exit> -- runs the zizmor step, then the Verdict on its outcome
+zz() {
+  rm -f "$tmp/rt/"zizmor*; if [ "$1" = - ]; then rm -f "$tmp/z.json"; else printf '%s\n' "$1" > "$tmp/z.json"; fi
+  job_step lint "Workflow security (zizmor, medium and above)" > "$tmp/z.sh" || { bad "lint / zizmor: step not found"; return; }
+  zout="$(cd "$tmp" && env PATH="$tmp/bin:$PATH" FAKE_JSON="$tmp/z.json" FAKE_RC="$2" FAKE_ARGS="$tmp/z.args" GH_TOKEN=t RUNNER_TEMP="$tmp/rt" bash -e "$tmp/z.sh" 2>&1)"; zrc=$?
+  verdict lint Verdict SYNC=success CHECK=success FORMAT=success ZIZMOR="$([ "$zrc" = 0 ] && echo success || echo failure)"
+}
+rest="zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
+nokva="- pass: no published advisory for an action pinned here (zizmor known-vulnerable-actions)"
+
+zz '[]' 0
+[ "$zrc" = 0 ] && ok "zizmor, no findings: the step passes" || bad "zizmor, no findings: the step exited $zrc" "$zout"
+grep -q -- '--format json' "$tmp/z.args" && grep -q -- '--min-severity medium' "$tmp/z.args" && ok "zizmor runs with --format json at medium and above" || bad "zizmor's arguments" "$(cat "$tmp/z.args")"
+grep -qx -- "- pass: $rest" <<<"$sum" && grep -qx -- "$nokva" <<<"$sum" && ok "zizmor, no findings: the two pass lines" || bad "zizmor, no findings: the two pass lines" "$sum"
+warned "zizmor, no findings: no warning" 0
+
+zz "[$imp]" 14
+[ "$zrc" != 0 ] && ok "an impostor-commit finding: the step fails" || bad "an impostor-commit finding: the step passed" "$zout"
+grep -q '^impostor-commit High .github/workflows/a.yml:10' <<<"$zout" && ok "an impostor-commit finding: printed with its ident, severity and location" || bad "the finding is not printed" "$zout"
+grep -qx -- "- fail: $rest" <<<"$sum" && ok "an impostor-commit finding: fail" || bad "an impostor-commit finding: no fail line" "$sum"
+grep -qx -- "$nokva" <<<"$sum" && ok "an impostor-commit finding: known-vulnerable-actions still reported" || bad "an impostor-commit finding: no known-vulnerable-actions line" "$sum"
+
+zz "[$kva1,$kva2]" 14
+[ "$zrc" = 0 ] && ok "only known-vulnerable-actions: the step passes" || bad "only known-vulnerable-actions: the step exited $zrc" "$zout"
+[ "$(grep -c '^known-vulnerable-actions High ' <<<"$zout")" = 2 ] && ok "only known-vulnerable-actions: each finding in the log" || bad "the advisories are not in the log" "$zout"
+grep -qx -- "- pass: $rest" <<<"$sum" && ok "only known-vulnerable-actions: pass for the rest" || bad "only known-vulnerable-actions: no pass for the rest" "$sum"
+warned "only known-vulnerable-actions: one not yet confirmed line and one warning per finding" 2
+grep -qE '^- not yet confirmed: GHSA-mrrh-fwg8-r2c3 .*tj-actions/changed-files@v35.*fixed version confirms it$' <<<"$sum" && ok "the line names the advisory, the action and its ref, and what confirms it" || bad "the line does not name the advisory, action and ref" "$sum"
+
+zz "[$kva1,$imp]" 14
+[ "$zrc" != 0 ] && grep -qx -- "- fail: $rest" <<<"$sum" && ok "both: fail for the rest" || bad "both: no fail" "$zout"$'\n'"$sum"
+warned "both: the advisory is still a not yet confirmed line" 1
+
+zz - 1
+[ "$zrc" != 0 ] && ok "exit 1, an error during the audit: the step fails" || bad "exit 1: the step passed" "$zout"
+grep -qx -- "- fail: $rest" <<<"$sum" && ok "exit 1: fail" || bad "exit 1: no fail line" "$sum"
+warned "exit 1: known-vulnerable-actions not yet confirmed" 1
+zz '[]' 2
+[ "$zrc" != 0 ] && ok "exit 2, an argument error: the step fails" || bad "exit 2: the step passed" "$zout"
+zz 'not json' 0
+[ "$zrc" != 0 ] && ok "output that is not JSON: the step fails" || bad "not JSON: the step passed" "$zout"
+f="$(finding known-vulnerable-actions High 'GHSA-x' 'uses: a/b@v1\\n::error::forged' 1)"
+zz "[$f]" 14
+if grep -q '^::error::forged' <<<"$zout$out"; then bad "a newline in a feature started a workflow command" "$zout$out"; else ok "a newline in a feature stays on its line"; fi
 
 echo "-- verdict lines: ci / test"
 # A not yet confirmed line can carry an input's text (the extra versions):
