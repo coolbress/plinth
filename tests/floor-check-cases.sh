@@ -1333,6 +1333,68 @@ out="$(python3 "$checker" --root "$unreadcopy" --no-network 2>&1)"
 if grep -q "plinth_sha=$sha40" <<<"$out"; then bad "an unreadable second plinth uses: line still let the lone parsed SHA print"; printf '%s\n' "$out" | grep -E 'template|plinth_sha' | sed 's/^/        /'
 else ok "an unreadable second plinth uses: line withholds the command too, not just a lone parsed SHA"; fi
 
+# The plinth pins agree (#447): ci.yml and label.yml are rendered at one
+# commit, and a hand edit that moves one leaves them apart. A WARN of its own,
+# whatever the template state: the fixture's recorded tag is the target, so
+# the drift item above prints no reason here.
+pins() { # <label.yml uses: line> -- the good copy plus a label.yml; sets out, rc
+  local copy="$work/pins"; rm -rf "$copy"; cp -R "$good" "$copy"
+  printf 'jobs:\n  label:\n%b\n' "$1" > "$copy/.github/workflows/label.yml"
+  out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"; rc=$?
+}
+sha1="$(printf '%040d' 1)"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1"
+has "ci.yml and label.yml at different plinth SHAs: a WARN names each file with its SHA" \
+  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$"
+has "the INFO under it is a sed line for label.yml's plinth pin" \
+  "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha1\|.*' \.github/workflows/label\.yml && rm \.github/workflows/label\.yml\.bak"
+fixed() { # <description> <ERE label.yml must match after the fix> -- runs the printed sed lines in $work/pins
+  ( cd "$work/pins" && sed -n 's/^  INFO    \(sed .*\.bak\)   (moves.*/\1/p' <<<"$out" | while IFS= read -r l; do eval "$l"; done )
+  if grep -qE -- "$2" "$work/pins/.github/workflows/label.yml" && [ -z "$(find "$work/pins/.github/workflows" -name '*.bak')" ]; then ok "$1"
+  else bad "$1"; sed 's/^/        /' "$work/pins/.github/workflows/label.yml"; fi
+}
+fixed "run as printed, it moves label.yml to the SHA the ci job calls and leaves no .bak" "pr-label\.yml@$sha40\$"
+lacks "the fix line does not touch ci.yml" "sed .*ci\.yml"
+if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out"; then ok "the disagreement alone exits 0 and fails nothing"; else bad "the disagreement alone should exit 0 (rc=$rc)"; fi
+lacks "the recorded tag equals the target: the drift item prints no update reason, the WARN stands on its own" "no update command"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha40"
+lacks "ci.yml and label.yml at the same plinth SHA: the item prints nothing" "pins disagree|pins not compared"
+out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
+lacks "only the ci job calls plinth: the item prints nothing" "pins disagree|pins not compared"
+pins "    steps:\n      - {uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1}"
+has "an unreadable uses: line is a SKIP naming the file" \
+  "^  SKIP  plinth workflow pins not compared: label\.yml line 4 mentions uses"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@main"
+lacks "a plinth uses: on a tag is the action-pins WARN, not repeated here" "pins disagree|pins not compared"
+# A SHA is one Git object however it is spelled: compared in lower case, and
+# the fix line names the lagging one as written, since sed matches case.
+lower_a="$(printf 'a%.0s' $(seq 40))"; upper_a="$(printf 'A%.0s' $(seq 40))"; upper_b="$(printf 'B%.0s' $(seq 40))"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$upper_a"
+sed -i.bak "s/$sha40/$lower_a/" "$work/pins/.github/workflows/ci.yml" && rm "$work/pins/.github/workflows/ci.yml.bak"
+out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
+lacks "the same SHA in upper case in label.yml and lower case in ci.yml: the item prints nothing" "pins disagree|pins not compared"
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$upper_b" > "$work/pins/.github/workflows/label.yml"
+out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
+has "an upper-case SHA that differs is named in lower case in the WARN" \
+  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $lower_a, label\.yml at $(tr B b <<<"$upper_b")\$"
+has "and as written in the sed line, which matches case" "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$upper_b\|.*@$lower_a\|g' \.github/workflows/label\.yml"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha40"
+has "two SHAs inside one file are both named" "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1 and $sha40\$"
+has "and only the lagging one gets a sed line" "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha1\|"
+lacks "the matching one gets none" "sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha40\|"
+# GitHub reads the owner and repository in any case, as the caller item does:
+# a ci job calling CoolBress/Plinth is still plinth's pin.
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1"
+sed -i.bak "s|coolbress/plinth/|CoolBress/Plinth/|" "$work/pins/.github/workflows/ci.yml" && rm "$work/pins/.github/workflows/ci.yml.bak"
+out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
+has "CoolBress/Plinth in ci.yml and coolbress/plinth in label.yml at different SHAs: the WARN names both" \
+  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$"
+fixed "and the fix still moves label.yml to the ci job's SHA" "pr-label\.yml@$sha40\$"
+# The fix rewrites plinth references only: the same SHA on another action stays.
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\n    steps:\n      - uses: someone/fork@$sha1"
+fixed "the same SHA on another action in label.yml is left as it was" "someone/fork@$sha1\$"
+fixed "while the plinth reference moves" "pr-label\.yml@$sha40\$"
+
 # The template-update skill (#232) runs the command stage 1 prints, not a
 # second construction of it: --print-update-command prints that same line
 # and nothing else, or a reason on stderr and exit 1. `--defaults` is in it
@@ -1601,7 +1663,7 @@ skipcount() { # <description> <expected not-verified count> <shell to change the
   if grep -q -- "-- 0 failed, $2 not verified" <<<"$out" && grep -q 'SKIP  .*ci job' <<<"$out"; then ok "$1"
   else bad "$1"; printf '%s\n' "$out" | grep -E 'SKIP|failed' | sed 's/^/        /'; fi
 }
-skipcount "an unreadable ci.yml is counted as not verified (with the action-pin item's own SKIP)" 3 \
+skipcount "an unreadable ci.yml is counted as not verified (with the action-pin and plinth-pin items' own SKIPs)" 4 \
   "printf 'jobs: {ci: {uses: coolbress/plinth/.github/workflows/python-ci.yml@%s}}\n' '$sha40' > .github/workflows/ci.yml"
 skipcount "no ci.yml in the checkout under --no-network is a SKIP counted as not verified" 2 \
   "rm .github/workflows/ci.yml"
