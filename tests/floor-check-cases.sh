@@ -1360,6 +1360,22 @@ has "an unreadable uses: line is a SKIP naming the file" \
   "^  SKIP  plinth workflow pins not compared: label\.yml line 4 mentions uses"
 pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@main"
 lacks "a plinth uses: on a tag is the action-pins WARN, not repeated here" "pins disagree|pins not compared"
+# A SHA is one Git object however it is spelled: compared in lower case, and
+# the fix line names the lagging one as written, since sed matches case.
+lower_a="$(printf 'a%.0s' $(seq 40))"; upper_a="$(printf 'A%.0s' $(seq 40))"; upper_b="$(printf 'B%.0s' $(seq 40))"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$upper_a"
+sed -i.bak "s/$sha40/$lower_a/" "$work/pins/.github/workflows/ci.yml" && rm "$work/pins/.github/workflows/ci.yml.bak"
+out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
+lacks "the same SHA in upper case in label.yml and lower case in ci.yml: the item prints nothing" "pins disagree|pins not compared"
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$upper_b" > "$work/pins/.github/workflows/label.yml"
+out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
+has "an upper-case SHA that differs is named in lower case in the WARN" \
+  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $lower_a, label\.yml at $(tr B b <<<"$upper_b")\$"
+has "and as written in the sed line, which matches case" "^  INFO    sed -i\.bak 's/$upper_b/$lower_a/' \.github/workflows/label\.yml"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha40"
+has "two SHAs inside one file are both named" "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1 and $sha40\$"
+has "and only the lagging one gets a sed line" "^  INFO    sed -i\.bak 's/$sha1/$sha40/' \.github/workflows/label\.yml"
+lacks "the matching one gets none" "sed -i\.bak 's/$sha40/"
 
 # The template-update skill (#232) runs the command stage 1 prints, not a
 # second construction of it: --print-update-command prints that same line
