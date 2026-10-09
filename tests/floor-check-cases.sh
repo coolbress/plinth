@@ -1346,8 +1346,14 @@ sha1="$(printf '%040d' 1)"
 pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1"
 has "ci.yml and label.yml at different plinth SHAs: a WARN names each file with its SHA" \
   "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$"
-has "the INFO under it moves label.yml to the SHA the ci job calls" \
-  "^  INFO    sed -i\.bak 's/$sha1/$sha40/' \.github/workflows/label\.yml && rm \.github/workflows/label\.yml\.bak"
+has "the INFO under it is a sed line for label.yml's plinth pin" \
+  "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha1\|.*' \.github/workflows/label\.yml && rm \.github/workflows/label\.yml\.bak"
+fixed() { # <description> <ERE label.yml must match after the fix> -- runs the printed sed lines in $work/pins
+  ( cd "$work/pins" && sed -n 's/^  INFO    \(sed .*\.bak\)   (moves.*/\1/p' <<<"$out" | while IFS= read -r l; do eval "$l"; done )
+  if grep -qE -- "$2" "$work/pins/.github/workflows/label.yml" && [ -z "$(find "$work/pins/.github/workflows" -name '*.bak')" ]; then ok "$1"
+  else bad "$1"; sed 's/^/        /' "$work/pins/.github/workflows/label.yml"; fi
+}
+fixed "run as printed, it moves label.yml to the SHA the ci job calls and leaves no .bak" "pr-label\.yml@$sha40\$"
 lacks "the fix line does not touch ci.yml" "sed .*ci\.yml"
 if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out"; then ok "the disagreement alone exits 0 and fails nothing"; else bad "the disagreement alone should exit 0 (rc=$rc)"; fi
 lacks "the recorded tag equals the target: the drift item prints no update reason, the WARN stands on its own" "no update command"
@@ -1371,11 +1377,23 @@ printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.y
 out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
 has "an upper-case SHA that differs is named in lower case in the WARN" \
   "^  WARN  workflow pins disagree: ci\.yml calls plinth at $lower_a, label\.yml at $(tr B b <<<"$upper_b")\$"
-has "and as written in the sed line, which matches case" "^  INFO    sed -i\.bak 's/$upper_b/$lower_a/' \.github/workflows/label\.yml"
+has "and as written in the sed line, which matches case" "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$upper_b\|.*@$lower_a\|g' \.github/workflows/label\.yml"
 pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha40"
 has "two SHAs inside one file are both named" "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1 and $sha40\$"
-has "and only the lagging one gets a sed line" "^  INFO    sed -i\.bak 's/$sha1/$sha40/' \.github/workflows/label\.yml"
-lacks "the matching one gets none" "sed -i\.bak 's/$sha40/"
+has "and only the lagging one gets a sed line" "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha1\|"
+lacks "the matching one gets none" "sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha40\|"
+# GitHub reads the owner and repository in any case, as the caller item does:
+# a ci job calling CoolBress/Plinth is still plinth's pin.
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1"
+sed -i.bak "s|coolbress/plinth/|CoolBress/Plinth/|" "$work/pins/.github/workflows/ci.yml" && rm "$work/pins/.github/workflows/ci.yml.bak"
+out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
+has "CoolBress/Plinth in ci.yml and coolbress/plinth in label.yml at different SHAs: the WARN names both" \
+  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$"
+fixed "and the fix still moves label.yml to the ci job's SHA" "pr-label\.yml@$sha40\$"
+# The fix rewrites plinth references only: the same SHA on another action stays.
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\n    steps:\n      - uses: someone/fork@$sha1"
+fixed "the same SHA on another action in label.yml is left as it was" "someone/fork@$sha1\$"
+fixed "while the plinth reference moves" "pr-label\.yml@$sha40\$"
 
 # The template-update skill (#232) runs the command stage 1 prints, not a
 # second construction of it: --print-update-command prints that same line

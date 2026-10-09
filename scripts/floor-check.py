@@ -882,42 +882,47 @@ def check_plinth_pins_agree(root: Path) -> None:
     required check. A plinth `uses:` not on a full SHA is the action-pins
     item's WARN and is not counted here; a `uses:` it cannot read is a SKIP
     unless the readable ones already disagree, since it could be a plinth pin
-    at another commit. SHAs compare in lower case, one Git object however it
-    is spelled; the fix line names each as written, since sed matches case."""
-    by_file: dict[str, list[str]] = {}
+    at another commit. The owner/repository and the SHA compare in lower case,
+    as GitHub reads them; the fix line names each as written, since sed
+    matches case, and rewrites only plinth references."""
+    # file -> (owner/repository as written, ref as written), in order, once each
+    by_file: dict[str, list[tuple[str, str]]] = {}
     unread: list[str] = []
     for p in workflow_files(root):
         for n, value, readable in iter_uses(read(p)):
             if not readable:
                 unread.append(f"{p.name} line {n}")
-            elif value.startswith(f"{PLINTH_REPO}/"):
-                ref = value.rpartition("@")[2]
-                if re.fullmatch(r"[0-9a-fA-F]{40}", ref) and ref not in by_file.setdefault(p.name, []):
-                    by_file[p.name].append(ref)
-    if len({s.lower() for shas in by_file.values() for s in shas}) < 2:
+                continue
+            m = re.fullmatch(r"([^/@]+/[^/@]+)/[^@]*@([0-9a-fA-F]{40})", value)
+            if m and m.group(1).lower() == PLINTH_REPO and m.groups() not in by_file.setdefault(p.name, []):
+                by_file[p.name].append((m.group(1), m.group(2)))
+    if len({ref.lower() for pins in by_file.values() for _, ref in pins}) < 2:
         if unread:
             result("SKIP", f"plinth workflow pins not compared: {', '.join(unread)} mentions uses in a form "
                            "this checker does not read, and could pin coolbress/plinth at another commit")
         return
     # The ci job's file first: the fix moves the others to the SHA it calls.
     names = sorted(by_file, key=lambda f: (f != "ci.yml", f))
-    parts = [f"{f} at {' and '.join(dict.fromkeys(s.lower() for s in by_file[f]))}" for f in names]
+    parts = [f"{f} at {' and '.join(dict.fromkeys(ref.lower() for _, ref in by_file[f]))}" for f in names]
     result("WARN", f"workflow pins disagree: {names[0]} calls plinth{parts[0][len(names[0]):]}"
                    + "".join(f", {x}" for x in parts[1:]))
     target = None
     ci = root / ".github" / "workflows" / "ci.yml"
     if ci.is_file():
         kind, value, _ = caller_job(read(ci))
-        m = re.fullmatch(rf"{re.escape(CALLER_WORKFLOW)}@([0-9a-fA-F]{{40}})", value) if kind == "uses" else None
-        target = m.group(1) if m else None
+        m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@([0-9a-fA-F]{40})", value) if kind == "uses" else None
+        if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
+            target = m.group(3)
     if target is None:
         result("INFO", f"  set every {PLINTH_REPO} uses: to the one commit the ci job should call")
         return
     for f in names:
-        for old in by_file[f]:
+        for repo, old in by_file[f]:
             if old.lower() != target.lower():
                 path = shlex.quote(f".github/workflows/{f}")
-                result("INFO", f"  sed -i.bak 's/{old}/{target}/' {path} && rm {path}.bak   "
+                # Only `<owner/repository>/<path>@<old>`: the same SHA elsewhere in the file is left alone.
+                repo_re = repo.replace(".", r"\.")
+                result("INFO", f"  sed -i.bak 's|{repo_re}/\\([^@]*\\)@{old}|{repo}/\\1@{target}|g' {path} && rm {path}.bak   "
                                "(moves it to the SHA the ci job calls)")
 
 
