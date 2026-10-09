@@ -37,7 +37,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change) step 5 says. AI is never a
   `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
 - A same-session `/code-review` helps but is not independent; say so. `third-party / review` only records an accepted reviewer's signal on the commit.
-  A release pull request (`chore(release): vX.Y.Z` whose diff has run 1's shape: the two manifests' `"version"` lines raised and `CHANGELOG.md` only adding lines) is passed by that check without a summons or a review, by design
+  A release pull request (`chore(release): vX.Y.Z` whose diff has run 1's shape: the two manifests' `"version"` lines raised and `CHANGELOG.md` only adding lines, the replaced `[Unreleased]` link aside) is passed by that check without a summons or a review, by design
   ([cut a release](docs/how-to/cut-a-release.md), step 4): merge it on green checks; do not wait for the reviewer, toggle draft, or post the summons for it.
   Whoever opens or merges a pull request reads the reviewer's inline comments
   (`gh api repos/<owner>/<repo>/pulls/<n>/comments`; the check's log lists their
