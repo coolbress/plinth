@@ -72,7 +72,27 @@ in the pull request before you merge. For example: *"Done means: with my
 sample file, it prints 33,000 won for September, and the next payment dates in
 order."*
 
-## Give the agent a token that cannot change the checks
+## The loop
+
+```text
+ start ─► first pull request merged ─► the agent's own token, four things by hand
+                                                           │
+ ┌─────────────────────────────────────────────────────────┘
+ ▼
+ shape the idea ─► (plan in tickets) ─► build one ticket ─► checks answer
+                                                                 │
+   next ticket ◄─ you say "merge" ◄─ you check what they cannot ◄┘
+                                          │
+            something broke? ─► reproduce, then fix ─► back into the loop
+```
+
+### 1. Start
+
+`/plinth:new-project <name>` creates the repository and a first pull request;
+merge it once its checks are green. For a repository you already have, ask for
+`/plinth:floor-check`: it lists what is missing and changes nothing.
+
+### Give the agent a token that cannot change the checks
 
 The browser login from Getting started holds `workflow`, and so does the one
 `gh auth login` asks for by default over HTTPS: an agent working with it can
@@ -173,11 +193,15 @@ pushes with its own credential. Creating another repository with
 `/plinth:new-project` needs the permission again; the generator stops, says
 so and prints the fix.
 
-This token was measured on one push each way, not through a whole loop: that
-Contents, Issues and Pull requests are enough for every step on this page is
-not verified.
+One loop finished on this token without Claude Code asking for more
+permission: an issue, the change, a pull request with its checks green, a
+merge a person made, and a resume in a new session (one run, on a public
+command-line repository, #403 record 1). Not run on it: a change that needs a
+new dependency, a failing check, a review round, the agent attempting the
+merge. That Contents, Issues and Pull requests are enough for every step on
+this page is not verified.
 
-## Set four things by hand that no check covers
+### Set four things by hand that no check covers
 
 Also once the first pull request is merged, settle four things outside the
 repository. They are guidance: plinth does not check them, and it cannot,
@@ -208,22 +232,6 @@ not been measured.
    every visitor gets and no login, at the database's own address rather
    than the app's page; what you can read, anyone can. Protects against
    data left open to everyone.
-
-## The loop
-
-```text
- shape the idea ─► (plan in tickets) ─► build one ticket ─► checks answer
-                                                                 │
-   next ticket ◄─ you say "merge" ◄─ you check what they cannot ◄┘
-                                          │
-            something broke? ─► reproduce, then fix ─► back into the loop
-```
-
-### 1. Start
-
-`/plinth:new-project <name>` creates the repository and a first pull request;
-merge it once its checks are green. For a repository you already have, ask for
-`/plinth:floor-check`: it lists what is missing and changes nothing.
 
 ### 2. Shape the idea: `/grill-with-docs`
 
