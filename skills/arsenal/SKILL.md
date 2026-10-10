@@ -165,7 +165,13 @@ No tool answers these three yet, and no recorded run shows the cost of the gap:
 
 ## How a tool gets on this list
 
-Four criteria (#475). Every tool above meets them, or is named below with why.
+Four criteria (#475) for the plugins and skills plinth installs or lists.
+Every one of those meets them, or is named below with why. The other rows name
+what plinth does not select: Claude Code's built-ins (`/clear`, `/run`), the
+generated repository's text and its `verify` and `simplify` skills (shipped by
+plinth-template at a release tag), the required checks, `third-party / review`
+and Dependabot. They are the wall or the platform, and the criteria do not
+apply to them.
 
 1. **It fills a gap.** It serves a row above: a step's problem that no other
    listed tool, and not the generated repository text alone, already answers.
