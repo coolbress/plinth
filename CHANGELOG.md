@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.10.0. A repository it
+  creates also carries a project skill named `simplify`, which Claude Code
+  tells the agent to run before a code commit, beside `verify`. It cleans the
+  change up within the agreed behaviour, never removes validation, error
+  handling that prevents a loss, a security measure or anything the issue
+  asked for, cleans a review-fix commit only on the fix's lines, and ends on
+  the checks `AGENTS.md` lists. It carries the rules `ponytail-skills` held
+  before #470 narrowed it. It is a prompt, not a hook: in trials on Claude
+  Code 2.1.296, Claude Opus 5.5 ran it before 6 of 6 code commits and Claude
+  Sonnet 5.5 before 1 of 21 (#467). Step 4 of
+  [How to run a project](docs/how-to/run-a-project.md) says so.
+  `/plinth:floor-check` now reports a repository on v1.9.1 as one tag behind.
+
 ## [1.11.0] - 2026-10-10
 
 This release narrows the default set to the skills it uses: `ponytail-skills`
