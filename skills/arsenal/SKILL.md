@@ -81,10 +81,11 @@ and `writing-for-agents` (#475, #477).
 The second way in: find the step of the loop in
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, then the concern (Value,
 Use, Health, Proof, Flow, Safety, Memory, Stewardship), then the problem. Who
-invokes it: **person** (typed; a user-only skill, invisible to the agent),
-**agent** (picked from its description), **commit** (Claude Code's commit
-instruction runs a project skill named `verify` or `simplify`), **text** (the
-generated repository's own text, no skill). Evidence is what the recorded runs
+invokes it: **person** (the person types it or does it; a user-only skill is
+invisible to the agent), **agent** (picked from its description), **commit**
+(Claude Code's commit instruction asks the agent to run a project skill named
+`verify` or `simplify`; the agent may skip it), **text** (the generated
+repository's own text, no skill). Evidence is what the recorded runs
 show (U1, U2, RC1, RC2, #302, #403, #458, #467, #469; #475 has the sources):
 "0" means none of those runs called it, not that it does not help. The runs
 were small, short and one person's; in every one the generated repository
@@ -165,8 +166,11 @@ No tool answers these three yet, and no recorded run shows the cost of the gap:
 
 ## How a tool gets on this list
 
-Four criteria (#475) for the plugins and skills plinth installs or lists.
-Every one of those meets them, or is named below with why. The other rows name
+Four criteria (#475) for the plugins and skills plinth installs or lists:
+what a tool has to show to be added or kept. The exceptions below are the
+known gaps, not a certificate that every other tool was checked against every
+criterion; `last30days` and Impeccable, for instance, are listed for rows
+`research` and `design-taste-frontend` also answer. The other rows name
 what plinth does not select: Claude Code's built-ins (`/clear`, `/run`), the
 generated repository's text and its `verify` and `simplify` skills (shipped by
 plinth-template at a release tag), the required checks, `third-party / review`
