@@ -199,6 +199,10 @@ Named exceptions:
   run records a call.
 - **No evidence yet** (criterion 1): `wizard`, a candidate on the two "after
   the first merge" rows.
+- **Cost measured only in part** (criterion 2): `mattpocock-skills` and
+  `ponytail-skills` state their share of the listing, measured; their tokens
+  per call and run time are not measured yet. Impeccable's cost is stated as
+  what it writes into the repository, not in tokens.
 - **Not pinned by plinth** (criterion 3): Impeccable, listed with its own
   installer, which writes into the repository.
 - **Listed, not installed** (criterion 4): `last30days` and `ponytail` run
