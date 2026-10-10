@@ -52,8 +52,8 @@ pull requests and have no tag.
   `output-skill` (not about design). Whoever wants them installs them from
   [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill); nothing in
   plinth's catalog mounts them. The default set's share of the skill listing
-  drops from ~3.0k to ~1.3k tokens, and run-a-project step 4 says when the agent
-  reaches for the skill (#469).
+  drops from ~3.0k to ~1.3k tokens, and run-a-project step 4 says to name the
+  skill in the ticket or the prompt for a page a person will look at (#469).
 - Updating an installed plinth past this change takes one more command,
   `claude plugin update taste-skill@plinth`, run once. On its own,
   `claude plugin update plinth@plinth` leaves the old copy of `taste-skill`
