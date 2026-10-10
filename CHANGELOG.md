@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/floor-check.py --project` outside `--root` is refused with one
+  usage line and exit 2 instead of a Python traceback; the help text says the
+  project is inside the root. In CI the project is always under the root, so
+  only a run by hand could hit it (#464).
+
 ## [1.10.0] - 2026-10-10
 
 A new repository is rendered from plinth-template v1.9.0. That version adds a project skill, `verify`, which Claude Code tells the agent to run before a commit, and it says in `AGENTS.md` how to judge what is still fixed after two review rounds. `third-party / review` now writes which review round the head is, and from the third round that the budget is spent. Minor, not patch: a new repository gains a file and a behaviour, and every review job summary gains a line.

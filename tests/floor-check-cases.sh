@@ -1475,6 +1475,19 @@ if grep -q "SKIP  template drift not verified (scripts/new-project.sh not found 
 then ok "no new-project.sh beside the checker: not verified, not passed"
 else bad "a missing new-project.sh"; printf '%s\n' "$out" | grep template | sed 's/^/        /'; fi
 
+# --project outside --root is a usage error, not a traceback (#464): every
+# item reads one repository, so the pair is refused before any item runs.
+out="$(python3 "$checker" --root "$good" --project "$work" --no-network 2>&1)"; rc=$?
+if [ "$rc" = 2 ] && grep -q -- "--project must be inside --root" <<<"$out" && ! grep -qE '^  (PASS|FAIL|WARN|SKIP)  ' <<<"$out" && ! grep -q Traceback <<<"$out"; then
+  ok "--project outside --root exits 2 with one message and runs no item"
+else bad "--project outside --root should exit 2 with the message and no item (rc=$rc)"; printf '%s\n' "$out" | head -5 | sed 's/^/        /'; fi
+out="$(python3 "$checker" --root "$good" --project "$good" --no-network 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q '^floor check: root=.* project=\.$' <<<"$out"; then ok "--project equal to --root runs as today"
+else bad "--project equal to --root should run as today (rc=$rc)"; printf '%s\n' "$out" | head -3 | sed 's/^/        /'; fi
+out="$(python3 "$checker" --root "$good" --project docs --no-network 2>&1)"; rc=$?
+if [ "$rc" != 2 ] && grep -q '^floor check: root=.* project=docs$' <<<"$out"; then ok "--project under --root runs as today"
+else bad "--project under --root should run as today (rc=$rc)"; printf '%s\n' "$out" | head -3 | sed 's/^/        /'; fi
+
 # The caller (#325): the `ci` job in ci.yml calls plinth's python-ci.yml at a
 # full commit SHA. A pull request that swaps that call for plain jobs of the
 # same check names turns every required check green; this item sees it from

@@ -1970,7 +1970,7 @@ def check_credentials(root: Path) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", default=".", help="repository checkout")
-    ap.add_argument("--project", default=".", help="project root, relative to --root")
+    ap.add_argument("--project", default=".", help="project root, relative to --root and inside it (the repository itself, or a directory under it)")
     ap.add_argument("--repo", help="owner/name on GitHub; enables inheritance and wall checks")
     ap.add_argument("--ruleset", help="ruleset.json the door applies; its contexts are the expected checks and its CodeQL thresholds the expected policy")
     ap.add_argument("--expect-checks", help="required check names, comma separated; overrides --ruleset")
@@ -2016,6 +2016,12 @@ def main() -> int:
     if a.print_update_command:
         return print_update_command(root)
     project = (root / a.project).resolve()
+    if project != root and root not in project.parents:
+        # Every item reads one repository: .github/, AGENTS.md, the ruleset at
+        # --root and the project under it. A project elsewhere on disk used to
+        # end in a traceback from relative_to (#464); it is a usage error.
+        ap.error(f"--project must be inside --root: {project} is not under {root}; "
+                 "pass the repository as --root and the project's path under it as --project")
     network = not a.no_network
     owner = a.repo.split("/")[0] if a.repo else None
 
