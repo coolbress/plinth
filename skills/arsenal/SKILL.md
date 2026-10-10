@@ -120,8 +120,8 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | Flow | Context degraded by a long session | `/clear`, one ticket per session (built in) | person | `/clear` between tickets | not recorded |
 | Proof | Code with no test that pins it | `/implement` (calls `tdd`, `code-review`) | person; `tdd` agent | Type `/implement #N` | 0 and 0; tests first via text (U2, RC1, #302 27 of 27) |
 | Proof | A plausible change that misses a case | `code-review` | agent | Ask for a review of the change | 1 (U1, after the person asked) |
-| Health | Scaffolding or reshuffling the change did not need | The template's `simplify` | commit | Nothing to type; runs before a code commit | Sonnet 5.5 1 of 18, Opus 5.5 6 of 6 (#467); #474 open |
-| Proof | A commit over a red or wrong check | The template's `verify` | commit | Nothing to type; runs before a code commit | 5 of 6 (#458); on Sonnet 5.5 1 of 5 and 2 of 16, Opus 5.5 6 of 6 (#467); #474, #476 open |
+| Health | Scaffolding or reshuffling the change did not need | The template's `simplify` | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | Sonnet 5.5 1 of 18, Opus 5.5 6 of 6 (#467); #474 open |
+| Proof | A commit over a red or wrong check | The template's `verify` | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | 5 of 6 (#458); on Sonnet 5.5 1 of 5 and 2 of 16, Opus 5.5 6 of 6 (#467); #474, #476 open |
 | Use | A page that looks templated | `design-taste-frontend` | person names it | Say so in the ticket, or type `/design-taste-frontend` | 1 named (U2); 0 unnamed on a rendered repository (#469) |
 | Flow | A merge or rebase conflict | `resolving-merge-conflicts` | agent | Say "resolve the conflict" | 0; none arose |
 
@@ -199,10 +199,12 @@ Named exceptions:
   run records a call.
 - **No evidence yet** (criterion 1): `wizard`, a candidate on the two "after
   the first merge" rows.
-- **Cost measured only in part** (criterion 2): `mattpocock-skills` and
-  `ponytail-skills` state their share of the listing, measured; their tokens
-  per call and run time are not measured yet. Impeccable's cost is stated as
-  what it writes into the repository, not in tokens.
+- **Cost measured only in part** (criterion 2): every entry's share of the
+  listing and its hooks are measured, but tokens per call are measured only
+  for `taste-skill` and `last30days`, and run time only for `last30days`'s
+  hook. For the rest, `ponytail`'s "~1k tokens" included, the Cost column is
+  the part measured so far. Impeccable's cost is stated as what it writes into
+  the repository, not in tokens.
 - **Not pinned by plinth** (criterion 3): Impeccable, listed with its own
   installer, which writes into the repository.
 - **Listed, not installed** (criterion 4): `last30days` and `ponytail` run
