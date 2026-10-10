@@ -30,7 +30,7 @@ check(market.get("version") == plugin["version"], f"marketplace.json version equ
 
 deps = plugin["dependencies"]
 names = [d["name"] if isinstance(d, dict) else d for d in deps]
-check(names == ["mattpocock-skills", "taste-skill", "ponytail-audit"],
+check(names == ["mattpocock-skills", "taste-skill", "ponytail-skills"],
       f"dependencies are exactly the default three: {names}")
 matt = deps[0]
 # No "version" range here: Claude Code resolves a range against {name}--v* tags on the
@@ -61,12 +61,14 @@ notice = (root / "NOTICE").read_text()
 check(all(sha in notice for sha in pinned.values()), "NOTICE records every pinned SHA")
 
 # One ponytail skill by default (#468): the mode, its review and the rest
-# stay in the full plugin, which carries the hooks.
-check("ponytail-skills" not in entries, "no marketplace entry named ponytail-skills")
-audit = entries["ponytail-audit"]
-check(audit.get("strict") is False and audit.get("skills") == ["./ponytail-audit"], "ponytail-audit: strict false, the one skill ./ponytail-audit")
-check(audit["source"]["source"] == "git-subdir" and audit["source"]["path"] == "skills", "ponytail-audit mounts skills/ only; hooks stay outside")
-check(entries["ponytail"]["source"]["sha"] == audit["source"]["sha"], "ponytail and ponytail-audit pin the same commit")
+# stay in the full plugin, which carries the hooks. The entry keeps its name and
+# narrows its skills: `claude plugin update` does not install a renamed
+# dependency, and leaves the old name installed and failing (measured for #468).
+ponytail_skills = entries["ponytail-skills"]
+check("ponytail-audit" not in entries, "no marketplace entry named ponytail-audit: the dependency is narrowed, not renamed")
+check(ponytail_skills.get("strict") is False and ponytail_skills.get("skills") == ["./ponytail-audit"], "ponytail-skills: strict false, the one skill ./ponytail-audit")
+check(ponytail_skills["source"]["source"] == "git-subdir" and ponytail_skills["source"]["path"] == "skills", "ponytail-skills mounts skills/ only; hooks stay outside")
+check(entries["ponytail"]["source"]["sha"] == ponytail_skills["source"]["sha"], "ponytail and ponytail-skills pin the same commit")
 
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
 check(skills == ["arsenal", "floor-check", "new-project", "template-update"],

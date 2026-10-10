@@ -37,8 +37,8 @@
       }
     },
     {
-      "name": "ponytail-audit",
-      "description": "One ponytail skill: a ranked, repository-wide list of what to delete or replace with the standard library. Applies nothing; no hooks. The full ponytail plugin is below.",
+      "name": "ponytail-skills",
+      "description": "One ponytail skill, /ponytail-audit: a ranked, repository-wide list of what to delete or replace with the standard library. Applies nothing; no hooks. The full ponytail plugin is below.",
       "category": "workflow",
       "source": {
         "source": "git-subdir",

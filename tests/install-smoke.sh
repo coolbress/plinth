@@ -135,7 +135,7 @@ expect() {  # expect <plugin> <needle>...
   echo "  PASS  $1: ${*:2}"
 }
 expect plinth@plinth "Skills (4)" "arsenal" "floor-check" "new-project" "template-update" "Hooks (0)"
-expect ponytail-audit@plinth "Skills (1)" "ponytail-audit"
+expect ponytail-skills@plinth "Skills (1)" "ponytail-audit"
 expect taste-skill@plinth "Skills (13)"
 # The default set runs no hook (#354): every dependency, whatever the list
 # holds, reports none once installed. This reads Claude Code's inventory of the

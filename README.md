@@ -123,8 +123,8 @@ marketplace serves; CI checks that version against the tested range
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (frontend design that
 does not look templated) and
-[ponytail-audit](https://github.com/DietrichGebert/ponytail) (one ponytail
-skill: what to delete or replace with the standard library,
+[ponytail-skills](https://github.com/DietrichGebert/ponytail) (one skill,
+`/ponytail-audit`: what to delete or replace with the standard library,
 repository-wide). Listed but not installed:
 [last30days](https://github.com/mvanhorn/last30days-skill) (what people said
 about a topic in the last 30 days; about 90k tokens per call, and a
