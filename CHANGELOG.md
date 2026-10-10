@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-10
+
+This release narrows the default set to the skills it uses: `ponytail-skills`
+keeps only `/ponytail-audit` and `taste-skill` keeps only
+`design-taste-frontend`, which cuts the default set's share of the skill
+listing from ~3.65k to ~1.3k tokens (#470, #471). It also renders
+plinth-template v1.9.1 for new repositories (#466) and makes
+`floor-check.py --project` outside `--root` a usage error instead of a
+traceback (#465). After `claude plugin update plinth@plinth`, run
+`claude plugin update taste-skill@plinth` once; without it the old
+`taste-skill` copy stays cached and fails to load.
+
+tested with plinth-template v1.9.1
+
 ### Fixed
 
 - `scripts/floor-check.py --project` outside `--root` is refused with one
@@ -2353,7 +2367,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/coolbress/plinth/releases/tag/v1.11.0
 [1.10.0]: https://github.com/coolbress/plinth/releases/tag/v1.10.0
 [1.9.0]: https://github.com/coolbress/plinth/releases/tag/v1.9.0
 [1.8.0]: https://github.com/coolbress/plinth/releases/tag/v1.8.0
