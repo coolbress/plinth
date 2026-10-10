@@ -155,6 +155,13 @@ release needs a green run on the commit it tags
    its head does not merge, a draft, a pull request only Dependabot pushed to
    and a release pull request whose diff is a release's aside. When the review does not come, follow
    [When the reviewer does not come](docs/how-to/configure-the-third-party-reviewer.md#when-the-reviewer-does-not-come).
+
+   Before pushing a fix for a review finding, run
+   `scripts/merge-when-green.sh <n> --round`. It only reads, and prints the
+   review round line `third-party / review` writes for the head; from round 3
+   it says the budget is spent and that a wording fix is answered on its
+   thread, not pushed, since each push starts another round
+   ([When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop)).
 4. Before merging, read the title and the description against the final
    diff: what changed and why, what was verified and what was not, as of the
    last commit. A review fix that changed the scope or the approach changes
@@ -190,8 +197,8 @@ release needs a green run on the commit it tags
    description is read when the command runs, so finish editing it before
    step 4, not after.
 
-   `scripts/merge-when-green.sh <n>` runs that command once nothing is left to
-   read, and stops otherwise: every check on the head green, and a reply
+   `scripts/merge-when-green.sh <n>` prints the review round line first, then
+   runs that command once nothing is left to read, and stops otherwise: every check on the head green, and a reply
    under every top-level inline comment, on any commit. A green
    `third-party / review` is the reviewer's verdict, since the check already
    binds it to the head and its push; on a repository with no such check it

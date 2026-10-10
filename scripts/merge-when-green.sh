@@ -4,6 +4,15 @@
 # person's word for this one pull request.
 #
 #   scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer]
+#                               [--reviewer-logins a,b] [--round]
+#
+# Every run first prints the review round line that `third-party / review`
+# writes for this head (scripts/pr-review/attest.py --round, the same files
+# read the same way, #485), and from round 3 that a wording fix is answered,
+# not pushed. The line never stops anything. With --round it prints only
+# that line and exits: GET calls only, no merge, for the moment before a fix
+# for a review finding is pushed. --reviewer-logins is the caller's
+# `reviewer-logins`, when it is not the reusable workflow's default.
 #
 # It stops, and merges nothing, when:
 #   - a check on the head is not SUCCESS once they have all finished;
@@ -21,14 +30,18 @@
 # A merged pull request is not undone by anything here; a stop changes nothing.
 set -uo pipefail
 
-usage="usage: scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer]"
+usage="usage: scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer] [--reviewer-logins a,b] [--round]"
 stop() { printf 'STOP: %s\n' "$@" >&2; exit 1; }
 
-pr=""; repo=""; reviewer=required
+pr=""; repo=""; reviewer=required; only_round=0
+# The default of `reviewer-logins` in .github/workflows/pr-review.yml.
+logins="chatgpt-codex-connector[bot]"
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) repo="${2:?$usage}"; shift 2 ;;
     --no-reviewer) reviewer=none; shift ;;
+    --reviewer-logins) logins="${2:?$usage}"; shift 2 ;;
+    --round) only_round=1; shift ;;
     -h|--help) echo "$usage"; exit 0 ;;
     *) [ -z "$pr" ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "$usage" >&2; exit 2; }; pr="$1"; shift ;;
   esac
@@ -43,6 +56,36 @@ state="$(gh pr view "$pr" -R "$repo" --json state --jq .state)" || stop "cannot 
 # The head this run reads and merges. Everything below is about this commit.
 head="$(gh pr view "$pr" -R "$repo" --json headRefOid --jq .headRefOid)" || stop "cannot read the head of $pr"
 echo "pull request $repo#$pr, head $head"
+
+# -- the review round ----------------------------------------------------------
+# The files pr-review.yml's step fetches, fetched the same way (a failed call
+# leaves `null`), judged by the same attest.py. Read-only, and never a stop.
+round() {
+  local d branch line
+  d="$(mktemp -d)" || { echo "review round: not read (no temporary directory)"; return; }
+  get() { gh api "repos/$repo/$1" --paginate > "$d/$2" 2>/dev/null || echo 'null' > "$d/$2"; }
+  get "pulls/$pr/reviews"   reviews.json
+  get "pulls/$pr/comments"  rcomments.json
+  get "issues/$pr/comments" icomments.json
+  if branch="$(gh pr view "$pr" -R "$repo" --json headRefName --jq .headRefName 2>/dev/null)" && [ -n "$branch" ]; then
+    gh api --method GET "repos/$repo/activity" -f ref="refs/heads/$branch" -f direction=desc -F per_page=100 \
+      > "$d/activity.json" 2>/dev/null || echo 'null' > "$d/activity.json"
+  else
+    echo 'null' > "$d/activity.json"
+  fi
+  if line="$(GITHUB_STEP_SUMMARY='' python3 "$(dirname "${BASH_SOURCE[0]}")/pr-review/attest.py" --round "$head" "$logins" \
+      "$d/reviews.json" "$d/rcomments.json" "$d/icomments.json" "$d/activity.json")" && [ -n "$line" ]; then
+    echo "$line"
+    case "$line" in *"review budget is spent"*)
+      echo "A wording fix is answered on its thread, not pushed: a push starts another round." ;;
+    esac
+  else
+    echo "review round: not read (attest.py failed)"
+  fi
+  rm -rf "$d"
+}
+round
+[ "$only_round" = 0 ] || exit 0
 
 # -- checks ----------------------------------------------------------------
 gh pr checks "$pr" -R "$repo" --watch --interval "$poll" >/dev/null 2>&1

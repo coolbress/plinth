@@ -14,6 +14,7 @@ cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 # Fake gh: fixtures in $FX. `--jq F` is applied with jq to the fixture's JSON.
 fx="$FX"; jqf=""; args=("$@")
+printf '%s\n' "$*" >>"$fx/calls"
 for ((i=0; i<${#args[@]}; i++)); do [ "${args[$i]}" = --jq ] && jqf="${args[$((i+1))]}"; done
 out() { if [ -n "$jqf" ]; then jq -r "$jqf" "$1"; else cat "$1"; fi; }
 case "$1 $2" in
@@ -27,7 +28,10 @@ case "$1 $2" in
   "pr merge") printf '%s\n' "$*" >"$fx/merged"; exit "$(cat "$fx/merge_rc" 2>/dev/null || echo 0)" ;;
   api*)
     case "$*" in
-      *"/comments"*) out "$fx/comments.json" ;;
+      *"/pulls/"*"/comments"*) out "$fx/comments.json" ;;
+      *"/pulls/"*"/reviews"*) [ -f "$fx/reviews.json" ] || exit 1; out "$fx/reviews.json" ;;
+      *"/issues/"*"/comments"*) [ -f "$fx/icomments.json" ] || exit 1; out "$fx/icomments.json" ;;
+      *"/activity"*) [ -f "$fx/activity.json" ] || exit 1; out "$fx/activity.json" ;;
       *) echo "fake gh: unexpected api $*" >&2; exit 1 ;;
     esac ;;
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
@@ -41,10 +45,11 @@ green='[{"name":"ci / install","state":"SUCCESS"},{"name":"third-party / review"
 # setup <case-dir>: a pull request that should merge; each case then breaks one thing.
 setup() {
   FX="$work/$1"; export FX; mkdir -p "$FX"
-  printf '{"state":"OPEN","headRefOid":"%s","body":"## What and why\\n\\nx"}' "$H" >"$FX/pr.json"
+  printf '{"state":"OPEN","headRefOid":"%s","headRefName":"b","body":"## What and why\\n\\nx"}' "$H" >"$FX/pr.json"
   printf '{"state":"MERGED","mergeCommit":{"oid":"abc"}}' >"$FX/after.json"
   printf '%s' "$green" >"$FX/checks.json"
   printf '[]' >"$FX/comments.json"
+  printf '[]' >"$FX/reviews.json"; printf '[]' >"$FX/icomments.json"; printf '[]' >"$FX/activity.json"
 }
 
 pass=0; fail=0
@@ -116,6 +121,50 @@ if PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>
 else
   pass=$((pass+1)); echo "  PASS  stop  gh pr merge refusing (for example a newer head) exits non-zero"
 fi
+
+echo "-- the review round (#485): the line third-party / review writes, never a stop"
+# Recorded from coolbress/plinth#484 at its last head, trimmed to the fields
+# attest.py and this script read; every inline thread there has a reply.
+rec="$root/tests/fixtures/pr-484-round"
+H484=aa3c0b9a85d9c00b030e691b5f5fc6d2d5d02c2d
+check() { # <label> <status>: one assertion
+  if [ "$2" = 0 ]; then pass=$((pass+1)); echo "  PASS  round $1"; else fail=$((fail+1)); echo "  FAIL  round $1"; sed 's/^/        /' "$FX/out"; fi
+}
+recorded() { # <case-dir>: the #484 fixtures as this case's answers
+  setup "$1"
+  printf '{"state":"OPEN","headRefOid":"%s","headRefName":"docs/arsenal-concern-index","body":"## What and why\\n\\nx"}' "$H484" >"$FX/pr.json"
+  cp "$rec/reviews.json" "$rec/icomments.json" "$rec/activity.json" "$FX/"; cp "$rec/rcomments.json" "$FX/comments.json"
+}
+want="$(python3 "$root/scripts/pr-review/attest.py" --round "$H484" "chatgpt-codex-connector[bot]" \
+  "$rec/reviews.json" "$rec/rcomments.json" "$rec/icomments.json" "$rec/activity.json")"
+# What third-party / review logged for that head (run 38063970448).
+logged="review round 7 on this pull request: 6 earlier commit(s) reviewed by an accepted reviewer, as read by this run. The review budget is spent (the first review and two rounds of fixes): fix only what is irreversible or reaches other people, answer the rest or move it to an issue. https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-third-party-reviewer.md#when-to-stop"
+[ "$want" = "$logged" ] && s=0 || s=1; check "the fixture reads as the check logged it on #484" $s
+recorded r484
+run merge "a round-7 pull request, green, every thread answered"
+grep -qxF -- "$want" "$FX/out"; check "the printed line equals attest.py --round on the same files" $?
+grep -qx "A wording fix is answered on its thread, not pushed: a push starts another round." "$FX/out"; check "from round 3, a wording fix is answered" $?
+[ "$(grep -n -m1 '^review round' "$FX/out" | cut -d: -f1)" -lt "$(grep -n -m1 '^checks:' "$FX/out" | cut -d: -f1)" ]; check "printed before the checks" $?
+grep -q 'activity.*ref=refs/heads/docs/arsenal-concern-index' "$FX/calls"; check "the activity log is read for the head branch" $?
+
+recorded before
+PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 0 ] && [ ! -f "$FX/merged" ] && grep -qxF -- "$want" "$FX/out"; check "--round prints the line, exits 0, merges nothing" $?
+! grep -qE '^pr (merge|checks|comment|edit|review|ready)|--method (POST|PATCH|PUT|DELETE)|(^| )-X ' "$FX/calls"; check "--round makes only read calls" $?
+! grep -q '^checks:' "$FX/out"; check "--round does not wait for the checks" $?
+
+recorded logins; PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round --reviewer-logins someone-else >"$FX/out" 2>&1
+grep -q '^review round 1 on this pull request' "$FX/out"; check "--reviewer-logins counts only those accounts" $?
+
+setup first
+run merge "round 1"
+grep -q '^review round 1 on this pull request' "$FX/out" && ! grep -q 'wording fix' "$FX/out"; check "round 1: the count, no budget sentence" $?
+setup unread; rm "$FX/reviews.json"
+run merge "a failed fetch of the reviews still merges"
+grep -q '^review round at least 1 .*reviews.json could not be read' "$FX/out"; check "a failed fetch reads as a lower bound" $?
+setup nopython; mkdir -p "$FX/bin"; printf '#!/bin/sh\nexit 1\n' >"$FX/bin/python3"; chmod +x "$FX/bin/python3"
+PATH="$FX/bin:$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>&1
+[ -f "$FX/merged" ] && grep -q '^review round: not read' "$FX/out"; s=$?; check "attest.py failing says so and still merges" $s
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

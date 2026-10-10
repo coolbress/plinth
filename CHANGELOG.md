@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/merge-when-green.sh` prints the review round line that
+  `third-party / review` writes for the head (attest.py's own line, from the
+  same calls) before its checks, and from round 3 that a wording fix is
+  answered, not pushed. `--round` prints only that line, with read calls
+  only, for the moment before a fix for a finding is pushed; `CONTRIBUTING.md`,
+  `AGENTS.md` and the reviewer how-to name it. Nothing it stops on changes
+  (#485).
+
 ## [1.12.0] - 2026-10-11
 
 This release moves `mattpocock-skills` into plinth's marketplace, pinned to

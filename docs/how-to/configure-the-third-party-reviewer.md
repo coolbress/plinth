@@ -414,7 +414,9 @@ the pull request merges. Say on the thread what was not changed and why, so
 the next reader does not reopen it. `third-party / review` counts the rounds
 for you: its log and job summary say which review round the head is, and from
 the third that the budget is spent. It does not stop a round: the summons, the
-wait and the verdict are the same in every round.
+wait and the verdict are the same in every round. A green check's log is seldom
+opened, so in this repository `scripts/merge-when-green.sh <n> --round` prints
+the same line without merging; run it before pushing a fix for a finding.
 
 The same rule bounds the code: a script guards outcomes that cannot be undone
 and documents the states that can. A reviewer asking for a guard on a
