@@ -124,9 +124,7 @@ Four skills, prefixed `/plinth:`:
 | `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; a conflict is left for you to resolve before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 
-Installed with plinth as dependencies, each pinned to a commit except
-`mattpocock-skills`, which arrives at whatever version Anthropic's official
-marketplace serves; CI checks that version against the tested range
+Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,

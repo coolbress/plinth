@@ -112,7 +112,7 @@ bad = [i for i, p in plugins.items() if not p.get("enabled") or p.get("errors")]
 # so: a kept one may hold what its owner installed.
 extra = [i for i in plugins if i not in want]
 if missing or bad or (fresh and extra):
-    print(f"  FAIL  missing={missing} not-clean={bad} installed-but-not-a-dependency={extra if fresh else 'not checked'}"); sys.exit(1)
+    print(f"  FAIL  missing={missing} not-clean={bad} not-a-dependency-or-left-behind={extra if fresh else 'not checked'}"); sys.exit(1)
 print("  PASS  everything installed, enabled, no errors" + (
     ", and nothing else" if fresh
     else f"; a kept configuration, so what else it holds is not checked: {extra}"))
@@ -134,9 +134,9 @@ expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
 # 20 of the 25 skills upstream ships (#475, #477); the other five never reach a session.
 leaving=(grill-me setup-matt-pocock-skills teach to-questionnaire writing-for-agents)
 expect mattpocock-skills@plinth "Skills (20)" "ask-matt" "implement" "tdd" "wizard" "Hooks (0)"
-not_expect() {  # not_expect <plugin> <needle>...
+not_expect() {  # not_expect <plugin> <skill>...: none on the details' Skills line
   local out p
-  out="$(claude plugin details "$1")"
+  out="$(claude plugin details "$1" | grep -E '^ *Skills \(')"
   for p in "${@:2}"; do
     ! grep -qw -- "$p" <<<"$out" || { echo "  FAIL  $1: '$p' should not be listed"; return 1; }
   done
@@ -159,9 +159,11 @@ for dep in "${deps[@]}"; do expect "$dep" "Hooks (0)"; done
 # `update` sees a newer one (a pull request carries the released version).
 [ "${fresh:-no}" = yes ] || { echo "  INFO  upgrade path not checked: a kept configuration"; exit 0; }
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
-readme_flat="$(tr -s ' \n' ' ' <"$root/README.md")"
-for c in "${upgrade_cmds[@]}"; do
-  grep -qF "\`$c\`" <<<"$readme_flat" || { echo "  FAIL  README's upgrade paragraph does not name \`$c\`"; exit 1; }
+# The docs name them in this order; the other order leaves no mattpocock-skills
+# skill until `install` runs.
+for doc in README.md docs/tutorials/getting-started.md; do
+  grep -qF "\`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/$doc")" \
+    || { echo "  FAIL  $doc does not name \`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`"; exit 1; }
 done
 tag="$(git ls-remote --tags --refs https://github.com/coolbress/plinth.git 'v*' | sed 's|.*refs/tags/||' | sort -V | tail -1)"
 [ -n "$tag" ] || { echo "  FAIL  no release tag read from github.com/coolbress/plinth"; exit 1; }
@@ -177,7 +179,10 @@ rm -rf "$up/mkt/.git"
   claude plugin install plinth@plinth -y >/dev/null
   rm -rf "$up/mkt" && mkdir "$up/mkt"
   (cd "$root" && git ls-files -z -co --exclude-standard | tar --null -T - -cf -) | tar -xf - -C "$up/mkt"
-  sed -i.bak -E 's/"version": "[^"]+"/"version": "999.0.0"/' "$up/mkt/.claude-plugin/plugin.json" "$up/mkt/.claude-plugin/marketplace.json"
+  for m in plugin.json marketplace.json; do
+    sed -i.bak -E 's/"version": "[^"]+"/"version": "999.0.0"/' "$up/mkt/.claude-plugin/$m"
+    grep -qF '"version": "999.0.0"' "$up/mkt/.claude-plugin/$m" || { echo "  FAIL  could not raise the version in $m"; exit 1; }
+  done
   echo "+ claude plugin update plinth@plinth"; claude plugin update plinth@plinth
   claude plugin list --json | python3 -c 'import json, sys
 for p in json.load(sys.stdin):

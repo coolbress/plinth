@@ -16,8 +16,8 @@ if ! diff <(printf '%s\n' "$readme") <(printf '%s\n' "$tutorial"); then
 fi
 n="$(grep -c '^claude ' <<<"$readme")"
 [ "$n" = 3 ] || { echo "  FAIL  the install block has $n command lines, the README promises three"; exit 1; }
-# The official marketplace first: one dependency lives there, and a fresh
-# configuration does not have it until an interactive first run (#282).
+# The official marketplace first. No dependency lives there since #477; #481
+# drops the line, and this check with it.
 [ "$(head -1 <<<"$(grep '^claude ' <<<"$readme")")" = "claude plugin marketplace add anthropics/claude-plugins-official" ] \
   || { echo "  FAIL  the install block does not add the official marketplace first"; exit 1; }
 echo "  PASS  README and tutorial install blocks are identical (3 commands, the official marketplace first)"

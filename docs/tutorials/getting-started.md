@@ -147,6 +147,9 @@ install, create, merge.
   `claude plugin update taste-skill@plinth` once before `/reload-plugins`
   (#469). From v1.11.0 or earlier, also run, once and in this order,
   `claude plugin install plinth@plinth` and then `claude plugin prune` before
-  `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace, and
-  without them the official copy stays and plinth reports the missing
-  dependency (#477).
+  `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace under
+  the same name, and `update` does not install the moved copy. Without the
+  two commands nothing is lost: the official copy keeps all 25 of its skills,
+  and plinth reports the missing dependency with the command to run. `prune`
+  removes the official copy only where it arrived as plinth's dependency; one
+  you installed yourself stays beside plinth's (#477).
