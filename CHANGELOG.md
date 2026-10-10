@@ -26,6 +26,24 @@ pull requests and have no tag.
   carrying a rendered SHA nothing kept in step, so a later template update
   cannot conflict on that comment (#463). `/plinth:floor-check` now reports a
   repository on v1.9.0 as one tag behind.
+- The default set carries one ponytail skill instead of six: the
+  `ponytail-skills` dependency becomes `ponytail-audit`, a whole-repository
+  list of what to delete or replace with the standard library, which
+  `run-a-project.md` step 9 now names beside
+  `/improve-codebase-architecture`. The other five leave because none of them
+  was invoked: the least-code mode becomes a project skill (#467), its review
+  is Claude Code's built-in `/simplify`, and whoever wants the mode every turn
+  installs `ponytail@plinth`, the full plugin with its hooks. The default
+  set's share of the skill listing drops from ~3.65k to ~3.0k tokens (#468).
+  `claude plugin update plinth@plinth` does not make the swap by itself
+  (measured once on Claude Code 2.1.296, with the marketplace in a local
+  directory; whether a later session start repairs it was not measured): it
+  updates plinth, leaves
+  `ponytail-skills` installed with the error "not found in marketplace
+  plinth", and does not install `ponytail-audit`, so plinth reports that
+  dependency missing; `claude plugin prune` refuses while `ponytail-skills`
+  fails to load. Run `claude plugin install plinth@plinth` to install
+  `ponytail-audit`, then `claude plugin uninstall ponytail-skills@plinth`.
 
 ## [1.10.0] - 2026-10-10
 

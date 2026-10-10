@@ -312,9 +312,10 @@ moving work somewhere else: another tool, another folder, another person.
 - **After each plinth release:** `/plinth:floor-check` says whether the
   repository is behind the template; `/plinth:template-update` takes the
   update as a draft pull request and leaves any conflict for you.
-- **Every week or two, or after a burst of work:**
-  `/improve-codebase-architecture` finds places to simplify. Each becomes a
-  new idea for step 2.
+- **Every week or two, or after a burst of work:** `/ponytail-audit` lists
+  what to delete or replace with the standard library, biggest cut first;
+  `/improve-codebase-architecture` finds places to deepen. Each becomes a new
+  idea for step 2.
 
 ## What the agent tells you, and when
 

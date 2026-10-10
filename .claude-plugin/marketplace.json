@@ -37,8 +37,8 @@
       }
     },
     {
-      "name": "ponytail-skills",
-      "description": "Write the least code that works. Skills only; the hooks stay in the full ponytail plugin below.",
+      "name": "ponytail-audit",
+      "description": "One ponytail skill: a ranked, repository-wide list of what to delete or replace with the standard library. Applies nothing; no hooks. The full ponytail plugin is below.",
       "category": "workflow",
       "source": {
         "source": "git-subdir",
@@ -49,12 +49,7 @@
       },
       "strict": false,
       "skills": [
-        "./ponytail",
-        "./ponytail-review",
-        "./ponytail-audit",
-        "./ponytail-debt",
-        "./ponytail-help",
-        "./ponytail-gain"
+        "./ponytail-audit"
       ]
     },
     {
