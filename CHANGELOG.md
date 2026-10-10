@@ -62,7 +62,8 @@ pull requests and have no tag.
   `claude plugin prune --dry-run` finds nothing. A session start, signed in or
   not, did not repair it, and `claude plugin install taste-skill@plinth`
   reports it already installed and leaves the error (measured on Claude Code
-  2.1.296, the marketplace added from a local clone). The entry's source moved
+  2.1.296, with the marketplace added from a local folder and again as a git
+  clone). The entry's source moved
   from `url` to `git-subdir`, the `skills/` directory of the same repository:
   upstream's root `plugin.json` makes a narrowed `url` entry fail as
   conflicting manifests even on a fresh install (#469).
