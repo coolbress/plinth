@@ -70,6 +70,14 @@ check(ponytail_skills.get("strict") is False and ponytail_skills.get("skills") =
 check(ponytail_skills["source"]["source"] == "git-subdir" and ponytail_skills["source"]["path"] == "skills", "ponytail-skills mounts skills/ only; hooks stay outside")
 check(entries["ponytail"]["source"]["sha"] == ponytail_skills["source"]["sha"], "ponytail and ponytail-skills pin the same commit")
 
+# One taste-skill skill by default (#469): design-taste-frontend is
+# self-contained; the other twelve need an image tool, serve another product, or
+# repeat it. Narrowed under the same name and source, like ponytail-skills.
+taste = entries["taste-skill"]
+check(taste.get("strict") is False and taste.get("skills") == ["./taste-skill"], "taste-skill: strict false, the one skill ./taste-skill")
+check(taste["source"]["source"] == "git-subdir" and taste["source"]["path"] == "skills", "taste-skill mounts skills/ only, below the upstream plugin.json")
+check("design-taste-frontend" in taste["description"] and "Thirteen" not in taste["description"], "taste-skill description names the one skill, not thirteen")
+
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
 check(skills == ["arsenal", "floor-check", "new-project", "template-update"],
       f"plinth skills are arsenal, floor-check, new-project, template-update: {skills}")

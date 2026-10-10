@@ -90,7 +90,11 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   under the name it has; never rename or move the entry. `claude plugin update`
   does not install a dependency under a new name, and the old one stays
   installed and failing, or, with a `renames` map, is dropped without an
-  error (measured for #468).
+  error (measured for #468). One exception, measured for #469: an entry whose
+  upstream root carries a `plugin.json` cannot narrow its `skills` with a
+  `url` source (`strict: false` then fails as conflicting manifests), so its
+  source moves to `git-subdir` under the same name, and installed copies need
+  `claude plugin update <name>@plinth` once besides the update of plinth.
 
 ## Never
 

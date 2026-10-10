@@ -89,19 +89,21 @@ lives. A fresh configuration does not have it until Claude Code's first
 interactive run, and without it plinth fails to load. Where it is already
 added, the line only says so.
 
-The default set runs no hook. Its skills cost context: Claude Code lists 32
+The default set runs no hook. Its skills cost context: Claude Code lists 15
 of them for the model and caps the whole skill listing, its own built-in
 skills included, at 1% of the model's context window. As `/context` estimates
-it on a fresh install, with a 1M-context model all 32 keep their
-descriptions, about 3,650 tokens. With the two 200k-context models measured
-(Haiku 4.5, Sonnet 4.5) the listing is cut to about 2,000 tokens and 26 of
-the 32 keep only their name: they still run when called by name, but Claude
-is less likely to pick them on its own. The `skillListingBudgetFraction`
-setting raises the cap (#255; measured again for #354, on Claude Code
-2.1.286).
+it on an installed default set, with a 1M-context model all 15 keep their
+descriptions, about 1,300 tokens. With Haiku 4.5, a 200k-context model, the
+listing is cut to about 2,000 tokens and 11 of the 15 keep about their name:
+they still run when called by name, but Claude is less likely to pick them on
+its own. The `skillListingBudgetFraction` setting raises the cap (#255;
+measured again for #354 and, on Claude Code 2.1.296, for #469).
 
 Third-party marketplaces do not auto-update. To move to a new version, run
-`claude plugin update plinth`, then `/reload-plugins`.
+`claude plugin update plinth`, then `/reload-plugins`. Moving from v1.10.0 or
+earlier also takes `claude plugin update taste-skill@plinth` once, before
+`/reload-plugins`: the dependency's source changed, and until then it fails to
+load (#469).
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
@@ -121,8 +123,8 @@ Installed with plinth as dependencies, each pinned to a commit except
 marketplace serves; CI checks that version against the tested range
 ([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
-[taste-skill](https://github.com/Leonxlnx/taste-skill) (frontend design that
-does not look templated) and
+[taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
+`design-taste-frontend`: frontend design that does not look templated) and
 [ponytail-skills](https://github.com/DietrichGebert/ponytail) (one skill,
 `/ponytail-audit`: what to delete or replace with the standard library,
 repository-wide). Listed but not installed:

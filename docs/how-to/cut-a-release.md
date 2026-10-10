@@ -71,7 +71,9 @@ to tracked files, and `gh` logged in with write access to the repository.
    version's `CHANGELOG.md` section. The tag goes on the commit that set the
    version: a pull request merged after it stays unreleased. It does not read
    the why-file this time, so any clone at the merged `main` can run it.
-8. Tell installers to run `claude plugin update plinth`, then `/reload-plugins`.
+8. Tell installers to run `claude plugin update plinth`, then `/reload-plugins`,
+   plus any one-time command the version's `CHANGELOG.md` section names (the
+   first release after v1.10.0 names `claude plugin update taste-skill@plinth`).
 
 ## If the script refuses
 

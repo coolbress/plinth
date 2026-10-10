@@ -18,13 +18,18 @@
     },
     {
       "name": "taste-skill",
-      "description": "Frontend design that does not look templated: landing pages, portfolios, redesigns. Thirteen skills, no hooks; pinned here to a commit.",
+      "description": "One taste-skill skill, design-taste-frontend: frontend design that does not look templated, for landing pages, portfolios and redesigns. No hooks; pinned here to a commit.",
       "category": "design",
       "source": {
-        "source": "url",
+        "source": "git-subdir",
         "url": "https://github.com/Leonxlnx/taste-skill.git",
+        "path": "skills",
         "sha": "ccbc15639c97057cbfcf32ecebc38ef716e4bb37"
-      }
+      },
+      "strict": false,
+      "skills": [
+        "./taste-skill"
+      ]
     },
     {
       "name": "last30days",
