@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-10
+
+A new repository is rendered from plinth-template v1.9.0. That version adds a project skill, `verify`, which Claude Code tells the agent to run before a commit, and it says in `AGENTS.md` how to judge what is still fixed after two review rounds. `third-party / review` now writes which review round the head is, and from the third round that the budget is spent. Minor, not patch: a new repository gains a file and a behaviour, and every review job summary gains a line.
+
+tested with plinth-template v1.9.0
+
 ### Added
 
 - `third-party / review` writes the review round to its log and job summary, on
@@ -2290,7 +2296,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/coolbress/plinth/releases/tag/v1.10.0
 [1.9.0]: https://github.com/coolbress/plinth/releases/tag/v1.9.0
 [1.8.0]: https://github.com/coolbress/plinth/releases/tag/v1.8.0
 [1.7.6]: https://github.com/coolbress/plinth/releases/tag/v1.7.6
