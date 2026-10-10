@@ -17,6 +17,40 @@
       "source": "./"
     },
     {
+      "name": "mattpocock-skills",
+      "description": "Matt Pocock's engineering skills, 20 of the 25 upstream ships: grilling, spec and ticket flows, TDD, code review, domain modelling. No hooks; pinned here to a commit.",
+      "category": "development",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/mattpocock/skills.git",
+        "path": "skills",
+        "sha": "c55ee46073ed923f86ce59a5eb3b6d895095d1b7"
+      },
+      "strict": false,
+      "skills": [
+        "./engineering/ask-matt",
+        "./engineering/diagnosing-bugs",
+        "./engineering/grill-with-docs",
+        "./engineering/triage",
+        "./engineering/improve-codebase-architecture",
+        "./engineering/tdd",
+        "./engineering/to-spec",
+        "./engineering/to-tickets",
+        "./engineering/wayfinder",
+        "./engineering/implement",
+        "./engineering/prototype",
+        "./engineering/research",
+        "./engineering/domain-modeling",
+        "./engineering/codebase-design",
+        "./engineering/code-review",
+        "./engineering/resolving-merge-conflicts",
+        "./engineering/wizard",
+        "./productivity/grilling",
+        "./productivity/handoff",
+        "./productivity/wait-what"
+      ]
+    },
+    {
       "name": "taste-skill",
       "description": "One taste-skill skill, design-taste-frontend: frontend design that does not look templated, for landing pages, portfolios and redesigns. No hooks; pinned here to a commit.",
       "category": "design",

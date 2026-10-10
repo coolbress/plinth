@@ -18,9 +18,8 @@ plinth has two halves, and it helps to know which is which:
 - **Inside the agent, made by others:** the skills you type or the agent
   picks up, such as `/grill-with-docs` and `/implement` from
   [mattpocock/skills](https://github.com/mattpocock/skills). plinth does not
-  write these. It chooses them, pins them to a commit (mattpocock-skills
-  comes from Anthropic's official marketplace instead, and CI checks its
-  version against a tested range), and this page shows how to walk them. Their authors own them and their licences
+  write these. It chooses them, pins them to a commit, and this page shows
+  how to walk them. Their authors own them and their licences
   apply; `/plinth:arsenal` lists each one with its source.
 
 Three lines carry it: **you decide** (steps 2, 3 and 6), **the checks answer**

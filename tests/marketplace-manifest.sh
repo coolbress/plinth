@@ -20,7 +20,7 @@ def check(cond, msg):
 
 entries = {p["name"]: p for p in market["plugins"]}
 check("claude-plugins-official" in market.get("allowCrossMarketplaceDependenciesOn", []),
-      "allowCrossMarketplaceDependenciesOn lists claude-plugins-official (without it install fails: cross-marketplace)")
+      "allowCrossMarketplaceDependenciesOn lists claude-plugins-official (no dependency needs it since #477; #481 drops it)")
 check("userConfig" not in plugin, "plugin.json has no userConfig")
 check(entries["plinth"]["source"] == "./", "plinth entry mounts the repository root")
 check("version" not in entries["plinth"], "plinth entry carries no version; plugin.json is the single source")
@@ -32,12 +32,7 @@ deps = plugin["dependencies"]
 names = [d["name"] if isinstance(d, dict) else d for d in deps]
 check(names == ["mattpocock-skills", "taste-skill", "ponytail-skills"],
       f"dependencies are exactly the default three: {names}")
-matt = deps[0]
-# No "version" range here: Claude Code resolves a range against {name}--v* tags on the
-# dependency's own repository, mattpocock/skills has none, and install then fails with
-# no-matching-tag (measured 2026-09-04). tests/install-smoke.sh checks the tested range instead.
-check(isinstance(matt, dict) and matt.get("marketplace") == "claude-plugins-official" and "version" not in matt,
-      "mattpocock-skills is resolved cross-marketplace, without a version range (see comment)")
+check(all(isinstance(d, str) for d in deps), "every dependency resolves in plinth's marketplace, none cross-marketplace")
 # Listed, not installed: in the catalog (so `claude plugin install <name>@plinth`
 # resolves) and not a dependency. Both run hooks, and the default set runs none
 # (#354); tests/install-smoke.sh reads each dependency's hook count once installed.
@@ -77,6 +72,20 @@ taste = entries["taste-skill"]
 check(taste.get("strict") is False and taste.get("skills") == ["./taste-skill"], "taste-skill: strict false, the one skill ./taste-skill")
 check(taste["source"]["source"] == "git-subdir" and taste["source"]["path"] == "skills", "taste-skill mounts skills/ only, below the upstream plugin.json")
 check("design-taste-frontend" in taste["description"] and "Thirteen" not in taste["description"], "taste-skill description names the one skill, not thirteen")
+
+# 20 of mattpocock/skills' 25 by default (#475): the five below leave. Moved from
+# claude-plugins-official under the same name and pinned here (#477): an
+# installed copy then needs `claude plugin install plinth@plinth` and
+# `claude plugin prune` once, which tests/install-smoke.sh runs on the upgrade path.
+matt = entries["mattpocock-skills"]
+leaving = {"setup-matt-pocock-skills", "grill-me", "teach", "to-questionnaire", "writing-for-agents"}
+matt_skills = [s.rsplit("/", 1)[1] for s in matt.get("skills", [])]
+check(matt.get("strict") is False and len(matt_skills) == 20 and not leaving & set(matt_skills),
+      f"mattpocock-skills: strict false, 20 skills, none of the five that leave: {sorted(leaving & set(matt_skills))}")
+check(matt["source"]["source"] == "git-subdir" and matt["source"]["path"] == "skills",
+      "mattpocock-skills mounts skills/ only, below the upstream plugin.json")
+check(all(re.fullmatch(r"\./(engineering|productivity)/[a-z-]+", s) for s in matt.get("skills", [])),
+      "mattpocock-skills: every skill is under engineering/ or productivity/")
 
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
 check(skills == ["arsenal", "floor-check", "new-project", "template-update"],

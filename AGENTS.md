@@ -94,7 +94,11 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   upstream root carries a `plugin.json` cannot narrow its `skills` with a
   `url` source (`strict: false` then fails as conflicting manifests), so its
   source moves to `git-subdir` under the same name, and installed copies need
-  `claude plugin update <name>@plinth` once besides the update of plinth.
+  `claude plugin update <name>@plinth` once besides the update of plinth. A
+  second exception, measured for #477: a move from another marketplace into
+  plinth's under the same name survives only with two commands,
+  `claude plugin install plinth@plinth` then `claude plugin prune`, which the
+  release note names.
 
 ## Never
 

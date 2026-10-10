@@ -5,8 +5,9 @@ plinth does not copy their code: each entry points at its upstream repository
 at the commit below, and Claude Code fetches it from there. An entry mounted
 from a subdirectory (git-subdir) arrives without the upstream LICENSE file, so
 each notice is reproduced here in full. Each licence was read on 2026-09-27:
-at the pinned commit for the three pinned entries, and at the commit named
-below for the two plinth does not pin.
+at the pinned commit for the pinned entries, and at the commit named below for
+Impeccable, which plinth does not pin. mattpocock-skills' was read again on
+2026-10-10 at its pinned commit.
 
 taste-skill
   https://github.com/Leonxlnx/taste-skill  (skills/taste-skill)
@@ -23,10 +24,9 @@ ponytail-skills and ponytail
   MIT  ·  commit 2ed6c52c9d7e5e56942508591085fd45dea277d3
   Copyright (c) 2026 DietrichGebert
 
-mattpocock-skills is installed from the claude-plugins-official marketplace and
-keeps its own LICENSE file. plinth does not pin it.
-  https://github.com/mattpocock/skills
-  MIT  ·  read at commit c55ee46073ed923f86ce59a5eb3b6d895095d1b7
+mattpocock-skills
+  https://github.com/mattpocock/skills  (skills/engineering and skills/productivity, 20 skills)
+  MIT  ·  commit c55ee46073ed923f86ce59a5eb3b6d895095d1b7
   Copyright (c) 2026 Matt Pocock
 
 Impeccable is listed, not installed or distributed by plinth; its own

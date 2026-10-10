@@ -25,6 +25,23 @@ pull requests and have no tag.
   Sonnet 5.5 before 1 of 21 (#467). Step 4 of
   [How to run a project](docs/how-to/run-a-project.md) says so.
   `/plinth:floor-check` now reports a repository on v1.9.1 as one tag behind.
+- `mattpocock-skills` comes from plinth's marketplace, pinned to commit
+  `c55ee46`, the one Anthropic's official marketplace pins, and carries 20 of
+  the 25 skills upstream ships. `setup-matt-pocock-skills`, `grill-me`,
+  `teach`, `to-questionnaire` and `writing-for-agents` leave (#475); only
+  `writing-for-agents` was in the model's skill listing, which drops to 14 of
+  the default set's skills, still ~1.3k tokens. On an installed plinth, run
+  `claude plugin install plinth@plinth` and then `claude plugin prune` once,
+  after `claude plugin update plinth@plinth` and before `/reload-plugins`:
+  `update` does not install a dependency that moved marketplace under the
+  same name. Without the two commands nothing is lost: the official copy
+  keeps all 25 skills, and plinth reports the missing dependency with the
+  command to run. `prune` removes the official copy only where it arrived as
+  plinth's dependency; one installed by hand stays beside plinth's, and both
+  load (measured on Claude Code 2.1.296, #477). Run in the other order, the
+  two commands leave no `mattpocock-skills` skill until `install` runs.
+  `tests/install-smoke.sh` now also installs the latest release, moves to the
+  checkout, and runs `update` and those two commands.
 
 ## [1.11.0] - 2026-10-10
 
