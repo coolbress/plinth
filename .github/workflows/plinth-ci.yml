@@ -236,12 +236,14 @@ jobs:
           # release moves the version on; every earlier version's are checked.
           v="$(jq -er .version .claude-plugin/plugin.json)"; v="${v//./[.]}"
           repo='https://github[.]com/coolbress/plinth'
-          # A link to this repository's own blob page is checked against the
-          # checkout: the file, at any ref, without a request to github.com,
-          # whose blob pages answered 503 for over an hour on 2026-10-10 while
-          # nothing the pull request changed was at fault (#486). The link text
+          # A link to this repository's own blob page on main is checked
+          # against the checkout, which is what main holds once this merges,
+          # without a request to github.com, whose blob pages answered 503 for
+          # over an hour on 2026-10-10 while nothing the pull request changed
+          # was at fault (#486). Only main: a link at another ref names a tree
+          # the checkout is not, so it still goes to github.com. The link text
           # stays absolute, since a CHANGELOG section becomes a Release body.
-          remap=(--remap "^$repo/blob/[^/]+/([^#]*)(#.*)?\$ file://$PWD/\$1")
+          remap=(--remap "^$repo/blob/main/([^#]*)(#.*)?\$ file://$PWD/\$1")
           "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" \
             --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
           # The remap on two fixtures, offline: an existing file passes with no
