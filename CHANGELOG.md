@@ -42,6 +42,11 @@ pull requests and have no tag.
   two commands leave no `mattpocock-skills` skill until `install` runs.
   `tests/install-smoke.sh` now also installs the latest release, moves to the
   checkout, and runs `update` and those two commands.
+- The install block is two lines: it no longer adds Anthropic's official
+  marketplace, which no dependency needs since `mattpocock-skills` moved, and
+  `marketplace.json` drops `allowCrossMarketplaceDependenciesOn`. An existing
+  install needs nothing for it: a marketplace already added stays added
+  (#481).
 
 ## [1.11.0] - 2026-10-10
 

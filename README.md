@@ -24,7 +24,6 @@ You decide. The checks answer. The record remembers.
 
 <!-- install-block:start -->
 ```bash
-claude plugin marketplace add anthropics/claude-plugins-official
 claude plugin marketplace add coolbress/plinth
 claude plugin install plinth@plinth
 ```
@@ -83,10 +82,6 @@ they are red.
 > Other mismatches warn and continue.
 
 ## Install, in detail
-
-The first line adds Anthropic's official marketplace. plinth no longer needs
-it: its one dependency there now comes from plinth's own marketplace (#477),
-and the next change removes the line (#481).
 
 The default set runs no hook. Its skills cost context: Claude Code lists 14
 of them for the model and caps the whole skill listing, its own built-in

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The README install block and the tutorial install block are the same bytes,
-# and the block is the three lines the README promises. CI runs those bytes.
+# and the block is the two lines the README promises. CI runs those bytes.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -15,9 +15,10 @@ if ! diff <(printf '%s\n' "$readme") <(printf '%s\n' "$tutorial"); then
   echo "  FAIL  README and tutorial install blocks differ"; exit 1
 fi
 n="$(grep -c '^claude ' <<<"$readme")"
-[ "$n" = 3 ] || { echo "  FAIL  the install block has $n command lines, the README promises three"; exit 1; }
-# The official marketplace first. No dependency lives there since #477; #481
-# drops the line, and this check with it.
-[ "$(head -1 <<<"$(grep '^claude ' <<<"$readme")")" = "claude plugin marketplace add anthropics/claude-plugins-official" ] \
-  || { echo "  FAIL  the install block does not add the official marketplace first"; exit 1; }
-echo "  PASS  README and tutorial install blocks are identical (3 commands, the official marketplace first)"
+[ "$n" = 2 ] || { echo "  FAIL  the install block has $n command lines, the README promises two"; exit 1; }
+# plinth's marketplace only: every dependency lives there since #477 (#481).
+[ "$(head -1 <<<"$(grep '^claude ' <<<"$readme")")" = "claude plugin marketplace add coolbress/plinth" ] \
+  || { echo "  FAIL  the install block does not add plinth's marketplace first"; exit 1; }
+! grep -q 'claude-plugins-official' <<<"$readme" \
+  || { echo "  FAIL  the install block adds the official marketplace, which no dependency needs"; exit 1; }
+echo "  PASS  README and tutorial install blocks are identical (2 commands, plinth's marketplace only)"

@@ -6,9 +6,6 @@
   "owner": {
     "name": "coolbress"
   },
-  "allowCrossMarketplaceDependenciesOn": [
-    "claude-plugins-official"
-  ],
   "plugins": [
     {
       "name": "plinth",
