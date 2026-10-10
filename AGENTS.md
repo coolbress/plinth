@@ -86,6 +86,11 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 - Adding a hook anywhere in the default plugin, or adding a dependency or raising
   its pin when that version ships one. Hooks live in the opt-in profile; a
   dependency's hook is still a hook in every user's session.
+- Changing what a dependency carries: narrow or widen its entry's `skills`
+  under the name it has; never rename or move the entry. `claude plugin update`
+  does not install a dependency under a new name, and the old one stays
+  installed and failing, or, with a `renames` map, is dropped without an
+  error (measured for #468).
 
 ## Never
 
