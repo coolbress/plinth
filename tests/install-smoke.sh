@@ -5,8 +5,8 @@
 # it can run on a laptop without touching the real installation; the fresh one
 # is removed at exit (it holds every pinned plugin, ~200 MB, and a laptop that
 # ran this daily filled its disk). Set CLAUDE_CONFIG_DIR to keep one. Needs network:
-# it clones the official marketplace, the pinned plugins and the latest
-# release (for the upgrade path at the end). Two substitutions
+# it clones plinth's pinned plugins and the latest release (for the upgrade
+# path at the end). Two substitutions
 # make the README's lines runnable in CI: the marketplace source is this checkout
 # instead of GitHub (so a pull request tests itself), and `install` gets `-y`
 # because there is no TTY.
@@ -75,7 +75,7 @@ claude plugin validate --strict "$root/skills"
 lines=()
 while IFS= read -r l; do lines+=("$l"); done \
   < <(awk '/<!-- install-block:start -->/{p=1;next} /<!-- install-block:end -->/{p=0} p' "$root/README.md" | grep '^claude ')
-[ "${#lines[@]}" = 3 ] || { echo "  FAIL  expected 3 README install lines, got ${#lines[@]}"; exit 1; }
+[ "${#lines[@]}" = 2 ] || { echo "  FAIL  expected 2 README install lines, got ${#lines[@]}"; exit 1; }
 for line in "${lines[@]}"; do
   line="${line//coolbress\/plinth/$root}"
   case "$line" in *" plugin install "*) line="$line -y" ;; esac
@@ -174,7 +174,11 @@ rm -rf "$up/mkt/.git"
 (
   export CLAUDE_CONFIG_DIR="$up/cfg"
   echo "-- upgrade path: $tag, then this checkout"
-  claude plugin marketplace add anthropics/claude-plugins-official >/dev/null
+  # A release whose plugin.json still names a dependency in the official
+  # marketplace (v1.11.0 and earlier) needs it added to install at all.
+  if grep -q '"marketplace": "claude-plugins-official"' "$up/mkt/.claude-plugin/plugin.json"; then
+    claude plugin marketplace add anthropics/claude-plugins-official >/dev/null
+  fi
   claude plugin marketplace add "$up/mkt" >/dev/null
   claude plugin install plinth@plinth -y >/dev/null
   rm -rf "$up/mkt" && mkdir "$up/mkt"

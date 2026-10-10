@@ -19,8 +19,8 @@ def check(cond, msg):
     fails += 0 if cond else 1
 
 entries = {p["name"]: p for p in market["plugins"]}
-check("claude-plugins-official" in market.get("allowCrossMarketplaceDependenciesOn", []),
-      "allowCrossMarketplaceDependenciesOn lists claude-plugins-official (no dependency needs it since #477; #481 drops it)")
+check("allowCrossMarketplaceDependenciesOn" not in market,
+      "no allowCrossMarketplaceDependenciesOn: every dependency is in plinth's marketplace (#477, #481)")
 check("userConfig" not in plugin, "plugin.json has no userConfig")
 check(entries["plinth"]["source"] == "./", "plinth entry mounts the repository root")
 check("version" not in entries["plinth"], "plinth entry carries no version; plugin.json is the single source")
