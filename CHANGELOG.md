@@ -47,6 +47,22 @@ pull requests and have no tag.
   `marketplace.json` drops `allowCrossMarketplaceDependenciesOn`. An existing
   install needs nothing for it: a marketplace already added stays added
   (#481).
+- `/plinth:arsenal` has a second way in, "By step and concern": #475's table
+  by step of the loop, then concern, each row with the problem, the tool, who
+  invokes it, how to use it and the evidence from the recorded runs ("0"
+  where none called it), plus the three problems no tool answers yet. "How a
+  tool gets on this list" states the four selection criteria for the plugins
+  and skills plinth installs or lists and names the known exceptions (a bar,
+  not a certificate that every tool was checked against each criterion),
+  and says the built-ins, the template's text and skills, and the checks are
+  not selected by them. `concepts.md`'s direction list moves the index and
+  the other shipped items (#403, #404, #409) out. The three groups and their columns are
+  unchanged. The skill's listing is unchanged (~80 tokens); one call costs
+  about 2.8k more input tokens (one Haiku 4.5 call, 24.2k to 27.0k). Five
+  problems written on #407 before the index existed each reached a fitting
+  tool through it, by its row, on Claude Sonnet 5.5; against the catalog
+  before it, three were routed to `/ask-matt` and one to an adjacent skill
+  (#478).
 
 ## [1.11.0] - 2026-10-10
 
