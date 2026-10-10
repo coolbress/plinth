@@ -13,7 +13,10 @@ enforcement.
 For the planning-to-review flow (grill, spec, tickets, implement, review) do not
 route by hand: run `/ask-matt` and let it pick the skill. The person's
 walk-through, stage by stage, is `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`:
-point them to it when they ask what to type next.
+point them to it when they ask what to type next. To find a tool by the
+step of that loop and the concern (a wrong problem, a false green, lost
+state), use "By step and concern" below; "How a tool gets on this list" says
+why each one is here.
 
 ## Reporting
 
@@ -72,3 +75,125 @@ Every third-party entry is pinned to a commit in this repository's
 `mattpocock-skills` carries 20 of the 25 skills upstream ships; the five left
 out are `setup-matt-pocock-skills`, `grill-me`, `teach`, `to-questionnaire`
 and `writing-for-agents` (#475, #477).
+
+## By step and concern
+
+The second way in: find the step of the loop in
+`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, then the concern (Value,
+Use, Health, Proof, Flow, Safety, Memory, Stewardship), then the problem. Who
+invokes it: **person** (typed; a user-only skill, invisible to the agent),
+**agent** (picked from its description), **commit** (Claude Code's commit
+instruction runs a project skill named `verify` or `simplify`), **text** (the
+generated repository's own text, no skill). Evidence is what the recorded runs
+show (U1, U2, RC1, RC2, #302, #403, #458, #467, #469; #475 has the sources):
+"0" means none of those runs called it, not that it does not help. The runs
+were small, short and one person's; in every one the generated repository
+text, not a typed skill, carried steps 2, 4, 7 and 8.
+
+### 1 Start, and after the first merge
+
+| Concern | Problem | Tool | Who | How to use it | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Safety | A repository without the wall | `/plinth:new-project` | person | Type `/` and pick it; give `<owner>/<name>` | typed 4 |
+| Health | An existing repository missing the floor | `/plinth:floor-check` | agent or person | Ask "is this repository set up?", or type it | 0 |
+| Safety | An agent token that can rewrite the checks or the ruleset | The token how-to; candidate `wizard` | person; `wizard` agent | run-a-project.md, "Give the agent a token"; ask the agent to walk you through it | #403 record 1, one loop on that token; `wizard` no evidence yet |
+| Safety | Production data, spend, restore, open data | The four things by hand; candidate `wizard` | person; `wizard` agent | run-a-project.md, "Set four things by hand" | 0; effect not measured (#402); `wizard` no evidence yet |
+
+### 2 Shape
+
+| Concern | Problem | Tool | Who | How to use it | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Value | The wrong problem built | `/grill-with-docs` (calls `grilling`, `domain-modeling`) | person | Type it with the idea before any code | 0; the generated text asked instead (U1 six questions, RC1 one, U2 one) |
+| Proof | A "done" nobody can see | The one rule; the template's "Done means" field (#299) | text | Write in the issue what you will look at to call it done | followed via text (U1, RC1) |
+| Value | A question code or a source can settle first | `prototype`, `research` | agent | Say "prototype it first" or "research this" | 0 |
+
+### 3 Plan
+
+| Concern | Problem | Tool | Who | How to use it | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Flow | A job too big for one session | `/to-spec`, `/to-tickets`; `/wayfinder` when the way is unclear | person | Type `/to-spec`, then `/to-tickets` on the spec | 0; no run needed it |
+
+### 4 Build
+
+| Concern | Problem | Tool | Who | How to use it | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Flow | Context degraded by a long session | `/clear`, one ticket per session (built in) | person | `/clear` between tickets | not recorded |
+| Proof | Code with no test that pins it | `/implement` (calls `tdd`, `code-review`) | person; `tdd` agent | Type `/implement #N` | 0 and 0; tests first via text (U2, RC1, #302 27 of 27) |
+| Proof | A plausible change that misses a case | `code-review` | agent | Ask for a review of the change | 1 (U1, after the person asked) |
+| Health | Scaffolding or reshuffling the change did not need | The template's `simplify` | commit | Nothing to type; runs before a code commit | Sonnet 5.5 1 of 18, Opus 5.5 6 of 6 (#467); #474 open |
+| Proof | A commit over a red or wrong check | The template's `verify` | commit | Nothing to type; runs before a code commit | 5 of 6 (#458); on Sonnet 5.5 1 of 5 and 2 of 16, Opus 5.5 6 of 6 (#467); #474, #476 open |
+| Use | A page that looks templated | `design-taste-frontend` | person names it | Say so in the ticket, or type `/design-taste-frontend` | 1 named (U2); 0 unnamed on a rendered repository (#469) |
+| Flow | A merge or rebase conflict | `resolving-merge-conflicts` | agent | Say "resolve the conflict" | 0; none arose |
+
+### 5 Check
+
+| Concern | Problem | Tool | Who | How to use it | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Proof | A green that did not check the property | The required checks; the three questions | CI; person | Ask run-a-project.md's three questions of every green | every run; each recorded false green was caught by the person looking (U1 23, 26; U2 13; #403 record 3) |
+| Use | Can I see it running | Built-in `/run`; the built-in `/verify` is shadowed by the template's (#476) | person or agent | Type `/run`, or ask to see it running | `run` 1 (U2) |
+| Proof | What no check asserts | `third-party / review` | CI | Turn on the reviewer (configure-the-third-party-reviewer.md) | off in the observed runs |
+
+### 6 Merge, 7 Break, 8 Resume
+
+| Step | Concern | Problem | Tool | Who | How to use it | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| 6 | Safety | The agent merging unasked | The rule in the generated `AGENTS.md` | text | Merge yourself, or say so each time | RC1 merged unasked twice; RC2, #403 asked |
+| 7 | Proof | A fix with no reproduction, or one that weakens a check | `diagnosing-bugs` | agent | Say "diagnose this" with the report | 0; reproduce-first via text (U1, U2, RC1) |
+| 7 | Flow | Issues other people open | `/triage` | person | Type it on the new issues | 0; no outside issue arrived |
+| 8 | Memory | State lost with the chat or the machine | The record; ask "where is this, what's next" | text | Ask it in a new session | met 4 of 4 (U1, U2, RC1, #403) |
+| 8 | Memory | Work moving to another tool or person | `/handoff` | person | Type it before you stop | 0; none moved |
+
+### 9 Healthy, and any step
+
+| Step | Concern | Problem | Tool | Who | How to use it | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| 9 | Safety | Vulnerable or stale dependencies | Dependabot and the checks | automatic | Merge its pull requests on green | U2, RC1 |
+| 9 | Stewardship | Drift behind the template | `/plinth:floor-check`, `/plinth:template-update` | person | `floor-check` reports it; type `/plinth:template-update` to apply | 0; no project crossed a release |
+| 9 | Stewardship | Code that grew more than it needs | `/ponytail-audit` | person | Type it every week or two | 0 |
+| 9 | Health | Shallow modules, hard-to-test seams | `/improve-codebase-architecture` (uses `codebase-design`) | person | Type it after a burst of work | 0 |
+| Any | Flow | Which skill now | `/ask-matt` | person | Type it with where you are | 0 |
+| Any | Use | An answer that did not land | `/wait-what` | person | Type it after the answer | 0 |
+| Any | Use | Which tool for a concern | `/plinth:arsenal` | agent or person | Ask, or type it | 3 agent, 2 typed |
+
+No tool answers these three yet, and no recorded run shows the cost of the gap:
+
+| Concern | Problem |
+| --- | --- |
+| Value | What shipped, held against what was asked |
+| Stewardship | The end of a project: data, keys, users told, who takes over |
+| Health | How the work went, for the next round |
+
+## How a tool gets on this list
+
+Four criteria (#475). Every tool above meets them, or is named below with why.
+
+1. **It fills a gap.** It serves a row above: a step's problem that no other
+   listed tool, and not the generated repository text alone, already answers.
+2. **Its cost is stated and bounded.** Tokens always loaded (a model-invocable
+   skill's description is in every session's listing; a user-only skill's is
+   not), tokens per call, hooks (none in the default set), run time, install
+   scope, and development dependencies it adds to a repository; measured, not
+   estimated.
+3. **It is pinned and licensed.** A full commit SHA in plinth's marketplace,
+   raised by pull request; its licence recorded in `NOTICE` and the Source
+   column.
+4. **Its place is chosen.** The default set holds a tool that serves a step
+   every project walks and costs no hook; everything else is listed, not
+   installed. A tool outside the plugin system is only ever listed.
+
+Named exceptions:
+
+- **Two tools on one row** (criterion 1): `/plinth:floor-check` reports drift
+  and `/plinth:template-update` applies it; `/to-spec` writes the spec,
+  `/to-tickets` cuts it and `/wayfinder` is for when the way itself is unclear;
+  `prototype` settles a question in code and `research` in sources.
+- **The generated text already carried the step** (criterion 1):
+  `/grill-with-docs`, `/implement` and `diagnosing-bugs` stay for the
+  safeguards run-a-project.md describes at their steps, with evidence 0 until a
+  run records a call.
+- **No evidence yet** (criterion 1): `wizard`, a candidate on the two "after
+  the first merge" rows.
+- **Not pinned by plinth** (criterion 3): Impeccable, listed with its own
+  installer, which writes into the repository.
+- **Listed, not installed** (criterion 4): `last30days` and `ponytail` run
+  hooks; Impeccable is outside plinth's marketplace.
