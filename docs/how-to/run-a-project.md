@@ -260,6 +260,15 @@ pass, has the change reviewed, and saves it as a commit. `/implement` stops
 there; the agent then opens the pull request, following the repository's
 rules.
 
+Before a commit that changes code, not only documents or tests, Claude Code
+tells the agent to run two skills the repository carries: `simplify` cleans the
+change up without changing what it does, and `verify` runs the checks. The
+cleanup never removes input validation, error handling that prevents a loss, a
+security measure or anything the ticket asked for, and on a commit that answers
+a review finding it touches only that fix's lines. The agent is asked, not
+forced, and in trials some models mostly skipped both skills (#467). The checks
+in step 5 are what decide.
+
 When the ticket is a page a person will look at, name `taste-skill` in the
 ticket or the prompt, or type `/design-taste-frontend`: on a repository
 rendered from the template the agent did not reach for it on its own (one
