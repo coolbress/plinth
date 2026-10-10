@@ -132,18 +132,19 @@ repository does today, except under this heading. What follows here is
 direction, not a feature: expect nothing from it until a release note says
 it shipped.
 
-- Running a project on a token without workflow or administration
-  permission, with Claude Code in its default auto mode, and recording what
-  the agent could and could not do (#403).
-- Making a lowered standard visible: a check configuration, a workflow input
-  or a test set that no longer matches what was agreed (#404).
 - Candidate checks specified and measured before any is adopted: mutation
   testing, changed-line coverage, and ruff's complexity, commented-out code
-  and unused-argument rules (#406); an arsenal indexed by the concern a tool
-  answers, with written selection criteria (#407); finding which of the five
-  things a project settles once go unrecorded, and asking for those (#408);
-  a `verify` skill shipped in the template (#409).
+  and unused-argument rules (#406); finding which of the five things a
+  project settles once go unrecorded, and asking for those (#408).
 - GitLab, after those (#353).
+
+Shipped from this list since it was written: the record of a project run on
+a token without workflow permission (#403, in
+[run a project](../how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks)),
+a lowered standard made visible (#404: `/plinth:floor-check` warns on a
+lowered `ci` input and `ci / diff-size` lists a test that lost lines or gained
+a skip), the template's `verify` skill (#409), and the
+arsenal's concern index with its selection criteria (#478).
 
 ## About how the pieces fit
 
