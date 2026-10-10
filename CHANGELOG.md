@@ -18,6 +18,15 @@ pull requests and have no tag.
   project is inside the root. In CI the project is always under the root, so
   only a run by hand could hit it (#464).
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.9.1. A repository it creates
+  differs from v1.9.0 in `ci.yml`'s commented-out third-party review block:
+  its `uses:` line names the `ci` job's SHA as the one to copy instead of
+  carrying a rendered SHA nothing kept in step, so a later template update
+  cannot conflict on that comment (#463). `/plinth:floor-check` now reports a
+  repository on v1.9.0 as one tag behind.
+
 ## [1.10.0] - 2026-10-10
 
 A new repository is rendered from plinth-template v1.9.0. That version adds a project skill, `verify`, which Claude Code tells the agent to run before a commit, and it says in `AGENTS.md` how to judge what is still fixed after two review rounds. `third-party / review` now writes which review round the head is, and from the third round that the budget is spent. Minor, not patch: a new repository gains a file and a behaviour, and every review job summary gains a line.
