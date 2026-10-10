@@ -52,7 +52,8 @@ pull requests and have no tag.
   invokes it, how to use it and the evidence from the recorded runs ("0"
   where none called it), plus the three problems no tool answers yet. "How a
   tool gets on this list" states the four selection criteria for the plugins
-  and skills plinth installs or lists, names each exception with its reason,
+  and skills plinth installs or lists and names the known exceptions (a bar,
+  not a certificate that every tool was checked against each criterion),
   and says the built-ins, the template's text and skills, and the checks are
   not selected by them. `concepts.md`'s direction list moves the index and
   the other shipped items (#403, #404, #409) out. The three groups and their columns are
