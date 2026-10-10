@@ -84,26 +84,32 @@ they are red.
 
 ## Install, in detail
 
-The first line adds Anthropic's official marketplace, where one dependency
-lives. A fresh configuration does not have it until Claude Code's first
-interactive run, and without it plinth fails to load. Where it is already
-added, the line only says so.
+The first line adds Anthropic's official marketplace. plinth no longer needs
+it: its one dependency there now comes from plinth's own marketplace (#477),
+and the next change removes the line (#481).
 
-The default set runs no hook. Its skills cost context: Claude Code lists 15
+The default set runs no hook. Its skills cost context: Claude Code lists 14
 of them for the model and caps the whole skill listing, its own built-in
 skills included, at 1% of the model's context window. As `/context` estimates
-it on an installed default set, with a 1M-context model all 15 keep their
-descriptions, about 1,300 tokens. With Haiku 4.5, a 200k-context model, the
-listing is cut to about 2,000 tokens and 11 of the 15 keep about their name:
-they still run when called by name, but Claude is less likely to pick them on
-its own. The `skillListingBudgetFraction` setting raises the cap (#255;
-measured again for #354 and, on Claude Code 2.1.296, for #469).
+it, with a 1M-context model all 14 keep their descriptions, about 1,300
+tokens. With Haiku 4.5, a 200k-context model, the listing is cut to about
+2,000 tokens and 9 of the 14 keep about their name: they still run when
+called by name, but Claude is less likely to pick them on its own. The
+`skillListingBudgetFraction` setting raises the cap (#255; measured again
+for #354 and, on Claude Code 2.1.296, for #469 and #477).
 
 Third-party marketplaces do not auto-update. To move to a new version, run
 `claude plugin update plinth`, then `/reload-plugins`. Moving from v1.10.0 or
 earlier also takes `claude plugin update taste-skill@plinth` once, before
 `/reload-plugins`: the dependency's source changed, and until then it fails to
-load (#469).
+load (#469). Moving from v1.11.0 or earlier also takes, once and in this order,
+`claude plugin install plinth@plinth` and then `claude plugin prune`, before
+`/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace under the
+same name, and `update` does not install the moved copy. Without the two
+commands nothing is lost: the official copy keeps all 25 of its skills, and
+plinth reports the missing dependency with the command to run. `prune` removes
+the official copy only where it arrived as plinth's dependency; one you
+installed yourself stays beside plinth's (#477).
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 

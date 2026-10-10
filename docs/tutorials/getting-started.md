@@ -42,9 +42,9 @@ claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-The first line adds Anthropic's official marketplace, where one dependency
-lives; where it is already added, the line only says so. Claude Code asks you
-to trust each marketplace the first time; answer yes for these two.
+The first line adds Anthropic's official marketplace, which plinth no longer
+needs (#477); the next change removes the line (#481). Claude Code asks
+you to trust each marketplace the first time; answer yes for these two.
 
 Then start Claude Code and type `/plinth:arsenal` to see what was installed.
 
@@ -145,4 +145,8 @@ install, create, merge.
 - To move plinth to a new version later: `claude plugin update plinth`, then
   `/reload-plugins`. From v1.10.0 or earlier, also run
   `claude plugin update taste-skill@plinth` once before `/reload-plugins`
-  (#469).
+  (#469). From v1.11.0 or earlier, also run, once and in this order,
+  `claude plugin install plinth@plinth` and then `claude plugin prune` before
+  `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace, and
+  without them the official copy stays and plinth reports the missing
+  dependency (#477).

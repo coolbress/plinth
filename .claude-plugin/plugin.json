@@ -16,10 +16,7 @@
     "skills"
   ],
   "dependencies": [
-    {
-      "name": "mattpocock-skills",
-      "marketplace": "claude-plugins-official"
-    },
+    "mattpocock-skills",
     "taste-skill",
     "ponytail-skills"
   ]

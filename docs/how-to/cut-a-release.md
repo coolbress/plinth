@@ -73,7 +73,9 @@ to tracked files, and `gh` logged in with write access to the repository.
    the why-file this time, so any clone at the merged `main` can run it.
 8. Tell installers to run `claude plugin update plinth`, then `/reload-plugins`,
    plus any one-time command the version's `CHANGELOG.md` section names (the
-   first release after v1.10.0 names `claude plugin update taste-skill@plinth`).
+   first release after v1.10.0 names `claude plugin update taste-skill@plinth`;
+   the first after v1.11.0 names `claude plugin install plinth@plinth` and then
+   `claude plugin prune`, in that order).
 
 ## If the script refuses
 

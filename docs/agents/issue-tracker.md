@@ -2,8 +2,9 @@
 
 Issues, specs and tickets for plinth live in GitHub Issues on
 `coolbress/plinth`. Read and write them with the `gh` CLI. (This file is what
-`setup-matt-pocock-skills` would create; it is pre-filled, so do not run that
-skill unless you change trackers. Original: mattpocock/skills, MIT.)
+mattpocock/skills' `setup-matt-pocock-skills` would create; it is pre-filled,
+and plinth does not install that skill (#477). Original: mattpocock/skills,
+MIT.)
 
 ## Before you write anything
 

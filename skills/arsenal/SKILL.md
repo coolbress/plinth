@@ -31,17 +31,17 @@ line arrived as text, and this catalog being open shows plinth is installed.
 
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
-| `mattpocock-skills` | Planning, specs, tickets, TDD, code review, domain modelling | Any change bigger than a typo; start with `/ask-matt` | ~0.85k tokens always on (11 skills listed) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
+| `mattpocock-skills` | Planning, specs, tickets, TDD, code review, domain modelling | Any change bigger than a typo; start with `/ask-matt` | ~0.8k tokens always on (10 skills listed) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
 | `taste-skill` | One skill, `design-taste-frontend`: frontend design that does not look templated, for landing pages, portfolios and redesigns, with its own redesign mode and pre-flight check. Dashboards and dense product UI go to `/design` first | A page a person will look at, server-rendered HTML included: say so in the ticket or the prompt, or type `/design-taste-frontend`; on a repository rendered from the template the agent did not reach for it on its own (one run, #469). Dashboards and dense product UI: `/design` first | ~0.1k tokens always on (1 skill), ~34k when it fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
 | `ponytail-skills` | One skill, `/ponytail-audit`: a ranked list of what to delete or replace with the standard library, repository-wide, biggest cut first; applies nothing | Every week or two, or after a burst of work | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 
 "Always on" is each plugin's share of the skill listing, as `/context`
-reports it with a 1M-context model (#255, again for #354, #468 and #469, the
-last on an installed default set). With plinth's own two listed skills
-(~0.2k) the set comes to ~1.3k. Claude Code caps the listing, built-in skills
+reports it with a 1M-context model (#255, again for #354, #468, #469 on an
+installed default set, and #477 with each plugin loaded as the catalog narrows
+it). With plinth's own two listed skills (~0.2k) the set comes to ~1.3k. Claude Code caps the listing, built-in skills
 included, at 1% of the context window. At 1M that leaves room for all of it.
-At 200k the cap is ~2k, and on Haiku 4.5, the 200k model measured for #469,
-11 of the default set's 15 descriptions were cut to under 20 tokens, about
+At 200k the cap is ~2k, and on Haiku 4.5, the 200k model measured for #469
+and #477, 9 of the default set's 14 descriptions were cut to under 20 tokens, about
 the skill's name, because the built-in skills share the same cap.
 
 Built into Claude Code, nothing to install: `/design` for screen mockups and
@@ -67,6 +67,8 @@ root, which writes the hooks, agents and skills above into the repository. Its
 own marketplace plugin loaded hooks and agents but did not register its skill
 on Claude Code 2.1.269.
 
-Every third-party entry except `mattpocock-skills`, which comes from
-Anthropic's official marketplace, is pinned to a commit in this repository's
+Every third-party entry is pinned to a commit in this repository's
 `.claude-plugin/marketplace.json`; the licenses are listed in `NOTICE`.
+`mattpocock-skills` carries 20 of the 25 skills upstream ships; the five left
+out are `setup-matt-pocock-skills`, `grill-me`, `teach`, `to-questionnaire`
+and `writing-for-agents` (#475, #477).
