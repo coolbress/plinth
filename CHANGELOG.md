@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-11
+
+This release moves `mattpocock-skills` into plinth's marketplace, pinned to
+commit `c55ee46` with 20 of its 25 skills (#482), drops Anthropic's official
+marketplace from the install block (#483), and gives `/plinth:arsenal` an
+index by step and concern with the four selection criteria (#484). New
+repositories render plinth-template v1.10.0, which adds the `simplify` project
+skill (#473); How to run a project moves the token and the four things after
+step 1 (#480), and `ci / docs` checks this repository's own blob links against
+the checkout (#487). On an installed plinth, after
+`claude plugin update plinth@plinth`, run `claude plugin install plinth@plinth`
+and then `claude plugin prune`, once, in that order, before `/reload-plugins`:
+`update` does not install a dependency that moved marketplace under the same
+name. Without them, `mattpocock-skills` stays the official marketplace's copy
+with all 25 skills, and plinth reports its own `mattpocock-skills` dependency
+as missing, with the command to run. Run in the other order, they leave no
+`mattpocock-skills` skill until `install` runs.
+
+tested with plinth-template v1.10.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.10.0. A repository it
@@ -2420,7 +2440,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/coolbress/plinth/releases/tag/v1.12.0
 [1.11.0]: https://github.com/coolbress/plinth/releases/tag/v1.11.0
 [1.10.0]: https://github.com/coolbress/plinth/releases/tag/v1.10.0
 [1.9.0]: https://github.com/coolbress/plinth/releases/tag/v1.9.0
