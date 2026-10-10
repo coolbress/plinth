@@ -17,9 +17,14 @@ pull requests and have no tag.
   `third-party / review` writes for the head (attest.py's own line, from the
   same calls) before its checks, and from round 3 that a wording fix is
   answered, not pushed. `--round` prints only that line, with read calls
-  only, for the moment before a fix for a finding is pushed; `CONTRIBUTING.md`,
-  `AGENTS.md` and the reviewer how-to name it. Nothing it stops on changes
-  (#485).
+  only, for the moment before a fix for a finding is pushed. From round 3,
+  or when the round cannot be read, `--round` exits 1 until
+  `--row irreversible|issue|answer|unclassified "<why>"` writes the finding's
+  row of "When to stop" and why, and prints that line for the description;
+  a `git push` does not run it, and `third-party / review` is unchanged.
+  `CONTRIBUTING.md`, `AGENTS.md` and the reviewer how-to name it. Nothing the
+  merge stops on changes. "When to stop" now opens with narrowing, before a
+  pull request opens, the sentences that claim more than the diff (#485).
 
 ## [1.12.0] - 2026-10-11
 

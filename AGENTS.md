@@ -56,6 +56,9 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   Before pushing a fix for a review finding, run
   `scripts/merge-when-green.sh <n> --round`: it only reads, and prints the
   same round line as the check's log, which a green check leaves unread.
+  From round 3 it exits 1 until `--row irreversible|issue|answer|unclassified
+  "<why>"` states the finding's row and reason; put the line it prints in the
+  description's review section.
   Never write the reviewer's summons text (its `@` mention) in a pull request
   description or comment: the reviewer reads it as a task and answers with
   noise (#184, #189). Describe it instead.

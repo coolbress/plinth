@@ -162,6 +162,11 @@ release needs a green run on the commit it tags
    it says the budget is spent and that a wording fix is answered on its
    thread, not pushed, since each push starts another round
    ([When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop)).
+   From round 3, or when the round cannot be read, it exits 1 until you add
+   `--row irreversible|issue|answer|unclassified "<why>"`: the finding's row
+   of that table, judged by what the diff does, and the reason. It prints a
+   line for the description's review section. It runs only when you run it;
+   `git push` does not.
 4. Before merging, read the title and the description against the final
    diff: what changed and why, what was verified and what was not, as of the
    last commit. A review fix that changed the scope or the approach changes

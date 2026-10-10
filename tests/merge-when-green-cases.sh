@@ -149,10 +149,33 @@ grep -q 'activity.*ref=refs/heads/docs/arsenal-concern-index' "$FX/calls"; check
 
 recorded before
 PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/out" 2>&1; rc=$?
-[ "$rc" = 0 ] && [ ! -f "$FX/merged" ] && grep -qxF -- "$want" "$FX/out"; check "--round prints the line, exits 0, merges nothing" $?
+[ "$rc" = 1 ] && [ ! -f "$FX/merged" ] && grep -qxF -- "$want" "$FX/out" && grep -q -- '--row irreversible|issue|answer|unclassified' "$FX/out"
+check "round 7, --round with no row: prints the line, asks for the row, exits 1, merges nothing" $?
 ! grep -qE '^pr (merge|checks|comment|edit|review|ready)|--method (POST|PATCH|PUT|DELETE)|(^| )-X ' "$FX/calls"; check "--round makes only read calls" $?
 ! grep -q '^checks:' "$FX/out"; check "--round does not wait for the checks" $?
 
+# rnd <label> <want-exit> [args...]: --round on the recorded round-7 pull request
+rnd() {
+  local label="$1" want_rc="$2" rc; shift 2
+  recorded "rnd-$want_rc-$RANDOM"
+  PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r "$@" >"$FX/out" 2>&1; rc=$?
+  [ "$rc" = "$want_rc" ] && [ ! -f "$FX/merged" ]; check "$label (exit $rc)" $?
+}
+rnd "round 7, --row answer with a reason: exit 0" 0 --round --row answer "a how-to line that could say more exposes nothing"
+grep -qx "For the description's review section: row answer: a how-to line that could say more exposes nothing" "$FX/out" \
+  && grep -q "do not push a fix" "$FX/out"; check "the row line is printed for the description, and no push for answer" $?
+rnd "round 7, --row irreversible: exit 0, says push" 0 --round --row irreversible "a check name consumers require"
+grep -q "Fix it and push" "$FX/out"; check "irreversible says fix and push" $?
+rnd "round 7, --row with an empty reason: exit 1" 1 --round --row issue "  "
+rnd "an unknown row: usage, exit 2" 2 --round --row wording "x"
+rnd "--row without --round: usage, exit 2" 2 --row answer "x"
+setup r1; PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/out" 2>&1
+check "round 1, --round with no row: exit 0" $?
+setup r0; mkdir -p "$FX/bin"; printf '#!/bin/sh\nexit 1\n' >"$FX/bin/python3"; chmod +x "$FX/bin/python3"
+PATH="$FX/bin:$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/out" 2>&1
+rc=$?; [ "$rc" = 1 ] && grep -q "could not be read" "$FX/out"; check "a round that cannot be read asks for the row too" $?
+setup lower; rm "$FX/reviews.json"; PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/out" 2>&1
+rc=$?; [ "$rc" = 1 ] && grep -q '^review round at least 1' "$FX/out"; check "a lower-bound count asks for the row too" $?
 recorded logins; PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round --reviewer-logins someone-else >"$FX/out" 2>&1
 grep -q '^review round 1 on this pull request' "$FX/out"; check "--reviewer-logins counts only those accounts" $?
 

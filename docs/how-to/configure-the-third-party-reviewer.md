@@ -390,6 +390,12 @@ Without them, or when they do not help:
 
 ## When to stop
 
+Before opening a pull request that carries text (a description, a how-to, a
+changelog entry), read every sentence that claims more than the diff does (a
+cost called measured, every entry said to meet a rule) and narrow it. On
+plinth#484 the first three review rounds corrected such sentences: the budget
+below bounds the rounds, this removes their cause.
+
 A model reviewer samples; it does not enumerate. Every fix is new surface, and
 a new head is a new review, so "until it finds nothing" is not a stopping
 rule. On one release script here it took seven rounds and thirteen findings,
@@ -416,7 +422,11 @@ for you: its log and job summary say which review round the head is, and from
 the third that the budget is spent. It does not stop a round: the summons, the
 wait and the verdict are the same in every round. A green check's log is seldom
 opened, so in this repository `scripts/merge-when-green.sh <n> --round` prints
-the same line without merging; run it before pushing a fix for a finding.
+the same line without merging; run it before pushing a fix for a finding. From
+round 3 it exits 1 until `--row <row> "<why>"` names the finding's row in the
+table above (`irreversible`, `issue`, `answer`, or `unclassified` for one that
+cannot be judged yet) and why, and prints that for the description. It is a
+local command: a `git push` does not run it, and the check does not change.
 
 The same rule bounds the code: a script guards outcomes that cannot be undone
 and documents the states that can. A reviewer asking for a guard on a
