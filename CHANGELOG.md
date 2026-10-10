@@ -40,6 +40,32 @@ pull requests and have no tag.
   the next session lists the one skill (measured on Claude Code 2.1.296 with a
   git-cloned marketplace). The entry was not renamed because an update does
   not install a dependency under a new name (#468).
+- The default set carries one taste-skill skill instead of thirteen: the
+  `taste-skill` dependency keeps its name and pinned commit and now holds
+  only `design-taste-frontend`, which carries its own redesign mode,
+  design-system table and pre-flight check. The twelve that leave are
+  `brandkit`, `imagegen-frontend-web`, `imagegen-frontend-mobile` and
+  `image-to-code-skill` (they assume an image-generation tool Claude Code does
+  not have), `gpt-tasteskill`, `stitch-skill` and `taste-skill-v1` (written for
+  another product or the old behaviour), `minimalist-skill`, `brutalist-skill`,
+  `soft-skill` and `redesign-skill` (presets the main skill covers), and
+  `output-skill` (not about design). Whoever wants them installs them from
+  [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill); nothing in
+  plinth's catalog mounts them. The default set's share of the skill listing
+  drops from ~3.0k to ~1.3k tokens, and run-a-project step 4 says when the agent
+  reaches for the skill (#469).
+- Updating an installed plinth past this change takes one more command,
+  `claude plugin update taste-skill@plinth`, run once. On its own,
+  `claude plugin update plinth@plinth` leaves the old copy of `taste-skill`
+  cached; it fails to load ("conflicting manifests") and plinth reports a
+  missing dependency until that command runs. Then the one skill loads and
+  `claude plugin prune --dry-run` finds nothing. A session start, signed in or
+  not, did not repair it, and `claude plugin install taste-skill@plinth`
+  reports it already installed and leaves the error (measured on Claude Code
+  2.1.296, the marketplace added from a local clone). The entry's source moved
+  from `url` to `git-subdir`, the `skills/` directory of the same repository:
+  upstream's root `plugin.json` makes a narrowed `url` entry fail as
+  conflicting manifests even on a fresh install (#469).
 
 ## [1.10.0] - 2026-10-10
 

@@ -260,6 +260,10 @@ pass, has the change reviewed, and saves it as a commit. `/implement` stops
 there; the agent then opens the pull request, following the repository's
 rules.
 
+When the ticket is a page a person will look at, the agent reaches for
+`taste-skill` on its own and asks at most one question; for dashboards and
+dense product UI it uses `/design` first.
+
 If you have corrected the agent twice and it is still off, stop: `/clear`, and
 say it again more precisely.
 

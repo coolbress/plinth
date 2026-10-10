@@ -121,8 +121,8 @@ Installed with plinth as dependencies, each pinned to a commit except
 marketplace serves; CI checks that version against the tested range
 ([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
-[taste-skill](https://github.com/Leonxlnx/taste-skill) (frontend design that
-does not look templated) and
+[taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
+`design-taste-frontend`: frontend design that does not look templated) and
 [ponytail-skills](https://github.com/DietrichGebert/ponytail) (one skill,
 `/ponytail-audit`: what to delete or replace with the standard library,
 repository-wide). Listed but not installed:

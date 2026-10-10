@@ -32,16 +32,17 @@ line arrived as text, and this catalog being open shows plinth is installed.
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
 | `mattpocock-skills` | Planning, specs, tickets, TDD, code review, domain modelling | Any change bigger than a typo; start with `/ask-matt` | ~0.85k tokens always on (11 skills listed) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
-| `taste-skill` | Frontend design that does not look templated: landing pages, portfolios, redesigns | Any page a person will look at, server-rendered HTML included, from its first version; the user will not ask for styling. It reads the brief, decides direction, and asks at most one question | ~1.7k tokens always on (13 skills), ~34k when `taste-skill` fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
+| `taste-skill` | One skill, `design-taste-frontend`: frontend design that does not look templated, for landing pages, portfolios and redesigns, with its own redesign mode and pre-flight check. Dashboards and dense product UI go to `/design` first | Any page a person will look at, server-rendered HTML included, from its first version; the user will not ask for styling. It reads the brief, decides direction, and asks at most one question | ~0.1k tokens always on (1 skill), ~34k when it fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
 | `ponytail-skills` | One skill, `/ponytail-audit`: a ranked list of what to delete or replace with the standard library, repository-wide, biggest cut first; applies nothing | Every week or two, or after a burst of work | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 
 "Always on" is each plugin's share of the skill listing, as `/context`
-reports it with a 1M-context model and only the default set loaded (#255,
-again for #354 and #468). With plinth's own two listed skills (~0.2k) the set
-comes to ~3.0k. Claude Code caps the listing, built-in skills included, at 1%
-of the context window. At 1M that leaves room for all of it. At 200k the cap is
-~2k, and on Haiku 4.5, the 200k model measured for #468, 25 of these 27
-descriptions were cut to under 20 tokens, about the skill's name.
+reports it with a 1M-context model (#255, again for #354, #468 and #469, the
+last on an installed default set). With plinth's own two listed skills
+(~0.2k) the set comes to ~1.3k. Claude Code caps the listing, built-in skills
+included, at 1% of the context window. At 1M that leaves room for all of it.
+At 200k the cap is ~2k, and on Haiku 4.5, the 200k model measured for #469,
+11 of the default set's 15 descriptions were cut to under 20 tokens, about
+the skill's name, because the built-in skills share the same cap.
 
 Built into Claude Code, nothing to install: `/design` for screen mockups and
 layouts before building, `/dataviz` for charts, `/security-review` for a
