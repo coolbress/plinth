@@ -143,4 +143,6 @@ install, create, merge.
 - `cd my-app && claude`, then `/plinth:floor-check` to read the wall from
   the inside.
 - To move plinth to a new version later: `claude plugin update plinth`, then
-  `/reload-plugins`.
+  `/reload-plugins`. From v1.10.0 or earlier, also run
+  `claude plugin update taste-skill@plinth` once before `/reload-plugins`
+  (#469).

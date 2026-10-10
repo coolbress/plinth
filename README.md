@@ -101,7 +101,10 @@ setting raises the cap (#255; measured again for #354, on Claude Code
 2.1.286).
 
 Third-party marketplaces do not auto-update. To move to a new version, run
-`claude plugin update plinth`, then `/reload-plugins`.
+`claude plugin update plinth`, then `/reload-plugins`. Moving from v1.10.0 or
+earlier also takes `claude plugin update taste-skill@plinth` once, before
+`/reload-plugins`: the dependency's source changed, and until then it fails to
+load (#469).
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
