@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-10-11
+
+A new repository's two project skills now say what they replace. Claude Code's bundled `/verify` builds and runs the app, and the template's `verify` skill takes its place, so it now says it runs the checks, not the app, and points to the bundled `/run`, which the agent can use and nothing replaces. Its `simplify` skill also removes wasted work the change adds. How to run a project's step 5 names `/run` for seeing the app.
+
+tested with plinth-template v1.11.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.11.0. A new repository's
@@ -2480,7 +2486,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.13.1...HEAD
+[1.13.1]: https://github.com/coolbress/plinth/releases/tag/v1.13.1
 [1.13.0]: https://github.com/coolbress/plinth/releases/tag/v1.13.0
 [1.12.0]: https://github.com/coolbress/plinth/releases/tag/v1.12.0
 [1.11.0]: https://github.com/coolbress/plinth/releases/tag/v1.11.0
