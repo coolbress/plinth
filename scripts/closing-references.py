@@ -2,6 +2,9 @@
 # The decision of the `ci / docs` step that reads a pull request's description
 # (#293), a pure function of one GraphQL answer:
 # closing-references.py <owner/repo> <answer.json>.
+# With --part-of <owner/repo>, it prints instead the issues the description on
+# stdin names on `Part of` link lines, one `owner/repo<TAB>N` each, for
+# scripts/merge-when-green.sh (#490).
 # Exit 0 when every issue the merge would close is named on the closing line,
 # 1 with the issues and the lines when one is not, 2 when the answer cannot be
 # read. tests/closing-references-cases.sh runs this through its step.
@@ -104,7 +107,19 @@ def show(issue: Issue, repo: str) -> str:
     return f"#{issue[1]}" if issue[0] == repo.lower() else f"{issue[0]}#{issue[1]}"
 
 
+def part_of(body: str, repo: str) -> list[Issue]:
+    """The issues named on `Part of` link lines: a sentence that quotes one is prose."""
+    lines = body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return [issue for line in lines
+            if LINK_LINE.match(line) and re.match(r"\s*part of\b", line, re.IGNORECASE)
+            for issue in refs(line, repo)]
+
+
 def main() -> int:
+    if sys.argv[1] == "--part-of":
+        for where, number in part_of(sys.stdin.read(), sys.argv[2]):
+            print(f"{where}\t{number}")
+        return 0
     repo, path = sys.argv[1], sys.argv[2]
     try:
         with open(path, encoding="utf-8") as f:

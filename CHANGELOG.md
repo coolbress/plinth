@@ -25,6 +25,15 @@ pull requests and have no tag.
   `CONTRIBUTING.md`, `AGENTS.md` and the reviewer how-to name it. Nothing the
   merge stops on changes. "When to stop" now opens with narrowing, before a
   pull request opens, the sentences that claim more than the diff (#485).
+- After a merge, `scripts/merge-when-green.sh` prints, for each issue the pull
+  request closes or names on a `Part of #N` line (the grammar `ci / docs`
+  reads), the acceptance criteria still unticked and, for an issue it closed,
+  a missing `## Outcome` (or `## Decision`), with GET calls only; an issue it
+  cannot read prints "not read" and the exit status does not change. A pull
+  request that does not read as merged yet, as in a merge queue, has its
+  issues left unread, and the script says so. `AGENTS.md` and
+  `CONTRIBUTING.md` now say the criteria are ticked at the merge for any named
+  issue, not only when it closes (#490).
 
 ## [1.12.0] - 2026-10-11
 

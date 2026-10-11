@@ -38,6 +38,9 @@
 #     ends as fixed, answered or moved to an issue, and the reply says which.
 # Then it squash-merges with the description as the body and
 # --match-head-commit, so a commit pushed while it waited stops the merge.
+# After the merge it prints, for each issue the pull request closes or names
+# on a `Part of #N` line, the acceptance criteria still unticked and, for one it
+# closed, a missing `## Outcome`, for whoever merged to settle (#490).
 # A merged pull request is not undone by anything here; a stop changes nothing.
 set -uo pipefail
 
@@ -167,4 +170,48 @@ open="$(awk -F'\t' '$2!=""{answered[$2]=1; next} {top[NR]=$0; id[NR]=$1} END{for
 body="$(gh pr view "$pr" -R "$repo" --json body --jq .body)" || stop "cannot read the description"
 [ -n "$body" ] || stop "the description is empty; it becomes the squash commit"
 gh pr merge "$pr" -R "$repo" --squash --match-head-commit "$head" --body "$body" || stop "gh pr merge refused"
-gh pr view "$pr" -R "$repo" --json state,mergeCommit --jq '"\(.state) \(.mergeCommit.oid)"'
+after="$(gh pr view "$pr" -R "$repo" --json state,mergeCommit --jq '"\(.state) \(.mergeCommit.oid)"')"
+after_rc=$?
+echo "$after"
+
+# -- the named issues (#490) ---------------------------------------------------
+# After the merge, with GET calls only: the issues GitHub closes through this
+# pull request and those its description names on a `Part of #N` line. For each,
+# the acceptance criteria still unticked and, for one the merge closed, a
+# body with no `## Outcome` (or `## Decision`). Which criterion the change met
+# is the merger's call, so nothing is ticked here, and a failed read prints
+# "not read" and leaves the exit status as it was without this section.
+named() {
+  local refs parts said=0 kind r n ib todo end
+  refs="$(gh pr view "$pr" -R "$repo" --json closingIssuesReferences \
+    --jq '(.closingIssuesReferences // [])[] | "closes\t\(.repository.owner.login)/\(.repository.name)\t\(.number)"' 2>/dev/null)" \
+    || { echo "issues this merge closed: not read"; said=1; refs=""; }
+  # A `Part of` link line, in the grammar `ci / docs` reads (closing-references.py).
+  parts="$(python3 "$(dirname "${BASH_SOURCE[0]}")/closing-references.py" --part-of "$repo" <<<"$body" 2>/dev/null)" \
+    || { echo "Part of lines: not read"; said=1; parts=""; }
+  parts="$(awk -F'\t' 'NF == 2 {printf "part\t%s\t%s\n", $1, $2}' <<<"$parts")"
+  while IFS=$'\t' read -r kind r n; do
+    [ -n "$n" ] || continue
+    if ! ib="$(gh api "repos/$r/issues/$n" --jq '.body // ""' 2>/dev/null)"; then
+      echo "$r#$n: not read"; said=1; continue
+    fi
+    ib="${ib//$'\r'/}"
+    todo="$(awk '/^## /{in_ac = ($0 ~ /^## Acceptance criteria[[:space:]]*$/); next}
+                 in_ac && /^[[:space:]]*[-*] \[ \]/' <<<"$ib")"
+    end=yes
+    [ "$kind" = part ] || grep -qE '^## (Outcome|Decision)([^[:alnum:]]|$)' <<<"$ib" || end=no
+    [ -n "$todo" ] || [ "$end" = no ] || continue
+    if [ "$kind" = closes ]; then echo "$r#$n, closed by this merge:"; else echo "$r#$n, part of this change:"; fi
+    [ -z "$todo" ] || { echo "  unticked acceptance criteria:"; sed 's/^[[:space:]]*/    /' <<<"$todo"; }
+    [ "$end" = yes ] || echo "  no ## Outcome (or ## Decision for a record) in the body"
+    said=1
+  done < <(printf '%s\n%s\n' "$refs" "$parts" | awk -F'\t' 'NF == 3 && !seen[tolower($2) "#" $3]++')
+  [ "$said" = 0 ] || echo "Whoever merged ticks the criteria this change met and writes the ending of an issue it closed (AGENTS.md)."
+}
+# A merge queue takes the pull request without merging it yet: the issues are
+# read only once it reads as merged.
+case "$after" in
+  MERGED*) named ;;
+  *) echo "Not merged yet (${after:-state not read}): read its issues' criteria once it has." ;;
+esac
+exit "$after_rc"

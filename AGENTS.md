@@ -73,8 +73,12 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   instead: a `wayfinder:research`, `:prototype` or `:grilling` child).
   Tick each acceptance criterion that was met; one left unticked is named in
   the Outcome with why (#294 closed with all five met and none ticked).
+  Ticking happens at the merge, closed or not: whoever merges a pull request
+  that names an issue (`Closes`, `Part of`) ticks the criteria it met
+  (#489 met three of #485's and left them unticked); `merge-when-green.sh`
+  prints what is left (#490).
   `Closes #N` closes it through GitHub without asking anyone, so whoever
-  merges writes it; measured 2026-09-23, 23 of 86 closed issues had no
+  merges writes the ending; measured 2026-09-23, 23 of 86 closed issues had no
   ending. A closing keyword before `#N` anywhere in the description closes
   that issue too: "the two fixes #65 decided" closed #65 on merge (#284).
   Word the prose another way; `ci / docs` fails a description that would (#293).
