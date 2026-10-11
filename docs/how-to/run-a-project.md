@@ -296,7 +296,10 @@ all of them. Before you say "merge", ask three things:
 - **"What shows it works, and what did you not check?"** The pull request's
   description should answer both, for each thing "done" meant.
 - **"Can I see it?"** Run the command, open the page, or compare a number with
-  one you worked out.
+  one you worked out. To have the agent launch and drive the app, type `/run`.
+  In a repository plinth rendered, `/verify` runs the checks in `AGENTS.md`,
+  not the app: the project skill takes the place of Claude Code's bundled one
+  (#476).
 - **"What did the reviewer say?"** If the optional third-party reviewer is on,
   read its comments, not just its green mark. Each should end as fixed,
   answered, or moved to an issue.

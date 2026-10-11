@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.11.0. A new repository's
+  `verify` skill says it runs the checks, not the app, and points to Claude
+  Code's bundled `/run` for the running app; its `simplify` skill also removes
+  wasted work the change adds, an addition from the comparison with the
+  bundled `/simplify`. How to run a project's step 5 names `/run` for seeing
+  the app, and says that in a rendered repository `/verify` runs the checks
+  (#476, #493). `/plinth:floor-check` reports v1.10.0 as one tag behind.
+
 ## [1.13.0] - 2026-10-11
 
 The review budget and the acceptance criteria were rules nobody read at the moment they apply: on #484 wording fixes were pushed through round 6 with the budget line sitting in a green check's log, and #489 met three criteria of an open issue and left them unticked. This release puts both where the person or agent merging reads, the output of `scripts/merge-when-green.sh`: the review round before a fix is pushed, with the finding's row asked for in writing from round 3, and after a merge the named issues' unticked criteria and missing ending. Nothing it stops on changes, and `third-party / review` is unchanged.
