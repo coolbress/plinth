@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- How to run a project's step 4 says the pre-commit skills are only asked
+  for and some models hardly ever run them, that the lint, type and test
+  commands from `AGENTS.md` ran before every commit in trials anyway, and
+  that what the skipped skills left out was the package build (#474). In
+  those headless trials of one small change, with both skills present,
+  Claude Sonnet 5.5 ran neither before any of 10 commits, and Claude Opus 5.5
+  ran at least one before 6 of 6 (#467). With `verify` alone, Sonnet's share
+  followed how it wrote the code: 12 of 14 with its edit tools, 2 of 16 from
+  the shell.
+
 ## [1.13.1] - 2026-10-11
 
 A new repository's two project skills now say what they replace. Claude Code's bundled `/verify` builds and runs the app, and the template's `verify` skill takes its place, so it now says it runs the checks, not the app, and points to the bundled `/run`, which the agent can use and nothing replaces. Its `simplify` skill also removes wasted work the change adds. How to run a project's step 5 names `/run` for seeing the app.

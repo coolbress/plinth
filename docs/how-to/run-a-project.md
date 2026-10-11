@@ -273,8 +273,10 @@ change up without changing what it does, and `verify` runs the checks. The
 cleanup never removes input validation, error handling that prevents a loss, a
 security measure or anything the ticket asked for, and on a commit that answers
 a review finding it touches only that fix's lines. The agent is asked, not
-forced, and in trials some models mostly skipped both skills (#467). The checks
-in step 5 are what decide.
+forced, and some models hardly ever run them. In trials the agent still ran
+the lint, type and test commands from `AGENTS.md` before every commit; what
+the skipped skills left out was the package build. The checks in step 5 are
+what decide (#474).
 
 When the ticket is a page a person will look at, name `taste-skill` in the
 ticket or the prompt, or type `/design-taste-frontend`: on a repository
