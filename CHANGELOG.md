@@ -19,7 +19,7 @@ pull requests and have no tag.
   answered, not pushed. `--round` stops before the checks and the merge,
   with read calls only, for the moment before a fix for a finding is pushed. From round 3,
   or when the round cannot be read, `--round` exits 1 until
-  `--row irreversible|issue|answer|unclassified "<why>"` writes the finding's
+  `--row <irreversible|issue|answer|unclassified> "<why>"` writes the finding's
   row of "When to stop" and why, and prints that line for the description;
   a `git push` does not run it, and `third-party / review` is unchanged.
   `CONTRIBUTING.md`, `AGENTS.md` and the reviewer how-to name it. Nothing the

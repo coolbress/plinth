@@ -41,7 +41,7 @@
 # A merged pull request is not undone by anything here; a stop changes nothing.
 set -uo pipefail
 
-usage="usage: scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer] [--reviewer-logins a,b] [--round [--row irreversible|issue|answer|unclassified \"<why>\"]]"
+usage="usage: scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer] [--reviewer-logins a,b] [--round [--row <irreversible|issue|answer|unclassified> \"<why>\"]]"
 stop() { printf 'STOP: %s\n' "$@" >&2; exit 1; }
 
 pr=""; repo=""; reviewer=required; only_round=0; row=""; why=""
@@ -124,7 +124,7 @@ if [ "$only_round" = 1 ]; then
     # The same target as this run, so the retry reads the same round.
     again="scripts/merge-when-green.sh $pr --repo $(printf '%q' "$repo")"
     [ "$logins" = "chatgpt-codex-connector[bot]" ] || again+=" --reviewer-logins $(printf '%q' "$logins")"
-    echo "  $again --round --row irreversible|issue|answer|unclassified \"<why>\"" >&2
+    echo "  $again --round --row <irreversible|issue|answer|unclassified> \"<why>\"" >&2
     echo "  irreversible: irreversible, or reaches other people; judge by what the diff does, not the reviewer's label" >&2
     exit 1
   fi

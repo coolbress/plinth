@@ -149,7 +149,7 @@ grep -q 'activity.*ref=refs/heads/docs/arsenal-concern-index' "$FX/calls"; check
 
 recorded before
 PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/out" 2>&1; rc=$?
-[ "$rc" = 1 ] && [ ! -f "$FX/merged" ] && grep -qxF -- "$want" "$FX/out" && grep -q -- '--row irreversible|issue|answer|unclassified' "$FX/out"
+[ "$rc" = 1 ] && [ ! -f "$FX/merged" ] && grep -qxF -- "$want" "$FX/out" && grep -q -- '--row <irreversible|issue|answer|unclassified> "<why>"' "$FX/out"
 check "round 7, --round with no row: prints the line, asks for the row, exits 1, merges nothing" $?
 grep -qF -- 'merge-when-green.sh 7 --repo o/r --round --row' "$FX/out"; check "the suggested retry keeps --repo" $?
 PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round --reviewer-logins 'chatgpt-codex-connector[bot],other' >"$FX/out" 2>&1
