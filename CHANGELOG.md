@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-11
+
+The review budget and the acceptance criteria were rules nobody read at the moment they apply: on #484 wording fixes were pushed through round 6 with the budget line sitting in a green check's log, and #489 met three criteria of an open issue and left them unticked. This release puts both where the person or agent merging reads, the output of `scripts/merge-when-green.sh`: the review round before a fix is pushed, with the finding's row asked for in writing from round 3, and after a merge the named issues' unticked criteria and missing ending. Nothing it stops on changes, and `third-party / review` is unchanged.
+
+tested with plinth-template v1.10.0
+
 ### Added
 
 - `scripts/merge-when-green.sh` prints the review round line that
@@ -2464,7 +2470,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/coolbress/plinth/releases/tag/v1.13.0
 [1.12.0]: https://github.com/coolbress/plinth/releases/tag/v1.12.0
 [1.11.0]: https://github.com/coolbress/plinth/releases/tag/v1.11.0
 [1.10.0]: https://github.com/coolbress/plinth/releases/tag/v1.10.0
