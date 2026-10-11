@@ -16,8 +16,8 @@ pull requests and have no tag.
 - `scripts/merge-when-green.sh` prints the review round line that
   `third-party / review` writes for the head (attest.py's own line, from the
   same calls) before its checks, and from round 3 that a wording fix is
-  answered, not pushed. `--round` prints only that line, with read calls
-  only, for the moment before a fix for a finding is pushed. From round 3,
+  answered, not pushed. `--round` stops before the checks and the merge,
+  with read calls only, for the moment before a fix for a finding is pushed. From round 3,
   or when the round cannot be read, `--round` exits 1 until
   `--row irreversible|issue|answer|unclassified "<why>"` writes the finding's
   row of "When to stop" and why, and prints that line for the description;

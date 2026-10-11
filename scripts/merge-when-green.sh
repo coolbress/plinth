@@ -10,9 +10,10 @@
 # Every run first prints the review round line that `third-party / review`
 # writes for this head (scripts/pr-review/attest.py --round, the same files
 # read the same way, #485), and from round 3 that a wording fix is answered,
-# not pushed. The line never stops anything. With --round it prints only
-# that line and exits: GET calls only, no merge, for the moment before a fix
-# for a review finding is pushed. --reviewer-logins is the caller's
+# not pushed. The line never stops anything. With --round it stops there,
+# before the checks and the merge: it prints the head and that line (and,
+# with --row or from round 3, what is below), with GET calls only, for the
+# moment before a fix for a review finding is pushed. --reviewer-logins is the caller's
 # `reviewer-logins`, when it is not the reusable workflow's default.
 #
 # From round 3, or when the round cannot be read, --round also asks for the
@@ -120,7 +121,10 @@ if [ "$only_round" = 1 ]; then
   elif [ "$spent" != no ]; then
     [ "$spent" = yes ] || echo "The round could not be read, so it may be past the budget."
     echo "Before pushing a fix, write the finding's row and why (When to stop):" >&2
-    echo "  scripts/merge-when-green.sh $pr --round --row irreversible|issue|answer|unclassified \"<why>\"" >&2
+    # The same target as this run, so the retry reads the same round.
+    again="scripts/merge-when-green.sh $pr --repo $(printf '%q' "$repo")"
+    [ "$logins" = "chatgpt-codex-connector[bot]" ] || again+=" --reviewer-logins $(printf '%q' "$logins")"
+    echo "  $again --round --row irreversible|issue|answer|unclassified \"<why>\"" >&2
     echo "  irreversible: irreversible, or reaches other people; judge by what the diff does, not the reviewer's label" >&2
     exit 1
   fi
