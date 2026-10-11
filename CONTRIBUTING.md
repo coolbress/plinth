@@ -214,6 +214,13 @@ release needs a green run on the commit it tags
    by the run started last; one still running holds the merge. Merging on a count that was printed but not checked
    let two unread findings through once (#306); this is the check.
 
+   After the merge it prints, for each issue the pull request closes or names
+   with `Part of #N`, the acceptance criteria still unticked and, for an issue
+   it closed, a body with no `## Outcome` (`## Decision` for a record). Tick
+   the criteria the change met and write the ending, whether or not the issue
+   closed (`AGENTS.md`). It only reads; an issue it cannot read is printed as
+   "not read", and the exit status does not change.
+
 ## Cut a release
 
 [How to cut a release](docs/how-to/cut-a-release.md). A release that moves

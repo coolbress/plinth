@@ -32,6 +32,9 @@ case "$1 $2" in
       *"/pulls/"*"/reviews"*) [ -f "$fx/reviews.json" ] || exit 1; out "$fx/reviews.json" ;;
       *"/issues/"*"/comments"*) [ -f "$fx/icomments.json" ] || exit 1; out "$fx/icomments.json" ;;
       *"/activity"*) [ -f "$fx/activity.json" ] || exit 1; out "$fx/activity.json" ;;
+      *"/issues/"[0-9]*)
+        [[ "$*" =~ issues/([0-9]+) ]]; f="$fx/issue-${BASH_REMATCH[1]}.json"
+        [ -f "$f" ] || exit 1; out "$f" ;;
       *) echo "fake gh: unexpected api $*" >&2; exit 1 ;;
     esac ;;
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
@@ -144,7 +147,7 @@ recorded r484
 run merge "a round-7 pull request, green, every thread answered"
 grep -qxF -- "$want" "$FX/out"; check "the printed line equals attest.py --round on the same files" $?
 grep -qx "A wording fix is answered on its thread, not pushed: a push starts another round." "$FX/out"; check "from round 3, a wording fix is answered" $?
-[ "$(grep -n -m1 '^review round' "$FX/out" | cut -d: -f1)" -lt "$(grep -n -m1 '^checks:' "$FX/out" | cut -d: -f1)" ]; check "printed before the checks" $?
+[ "$(grep -n -m1 '^review round' "$FX/out" | cut -d: -f1)" -lt "$(grep -n -m1 '^checks:' "$FX/out" | cut -d: -f1)" ] && s=0 || s=1; check "printed before the checks" $s
 grep -q 'activity.*ref=refs/heads/docs/arsenal-concern-index' "$FX/calls"; check "the activity log is read for the head branch" $?
 
 recorded before
@@ -191,6 +194,55 @@ grep -q '^review round at least 1 .*reviews.json could not be read' "$FX/out"; c
 setup nopython; mkdir -p "$FX/bin"; printf '#!/bin/sh\nexit 1\n' >"$FX/bin/python3"; chmod +x "$FX/bin/python3"
 PATH="$FX/bin:$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>&1
 [ -f "$FX/merged" ] && grep -q '^review round: not read' "$FX/out"; s=$?; check "attest.py failing says so and still merges" $s
+
+echo "-- after the merge, the named issues (#490): printed, never a stop"
+# issue <case-dir> <n> <body>: an issue fixture with that body
+issue() { jq -n --arg b "$3" '{body: $b}' >"$FX/issue-$2.json"; }
+named_pr() { # <case-dir> <closing numbers, space-separated> <description>
+  setup "$1"
+  jq -n --arg h "$H" --arg b "$3" --arg c "$2" '{state: "OPEN", headRefOid: $h, headRefName: "b", body: $b,
+    closingIssuesReferences: [$c | split(" ")[] | select(. != "") | {number: tonumber, repository: {name: "r", owner: {login: "o"}}}]}' >"$FX/pr.json"
+}
+open_ac=$'## What to build\n\nx\n\n## Acceptance criteria\n\n- [x] one done\n- [ ] two left\r\n- [ ] three left\n\n## Not building\n\n- [ ] not a criterion'
+done_ac=$'## Acceptance criteria\n\n- [x] one\n- [x] two\n\n## Outcome\n\nCompleted.'
+named_pr partof "" $'## What and why\n\nx\n\nPart of #12\n\nAssisted-by: a:b'; issue partof 12 "$open_ac"
+run merge "a merge naming an open issue with Part of"
+grep -qx 'o/r#12, part of this change:' "$FX/out" && grep -qx '    - \[ \] two left' "$FX/out" && grep -qx '    - \[ \] three left' "$FX/out"
+check "Part of #12: its two unticked criteria are printed" $?
+! grep -q 'not a criterion\|one done\|no ## Outcome' "$FX/out"; check "only unticked lines under Acceptance criteria; no ending asked of an open issue" $?
+grep -q '^Whoever merged ticks the criteria' "$FX/out"; check "it ends with the line for whoever merged" $?
+[ "$(grep -n -m1 '^MERGED' "$FX/out" | cut -d: -f1)" -lt "$(grep -n -m1 '^o/r#12' "$FX/out" | cut -d: -f1)" ] && s=0 || s=1; check "printed after the merge" $s
+# Every call after the merge (the log has the --body's lines too, skipped here):
+# a pull request view, or a plain `gh api` read of the issue.
+sed -n "$(grep -n -m1 '^pr merge' "$FX/calls" | cut -d: -f1),\$p" "$FX/calls" | sed 1d | grep -E '^(pr|api|issue|repo) ' \
+  | grep -vE '^pr view 7 -R o/r --json (state,mergeCommit|closingIssuesReferences) --jq |^api repos/o/r/issues/12 --jq [^-]*$' >"$FX/odd"
+[ ! -s "$FX/odd" ] && [ "$(grep -c '^api repos/o/r/issues/12 ' "$FX/calls")" = 1 ] && s=0 || s=1
+check "the issue reads are GET only" $s
+head -n "$(grep -n -m1 '^pr merge' "$FX/calls" | cut -d: -f1)" "$FX/calls" | grep -q 'issues/12\|closingIssuesReferences' && s=1 || s=0
+check "nothing is read for the issues before the merge" $s
+
+named_pr closes "12" $'## What and why\n\nx\n\nCloses #12'; issue closes 12 $'## Acceptance criteria\n\n- [x] one\n\n## Not building\n\nx'
+run merge "a merge closing an issue with no ending"
+grep -qx 'o/r#12, closed by this merge:' "$FX/out" && grep -qx '  no ## Outcome (or ## Decision for a record) in the body' "$FX/out" && ! grep -q unticked "$FX/out"
+check "Closes #12 without Outcome: the missing ending is printed" $?
+
+named_pr settled "12 13" $'Closes #12\nCloses #13\nPart of #12'; issue settled 12 "$done_ac"
+issue settled 13 $'## Acceptance criteria\n\n- [x] one\n\n## Decision\n\nDecided.'
+run merge "a merge closing two settled issues"
+! grep -q '^o/r#\|Whoever merged' "$FX/out"; check "every criterion ticked and an ending: nothing printed (must not print)" $?
+[ "$(grep -c 'issues/12 ' "$FX/calls")" = 1 ]; check "an issue both closed and Part of is read once" $?
+
+named_pr nobody "" $'## What and why\n\nKept apart of #9 on purpose.'
+run merge "a merge naming no issue"
+! grep -q 'Whoever merged\|not read' "$FX/out"; check "no issue named (\"apart of #9\" is not one): nothing printed" $?
+
+named_pr unread "12" $'Closes #12\nPart of o/other#5'; issue unread 12 "$done_ac"
+run merge "an issue that cannot be read still exits 0"
+grep -qx 'o/other#5: not read' "$FX/out" && grep -q '^Whoever merged' "$FX/out"; check "a failed issue read prints not read" $?
+named_pr norefs "" $'Part of #12'; issue norefs 12 "$open_ac"
+jq '.closingIssuesReferences = "x"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
+run merge "the closing references cannot be read: still exits 0"
+grep -qx 'issues this merge closed: not read' "$FX/out" && grep -qx 'o/r#12, part of this change:' "$FX/out"; check "unreadable closing references say so; Part of is still read" $?
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
