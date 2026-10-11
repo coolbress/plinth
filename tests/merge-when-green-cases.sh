@@ -232,9 +232,10 @@ run merge "a merge closing two settled issues"
 ! grep -q '^o/r#\|Whoever merged' "$FX/out"; check "every criterion ticked and an ending: nothing printed (must not print)" $?
 [ "$(grep -c 'issues/12 ' "$FX/calls")" = 1 ]; check "an issue both closed and Part of is read once" $?
 
-named_pr nobody "" $'## What and why\n\nKept apart of #9 on purpose.'
+named_pr nobody "" $'## What and why\n\nKept apart of #9 on purpose; #489 merged with Part of #485 in prose.\nPart of #485 is quoted here as an example, not a link.'
 run merge "a merge naming no issue"
-! grep -q 'Whoever merged\|not read' "$FX/out"; check "no issue named (\"apart of #9\" is not one): nothing printed" $?
+! grep -q 'Whoever merged\|not read' "$FX/out"; check "no issue named (prose quoting Part of #485 is not a link line): nothing printed" $?
+! grep -qE 'issues/[0-9]+ ' "$FX/calls"; check "and no issue is read" $?
 
 named_pr unread "12" $'Closes #12\nPart of o/other#5'; issue unread 12 "$done_ac"
 run merge "an issue that cannot be read still exits 0"
@@ -243,6 +244,16 @@ named_pr norefs "" $'Part of #12'; issue norefs 12 "$open_ac"
 jq '.closingIssuesReferences = "x"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
 run merge "the closing references cannot be read: still exits 0"
 grep -qx 'issues this merge closed: not read' "$FX/out" && grep -qx 'o/r#12, part of this change:' "$FX/out"; check "unreadable closing references say so; Part of is still read" $?
+
+named_pr two "" $'x\n\nPart of #12, #13.'; issue two 12 "$open_ac"; issue two 13 "$open_ac"
+run merge "a Part of line naming two issues"
+grep -qx 'o/r#12, part of this change:' "$FX/out" && grep -qx 'o/r#13, part of this change:' "$FX/out"; check "both issues on the line are read" $?
+
+named_pr queued "12" $'Closes #12'; issue queued 12 $'## Acceptance criteria\n\n- [ ] left'
+printf '{"state":"OPEN","mergeCommit":null}' >"$FX/after.json"
+run merge "a merge queue takes it: gh pr merge succeeds, the state is still OPEN"
+grep -q '^Not merged yet (OPEN null)' "$FX/out" && ! grep -q 'issues/12' "$FX/calls" && ! grep -q '^o/r#12' "$FX/out"
+check "not merged yet: says so and reads no issue" $?
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
