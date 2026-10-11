@@ -1,0 +1,58 @@
+[
+ {
+  "before": "aa3c0b9a85d9c00b030e691b5f5fc6d2d5d02c2d",
+  "after": "0000000000000000000000000000000000000000",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T15:42:01Z",
+  "activity_type": "branch_deletion"
+ },
+ {
+  "before": "2063c8564cd96754caa8df2f1497d772b9ace8e1",
+  "after": "aa3c0b9a85d9c00b030e691b5f5fc6d2d5d02c2d",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T15:31:33Z",
+  "activity_type": "push"
+ },
+ {
+  "before": "6568e694ae759a2895950d80c4c7022aa9831685",
+  "after": "2063c8564cd96754caa8df2f1497d772b9ace8e1",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T14:40:44Z",
+  "activity_type": "push"
+ },
+ {
+  "before": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "after": "6568e694ae759a2895950d80c4c7022aa9831685",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T14:31:20Z",
+  "activity_type": "push"
+ },
+ {
+  "before": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "after": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T14:26:37Z",
+  "activity_type": "push"
+ },
+ {
+  "before": "913533a159157772a88fdf5f46abad73bd981f82",
+  "after": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T14:22:07Z",
+  "activity_type": "push"
+ },
+ {
+  "before": "bb8e953257282b76eecabec0839186454cda741d",
+  "after": "913533a159157772a88fdf5f46abad73bd981f82",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T14:18:08Z",
+  "activity_type": "push"
+ },
+ {
+  "before": "0000000000000000000000000000000000000000",
+  "after": "bb8e953257282b76eecabec0839186454cda741d",
+  "ref": "refs/heads/docs/arsenal-concern-index",
+  "timestamp": "2026-10-10T14:13:36Z",
+  "activity_type": "branch_creation"
+ }
+]

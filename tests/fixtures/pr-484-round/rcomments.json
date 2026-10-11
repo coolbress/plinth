@@ -1,0 +1,302 @@
+[
+ {
+  "id": 4237900433,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "bb8e953257282b76eecabec0839186454cda741d",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 168,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Distinguish non-plugin mechanisms from selected tools**"
+ },
+ {
+  "id": 4237900437,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "bb8e953257282b76eecabec0839186454cda741d",
+  "path": "CHANGELOG.md",
+  "line": null,
+  "original_line": 54,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Remove the shipped index from the future-direction list**"
+ },
+ {
+  "id": 4237907252,
+  "in_reply_to_id": 4237900433,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "bb8e953257282b76eecabec0839186454cda741d",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 168,
+  "body": "Fixed in 913533a (see the description's review section)."
+ },
+ {
+  "id": 4237907318,
+  "in_reply_to_id": 4237900437,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "bb8e953257282b76eecabec0839186454cda741d",
+  "path": "CHANGELOG.md",
+  "line": null,
+  "original_line": 54,
+  "body": "Fixed in 913533a (see the description's review section)."
+ },
+ {
+  "id": 4237913819,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "913533a159157772a88fdf5f46abad73bd981f82",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Narrow the blanket cost criterion**"
+ },
+ {
+  "id": 4237918383,
+  "in_reply_to_id": 4237913819,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "913533a159157772a88fdf5f46abad73bd981f82",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "Fixed in c97fda7: named as a criterion-2 exception (cost measured only in part)."
+ },
+ {
+  "id": 4237926476,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 124,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Describe commit-triggered skills as advisory**"
+ },
+ {
+  "id": 4237926483,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Include ponytail in the partial-cost exception**"
+ },
+ {
+  "id": 4237931243,
+  "in_reply_to_id": 4237913819,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "913533a159157772a88fdf5f46abad73bd981f82",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "Fixed in d2c65fe; see the description's round-3 lines."
+ },
+ {
+  "id": 4237931295,
+  "in_reply_to_id": 4237926476,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 124,
+  "body": "Fixed in d2c65fe; see the description's round-3 lines."
+ },
+ {
+  "id": 4237931344,
+  "in_reply_to_id": 4237926483,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "Fixed in d2c65fe; see the description's round-3 lines."
+ },
+ {
+  "id": 4237941890,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 86,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Stop saying the commit instruction runs the skills**"
+ },
+ {
+  "id": 4237941896,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 169,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Add criterion-1 coverage for every listed plugin**"
+ },
+ {
+  "id": 4237941900,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 84,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Define \u201cperson\u201d as an invoker rather than a skill type**"
+ },
+ {
+  "id": 4237946581,
+  "in_reply_to_id": 4237913819,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "913533a159157772a88fdf5f46abad73bd981f82",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "Round 4: handled in 6568e69. See the description's round-4 lines: the two repeats were already fixed in d2c65fe; the legend and 'person' are fixed; the blanket "
+ },
+ {
+  "id": 4237946646,
+  "in_reply_to_id": 4237926483,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "Round 4: handled in 6568e69. See the description's round-4 lines: the two repeats were already fixed in d2c65fe; the legend and 'person' are fixed; the blanket "
+ },
+ {
+  "id": 4237946711,
+  "in_reply_to_id": 4237941890,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 86,
+  "body": "Round 4: handled in 6568e69. See the description's round-4 lines: the two repeats were already fixed in d2c65fe; the legend and 'person' are fixed; the blanket "
+ },
+ {
+  "id": 4237946774,
+  "in_reply_to_id": 4237941896,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 169,
+  "body": "Round 4: handled in 6568e69. See the description's round-4 lines: the two repeats were already fixed in d2c65fe; the legend and 'person' are fixed; the blanket "
+ },
+ {
+  "id": 4237946854,
+  "in_reply_to_id": 4237941900,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "d2c65fed29fa9e31e7ac138a621c8dc2d546b84f",
+  "path": "skills/arsenal/SKILL.md",
+  "line": null,
+  "original_line": 84,
+  "body": "Round 4: handled in 6568e69. See the description's round-4 lines: the two repeats were already fixed in d2c65fe; the legend and 'person' are fixed; the blanket "
+ },
+ {
+  "id": 4237953547,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "6568e694ae759a2895950d80c4c7022aa9831685",
+  "path": "CHANGELOG.md",
+  "line": null,
+  "original_line": 55,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Stop claiming every selection exception is named**"
+ },
+ {
+  "id": 4237976477,
+  "in_reply_to_id": 4237913819,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "913533a159157772a88fdf5f46abad73bd981f82",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "Round 5: see the description. The CHANGELOG wording is fixed in 2063c85; the cost threads re-post findings already fixed in d2c65fe."
+ },
+ {
+  "id": 4237976539,
+  "in_reply_to_id": 4237926483,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "c97fda73777c81185a4de0a93d9b93b045d1dff1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 186,
+  "original_line": 182,
+  "body": "Round 5: see the description. The CHANGELOG wording is fixed in 2063c85; the cost threads re-post findings already fixed in d2c65fe."
+ },
+ {
+  "id": 4237976593,
+  "in_reply_to_id": 4237953547,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "6568e694ae759a2895950d80c4c7022aa9831685",
+  "path": "CHANGELOG.md",
+  "line": null,
+  "original_line": 55,
+  "body": "Round 5: see the description. The CHANGELOG wording is fixed in 2063c85; the cost threads re-post findings already fixed in d2c65fe."
+ },
+ {
+  "id": 4237983340,
+  "in_reply_to_id": null,
+  "user": {
+   "login": "chatgpt-codex-connector[bot]"
+  },
+  "original_commit_id": "2063c8564cd96754caa8df2f1497d772b9ace8e1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 161,
+  "original_line": 161,
+  "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Correct the 33-row schema claim**"
+ },
+ {
+  "id": 4238070842,
+  "in_reply_to_id": 4237983340,
+  "user": {
+   "login": "coolbress"
+  },
+  "original_commit_id": "2063c8564cd96754caa8df2f1497d772b9ace8e1",
+  "path": "skills/arsenal/SKILL.md",
+  "line": 161,
+  "original_line": 161,
+  "body": "Corrected in the description (30 tool rows with the full columns, plus three 'Missing' rows in a two-column table); no code change."
+ }
+]
