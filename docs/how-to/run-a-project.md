@@ -268,15 +268,17 @@ there; the agent then opens the pull request, following the repository's
 rules.
 
 Before a commit that changes code, not only documents or tests, Claude Code
-tells the agent to run two skills the repository carries: `simplify` cleans the
-change up without changing what it does, and `verify` runs the checks. The
+tells the agent to run the `verify` skill the repository carries: it first
+cleans the change up without changing what it does, then runs the checks. The
 cleanup never removes input validation, error handling that prevents a loss, a
 security measure or anything the ticket asked for, and on a commit that answers
-a review finding it touches only that fix's lines. The agent is asked, not
-forced, and some models hardly ever run them. In trials the agent still ran
-the lint, type and test commands from `AGENTS.md` before every commit; what
-the skipped skills left out was the package build. The checks in step 5 are
-what decide (#474).
+a review finding it touches only that fix's lines. The repository also refuses
+shell file writes, so the agent writes code with its edit tools; in trials,
+that and a single skill together, and neither alone, raised how often one
+model ran it (#496). The agent is still asked, not forced. In trials it ran the lint, type
+and test commands from `AGENTS.md` before every commit even when it skipped the
+skill; what a skipped skill left out was the package build. The checks in step
+5 are what decide (#474).
 
 When the ticket is a page a person will look at, name `taste-skill` in the
 ticket or the prompt, or type `/design-taste-frontend`: on a repository

@@ -13,6 +13,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.12.0. A new repository
+  carries one pre-commit skill, `verify`, which cleans the change up and then
+  runs the checks, and its `.claude/settings.json` refuses shell file writes
+  (`Bash(cat)`, `Bash(tee:*)`, `Bash(sed -i:*)`), so the agent writes code with
+  its edit tools; `AGENTS.md` tells it to do so after a refusal. In #496's
+  trials, five runs per case, Claude Sonnet 5.5 ran the skill before 4 of 5
+  commits with both changes and 0 or 1 of 5 otherwise; Claude Opus 5.5 ran it
+  before 5 of 5 in every case. How to run a project's step 4 and
+  `/plinth:arsenal`'s rows say one skill. `/plinth:floor-check` reports v1.11.0
+  as one tag behind (#498).
 - How to run a project's step 4 says the pre-commit skills are only asked
   for and some models hardly ever run them, that the lint, type and test
   commands from `AGENTS.md` ran before every commit in trials anyway, and
