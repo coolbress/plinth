@@ -272,8 +272,9 @@ if mode == "--cause":
     print("  - the known cause: the reviewer reported its usage limit on this pull request after this head was pushed")
     print(f"    ({who} at {when}Z): {first}")
     print("    Next: raise or reset the limit in Codex's settings, then re-run this job; nothing re-runs by")
-    print("    itself when the limit is lifted. Re-running needs a token with Actions: write, and with")
-    print("    summons-token the re-run posts its summons again.")
+    print("    itself when the limit is lifted. Re-running needs a token with Actions: write. With")
+    print("    summons-token the re-run may post its summons, but never a third for this commit:")
+    print("    after two, comment the ask yourself (below) before re-running.")
     sys.exit(0)
 
 def looked(how, excerpt=None):

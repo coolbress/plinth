@@ -514,7 +514,8 @@ AFTER_PUSH="$(limit "$BOT" 2026-09-18T07:21:03Z)"   # $PUSHED has this head at $
 cause "the captured notice from an accepted login after the push: named" "$AFTER_PUSH" "$PUSHED" 0 \
   "the reviewer reported its usage limit on this pull request"
 for want in "$BOT at 2026-09-18T07:21:03Z" "You have reached your Codex usage limits for code reviews. You can see your limits" \
-            "raise or reset the limit in Codex's settings" "re-run this job" "Actions: write"; do
+            "raise or reset the limit in Codex's settings" "re-run this job" "Actions: write" \
+            "never a third for this commit" "comment the ask yourself"; do
   grep -qF "$want" "$tmp/log" || { echo "  FAIL  the known-cause lines lack '$want'" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
 done
 grep -qF "To continue using code reviews" "$tmp/log" \
