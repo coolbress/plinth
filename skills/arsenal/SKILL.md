@@ -84,9 +84,9 @@ Use, Health, Proof, Flow, Safety, Memory, Stewardship), then the problem. Who
 invokes it: **person** (the person types it or does it; a user-only skill is
 invisible to the agent), **agent** (picked from its description), **commit**
 (Claude Code's commit instruction asks the agent to run a project skill named
-`verify` or `simplify`; the agent may skip it), **text** (the generated
+`verify`; the agent may skip it), **text** (the generated
 repository's own text, no skill). Evidence is what the recorded runs
-show (U1, U2, RC1, RC2, #302, #403, #458, #467, #469; #475 has the sources):
+show (U1, U2, RC1, RC2, #302, #403, #458, #467, #469, #474, #496; #475 has the sources):
 "0" means none of those runs called it, not that it does not help. The runs
 were small, short and one person's; in every one the generated repository
 text, not a typed skill, carried steps 2, 4, 7 and 8.
@@ -121,8 +121,8 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | Flow | Context degraded by a long session | `/clear`, one ticket per session (built in) | person | `/clear` between tickets | not recorded |
 | Proof | Code with no test that pins it | `/implement` (calls `tdd`, `code-review`) | person; `tdd` agent | Type `/implement #N` | 0 and 0; tests first via text (U2, RC1, #302 27 of 27) |
 | Proof | A plausible change that misses a case | `code-review` | agent | Ask for a review of the change | 1 (U1, after the person asked) |
-| Health | Scaffolding or reshuffling the change did not need | The template's `simplify` | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | Sonnet 5.5 1 of 18, Opus 5.5 6 of 6 (#467); #474 open |
-| Proof | A commit over a red or wrong check | The template's `verify` | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | 5 of 6 (#458); on Sonnet 5.5 1 of 5 and 2 of 16, Opus 5.5 6 of 6 (#467); #474, #476 open |
+| Health | Scaffolding or reshuffling the change did not need | The template's `verify`, its cleanup step | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | Sonnet 5.5 4 of 5 with one skill and shell writes refused, 0 of 5 before; Opus 5.5 5 of 5 (#496) |
+| Proof | A commit over a red or wrong check | The template's `verify` | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | 5 of 6 (#458); on Sonnet 5.5 0 of 10 beside `simplify` (#474), 4 of 5 as one skill with shell writes refused (#496); Opus 5.5 5 of 5 (#496) |
 | Use | A page that looks templated | `design-taste-frontend` | person names it | Say so in the ticket, or type `/design-taste-frontend` | 1 named (U2); 0 unnamed on a rendered repository (#469) |
 | Flow | A merge or rebase conflict | `resolving-merge-conflicts` | agent | Say "resolve the conflict" | 0; none arose |
 
@@ -172,7 +172,7 @@ known gaps, not a certificate that every other tool was checked against every
 criterion; `last30days` and Impeccable, for instance, are listed for rows
 `research` and `design-taste-frontend` also answer. The other rows name
 what plinth does not select: Claude Code's built-ins (`/clear`, `/run`), the
-generated repository's text and its `verify` and `simplify` skills (shipped by
+generated repository's text and its `verify` skill (shipped by
 plinth-template at a release tag), the required checks, `third-party / review`
 and Dependabot. They are the wall or the platform, and the criteria do not
 apply to them.
