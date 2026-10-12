@@ -273,9 +273,10 @@ cleans the change up without changing what it does, then runs the checks. The
 cleanup never removes input validation, error handling that prevents a loss, a
 security measure or anything the ticket asked for, and on a commit that answers
 a review finding it touches only that fix's lines. The repository also refuses
-shell file writes, so the agent writes code with its edit tools; in trials,
-that and a single skill together, and neither alone, raised how often one
-model ran it (#496). The agent is still asked, not forced. In trials it ran the lint, type
+the shell writes agents use most, a `cat` heredoc, `tee` and `sed -i` (not
+`echo` or `printf` into a file), so the agent writes code with its edit tools;
+in trials, that and a single skill together, and neither alone, raised how
+often one model ran it (#496). The agent is still asked, not forced. In trials it ran the lint, type
 and test commands from `AGENTS.md` before every commit even when it skipped the
 skill; what a skipped skill left out was the package build. The checks in step
 5 are what decide (#474).

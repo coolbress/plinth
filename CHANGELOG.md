@@ -15,9 +15,10 @@ pull requests and have no tag.
 
 - `/plinth:new-project` renders plinth-template v1.12.0. A new repository
   carries one pre-commit skill, `verify`, which cleans the change up and then
-  runs the checks, and its `.claude/settings.json` refuses shell file writes
-  (`Bash(cat)`, `Bash(tee:*)`, `Bash(sed -i:*)`), so the agent writes code with
-  its edit tools; `AGENTS.md` tells it to do so after a refusal. In #496's
+  runs the checks, and its `.claude/settings.json` refuses a `cat` heredoc,
+  `tee` and `sed -i` (`Bash(cat)`, `Bash(tee:*)`, `Bash(sed -i:*)`; `echo` or
+  `printf` into a file still runs), so the agent writes code with its edit
+  tools; `AGENTS.md` tells it to do so after a refusal. In #496's
   trials, five runs per case, Claude Sonnet 5.5 ran the skill before 4 of 5
   commits with both changes and 0 or 1 of 5 otherwise; Claude Opus 5.5 ran it
   before 5 of 5 in every case. How to run a project's step 4 and
