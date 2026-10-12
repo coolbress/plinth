@@ -546,17 +546,30 @@ prev=""; for a in "$@"; do
     if [ -f "${FAKE_XML:-}" ]; then cp "$FAKE_XML" "$a"; else echo "No data to report."; exit 1; fi
   fi; prev="$a"; done
 [ "$1" = pip ] && exit "${FAKE_PIP_RC:-0}"
+case "$*" in *"import coverage"*) exit "${FAKE_HAS_COV:-1}" ;; esac
 exit 0
 SH
-chmod +x "$tmp/cbin/uv"
+# The fake git: the repository root the recordings were made under, and
+# FAKE_CHANGED as the changed Python files.
+cat > "$tmp/cbin/git" <<'SH'
+#!/usr/bin/env bash
+case "$1" in
+  rev-parse) echo /home/runner/work/p/p ;;
+  diff) printf 'git %s\n' "$*" >> "$FAKE_ARGS"; [ "${FAKE_GIT_RC:-0}" = 0 ] || exit "$FAKE_GIT_RC"; printf '%b' "${FAKE_CHANGED:-}" ;;
+esac
+SH
+chmod +x "$tmp/cbin/uv" "$tmp/cbin/git"
 # judge <xml or -> <json or -> <env assignments...> -- runs the judging step, then the Verdict
+# The changed Python files a recording's diff-cover report names (its git
+# diff), as FAKE_CHANGED; a case that changed more passes its own.
+changed_in() { [ "$1" = - ] || python3 -c 'import json, sys; print("\\n".join(json.load(open(sys.argv[1]))["src_stats"]), end="")' "$fx/$1"; }
 judge() {
   local x="$1" j="$2"; shift 2
   rm -rf "$tmp/rt/changed.verdict" "$tmp/rt/diff-cover" "$tmp/args"*
   job_step test "Changed lines under the tests" > "$tmp/j.sh" || { bad "test / Changed lines under the tests: step not found"; return; }
   jout="$(cd "$tmp" && env PATH="$tmp/cbin:$PATH" RUNNER_TEMP="$tmp/rt" FAKE_ARGS="$tmp/args" \
     FAKE_XML="$([ "$x" = - ] || echo "$fx/$x")" FAKE_JSON="$([ "$j" = - ] || echo "$fx/$j")" \
-    PR=7 COV=success PYTEST=success "$@" bash -e "$tmp/j.sh" 2>&1)"; jrc=$?
+    FAKE_CHANGED="$(changed_in "$j")" PR=7 COV=success PYTEST=success "$@" bash -e "$tmp/j.sh" 2>&1)"; jrc=$?
   verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
 }
 # line <label> <expected changed-lines summary line, a regex> <n warnings>
@@ -604,6 +617,18 @@ judge nothing.xml nothing.json
 line "nothing collected in the project: not yet confirmed, not a fail" '^- not yet confirmed: changed lines ran under the tests, coverage recorded no line in the whole project, .*pytest-cov' 1
 judge - -
 line "coverage xml has no data: not yet confirmed, coverage recorded no line" '^- not yet confirmed: changed lines ran under the tests, coverage recorded no line in the whole project' 1
+# A changed Python file coverage's report does not have: named, not passed.
+judge noexec.xml noexec.json FAKE_CHANGED='sub/src/canary/__init__.py\nsub/src/canary/generated.py\nsub/tests/test_gen.py'
+line "a changed file the project's coverage configuration omits: not yet confirmed, named" "^- not yet confirmed: changed lines ran under the tests, 1 changed Python files are not in coverage's report \\(outside the measured source, or omitted by the project's coverage configuration\\): sub/src/canary/generated\\.py; a run that measures them confirms it$" 1
+if grep -q 'does not apply (no changed executable line)' <<<"$sum"; then bad "an unmeasured file still gets the does-not-apply pass" "$sum"; else ok "an unmeasured file: no does-not-apply pass"; fi
+grep -q "^git diff --name-only --diff-filter=d HEAD^1 HEAD -- \*\.py$" "$tmp/args" && ok "the changed Python files are git's, against HEAD^1, deletions left out" || bad "git's arguments" "$(cat "$tmp/args")"
+judge all.xml all.json FAKE_CHANGED='sub/src/canary/__init__.py\nsub/scripts/tool.py'
+line "all measured lines ran, a file outside the source changed: the pass, then the file named" '^- not yet confirmed: changed lines ran under the tests, 1 changed Python files are not in .*: sub/scripts/tool\.py;' 1
+grep -qx -- '- pass: changed lines ran under the tests, all 4 changed lines ran' <<<"$sum" && ok "the pass line is still there" || bad "the pass line is gone" "$sum"
+judge some.xml some.json FAKE_CHANGED='sub/src/canary/__init__.py\nsub/scripts/tool.py'
+grep -q '^- not yet confirmed: 3 of 4 changed lines did not run' <<<"$sum" && warned "some ran and a file outside the source: two lines, each a warning" 2 || bad "some ran and a file outside the source" "$sum"
+judge noexec.xml noexec.json FAKE_GIT_RC=1
+line "git did not list the changed files: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, git did not list the changed files' 1
 judge none.xml none.json PR=""
 line "not a pull request: pass, does not apply" '^- pass: changed lines ran under the tests, does not apply \(not a pull request\)$' 0
 [ ! -s "$tmp/args" ] && ok "not a pull request: no tool runs" || bad "not a pull request: a tool ran" "$(cat "$tmp/args")"
@@ -650,6 +675,9 @@ reqcheck "$tmp/args.coverage-requirements.txt" "coverage: one version, every fil
   && bad "a refused coverage install: the step passed" || ok "a refused coverage install fails its step (continue-on-error keeps the job)"
 blk="$(sed -n '/- name: Install coverage/,/run: |/p' "$wf")"
 grep -q 'continue-on-error: true' <<<"$blk" && ok "the install step: continue-on-error" || bad "the install step's keys" "$blk"
+rm -f "$tmp/args"*; (cd "$tmp/srcl" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" RUNNER_TEMP="$tmp/rt" FAKE_HAS_COV=0 bash -e "$tmp/c.sh" >/dev/null 2>&1); crc=$?
+if [ "$crc" = 0 ] && ! grep -q '^uv pip install' "$tmp/args"; then ok "coverage the lock already carries: used as locked, nothing installed over it"
+else bad "a locked coverage was installed over (exit $crc)" "$(cat "$tmp/args")"; fi
 
 # The pytest step: under coverage when it installed, `--source=src` with a
 # src/ directory and `.` without; plain `uv run pytest` otherwise.

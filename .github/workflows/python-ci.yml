@@ -271,9 +271,11 @@ jobs:
       # step. The release #406 measured, each file pinned by its hash:
       # `uv run --with` and `uvx` install a file whose hash does not match,
       # `uv pip install --require-hashes` refuses it. The wheels are CPython
-      # 3.10 to 3.14 on Linux x86_64 and the pure-Python one. A failed
-      # install never fails the job: pytest then runs without coverage and
-      # the changed lines are not yet confirmed.
+      # 3.10 to 3.14 on Linux x86_64 and the pure-Python one. A coverage the
+      # lock already carries (pytest-cov's, say) is used as locked: installing
+      # over it would run the tests against an environment uv.lock does not
+      # describe. A failed install never fails the job: pytest then runs
+      # without coverage and the changed lines are not yet confirmed.
       - name: Install coverage
         id: cov
         continue-on-error: true
@@ -289,7 +291,11 @@ jobs:
               --hash=sha256:bb45474711ba385c46a0bfe696c695a929ae69ac636cda8f532be9e8c93d720a \
               --hash=sha256:f7941f6f2fe6dd6807a1208737b8a0cbcf1cc6d7b07d24998ad2d63590868260
           REQ
-          uv pip install --python .venv --require-hashes --no-deps -r "$r"
+          if uv run --no-sync python -c 'import coverage' 2>/dev/null; then
+            echo "coverage is in the locked environment: used as locked, nothing installed"
+          else
+            uv pip install --python .venv --require-hashes --no-deps -r "$r"
+          fi
           uv run --no-sync coverage --version
       # Under coverage when it installed; the exit code is pytest's either way.
       - id: pytest
@@ -302,8 +308,11 @@ jobs:
 
       # Which of the lines a pull request changes ran under the tests (#503).
       # Reported, never failing (#503's Decisions, 2026-10-12): the verdict
-      # line goes to a file the Verdict step writes, and a step that breaks
+      # lines go to a file the Verdict step writes, and a step that breaks
       # leaves no file, which the Verdict step reports as not yet confirmed.
+      # A changed Python file coverage's report does not have (outside the
+      # measured source, or omitted by the project's configuration) has no
+      # lines in diff-cover's report either: it is named, not passed.
       # Test files are left out by diff-size's TEST pattern. A line only a
       # live service or the entry point runs carries `# pragma: no cover`
       # with its reason, which diff-size lists.
@@ -344,20 +353,25 @@ jobs:
           if [ -s "$xml" ] && uv venv -q --python 3.12 "$d" && uv pip install -q --python "$d" --require-hashes -r "$r"; then
             "$d/bin/diff-cover" "$xml" --compare-branch=HEAD^1 --format "json:$json" || true
           fi
-          python3 - "$xml" "$json" "$out" <<'PY'
-          import json, re, sys
+          changed="$RUNNER_TEMP/changed-python.txt"; top="$(git rev-parse --show-toplevel || true)"
+          git diff --name-only --diff-filter=d HEAD^1 HEAD -- '*.py' > "$changed" || rm -f "$changed"
+          python3 - "$xml" "$json" "$out" "$changed" "$top" <<'PY'
+          import json, os, re, sys
           import xml.etree.ElementTree as ET
-          xml, report, out = sys.argv[1:4]
+          xml, report, out, changed, top = sys.argv[1:6]
           STD = "changed lines ran under the tests"
           TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")   # diff-size's
           CONFIRMS = "a test that runs them, or `# pragma: no cover` with its reason, confirms it"
-          def say(s):
+          def say(*lines):
               with open(out, "w", encoding="utf-8") as f:
-                  f.write(s + "\n")
+                  f.writelines(s + "\n" for s in lines)
+          def clean(p):
+              return re.sub(r"[\x00-\x1f\x7f]", "?", p)
           try:
-              covered = int(ET.parse(xml).getroot().get("lines-covered", "0"))
+              root = ET.parse(xml).getroot()
+              covered = int(root.get("lines-covered", "0"))
           except (OSError, ET.ParseError, ValueError):
-              covered = 0   # `coverage xml` writes nothing when it has no data
+              root, covered = None, 0   # `coverage xml` writes nothing when it has no data
           if covered == 0:
               say(f"not yet confirmed: {STD}, coverage recorded no line in the whole project, "
                   "usually because another tool owns the tracer (pytest-cov's --cov in the "
@@ -370,6 +384,27 @@ jobs:
               say(f"not yet confirmed: {STD}, diff-cover did not finish (its error is in this "
                   "step's log); a run where it does confirms it")
               sys.exit(0)
+          try:
+              with open(changed, encoding="utf-8") as f:
+                  files = [l for l in f.read().splitlines() if l and not TEST.search(l)]
+          except OSError:
+              say(f"not yet confirmed: {STD}, git did not list the changed files (its error is in "
+                  "this step's log); a run where it does confirms it")
+              sys.exit(0)
+          # The files coverage's report has, as paths from the repository root,
+          # and every file diff-cover matched in it.
+          measured = {os.path.relpath(os.path.normpath(os.path.join(s.text or "", c.get("filename", ""))), top)
+                      for s in root.iter("source") for c in root.iter("class")} | set(stats)
+          unmeasured = [clean(f) for f in files if f not in measured]
+          for f in unmeasured:
+              print(f"not in coverage's report: {f}")
+          extra = []
+          if unmeasured:
+              listed = ", ".join(unmeasured[:9]) + (f", and {len(unmeasured) - 9} more in this step's log"
+                                                    if len(unmeasured) > 9 else "")
+              extra = [f"not yet confirmed: {STD}, {len(unmeasured)} changed Python files are not in "
+                       "coverage's report (outside the measured source, or omitted by the project's "
+                       f"coverage configuration): {listed}; a run that measures them confirms it"]
           def ranges(ns):
               ns, rs = sorted(set(ns)), []
               for n in ns:
@@ -380,7 +415,7 @@ jobs:
               return ",".join(str(a) if a == b else f"{a}-{b}" for a, b in rs)
           stats = {p: s for p, s in stats.items() if not TEST.search(p)}
           total = sum(len(set(s["covered_lines"]) | set(s["violation_lines"])) for s in stats.values())
-          missed = [(re.sub(r"[\x00-\x1f\x7f]", "?", p), s["violation_lines"])
+          missed = [(clean(p), s["violation_lines"])
                     for p, s in sorted(stats.items()) if s["violation_lines"]]
           n = sum(len(set(v)) for _, v in missed)
           for p, v in missed:   # every file, past the nine the verdict line names
@@ -389,13 +424,13 @@ jobs:
           if len(missed) > 9:
               shown += f", and {len(missed) - 9} more files in this step's log"
           if total == 0:
-              say(f"pass: {STD}, does not apply (no changed executable line)")
+              say(*(extra or [f"pass: {STD}, does not apply (no changed executable line)"]))
           elif n == 0:
-              say(f"pass: {STD}, all {total} changed lines ran")
+              say(f"pass: {STD}, all {total} changed lines ran", *extra)
           elif n == total:
-              say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}; {CONFIRMS}")
+              say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}; {CONFIRMS}", *extra)
           else:
-              say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}; {CONFIRMS}")
+              say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}; {CONFIRMS}", *extra)
           PY
 
       # Exercise the declared range for real. Empty input: this step does
@@ -427,7 +462,7 @@ jobs:
           v "$PYTEST" "pytest on .python-version"
           if [ -n "$VERSIONS" ]; then v "$EXTRA" "pytest on $VERSIONS"
           else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
-          if [ -s "$RUNNER_TEMP/changed.verdict" ] && IFS= read -r l < "$RUNNER_TEMP/changed.verdict" && [ -n "$l" ]; then say "$l"
+          if [ -s "$RUNNER_TEMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$RUNNER_TEMP/changed.verdict"
           else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
 
   # Secret detection. Not a duplicate of push protection: push protection
