@@ -593,7 +593,9 @@ reqcheck() { # <label> <requirements file> <package==version...>
   python3 - "$f" "$@" <<'PY' && ok "$l" || bad "$l" "$(cat "$f" 2>&1)"
 import re, sys
 text = open(sys.argv[1]).read().replace("\\\n", " ")
-entries = [l.split() for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+# A requirement, then an optional `; <marker>`, then its hashes.
+entries = [[l.split()[0]] + [w for w in l.split() if w.startswith("--")]
+           for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]
 names = sorted(e[0] for e in entries)
 ok = names == sorted(sys.argv[2:]) and all(
     len(e) > 1 and all(re.fullmatch(r"--hash=sha256:[0-9a-f]{64}", h) for h in e[1:]) for e in entries)
@@ -670,7 +672,9 @@ job_step test "Install coverage" > "$tmp/c.sh" || bad "test / Install coverage: 
 rm -f "$tmp/args"*; (cd "$tmp/srcl" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" RUNNER_TEMP="$tmp/rt" bash -e "$tmp/c.sh" >/dev/null 2>&1)
 grep -qx "uv pip install --python .venv --require-hashes --no-deps -r $tmp/rt/coverage-requirements.txt" "$tmp/args" \
   && ok "coverage installs into the synced environment with --require-hashes" || bad "coverage's install" "$(cat "$tmp/args")"
-reqcheck "$tmp/args.coverage-requirements.txt" "coverage: one version, every file by its sha256" coverage==7.10.7
+reqcheck "$tmp/args.coverage-requirements.txt" "coverage and tomli: one version, every file by its sha256" coverage==7.10.7 tomli==2.2.1
+grep -qx 'tomli==2.2.1 ; python_version < "3.11" \\' "$tmp/args.coverage-requirements.txt" \
+  && ok "tomli, coverage's toml extra, only before Python 3.11 (pyproject.toml settings)" || bad "tomli's marker" "$(cat "$tmp/args.coverage-requirements.txt")"
 (cd "$tmp/srcl" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" RUNNER_TEMP="$tmp/rt" FAKE_PIP_RC=1 bash -e "$tmp/c.sh" >/dev/null 2>&1) \
   && bad "a refused coverage install: the step passed" || ok "a refused coverage install fails its step (continue-on-error keeps the job)"
 blk="$(sed -n '/- name: Install coverage/,/run: |/p' "$wf")"
