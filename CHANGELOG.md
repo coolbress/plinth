@@ -13,6 +13,18 @@ pull requests and have no tag.
 
 ### Changed
 
+- `ci / test` runs pytest under coverage on `.python-version` and, on a
+  pull request, reports in its job summary the changed lines no test runs,
+  test files left out: `not yet confirmed: none of the N changed lines ran`,
+  or `N of M changed lines did not run`, each with the files and lines. It
+  never fails the check: no outcome of the judgement turns `ci / test` red
+  in this release, and a later release may make the "none ran" case fail.
+  Coverage 7.10.7 and diff-cover 9.7.1 come from the workflow; nothing is
+  added to `uv.lock`. A line that only runs against a live service or as
+  the process entry point is exempted now with `# pragma: no cover` and its
+  reason, which `ci / diff-size` lists. A project whose `addopts` carries
+  pytest-cov's `--cov` gets `not yet confirmed`: coverage records no line
+  under it (#503).
 - When `third-party / review` fails after its wait and an accepted reviewer
   posted Codex's usage-limit notice (`You have reached your Codex usage
   limits`) after the head's push and before any newer push, the red log

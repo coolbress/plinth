@@ -242,10 +242,21 @@ jobs:
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
+    # Coverage comes from the workflow, not the project (#406, #503): `--with`
+    # overlays it and leaves uv.lock untouched, and pytest-cov in the
+    # template's addopts would break the extra-versions step. Pinned to the
+    # releases #406 measured, as zizmor is pinned in lint.
+    env:
+      COVERAGE_PIN: "coverage[toml]==7.10.7"
+      DIFF_COVER_PIN: "diff-cover@9.7.1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+          # On a pull request the checkout is GitHub's merge commit; its
+          # first parent, HEAD^1, is the base the changed lines are judged
+          # against.
+          fetch-depth: 2
       - name: Install uv (official release, SHA256 verified)
         env:
           UV_VERSION: "0.12.9"
@@ -261,8 +272,99 @@ jobs:
           echo "$d" >> "$GITHUB_PATH"
       - id: sync
         run: uv sync --locked
+      # A failed install never fails the job: pytest then runs without
+      # coverage and the changed lines are not yet confirmed.
+      - name: Install coverage
+        id: cov
+        continue-on-error: true
+        run: uv run --locked --with "$COVERAGE_PIN" coverage --version
+      # Under coverage when it installed; the exit code is pytest's either way.
       - id: pytest
-        run: uv run pytest
+        env:
+          COV: ${{ steps.cov.outcome }}
+        run: |
+          if [ "$COV" != success ]; then exec uv run pytest; fi
+          src=.; [ -d src ] && src=src
+          exec uv run --locked --with "$COVERAGE_PIN" coverage run --branch --source="$src" -m pytest
+
+      # Which of the lines a pull request changes ran under the tests (#503).
+      # Reported, never failing (#503's Decisions, 2026-10-12): the verdict
+      # line goes to a file the Verdict step writes, and a step that breaks
+      # leaves no file, which the Verdict step reports as not yet confirmed.
+      # Test files are left out by diff-size's TEST pattern. A line only a
+      # live service or the entry point runs carries `# pragma: no cover`
+      # with its reason, which diff-size lists.
+      - name: Changed lines under the tests
+        id: changed
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          COV: ${{ steps.cov.outcome }}
+          PYTEST: ${{ steps.pytest.outcome }}
+        run: |
+          std="changed lines ran under the tests"
+          out="$RUNNER_TEMP/changed.verdict"; rm -f "$out"
+          if [ -z "$PR" ]; then echo "pass: $std, does not apply (not a pull request)" > "$out"; exit 0; fi
+          if [ "$COV" != success ] || [ "$PYTEST" != success ]; then
+            echo "not yet confirmed: $std, it did not run because an earlier step failed; a run that gets past that step confirms it" > "$out"; exit 0
+          fi
+          xml="$RUNNER_TEMP/coverage.xml"; json="$RUNNER_TEMP/diff-cover.json"; rm -f "$xml" "$json"
+          uv run --locked --with "$COVERAGE_PIN" coverage xml -o "$xml" || true
+          if [ -s "$xml" ]; then uvx "$DIFF_COVER_PIN" "$xml" --compare-branch=HEAD^1 --format "json:$json" || true; fi
+          python3 - "$xml" "$json" "$out" <<'PY'
+          import json, re, sys
+          import xml.etree.ElementTree as ET
+          xml, report, out = sys.argv[1:4]
+          STD = "changed lines ran under the tests"
+          TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")   # diff-size's
+          CONFIRMS = "a test that runs them, or `# pragma: no cover` with its reason, confirms it"
+          def say(s):
+              with open(out, "w", encoding="utf-8") as f:
+                  f.write(s + "\n")
+          try:
+              covered = int(ET.parse(xml).getroot().get("lines-covered", "0"))
+          except (OSError, ET.ParseError, ValueError):
+              covered = 0   # `coverage xml` writes nothing when it has no data
+          if covered == 0:
+              say(f"not yet confirmed: {STD}, coverage recorded no line in the whole project, "
+                  "usually because another tool owns the tracer (pytest-cov's --cov in the "
+                  "project's addopts); a run where coverage records lines confirms it")
+              sys.exit(0)
+          try:
+              with open(report, encoding="utf-8") as f:
+                  stats = json.load(f)["src_stats"]
+          except (OSError, ValueError, KeyError, TypeError):
+              say(f"not yet confirmed: {STD}, diff-cover did not finish (its error is in this "
+                  "step's log); a run where it does confirms it")
+              sys.exit(0)
+          def ranges(ns):
+              ns, rs = sorted(set(ns)), []
+              for n in ns:
+                  if rs and n == rs[-1][1] + 1:
+                      rs[-1][1] = n
+                  else:
+                      rs.append([n, n])
+              return ",".join(str(a) if a == b else f"{a}-{b}" for a, b in rs)
+          stats = {p: s for p, s in stats.items() if not TEST.search(p)}
+          total = sum(len(set(s["covered_lines"]) | set(s["violation_lines"])) for s in stats.values())
+          missed = [(re.sub(r"[\x00-\x1f\x7f]", "?", p), s["violation_lines"])
+                    for p, s in sorted(stats.items()) if s["violation_lines"]]
+          n = sum(len(set(v)) for _, v in missed)
+          for p, v in missed:   # every file, past the nine the verdict line names
+              print(f"did not run under the tests: {p}:{ranges(v)}")
+          shown = ", ".join(f"{p}:{ranges(v)}" for p, v in missed[:9])
+          if len(missed) > 9:
+              shown += f", and {len(missed) - 9} more files in this step's log"
+          if total == 0:
+              say(f"pass: {STD}, does not apply (no changed executable line)")
+          elif n == 0:
+              say(f"pass: {STD}, all {total} changed lines ran")
+          elif n == total:
+              say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}; {CONFIRMS}")
+          else:
+              say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}; {CONFIRMS}")
+          PY
 
       # Exercise the declared range for real. Empty input: this step does
       # nothing. uv downloads the interpreter, so the runner needs no preinstall.
@@ -293,6 +395,8 @@ jobs:
           v "$PYTEST" "pytest on .python-version"
           if [ -n "$VERSIONS" ]; then v "$EXTRA" "pytest on $VERSIONS"
           else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
+          if [ -s "$RUNNER_TEMP/changed.verdict" ] && IFS= read -r l < "$RUNNER_TEMP/changed.verdict" && [ -n "$l" ]; then say "$l"
+          else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
 
   # Secret detection. Not a duplicate of push protection: push protection
   # blocks provider-format tokens only and lets private-key PEMs and generic

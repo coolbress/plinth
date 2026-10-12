@@ -355,14 +355,14 @@ else ok "a newline in a path stays inside its warning"; fi
 # The verdict lines each python-ci job opens its summary with (#437), run
 # from the steps themselves: extracted by job and step name, run as the
 # runner runs a `run:` block (bash -e), with the step's env given here.
-job_step() { # <job> <step name> -- prints the step's run block, dedented
+job_step() { # <job> <step name or id> -- prints the step's run block, dedented
   python3 - "$wf" "$1" "$2" <<'PY'
 import sys
 lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
 job, name = sys.argv[2], sys.argv[3]
 j = next((i for i, l in enumerate(lines) if l == f"  {job}:"), None)
 end = next((i for i in range(j + 1, len(lines)) if lines[i][:3].strip() and lines[i].startswith("  ") and not lines[i].startswith("   ")), len(lines)) if j is not None else 0
-at = next((i for i in range(j or 0, end) if lines[i].strip() == f"- name: {name}"), None)
+at = next((i for i in range(j or 0, end) if lines[i].strip() in (f"- name: {name}", f"- id: {name}")), None)
 if j is None or at is None:
     sys.exit(f"step not found: {job} / {name}")
 i = next(k for k in range(at, end) if lines[k].strip() == "run: |")
@@ -514,10 +514,124 @@ printf '%s\n' '. "$1"' 'say "not yet confirmed: x%"$'"'"'\n'"'"'"::error::y"$'"'
 out="$(GITHUB_STEP_SUMMARY=/dev/null bash -e "$tmp/say-call.sh" "$tmp/say.sh")"
 if [ "$out" = '::warning::not yet confirmed: x%25%0A::error::y%0D' ]; then ok "a not yet confirmed line escapes %, a newline and a carriage return"
 else bad "say does not escape its text" "$out"; fi
+echo "pass: changed lines ran under the tests, does not apply (not a pull request)" > "$tmp/rt/changed.verdict"
 verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
 if grep -qx -- "- pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)" <<<"$sum"; then ok "no extra versions: pass, does not apply, not a skipped step's not yet confirmed"
 else bad "no extra versions" "$sum"; fi
 warned "no extra versions: no warning" 0
+
+# The changed lines a pull request's tests ran (#503). The pytest step and the
+# judging step run against a fake uv and uvx: `coverage xml` copies a recorded
+# coverage.xml, diff-cover a recorded JSON report. The recordings are real runs
+# of coverage 7.10.7 and diff-cover 9.7.1 on the canary against a merge
+# commit's first parent (tests/fixtures/changed-lines/record.sh). Then the
+# Verdict step writes the line. No outcome fails the step or the job yet.
+echo "-- ci / test: changed lines under the tests"
+fx="$root/tests/fixtures/changed-lines"
+mkdir -p "$tmp/cbin"
+cat > "$tmp/cbin/uv" <<'SH'
+#!/usr/bin/env bash
+printf 'uv %s\n' "$*" >> "$FAKE_ARGS"
+prev=""; for a in "$@"; do
+  if [ "$prev" = -o ]; then
+    if [ -f "${FAKE_XML:-}" ]; then cp "$FAKE_XML" "$a"; else echo "No data to report."; exit 1; fi
+  fi; prev="$a"; done
+exit 0
+SH
+cat > "$tmp/cbin/uvx" <<'SH'
+#!/usr/bin/env bash
+printf 'uvx %s\n' "$*" >> "$FAKE_ARGS"
+for a in "$@"; do case "$a" in json:*) [ -f "${FAKE_JSON:-}" ] && cp "$FAKE_JSON" "${a#json:}" ;; esac; done
+exit "${FAKE_DC_RC:-0}"
+SH
+chmod +x "$tmp/cbin/uv" "$tmp/cbin/uvx"
+pins=(COVERAGE_PIN="coverage[toml]==7.10.7" DIFF_COVER_PIN="diff-cover@9.7.1")
+# judge <xml or -> <json or -> <env assignments...> -- runs the judging step, then the Verdict
+judge() {
+  local x="$1" j="$2"; shift 2
+  rm -f "$tmp/rt/changed.verdict" "$tmp/args"
+  job_step test "Changed lines under the tests" > "$tmp/j.sh" || { bad "test / Changed lines under the tests: step not found"; return; }
+  jout="$(cd "$tmp" && env PATH="$tmp/cbin:$PATH" RUNNER_TEMP="$tmp/rt" FAKE_ARGS="$tmp/args" \
+    FAKE_XML="$([ "$x" = - ] || echo "$fx/$x")" FAKE_JSON="$([ "$j" = - ] || echo "$fx/$j")" \
+    PR=7 COV=success PYTEST=success "${pins[@]}" "$@" bash -e "$tmp/j.sh" 2>&1)"; jrc=$?
+  verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
+}
+# line <label> <expected changed-lines summary line, a regex> <n warnings>
+line() {
+  if [ "$jrc" != 0 ]; then bad "$1 (the judging step exited $jrc; it never fails)" "$jout"; return; fi
+  if [ "$rc" != 0 ]; then bad "$1 (the Verdict step exited $rc)" "$out"; return; fi
+  if [ "$(tail -1 <<<"$sum")" != "" ] && grep -qE -- "$2" <<<"$(tail -1 <<<"$sum")"; then warned "$1" "$3"
+  else bad "$1 (last summary line does not match '$2')" "$sum"$'\n'"$jout"; fi
+}
+confirms='; a test that runs them, or `# pragma: no cover` with its reason, confirms it$'
+
+judge none.xml none.json
+line "none ran: not yet confirmed, the lines named, a green step" "^- not yet confirmed: none of the 4 changed lines ran under the tests: sub/src/canary/extra\.py:1-4$confirms" 1
+grep -q -- '--compare-branch=HEAD^1' "$tmp/args" && grep -q '^uvx diff-cover@9.7.1 ' "$tmp/args" \
+  && ok "diff-cover is the pinned release, against HEAD^1" || bad "diff-cover's arguments" "$(cat "$tmp/args")"
+grep -q '^uv run --locked --with coverage\[toml\]==7.10.7 coverage xml -o ' "$tmp/args" \
+  && ok "coverage xml is the pinned release, an overlay on the locked environment" || bad "coverage xml's arguments" "$(cat "$tmp/args")"
+judge flat.xml flat.json
+line "none ran, a test file in the report (flat layout, --source=.): the test file is left out" "^- not yet confirmed: none of the 4 changed lines ran under the tests: sub/canary/extra\.py:1-4$confirms" 1
+judge some.xml some.json
+line "some ran: not yet confirmed, N of M, the file and lines, a green step" "^- not yet confirmed: 3 of 4 changed lines did not run under the tests: sub/src/canary/__init__\.py:9-11$confirms" 1
+judge all.xml all.json
+line "all ran: pass" '^- pass: changed lines ran under the tests, all 4 changed lines ran$' 0
+judge noexec.xml noexec.json
+line "a comment only: pass, does not apply" '^- pass: changed lines ran under the tests, does not apply \(no changed executable line\)$' 0
+judge nothing.xml nothing.json
+line "nothing collected in the project: not yet confirmed, not a fail" '^- not yet confirmed: changed lines ran under the tests, coverage recorded no line in the whole project, .*pytest-cov' 1
+judge - -
+line "coverage xml has no data: not yet confirmed, coverage recorded no line" '^- not yet confirmed: changed lines ran under the tests, coverage recorded no line in the whole project' 1
+judge none.xml none.json PR=""
+line "not a pull request: pass, does not apply" '^- pass: changed lines ran under the tests, does not apply \(not a pull request\)$' 0
+[ ! -s "$tmp/args" ] && ok "not a pull request: no tool runs" || bad "not a pull request: a tool ran" "$(cat "$tmp/args")"
+judge none.xml none.json PYTEST=failure
+line "pytest failed: not yet confirmed, the existing form" '^- not yet confirmed: changed lines ran under the tests, it did not run because an earlier step failed; a run that gets past that step confirms it$' 1
+judge none.xml none.json COV=failure PYTEST=success
+line "coverage did not install: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, it did not run because an earlier step failed' 1
+judge none.xml - FAKE_DC_RC=1
+line "diff-cover failed: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, diff-cover did not finish' 1
+# Eleven files missed: nine named, the rest counted.
+python3 - "$tmp/many.json" <<'PY'
+import json, sys
+s = {f"src/m{i:02}.py": {"covered_lines": [1], "violation_lines": [2, 3, 5]} for i in range(11)}
+json.dump({"src_stats": s}, open(sys.argv[1], "w"))
+PY
+cp "$tmp/many.json" "$fx/.many.json"; judge some.xml .many.json; rm -f "$fx/.many.json"
+line "eleven files: nine named, the rest counted" '^- not yet confirmed: 33 of 44 changed lines did not run under the tests: src/m00\.py:2-3,5, .*src/m08\.py:2-3,5, and 2 more files in this step.s log;' 1
+[ "$(grep -c '^did not run under the tests: src/m[0-9]*\.py:2-3,5$' <<<"$jout")" = 11 ] && ok "eleven files: the step's log lists all eleven" || bad "the log does not list every file" "$jout"
+# A step that broke left no verdict file.
+rm -f "$tmp/rt/changed.verdict"
+verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
+if grep -qE '^- not yet confirmed: changed lines ran under the tests, the judging step did not finish' <<<"$(tail -1 <<<"$sum")" && [ "$rc" = 0 ]; then ok "the judging step left no verdict: not yet confirmed, the Verdict step passes"
+else bad "no verdict file" "$sum"; fi
+# The recordings are of the releases the workflow pins.
+grep -q "coverage\\[toml\\]==7.10.7" "$fx/record.sh" && grep -q 'diff-cover@9.7.1' "$fx/record.sh" \
+  && grep -q 'COVERAGE_PIN: "coverage\[toml\]==7.10.7"' "$wf" && grep -q 'DIFF_COVER_PIN: "diff-cover@9.7.1"' "$wf" \
+  && ok "the fixtures were recorded with the releases the workflow pins" || bad "the pins and the recordings differ: re-record with record.sh"
+# The test files left out are the ones diff-size names: the same pattern.
+pats="$(grep -h 'TEST = re.compile' "$wf" | sed 's/ *#.*$//; s/^ *//' | sort -u | wc -l | tr -d ' ')"
+[ "$pats" = 1 ] && [ "$(grep -c 'TEST = re.compile' "$wf")" = 2 ] && ok "the judging step leaves out diff-size's TEST paths" || bad "the two TEST patterns differ" "$(grep 'TEST = re.compile' "$wf")"
+# The judging step never fails the job, and has no `if:` besides !cancelled().
+blk="$(sed -n '/- name: Changed lines under the tests/,/run: |/p' "$wf")"
+grep -q 'continue-on-error: true' <<<"$blk" && grep -q 'if: \${{ !cancelled() }}' <<<"$blk" && ok "the judging step: continue-on-error, runs after a failed step" || bad "the judging step's keys" "$blk"
+
+# The pytest step: under coverage when it installed, `--source=src` with a
+# src/ directory and `.` without; plain `uv run pytest` otherwise.
+job_step test pytest > "$tmp/p.sh" || bad "test / pytest: step not found"
+pyrun() { rm -f "$tmp/args"; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" "${pins[@]}" COV="$2" bash -e "$tmp/p.sh" >/dev/null 2>&1); prc=$?; }
+mkdir -p "$tmp/flat" "$tmp/srcl/src"
+pyrun "$tmp/srcl" success
+grep -qx 'uv run --locked --with coverage\[toml\]==7.10.7 coverage run --branch --source=src -m pytest' "$tmp/args" && ok "pytest, src layout: under coverage, --source=src" || bad "pytest, src layout" "$(cat "$tmp/args")"
+pyrun "$tmp/flat" success
+grep -qx 'uv run --locked --with coverage\[toml\]==7.10.7 coverage run --branch --source=. -m pytest' "$tmp/args" && ok "pytest, no src/: under coverage, --source=." || bad "pytest, flat" "$(cat "$tmp/args")"
+pyrun "$tmp/flat" failure
+grep -qx 'uv run pytest' "$tmp/args" && ok "coverage did not install: plain uv run pytest" || bad "pytest without coverage" "$(cat "$tmp/args")"
+printf '#!/usr/bin/env bash\nexit 3\n' > "$tmp/cbin/uv3"; cp "$tmp/cbin/uv" "$tmp/cbin/uv.keep"; cp "$tmp/cbin/uv3" "$tmp/cbin/uv"
+pyrun "$tmp/srcl" success; [ "$prc" = 3 ] && ok "under coverage the step's exit code is pytest's" || bad "exit code $prc, not 3"
+pyrun "$tmp/srcl" failure; [ "$prc" = 3 ] && ok "without coverage the step's exit code is pytest's" || bad "exit code $prc, not 3"
+cp "$tmp/cbin/uv.keep" "$tmp/cbin/uv"
 
 echo "-- verdict lines: ci / floor-check"
 mkdir -p "$tmp/rt/plinth"

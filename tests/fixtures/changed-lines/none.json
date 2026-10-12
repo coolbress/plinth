@@ -1,0 +1,1 @@
+{"report_name": "XML", "diff_name": "HEAD^1...HEAD, staged and unstaged changes", "src_stats": {"sub/src/canary/extra.py": {"percent_covered": 0.0, "violation_lines": [1, 2, 3, 4], "covered_lines": [], "violations": [[1, null], [2, null], [3, null], [4, null]]}}, "total_num_lines": 4, "total_num_violations": 4, "total_percent_covered": 0, "num_changed_lines": 9}
