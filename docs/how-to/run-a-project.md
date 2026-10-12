@@ -241,6 +241,18 @@ looks up the facts itself and brings you only the decisions.
 - Push back at least once. Agreeing to every recommended answer is how an
   idea gets built wrong with confidence.
 - Say what is out of scope, and what proves it is done (the rule above).
+- In a project's first interview, also settle three things no ticket repeats:
+  who besides you is affected; the limits of cost and risk, and the outside
+  rules that bind the project (law on data and accessibility, the terms of
+  the services it calls, licences); and how long it must last, who takes it
+  over, and what happens at the end (data deleted or handed over, keys
+  revoked, users told). Have the agent write the answers in the README; a
+  ticket refers to them and adds only its own result and proof. Each was
+  missing from the whole project in two or three of the three recorded
+  project runs, all trial projects (#408). The fifth thing, the agent's
+  reach, is what the
+  [four things by hand](#set-four-things-by-hand-that-no-check-covers) above
+  limit.
 
 It asks you to confirm that you both understand the same thing before it
 acts. The words you agreed on go into `CONTEXT.md`, so later sessions use the

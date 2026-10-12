@@ -134,8 +134,7 @@ it shipped.
 
 - Candidate checks specified and measured before any is adopted: mutation
   testing, changed-line coverage, and ruff's complexity, commented-out code
-  and unused-argument rules (#406); finding which of the five things a
-  project settles once go unrecorded, and asking for those (#408).
+  and unused-argument rules (#406).
 - GitLab, after those (#353).
 
 Shipped from this list since it was written: the record of a project run on
@@ -143,8 +142,12 @@ a token without workflow permission (#403, in
 [run a project](../how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks)),
 a lowered standard made visible (#404: `/plinth:floor-check` warns on a
 lowered `ci` input and `ci / diff-size` lists a test that lost lines or gained
-a skip), the template's `verify` skill (#409), and the
-arsenal's concern index with its selection criteria (#478).
+a skip), the template's `verify` skill (#409), the
+arsenal's concern index with its selection criteria (#478), and
+[step 2 of run a project](../how-to/run-a-project.md#2-shape-the-idea-grill-with-docs)
+asking for the things recorded runs left out: who else is affected, the
+limits and outside rules, and how long the project lasts and how it ends
+(#408).
 
 ## About how the pieces fit
 

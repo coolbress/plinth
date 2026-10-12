@@ -21,6 +21,14 @@ pull requests and have no tag.
   job). Without such a notice the log
   still names the limit as a possible cause. The notice never counts as a
   review, and the check still waits the full window (#449).
+- How to run a project's step 2 asks, in a project's first interview, who
+  else is affected, the limits of cost and risk with the outside rules, and
+  how long the project lasts and how it ends, and has the answers written in
+  the README. Each was missing from the whole project in two or three of the
+  three recorded project runs (U1, U2, RC1), all trial projects. The most
+  the agent can destroy or spend, missing in all three, already has the four
+  things set by hand.
+  Guidance, not a check; its effect is not measured (#408).
 
 ## [1.14.0] - 2026-10-12
 
