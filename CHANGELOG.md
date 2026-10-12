@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-12
+
+A new repository now carries one pre-commit skill instead of two, and refuses a `cat` heredoc, `tee` and `sed -i`, so the agent writes code with its edit tools. In five trials per case, Claude Sonnet 5.5 ran the skill before 4 of 5 commits with both changes and 0 or 1 of 5 with either alone or neither (#496). How to run a project's step 4 says what the skills are asked to do and what a skipped one leaves out, without rates (#474).
+
+tested with plinth-template v1.12.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.12.0. A new repository
@@ -2509,7 +2515,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.13.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/coolbress/plinth/releases/tag/v1.14.0
 [1.13.1]: https://github.com/coolbress/plinth/releases/tag/v1.13.1
 [1.13.0]: https://github.com/coolbress/plinth/releases/tag/v1.13.0
 [1.12.0]: https://github.com/coolbress/plinth/releases/tag/v1.12.0
