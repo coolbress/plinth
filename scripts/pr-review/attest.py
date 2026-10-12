@@ -247,7 +247,11 @@ def limit_notices():
     """Usage-limit notices by an accepted reviewer posted after the newest
     push of this head, oldest first, as (login, created_at, first line). An
     earlier notice may belong to an earlier head or a lifted limit; where
-    the push cannot be read, none is this head's."""
+    the push cannot be read, none is this head's. This head's run lives on
+    after a newer push, so a notice counts only while this head was still
+    the branch's tip: no other commit pushed from this head's push up to the
+    notice's second, and every other push's time read (#501's review)."""
+    others = [str(p.get("timestamp") or "") for p in pushes if p.get("after") != head]
     found = []
     for it in load(icomments_p):
         body = it.get("body") or ""
@@ -255,7 +259,8 @@ def limit_notices():
             continue
         when = str(it.get("created_at") or "")
         when = when[:19] if STAMP.match(when) else ""
-        if pushed and when > pushed:
+        replaced = any(not STAMP.match(t) or pushed <= t[:19] <= when for t in others)
+        if pushed and when > pushed and not replaced:
             found.append(((it.get("user") or {}).get("login"), when, body.strip().splitlines()[0][:200]))
     return sorted(found, key=lambda n: n[1])
 

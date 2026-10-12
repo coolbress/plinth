@@ -528,6 +528,18 @@ cause "the same notice from a login that is not accepted: not named" "$(limit so
 cause "posted before this head's push: not named" "$(limit "$BOT" 2026-09-18T07:10:00Z)" "$PUSHED" 1 "" "usage limit"
 cause "posted in the push's second: not named" "$(limit "$BOT" "$T_PUSH")" "$PUSHED" 1
 cause "the push cannot be read: not named" "$AFTER_PUSH" 'null' 1 "" "usage limit"
+# This head's run lives on after a newer push; a notice posted while another
+# commit was the branch's tip answers that commit, not this one (#501's review).
+cause "another commit pushed after this head, before the notice: not named" "$AFTER_PUSH" \
+  "[$(push "$OLD" 2026-09-18T07:18:00Z "$HEAD"),$(push "$HEAD" "$T_PUSH")]" 1 "" "usage limit"
+cause "another commit pushed in the notice's second: not named" "$AFTER_PUSH" \
+  "[$(push "$OLD" 2026-09-18T07:21:03Z "$HEAD"),$(push "$HEAD" "$T_PUSH")]" 1
+cause "another commit's push without a time: not named" "$AFTER_PUSH" \
+  "[{\"after\":\"$OLD\",\"before\":\"$HEAD\"},$(push "$HEAD" "$T_PUSH")]" 1
+cause "another commit pushed after the notice: still named" "$AFTER_PUSH" \
+  "[$(push "$OLD" 2026-09-18T07:30:00Z "$HEAD"),$(push "$HEAD" "$T_PUSH")]" 0 "usage limit"
+cause "another commit pushed before this head: still named" "$AFTER_PUSH" \
+  "[$(push "$HEAD" "$T_PUSH"),$(push "$OLD" 2026-09-18T07:10:00Z)]" 0 "usage limit"
 cause "the notice has no time: not named" \
   "$(python3 -c 'import json,sys; print(json.dumps([{"user": {"login": sys.argv[1]}, "body": sys.argv[2]}]))' "$BOT" "$LIMIT_BODY")" "$PUSHED" 1
 cause "the words further down a comment: not named" \

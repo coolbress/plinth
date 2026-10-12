@@ -15,9 +15,10 @@ pull requests and have no tag.
 
 - When `third-party / review` fails after its wait and an accepted reviewer
   posted Codex's usage-limit notice (`You have reached your Codex usage
-  limits`) after the head's push, the red log names it as the known cause:
-  the notice's first line, who posted it and when, and the next step (raise or
-  reset the limit, then re-run the failed job). Without such a notice the log
+  limits`) after the head's push and before any newer push, the red log
+  names it as the known cause: the notice's first line, who posted it and
+  when, and the next step (raise or reset the limit, then re-run the failed
+  job). Without such a notice the log
   still names the limit as a possible cause. The notice never counts as a
   review, and the check still waits the full window (#449).
 
