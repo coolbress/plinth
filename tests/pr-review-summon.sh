@@ -229,6 +229,17 @@ if grep -qF "usage limit" "$tmp/out" && grep -qF "possible" "$tmp/out"; then
 else
   echo "  FAIL  the red log does not name a used-up usage limit as a possible cause" >&2; fails=$((fails + 1))
 fi
+# The reviewer said it is out of its limit after the push (#449): the wait runs
+# in full, the check fails, and the red log names the notice as the known cause.
+NOTICE="[{\"user\":{\"login\":\"$BOT\"},\"created_at\":\"2026-09-18T10:20:05Z\",\"body\":\"You have reached your Codex usage limits for code reviews. You can see your limits in the dashboard.\nTo continue using code reviews, add credits.\"}]"
+step "token, a usage-limit notice after the push: fails after the wait"  tok "$NOTICE" "20"
+if grep -qF "the known cause: the reviewer reported its usage limit" "$tmp/out" \
+   && grep -qF "($BOT at 2026-09-18T10:20:05Z): You have reached your Codex usage limits for code reviews." "$tmp/out" \
+   && ! grep -qF "a possible cause" "$tmp/out"; then
+  echo "  PASS  the red log names the notice as the known cause, not a possible one"
+else
+  echo "  FAIL  the red log does not name the notice as the known cause" >&2; sed 's/^/        /' "$tmp/out" | tail -15 >&2; fails=$((fails + 1))
+fi
 step "token, reviewer started after the push: only the second ask"     tok "$AFTER" "20"
 grep -qF "reviewer active since the push (2026-09-18T10:20:00Z): $BOT, comment updated 2026-09-18T10:20:05Z: not asking" "$tmp/out" \
   || { echo "  FAIL  the first ask point's log does not say why it did not ask" >&2; fails=$((fails + 1)); }

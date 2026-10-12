@@ -383,10 +383,17 @@ Without them, or when they do not help:
    (on a repository a person owns, usually the owner's). When
    the verdict arrives only as a comment, re-run the check from its page.
 3. If the reviewer stays silent (an outage, or its usage limit), the pull
-   request waits. An admin can take `third-party / review` out of the ruleset
-   in Settings and add it back afterwards with `scripts/upgrade-ruleset.sh`;
-   say so on the pull request. Never merge with `--admin`: it bypasses every
-   other rule as well.
+   request waits. When Codex answered after the push with its usage-limit
+   notice (`You have reached your Codex usage limits`), the check still waits
+   the full window, then fails naming the notice as the known cause: its first
+   line, who posted it and when, and the next step. Otherwise the log names
+   the limit only as a possible cause. Nothing re-runs by itself after the
+   limit is lifted: raise or reset it in Codex's settings, then re-run the
+   failed job, which needs a token with Actions: write; with `summons-token`
+   the re-run posts its summons again. An admin can take
+   `third-party / review` out of the ruleset in Settings and add it back
+   afterwards with `scripts/upgrade-ruleset.sh`; say so on the pull request.
+   Never merge with `--admin`: it bypasses every other rule as well.
 
 ## When to stop
 

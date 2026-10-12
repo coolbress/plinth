@@ -3,8 +3,9 @@
 # the step fetched: attest.py <head> <logins> <reviews> <review-comments>
 # <issue-comments> [<activity>]. Exit 0 with the signal found, 1 with what
 # was seen. With `--round` first it only writes the review round line and
-# exits 0 (the step's red path). tests/pr-review-attest.sh runs this file
-# against fixtures.
+# exits 0 (the step's red path); with `--cause` it only writes the known
+# cause of the red, exit 0, or nothing, exit 1 (#449).
+# tests/pr-review-attest.sh runs this file against fixtures.
 r"""Did an accepted reviewer account leave a signal on THIS commit?
 Participation evidence, no verdict.
 
@@ -84,8 +85,8 @@ import pathlib
 import re
 import sys
 
-only_round = len(sys.argv) > 1 and sys.argv[1] == "--round"
-if only_round:
+mode = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ("--round", "--cause") else ""
+if mode:
     del sys.argv[1]
 head, logins_csv = sys.argv[1:3]
 reviews_p, rcomments_p, icomments_p = sys.argv[3:6]
@@ -105,6 +106,11 @@ DONE = re.compile(
 #: submits it on the head when the person who asked is out of quota
 #: (measured 2026-09-19, #204). Vendor text, the one notice measured.
 COULD_NOT_REVIEW = re.compile(r"\s*Copilot was unable to review this pull request", re.IGNORECASE)
+#: An issue comment whose body begins so says the reviewer is out of its
+#: usage limit: Codex posts it instead of a review, on its own trigger and on
+#: a summons (measured 2026-10-09 on #448, #449). Never a review; on a red it
+#: is the known cause. Vendor text, the one notice measured.
+USAGE_LIMIT = re.compile(r"\s*You have reached your Codex usage limits", re.IGNORECASE)
 logins = {x.strip().lower() for x in logins_csv.split(",") if x.strip()}
 MARK = re.compile(r"<!--\s*codex-security-review:v1\s*(\{.*?\})\s*-->", re.DOTALL)
 
@@ -223,8 +229,51 @@ def say_round():
         with open(summary, "a") as f:
             f.write(line + "\n")
 
-if only_round:
+# Signals 3 and 4 name the head by a prefix (ten characters, seven), so
+# both are also bound to the push of this head and to the head being
+# the one such commit (#191, #193). All times are UTC to the second in
+# one shape, so they compare as text.
+pushes = [p for p in load(activity_p) if isinstance(p, dict)]
+if len(pushes) >= 100:   # a full page: older pushes may be missing
+    pushes = []
+# The newest push of this head is the latest by time, not the first
+# listed: the step asks for newest first, and this does not lean on
+# it (#197). One of them without a readable time: nothing is known.
+stamps = [str(p.get("timestamp") or "") for p in pushes if p.get("after") == head]
+pushed = max(stamps)[:19] if stamps and all(STAMP.match(t) for t in stamps) else ""
+tips = {str(p.get(k) or "") for p in pushes for k in ("before", "after")}
+
+def limit_notices():
+    """Usage-limit notices by an accepted reviewer posted after the newest
+    push of this head, oldest first, as (login, created_at, first line). An
+    earlier notice may belong to an earlier head or a lifted limit; where
+    the push cannot be read, none is this head's."""
+    found = []
+    for it in load(icomments_p):
+        body = it.get("body") or ""
+        if not ours(it) or not USAGE_LIMIT.match(body):
+            continue
+        when = str(it.get("created_at") or "")
+        when = when[:19] if STAMP.match(when) else ""
+        if pushed and when > pushed:
+            found.append(((it.get("user") or {}).get("login"), when, body.strip().splitlines()[0][:200]))
+    return sorted(found, key=lambda n: n[1])
+
+if mode == "--round":
     say_round()
+    sys.exit(0)
+if mode == "--cause":
+    # The step's red path, after the full wait (#449). The wait is not cut
+    # short on a notice: a limit lifted inside it can still bring a review.
+    found = limit_notices()
+    if not found:
+        sys.exit(1)
+    who, when, first = found[-1]
+    print("  - the known cause: the reviewer reported its usage limit on this pull request after this head was pushed")
+    print(f"    ({who} at {when}Z): {first}")
+    print("    Next: raise or reset the limit in Codex's settings, then re-run this job; nothing re-runs by")
+    print("    itself when the limit is lifted. Re-running needs a token with Actions: write, and with")
+    print("    summons-token the re-run posts its summons again.")
     sys.exit(0)
 
 def looked(how, excerpt=None):
@@ -300,20 +349,6 @@ for it in load(icomments_p):
         if d.get("headSha") == head and d.get("status") == "completed":
             looked("marker status=completed")
 
-# Signals 3 and 4 name the head by a prefix (ten characters, seven), so
-# both are also bound to the push of this head and to the head being
-# the one such commit (#191, #193). All times are UTC to the second in
-# one shape, so they compare as text.
-pushes = [p for p in load(activity_p) if isinstance(p, dict)]
-if len(pushes) >= 100:   # a full page: older pushes may be missing
-    pushes = []
-# The newest push of this head is the latest by time, not the first
-# listed: the step asks for newest first, and this does not lean on
-# it (#197). One of them without a readable time: nothing is known.
-stamps = [str(p.get("timestamp") or "") for p in pushes if p.get("after") == head]
-pushed = max(stamps)[:19] if stamps and all(STAMP.match(t) for t in stamps) else ""
-tips = {str(p.get(k) or "") for p in pushes for k in ("before", "after")}
-
 def unbound(sha, when):
     """Why a signal that names this head as `sha` and was finished at
     `when` is not tied to it; empty when it is."""
@@ -369,6 +404,10 @@ print("not yet.")
 for it in notices[-3:]:
     print(f"   review {(it.get('user') or {}).get('login')} ({it.get('state') or '?'}) <- this commit,"
           f" not counted: a could-not-review notice: {(it.get('body') or '').strip().splitlines()[0][:90]}")
+limited = limit_notices()
+if limited:
+    who, when, _ = limited[-1]
+    print(f"   issue comment {who} {when}Z after this head's push, not counted: a usage-limit notice")
 for sha, status in states[-3:]:
     print(f"   marker {sha[:8]} status={status} {'<- this commit' if sha == head else ''}")
 for sha, why in left_out[-3:]:

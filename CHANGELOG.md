@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- When `third-party / review` fails after its wait and an accepted reviewer
+  posted Codex's usage-limit notice (`You have reached your Codex usage
+  limits`) after the head's push, the red log names it as the known cause:
+  the notice's first line, who posted it and when, and the next step (raise or
+  reset the limit, then re-run the failed job). Without such a notice the log
+  still names the limit as a possible cause. The notice never counts as a
+  review, and the check still waits the full window (#449).
+
 ## [1.14.0] - 2026-10-12
 
 A new repository now carries one pre-commit skill instead of two, and refuses a `cat` heredoc, `tee` and `sed -i`, so the agent writes code with its edit tools. In five trials per case, Claude Sonnet 5.5 ran the skill before 4 of 5 commits with both changes and 0 or 1 of 5 with either alone or neither (#496). How to run a project's step 4 says what the skills are asked to do and what a skipped one leaves out, without rates (#474).

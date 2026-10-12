@@ -488,6 +488,74 @@ else
   echo "  FAIL  the step never calls attest.py --round; a red would carry no round line" >&2; fails=$((fails + 1))
 fi
 
+echo "-- a usage-limit notice is the known cause of a red, never a review (#449)"
+# Codex out of its limit answers with an issue comment, not a review object
+# (measured on #448, head c5862eb, 2026-10-09 04:04:48Z and 04:18:35Z). The
+# body as captured; the first line is what the red log quotes.
+LIMIT_BODY='You have reached your Codex usage limits for code reviews. You can see your limits in the [Codex usage dashboard](https://chatgpt.com/codex/cloud/settings/usage).
+To continue using code reviews, you can upgrade your account or add credits to your account and enable them for code reviews in your [settings](https://chatgpt.com/codex/cloud/settings/code-review).'
+limit() {  # author, created_at: one notice
+  python3 -c 'import json,sys; print(json.dumps([{"user": {"login": sys.argv[1]}, "created_at": sys.argv[2], "body": sys.argv[3]}], ensure_ascii=False))' "$1" "$2" "$LIMIT_BODY"
+}
+cause() {  # name, issue comments, activity, expected exit, [wanted text], [unwanted text]
+  printf '%s' "$2" > "$tmp/i.json"; echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
+  printf '%s' "$3" > "$tmp/a.json"
+  python3 "$attest" --cause "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1
+  got=$?
+  if [ "$got" -ne "$4" ] || { [ -n "${5:-}" ] && ! grep -qF "$5" "$tmp/log"; } \
+     || { [ -n "${6:-}" ] && grep -qF "$6" "$tmp/log"; }; then
+    echo "  FAIL  $1: exit $got (wanted $4)${5:+, wanted '$5'}${6:+, not '$6'}" >&2
+    sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
+  else
+    echo "  PASS  $1"
+  fi
+}
+AFTER_PUSH="$(limit "$BOT" 2026-09-18T07:21:03Z)"   # $PUSHED has this head at $T_PUSH
+cause "the captured notice from an accepted login after the push: named" "$AFTER_PUSH" "$PUSHED" 0 \
+  "the reviewer reported its usage limit on this pull request"
+for want in "$BOT at 2026-09-18T07:21:03Z" "You have reached your Codex usage limits for code reviews. You can see your limits" \
+            "raise or reset the limit in Codex's settings" "re-run this job" "Actions: write"; do
+  grep -qF "$want" "$tmp/log" || { echo "  FAIL  the known-cause lines lack '$want'" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
+done
+grep -qF "To continue using code reviews" "$tmp/log" \
+  && { echo "  FAIL  the known-cause lines quote more than the notice's first line" >&2; fails=$((fails + 1)); }
+cause "the newest of two notices is the one quoted" \
+  "$(joined "$(limit "$BOT" 2026-09-18T07:21:03Z)" "$(limit "$BOT" 2026-09-18T07:35:00Z)")" "$PUSHED" 0 "at 2026-09-18T07:35:00Z"
+cause "after leading whitespace and in another letter case: named" \
+  "$(python3 -c 'import json,sys; print(json.dumps([{"user": {"login": sys.argv[1]}, "created_at": "2026-09-18T07:21:03Z", "body": "\n  YOU HAVE REACHED YOUR CODEX USAGE LIMITS for code reviews."}]))' "$BOT")" "$PUSHED" 0 "usage limit"
+cause "the same notice from a login that is not accepted: not named" "$(limit someone 2026-09-18T07:21:03Z)" "$PUSHED" 1 "" "usage limit"
+cause "posted before this head's push: not named" "$(limit "$BOT" 2026-09-18T07:10:00Z)" "$PUSHED" 1 "" "usage limit"
+cause "posted in the push's second: not named" "$(limit "$BOT" "$T_PUSH")" "$PUSHED" 1
+cause "the push cannot be read: not named" "$AFTER_PUSH" 'null' 1 "" "usage limit"
+cause "the notice has no time: not named" \
+  "$(python3 -c 'import json,sys; print(json.dumps([{"user": {"login": sys.argv[1]}, "body": sys.argv[2]}]))' "$BOT" "$LIMIT_BODY")" "$PUSHED" 1
+cause "the words further down a comment: not named" \
+  "$(python3 -c 'import json,sys; print(json.dumps([{"user": {"login": sys.argv[1]}, "created_at": "2026-09-18T07:21:03Z", "body": "Review done.\n" + sys.argv[2]}]))' "$BOT" "$LIMIT_BODY")" "$PUSHED" 1
+cause "no notice: nothing printed" '[]' "$PUSHED" 1
+[ -s "$tmp/log" ] && { echo "  FAIL  --cause printed without a notice" >&2; fails=$((fails + 1)); }
+judge_with() {  # name, reviews JSON, expected exit: the verdict with the notice in the issue comments
+  printf '%s' "$AFTER_PUSH" > "$tmp/i.json"; printf '%s' "$2" > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
+  printf '%s' "$PUSHED" > "$tmp/a.json"
+  python3 "$attest" "$HEAD" "$BOT" "$tmp/r.json" "$tmp/rc.json" "$tmp/i.json" "$tmp/a.json" >"$tmp/log" 2>&1
+  got=$?
+  if [ "$got" -ne "$3" ]; then
+    echo "  FAIL  $1: exit $got (wanted $3)" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1))
+  else
+    echo "  PASS  $1"
+  fi
+}
+judge_with "the notice and nothing else: not a review" '[]' 1
+grep -qF "not counted: a usage-limit notice" "$tmp/log" \
+  || { echo "  FAIL  the look's log does not name the notice as not counted" >&2; sed 's/^/        /' "$tmp/log" >&2; fails=$((fails + 1)); }
+judge_with "the notice, then a real review on the head: passes" "$(rvw "$BOT" "$HEAD")" 0
+rnd "a notice on the pull request is not an earlier round" '[]' "$(joined "$ON_HEAD" "$AFTER_PUSH")" "$LOG3" pass \
+  "review round 1 on this pull request: 0 earlier commit(s)"
+if grep -vE '^[[:space:]]*#' "$wf" | grep -qF 'attest.py" --cause "$HEAD_SHA"'; then
+  echo "  PASS  the step asks for the known cause on its red path"
+else
+  echo "  FAIL  the step never calls attest.py --cause; a red would not name the notice" >&2; fails=$((fails + 1))
+fi
+
 echo "-- when nothing matches, the log carries the clues (wrong name or commit: fix it in one go)"
 printf '%s' "$(cmt "$BOT" "$OLD" completed)" > "$tmp/i.json"
 echo '[]' > "$tmp/r.json"; echo '[]' > "$tmp/rc.json"
