@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-10-13
+
+A repository `/plinth:new-project` creates now calls plinth v1.15.0's workflows instead of v1.7.2's, so its `ci / test` reports the changed lines no test ran, without failing the check (#503). v1.15.0 shipped that judgement, but the door rendered a template whose CI still called v1.7.2, so no new repository ran it; this release's template, v1.12.1, changes only that pin.
+
+tested with plinth-template v1.12.1
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.12.1, whose CI calls plinth
@@ -2563,7 +2569,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.15.1...HEAD
+[1.15.1]: https://github.com/coolbress/plinth/releases/tag/v1.15.1
 [1.15.0]: https://github.com/coolbress/plinth/releases/tag/v1.15.0
 [1.14.0]: https://github.com/coolbress/plinth/releases/tag/v1.14.0
 [1.13.1]: https://github.com/coolbress/plinth/releases/tag/v1.13.1
