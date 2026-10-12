@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.12.1, whose CI calls plinth
+  v1.15.0 instead of v1.7.2. A new repository's `ci / test` reports the changed
+  lines no test ran, without failing the check (#503), with the other
+  `python-ci.yml` changes since v1.7.2. `/plinth:floor-check` reports v1.12.0 as
+  one tag behind.
+
 ## [1.15.0] - 2026-10-12
 
 `ci / test` now runs the tests under coverage and, on a pull request, reports the changed lines no test runs, without failing the check yet: in #406's measurement the strict rule would have caught none of 14 pull requests, so it starts as a report and is promoted only on evidence (#503). The two coverage tools install from hash-pinned lists. `third-party / review` names Codex's usage-limit notice as the known cause when it times out after one (#449), and How to run a project's step 2 asks a project's first interview for who else is affected, its limits and how it ends (#408).
