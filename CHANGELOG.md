@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-10-12
+
+`ci / test` now runs the tests under coverage and, on a pull request, reports the changed lines no test runs, without failing the check yet: in #406's measurement the strict rule would have caught none of 14 pull requests, so it starts as a report and is promoted only on evidence (#503). The two coverage tools install from hash-pinned lists. `third-party / review` names Codex's usage-limit notice as the known cause when it times out after one (#449), and How to run a project's step 2 asks a project's first interview for who else is affected, its limits and how it ends (#408).
+
+tested with plinth-template v1.12.0
+
 ### Changed
 
 - `ci / test` runs pytest under coverage on `.python-version` and, on a
@@ -2549,7 +2555,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/coolbress/plinth/releases/tag/v1.15.0
 [1.14.0]: https://github.com/coolbress/plinth/releases/tag/v1.14.0
 [1.13.1]: https://github.com/coolbress/plinth/releases/tag/v1.13.1
 [1.13.0]: https://github.com/coolbress/plinth/releases/tag/v1.13.0
