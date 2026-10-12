@@ -19,8 +19,8 @@ pull requests and have no tag.
   or `N of M changed lines did not run`, each with the files and lines. It
   never fails the check: no outcome of the judgement turns `ci / test` red
   in this release, and a later release may make the "none ran" case fail.
-  Coverage 7.10.7 and diff-cover 9.7.1 come from the workflow; nothing is
-  added to `uv.lock`. A line that only runs against a live service or as
+  Coverage 7.10.7 and diff-cover 9.7.1 come from the workflow, every file
+  checked against its hash; nothing is added to `uv.lock`. A line that only runs against a live service or as
   the process entry point is exempted now with `# pragma: no cover` and its
   reason, which `ci / diff-size` lists. A project whose `addopts` carries
   pytest-cov's `--cov` gets `not yet confirmed`: coverage records no line

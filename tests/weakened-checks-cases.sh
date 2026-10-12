@@ -521,39 +521,42 @@ else bad "no extra versions" "$sum"; fi
 warned "no extra versions: no warning" 0
 
 # The changed lines a pull request's tests ran (#503). The pytest step and the
-# judging step run against a fake uv and uvx: `coverage xml` copies a recorded
-# coverage.xml, diff-cover a recorded JSON report. The recordings are real runs
+# judging step run against a fake uv: `coverage xml` copies a recorded
+# coverage.xml, and the diff-cover it installs copies a recorded JSON report. The recordings are real runs
 # of coverage 7.10.7 and diff-cover 9.7.1 on the canary against a merge
 # commit's first parent (tests/fixtures/changed-lines/record.sh). Then the
 # Verdict step writes the line. No outcome fails the step or the job yet.
 echo "-- ci / test: changed lines under the tests"
 fx="$root/tests/fixtures/changed-lines"
 mkdir -p "$tmp/cbin"
+# The fake uv: `venv <dir>` makes a diff-cover in <dir>/bin that copies
+# FAKE_JSON and exits FAKE_DC_RC; `pip install -r <file>` keeps a copy of the
+# requirements and exits FAKE_PIP_RC; `-o <file>` (coverage xml) copies FAKE_XML.
 cat > "$tmp/cbin/uv" <<'SH'
 #!/usr/bin/env bash
 printf 'uv %s\n' "$*" >> "$FAKE_ARGS"
+if [ "$1" = venv ]; then
+  d="${!#}"; mkdir -p "$d/bin"
+  printf '#!/usr/bin/env bash\nprintf "diff-cover %%s\\n" "$*" >> "$FAKE_ARGS"\nfor a in "$@"; do case "$a" in json:*) [ -f "${FAKE_JSON:-}" ] && cp "$FAKE_JSON" "${a#json:}" ;; esac; done\nexit "${FAKE_DC_RC:-0}"\n' > "$d/bin/diff-cover"
+  chmod +x "$d/bin/diff-cover"; exit 0
+fi
 prev=""; for a in "$@"; do
+  if [ "$prev" = -r ]; then cp "$a" "$FAKE_ARGS.$(basename "$a")"; fi
   if [ "$prev" = -o ]; then
     if [ -f "${FAKE_XML:-}" ]; then cp "$FAKE_XML" "$a"; else echo "No data to report."; exit 1; fi
   fi; prev="$a"; done
+[ "$1" = pip ] && exit "${FAKE_PIP_RC:-0}"
 exit 0
 SH
-cat > "$tmp/cbin/uvx" <<'SH'
-#!/usr/bin/env bash
-printf 'uvx %s\n' "$*" >> "$FAKE_ARGS"
-for a in "$@"; do case "$a" in json:*) [ -f "${FAKE_JSON:-}" ] && cp "$FAKE_JSON" "${a#json:}" ;; esac; done
-exit "${FAKE_DC_RC:-0}"
-SH
-chmod +x "$tmp/cbin/uv" "$tmp/cbin/uvx"
-pins=(COVERAGE_PIN="coverage[toml]==7.10.7" DIFF_COVER_PIN="diff-cover@9.7.1")
+chmod +x "$tmp/cbin/uv"
 # judge <xml or -> <json or -> <env assignments...> -- runs the judging step, then the Verdict
 judge() {
   local x="$1" j="$2"; shift 2
-  rm -f "$tmp/rt/changed.verdict" "$tmp/args"
+  rm -rf "$tmp/rt/changed.verdict" "$tmp/rt/diff-cover" "$tmp/args"*
   job_step test "Changed lines under the tests" > "$tmp/j.sh" || { bad "test / Changed lines under the tests: step not found"; return; }
   jout="$(cd "$tmp" && env PATH="$tmp/cbin:$PATH" RUNNER_TEMP="$tmp/rt" FAKE_ARGS="$tmp/args" \
     FAKE_XML="$([ "$x" = - ] || echo "$fx/$x")" FAKE_JSON="$([ "$j" = - ] || echo "$fx/$j")" \
-    PR=7 COV=success PYTEST=success "${pins[@]}" "$@" bash -e "$tmp/j.sh" 2>&1)"; jrc=$?
+    PR=7 COV=success PYTEST=success "$@" bash -e "$tmp/j.sh" 2>&1)"; jrc=$?
   verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
 }
 # line <label> <expected changed-lines summary line, a regex> <n warnings>
@@ -567,10 +570,28 @@ confirms='; a test that runs them, or `# pragma: no cover` with its reason, conf
 
 judge none.xml none.json
 line "none ran: not yet confirmed, the lines named, a green step" "^- not yet confirmed: none of the 4 changed lines ran under the tests: sub/src/canary/extra\.py:1-4$confirms" 1
-grep -q -- '--compare-branch=HEAD^1' "$tmp/args" && grep -q '^uvx diff-cover@9.7.1 ' "$tmp/args" \
-  && ok "diff-cover is the pinned release, against HEAD^1" || bad "diff-cover's arguments" "$(cat "$tmp/args")"
-grep -q '^uv run --locked --with coverage\[toml\]==7.10.7 coverage xml -o ' "$tmp/args" \
-  && ok "coverage xml is the pinned release, an overlay on the locked environment" || bad "coverage xml's arguments" "$(cat "$tmp/args")"
+grep -q '^diff-cover .* --compare-branch=HEAD^1 ' "$tmp/args" && grep -q "^uv pip install -q --python $tmp/rt/diff-cover --require-hashes -r " "$tmp/args" \
+  && ok "diff-cover runs from its own environment, installed with --require-hashes, against HEAD^1" || bad "diff-cover's install or arguments" "$(cat "$tmp/args")"
+grep -q '^uv run --no-sync coverage xml -o ' "$tmp/args" \
+  && ok "coverage xml runs in the synced environment, no re-sync" || bad "coverage xml's arguments" "$(cat "$tmp/args")"
+# Every requirement the two installs read is pinned with == and carries a hash.
+reqcheck() { # <label> <requirements file> <package==version...>
+  local f="$1" l="$2"; shift 2
+  python3 - "$f" "$@" <<'PY' && ok "$l" || bad "$l" "$(cat "$f" 2>&1)"
+import re, sys
+text = open(sys.argv[1]).read().replace("\\\n", " ")
+entries = [l.split() for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+names = sorted(e[0] for e in entries)
+ok = names == sorted(sys.argv[2:]) and all(
+    len(e) > 1 and all(re.fullmatch(r"--hash=sha256:[0-9a-f]{64}", h) for h in e[1:]) for e in entries)
+sys.exit(0 if ok else 1)
+PY
+}
+reqcheck "$tmp/args.diff-cover-requirements.txt" "diff-cover and each dependency: one version, every file by its sha256" \
+  diff-cover==9.7.1 chardet==5.2.0 jinja2==3.1.6 markupsafe==3.0.3 pluggy==1.6.0 pygments==2.19.2
+judge none.xml none.json FAKE_PIP_RC=1
+line "diff-cover's install refused (a hash that does not match): not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, diff-cover did not finish' 1
+if grep -q '^diff-cover ' "$tmp/args"; then bad "diff-cover ran after its install failed" "$(cat "$tmp/args")"; else ok "diff-cover does not run when its install failed"; fi
 judge flat.xml flat.json
 line "none ran, a test file in the report (flat layout, --source=.): the test file is left out" "^- not yet confirmed: none of the 4 changed lines ran under the tests: sub/canary/extra\.py:1-4$confirms" 1
 judge some.xml some.json
@@ -608,7 +629,7 @@ if grep -qE '^- not yet confirmed: changed lines ran under the tests, the judgin
 else bad "no verdict file" "$sum"; fi
 # The recordings are of the releases the workflow pins.
 grep -q "coverage\\[toml\\]==7.10.7" "$fx/record.sh" && grep -q 'diff-cover@9.7.1' "$fx/record.sh" \
-  && grep -q 'COVERAGE_PIN: "coverage\[toml\]==7.10.7"' "$wf" && grep -q 'DIFF_COVER_PIN: "diff-cover@9.7.1"' "$wf" \
+  && grep -q '^ *coverage==7.10.7 \\$' "$wf" && grep -q '^ *diff-cover==9.7.1 \\$' "$wf" \
   && ok "the fixtures were recorded with the releases the workflow pins" || bad "the pins and the recordings differ: re-record with record.sh"
 # The test files left out are the ones diff-size names: the same pattern.
 pats="$(grep -h 'TEST = re.compile' "$wf" | sed 's/ *#.*$//; s/^ *//' | sort -u | wc -l | tr -d ' ')"
@@ -617,15 +638,27 @@ pats="$(grep -h 'TEST = re.compile' "$wf" | sed 's/ *#.*$//; s/^ *//' | sort -u 
 blk="$(sed -n '/- name: Changed lines under the tests/,/run: |/p' "$wf")"
 grep -q 'continue-on-error: true' <<<"$blk" && grep -q 'if: \${{ !cancelled() }}' <<<"$blk" && ok "the judging step: continue-on-error, runs after a failed step" || bad "the judging step's keys" "$blk"
 
+# The coverage install step: every file by its hash, into the synced
+# environment; a refused install fails the step, which continues on error.
+mkdir -p "$tmp/flat" "$tmp/srcl/src"
+job_step test "Install coverage" > "$tmp/c.sh" || bad "test / Install coverage: step not found"
+rm -f "$tmp/args"*; (cd "$tmp/srcl" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" RUNNER_TEMP="$tmp/rt" bash -e "$tmp/c.sh" >/dev/null 2>&1)
+grep -qx "uv pip install --python .venv --require-hashes --no-deps -r $tmp/rt/coverage-requirements.txt" "$tmp/args" \
+  && ok "coverage installs into the synced environment with --require-hashes" || bad "coverage's install" "$(cat "$tmp/args")"
+reqcheck "$tmp/args.coverage-requirements.txt" "coverage: one version, every file by its sha256" coverage==7.10.7
+(cd "$tmp/srcl" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" RUNNER_TEMP="$tmp/rt" FAKE_PIP_RC=1 bash -e "$tmp/c.sh" >/dev/null 2>&1) \
+  && bad "a refused coverage install: the step passed" || ok "a refused coverage install fails its step (continue-on-error keeps the job)"
+blk="$(sed -n '/- name: Install coverage/,/run: |/p' "$wf")"
+grep -q 'continue-on-error: true' <<<"$blk" && ok "the install step: continue-on-error" || bad "the install step's keys" "$blk"
+
 # The pytest step: under coverage when it installed, `--source=src` with a
 # src/ directory and `.` without; plain `uv run pytest` otherwise.
 job_step test pytest > "$tmp/p.sh" || bad "test / pytest: step not found"
-pyrun() { rm -f "$tmp/args"; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" "${pins[@]}" COV="$2" bash -e "$tmp/p.sh" >/dev/null 2>&1); prc=$?; }
-mkdir -p "$tmp/flat" "$tmp/srcl/src"
+pyrun() { rm -f "$tmp/args"; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" COV="$2" bash -e "$tmp/p.sh" >/dev/null 2>&1); prc=$?; }
 pyrun "$tmp/srcl" success
-grep -qx 'uv run --locked --with coverage\[toml\]==7.10.7 coverage run --branch --source=src -m pytest' "$tmp/args" && ok "pytest, src layout: under coverage, --source=src" || bad "pytest, src layout" "$(cat "$tmp/args")"
+grep -qx 'uv run --no-sync coverage run --branch --source=src -m pytest' "$tmp/args" && ok "pytest, src layout: under coverage, --source=src" || bad "pytest, src layout" "$(cat "$tmp/args")"
 pyrun "$tmp/flat" success
-grep -qx 'uv run --locked --with coverage\[toml\]==7.10.7 coverage run --branch --source=. -m pytest' "$tmp/args" && ok "pytest, no src/: under coverage, --source=." || bad "pytest, flat" "$(cat "$tmp/args")"
+grep -qx 'uv run --no-sync coverage run --branch --source=. -m pytest' "$tmp/args" && ok "pytest, no src/: under coverage, --source=." || bad "pytest, flat" "$(cat "$tmp/args")"
 pyrun "$tmp/flat" failure
 grep -qx 'uv run pytest' "$tmp/args" && ok "coverage did not install: plain uv run pytest" || bad "pytest without coverage" "$(cat "$tmp/args")"
 printf '#!/usr/bin/env bash\nexit 3\n' > "$tmp/cbin/uv3"; cp "$tmp/cbin/uv" "$tmp/cbin/uv.keep"; cp "$tmp/cbin/uv3" "$tmp/cbin/uv"
