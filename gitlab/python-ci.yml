@@ -92,6 +92,16 @@ workflow:
         for l in ${plinth_lines+"${plinth_lines[@]}"}; do printf -- '- %s\n' "${l//[$'\r\n']/ }"; done
         exit "$plinth_failed"
       }
+      # A branch pipeline for a commit an open merge request carries has no
+      # CI_MERGE_REQUEST_* variables, so a merge request check would read it
+      # as "not a merge request". That happens when the project's own
+      # `workflow:` replaces the rules above, and a green branch pipeline
+      # can then satisfy "Pipelines must succeed": a fail, never a pass.
+      plinth_branch_of_mr() {
+        if [ -n "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "${CI_OPEN_MERGE_REQUESTS:-}" ]; then return 1; fi
+        say "fail: $1, this is a branch pipeline while merge request ${CI_OPEN_MERGE_REQUESTS} is open, so it was not checked against the merge request; let merge request pipelines run (a project's own workflow: replaces plinth's rules)"
+        plinth_failed=1
+      }
       plinth_uv() {
         local d="$PLINTH_TMP/uv" f="uv-x86_64-unknown-linux-gnu.tar.gz"
         mkdir -p "$d" &&
@@ -305,7 +315,7 @@ test:
           say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}; {CONFIRMS}", *extra)
       PY
       }
-      changed_lines || true
+      if plinth_branch_of_mr "changed lines ran under the tests"; then branch_of_mr=1; else branch_of_mr=; changed_lines || true; fi
 
       # Exercise the declared range for real; uv downloads the interpreter.
       extra_versions() {
@@ -317,7 +327,8 @@ test:
       }
       if [ -n "$PLINTH_EXTRA_PYTHON_VERSIONS" ]; then step "pytest on $PLINTH_EXTRA_PYTHON_VERSIONS" extra_versions
       else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
-      if [ -s "$PLINTH_TMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/changed.verdict"
+      if [ -n "$branch_of_mr" ]; then :
+      elif [ -s "$PLINTH_TMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/changed.verdict"
       else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
       verdict
 
@@ -352,6 +363,7 @@ pr-title:
   script:
     - |
       title="${CI_MERGE_REQUEST_TITLE:-}"
+      if plinth_branch_of_mr "MR title"; then verdict; fi
       if [ -z "$title" ]; then
         echo "Not a merge request: no title to check."
         say "pass: MR title, does not apply (not a merge request: no title to check)"
@@ -396,6 +408,7 @@ deps:
     - |
       std="dependency review"
       base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"
+      if plinth_branch_of_mr "$std"; then verdict; fi
       if [ -z "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "$base" ]; then
         say "pass: $std, does not apply (not a merge request: no base to compare dependencies against)"
         verdict
@@ -403,12 +416,16 @@ deps:
       plinth_osv || exit 1
       export OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY="$PLINTH_TMP/osv-db"
       lock="${PLINTH_WORKDIR%/}/uv.lock"; lock="${lock#./}"
+      # osv-scanner applies an osv-scanner.toml beside the lockfile, where a
+      # merge request could ignore the advisory it adds: both scans use this
+      # empty one instead.
+      : > "$PLINTH_TMP/osv-scanner.toml"
       # scan <lockfile> <out.json> [flags]: 0 when osv-scanner read the file.
       # It exits 1 on findings, 128 when it found no package: that is a pass
       # only for a lockfile with no registry package in it.
       scan() {
         local rc=0
-        osv-scanner scan source --offline-vulnerabilities "${@:3}" --format json -L "$1" > "$2" || rc=$?
+        osv-scanner scan source --offline-vulnerabilities --config="$PLINTH_TMP/osv-scanner.toml" "${@:3}" --format json -L "$1" > "$2" || rc=$?
         case "$rc" in
           0|1) return 0 ;;
           128) if grep -q 'source = { registry' "$1"; then echo "osv-scanner found no package in $1, which names registry packages"; return 1; fi
@@ -489,6 +506,7 @@ diff-size:
   script:
     - |
       base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"; head="${CI_COMMIT_SHA:-}"
+      if plinth_branch_of_mr "diff size"; then verdict; fi
       if [ -z "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "$base" ] || [ -z "$head" ]; then
         echo "Not a merge request: no diff to measure."
         say "pass: diff size, does not apply (not a merge request: no diff to measure)"

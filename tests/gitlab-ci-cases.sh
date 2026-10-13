@@ -149,6 +149,8 @@ title "research: a corpus note";      expect "an invented type fails" 1 "fail: M
 title "Draft: research: a note";      expect "a draft with an invented type fails" 1 "fail: MR title"
 title "fix: x (#12)";                 expect "a trailing (#N) passes: GitLab's squash adds no number" 0 "pass: MR title"
 title "";                             expect "not a merge request: a pass that says so" 0 "pass: MR title, does not apply"
+CI_OPEN_MERGE_REQUESTS='g/p!3' run_job pr-title
+expect "a branch pipeline while a merge request is open fails, it is not a pass" 1 "fail: MR title, this is a branch pipeline while merge request g/p!3 is open"
 
 echo "-- deps (osv-scanner stubbed: it answers per lockfile from fixtures)"
 cat > "$tmp/bin/osv-scanner" <<'SH'
@@ -189,8 +191,9 @@ expect "an added version with a high advisory fails" 1 "fail: dependency review,
 grep -q -- "--download-offline-databases" <(sed -n 1p "$STUB/log") && ! grep -q -- "--download-offline-databases" <(sed -n 2p "$STUB/log") \
   && [ "$(sed 's/.* db=//' "$STUB/log" | sort -u | wc -l | tr -d ' ')" = 1 ] && [ "$(wc -l < "$STUB/log" | tr -d ' ')" = 2 ] \
   && grep -q -- "--offline-vulnerabilities" <(sed -n 2p "$STUB/log") \
-  && ok "the database is downloaded once, and both lockfiles are scanned offline against that one copy" \
-  || bad "the scans do not share one downloaded database" "$(cat "$STUB/log")"
+  && [ "$(grep -c -- "--config=" "$STUB/log")" = 2 ] \
+  && ok "the database is downloaded once, both lockfiles are scanned offline against that one copy, each with plinth's own config" \
+  || bad "the scans do not share one downloaded database and plinth's config" "$(cat "$STUB/log")"
 deps_case "$(report "$high")" "$(report "$high")"
 expect "the same advisory at the base is not added: a pass" 0 "pass: dependency review, no added dependency version with an advisory at high or above"
 deps_case "$(report "$(finding jinja2 3.1.3 GHSA-high 8.8)")" "$(report "$high")"
@@ -213,6 +216,8 @@ deps_case "$(report)" "" 1 128
 expect "no package found in a lockfile that names registry packages fails, at the base too" 1 "fail: dependency review"
 (cd "$repo" && CI_MERGE_REQUEST_IID='' run_job deps && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
 expect "not a merge request: a pass that says so" 0 "pass: dependency review, does not apply"
+(cd "$repo" && CI_MERGE_REQUEST_IID='' CI_OPEN_MERGE_REQUESTS='g/p!3' run_job deps && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
+expect "a branch pipeline while a merge request is open fails" 1 "fail: dependency review, this is a branch pipeline while merge request g/p!3 is open"
 # A merge base with no uv.lock: the scan of the empty stand-in finds no
 # package, and every locked version counts as added.
 repo="$tmp/deps-new"; mkdir -p "$repo"
@@ -305,6 +310,10 @@ expect "over the limit fails" 1 "fail: diff size, 31 lines, over the limit of 20
 expect "a named pipeline change is listed as named" 1 "named in the description: .gitlab-ci.yml"
 ds 0 "x"
 expect "max-diff-lines 0 measures without blocking" 0 "pass: diff size, measured and not enforced (max-diff-lines is 0): 31 lines"
+
+(cd "$repo" && CI_MERGE_REQUEST_IID='' CI_OPEN_MERGE_REQUESTS='g/p!3' PLINTH_WORKDIR=. PLINTH_MAX_DIFF_LINES=400 PLINTH_DIFF_SIZE_EXCLUDE="" run_job diff-size \
+   && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
+expect "a branch pipeline while a merge request is open fails" 1 "fail: diff size, this is a branch pipeline while merge request g/p!3 is open"
 
 echo "-- $fail failed, $pass passed"
 [ "$fail" = 0 ]
