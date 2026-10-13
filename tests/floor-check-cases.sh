@@ -109,6 +109,17 @@ plant "a settings without the cat rule is caught" "sed -i.bak 's/\"Bash(cat \*\.
 plant "a grep rule that names only .env.example is caught" "sed -i.bak 's/\"Bash(grep \*\.env)\"/\"Bash(grep *.env.example)\"/' .claude/settings.json" "does not deny \`grep KEY .env\`"
 plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source *.env.local*)\"/' .claude/settings.json" "does not deny \`source .env\`"
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
+# A *.md symbolic link whose target is missing was read like a file and
+# crashed the checker before any verdict (#525). It is a FAIL naming the link
+# and its target, every other item is still reported, and a link to a file
+# that exists is read through it.
+plant "a dangling *.md link is a FAIL naming the link and its target (#525)" "ln -s MISSING.md CLAUDE.md" "CLAUDE.md -> MISSING.md"
+plant "a *.md link to an existing file is read through it" "ln -s README.md NOTES.md" "__none__"
+dl="$work/dangling"; rm -rf "$dl"; cp -R "$good" "$dl"; ln -s MISSING.md "$dl/CLAUDE.md"
+out="$(python3 "$checker" --root "$dl" --no-network --verdicts "$dl.verdicts" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && [ -s "$dl.verdicts" ] && ! grep -q Traceback <<<"$out" && grep -q '^  PASS  LICENSE present' <<<"$out" \
+  && grep -q -- '-- 1 failed' <<<"$out"; then ok "a dangling *.md link still writes the verdicts and reports the other items"
+else bad "a dangling *.md link stops the checker (rc=$rc, verdicts $( [ -s "$dl.verdicts" ] && echo written || echo missing ))"; printf '%s\n' "$out" | grep -E 'Traceback|Error|FAIL|failed' | sed 's/^/        /'; fi
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
 plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"
 # The image check is the service archetypes' own required check (#127): the job
