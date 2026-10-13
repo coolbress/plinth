@@ -756,42 +756,63 @@ floor-check:
           sys.exit(1)
       def code(l):   # the line without a comment; a `#` inside a URL is not one
           return re.sub(r"(^|\s)#.*$", "", l)
-      # An include's value only: `include: <url>`, `remote: <url>`, or a list
-      # item `- <url>`. The same URL anywhere else (a variable, a script) is
-      # not an include.
-      def included(l, m):
-          return re.fullmatch(r"\s*(?:-\s*)?(?:(?:include|remote)\s*:\s*)?['\"]?", l[:m.start()])
-      refs = [(i, m) for i, l in enumerate(lines) for m in URL.finditer(code(l)) if included(code(l), m)]
-      pinned = [(i, m) for i, m in refs if re.fullmatch(r"[0-9a-fA-F]{40}", m.group(1))]
-      loose = sorted({m.group(1) for _, m in refs} - {m.group(1) for _, m in pinned})
-      if not refs or loose:
+      def indent(c):
+          return len(c) - len(c.lstrip(" "))
+      # Only the top-level `include:` node gives a URL its meaning: its inline
+      # value, or the block under it up to the next top-level key. The same
+      # URL anywhere else (a variable, a script list) is not an include, and
+      # an include of plinth from a nested local file is not read here.
+      top = next((i for i, l in enumerate(lines) if re.match(r"include\s*:", code(l))), None)
+      items = []   # each include: its text, as lines
+      if top is not None:
+          inline = code(lines[top]).split(":", 1)[1].strip()
+          if inline:
+              items = [[inline]]
+          block = []
+          for l in lines[top + 1:]:
+              c = code(l)
+              if c.strip() and indent(c) == 0 and not c.startswith("-"):
+                  break
+              if c.strip():
+                  block.append(c)
+          if block:
+              dash = min((indent(c) for c in block if c.lstrip(" ").startswith("-")), default=None)
+              if dash is None:
+                  items.append(block)   # one include as a mapping
+              else:
+                  for c in block:
+                      if indent(c) == dash and c.lstrip(" ").startswith("-"):
+                          items.append([c])
+                      elif items and indent(c) > dash:
+                          items[-1].append(c)
+      def plinth(item):
+          """The plinth URL an include names as `remote:` or as a bare
+          string, or None; and whether it names a checksum."""
+          head = re.sub(r"^\s*(?:-\s*)?", "", item[0])
+          rest = [head] + [l.strip() for l in item[1:]]
+          for l in rest:
+              m = URL.search(l)
+              if m and re.fullmatch(r"(?:remote\s*:\s*)?['\"]?\[?\s*['\"]?", l[:m.start()]):
+                  checked = any(re.match(r"integrity\s*:\s*['\"]?sha256-[A-Za-z0-9+/=]+", r) for r in rest)
+                  return m, checked
+          return None, False
+      found = [r for r in (plinth(i) for i in items) if r[0]]
+      loose = sorted({m.group(1) for m, _ in found if not re.fullmatch(r"[0-9a-fA-F]{40}", m.group(1))})
+      if not found or loose:
           why = (f"it includes it at {', '.join(loose)}, not a full commit SHA" if loose
-                 else "no include of https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml was found")
+                 else "no include of https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml was found in its top-level include")
           print(f"fail: {STD}, {why}")
           sys.exit(1)
-      print(f"pass: {STD} ({pinned[0][1].group(1)})")
-      # `integrity:` belongs to the include when it sits in the same list item:
-      # indented at least as far as the key on the URL's line.
-      def checksum(i):
-          line = code(lines[i])
-          if not line.lstrip(" -").startswith("remote:"):
-              return False   # `include: '<url>'` has no room for one
-          key = len(line) - len(line.lstrip(" -"))
-          for l in lines[i + 1:]:
-              c = code(l)
-              if not c.strip():
-                  continue
-              ind = len(c) - len(c.lstrip(" "))
-              if ind < key or (ind == key and c.lstrip(" ").startswith("-")):
-                  return False
-              if ind == key and re.match(r"\s*integrity:\s*['\"]?sha256-[A-Za-z0-9+/=]+", c):
-                  return True
-          return False
-      if any(checksum(i) for i, _ in pinned):
+      print(f"pass: {STD} ({', '.join(sorted({m.group(1) for m, _ in found}))})")
+      # GitLab checks a checksum per include, and a later include can replace
+      # an earlier one's jobs: every include needs its own.
+      bare = sum(1 for _, checked in found if not checked)
+      if not bare:
           print("pass: the include names a checksum (include:integrity), which GitLab checks before the pipeline starts")
       else:
-          print("not yet confirmed: the bytes GitLab fetched are plinth's file, the include names no checksum "
-                "(include:integrity), which GitLab.com Free checks; a checksum on the include confirms it")
+          which = "the include names" if len(found) == 1 else f"{bare} of {len(found)} includes names"
+          print(f"not yet confirmed: the bytes GitLab fetched are plinth's file, {which} no checksum "
+                "(include:integrity), which GitLab.com Free checks; a checksum on each include confirms it")
       for what in (
           "the protected default branch (no force push, merge requests only, Maintainers merge)",
           "the merge check \"Pipelines must succeed\", with \"Skipped pipelines are considered successful\" off",

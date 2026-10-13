@@ -277,6 +277,29 @@ expect "a second include at a tag fails beside a pinned one" 1 "it includes it a
 fc "include:
   - '$url'"
 expect "a list item holding only the URL is an include" 0 "pass: .gitlab-ci.yml includes"
+fc "include:
+  - local: ci/plinth.yml
+variables:
+  remote: $url
+.hidden:
+  script:
+    - '$url'"
+expect "a pinned URL outside the top-level include node (a variable, a script list) is not the include" 1 "no include of https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml was found"
+fc "include:
+- remote: $url
+  integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
+stages: [test]"
+expect "list items at the key's own indentation are the include" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
+fc "include:
+  - remote: $url
+    integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
+  - remote: https://raw.githubusercontent.com/coolbress/plinth/$(printf 'f%.0s' {1..40})/gitlab/python-ci.yml"
+expect "a checksum on one of two includes is not a checksum on both" 0 "not yet confirmed: the bytes GitLab fetched are plinth's file, 1 of 2 includes names no checksum"
+refuse "one checksum of two is not a pass" "pass: the include names a checksum"
+fc "include:
+  remote: $url
+  integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
+expect "the mapping form with a checksum passes" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
 fc "# include:
 #   - remote: $url
 lint:
