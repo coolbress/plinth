@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-13
+
+`/plinth:template-update` kept a repository's plinth pin on purpose (#219), so an update could record a new template tag while the repository's CI still called an older plinth than that tag was tested with, and a feature shipped in the workflow did not arrive (#511, seen on plinth-reach). The update now shows the pin the target tag was tested with when it is newer, and a person chooses with `--plinth-pin tested`; the pin is never moved without that choice, and never backwards.
+
+tested with plinth-template v1.12.1
+
 ### Changed
 
 - `/plinth:floor-check` and `/plinth:template-update` offer the plinth pin the
@@ -2579,7 +2585,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.15.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/coolbress/plinth/releases/tag/v1.16.0
 [1.15.1]: https://github.com/coolbress/plinth/releases/tag/v1.15.1
 [1.15.0]: https://github.com/coolbress/plinth/releases/tag/v1.15.0
 [1.14.0]: https://github.com/coolbress/plinth/releases/tag/v1.14.0
