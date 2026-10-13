@@ -1453,6 +1453,90 @@ if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier up
   ok "a compare call that 404s still prints the update command, and names the file list as unread"
 else bad "a 404 on the compare call"; printf '%s\n' "$out" | grep -E 'template|copier update' | sed 's/^/        /'; fi
 
+# The tested pin (#511): the target tag's copier.yml names the plinth commit
+# it was tested with. When that is newer than the pin the workflows call, a
+# second line carries it, for a person to choose; never one that moves the
+# pin backwards, and never past a comparison that was not read.
+tested="$(printf '%040d' 3)"
+pin_api() { # <copier.yml plinth_sha default or "-" for none> <compare status or "-" for none> → sets $pin_dir
+  pin_dir="$work/api-pin"; rm -rf "$pin_dir"
+  mkdir -p "$pin_dir/repos/coolbress/plinth-template/contents" "$pin_dir/repos/coolbress/plinth/compare"
+  if [ "$1" != - ]; then
+    printf 'plinth_sha:\n  type: str\n  help: |\n    Commit of coolbress/plinth.\n  default: "%s"\n\nowner_github_defaults:\n  default: "0000000000000000000000000000000000000009"\n' "$1" \
+      | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$pin_dir/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+  fi
+  [ "$2" = - ] || jq -n --arg s "$2" '{status: $s, ahead_by: 4, behind_by: 0}' > "$pin_dir/repos/coolbress/plinth/compare/$sha40...$tested.json"
+  jq -n --arg t "$tested" '[{name: "v9.0.0", commit: {sha: $t}}]' > "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"
+}
+pcopy2="$work/pin-choice"; rm -rf "$pcopy2"; cp -R "$good" "$pcopy2"
+printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy2/.copier-answers.yml"
+pin_out() { out="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"; }
+live_line="copier update --defaults --vcs-ref $target_ref --data plinth_sha=$sha40"
+tested_line="copier update --defaults --vcs-ref $target_ref --data plinth_sha=$tested"
+pin_api "$tested" ahead; pin_out
+if [ "$lines" = 2 ] && grep -qF "$live_line" <<<"$out" && grep -qF "$tested_line" <<<"$out"
+then ok "tested pin ahead of the live one: both update lines are printed, the live one first"
+else bad "tested ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
+has "the comparison names both SHAs, the tested pin's tag and the compare URL" \
+  "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested \(v9\.0\.0\), 4 commit\(s\) newer: https://github\.com/coolbress/plinth/compare/$sha40\.\.\.$tested\$"
+has "the second line is offered, not chosen" "the line above keeps the live pin; this one moves it to the tested pin, if you choose it:"
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 0 ] && [ "$printed" = "$(sed -n 's/^  INFO    \(uvx .*plinth_sha='"$tested"'\)$/\1/p' <<<"$out")" ] && grep -q "4 commit(s) newer" "$work/print-err"
+then ok "--print-update-command --plinth-pin tested prints exactly the second line, the comparison on stderr"
+else bad "--plinth-pin tested, ahead (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command 2>/dev/null)"
+case "$printed" in *"$live_line") ok "--print-update-command without --plinth-pin still prints the live line" ;;
+  *) bad "--print-update-command default: '$printed'" ;; esac
+
+rm "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"; pin_out
+if [ "$lines" = 2 ] && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 4 commit(s) newer (release tags not read): https://" <<<"$out"
+then ok "the tag list unread: the comparison says so, rather than reading as an untagged commit"
+else bad "tags unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
+
+pin_api "$tested" behind; pin_out
+if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
+   && grep -q "INFO    plinth pin: the workflows call $sha40, newer than $tested (v9.0.0) that $target_ref was tested with; the live pin is kept, never moved backwards" <<<"$out"
+then ok "live pin ahead of the tested one: one line, kept because it is newer"
+else bad "live ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "never moved backwards" "$work/print-err"; then ok "--plinth-pin tested never prints a line that moves the pin backwards: exit 1, says why"
+else bad "--plinth-pin tested, live ahead (rc=$rc, stdout '$printed')"; fi
+
+pin_api "$sha40" -; pin_out
+if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" && ! grep -q "plinth pin:" <<<"$out"
+then ok "live pin equal to the tested one: one line, no comparison"
+else bad "equal ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
+
+pin_api "$tested" -; pin_out
+if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
+   && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, but the two were not compared (offline or API error); the live pin is kept" <<<"$out"
+then ok "the compare unreadable: one line, the comparison named as not read"
+else bad "compare unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>/dev/null)"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "--plinth-pin tested past an unread comparison prints no line, exit 1"
+else bad "--plinth-pin tested, compare unread (rc=$rc, stdout '$printed')"; fi
+
+pin_api "$tested" diverged; pin_out
+if [ "$lines" = 1 ] && grep -q "were not compared (the two commits have diverged)" <<<"$out"
+then ok "diverged commits: one line, no direction claimed"
+else bad "diverged ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
+
+pin_api - ahead; pin_out
+if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
+   && grep -q "INFO    plinth pin: the one $target_ref was tested with was not read (coolbress/plinth-template copier.yml at $target_ref: offline or API error); the live pin $sha40 is kept" <<<"$out"
+then ok "the tested pin unreadable: one line, named as not read"
+else bad "tested unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
+out="$(python3 "$checker" --root "$pcopy2" --no-network 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"
+if [ "$lines" = 1 ] && grep -q "plinth pin: the one $target_ref was tested with was not read" <<<"$out"; then ok "offline: one line, the tested pin not read"
+else bad "offline ($lines lines)"; fi
+pin_api "not-a-sha" ahead; pin_out
+if [ "$lines" = 1 ] && grep -q "has no plinth_sha default that is a full commit SHA" <<<"$out"; then ok "a plinth_sha default that is not a full SHA is not read, not offered"
+else bad "malformed default ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
+python3 "$checker" --root "$pcopy2" --no-network --plinth-pin tested >/dev/null 2>&1; rc=$?
+if [ "$rc" = 2 ]; then ok "--plinth-pin without --print-update-command is a usage error"; else bad "--plinth-pin alone (rc=$rc)"; fi
+python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin newest >/dev/null 2>&1; rc=$?
+if [ "$rc" = 2 ]; then ok "an unknown --plinth-pin value is a usage error"; else bad "--plinth-pin newest (rc=$rc)"; fi
+
 # Single-sourced: the target comes from scripts/new-project.sh beside the
 # checker, never a copy inside floor-check.py itself.
 selfdir="$work/selfcheck"; mkdir -p "$selfdir"

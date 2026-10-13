@@ -26,16 +26,27 @@ nothing. Show that output whole. Exit 1 means nothing to do or a stop (the
 recorded tag is the target, no pin to carry, a base it could not verify):
 show the message and stop there.
 
+The command keeps the plinth commit the repository's workflows call today,
+so an update never undoes a pin Dependabot moved. When the target tag was
+tested with a newer plinth commit, the plan also prints a `Plinth pin:` line
+comparing the two, a second command `With the tested pin:`, and two `--apply`
+lines, `--plinth-pin live` and `--plinth-pin tested`.
+
 ## 2. The user's yes
 
 Ask the user whether to apply exactly that plan. Invoking this skill is not
 the yes: the yes is to the plan they have just read. Without it, stop.
 
-On a yes, run the `--apply` line the plan printed, as printed, adding your own
-agent and model:
+When the plan printed two `--apply` lines, the question names both, and the
+user picks one: keep the pin the workflows call today, or move it to the one
+the target tag was tested with. Do not pick for them or recommend one as the
+default; the `Plinth pin:` line is what they decide on.
+
+On a yes, run the `--apply` line the plan printed, as printed (the one the
+user picked, when there were two), adding your own agent and model:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> --assisted-by <agent>:<model>
+${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> [--plinth-pin live|tested] --assisted-by <agent>:<model>
 ```
 
 For example `--assisted-by Claude:claude-fable-5-1`. The line ends the pull
@@ -61,7 +72,8 @@ the plan; then show the plan again and ask again.
   which pushes the commit already made and does not make a second one. Do not
   work around it: do not run copier, `git push` or `gh pr create` yourself.
 
-The pull request's description lists what copier merged cleanly, what a
+The pull request's description says which plinth pin was chosen and names
+both SHAs, and lists what copier merged cleanly, what a
 person resolved, and anything else a person changed after the update. It
 uses the two headings of the pull-request template plinth-template renders;
 it does not read a template this repository or its owner changed. If theirs

@@ -24,6 +24,10 @@ mkdir -p "$work/bin"
 sha40="$(printf '%040d' 7)"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+# The checker's GitHub reads come from fixtures, never the network: an empty
+# directory answers 404 to each, so the tested pin is "not read" unless a
+# case writes one (#511).
+export FLOOR_CHECK_API_DIR="$work/api-none"; mkdir -p "$FLOOR_CHECK_API_DIR"
 
 # ── mock: gh ─────────────────────────────────────────────────────────────
 # repo view names o/r with default branch main; the branch API answers the
@@ -231,6 +235,69 @@ git -C "$repo" commit -q -am "bump plinth" && git -C "$repo" push -q origin main
 run --apply "$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$raised\$" "$work/uvx.log"; then ok "copier is given the pin the workflows carry today, not the one first rendered"
 else bad "raised pin (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; fi
+
+# ── the plinth pin: live by default, tested on a person's choice (#511) ─
+tested="$(printf '%040d' 8)"
+pin_api="$work/api-pin"
+mkdir -p "$pin_api/repos/coolbress/plinth-template/contents" "$pin_api/repos/coolbress/plinth/compare"
+printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$tested" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
+  > "$pin_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+printf '{"status":"ahead","ahead_by":2}\n' > "$pin_api/repos/coolbress/plinth/compare/$sha40...$tested.json"
+pinrun() { # <fixture dir> <args...>: run with that API fixture
+  local api="$1"; shift
+  out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$api" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" "$@" 2>&1)"; rc=$?
+}
+fixture pinplan; reset_logs
+base="$(git -C "$BARE" rev-parse main)"
+pinrun "$pin_api"
+if [ "$rc" = 0 ] && grep -q "^Command: .*plinth_sha=$sha40\$" <<<"$out" && grep -q "^With the tested pin: .*plinth_sha=$tested\$" <<<"$out" \
+   && grep -q "^Plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 2 commit(s) newer" <<<"$out" \
+   && grep -qF -- "--apply $base --plinth-pin live" <<<"$out" && grep -qF -- "--apply $base --plinth-pin tested" <<<"$out"
+then ok "a tested pin newer than the live one: the plan prints the comparison, both lines and an --apply line for each choice"
+else bad "plan with two pins (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs; pinrun "$work/api-none"
+if [ "$rc" = 0 ] && ! grep -q "With the tested pin" <<<"$out" && ! grep -q -- "--plinth-pin" <<<"$out" && grep -q "^Plinth pin: .*was not read" <<<"$out"
+then ok "the tested pin not read: the plan prints one line, one --apply line, and says it was not read"
+else bad "plan with one pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+for choice in tested live default; do
+  fixture "pin$choice"; reset_logs
+  base="$(git -C "$BARE" rev-parse main)"
+  if [ "$choice" = default ]; then pinrun "$pin_api" --apply "$base"; else pinrun "$pin_api" --apply "$base" --plinth-pin "$choice"; fi
+  want_sha="$sha40"; [ "$choice" = tested ] && want_sha="$tested"
+  body="$(cat "$work/gh.log.body" 2>/dev/null)"
+  if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_ref --data plinth_sha=$want_sha\$" "$work/uvx.log"
+  then ok "--apply $([ "$choice" = default ] && echo "without --plinth-pin" || echo "--plinth-pin $choice") runs copier with the $([ "$choice" = tested ] && echo tested || echo live) SHA"
+  else bad "--plinth-pin $choice (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+  if grep -qF -- "--plinth-pin $([ "$choice" = tested ] && echo tested || echo live)" <<<"$body" && grep -q "$sha40" <<<"$body" && grep -q "$tested" <<<"$body"
+  then ok "the description says which pin was chosen ($choice) and names both SHAs"
+  else bad "description for $choice"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+done
+
+# The live pin already the tested one: --plinth-pin tested runs the same
+# line, and the description does not claim a move.
+same_api="$work/api-same"; rm -rf "$same_api"; mkdir -p "$same_api/repos/coolbress/plinth-template/contents"
+printf 'plinth_sha:\n  default: "%s"\n' "$sha40" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
+  > "$same_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+fixture pinsame; reset_logs
+pinrun "$same_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin tested
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$sha40\$" "$work/uvx.log" && grep -q "The plinth pin: unchanged" <<<"$body" && ! grep -q "moved to" <<<"$body"
+then ok "--plinth-pin tested when the live pin is the tested one: the same line runs, and the description says nothing moved"
+else bad "--plinth-pin tested, equal (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
+
+fixture pinunread; reset_logs
+pinrun "$work/api-none" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin tested
+if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && grep -q "no update command with the tested pin" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
+then ok "--plinth-pin tested with the tested pin not read stops before copier, opens nothing"
+else bad "--plinth-pin tested, unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs
+pinrun "$pin_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin newest
+if [ "$rc" = 2 ] && [ ! -e "$work/uvx.log" ]; then ok "an unknown --plinth-pin value exits 2 before anything runs"
+else bad "--plinth-pin newest (rc=$rc)"; fi
+pinrun "$pin_api" --plinth-pin tested
+if [ "$rc" = 2 ]; then ok "--plinth-pin without --apply exits 2: the choice is made where copier runs"
+else bad "--plinth-pin on the plan (rc=$rc)"; fi
 
 # ── a pull request GitHub made although gh reported failure is adopted ──
 fixture adopt; reset_logs
