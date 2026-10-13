@@ -14,12 +14,12 @@ pull requests and have no tag.
 ### Added
 
 - `gitlab/python-ci.yml`, a pipeline for GitLab.com that a project includes
-  from GitHub at a full commit SHA, optionally with an `include:integrity`
-  checksum (#353). Its jobs
-  have `python-ci.yml`'s names and pinned tools; `deps` uses osv-scanner, since
-  GitLab Free has no dependency review, and `floor-check` reads only the
-  include. No GitLab project has run it yet, and whether GitLab.com Free
-  enforces `include:integrity` is not confirmed.
+  from GitHub at a full commit SHA with an `include:integrity` checksum
+  (#353). Its jobs have `python-ci.yml`'s names and pinned tools; `deps` uses
+  osv-scanner, since GitLab Free has no dependency review, and `floor-check`
+  reads only the include. Measured on a GitLab.com Free private project: green
+  on the default branch and on a merge request, about 4 compute minutes a
+  pipeline, and a wrong checksum fails the pipeline before any job.
   [GitLab pipeline](docs/reference/gitlab-ci.md) says what GitLab Free cannot
   hold.
 

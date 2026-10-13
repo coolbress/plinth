@@ -712,7 +712,9 @@ build:
 # The floor, as far as this pipeline can read it on GitLab: whether the
 # pipeline definition (CI_CONFIG_PATH, .gitlab-ci.yml by default) still
 # includes this file from plinth at a full commit SHA, and whether that
-# include names a checksum. The protected default branch, the merge checks
+# include names a checksum. GitLab.com Free checks one: a wrong checksum
+# fails the pipeline before any job, "failed integrity check" (measured on
+# #353). The protected default branch, the merge checks
 # and the rest of the floor are GitLab settings and files /plinth:floor-check
 # does not read on GitLab yet (#353); each is a not yet confirmed line, never
 # a pass. It reads the merge request's own definition, so a merge request
@@ -768,12 +770,10 @@ floor-check:
                   return True
           return False
       if any(checksum(i) for i, _ in pinned):
-          print("pass: the include names a checksum (include:integrity)")
-          print("not yet confirmed: GitLab.com Free refusing an include whose bytes differ from its checksum, "
-                "not confirmed yet; a run on GitLab.com Free with a wrong checksum confirms it")
+          print("pass: the include names a checksum (include:integrity), which GitLab checks before the pipeline starts")
       else:
-          print("not yet confirmed: the include names no checksum (include:integrity), and whether GitLab.com Free "
-                "honours one is not confirmed yet; the commit SHA in the URL stands in for it until then")
+          print("not yet confirmed: the bytes GitLab fetched are plinth's file, the include names no checksum "
+                "(include:integrity), which GitLab.com Free checks; a checksum on the include confirms it")
       for what in (
           "the protected default branch (no force push, merge requests only, Maintainers merge)",
           "the merge check \"Pipelines must succeed\", with \"Skipped pipelines are considered successful\" off",

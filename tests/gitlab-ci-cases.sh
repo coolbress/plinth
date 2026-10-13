@@ -240,19 +240,20 @@ fc "include:
     integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
     inputs:
       max-diff-lines: 400"
-expect "an include at a full SHA with a checksum passes" 0 "pass: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA ($sha)" "pass: the include names a checksum" "not yet confirmed: GitLab.com Free refusing an include"
+expect "an include at a full SHA with a checksum passes" 0 "pass: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA ($sha)" "pass: the include names a checksum"
 expect "the GitLab settings it does not read are not yet confirmed" 0 "not yet confirmed: the protected default branch" "not yet confirmed: the merge check \"Pipelines must succeed\"" "not yet confirmed: every job of this pipeline"
 refuse "nothing it does not read is a pass" "pass: the protected"
+refuse "a checksum leaves nothing about it unconfirmed" "not yet confirmed: the bytes GitLab fetched"
 fc "include:
   - remote: $url"
-expect "no checksum: not yet confirmed, not a failure" 0 "not yet confirmed: the include names no checksum"
+expect "no checksum: not yet confirmed, not a failure" 0 "not yet confirmed: the bytes GitLab fetched are plinth's file, the include names no checksum"
 fc "include: '$url'"
-expect "the one-line form passes, with no checksum" 0 "pass: .gitlab-ci.yml includes" "not yet confirmed: the include names no checksum"
+expect "the one-line form passes, with no checksum" 0 "pass: .gitlab-ci.yml includes" "the include names no checksum"
 fc "include:
   - remote: $url
   - local: other.yml
     integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
-expect "another item's integrity is not this include's" 0 "not yet confirmed: the include names no checksum"
+expect "another item's integrity is not this include's" 0 "the include names no checksum"
 fc "include:
   - remote: https://raw.githubusercontent.com/coolbress/plinth/v1.16.0/gitlab/python-ci.yml"
 expect "an include at a tag fails" 1 "fail: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it includes it at v1.16.0"
