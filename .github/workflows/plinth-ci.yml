@@ -36,6 +36,9 @@ jobs:
       - name: python-ci contract (job names, inputs, secrets, ruleset contexts)
         run: ./tests/python-ci-contract.sh
 
+      - name: GitLab pipeline matches python-ci; four of its jobs run on fixtures
+        run: ./tests/gitlab-ci-cases.sh
+
       - name: ci / pr-title verdicts
         run: ./tests/pr-title-cases.sh
 

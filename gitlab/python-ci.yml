@@ -1,0 +1,826 @@
+# plinth's pipeline for GitLab.com (#353). A project's .gitlab-ci.yml
+# includes it from GitHub, at a full commit SHA:
+#
+#   include:
+#     - remote: https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml
+#       integrity: sha256-<base64 of the file's SHA-256>
+#
+# docs/reference/gitlab-ci.md says what the commit SHA and the checksum each
+# stand in for, and what nothing on GitLab Free holds.
+#
+# The jobs are python-ci.yml's, under the same names, and run the same checks
+# with the same pinned tools; tests/gitlab-ci-cases.sh keeps the names, the
+# inputs, the pins and the text the two files share equal. Where GitHub and GitLab differ
+# the job says so beside the line that differs.
+#
+# GitLab Free has no required checks by name. The merge check "Pipelines must
+# succeed" takes the pipeline as a whole, and the pipeline is built from the
+# merge request's own .gitlab-ci.yml: a merge request that removes a job, or
+# this include, runs without it and still merges when what is left passes.
+# Nothing in the merge request's pipeline can see that; only a read from
+# outside it, after the merge, can.
+#
+# Each job writes its verdict lines (`pass:`, `fail:`, `not yet confirmed:`;
+# the forms are in docs/reference/required-checks.md) at the end of its log
+# under "Verdict". GitLab has no job summary and no annotations, so a not yet
+# confirmed line is in the log only. A job that stops before its first check
+# (a tool install) writes none, and its failure is the verdict.
+#
+# The image is pinned by digest; uv, gitleaks and osv-scanner come from their
+# official releases with SHA-256 checksums.
+
+spec:
+  inputs:
+    working-directory:
+      description: Project root, relative to the repository root.
+      default: "."
+    max-diff-lines:
+      description: Upper bound on the lines one merge request may change for review (added + removed). 0 measures without blocking.
+      type: number
+      default: 400
+    deps-fail-on-severity:
+      description: Lowest vulnerability severity the deps job blocks on.
+      options: [critical, high, moderate, low]
+      default: high
+    diff-size-exclude:
+      description: Path patterns left out of the diff count, space separated, passed as git pathspecs.
+      default: "*.md *.lock *lock.json *lock.yaml *lock.yml LICENSE"
+    extra-python-versions:
+      description: Python versions to test in addition to .python-version, space separated.
+      default: ""
+---
+
+# Merge request pipelines, and the default branch after a merge. A branch
+# push with an open merge request is left to the merge request's pipeline, so
+# the same commit does not run twice.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+.plinth:
+  image: python:3.12-bookworm@sha256:5560e9ab8709f459489e5b8aa696eda8a07ef821e14bb122be62d91234bfa98b
+  stage: test
+  interruptible: true
+  timeout: 10m
+  variables:
+    PLINTH_WORKDIR: $[[ inputs.working-directory ]]
+    UV_VERSION: "0.12.9"
+    UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+  before_script:
+    - |
+      PLINTH_TMP="$(mktemp -d)"
+      plinth_failed=0; plinth_last=; plinth_lines=()
+      say() { plinth_lines+=("$1"); }
+      # A check: its verdict line from its exit code. After a failed check the
+      # later ones do not run and are not yet confirmed, as on GitHub. A
+      # function run here has errexit off, so each one returns its failures.
+      step() {
+        local std="$1"; shift
+        if [ "$plinth_failed" != 0 ]; then
+          say "not yet confirmed: $std, it did not run because an earlier step failed; a run that gets past that step confirms it"
+          plinth_last=skipped; return 0
+        fi
+        printf '$ %s\n' "$*"
+        if "$@"; then say "pass: $std"; plinth_last=success; else say "fail: $std"; plinth_last=failure; plinth_failed=1; fi
+      }
+      verdict() {
+        echo; echo "Verdict"
+        local l
+        for l in ${plinth_lines+"${plinth_lines[@]}"}; do printf -- '- %s\n' "${l//[$'\r\n']/ }"; done
+        exit "$plinth_failed"
+      }
+      # A branch pipeline for a commit an open merge request carries has no
+      # CI_MERGE_REQUEST_* variables, so a merge request check would read it
+      # as "not a merge request". That happens when the project's own
+      # `workflow:` replaces the rules above, and a green branch pipeline
+      # can then satisfy "Pipelines must succeed": a fail, never a pass.
+      plinth_branch_of_mr() {
+        if [ -n "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "${CI_OPEN_MERGE_REQUESTS:-}" ]; then return 1; fi
+        say "fail: $1, this is a branch pipeline while merge request ${CI_OPEN_MERGE_REQUESTS} is open, so it was not checked against the merge request; let merge request pipelines run (a project's own workflow: replaces plinth's rules)"
+        plinth_failed=1
+      }
+      plinth_uv() {
+        local d="$PLINTH_TMP/uv" f="uv-x86_64-unknown-linux-gnu.tar.gz"
+        mkdir -p "$d" &&
+          curl -fsSL --retry 3 -o "$d/$f" "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f" &&
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c - &&
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx" &&
+          export PATH="$d:$PATH"
+      }
+      plinth_gitleaks() {
+        local d="$PLINTH_TMP/gitleaks" f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+        mkdir -p "$d" &&
+          curl -fsSL --retry 3 -o "$d/$f" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$f" &&
+          echo "${GITLEAKS_SHA256}  $d/$f" | sha256sum -c - &&
+          tar -xzf "$d/$f" -C "$d" gitleaks &&
+          export PATH="$d:$PATH"
+      }
+      plinth_osv() {
+        local d="$PLINTH_TMP/osv" f=osv-scanner_linux_amd64
+        mkdir -p "$d" &&
+          curl -fsSL --retry 3 -o "$d/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/$f" &&
+          echo "${OSV_SCANNER_SHA256}  $d/osv-scanner" | sha256sum -c - &&
+          chmod +x "$d/osv-scanner" &&
+          export PATH="$d:$PATH"
+      }
+
+lint:
+  extends: .plinth
+  script:
+    - |
+      plinth_uv || exit 1
+      cd "$PLINTH_WORKDIR" || exit 1
+      # --locked fails when the lockfile is missing or disagrees with pyproject.
+      step "uv sync --locked" uv sync --locked
+      step "ruff check" uv run ruff check .
+      step "ruff format --check" uv run ruff format --check .
+      # GitHub's lint also runs zizmor on .github/workflows/. zizmor audits
+      # GitHub Actions only, and no pinned tool audits .gitlab-ci.yml.
+      say "not yet confirmed: the pipeline definition's security, zizmor audits GitHub Actions only and nothing in this pipeline audits .gitlab-ci.yml; a reviewer reading the merge request's .gitlab-ci.yml changes confirms it"
+      verdict
+
+typecheck:
+  extends: .plinth
+  script:
+    - |
+      plinth_uv || exit 1
+      cd "$PLINTH_WORKDIR" || exit 1
+      step "uv sync --locked" uv sync --locked
+      step "mypy" uv run mypy .
+      verdict
+
+# Coverage and diff-cover are installed as in python-ci.yml, each file pinned
+# by its hash with `uv pip install --require-hashes` (#504: `uv run --with`
+# and `uvx` install a file whose hash does not match). On GitHub the changed
+# lines are judged against the merge commit's first parent; a GitLab merge
+# request pipeline checks out the merge request's head, so here they are
+# judged against CI_MERGE_REQUEST_DIFF_BASE_SHA, the merge base GitLab's
+# Changes tab shows.
+test:
+  extends: .plinth
+  variables:
+    GIT_DEPTH: "0"
+    PLINTH_EXTRA_PYTHON_VERSIONS: $[[ inputs.extra-python-versions ]]
+  script:
+    - |
+      plinth_uv || exit 1
+      cd "$PLINTH_WORKDIR" || exit 1
+      step "uv sync --locked" uv sync --locked
+      # A failed install never fails the job: pytest then runs without
+      # coverage and the changed lines are not yet confirmed.
+      install_coverage() {
+        local r="$PLINTH_TMP/coverage-requirements.txt"
+        cat > "$r" <<'REQ'
+      coverage==7.10.7 \
+          --hash=sha256:8421e088bc051361b01c4b3a50fd39a4b9133079a2229978d9d30511fd05231b \
+          --hash=sha256:35f5e3f9e455bb17831876048355dca0f758b6df22f49258cb5a91da23ef437d \
+          --hash=sha256:314f2c326ded3f4b09be11bc282eb2fc861184bc95748ae67b360ac962770be7 \
+          --hash=sha256:10b6ba00ab1132a0ce4428ff68cf50a25efd6840a42cdf4239c9b99aad83be8b \
+          --hash=sha256:bb45474711ba385c46a0bfe696c695a929ae69ac636cda8f532be9e8c93d720a \
+          --hash=sha256:f7941f6f2fe6dd6807a1208737b8a0cbcf1cc6d7b07d24998ad2d63590868260
+      tomli==2.2.1 ; python_version < "3.11" \
+          --hash=sha256:cb55c73c5f4408779d0cf3eef9f762b9c9f147a77de7b258bef0a5628adc85cc
+      REQ
+        if uv run --no-sync python -c 'import coverage' 2>/dev/null; then
+          echo "coverage is in the locked environment: used as locked, nothing installed"
+        else
+          uv pip install --python .venv --require-hashes --no-deps -r "$r" || return 1
+        fi
+        uv run --no-sync coverage --version
+      }
+      cov=skipped
+      if [ "$plinth_failed" = 0 ]; then
+        if install_coverage; then cov=success; else cov=failure; fi
+      fi
+      # Under coverage when it installed; the outcome is pytest's either way.
+      run_pytest() {
+        if [ "$cov" != success ]; then uv run pytest; return; fi
+        local src=.; [ -d src ] && src=src
+        uv run --no-sync coverage run --branch --source="$src" -m pytest
+      }
+      step "pytest on .python-version" run_pytest
+      pytest_outcome="$plinth_last"
+
+      # Which of the lines a merge request changes ran under the tests (#503).
+      # Reported, never failing; a step that breaks leaves no verdict file,
+      # which is reported as not yet confirmed.
+      changed_lines() {
+        local std="changed lines ran under the tests" base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"
+        local out="$PLINTH_TMP/changed.verdict"; rm -f "$out"
+        if [ -z "${CI_MERGE_REQUEST_IID:-}" ]; then echo "pass: $std, does not apply (not a merge request)" > "$out"; return 0; fi
+        if [ "$cov" != success ] || [ "$pytest_outcome" != success ]; then
+          echo "not yet confirmed: $std, it did not run because an earlier step failed; a run that gets past that step confirms it" > "$out"; return 0
+        fi
+        local xml="$PLINTH_TMP/coverage.xml" json="$PLINTH_TMP/diff-cover.json"
+        uv run --no-sync coverage xml -o "$xml" || true
+        local r="$PLINTH_TMP/diff-cover-requirements.txt" d="$PLINTH_TMP/diff-cover"
+        cat > "$r" <<'REQ'
+      diff-cover==9.7.1 \
+          --hash=sha256:a662f3cacf57ba494dcb0235349c4912ae7f44345b162894ce5949745501c9c7
+      chardet==5.2.0 \
+          --hash=sha256:e1cf59446890a00105fe7b7912492ea04b6e6f06d4b742b2c788469e34c82970
+      jinja2==3.1.6 \
+          --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
+      markupsafe==3.0.3 \
+          --hash=sha256:d6dd0be5b5b189d31db7cda48b91d7e0a9795f31430b7f271219ab30f1d3ac9d
+      pluggy==1.6.0 \
+          --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
+      pygments==2.19.2 \
+          --hash=sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b
+      REQ
+        if [ -s "$xml" ] && uv venv -q --python 3.12 "$d" && uv pip install -q --python "$d" --require-hashes -r "$r"; then
+          "$d/bin/diff-cover" "$xml" --compare-branch="$base" --format "json:$json" || true
+        fi
+        local changed="$PLINTH_TMP/changed-python.txt" top
+        top="$(git rev-parse --show-toplevel || true)"
+        git diff --name-only --diff-filter=d "$base" HEAD -- '*.py' > "$changed" || rm -f "$changed"
+        python3 - "$xml" "$json" "$out" "$changed" "$top" <<'PY'
+      import json, os, re, sys
+      import xml.etree.ElementTree as ET
+      xml, report, out, changed, top = sys.argv[1:6]
+      STD = "changed lines ran under the tests"
+      TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")   # diff-size's
+      CONFIRMS = "a test that runs them, or `# pragma: no cover` with its reason, confirms it"
+      def say(*lines):
+          with open(out, "w", encoding="utf-8") as f:
+              f.writelines(s + "\n" for s in lines)
+      def clean(p):
+          return re.sub(r"[\x00-\x1f\x7f]", "?", p)
+      try:
+          root = ET.parse(xml).getroot()
+          covered = int(root.get("lines-covered", "0"))
+      except (OSError, ET.ParseError, ValueError):
+          root, covered = None, 0   # `coverage xml` writes nothing when it has no data
+      if covered == 0:
+          say(f"not yet confirmed: {STD}, coverage recorded no line in the whole project, "
+              "usually because another tool owns the tracer (pytest-cov's --cov in the "
+              "project's addopts); a run where coverage records lines confirms it")
+          sys.exit(0)
+      try:
+          with open(report, encoding="utf-8") as f:
+              stats = json.load(f)["src_stats"]
+      except (OSError, ValueError, KeyError, TypeError):
+          say(f"not yet confirmed: {STD}, diff-cover did not finish (its error is in this "
+              "step's log); a run where it does confirms it")
+          sys.exit(0)
+      try:
+          with open(changed, encoding="utf-8") as f:
+              files = [l for l in f.read().splitlines() if l and not TEST.search(l)]
+      except OSError:
+          say(f"not yet confirmed: {STD}, git did not list the changed files (its error is in "
+              "this step's log); a run where it does confirms it")
+          sys.exit(0)
+      # The files coverage's report has, as paths from the repository root,
+      # and every file diff-cover matched in it.
+      measured = {os.path.relpath(os.path.normpath(os.path.join(s.text or "", c.get("filename", ""))), top)
+                  for s in root.iter("source") for c in root.iter("class")} | set(stats)
+      unmeasured = [clean(f) for f in files if f not in measured]
+      for f in unmeasured:
+          print(f"not in coverage's report: {f}")
+      extra = []
+      if unmeasured:
+          listed = ", ".join(unmeasured[:9]) + (f", and {len(unmeasured) - 9} more in this step's log"
+                                                if len(unmeasured) > 9 else "")
+          extra = [f"not yet confirmed: {STD}, {len(unmeasured)} changed Python files are not in "
+                   "coverage's report (outside the measured source, or omitted by the project's "
+                   f"coverage configuration): {listed}; a run that measures them confirms it"]
+      def ranges(ns):
+          ns, rs = sorted(set(ns)), []
+          for n in ns:
+              if rs and n == rs[-1][1] + 1:
+                  rs[-1][1] = n
+              else:
+                  rs.append([n, n])
+          return ",".join(str(a) if a == b else f"{a}-{b}" for a, b in rs)
+      stats = {p: s for p, s in stats.items() if not TEST.search(p)}
+      total = sum(len(set(s["covered_lines"]) | set(s["violation_lines"])) for s in stats.values())
+      missed = [(clean(p), s["violation_lines"])
+                for p, s in sorted(stats.items()) if s["violation_lines"]]
+      n = sum(len(set(v)) for _, v in missed)
+      for p, v in missed:   # every file, past the nine the verdict line names
+          print(f"did not run under the tests: {p}:{ranges(v)}")
+      shown = ", ".join(f"{p}:{ranges(v)}" for p, v in missed[:9])
+      if len(missed) > 9:
+          shown += f", and {len(missed) - 9} more files in this step's log"
+      if total == 0:
+          say(*(extra or [f"pass: {STD}, does not apply (no changed executable line)"]))
+      elif n == 0:
+          say(f"pass: {STD}, all {total} changed lines ran", *extra)
+      elif n == total:
+          say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}; {CONFIRMS}", *extra)
+      else:
+          say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}; {CONFIRMS}", *extra)
+      PY
+      }
+      if plinth_branch_of_mr "changed lines ran under the tests"; then branch_of_mr=1; else branch_of_mr=; changed_lines || true; fi
+
+      # Exercise the declared range for real; uv downloads the interpreter.
+      extra_versions() {
+        local v
+        for v in $PLINTH_EXTRA_PYTHON_VERSIONS; do
+          echo "── python $v"
+          uv run --isolated --python "$v" --with pytest pytest -q || return 1
+        done
+      }
+      if [ -n "$PLINTH_EXTRA_PYTHON_VERSIONS" ]; then step "pytest on $PLINTH_EXTRA_PYTHON_VERSIONS" extra_versions
+      else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
+      if [ -n "$branch_of_mr" ]; then :
+      elif [ -s "$PLINTH_TMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/changed.verdict"
+      else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
+      verdict
+
+# Secret detection, history included: a deleted secret is still in history.
+# GitLab Free has no secret push protection (#353), so this job is the only
+# secret check, and it runs after the secret has reached GitLab.
+secrets:
+  extends: .plinth
+  variables:
+    GIT_DEPTH: "0"
+    GITLEAKS_VERSION: "8.30.1"
+    GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+  script:
+    - |
+      plinth_gitleaks || exit 1
+      cd "$PLINTH_WORKDIR" || exit 1
+      step "gitleaks, the history included" gitleaks git . --no-banner --redact
+      verdict
+
+# The merge request title is Conventional Commits with the standard eleven
+# types only, as on GitHub. Two differences: a draft prefix GitLab adds
+# ("Draft:", "[Draft]", "(Draft)") is left out, since marking the merge
+# request ready removes it without a new pipeline; and a title ending in
+# `(#N)` passes, since GitLab's squash commit does not append the merge
+# request's number to its title the way GitHub's does.
+# What it cannot see: GitLab starts no pipeline when a merge request is
+# retitled (GitHub re-runs on `edited`), so a title changed after the last
+# pipeline is never checked, and the squash commit takes that title.
+pr-title:
+  extends: .plinth
+  timeout: 3m
+  script:
+    - |
+      title="${CI_MERGE_REQUEST_TITLE:-}"
+      if plinth_branch_of_mr "MR title"; then verdict; fi
+      if [ -z "$title" ]; then
+        echo "Not a merge request: no title to check."
+        say "pass: MR title, does not apply (not a merge request: no title to check)"
+        verdict
+      fi
+      shopt -s nocasematch
+      if [[ "$title" =~ ^(\[draft\]|\(draft\)|draft:)[[:space:]]*(.*)$ ]]; then title="${BASH_REMATCH[2]}"; fi
+      shopt -u nocasematch
+      types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+      re="^($types)(\([a-zA-Z0-9_.,/ -]+\))?!?: .+"
+      if [[ "$title" =~ $re ]]; then
+        echo "OK: $title"
+        say "pass: MR title follows the convention"
+      else
+        echo "MR title is not Conventional Commits: $title"
+        echo "Format: type(scope): summary, or type(scope)!: summary for a breaking change."
+        echo "Types are these eleven only: feat fix docs style refactor perf test build ci chore revert."
+        echo "Local meaning goes into the scope (docs(research):, refactor(layout):); do not invent a type."
+        say "fail: MR title, it is not Conventional Commits"
+        plinth_failed=1
+      fi
+      verdict
+
+# A wall, not a net: blocks a vulnerable dependency version a merge request
+# adds. GitLab Free has no dependency review service, so osv-scanner reads
+# uv.lock at the head and at the merge base. The OSV database is downloaded
+# once and both lockfiles are scanned offline against that one copy, so a
+# finding counts as added only when the head has it and the base does not.
+# The severity is the advisory's highest CVSS score: critical 9.0 and up,
+# high 7.0, moderate 4.0, low above 0. An advisory with no score counts as at
+# or above any threshold. A scan that cannot run (the download, an error, a
+# lockfile osv-scanner cannot read) fails the job: it never passes unchecked.
+deps:
+  extends: .plinth
+  timeout: 5m
+  variables:
+    GIT_DEPTH: "0"
+    PLINTH_DEPS_FAIL_ON_SEVERITY: $[[ inputs.deps-fail-on-severity ]]
+    OSV_SCANNER_VERSION: "2.6.0"
+    OSV_SCANNER_SHA256: "ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108"
+  script:
+    - |
+      std="dependency review"
+      base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"
+      if plinth_branch_of_mr "$std"; then verdict; fi
+      if [ -z "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "$base" ]; then
+        say "pass: $std, does not apply (not a merge request: no base to compare dependencies against)"
+        verdict
+      fi
+      plinth_osv || exit 1
+      export OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY="$PLINTH_TMP/osv-db"
+      lock="${PLINTH_WORKDIR%/}/uv.lock"; lock="${lock#./}"
+      # osv-scanner applies an osv-scanner.toml beside the lockfile, where a
+      # merge request could ignore the advisory it adds: both scans use this
+      # empty one instead.
+      : > "$PLINTH_TMP/osv-scanner.toml"
+      # scan <lockfile> <out.json> [flags]: 0 when osv-scanner read the file.
+      # It exits 1 on findings, 128 when it found no package: that is a pass
+      # only for a lockfile with no registry package in it.
+      scan() {
+        local rc=0
+        osv-scanner scan source --offline-vulnerabilities --config="$PLINTH_TMP/osv-scanner.toml" "${@:3}" --format json -L "$1" > "$2" || rc=$?
+        case "$rc" in
+          0|1) return 0 ;;
+          128) if grep -q 'source = { registry' "$1"; then echo "osv-scanner found no package in $1, which names registry packages"; return 1; fi
+               echo '{"results": []}' > "$2"; return 0 ;;
+          *) echo "osv-scanner exited $rc on $1: an error, not a finding"; return 1 ;;
+        esac
+      }
+      review() {
+        if [ ! -f "$lock" ]; then echo "no $lock at the head"; return 1; fi
+        git cat-file -e "$base^{commit}" || { echo "the merge base $base is not in the clone"; return 1; }
+        local b="$PLINTH_TMP/base"; mkdir -p "$b"
+        if git cat-file -e "$base:$lock" 2>/dev/null; then
+          git show "$base:$lock" > "$b/uv.lock" || return 1
+        else
+          echo "no $lock at the merge base: every locked version counts as added"
+          echo "version = 1" > "$b/uv.lock"
+        fi
+        scan "$lock" "$PLINTH_TMP/head.json" --download-offline-databases || return 1
+        scan "$b/uv.lock" "$PLINTH_TMP/base.json" || return 1
+        python3 - "$PLINTH_TMP/head.json" "$PLINTH_TMP/base.json" "$PLINTH_DEPS_FAIL_ON_SEVERITY" "$PLINTH_TMP/deps.verdict" <<'PY'
+      import json, sys
+      head, base, threshold, out = sys.argv[1:5]
+      FLOOR = {"critical": 9.0, "high": 7.0, "moderate": 4.0, "low": 0.0}[threshold]
+      def findings(path):
+          with open(path, encoding="utf-8") as f:
+              data = json.load(f)
+          found = {}
+          for r in data["results"]:
+              for p in r["packages"]:
+                  pkg = p["package"]
+                  for g in p.get("groups") or []:
+                      key = (pkg["name"], pkg["version"], tuple(sorted(g["ids"])))
+                      found[key] = g.get("max_severity") or ""
+          return found
+      try:
+          new, old = findings(head), findings(base)
+      except (OSError, ValueError, KeyError, TypeError) as e:
+          print(f"osv-scanner's output is not the JSON report expected: {e!r}")
+          sys.exit(2)
+      def blocks(score):
+          try:
+              return float(score) > FLOOR if FLOOR == 0.0 else float(score) >= FLOOR
+          except ValueError:
+              return True   # no score: counted as at or above
+      added = sorted((k, s) for k, s in new.items() if k not in old)
+      for (name, version, ids), s in added:
+          print(f"added: {name} {version} {', '.join(ids)} (CVSS {s or 'none'})")
+      hits = [f"{name} {version} ({ids[0]}, CVSS {s or 'none'})" for (name, version, ids), s in added if blocks(s)]
+      with open(out, "w", encoding="utf-8") as f:
+          if hits:
+              shown = ", ".join(hits[:9]) + (f", and {len(hits) - 9} more in the log" if len(hits) > 9 else "")
+              f.write(f"fail: dependency review, {len(hits)} advisories at {threshold} or above on added dependency versions: {shown}\n")
+          else:
+              f.write(f"pass: dependency review, no added dependency version with an advisory at {threshold} or above (osv-scanner, the OSV database)\n")
+      sys.exit(1 if hits else 0)
+      PY
+      }
+      rc=0; review || rc=$?
+      if [ -s "$PLINTH_TMP/deps.verdict" ]; then say "$(cat "$PLINTH_TMP/deps.verdict")"
+      else say "fail: $std, the scan could not run (its error is above); a run where osv-scanner reads both lockfiles confirms it"; fi
+      [ "$rc" = 0 ] || plinth_failed=1
+      verdict
+
+# A reviewability gate: added plus removed lines, docs and lockfiles left
+# out, against max-diff-lines. Then, as on GitHub, each change to the checks
+# the description does not name is a WARN in the log, never a failure. On
+# GitLab the pipeline definition is .gitlab-ci.yml and anything under
+# .gitlab/ci/; the description is CI_MERGE_REQUEST_DESCRIPTION, which GitLab
+# cuts at 2700 characters (CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED), and a
+# name past the cut reads as not named.
+diff-size:
+  extends: .plinth
+  timeout: 5m
+  variables:
+    GIT_DEPTH: "0"
+    PLINTH_MAX_DIFF_LINES: $[[ inputs.max-diff-lines ]]
+    PLINTH_DIFF_SIZE_EXCLUDE: $[[ inputs.diff-size-exclude ]]
+  script:
+    - |
+      base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"; head="${CI_COMMIT_SHA:-}"
+      if plinth_branch_of_mr "diff size"; then verdict; fi
+      if [ -z "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "$base" ] || [ -z "$head" ]; then
+        echo "Not a merge request: no diff to measure."
+        say "pass: diff size, does not apply (not a merge request: no diff to measure)"
+        verdict
+      fi
+      root="${PLINTH_WORKDIR%/}"
+      if [ -z "$root" ] || [ "$root" = "." ]; then prefix=""; spec=("."); else prefix="$root/"; spec=("$root"); fi
+      patterns=()
+      [ -z "$PLINTH_DIFF_SIZE_EXCLUDE" ] || read -r -a patterns <<< "$PLINTH_DIFF_SIZE_EXCLUDE"
+      for p in ${patterns+"${patterns[@]}"}; do spec+=(":(exclude)${prefix}${p}"); done
+      if ! numstat="$(git diff --numstat "${base}...${head}" -- "${spec[@]}")"; then
+        echo "Could not compute the diff (base=${base} head=${head})."
+        say "fail: diff size, the diff could not be computed"; plinth_failed=1
+      else
+        added=0; removed=0
+        while read -r a d _; do
+          if [ -z "$a" ] || [ "$a" = "-" ]; then continue; fi   # blank line or binary
+          added=$((added + a)); removed=$((removed + d))
+        done <<< "$numstat"
+        total=$((added + removed))
+        echo "Reviewable change: ${total} lines (+${added} / -${removed}); limit ${PLINTH_MAX_DIFF_LINES}; excluded: ${PLINTH_DIFF_SIZE_EXCLUDE}"
+        if [ "$PLINTH_MAX_DIFF_LINES" -le 0 ]; then
+          say "pass: diff size, measured and not enforced (max-diff-lines is 0): ${total} lines"
+        elif [ "$total" -gt "$PLINTH_MAX_DIFF_LINES" ]; then
+          echo "Over the limit. Split the change along its dependency chain into a stack (data, then API, then wiring, then UX)."
+          say "fail: diff size, ${total} lines, over the limit of ${PLINTH_MAX_DIFF_LINES}"; plinth_failed=1
+        else
+          say "pass: diff size, ${total} lines, within the limit of ${PLINTH_MAX_DIFF_LINES}"
+        fi
+      fi
+      BASE_SHA="$base" HEAD_SHA="$head" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" \
+        TRUNCATED="${CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED:-}" python3 - <<'PY' || true
+      import os, re, subprocess, sys
+
+      base, head = os.environ["BASE_SHA"], os.environ["HEAD_SHA"]
+      body = os.environ.get("BODY") or ""
+
+      def git(*args):
+          r = subprocess.run(["git", *args], capture_output=True)
+          if r.returncode != 0:
+              err = r.stderr.decode("utf-8", "replace").strip().replace("\n", " ")
+              print(f"WARN: git {args[0]} failed (base={base} head={head}): {err}; changes to the checks not compared")
+              sys.exit(1)
+          return r.stdout.decode("utf-8", "surrogateescape")
+
+      TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")
+      CONFIG = {
+          "conftest.py", "pytest.toml", ".pytest.toml",                # pytest
+          "pytest.ini", ".pytest.ini",                                 # pytest
+          "tox.ini", "setup.cfg",                                      # pytest, others
+          "mypy.ini", ".mypy.ini",                                     # mypy
+          "ruff.toml", ".ruff.toml",                                   # ruff
+          ".coveragerc",                                               # coverage
+          ".pre-commit-config.yaml",                                   # pre-commit
+          ".gitleaks.toml", ".gitleaksignore",                         # gitleaks
+      }   # python-ci.yml's, less ruleset.json: GitLab's wall is not a file
+      mb = git("merge-base", base, head).strip()
+      try:
+          import tomllib
+      except ImportError:   # Python < 3.11: no parser, so any edit counts
+          tomllib = None
+
+      def tool_table(rev, path):
+          """pyproject.toml's `tool` table at rev; None when the file is
+          absent; its whole text when it cannot be parsed."""
+          r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
+          if r.returncode != 0:
+              return None
+          text = r.stdout.decode("utf-8", "replace")
+          if tomllib is None:
+              return text
+          try:
+              return tomllib.loads(text).get("tool")
+          except tomllib.TOMLDecodeError:
+              return text
+
+      def pipeline(p):
+          return p.rsplit("/", 1)[-1] == ".gitlab-ci.yml" or p.startswith(".gitlab/ci/")
+
+      def what(status, old, new):
+          name = new.rsplit("/", 1)[-1]
+          if pipeline(new) or pipeline(old):
+              return "the pipeline definition changed"
+          if name in CONFIG or old.rsplit("/", 1)[-1] in CONFIG:
+              return "check configuration changed"
+          if status == "D" and TEST.search(old):
+              return "a test file deleted"
+          if status == "R" and TEST.search(old) and not TEST.search(new):
+              return "a test file moved out of the test paths"
+          was = old.rsplit("/", 1)[-1] == "pyproject.toml"
+          if (was or name == "pyproject.toml") and (
+                  (tool_table(mb, old) if was else None)
+                  != (tool_table(head, new) if name == "pyproject.toml" else None)):
+              return "its [tool.*] tables changed (ruff, mypy, pytest configuration)"
+          return None
+
+      MARKER = re.compile(r"\bmark\s*\.\s*(?:skipif|skip|xfail)\b|\bpytest\s*\.\s*skip\s*\("
+                          r"|#\s*noqa\b|#\s*type:\s*ignore\b|#\s*pragma:\s*no\s*cover\b",
+                          re.IGNORECASE)
+      lost, stat = set(), git("diff", "--numstat", "-M", "-z", f"{base}...{head}").split("\0")
+      i = 0
+      while i < len(stat) and stat[i]:
+          _, d, path = stat[i].split("\t", 2)
+          if path:
+              new, i = path, i + 1
+          else:
+              new, i = stat[i + 2], i + 3
+          if d not in ("-", "0"):
+              lost.add(new)
+
+      def markers(status, old, new):
+          """The markers on lines this pull request adds to a Python file."""
+          if status not in ("A", "M", "R") or not new.endswith(".py"):
+              return []
+          out, hunk = [], False
+          for line in git("diff", "-U0", "-M", "--no-color", "--no-ext-diff", "--no-textconv",
+                          f"{base}...{head}", "--",
+                          f":(literal){old}", f":(literal){new}").split("\n"):
+              hunk = hunk or line.startswith("@@")
+              if hunk and line.startswith("+"):
+                  out += [m.group(0) for m in MARKER.finditer(line)]
+          return sorted(set(out))
+
+      def shape(status, old, new):
+          whys = []
+          if status in ("M", "R") and new.endswith(".py") and TEST.search(old) \
+                  and TEST.search(new) and new in lost:
+              whys.append("a test file lost lines")
+          found = markers(status, old, new)
+          if found:
+              whys.append("a skip or a suppression added (" + ", ".join(found) + ")")
+          return whys
+
+      fields = git("diff", "--name-status", "-M", "-z", f"{base}...{head}").split("\0")
+      found, i = [], 0
+      while i < len(fields) and fields[i]:
+          status = fields[i][0]
+          if status == "R":
+              old, new, i = fields[i + 1], fields[i + 2], i + 3
+          else:
+              old = new = fields[i + 1]
+              i += 2
+          whys = [w for w in [what(status, old, new)] if w] + shape(status, old, new)
+          if whys:
+              found.append((new if status != "D" else old, old, "; ".join(whys)))
+
+      EDGE = r"\s`'\"()\[\]{}<>*,;:!?\u2018\u2019\u201c\u201d"
+      WRAP = "[_~]+"
+
+      def named(path, old):
+          """A path or file name standing whole in the body, with an EDGE
+          character or the start or end on each side; a full stop may end
+          it. So `python-ci.yml` does not name `ci.yml`. A `/` may also come
+          before a path (a link to the file) but not before a bare name:
+          `docs/ci.yml` does not name `.github/workflows/ci.yml`. A link
+          target's `#fragment` is dropped first: inline (`[x](ci.yml#L3)`),
+          a reference definition (`[x]: ci.yml#L3`) or an autolink, which
+          has a scheme (`<https://…/ci.yml#L3>`; `<ci.yml#2>` is not one)."""
+          text = re.sub(r"(\]\([^()\s#]*)#[^()\s]*", r"\1", body)
+          text = re.sub(r"(?m)^( {0,3}\[[^\]]+\]:[ \t]*<?[^\s<>#]*)#[^\s<>]*", r"\1", text)
+          text = re.sub(r"(<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s#]*)#[^<>\s]*(?=>)", r"\1", text)
+          def whole(p):
+              before = "(?<![^" + EDGE + ("/" if "/" in p else "") + "])"
+              after = r"(?=\Z|[" + EDGE + r"]|\.(?:\Z|[" + EDGE + "]))"
+              before_run = "(?<![^" + EDGE + "])"
+              return re.search(before + re.escape(p) + after, text) \
+                  or re.search(before_run + WRAP + re.escape(p) + WRAP + after, text)
+          return any(whole(p) for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
+
+      def flat(s):   # no text from a path starts another log line
+          return s.replace("\r", "?").replace("\n", "?")
+
+      unnamed = 0
+      for path, old, why in found:
+          label = flat(path if path == old else f"{old} -> {path}")
+          if named(path, old):
+              print(f"named in the description: {label}: {why}")
+          else:
+              unnamed += 1
+              print(f"WARN: {label}: {why}, and the description does not name it.")
+      print(f"{len(found)} change(s) to the checks, {unnamed} not named in the description.")
+      if unnamed:
+          print("A WARN, not a failure. Name each path in the description and say why;")
+          print("the description is read when the pipeline starts, so push to re-check it.")
+      if os.environ.get("TRUNCATED") == "true":
+          print("GitLab cut the description at 2700 characters: a path named past the cut reads as not named.")
+      PY
+      verdict
+
+build:
+  extends: .plinth
+  script:
+    - |
+      plinth_uv || exit 1
+      cd "$PLINTH_WORKDIR" || exit 1
+      step "uv sync --locked" uv sync --locked
+      step "uv build" uv build
+      # `uv build` proves the files were produced; whether they install and
+      # import in a clean environment is a different sentence.
+      smoke() {
+        local name art m
+        name="$(uv run python -c 'import tomllib,pathlib;print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["name"])')" || return 1
+        for art in dist/*.whl dist/*.tar.gz; do
+          rm -rf .smoke
+          uv venv --quiet .smoke &&
+            uv pip install --quiet --python .smoke/bin/python "$art" &&
+            .smoke/bin/python -c 'import importlib.metadata as md,sys; print(sys.argv[1], md.version(sys.argv[1]))' "$name" || return 1
+          if [ -d src ]; then
+            for m in src/*/; do
+              m="$(basename "$m")"
+              .smoke/bin/python -c 'import importlib,sys; importlib.import_module(sys.argv[1])' "$m" || return 1
+              echo "  import $m ok"
+            done
+          fi
+          echo "  OK $art"
+        done
+      }
+      step "install smoke, the wheel and the sdist in a clean venv" smoke
+      verdict
+
+# The floor, as far as this pipeline can read it on GitLab: whether the
+# pipeline definition (CI_CONFIG_PATH, .gitlab-ci.yml by default) still
+# includes this file from plinth at a full commit SHA, and whether that
+# include names a checksum. GitLab.com Free checks one: a wrong checksum
+# fails the pipeline before any job, "failed integrity check" (measured on
+# #353). The protected default branch, the merge checks
+# and the rest of the floor are GitLab settings and files /plinth:floor-check
+# does not read on GitLab yet (#353); each is a not yet confirmed line, never
+# a pass. It reads the merge request's own definition, so a merge request
+# that removes this include or this job removes this check too: only a read
+# from outside the merge request, after the merge, sees that.
+floor-check:
+  extends: .plinth
+  timeout: 5m
+  script:
+    - |
+      CONFIG="${CI_CONFIG_PATH:-.gitlab-ci.yml}" python3 - <<'PY' > "$PLINTH_TMP/floor.verdicts" || plinth_failed=1
+      import os, re, sys
+      path = os.environ["CONFIG"]
+      URL = re.compile(r"https://raw\.githubusercontent\.com/coolbress/plinth/([^/\s'\"]+)/gitlab/python-ci\.yml")
+      STD = f"{path} includes plinth's GitLab pipeline at a full commit SHA"
+      try:
+          with open(path, encoding="utf-8") as f:
+              lines = f.read().split("\n")
+      except (OSError, UnicodeDecodeError) as e:
+          print(f"fail: {STD}, it could not be read ({e.__class__.__name__})")
+          sys.exit(1)
+      def code(l):   # the line without a comment; a `#` inside a URL is not one
+          return re.sub(r"(^|\s)#.*$", "", l)
+      def indent(c):
+          return len(c) - len(c.lstrip(" "))
+      # Only the top-level `include:` node gives a URL its meaning: its inline
+      # value, or the block under it up to the next top-level key. The same
+      # URL anywhere else (a variable, a script list) is not an include, and
+      # an include of plinth from a nested local file is not read here.
+      top = next((i for i, l in enumerate(lines) if re.match(r"include\s*:", code(l))), None)
+      items = []   # each include: its text, as lines
+      if top is not None:
+          inline = code(lines[top]).split(":", 1)[1].strip()
+          if inline:
+              items = [[inline]]
+          block = []
+          for l in lines[top + 1:]:
+              c = code(l)
+              if c.strip() and indent(c) == 0 and not c.startswith("-"):
+                  break
+              if c.strip():
+                  block.append(c)
+          if block:
+              dash = min((indent(c) for c in block if c.lstrip(" ").startswith("-")), default=None)
+              if dash is None:
+                  items.append(block)   # one include as a mapping
+              else:
+                  for c in block:
+                      if indent(c) == dash and c.lstrip(" ").startswith("-"):
+                          items.append([c])
+                      elif items and indent(c) > dash:
+                          items[-1].append(c)
+      def plinth(item):
+          """The plinth URL an include names as `remote:` or as a bare
+          string, or None; and whether it names a checksum."""
+          head = re.sub(r"^\s*(?:-\s*)?", "", item[0])
+          rest = [head] + [l.strip() for l in item[1:]]
+          for l in rest:
+              m = URL.search(l)
+              if m and re.fullmatch(r"(?:remote\s*:\s*)?['\"]?\[?\s*['\"]?", l[:m.start()]):
+                  checked = any(re.match(r"integrity\s*:\s*['\"]?sha256-[A-Za-z0-9+/=]+", r) for r in rest)
+                  return m, checked
+          return None, False
+      found = [r for r in (plinth(i) for i in items) if r[0]]
+      loose = sorted({m.group(1) for m, _ in found if not re.fullmatch(r"[0-9a-fA-F]{40}", m.group(1))})
+      if not found or loose:
+          why = (f"it includes it at {', '.join(loose)}, not a full commit SHA" if loose
+                 else "no include of https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml was found in its top-level include")
+          print(f"fail: {STD}, {why}")
+          sys.exit(1)
+      print(f"pass: {STD} ({', '.join(sorted({m.group(1) for m, _ in found}))})")
+      # GitLab checks a checksum per include, and a later include can replace
+      # an earlier one's jobs: every include needs its own.
+      bare = sum(1 for _, checked in found if not checked)
+      if not bare:
+          print("pass: the include names a checksum (include:integrity), which GitLab checks before the pipeline starts")
+      else:
+          which = "the include names" if len(found) == 1 else f"{bare} of {len(found)} includes names"
+          print(f"not yet confirmed: the bytes GitLab fetched are plinth's file, {which} no checksum "
+                "(include:integrity), which GitLab.com Free checks; a checksum on each include confirms it")
+      for what in (
+          "the protected default branch (no force push, merge requests only, Maintainers merge)",
+          "the merge check \"Pipelines must succeed\", with \"Skipped pipelines are considered successful\" off",
+          "every job of this pipeline in the merge request's own pipeline definition (GitLab Free has no required checks by name)",
+          "the rest of the floor (the document set, agent settings, the project files)",
+      ):
+          print(f"not yet confirmed: {what}, floor-check does not read GitLab yet (#353); a floor-check that reads it confirms it")
+      PY
+      while IFS= read -r l || [ -n "$l" ]; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/floor.verdicts"
+      [ -s "$PLINTH_TMP/floor.verdicts" ] || { say "fail: the floor, the check wrote no verdicts"; plinth_failed=1; }
+      verdict
