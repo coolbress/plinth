@@ -1488,6 +1488,11 @@ printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --
 case "$printed" in *"$live_line") ok "--print-update-command without --plinth-pin still prints the live line" ;;
   *) bad "--print-update-command default: '$printed'" ;; esac
 
+rm "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"; pin_out
+if [ "$lines" = 2 ] && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 4 commit(s) newer (release tags not read): https://" <<<"$out"
+then ok "the tag list unread: the comparison says so, rather than reading as an untagged commit"
+else bad "tags unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
+
 pin_api "$tested" behind; pin_out
 if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
    && grep -q "INFO    plinth pin: the workflows call $sha40, newer than $tested (v9.0.0) that $target_ref was tested with; the live pin is kept, never moved backwards" <<<"$out"

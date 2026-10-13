@@ -1097,6 +1097,8 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
         sha = t.get("commit", {}).get("sha", "") if isinstance(t, dict) else ""
         if isinstance(sha, str) and isinstance(t.get("name"), str):
             tags.setdefault(sha.lower(), []).append(t["name"])
+    # A failed tag read is said, not shown as an untagged commit (#512 review).
+    tag_gap = "" if isinstance(listing, list) else " (release tags not read)"
 
     def name(sha: str) -> str:
         return f"{sha} ({', '.join(sorted(tags[sha]))})" if sha in tags else sha
@@ -1108,11 +1110,11 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
         by = f", {n} commit(s) newer" if isinstance(n, int) else ", newer"
         return {"state": "tested-ahead", "tested": tested, "cmd": update_line(d, tested),
                 "note": f"plinth pin: the workflows call {name(live)}; {target} was tested with "
-                        f"{name(tested)}{by}: {url}"}
+                        f"{name(tested)}{by}{tag_gap}: {url}"}
     if status == "behind":
         return {"state": "live-ahead", "tested": tested,
                 "note": f"plinth pin: the workflows call {name(live)}, newer than {name(tested)} that {target} "
-                        f"was tested with; the live pin is kept, never moved backwards: {url}"}
+                        f"was tested with; the live pin is kept, never moved backwards{tag_gap}: {url}"}
     why = ("the two commits have diverged" if status == "diverged"
            else "offline or API error" if cmp in (ABSENT, ERROR) else "an unexpected compare response")
     return {"state": "unread", "tested": tested,
