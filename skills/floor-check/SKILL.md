@@ -232,7 +232,13 @@ among them — the template's own change, not necessarily this repository's:
 another archetype, inherited forms or a hand-made edit can mean some of it
 was never rendered here), and a `copier update` line carrying the commit of
 plinth this repository's own workflows call today, read from their `uses:`
-lines so the update does not move that pin under it. When that pin cannot be
+lines so the update does not move that pin under it. When the target tag was
+tested with a newer plinth commit (its `copier.yml` `plinth_sha` default,
+compared with the live pin on GitHub), a second line carries that one, under
+a line naming both SHAs, their release tags and the compare URL: the person
+chooses, the item never does. A live pin newer than the tested one is kept
+and said so, with no second line; a comparison that could not be read is
+said so too, with only the first line (#511). When that pin cannot be
 established (no such `uses:` line, or two that disagree) the tags and file
 list still print, with no command. A repository the door did not make, or
 whose recorded tag is not an exact release tag, is a SKIP, not a PASS. It

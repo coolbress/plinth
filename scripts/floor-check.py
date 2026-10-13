@@ -50,13 +50,17 @@ naming the gap and what stands in its place; a licence state the API does not
 answer is a SKIP, or with --actions-token an INFO naming the run that judges
 it. Every other item is expected as on a public repository.
 
-One more is WARN-only and reads no network beyond one GitHub compare call
+One more is WARN-only and reads no network beyond one GitHub compare call and the three reads named below
 (#219): whether the template tag this repository was rendered from
 (.copier-answers.yml's _commit) is behind the tag plinth is tested with
 today (scripts/new-project.sh's template_ref, read from that file alone).
 Behind prints the template's own changed files and a `copier update` line;
 it never runs one. --print-update-command prints that line alone, for the
-template-update skill (#232), which runs it.
+template-update skill (#232), which runs it. The line carries the plinth pin
+the workflows call today (#219); when the target tag was tested with a newer
+plinth commit, a second line carries that one, for a person to choose
+(--plinth-pin tested), after three more reads: the tag's copier.yml,
+plinth's tags and a compare of the two plinth commits (#511).
 """
 
 from __future__ import annotations
@@ -1040,9 +1044,80 @@ def template_drift(root: Path) -> dict:
     # --defaults: without a terminal copier update stops at "Interactive
     # session required" (measured, copier 9.18.2), and the skill that runs
     # this line has none. It answers each question with the recorded answer.
-    cmd = (f"uvx --from copier=={copier_version} --exclude-newer {copier_newer} "
-           f"copier update --defaults --vcs-ref {target} --data plinth_sha={sha}") if sha else None
-    return {**out, "state": "behind", "cmd": cmd, "why_not": why_not}
+    out.update(copier_version=copier_version, copier_newer=copier_newer)
+    return {**out, "state": "behind", "cmd": update_line(out, sha) if sha else None, "why_not": why_not, "live": sha}
+
+
+def update_line(d: dict, pin: str) -> str:
+    """The `copier update` line to the target tag, carrying plinth pin `pin`."""
+    return (f"uvx --from copier=={d['copier_version']} --exclude-newer {d['copier_newer']} "
+            f"copier update --defaults --vcs-ref {d['target']} --data plinth_sha={pin}")
+
+
+def tested_plinth_pin(template_repo: str, target: str, network: bool) -> tuple[str | None, str | None]:
+    """The plinth commit the target template tag was tested with: the
+    `plinth_sha` default in that tag's copier.yml (#511). Returns (sha, None),
+    or (None, reason) when it is not read. Not a YAML parser: the `default:`
+    line inside the top-level `plinth_sha:` block."""
+    data = api(f"repos/{template_repo}/contents/copier.yml?ref={target}", network)
+    if data in (ABSENT, ERROR):
+        return None, f"{template_repo} copier.yml at {target}: offline or API error"
+    try:
+        text = base64.b64decode(data["content"]).decode()
+    except (TypeError, KeyError, ValueError):
+        return None, f"{template_repo} copier.yml at {target}: an unexpected contents response"
+    m = re.search(r"^plinth_sha:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)*)", text + "\n", re.MULTILINE)
+    d = re.search(r"^[ \t]+default:[ \t]*[\"']?([0-9a-fA-F]{40})[\"']?[ \t]*$", m.group(1), re.MULTILINE) if m else None
+    if not d:
+        return None, f"{template_repo} copier.yml at {target} has no plinth_sha default that is a full commit SHA"
+    return d.group(1).lower(), None
+
+
+def plinth_pin_choice(d: dict, network: bool) -> dict:
+    """When the update is behind and the live pin is known: the live pin
+    against the one the target tag was tested with (#511). #219 carries the
+    live pin on purpose, so an update never overwrites what Dependabot set;
+    this offers the tested pin beside it, for a person to choose, and only
+    when it is newer. `state` is tested-ahead (`cmd` is the line with the
+    tested pin), equal (`cmd` is the live line), live-ahead or unread (no
+    `cmd`); `note` is the one line that says so, naming both SHAs when read."""
+    live = d["live"].lower()
+    target = d["target"]
+    tested, why = tested_plinth_pin(d["template_repo"], target, network)
+    if tested is None:
+        return {"state": "unread", "note": f"plinth pin: the one {target} was tested with was not read ({why}); "
+                                           f"the live pin {live} is kept"}
+    if tested == live:
+        return {"state": "equal", "tested": tested, "cmd": d["cmd"],
+                "note": f"plinth pin: the workflows call {live}, the one {target} was tested with"}
+    url = f"https://github.com/{PLINTH_REPO}/compare/{live}...{tested}"
+    tags: dict[str, list[str]] = {}
+    listing = api(f"repos/{PLINTH_REPO}/tags?per_page=100", network, paginate=True)
+    for t in listing if isinstance(listing, list) else []:
+        sha = t.get("commit", {}).get("sha", "") if isinstance(t, dict) else ""
+        if isinstance(sha, str) and isinstance(t.get("name"), str):
+            tags.setdefault(sha.lower(), []).append(t["name"])
+
+    def name(sha: str) -> str:
+        return f"{sha} ({', '.join(sorted(tags[sha]))})" if sha in tags else sha
+
+    cmp = api(f"repos/{PLINTH_REPO}/compare/{live}...{tested}", network)
+    status = cmp.get("status") if isinstance(cmp, dict) else None
+    if status == "ahead":
+        n = cmp.get("ahead_by")
+        by = f", {n} commit(s) newer" if isinstance(n, int) else ", newer"
+        return {"state": "tested-ahead", "tested": tested, "cmd": update_line(d, tested),
+                "note": f"plinth pin: the workflows call {name(live)}; {target} was tested with "
+                        f"{name(tested)}{by}: {url}"}
+    if status == "behind":
+        return {"state": "live-ahead", "tested": tested,
+                "note": f"plinth pin: the workflows call {name(live)}, newer than {name(tested)} that {target} "
+                        f"was tested with; the live pin is kept, never moved backwards: {url}"}
+    why = ("the two commits have diverged" if status == "diverged"
+           else "offline or API error" if cmp in (ABSENT, ERROR) else "an unexpected compare response")
+    return {"state": "unread", "tested": tested,
+            "note": f"plinth pin: the workflows call {live}; {target} was tested with {tested}, but the two "
+                    f"were not compared ({why}); the live pin is kept"}
 
 
 def check_template_drift(root: Path, network: bool) -> None:
@@ -1094,16 +1169,34 @@ def check_template_drift(root: Path, network: bool) -> None:
                 for pline in patch.splitlines():
                     result("INFO", f"    {pline}")
 
-    if d["cmd"]:
-        result("INFO", f"  {d['cmd']}")
-    else:
+    if not d["cmd"]:
         result("INFO", f"  no update command: {d['why_not']}")
+        return
+    result("INFO", f"  {d['cmd']}")
+    choice = plinth_pin_choice(d, network)
+    if choice["state"] == "equal":
+        return
+    result("INFO", f"  {choice['note']}")
+    if choice["state"] == "tested-ahead":
+        result("INFO", "  the line above keeps the live pin; this one moves it to the tested pin, if you choose it:")
+        result("INFO", f"  {choice['cmd']}")
 
 
-def print_update_command(root: Path) -> int:
+def print_update_command(root: Path, plinth_pin: str = "live", network: bool = True) -> int:
     """--print-update-command: the drift item's command line alone on
-    stdout, exit 0; otherwise why there is none on stderr, exit 1."""
+    stdout, exit 0; otherwise why there is none on stderr, exit 1. With
+    --plinth-pin tested, the line with the tested pin, and the comparison
+    on stderr whether or not there is one: --plinth-pin tested never prints
+    a line that would move the pin backwards or past an unread comparison."""
     d = template_drift(root)
+    if d.get("cmd") and plinth_pin == "tested":
+        choice = plinth_pin_choice(d, network)
+        print(choice["note"], file=sys.stderr)
+        if choice.get("cmd"):
+            print(choice["cmd"])
+            return 0
+        print("no update command with the tested pin: only the live pin's line stands", file=sys.stderr)
+        return 1
     if d.get("cmd"):
         print(d["cmd"])
         return 0
@@ -1994,6 +2087,9 @@ def main() -> int:
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
+    ap.add_argument("--plinth-pin", choices=("live", "tested"), default="live",
+                    help="with --print-update-command: the line carrying the plinth pin the workflows call (live, "
+                         "the default) or the one the target template tag was tested with (tested; only when it is newer)")
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
     ap.add_argument("--without-code-scanning", action="store_true",
@@ -2013,8 +2109,10 @@ def main() -> int:
         return 0
 
     root = Path(a.root).resolve()
+    if a.plinth_pin != "live" and not a.print_update_command:
+        ap.error("--plinth-pin needs --print-update-command")
     if a.print_update_command:
-        return print_update_command(root)
+        return print_update_command(root, a.plinth_pin, not a.no_network)
     project = (root / a.project).resolve()
     if project != root and root not in project.parents:
         # Every item reads one repository: .github/, AGENTS.md, the ruleset at

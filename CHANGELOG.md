@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:floor-check` and `/plinth:template-update` offer the plinth pin the
+  target template tag was tested with, when it is newer than the one a
+  repository's workflows call (#511). An update still keeps the live pin unless
+  a person runs `--apply` with `--plinth-pin tested`; the plan prints both lines,
+  the two SHAs with their release tags and the compare URL. A live pin newer
+  than the tested one is kept and never moved backwards. The draft pull request
+  says which pin was chosen.
+
 ## [1.15.1] - 2026-10-13
 
 A repository `/plinth:new-project` creates now calls plinth v1.15.0's workflows instead of v1.7.2's, so its `ci / test` reports the changed lines no test ran, without failing the check (#503). v1.15.0 shipped that judgement, but the door rendered a template whose CI still called v1.7.2, so no new repository ran it; this release's template, v1.12.1, changes only that pin.
