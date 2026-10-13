@@ -20,6 +20,10 @@ pull requests and have no tag.
   same at both commits. `host: gitlab`, rendered by hand for now, gives a
   GitLab.com project plinth's GitLab pipeline;
   [GitLab pipeline](docs/reference/gitlab-ci.md) says what it holds.
+  `/plinth:floor-check` now reports a repository on v1.12.1 as behind. Its
+  `/plinth:template-update` keeps the plinth pin the repository's workflows
+  call, and the plan offers v1.13.0's pin, `1e163e2`, as a second line
+  (`--plinth-pin tested`) when it is newer; only a person's choice applies it.
 
 ## [1.17.0] - 2026-10-13
 
