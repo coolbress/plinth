@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-10-13
+
+`/plinth:new-project` renders plinth-template v1.13.0, which adds a `host` question for GitLab.com (#353) and moves a new repository's CI pin to plinth v1.17.0. The door passes no host, so a new repository renders as before apart from that pin; `/plinth:floor-check` now reports a repository on v1.12.1 as behind.
+
+tested with plinth-template v1.13.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.13.0 (#353). Its new
@@ -2617,7 +2623,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.17.1...HEAD
+[1.17.1]: https://github.com/coolbress/plinth/releases/tag/v1.17.1
 [1.17.0]: https://github.com/coolbress/plinth/releases/tag/v1.17.0
 [1.16.0]: https://github.com/coolbress/plinth/releases/tag/v1.16.0
 [1.15.1]: https://github.com/coolbress/plinth/releases/tag/v1.15.1
