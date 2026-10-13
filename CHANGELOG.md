@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `gitlab/python-ci.yml`, a pipeline for GitLab.com that a project includes
+  from GitHub at a full commit SHA, optionally with an `include:integrity`
+  checksum (#353). Its jobs
+  have `python-ci.yml`'s names and pinned tools; `deps` uses osv-scanner, since
+  GitLab Free has no dependency review, and `floor-check` reads only the
+  include. No GitLab project has run it yet, and whether GitLab.com Free
+  enforces `include:integrity` is not confirmed.
+  [GitLab pipeline](docs/reference/gitlab-ci.md) says what GitLab Free cannot
+  hold.
+
 ## [1.16.0] - 2026-10-13
 
 `/plinth:template-update` kept a repository's plinth pin on purpose (#219), so an update could record a new template tag while the repository's CI still called an older plinth than that tag was tested with, and a feature shipped in the workflow did not arrive (#511, seen on plinth-reach). The update now shows the pin the target tag was tested with when it is newer, and a person chooses with `--plinth-pin tested`; the pin is never moved without that choice, and never backwards.
