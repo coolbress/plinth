@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-10-13
+
+plinth's wall existed on GitHub only, and a personal GitHub Free account cannot put a ruleset on a private repository (#353). This release ships `gitlab/python-ci.yml`, a pipeline a GitLab.com project includes from GitHub at a full commit SHA with an `include:integrity` checksum, under `python-ci.yml`'s job names. It has run green on a GitLab.com Free private project. plinth-template can point a new GitLab project at a released commit only once one carries the file, which this release does.
+
+tested with plinth-template v1.12.1
+
 ### Added
 
 - `gitlab/python-ci.yml`, a pipeline for GitLab.com that a project includes
@@ -2597,7 +2603,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/coolbress/plinth/releases/tag/v1.17.0
 [1.16.0]: https://github.com/coolbress/plinth/releases/tag/v1.16.0
 [1.15.1]: https://github.com/coolbress/plinth/releases/tag/v1.15.1
 [1.15.0]: https://github.com/coolbress/plinth/releases/tag/v1.15.0
