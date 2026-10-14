@@ -1174,7 +1174,7 @@ if grep -q '^glab api --hostname gitlab.com -X DELETE projects/555$' "$work/home
    && grep -qF -- '-X DELETE projects/555?permanently_remove=true&full_path=tester%2Fprobe-deletion_scheduled-555' "$work/home-gl-push-fail/calls.log"
 then ok gl-push-fail "the rollback schedules the deletion, then removes it for good with the renamed full_path"
 else bad gl-push-fail "the rollback is not the two-step permanent removal"; grep -F -- 'DELETE' "$work/home-gl-push-fail/calls.log" | sed 's/^/        /'; fi
-E="FAIL_AT=push MOCK_GL_LEVEL=40" gl_run gl-push-fail-maintainer err yes no "delete it at https://gitlab.com/someorg/probe/edit" -- someorg/probe --host gitlab
+E="FAIL_AT=push MOCK_GL_LEVEL=40" gl_run gl-push-fail-maintainer err yes no "only an Owner of someorg can delete it: ask one to delete https://gitlab.com/someorg/probe" -- someorg/probe --host gitlab
 E="FAIL_AT=push MOCK_GL_DELETE_FAILS=1" gl_run gl-push-fail-delete-fails err yes no "ROLLBACK FAILED: https://gitlab.com/tester/probe exists without a wall" -- probe --host gitlab
 E="FAIL_AT=push MOCK_GL_PERM_FAILS=1" gl_run gl-push-fail-partial err yes yes "ROLLBACK PARTLY DONE" -- probe --host gitlab
 if grep -qF "https://gitlab.com/projects/555" "$work/home-gl-push-fail-partial/out" && ! grep -qF "https://gitlab.com/tester/probe/edit" "$work/home-gl-push-fail-partial/out"

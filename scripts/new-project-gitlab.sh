@@ -147,7 +147,7 @@ else
   level="$(glab api --hostname "$gitlab" "groups/$group_id/members/all/$user_id" 2>/dev/null | json 'd["access_level"]')" || level=""
   case "$level" in
     50) role=owner ;;
-    40) role=maintainer; rollback="off (Maintainer cannot delete a project in $ns; on failure it stays: delete it at $url/edit)" ;;
+    40) role=maintainer; rollback="off (a Maintainer cannot delete a project in $ns; on failure it stays, for an Owner of $ns to delete)" ;;
     *)  stop "creating a project in '$ns' needs the Maintainer role or above; $login has ${level:+access level $level}${level:-no membership}" \
           "  fix: ask a group Owner for Maintainer, or create it under $login ($login/$name)" ;;
   esac
@@ -271,7 +271,9 @@ created=1; pushed=0
 # and then removed for good with that path (permanently_remove, full_path).
 rollback() {
   case "$rollback" in off*)
-    printf '%s\n' "rollback is off: $url stays, without a wall; delete it at $url/edit" >&2; return ;;
+    # Rollback is off for a group Maintainer because only an Owner (or an
+    # administrator) can delete a project: the fix names who can.
+    printf '%s\n' "rollback is off: $url stays, without a wall, and only an Owner of $ns can delete it: ask one to delete $url (Settings > General > Advanced)" >&2; return ;;
   esac
   if ! glab api --hostname "$gitlab" -X DELETE "projects/$project_id" >/dev/null 2>&1; then
     printf '%s\n' "ROLLBACK FAILED: $url exists without a wall; delete it at $url/edit" >&2; return
