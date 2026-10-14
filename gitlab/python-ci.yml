@@ -748,8 +748,8 @@ floor-check:
       # The definition is read with a YAML parser, not a scanner (#528): a
       # duplicate key takes its last value and quoting follows YAML, as
       # GitLab reads it. PyYAML 6.0.3 from PyPI, every wheel pinned by its
-      # hash (CPython 3.11 to 3.13 on Linux and macOS, x86_64 and arm64), no
-      # source build. A failed install fails the job; it never passes it.
+      # hash (CPython 3.11 to 3.14 on Linux and macOS, x86_64 and arm64), no
+      # source build. A Python outside that range finds no wheel and fails. A failed install fails the job; it never passes it.
       plinth_pyyaml() {
         local d="$PLINTH_TMP/yaml" r="$PLINTH_TMP/pyyaml-requirements.txt"
         cat > "$r" <<'REQ'
@@ -765,7 +765,11 @@ floor-check:
           --hash=sha256:b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d \
           --hash=sha256:10892704fc220243f5305762e276552a0395f7beb4dbf9b14ec8fd43b57f126c \
           --hash=sha256:652cb6edd41e718550aad172851962662ff2681490a8a711af6a4d288dd96824 \
-          --hash=sha256:44edc647873928551a01e7a563d7452ccdebee747728c1080d881d68af7b997e
+          --hash=sha256:44edc647873928551a01e7a563d7452ccdebee747728c1080d881d68af7b997e \
+          --hash=sha256:c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5 \
+          --hash=sha256:501a031947e3a9025ed4405a168e6ef5ae3126c59f90ce0cd6f2bfc477be31b7 \
+          --hash=sha256:34d5fcd24b8445fadc33f9cf348c1047101756fd760b4dacb5c3e99755703310 \
+          --hash=sha256:8d1fab6bb153a416f9aeb4b8763bc0f22a5586065f86f7664fc23339fc1c1fac
       REQ
         python3 -m venv "$d" &&
           "$d/bin/pip" install --quiet --disable-pip-version-check --require-hashes \

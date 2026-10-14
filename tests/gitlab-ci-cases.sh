@@ -18,8 +18,11 @@ gh="$root/.github/workflows/python-ci.yml"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/gitlab-ci.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
-python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
-  || { echo "  FAIL  needs python3 3.11 or later (tomllib), as the image has; got $(python3 --version 2>&1)"; exit 1; }
+# 3.11 for tomllib, as the image has; at most 3.14, the newest CPython whose
+# PyYAML wheels floor-check pins by hash (#528). A newer one finds no pinned
+# wheel: raise the pins in gitlab/python-ci.yml, then this bound.
+python3 -c 'import sys; sys.exit(not ((3, 11) <= sys.version_info[:2] <= (3, 14)))' \
+  || { echo "  FAIL  needs python3 3.11 to 3.14 (tomllib; floor-check's PyYAML wheels are pinned for those); got $(python3 --version 2>&1)"; exit 1; }
 
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  PASS  %s\n' "$1"; }
