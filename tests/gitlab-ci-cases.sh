@@ -345,6 +345,30 @@ include:
 job:
   script: !reference [.base, script]"
 expect "GitLab's !reference tag is data, not a parse error" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
+fc "include:
+  - remote: $url
+    integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
+  - remote: $main_url?x=1"
+expect "a plinth URL with a query is not left out: it fails, naming it" 1 "includes plinth by a URL that is not" "?x=1"
+fc "include:
+  - '$url'
+  - https://cdn.jsdelivr.net/gh/coolbress/plinth@main/gitlab/python-ci.yml"
+expect "plinth from another host fails, naming the URL" 1 "includes plinth by a URL that is not" "cdn.jsdelivr.net"
+fc "spec:
+  inputs:
+    stage:
+      default: test
+---
+include:
+  - remote: $url
+    integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
+expect "an inputs header and its --- separator are read as GitLab lays them out" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
+fc "a: 1
+---
+include: ['$url']
+---
+b: 2"
+expect "three documents are not a layout GitLab reads: it fails" 1 "not the layout GitLab reads"
 d="$tmp/fc-noinstall"; mkdir -p "$d"; printf 'include:\n  - remote: %s\n' "$url" > "$d/.gitlab-ci.yml"
 (cd "$d" && PIP_INDEX_URL=http://127.0.0.1:9/simple PIP_NO_CACHE_DIR=1 PIP_RETRIES=0 PIP_TIMEOUT=2 run_job floor-check \
    && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"

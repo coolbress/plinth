@@ -748,7 +748,7 @@ floor-check:
       # The definition is read with a YAML parser, not a scanner (#528): a
       # duplicate key takes its last value and quoting follows YAML, as
       # GitLab reads it. PyYAML 6.0.3 from PyPI, every wheel pinned by its
-      # hash (CPython 3.12 and 3.13 on Linux and macOS, x86_64 and arm64), no
+      # hash (CPython 3.11 to 3.13 on Linux and macOS, x86_64 and arm64), no
       # source build. A failed install fails the job; it never passes it.
       plinth_pyyaml() {
         local d="$PLINTH_TMP/yaml" r="$PLINTH_TMP/pyyaml-requirements.txt"
@@ -761,7 +761,11 @@ floor-check:
           --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0 \
           --hash=sha256:2283a07e2c21a2aa78d9c4442724ec1eb15f5e42a723b99cb3d822d48f5f7ad1 \
           --hash=sha256:7f047e29dcae44602496db43be01ad42fc6f1cc0d8cd6c83d342306c32270196 \
-          --hash=sha256:8da9669d359f02c0b91ccc01cac4a67f16afec0dac22c2ad09f46bee0697eba8
+          --hash=sha256:8da9669d359f02c0b91ccc01cac4a67f16afec0dac22c2ad09f46bee0697eba8 \
+          --hash=sha256:b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d \
+          --hash=sha256:10892704fc220243f5305762e276552a0395f7beb4dbf9b14ec8fd43b57f126c \
+          --hash=sha256:652cb6edd41e718550aad172851962662ff2681490a8a711af6a4d288dd96824 \
+          --hash=sha256:44edc647873928551a01e7a563d7452ccdebee747728c1080d881d68af7b997e
       REQ
         python3 -m venv "$d" &&
           "$d/bin/pip" install --quiet --disable-pip-version-check --require-hashes \
@@ -790,24 +794,44 @@ floor-check:
           like) as data instead of refusing the file."""
       Loader.add_multi_constructor("!", lambda loader, suffix, node: None)
       try:
-          doc = yaml.load(text, Loader=Loader)
+          docs = list(yaml.load_all(text, Loader=Loader))
       except yaml.YAMLError as e:
           why = " ".join(str(e).split())[:200]
           print(f"fail: {STD}, it is not YAML that can be read ({why})")
+          sys.exit(1)
+      # One document, or GitLab's inputs layout: a `spec:` header, `---`, then
+      # the configuration.
+      if len(docs) == 2 and isinstance(docs[0], dict) and set(docs[0]) == {"spec"}:
+          doc = docs[1]
+      elif len(docs) <= 1:
+          doc = docs[0] if docs else None
+      else:
+          print(f"fail: {STD}, its {len(docs)} YAML documents are not the layout GitLab reads "
+                "(one document, or a spec: header, ---, and the configuration)")
           sys.exit(1)
       # Only the top-level `include:` gives a URL its meaning, as a string or
       # a mapping's `remote:`; an include of plinth from a nested local file
       # is not read here. The URL is the whole value, not found inside one.
       include = doc.get("include") if isinstance(doc, dict) else None
       entries = include if isinstance(include, list) else ([] if include is None else [include])
-      found = []
+      found, near = [], []
       for e in entries:
           url, integrity = (e, None) if isinstance(e, str) else \
               (e.get("remote"), e.get("integrity")) if isinstance(e, dict) else (None, None)
           m = URL.fullmatch(url.strip()) if isinstance(url, str) else None
+          # A URL naming plinth in any other form (a query, a fragment,
+          # another host) would be left out of the judgement while GitLab
+          # still fetches it: it fails instead.
+          if not m and isinstance(url, str) and "coolbress/plinth" in url.lower():
+              near.append(url.strip())
           if m:
               checked = isinstance(integrity, str) and re.fullmatch(r"sha256-[A-Za-z0-9+/]{43}=", integrity.strip())
               found.append((m, bool(checked)))
+      if near:
+          shown = ", ".join(" ".join(u.split())[:200] for u in near)
+          print(f"fail: {STD}, it includes plinth by a URL that is not "
+                f"https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml: {shown}")
+          sys.exit(1)
       loose = sorted({m.group(1) for m, _ in found if not re.fullmatch(r"[0-9a-fA-F]{40}", m.group(1))})
       if not found or loose:
           why = (f"it includes it at {', '.join(loose)}, not a full commit SHA" if loose

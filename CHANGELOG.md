@@ -20,7 +20,10 @@ pull requests and have no tag.
   hid a later include at a branch. PyYAML 6.0.3 is installed from PyPI with
   every wheel pinned by its hash and no source build. A definition that is
   not YAML fails naming the parser's error, and a PyYAML that does not
-  install fails the job.
+  install fails the job. An inputs header (`spec:`, `---`, then the
+  configuration) is read as GitLab lays it out, and an include that names
+  plinth by any other URL form (a query, a fragment, another host) fails
+  instead of being left out of the judgement.
 
 - The GitLab pipeline's `floor-check` judges every include in an inline flow
   sequence or mapping (#521). `include: ['<full-SHA URL>', '<URL at main>']`
