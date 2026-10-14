@@ -23,7 +23,9 @@ pull requests and have no tag.
     commit per merge request.
 
   Each part is read back. A call or a read-back that fails rolls the
-  project back. The labels in `labels.txt` follow; one that fails is named
+  project back where the login can delete it; a group Maintainer cannot,
+  so the project stays with part of its wall or none, for an Owner to
+  delete. The labels in `labels.txt` follow; one that fails is named
   and left. The last lines name the wall and what GitLab Free cannot hold:
   no required checks by name. The first merge request comes next.
 

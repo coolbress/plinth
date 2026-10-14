@@ -46,7 +46,9 @@ fail rather than read it as not a merge request. A project that lists
 ## The wall on GitLab Free
 
 These are project settings. `/plinth:new-project <name> --host gitlab`
-sets them, reads each back, and rolls the project back if one does not hold;
+sets them, reads each back, and rolls the project back if one does not hold
+(where the login can delete it: a group Maintainer cannot, so the project
+stays for an Owner to delete or finish);
 on a project made another way they are set by hand:
 
 - The default branch is protected: no force push, changes through merge
