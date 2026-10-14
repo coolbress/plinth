@@ -43,7 +43,7 @@ pull requests and have no tag.
   so the project stays with part of its wall or none, for an Owner to
   delete. The labels in `labels.txt` follow; one that fails is named
   and left. The last lines name the wall and what GitLab Free cannot hold:
-  no required checks by name. The first merge request comes next.
+  no required checks by name.
 
 - `/plinth:new-project <name> --host gitlab` creates the GitLab.com project
   and pushes `main` after the plan (#532, part of #353). The create goes
@@ -56,9 +56,7 @@ pull requests and have no tag.
   settings URL. Four more misreads now stop before the create: a project
   more public than its group, a personal access token without `api` that
   cannot read itself, GitLab's reserved project names, and a subgroup on the
-  path. The wall and the first merge request come next, so the project has
-  no wall yet, and the last line says so. The two doors' shared helpers moved
-  to `scripts/lib/door.sh`.
+  path. The two doors' shared helpers moved to `scripts/lib/door.sh`.
 
 - `/plinth:new-project <name> --host gitlab`, the first stage of the GitLab
   door (#531, part of #353). It checks:
@@ -74,8 +72,8 @@ pull requests and have no tag.
 
   It then checks the license and archetype against the template's choices,
   renders the template with `host=gitlab`, with none of gh's or glab's token
-  variables in copier's environment, and prints the plan. It creates nothing on
-  GitLab yet. Private is the default, `--public` the other choice. Without
+  variables in copier's environment, and prints the plan. Private is the
+  default, `--public` the other choice. Without
   `--host`, or with `--host github`, the door runs as before.
 
 ## [1.17.2] - 2026-10-14
