@@ -1032,19 +1032,20 @@ case "$all" in
                              *)    echo "glab ${MOCK_GLAB_VERSION:-1.122.0} (mock)" ;;
                            esac ;;
   "auth status"*)          [ "${MOCK_GLAB_NOAUTH:-0}" = 1 ] && { echo "x gitlab.com: not logged in" >&2; exit 1; }; echo "gitlab.com: logged in" ;;
-  "api user")              echo '{"id": 7, "username": "tester"}' ;;
-  "api personal_access_tokens/self")
+  "api --hostname gitlab.com user")              echo '{"id": 7, "username": "tester"}' ;;
+  "api --hostname gitlab.com personal_access_tokens/self")
                            case "${MOCK_GL_TOKEN:-api}" in
                              oauth) echo '{"message":"401 Unauthorized"}'; exit 1 ;;
                              *)     echo "{\"scopes\": [\"${MOCK_GL_TOKEN:-api}\"]}" ;;
                            esac ;;
-  "api groups/someorg")    [ "${MOCK_GL_GROUP:-1}" = 1 ] || { echo '{"message":"404 Group Not Found"}'; exit 1; }
+  "api --hostname gitlab.com groups/someorg")    [ "${MOCK_GL_GROUP:-1}" = 1 ] || { echo '{"message":"404 Group Not Found"}'; exit 1; }
                            echo "{\"id\": 9, \"full_path\": \"someorg\", \"project_creation_level\": \"${MOCK_GL_CREATION:-maintainer}\"}" ;;
-  "api groups/9/members/all/7")
+  "api --hostname gitlab.com groups/9/members/all/7")
                            [ "${MOCK_GL_LEVEL:-50}" = none ] && { echo '{"message":"404 Not found"}'; exit 1; }
                            echo "{\"access_level\": ${MOCK_GL_LEVEL:-50}}" ;;
-  # Only the encoded path is a project read; an unencoded one falls through.
-  "api projects/tester%2Fprobe"|"api projects/someorg%2Fprobe")
+  # Every API read names gitlab.com (`--hostname`); only the encoded path is a
+  # project read. Anything else falls through and fails.
+  "api --hostname gitlab.com projects/tester%2Fprobe"|"api --hostname gitlab.com projects/someorg%2Fprobe")
                            case "${MOCK_GL_EXISTS:-0}" in
                              1)   echo '{"id": 1, "path_with_namespace": "x/y"}' ;;
                              500) echo '{"message":"500 Internal Server Error"}'; echo "glab: 500 Internal Server Error" >&2; exit 1 ;;
@@ -1114,6 +1115,9 @@ E="MOCK_GL_TOKEN=oauth" gl_run gl-token-oauth ok "rollback: best effort" -- prob
 E="MOCK_GL_CREATION=owner MOCK_GL_LEVEL=40" gl_run gl-group-owner-only err "lets only Owners create projects" -- someorg/probe --host gitlab
 E="MOCK_GL_CREATION=noone" gl_run gl-group-noone err "lets no one create projects" -- someorg/probe --host gitlab
 gl_run gl-bad-name err "No Python package name can be made from '9lives'" -- 9lives --host gitlab
+gl_run gl-slug-git err "is not a GitLab project path" -- foo.git --host gitlab
+gl_run gl-slug-end err "is not a GitLab project path" -- foo- --host gitlab
+gl_run gl-slug-double err "is not a GitLab project path" -- foo..bar --host gitlab
 if [ ! -e "$work/home-gl-bad-name/9lives" ]; then ok gl-bad-name "a name the template refuses stops before the render"
 else bad gl-bad-name "a refused name left a directory behind"; fi
 if grep -q 'GITLAB_TOKEN' "$root/scripts/new-project-gitlab.sh" && grep -qE 'env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN uvx' "$root/scripts/new-project-gitlab.sh"

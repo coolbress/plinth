@@ -7,6 +7,9 @@
 # GitLab. Creating the project and pushing main (#532), raising the wall
 # (#533) and the first merge request (#534) come next.
 #
+# Every API read names gitlab.com (`glab api --hostname`): without it glab may
+# answer for the GitLab host of the repository it is run from.
+#
 # Preflight, in order; the first miss stops with the one line that fixes it:
 #   1 tools       claude, git >= 2.28, uv, python3, curl, glab >= the tested
 #                 version, logged in to gitlab.com
@@ -74,7 +77,7 @@ glab auth status --hostname "$gitlab" >/dev/null 2>&1 \
   || stop "glab is not logged in to $gitlab" "  fix: glab auth login --hostname $gitlab --web --git-protocol https   (browser login; the token stays in the keyring)"
 
 # ── 2 login ──────────────────────────────────────────────────────────────
-user_json="$(glab api user 2>/dev/null)" || stop "cannot read $gitlab/api/v4/user with glab's login" "  fix: glab auth status --hostname $gitlab"
+user_json="$(glab api --hostname "$gitlab" user 2>/dev/null)" || stop "cannot read $gitlab/api/v4/user with glab's login" "  fix: glab auth status --hostname $gitlab"
 login="$(json 'd["username"]' <<<"$user_json")" || login=""
 user_id="$(json 'd["id"]' <<<"$user_json")" || user_id=""
 [ -n "$login" ] && [ -n "$user_id" ] || stop "$gitlab/api/v4/user did not name the login" "  fix: glab auth status --hostname $gitlab"
@@ -84,7 +87,7 @@ user_id="$(json 'd["id"]' <<<"$user_json")" || user_id=""
 # login asks for `api`, but that is not read here, so the rollback is best
 # effort, as the GitHub door says for a token whose reach it cannot read.
 token_note=""; scopes_read=yes
-if pat="$(glab api personal_access_tokens/self 2>/dev/null)" && scopes="$(json '" ".join(d["scopes"])' <<<"$pat")"; then
+if pat="$(glab api --hostname "$gitlab" personal_access_tokens/self 2>/dev/null)" && scopes="$(json '" ".join(d["scopes"])' <<<"$pat")"; then
   grep -qw api <<<"$scopes" || stop "glab's token lacks the api scope (it has: ${scopes:-none}); creating and configuring a project needs it" \
     "  fix: glab auth login --hostname $gitlab --web --git-protocol https   (or a personal access token with the api scope)"
 else
@@ -113,11 +116,11 @@ enc() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[
 # the rollback (from #532) needs (GitLab's permissions table).
 role=owner; rollback=on
 if [ "$ns" != "$login" ]; then
-  group_json="$(glab api "groups/$(enc "$ns")" 2>/dev/null)" || group_json=""
+  group_json="$(glab api --hostname "$gitlab" "groups/$(enc "$ns")" 2>/dev/null)" || group_json=""
   group_id="$(json 'd["id"]' <<<"$group_json")" || group_id=""
   [ -n "$group_id" ] || stop "group '$ns' does not exist on GitLab.com, or $login cannot see it" \
     "  fix: create it under $login ($login/$name), or ask a group Owner for access"
-  level="$(glab api "groups/$group_id/members/all/$user_id" 2>/dev/null | json 'd["access_level"]')" || level=""
+  level="$(glab api --hostname "$gitlab" "groups/$group_id/members/all/$user_id" 2>/dev/null | json 'd["access_level"]')" || level=""
   case "$level" in
     50) role=owner ;;
     40) role=maintainer; rollback="off (Maintainer cannot delete a project in $ns; on failure it stays: delete it at $url/edit)" ;;
@@ -136,6 +139,15 @@ if [ "$scopes_read" = no ]; then
 fi
 
 # ── 4 project ────────────────────────────────────────────────────────────
+# GitLab's path rules (its "Reserved project and group names" page): letters,
+# digits, `_`, `-` and `.`; a letter or digit at each end; no two special
+# characters in a row; not ending in `.git` or `.atom`. Checked before the
+# render, so a name GitLab would refuse is never planned.
+if ! [[ "$name" =~ ^[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$ ]] || [[ "$name" =~ [_.-][_.-] ]] \
+   || [[ "$(lower "$name")" =~ \.(git|atom)$ ]]; then
+  stop "'$name' is not a GitLab project path: letters, digits, _ - and ., a letter or digit at each end, no two of _ - . in a row, not ending in .git or .atom" \
+    "  fix: choose another project name"
+fi
 # The template derives the package name from the project name and refuses one
 # that is not a Python identifier (its copier.yml validator). Checked here, so
 # the refusal comes before the render and before anything exists.
@@ -143,7 +155,7 @@ pkg="$(lower "$name" | sed 's/[-. ]/_/g')"
 python3 -c 'import keyword, re, sys; p = sys.argv[1]; sys.exit(0 if re.fullmatch(r"[a-z_][a-z0-9_]*", p) and not keyword.iskeyword(p) else 1)' "$pkg" \
   || stop "No Python package name can be made from '$name': '$pkg' is not an identifier or is a Python keyword" "  fix: choose another project name"
 # Only a 404 is "not there": a network error, a 401 or a 5xx is not an answer.
-if exists_out="$(glab api "projects/$(enc "$project")" 2>&1)"; then
+if exists_out="$(glab api --hostname "$gitlab" "projects/$(enc "$project")" 2>&1)"; then
   stop "$url already exists; the door creates new projects only"
 elif ! grep -q '404' <<<"$exists_out"; then
   stop "could not tell whether $url exists; GitLab answered: $(head -c 200 <<<"$exists_out" | tr '\n' ' ')" "  fix: run it again"

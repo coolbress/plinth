@@ -53,8 +53,10 @@ What to do with the output:
   or in a file, and never ask the user to paste one into the chat.
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
-- **It printed the GitLab plan** (`--host gitlab`, exit 0): show the plan
-  line and the line after it, which says nothing is created on GitLab yet.
+- **It printed the GitLab plan** (`--host gitlab`, exit 0): show the
+  `create gitlab.com/…` plan line, the `token scopes:` line when there is
+  one, and the `rendered into …; nothing is created on GitLab yet` line, the
+  last one printed.
 - **It finished** (exit 0): show the final lines, the `administration:` line
   and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
   and `not verified:` line as printed. The next step for the user is to open
