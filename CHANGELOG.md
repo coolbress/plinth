@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.17.2] - 2026-10-14
+
+Three fixes to `floor-check`. The GitHub checker reported a `*.md` symbolic link to a missing file as a crash with no verdict, and now names it in a FAIL (#525). The GitLab pipeline's `floor-check` judged only the first URL of an inline include, and then could be misled by crafted YAML (#521, #528). It now reads the definition with PyYAML pinned by hash, as GitLab reads it, and fails on any other URL form that names plinth.
+
+tested with plinth-template v1.13.0
+
 ### Fixed
 
 - The GitLab pipeline's `floor-check` reads the pipeline definition with a
@@ -2650,7 +2656,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.17.2...HEAD
+[1.17.2]: https://github.com/coolbress/plinth/releases/tag/v1.17.2
 [1.17.1]: https://github.com/coolbress/plinth/releases/tag/v1.17.1
 [1.17.0]: https://github.com/coolbress/plinth/releases/tag/v1.17.0
 [1.16.0]: https://github.com/coolbress/plinth/releases/tag/v1.16.0
