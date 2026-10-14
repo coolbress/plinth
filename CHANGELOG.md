@@ -13,6 +13,15 @@ pull requests and have no tag.
 
 ### Fixed
 
+- The GitLab pipeline's `floor-check` reads the pipeline definition with a
+  YAML parser instead of a hand-written scanner (#528). Two crafted includes
+  passed the scanner while GitLab read them differently: a duplicate `remote`
+  key, whose last value GitLab uses, and a quote inside a plain scalar, which
+  hid a later include at a branch. PyYAML 6.0.3 is installed from PyPI with
+  every wheel pinned by its hash and no source build. A definition that is
+  not YAML fails naming the parser's error, and a PyYAML that does not
+  install fails the job.
+
 - The GitLab pipeline's `floor-check` judges every include in an inline flow
   sequence or mapping (#521). `include: ['<full-SHA URL>', '<URL at main>']`
   was read as one include, and only its first URL was judged, so it passed.

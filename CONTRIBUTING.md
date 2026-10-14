@@ -11,7 +11,7 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke, markdownlint, workflow-lint and python-lint need network
+# every test; install-smoke, markdownlint, workflow-lint, python-lint and gitlab-ci-cases need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
@@ -32,7 +32,9 @@ first time; a missing tool is a FAIL that names the install command, never a
 skip. `tests/weakened-checks-cases.sh` needs `python3` 3.11 or later, the
 version whose standard library parses TOML, as the runner's does.
 `tests/install-smoke-interrupt.sh` needs `perl`, `pkill` and `pgrep` and takes
-about 15 seconds. Everything else runs offline in seconds.
+about 15 seconds. `tests/gitlab-ci-cases.sh` installs the GitLab
+`floor-check` job's PyYAML from PyPI, pinned by hash, so it needs network.
+Everything else runs offline in seconds.
 
 That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
 one, the link check. CodeQL and the `canary` jobs run only on GitHub.

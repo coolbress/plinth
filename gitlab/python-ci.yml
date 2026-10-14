@@ -27,7 +27,8 @@
 # (a tool install) writes none, and its failure is the verdict.
 #
 # The image is pinned by digest; uv, gitleaks and osv-scanner come from their
-# official releases with SHA-256 checksums.
+# official releases with SHA-256 checksums, and floor-check's PyYAML from PyPI
+# with every wheel's hash.
 
 spec:
   inputs:
@@ -743,135 +744,70 @@ floor-check:
   timeout: 5m
   script:
     - |
-      CONFIG="${CI_CONFIG_PATH:-.gitlab-ci.yml}" python3 - <<'PY' > "$PLINTH_TMP/floor.verdicts" || plinth_failed=1
+      cfg="${CI_CONFIG_PATH:-.gitlab-ci.yml}"
+      # The definition is read with a YAML parser, not a scanner (#528): a
+      # duplicate key takes its last value and quoting follows YAML, as
+      # GitLab reads it. PyYAML 6.0.3 from PyPI, every wheel pinned by its
+      # hash (CPython 3.12 and 3.13 on Linux and macOS, x86_64 and arm64), no
+      # source build. A failed install fails the job; it never passes it.
+      plinth_pyyaml() {
+        local d="$PLINTH_TMP/yaml" r="$PLINTH_TMP/pyyaml-requirements.txt"
+        cat > "$r" <<'REQ'
+      pyyaml==6.0.3 \
+          --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc \
+          --hash=sha256:0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6 \
+          --hash=sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28 \
+          --hash=sha256:ee2922902c45ae8ccada2c5b501ab86c36525b883eff4255313a253a3160861c \
+          --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0 \
+          --hash=sha256:2283a07e2c21a2aa78d9c4442724ec1eb15f5e42a723b99cb3d822d48f5f7ad1 \
+          --hash=sha256:7f047e29dcae44602496db43be01ad42fc6f1cc0d8cd6c83d342306c32270196 \
+          --hash=sha256:8da9669d359f02c0b91ccc01cac4a67f16afec0dac22c2ad09f46bee0697eba8
+      REQ
+        python3 -m venv "$d" &&
+          "$d/bin/pip" install --quiet --disable-pip-version-check --require-hashes \
+            --only-binary :all: --no-deps -r "$r" &&
+          PLINTH_PY="$d/bin/python"
+      }
+      if ! plinth_pyyaml; then
+        say "fail: $cfg includes plinth's GitLab pipeline at a full commit SHA, PyYAML did not install (its error is above), so nothing read the definition"
+        plinth_failed=1
+        verdict
+      fi
+      CONFIG="$cfg" "$PLINTH_PY" - <<'PY' > "$PLINTH_TMP/floor.verdicts" || plinth_failed=1
       import os, re, sys
+      import yaml
       path = os.environ["CONFIG"]
       URL = re.compile(r"https://raw\.githubusercontent\.com/coolbress/plinth/([^/\s'\"]+)/gitlab/python-ci\.yml")
       STD = f"{path} includes plinth's GitLab pipeline at a full commit SHA"
       try:
           with open(path, encoding="utf-8") as f:
-              lines = f.read().split("\n")
+              text = f.read()
       except (OSError, UnicodeDecodeError) as e:
           print(f"fail: {STD}, it could not be read ({e.__class__.__name__})")
           sys.exit(1)
-      def quoted(text):
-          """For each character, whether it is inside a quoted scalar, and
-          whether a quote is still open at the end. A quote opens one only
-          where a scalar starts (at the start, or after a space, `[`, `{`,
-          `,`, `:` or `-`), so `it's` stays plain; inside double quotes a
-          backslash escapes the next character, and inside single quotes
-          `''` is one quote (#521)."""
-          mask, quote, prev, i = [False] * len(text), "", "", 0
-          while i < len(text):
-              ch = text[i]
-              if quote:
-                  mask[i] = True
-                  if (quote == '"' and ch == "\\" and i + 1 < len(text)) or \
-                          (quote == "'" and ch == "'" and text[i + 1:i + 2] == "'"):
-                      mask[i + 1] = True
-                      i += 2
-                      continue
-                  if ch == quote:
-                      quote = ""
-              elif ch in "'\"" and prev in ("", "[", "{", ",", ":", "-"):
-                  quote, mask[i] = ch, True
-              if not ch.isspace():
-                  prev = ch
-              i += 1
-          return mask, bool(quote)
-      def code(l):
-          """The line without a comment: a `#` at the start or after a space,
-          outside a quoted scalar. A `#` inside a URL or a quote is not one."""
-          mask, _ = quoted(l)
-          for i, ch in enumerate(l):
-              if ch == "#" and not mask[i] and (i == 0 or l[i - 1] in " \t"):
-                  return l[:i].rstrip()
-          return l
-      def indent(c):
-          return len(c) - len(c.lstrip(" "))
-      # Only the top-level `include:` node gives a URL its meaning: its inline
-      # value, or the block under it up to the next top-level key. The same
-      # URL anywhere else (a variable, a script list) is not an include, and
-      # an include of plinth from a nested local file is not read here.
-      top = next((i for i, l in enumerate(lines) if re.match(r"include\s*:", code(l))), None)
-      def split_flow(text):
-          """The top-level comma-separated parts inside a flow collection, or
-          None when a bracket or a quote does not close on the line."""
-          mask, still_open = quoted(text)
-          if still_open:
-              return None
-          parts, depth, cur = [], 0, ""
-          for i, ch in enumerate(text):
-              if not mask[i]:
-                  if ch in "[{":
-                      depth += 1
-                  elif ch in "]}":
-                      depth -= 1
-                      if depth < 0:
-                          return None
-                  elif ch == "," and depth == 0:
-                      parts.append(cur.strip())
-                      cur = ""
-                      continue
-              cur += ch
-          if depth:
-              return None
-          return parts + ([cur.strip()] if cur.strip() else [])
-      unsplit = []   # line numbers of inline values that could not be split (#521)
-      def flow(value, n):
-          """The includes an inline value names, each as its lines: a flow
-          sequence gives one per element, a flow mapping one with a line per
-          key, anything else one."""
-          v = value.strip()
-          close = {"[": "]", "{": "}"}.get(v[:1])
-          if not close:
-              return [[v]]
-          inner = split_flow(v[1:-1]) if v.endswith(close) else None
-          if inner is None:
-              unsplit.append(n)
-              return []
-          if close == "}":
-              return [inner]
-          return [i for part in inner for i in flow(part, n)]
-      items = []   # each include: its text, as lines
-      if top is not None:
-          inline = code(lines[top]).split(":", 1)[1].strip()
-          if inline:
-              items = flow(inline, top + 1)
-          block = []
-          for n, l in enumerate(lines[top + 1:], top + 2):
-              c = code(l)
-              if c.strip() and indent(c) == 0 and not c.startswith("-"):
-                  break
-              if c.strip():
-                  block.append((n, c))
-          if block:
-              dash = min((indent(c) for _, c in block if c.lstrip(" ").startswith("-")), default=None)
-              if dash is None:
-                  items.append([c for _, c in block])   # one include as a mapping
-              else:
-                  for n, c in block:
-                      if indent(c) == dash and c.lstrip(" ").startswith("-"):
-                          head = re.sub(r"^\s*-\s*", "", c)
-                          items += flow(head, n) if head.startswith(("[", "{")) else [[c]]
-                      elif items and indent(c) > dash:
-                          items[-1].append(c)
-      if unsplit:
-          print(f"fail: {STD}, cannot split the include on line {', '.join(map(str, unsplit))}: "
-                "a flow collection that does not close on its line; write each include as a list item")
+      class Loader(yaml.SafeLoader):
+          """SafeLoader that accepts GitLab's tags (`!reference` and the
+          like) as data instead of refusing the file."""
+      Loader.add_multi_constructor("!", lambda loader, suffix, node: None)
+      try:
+          doc = yaml.load(text, Loader=Loader)
+      except yaml.YAMLError as e:
+          why = " ".join(str(e).split())[:200]
+          print(f"fail: {STD}, it is not YAML that can be read ({why})")
           sys.exit(1)
-      def plinth(item):
-          """The plinth URL an include names as `remote:` or as a bare
-          string, or None; and whether it names a checksum."""
-          head = re.sub(r"^\s*(?:-\s*)?", "", item[0])
-          rest = [head] + [l.strip() for l in item[1:]]
-          for l in rest:
-              m = URL.search(l)
-              if m and re.fullmatch(r"(?:remote\s*:\s*)?['\"]?\[?\s*['\"]?", l[:m.start()]):
-                  checked = any(re.match(r"integrity\s*:\s*['\"]?sha256-[A-Za-z0-9+/=]+", r) for r in rest)
-                  return m, checked
-          return None, False
-      found = [r for r in (plinth(i) for i in items) if r[0]]
+      # Only the top-level `include:` gives a URL its meaning, as a string or
+      # a mapping's `remote:`; an include of plinth from a nested local file
+      # is not read here. The URL is the whole value, not found inside one.
+      include = doc.get("include") if isinstance(doc, dict) else None
+      entries = include if isinstance(include, list) else ([] if include is None else [include])
+      found = []
+      for e in entries:
+          url, integrity = (e, None) if isinstance(e, str) else \
+              (e.get("remote"), e.get("integrity")) if isinstance(e, dict) else (None, None)
+          m = URL.fullmatch(url.strip()) if isinstance(url, str) else None
+          if m:
+              checked = isinstance(integrity, str) and re.fullmatch(r"sha256-[A-Za-z0-9+/]{43}=", integrity.strip())
+              found.append((m, bool(checked)))
       loose = sorted({m.group(1) for m, _ in found if not re.fullmatch(r"[0-9a-fA-F]{40}", m.group(1))})
       if not found or loose:
           why = (f"it includes it at {', '.join(loose)}, not a full commit SHA" if loose

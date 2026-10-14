@@ -8,7 +8,8 @@
 # `set -eo pipefail`, so the rule tested is the rule shipped. lint,
 # typecheck, test, build and secrets do not run here. GitLab itself never
 # runs here: whether GitLab accepts the file is a run on GitLab.com,
-# recorded on #353.
+# recorded on #353. floor-check installs its PyYAML from PyPI (#528), so
+# those cases need network; the other downloads are stubbed.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gl="$root/gitlab/python-ci.yml"
@@ -311,7 +312,7 @@ fc "include: ['$url', \"$url2\"]"
 expect "a flow sequence of two pinned URLs passes, and neither names a checksum" 0 "pass: .gitlab-ci.yml includes" "2 of 2 includes names no checksum"
 fc "include: ['$url',
   '$main_url']"
-expect "inline syntax that cannot be split fails, naming the line" 1 "cannot split the include on line 1"
+expect "a flow sequence over two lines is read as YAML, and its unpinned URL fails" 1 "it includes it at main"
 fc "include: {remote: '$url', integrity: 'sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8='}"
 expect "an inline flow mapping is an include with its checksum" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
 fc "include:
@@ -324,6 +325,30 @@ fc "include: {remote: '$url', inputs: {working-directory: \"dir #1\"}} # a comme
 expect "a # inside a quoted flow value is not a comment, one after it is" 0 "pass: .gitlab-ci.yml includes"
 fc "include: [it's.yml, '$url', '$main_url'] # it's a comment"
 expect "an apostrophe inside a plain value opens no quote" 1 "it includes it at main"
+# Read with a YAML parser, not a scanner (#528): a duplicate key takes its
+# last value, a quote inside a plain scalar opens nothing, GitLab's tags are
+# data, a file that is not YAML fails naming why, and an install that fails
+# fails the job.
+fc "include: {remote: '$url', remote: '$main_url'}"
+expect "a duplicate remote key is judged on its last value, as GitLab reads it (#528)" 1 "it includes it at main"
+fc "include: [{remote: '$url', inputs: {x: foo:\"bar}}, {remote: '$main_url', inputs: {x: baz\"}}]"
+expect "a quote inside a plain scalar does not hide the next include (#528)" 1 "it includes it at main"
+fc "include: ['$url'
+lint:
+  script: [true]"
+expect "a definition that is not YAML fails, naming the parser's error" 1 "it is not YAML that can be read ("
+fc ".base:
+  script: [true]
+include:
+  - remote: $url
+    integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
+job:
+  script: !reference [.base, script]"
+expect "GitLab's !reference tag is data, not a parse error" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
+d="$tmp/fc-noinstall"; mkdir -p "$d"; printf 'include:\n  - remote: %s\n' "$url" > "$d/.gitlab-ci.yml"
+(cd "$d" && PIP_INDEX_URL=http://127.0.0.1:9/simple PIP_NO_CACHE_DIR=1 PIP_RETRIES=0 PIP_TIMEOUT=2 run_job floor-check \
+   && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
+expect "PyYAML that does not install fails the job, never passes it" 1 "PyYAML did not install"
 fc "# include:
 #   - remote: $url
 lint:
