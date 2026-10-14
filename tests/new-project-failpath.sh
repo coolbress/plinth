@@ -1316,6 +1316,11 @@ if [ "$(cat "$work/home-gl-mr-fail/mr-description")" = "$(cat "$work/home-gl-mr-
 then ok gl-mr-fail "the description the call sent is kept for the command that opens it"
 else bad gl-mr-fail "the recovery command would open a different merge request"; fi
 E="FAIL_AT=push-branch" gl_run gl-mr-push-fail ok yes no "first merge request: not opened (the push of docs/first-mr failed: mock git: branch push refused on purpose)" -- probe --host gitlab
+# A --dir with a space: every printed cd is quoted, so it runs when pasted.
+spaced="$work/home-gl-mr-spaced/My Project"; spaced_q="$(printf %q "$spaced")"
+E="FAIL_AT=push-branch" gl_run gl-mr-spaced ok yes no "push and open it: cd $spaced_q && git push -u origin docs/first-mr" -- probe --host gitlab "--dir=$spaced"
+grep -qF "  next: cd $spaced_q && claude" "$work/home-gl-mr-spaced/out" \
+  && ok gl-mr-spaced "the next line quotes the directory too" || bad gl-mr-spaced "the next line does not quote the directory"
 grep -q -- '-X POST projects/555/merge_requests ' "$work/home-gl-mr-push-fail/calls.log" \
   && bad gl-mr-push-fail "a merge request was asked for after its branch failed to push" || ok gl-mr-push-fail "no merge request without its branch"
 E="MOCK_GL_BASELINE=running PLINTH_FIRST_PR_WAIT=20" gl_run gl-baseline-running ok yes no "first pipeline on main: not confirmed: still running after 20 s: https://gitlab.com/tester/probe/-/pipelines/77" -- probe --host gitlab

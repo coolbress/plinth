@@ -414,9 +414,10 @@ Assisted-by: $assisted_by}"
 # Kept untracked in .git, so the command that finishes a failed open sends the
 # same description: --fill would rebuild it from a commit that has only a subject.
 printf '%s\n' "$mr_body" > "$dir/.git/plinth-first-mr.md"
+dir_q="$(printf %q "$dir")"   # every printed cd runs when pasted, spaces and all
 mr_create="glab mr create --source-branch $branch --target-branch main --title '$mr_title' --description-file .git/plinth-first-mr.md --remove-source-branch --yes"
 if ! push_err="$(git -C "$dir" push -u origin "$branch" 2>&1 >/dev/null)"; then
-  mr_line="not opened (the push of $branch failed: $(tail -1 <<<"$push_err")); push and open it: cd $dir && git push -u origin $branch && $mr_create"
+  mr_line="not opened (the push of $branch failed: $(tail -1 <<<"$push_err")); push and open it: cd $dir_q && git push -u origin $branch && $mr_create"
 else
   mr_err="$(mktemp)"
   if mr_out="$(glab api --hostname "$gitlab" -X POST "projects/$project_id/merge_requests" -f "source_branch=$branch" -f target_branch=main \
@@ -424,7 +425,7 @@ else
      && mr_url="$(json 'd["web_url"]' <<<"$mr_out")" && [ -n "$mr_url" ]; then
     mr_line="$mr_url"
   else
-    mr_line="not opened (GitLab answered: $(head -c 300 <<<"$mr_out" | tr '\n' ' ' | sed 's/ *$//')); open it: cd $dir && $mr_create"
+    mr_line="not opened (GitLab answered: $(head -c 300 <<<"$mr_out" | tr '\n' ' ' | sed 's/ *$//')); open it: cd $dir_q && $mr_create"
   fi
   rm -f "$mr_err"
 fi
@@ -471,5 +472,5 @@ done: $url ($visibility, $spdx, $arch, $template_repo@$template_ref)
   wall: main protected (no push, Maintainers merge, no force push); merges only when the pipeline succeeds, a skipped one not counted; squash, fast-forward
   GitLab Free has no required checks by name: a merge request that drops a job from .gitlab-ci.yml still merges when what is left passes (docs/reference/gitlab-ci.md)
   compute minutes: each pipeline uses the namespace's GitLab.com compute minutes, about 4 to 5 for this one (measured on #353); the quota is at $quota_url
-  next: cd $dir && claude
+  next: cd $dir_q && claude
 EOF
