@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:floor-check` no longer stops on a `*.md` symbolic link whose
+  target is missing (#525). It read the link like a file and crashed before
+  writing any verdict, so `ci / floor-check` said only that the checker wrote
+  none. The relative-links item now fails naming the link and its target,
+  and every other item is reported.
+
 ## [1.17.1] - 2026-10-13
 
 `/plinth:new-project` renders plinth-template v1.13.0, which adds a `host` question for GitLab.com (#353) and moves a new repository's CI pin to plinth v1.17.0. The door passes no host, so a new repository renders as before apart from that pin; `/plinth:floor-check` now reports a repository on v1.12.1 as behind.

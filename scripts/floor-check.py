@@ -1221,7 +1221,12 @@ def check_doc_links(root: Path) -> None:
         result("FAIL", "no markdown document found at all")
         return
     broken: dict[str, list[str]] = {}
+    # A symbolic link whose target is missing has nothing to read: named, not
+    # read, so the checker reports it instead of stopping (#525).
+    dangling = [d for d in docs if d.is_symlink() and not d.exists()]
     for doc in docs:
+        if doc in dangling:
+            continue
         text = inline.sub("", fenced.sub("", read(doc)))
         for target in link.findall(text):
             if target.startswith(("http://", "https://", "mailto:", "#")):
@@ -1231,8 +1236,14 @@ def check_doc_links(root: Path) -> None:
                 continue  # outside the repository: a GitHub-interpreted URL, not a file
             if not path.exists():
                 broken.setdefault(doc.relative_to(root).as_posix(), []).append(target)
-    ok(not broken, f"relative links in {len(docs)} markdown files resolve",
-       f"links to files that do not exist: {broken}")
+    why = []
+    if broken:
+        why.append(f"links to files that do not exist: {broken}")
+    if dangling:
+        why.append("symbolic links to files that do not exist: " + ", ".join(
+            f"{d.relative_to(root).as_posix()} -> {os.readlink(d)}" for d in dangling))
+    ok(not broken and not dangling, f"relative links in {len(docs)} markdown files resolve",
+       "; ".join(why))
 
 
 # ── project-level floor ───────────────────────────────────────────────────
