@@ -754,8 +754,39 @@ floor-check:
       except (OSError, UnicodeDecodeError) as e:
           print(f"fail: {STD}, it could not be read ({e.__class__.__name__})")
           sys.exit(1)
-      def code(l):   # the line without a comment; a `#` inside a URL is not one
-          return re.sub(r"(^|\s)#.*$", "", l)
+      def quoted(text):
+          """For each character, whether it is inside a quoted scalar, and
+          whether a quote is still open at the end. A quote opens one only
+          where a scalar starts (at the start, or after a space, `[`, `{`,
+          `,`, `:` or `-`), so `it's` stays plain; inside double quotes a
+          backslash escapes the next character, and inside single quotes
+          `''` is one quote (#521)."""
+          mask, quote, prev, i = [False] * len(text), "", "", 0
+          while i < len(text):
+              ch = text[i]
+              if quote:
+                  mask[i] = True
+                  if (quote == '"' and ch == "\\" and i + 1 < len(text)) or \
+                          (quote == "'" and ch == "'" and text[i + 1:i + 2] == "'"):
+                      mask[i + 1] = True
+                      i += 2
+                      continue
+                  if ch == quote:
+                      quote = ""
+              elif ch in "'\"" and prev in ("", "[", "{", ",", ":", "-"):
+                  quote, mask[i] = ch, True
+              if not ch.isspace():
+                  prev = ch
+              i += 1
+          return mask, bool(quote)
+      def code(l):
+          """The line without a comment: a `#` at the start or after a space,
+          outside a quoted scalar. A `#` inside a URL or a quote is not one."""
+          mask, _ = quoted(l)
+          for i, ch in enumerate(l):
+              if ch == "#" and not mask[i] and (i == 0 or l[i - 1] in " \t"):
+                  return l[:i].rstrip()
+          return l
       def indent(c):
           return len(c) - len(c.lstrip(" "))
       # Only the top-level `include:` node gives a URL its meaning: its inline
@@ -766,35 +797,24 @@ floor-check:
       def split_flow(text):
           """The top-level comma-separated parts inside a flow collection, or
           None when a bracket or a quote does not close on the line."""
-          parts, depth, quote, cur = [], 0, "", ""
-          i = 0
-          while i < len(text):
-              ch = text[i]
-              i += 1
-              if quote == '"' and ch == "\\" and i < len(text):
-                  cur += ch + text[i]   # a double-quoted escape, \" among them
-                  i += 1
-                  continue
-              if quote == "'" and ch == "'" and text[i:i + 1] == "'":
-                  cur += "''"   # a single-quoted '' is one quote, not the end
-                  i += 1
-                  continue
-              if quote:
-                  quote = "" if ch == quote else quote
-              elif ch in "'\"":
-                  quote = ch
-              elif ch in "[{":
-                  depth += 1
-              elif ch in "]}":
-                  depth -= 1
-                  if depth < 0:
-                      return None
-              elif ch == "," and depth == 0:
-                  parts.append(cur.strip())
-                  cur = ""
-                  continue
+          mask, still_open = quoted(text)
+          if still_open:
+              return None
+          parts, depth, cur = [], 0, ""
+          for i, ch in enumerate(text):
+              if not mask[i]:
+                  if ch in "[{":
+                      depth += 1
+                  elif ch in "]}":
+                      depth -= 1
+                      if depth < 0:
+                          return None
+                  elif ch == "," and depth == 0:
+                      parts.append(cur.strip())
+                      cur = ""
+                      continue
               cur += ch
-          if quote or depth:
+          if depth:
               return None
           return parts + ([cur.strip()] if cur.strip() else [])
       unsplit = []   # line numbers of inline values that could not be split (#521)

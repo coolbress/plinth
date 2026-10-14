@@ -320,6 +320,10 @@ fc "include:
 expect "flow mappings as list items are judged one by one" 1 "it includes it at main"
 fc "include: {remote: '$url', inputs: {label: \"a\\\"b, c\", note: 'it''s, ok'}}"
 expect "an escaped quote inside a quoted flow value does not end it" 0 "pass: .gitlab-ci.yml includes" "the include names no checksum"
+fc "include: {remote: '$url', inputs: {working-directory: \"dir #1\"}} # a comment"
+expect "a # inside a quoted flow value is not a comment, one after it is" 0 "pass: .gitlab-ci.yml includes"
+fc "include: [it's.yml, '$url', '$main_url'] # it's a comment"
+expect "an apostrophe inside a plain value opens no quote" 1 "it includes it at main"
 fc "# include:
 #   - remote: $url
 lint:
