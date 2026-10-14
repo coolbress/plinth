@@ -13,6 +13,22 @@ pull requests and have no tag.
 
 ### Added
 
+- `/plinth:new-project <name> --host gitlab` raises the wall after the push
+  (#533, part of #353), the settings #353 measured on GitLab.com Free:
+  - GitLab's default protection of `main` is replaced by plinth's: no one
+    pushes, Maintainers merge, no force push;
+  - a merge request merges only when its pipeline succeeds, and a skipped
+    pipeline does not count;
+  - squash is required and merges are fast-forward, so `main` gains one
+    commit per merge request.
+
+  Each part is read back. A call or a read-back that fails rolls the
+  project back where the login can delete it; a group Maintainer cannot,
+  so the project stays with part of its wall or none, for an Owner to
+  delete. The labels in `labels.txt` follow; one that fails is named
+  and left. The last lines name the wall and what GitLab Free cannot hold:
+  no required checks by name. The first merge request comes next.
+
 - `/plinth:new-project <name> --host gitlab` creates the GitLab.com project
   and pushes `main` after the plan (#532, part of #353). The create goes
   through the API with the namespace, the visibility and `main` as the

@@ -45,12 +45,18 @@ fail rather than read it as not a merge request. A project that lists
 
 ## The wall on GitLab Free
 
-These are project settings, made by hand for now:
+These are project settings. `/plinth:new-project <name> --host gitlab`
+sets them, reads each back, and rolls the project back if one does not hold
+(where the login can delete it: a group Maintainer cannot, so the project
+stays for an Owner to delete or finish);
+on a project made another way they are set by hand:
 
 - The default branch is protected: no force push, changes through merge
   requests only, Maintainers merge.
 - The merge check "Pipelines must succeed" is on, and "Skipped pipelines are
   considered successful" is off.
+- Squash is required and the merge method is fast-forward, so the default
+  branch gains one commit per merge request.
 
 What it cannot hold: GitLab Free has no required checks by name. The merge
 check takes the pipeline as a whole, and the pipeline is built from the merge
