@@ -17,6 +17,10 @@ Run, with the user's arguments exactly as typed:
 ${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS
 ```
 
+With `--host gitlab`, put `PLINTH_ASSISTED_BY=<agent>:<model>` in front of it,
+naming yourself as a commit trailer would (e.g. `Claude:claude-opus-5-5`): the
+first merge request's description ends with that `Assisted-by` line.
+
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL, and
@@ -39,12 +43,15 @@ project or subgroup there, no more public than its group). It then renders
 the template with `host=gitlab`, prints the plan line, creates the project,
 pushes `main`, and raises the wall: main protected (no push, Maintainers
 merge, no force push), merges only when the pipeline succeeds, squash and
-fast-forward, each read back; then the labels. If a step after the create
-fails before the wall reads back, it deletes the project for good where the
-login can, says so when GitLab only scheduled the deletion, and names the
-project where the login cannot delete it. A label that fails is named and
-left. The first merge request is the next stage of #353. The project is
-private unless `--public` is given.
+fast-forward, each read back; then the labels. Last, it opens the first
+merge request (a First day section in README.md, in the rendered template's
+shape) and reads `main`'s first pipeline until it completes or five minutes
+pass; a red one is named with its failed jobs and not re-run. If a step after
+the create fails before the wall reads back, it deletes the project for good
+where the login can, says so when GitLab only scheduled the deletion, and
+names the project where the login cannot delete it. A label or the merge
+request that fails is named and left: the project is right by then. The
+project is private unless `--public` is given.
 
 What to do with the output:
 
@@ -62,9 +69,11 @@ What to do with the output:
   repeat the URL and that the repository exists without a wall.
 - **It created the GitLab project** (`--host gitlab`, exit 0): show the
   `create gitlab.com/…` plan line, the `token scopes:` line when there is
-  one, the `created … and pushed main` line, any `warning:` line about a
-  label, the `wall:` line, the `GitLab Free has no required checks by name`
-  line, and the `not done yet:` line, the last one printed.
+  one, any `warning:` line about a label, and every line from `done:` on: the
+  first merge request (or why it was not opened, with the command that opens
+  it), the first pipeline on `main`, the wall, both GitLab Free limits, and
+  `next:`. A `not confirmed` or `failed` pipeline is said as it is, never as
+  passed.
 - **The GitLab run rolled back** (exit 1): show the message. If it says
   `ROLLBACK FAILED` or `ROLLBACK PARTLY DONE`, repeat the URL and that the
   project exists with part of its wall or none.
