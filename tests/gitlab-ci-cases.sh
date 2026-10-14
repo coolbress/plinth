@@ -318,6 +318,8 @@ fc "include:
   - {remote: '$url', integrity: 'sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8='}
   - {remote: '$main_url'}"
 expect "flow mappings as list items are judged one by one" 1 "it includes it at main"
+fc "include: {remote: '$url', inputs: {label: \"a\\\"b, c\", note: 'it''s, ok'}}"
+expect "an escaped quote inside a quoted flow value does not end it" 0 "pass: .gitlab-ci.yml includes" "the include names no checksum"
 fc "# include:
 #   - remote: $url
 lint:

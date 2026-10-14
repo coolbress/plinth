@@ -767,7 +767,18 @@ floor-check:
           """The top-level comma-separated parts inside a flow collection, or
           None when a bracket or a quote does not close on the line."""
           parts, depth, quote, cur = [], 0, "", ""
-          for ch in text:
+          i = 0
+          while i < len(text):
+              ch = text[i]
+              i += 1
+              if quote == '"' and ch == "\\" and i < len(text):
+                  cur += ch + text[i]   # a double-quoted escape, \" among them
+                  i += 1
+                  continue
+              if quote == "'" and ch == "'" and text[i:i + 1] == "'":
+                  cur += "''"   # a single-quoted '' is one quote, not the end
+                  i += 1
+                  continue
               if quote:
                   quote = "" if ch == quote else quote
               elif ch in "'\"":
