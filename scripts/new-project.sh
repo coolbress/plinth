@@ -92,9 +92,9 @@ esac; done
 public_cmd="/plinth:new-project"
 for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' "$a")"; done
 
-stop() { printf '%s\n' "$@" >&2; exit 2; }
-warn() { printf 'warning: %s\n' "$1" >&2; }
-below() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" != "$1" ]; }   # below <floor> <version>
+# stop, warn, below and choices_of, shared with the GitLab door.
+# shellcheck source=scripts/lib/door.sh
+. "$here/lib/door.sh"
 
 # ── 1 tools ──────────────────────────────────────────────────────────────
 command -v git >/dev/null || stop "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
@@ -275,7 +275,6 @@ spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
 # exists, so an unsupported license would create and delete. Unreadable is not
 # a stop: copier is the judge, and a refusal rolls back.
 copier_yml="$(gh api "repos/$template_repo/contents/copier.yml?ref=$template_ref" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || copier_yml=""
-choices_of() { sed -n "/^$1:/,/^[a-z_]/p" <<<"$copier_yml" | sed -n 's/^    [^:]*: \([A-Za-z0-9][A-Za-z0-9.-]*\)$/\1/p'; }
 arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
 if [ -n "$arch_choices" ] && [ -n "$lic_choices" ]; then
   grep -qxF "$arch" <<<"$arch_choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$arch_choices")"

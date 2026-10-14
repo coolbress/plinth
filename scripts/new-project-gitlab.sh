@@ -3,9 +3,10 @@
 #   new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>]
 #                  [--archetype=<a>] [--dir=<path>] [--private|--public]
 #
-# This stage (#531) checks, renders and prints the plan, and creates nothing on
-# GitLab. Creating the project and pushing main (#532), raising the wall
-# (#533) and the first merge request (#534) come next.
+# It checks, renders and prints the plan (#531), then creates the project and
+# pushes main (#532). Raising the wall (#533) and the first merge request
+# (#534) come next. A failure after the create rolls the project back:
+# deleted for good where the login can delete it, named where it cannot.
 #
 # Every API read names gitlab.com (`glab api --hostname`): without it glab may
 # answer for the GitLab host of the repository it is run from.
@@ -15,13 +16,20 @@
 #                 version, logged in to gitlab.com
 #   2 login       the username glab is logged in as
 #   3 namespace   a bare name goes under that username; <group>/<name> needs
-#                 the Maintainer role or above in the group. Rollback (once
-#                 the door creates) needs Owner there: below it, rollback is off
-#   4 project     must not exist yet. Private by default: GitLab.com Free
-#                 protects a private project's branch (measured on #353)
+#                 the Maintainer role or above in the group. Rollback needs
+#                 Owner there: below it, rollback is off
+#   4 project     GitLab's path rules and not a reserved name; no project and no
+#                 subgroup on the path yet; no more public than its group.
+#                 Private by default: GitLab.com Free protects a private
+#                 project's branch (measured on #353)
 # Then the license and the archetype against the template's own choices, and
 # the render, with host=gitlab, into ~/<name> or --dir.
 set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# stop, warn, below and choices_of, shared with the GitHub door.
+# shellcheck source=scripts/lib/door.sh
+. "$here/lib/door.sh"
 
 # The pins come from new-project.sh, their one source: run through it.
 template_repo="${PLINTH_DOOR_TEMPLATE_REPO:?run it as new-project.sh <name> --host gitlab}"
@@ -47,8 +55,6 @@ for a in "$@"; do case "$a" in
 esac; done
 [ -n "$target" ] || { echo "$usage" >&2; exit 2; }
 
-stop() { printf '%s\n' "$@" >&2; exit 2; }
-below() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" != "$1" ]; }   # below <floor> <version>
 json() { # <python expression on d> < json: the value, or nothing when the input is not JSON
   python3 -c 'import json,sys
 try: d = json.load(sys.stdin)
@@ -86,13 +92,26 @@ user_id="$(json 'd["id"]' <<<"$user_json")" || user_id=""
 # login's OAuth token is not readable this way (measured on #531): glab's web
 # login asks for `api`, but that is not read here, so the rollback is best
 # effort, as the GitHub door says for a token whose reach it cannot read.
+# A failed read is told apart by GitLab's answer (#535 review round 4): a
+# browser login's token gets "requires token type to be a personal access
+# token" (400, measured), a personal access token without the scope to read
+# itself gets insufficient_scope (403); anything else is not an answer.
 token_note=""; scopes_read=yes
-if pat="$(glab api --hostname "$gitlab" personal_access_tokens/self 2>/dev/null)" && scopes="$(json '" ".join(d["scopes"])' <<<"$pat")"; then
-  grep -qw api <<<"$scopes" || stop "glab's token lacks the api scope (it has: ${scopes:-none}); creating and configuring a project needs it" \
-    "  fix: glab auth login --hostname $gitlab --web --git-protocol https   (or a personal access token with the api scope)"
+token_fix="  fix: glab auth login --hostname $gitlab --web --git-protocol https   (or a personal access token with the api scope)"
+if pat="$(glab api --hostname "$gitlab" personal_access_tokens/self 2>/dev/null)"; then
+  scopes="$(json '" ".join(d["scopes"])' <<<"$pat")" || stop "could not read glab's token scopes from $gitlab" "$token_fix"
+  grep -qw api <<<"$scopes" || stop "glab's token lacks the api scope (it has: ${scopes:-none}); creating and configuring a project needs it" "$token_fix"
 else
-  scopes_read=no
-  token_note="token scopes: not readable (a browser login's token); glab's web login asks for api"
+  why="$(json 'd.get("error") or d.get("message", "")' <<<"$pat")" || why=""
+  case "$why" in
+    *"requires token type to be a personal access token"*)
+      scopes_read=no
+      token_note="token scopes: not readable (a browser login's token); glab's web login asks for api" ;;
+    insufficient_scope*)
+      stop "glab's token lacks the api scope (GitLab: insufficient_scope); creating and configuring a project needs it" "$token_fix" ;;
+    *)
+      stop "could not read glab's token scopes from $gitlab (GitLab answered: ${why:-nothing readable})" "$token_fix" ;;
+  esac
 fi
 
 # ── 3 namespace ──────────────────────────────────────────────────────────
@@ -114,16 +133,21 @@ enc() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[
 # A personal namespace is the login's own: its owner creates and deletes there.
 # A group needs Maintainer to create a project, and Owner to delete one, which
 # the rollback (from #532) needs (GitLab's permissions table).
-role=owner; rollback=on
-if [ "$ns" != "$login" ]; then
+role=owner; rollback=on; group_vis=""
+if [ "$ns" = "$login" ]; then
+  ns_id="$(glab api --hostname "$gitlab" "namespaces/$(enc "$ns")" 2>/dev/null | json 'd["id"]')" || ns_id=""
+  [ -n "$ns_id" ] || stop "could not read the namespace id of $ns on $gitlab" "  fix: glab auth status --hostname $gitlab"
+else
   group_json="$(glab api --hostname "$gitlab" "groups/$(enc "$ns")" 2>/dev/null)" || group_json=""
   group_id="$(json 'd["id"]' <<<"$group_json")" || group_id=""
   [ -n "$group_id" ] || stop "group '$ns' does not exist on GitLab.com, or $login cannot see it" \
     "  fix: create it under $login ($login/$name), or ask a group Owner for access"
+  ns_id="$group_id"
+  group_vis="$(json 'd.get("visibility")' <<<"$group_json")" || group_vis=""
   level="$(glab api --hostname "$gitlab" "groups/$group_id/members/all/$user_id" 2>/dev/null | json 'd["access_level"]')" || level=""
   case "$level" in
     50) role=owner ;;
-    40) role=maintainer; rollback="off (Maintainer cannot delete a project in $ns; on failure it stays: delete it at $url/edit)" ;;
+    40) role=maintainer; rollback="off (a Maintainer cannot delete a project in $ns; on failure it stays, for an Owner of $ns to delete)" ;;
     *)  stop "creating a project in '$ns' needs the Maintainer role or above; $login has ${level:+access level $level}${level:-no membership}" \
           "  fix: ask a group Owner for Maintainer, or create it under $login ($login/$name)" ;;
   esac
@@ -133,6 +157,17 @@ if [ "$ns" != "$login" ]; then
     noone) stop "the group '$ns' lets no one create projects (its project creation setting)" "  fix: a group Owner changes it, or create it under $login ($login/$name)" ;;
     owner) [ "$role" = owner ] || stop "the group '$ns' lets only Owners create projects, and $login is $role there" "  fix: ask a group Owner, or create it under $login ($login/$name)" ;;
   esac
+fi
+# A project is no more visible than its group (GitLab's group visibility
+# rules; #535 review round 3): private < internal < public.
+rank() { case "$1" in private) echo 0 ;; internal) echo 1 ;; public) echo 2 ;; *) echo 9 ;; esac; }
+if [ "$ns" != "$login" ] && [ "$visibility" != private ] && [ -z "$group_vis" ]; then
+  stop "could not read the visibility of the group '$ns', and a $visibility project must be no more visible than its group" \
+    "  fix: run it again, or --private"
+fi
+if [ -n "$group_vis" ] && [ "$(rank "$visibility")" -gt "$(rank "$group_vis")" ]; then
+  stop "a $visibility project cannot sit in the group '$ns', which is $group_vis: GitLab keeps a project no more visible than its group" \
+    "  fix: --private, or a group Owner raises the group's visibility"
 fi
 if [ "$scopes_read" = no ]; then
   case "$rollback" in on) rollback="best effort (the token's scopes are not readable; it needs api to delete what it creates)" ;; esac
@@ -148,6 +183,11 @@ if ! [[ "$name" =~ ^[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$ ]] || [[ "$name" =
   stop "'$name' is not a GitLab project path: letters, digits, _ - and ., a letter or digit at each end, no two of _ - . in a row, not ending in .git or .atom" \
     "  fix: choose another project name"
 fi
+# GitLab's reserved project names (the same page, one path segment each).
+case "$(lower "$name")" in
+  badges|blame|blob|builds|commits|create|create_dir|edit|files|find_file|new|preview|raw|refs|tree|update|wikis)
+    stop "'$name' is a name GitLab reserves for its own routes; it refuses a project by that name" "  fix: choose another project name" ;;
+esac
 # The template derives the package name from the project name and refuses one
 # that is not a Python identifier (its copier.yml validator). Checked here, so
 # the refusal comes before the render and before anything exists.
@@ -165,6 +205,14 @@ case "$exists_msg" in
   "404 "*) ;;
   *) stop "could not tell whether $url exists; GitLab answered: $(head -c 200 <<<"${exists_msg:-$exists_out}" | tr '\n' ' ')" "  fix: run it again" ;;
 esac
+# A subgroup on the same path blocks the project too (#535 review round 4).
+if [ "$ns" != "$login" ]; then
+  if sub_out="$(glab api --hostname "$gitlab" "groups/$(enc "$project")" 2>/dev/null)"; then
+    stop "$url is taken: a subgroup already holds that path, and GitLab does not put a project and a subgroup on one path" "  fix: choose another project name"
+  fi
+  sub_msg="$(json 'd.get("message", "") if isinstance(d, dict) else ""' <<<"$sub_out")" || sub_msg=""
+  case "$sub_msg" in "404 "*) ;; *) stop "could not tell whether a subgroup holds $url; GitLab answered: ${sub_msg:-nothing readable}" "  fix: run it again" ;; esac
+fi
 [ ! -e "$dir" ] || { entries="$(ls -A "$dir" 2>/dev/null)" && [ -z "$entries" ]; } \
   || stop "$dir already exists and is not an empty directory" "  fix: --dir=<another path>   (the door creates ~/<name> itself; an empty directory is fine)"
 if git -C "$(dirname "$dir")" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -175,7 +223,6 @@ fi
 # its copier.yml at the pinned tag (public, over GitHub's raw files): copier
 # refuses anything else, and that would come after the project exists.
 copier_yml="$(curl -fsSL --retry 2 "https://raw.githubusercontent.com/$template_repo/$template_ref/copier.yml" 2>/dev/null)" || copier_yml=""
-choices_of() { sed -n "/^$1:/,/^[a-z_]/p" <<<"$copier_yml" | sed -n 's/^    [^:]*: \([A-Za-z0-9][A-Za-z0-9.-]*\)$/\1/p'; }
 arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
 [ -n "$arch_choices" ] && [ -n "$lic_choices" ] \
   || stop "could not read the template's archetype and license choices ($template_repo@$template_ref copier.yml)" "  fix: run it again; it needs raw.githubusercontent.com"
@@ -200,4 +247,73 @@ git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $
 
 echo "create $gitlab/$project ($visibility, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: protected main (no push, Maintainers merge, no force push), Pipelines must succeed, squash, fast-forward; then the first merge request. rollback: $rollback"
 [ -z "$token_note" ] || echo "$token_note"
-echo "rendered into $dir; nothing is created on GitLab yet: creating the project, the wall and the first merge request are the next stages of the GitLab door (#353)"
+
+# ── create ───────────────────────────────────────────────────────────────
+# Through the API, not `glab repo create`, which prompts and hangs inside a
+# git repository (measured on #353). A failed create leaves nothing to roll
+# back; its answer is named.
+# The answer is read from stdout only: glab writes notices (an update
+# available) to stderr even when the call succeeds.
+create_err="$(mktemp)"
+if ! create_out="$(glab api --hostname "$gitlab" -X POST projects -f "name=$name" -f "path=$name" \
+      -F "namespace_id=$ns_id" -f "visibility=$visibility" -f default_branch=main 2>"$create_err")"; then
+  printf '%s\n' "the create call failed, so there is nothing to roll back: $(head -c 300 <<<"$create_out $(cat "$create_err")" | tr '\n' ' ')" \
+    "  if GitLab created it anyway, it is at $url" >&2
+  rm -f "$create_err"; exit 1
+fi
+rm -f "$create_err"
+project_id="$(json 'd["id"]' <<<"$create_out")" || project_id=""
+[ -n "$project_id" ] || { printf '%s\n' "the create call answered without a project id; check $url and delete it by hand if it exists" >&2; exit 1; }
+created=1; pushed=0
+
+# The rollback, for a failure after the create: GitLab.com schedules a
+# deletion and renames the path, so the project is deleted, its new path read,
+# and then removed for good with that path (permanently_remove, full_path).
+rollback() {
+  case "$rollback" in off*)
+    # Rollback is off for a group Maintainer because only an Owner (or an
+    # administrator) can delete a project: the fix names who can.
+    printf '%s\n' "rollback is off: $url stays, without a wall, and only an Owner of $ns can delete it: ask one to delete $url (Settings > General > Advanced)" >&2; return ;;
+  esac
+  if ! glab api --hostname "$gitlab" -X DELETE "projects/$project_id" >/dev/null 2>&1; then
+    printf '%s\n' "ROLLBACK FAILED: $url exists without a wall; delete it at $url/edit" >&2; return
+  fi
+  # After the first DELETE the path has changed, so the project is named by
+  # its id from here on (GitLab redirects /projects/<id> to wherever it is).
+  by_id="https://$gitlab/projects/$project_id"
+  if read_out="$(glab api --hostname "$gitlab" "projects/$project_id" 2>/dev/null)"; then
+    renamed="$(json 'd["path_with_namespace"]' <<<"$read_out")" || renamed=""
+  else
+    read_msg="$(json 'd.get("message", "") if isinstance(d, dict) else ""' <<<"$read_out")" || read_msg=""
+    case "$read_msg" in "404 "*)
+      printf '%s\n' "rolled back: deleted $url (GitLab removed it at once)" >&2; return ;;
+    esac
+    renamed=""
+  fi
+  if [ -n "$renamed" ] && glab api --hostname "$gitlab" -X DELETE "projects/$project_id?permanently_remove=true&full_path=$(enc "$renamed")" >/dev/null 2>&1; then
+    printf '%s\n' "rolled back: deleted $url for good" >&2
+  else
+    printf '%s\n' "ROLLBACK PARTLY DONE: $url is scheduled for deletion (as ${renamed:-an unread path}), not removed for good; remove it at $by_id (Settings > General > Advanced)" >&2
+  fi
+}
+cleanup() {
+  local rc=$?
+  trap - EXIT
+  if [ "${created:-0}" = 1 ] && [ "${pushed:-0}" != 1 ]; then
+    rollback
+    [ "$rc" -ne 0 ] || rc=1
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT
+
+# ── push main ────────────────────────────────────────────────────────────
+# Over HTTPS, with glab as the credential helper for gitlab.com in this
+# repository's own config only, as the #353 probe pushed.
+git -C "$dir" config --local --replace-all credential.https://gitlab.com.helper ''
+git -C "$dir" config --local --add credential.https://gitlab.com.helper '!glab auth git-credential'
+git -C "$dir" push -u origin main
+
+pushed=1
+echo "created $url ($visibility) and pushed main"
+echo "not raised yet: the wall (protected main, Pipelines must succeed, squash, fast-forward) and the first merge request, the next stages of the GitLab door (#353); until then set them in $url/-/settings/repository and $url/edit"

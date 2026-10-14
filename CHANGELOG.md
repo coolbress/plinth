@@ -13,6 +13,21 @@ pull requests and have no tag.
 
 ### Added
 
+- `/plinth:new-project <name> --host gitlab` creates the GitLab.com project
+  and pushes `main` after the plan (#532, part of #353). The create goes
+  through the API with the namespace, the visibility and `main` as the
+  default branch. The push uses glab as the credential helper in the new
+  repository's own config. A failure after the create rolls back: GitLab.com
+  schedules a deletion and renames the project, so the door deletes it,
+  reads the new path, and removes it for good with that path. Where the
+  login cannot delete (a group Maintainer), the project is named with its
+  settings URL. Four more misreads now stop before the create: a project
+  more public than its group, a personal access token without `api` that
+  cannot read itself, GitLab's reserved project names, and a subgroup on the
+  path. The wall and the first merge request come next, so the project has
+  no wall yet, and the last line says so. The two doors' shared helpers moved
+  to `scripts/lib/door.sh`.
+
 - `/plinth:new-project <name> --host gitlab`, the first stage of the GitLab
   door (#531, part of #353). It checks:
   - `glab`: installed, at least the version it was run with, and logged in
