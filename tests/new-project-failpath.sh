@@ -1207,7 +1207,7 @@ if grep -q '^glab api --hostname gitlab.com -X DELETE projects/555$' "$work/home
 then ok gl-push-fail "the rollback schedules the deletion, then removes it for good with the renamed full_path"
 else bad gl-push-fail "the rollback is not the two-step permanent removal"; grep -F -- 'DELETE' "$work/home-gl-push-fail/calls.log" | sed 's/^/        /'; fi
 E="FAIL_AT=push MOCK_GL_LEVEL=40" gl_run gl-push-fail-maintainer err yes no "only an Owner of someorg can delete it: ask one to delete https://gitlab.com/someorg/probe" -- someorg/probe --host gitlab
-E="FAIL_AT=push MOCK_GL_DELETE_FAILS=1" gl_run gl-push-fail-delete-fails err yes no "ROLLBACK FAILED: https://gitlab.com/tester/probe exists without a wall" -- probe --host gitlab
+E="FAIL_AT=push MOCK_GL_DELETE_FAILS=1" gl_run gl-push-fail-delete-fails err yes no "ROLLBACK FAILED: https://gitlab.com/tester/probe exists with part of its wall or none" -- probe --host gitlab
 E="FAIL_AT=push MOCK_GL_PERM_FAILS=1" gl_run gl-push-fail-partial err yes yes "ROLLBACK PARTLY DONE" -- probe --host gitlab
 if grep -qF "https://gitlab.com/projects/555" "$work/home-gl-push-fail-partial/out" && ! grep -qF "https://gitlab.com/tester/probe/edit" "$work/home-gl-push-fail-partial/out"
 then ok gl-push-fail-partial "a scheduled-only deletion names the project by its id, not by the path GitLab renamed"
@@ -1261,6 +1261,9 @@ readback-checks|the merge settings did not read back as set|
 readback-squash|the merge settings did not read back as set|
 readback-method|the merge settings did not read back as set|
 CASES
+# A wall step failing where the login cannot delete: protection may already be up.
+E="MOCK_GL_WALL_FAIL=checks MOCK_GL_LEVEL=40" gl_run gl-wall-checks-maintainer err yes no "rollback is off: https://gitlab.com/someorg/probe stays, with part of its wall or none, and only an Owner of someorg can delete it" -- someorg/probe --host gitlab
+E="MOCK_GL_WALL_FAIL=checks MOCK_GL_DELETE_FAILS=1" gl_run gl-wall-checks-delete-fails err yes no "ROLLBACK FAILED: https://gitlab.com/tester/probe exists with part of its wall or none" -- probe --host gitlab
 E="MOCK_GL_WALL_FAIL=unprotect404" gl_run gl-wall-unprotect404 ok yes no "wall: main protected" -- probe --host gitlab
 E="MOCK_GL_WALL_FAIL=race" gl_run gl-wall-race ok yes no "wall: main protected" -- probe --host gitlab
 if [ "$(grep -c -- '-X POST projects/555/protected_branches ' "$work/home-gl-wall-race/calls.log")" = 2 ] \

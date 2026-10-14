@@ -274,10 +274,10 @@ rollback() {
   case "$rollback" in off*)
     # Rollback is off for a group Maintainer because only an Owner (or an
     # administrator) can delete a project: the fix names who can.
-    printf '%s\n' "rollback is off: $url stays, without a wall, and only an Owner of $ns can delete it: ask one to delete $url (Settings > General > Advanced)" >&2; return ;;
+    printf '%s\n' "rollback is off: $url stays, with part of its wall or none, and only an Owner of $ns can delete it: ask one to delete $url (Settings > General > Advanced)" >&2; return ;;
   esac
   if ! glab api --hostname "$gitlab" -X DELETE "projects/$project_id" >/dev/null 2>&1; then
-    printf '%s\n' "ROLLBACK FAILED: $url exists without a wall; delete it at $url/edit" >&2; return
+    printf '%s\n' "ROLLBACK FAILED: $url exists with part of its wall or none; delete it at $url/edit" >&2; return
   fi
   # After the first DELETE the path has changed, so the project is named by
   # its id from here on (GitLab redirects /projects/<id> to wherever it is).
