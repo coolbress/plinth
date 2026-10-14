@@ -250,6 +250,7 @@ for a in "$@"; do
   if [ "$a" = push ]; then
     printf 'git %s\n' "$*" >> "$GH_LOG"
     [ "${FAIL_AT:-}" = push ] && { printf '%b\n' "${MOCK_PUSH_ERR:-mock git: push refused on purpose}" >&2; exit 1; }
+    [ "${FAIL_AT:-}" = push-branch ] && [ "${*: -1}" = docs/first-mr ] && { echo "mock git: branch push refused on purpose" >&2; exit 1; }
     # An empty repository takes the first branch pushed as its default branch,
     # and the gh mock reads this file back. Last argument, minus any refspec
     # prefix: `HEAD:refs/heads/x` pushes `x`, `-u origin main` pushes `main`.
@@ -1121,6 +1122,19 @@ case "$all" in
   "api --hostname gitlab.com -X POST projects/555/labels "*)
                            [ "${MOCK_GL_LABEL_FAIL:-}" != "" ] && case "$all" in *"name=${MOCK_GL_LABEL_FAIL} "*) echo '{"message":"400 Bad request"}'; exit 1 ;; esac
                            echo '{"id": 1}' ;;
+  # The first merge request and main's first pipeline (#534).
+  "api --hostname gitlab.com -X POST projects/555/merge_requests "*)
+                           for a in "$@"; do case "$a" in description=*) printf '%s' "${a#description=}" > "$HOME/mr-description" ;; esac; done
+                           [ "${MOCK_GL_MR:-ok}" = fail ] && { echo '{"message":["Another open merge request already exists"]}'; exit 1; }
+                           echo '{"iid": 1, "web_url": "https://gitlab.com/tester/probe/-/merge_requests/1"}' ;;
+  "api --hostname gitlab.com projects/555/pipelines?ref=main")
+                           case "${MOCK_GL_BASELINE:-success}" in
+                             none)  echo '[]' ;;
+                             error) echo '{"message":"500 Internal Server Error"}'; exit 1 ;;
+                             *)     echo "[{\"id\": 77, \"status\": \"${MOCK_GL_BASELINE:-success}\", \"web_url\": \"https://gitlab.com/tester/probe/-/pipelines/77\"}]" ;;
+                           esac ;;
+  "api --hostname gitlab.com projects/555/pipelines/77/jobs?scope[]=failed")
+                           echo '[{"name": "test"}, {"name": "deps"}]' ;;
   *"-X "*|*"--method"*)    echo "mock glab: an unexpected write: $all" >&2; exit 3 ;;
   *)                       echo "mock glab: unexpected call: $all" >&2; exit 4 ;;
 esac
@@ -1271,6 +1285,41 @@ if [ "$(grep -c -- '-X POST projects/555/protected_branches ' "$work/home-gl-wal
 then ok gl-wall-race "GitLab's protection landing between the DELETE and the POST is deleted again, and the POST retried once"
 else bad gl-wall-race "the race was not retried as delete then post"; grep protected_branches "$work/home-gl-wall-race/calls.log" | sed 's/^/        /'; fi
 E="MOCK_GL_WALL_FAIL=race2" gl_run gl-wall-race2 err yes yes "could not protect main: GitLab answered: {\"message\":\"Protected branch 'main' already exists\"}" -- probe --host gitlab
+# The first merge request and the baseline (#534).
+o="$work/home-gl-plan"
+if grep -qF -- '-X POST projects/555/merge_requests -f source_branch=docs/first-mr -f target_branch=main -f title=docs: first merge request through the wall -F remove_source_branch=true' "$o/calls.log" \
+   && [ "$(grep -c -- '-X POST projects/555/merge_requests ' "$o/calls.log")" = 1 ] \
+   && grep -q 'push -u origin docs/first-mr$' "$o/calls.log" \
+   && grep -qx '## What and why' "$o/mr-description" && grep -qx '## How it was verified' "$o/mr-description" && grep -qx '## First day' "$o/mr-description" \
+   && ! grep -q 'Assisted-by' "$o/mr-description" \
+   && [ "$("$real_git" -C "$o/probe" log -1 --format=%s docs/first-mr)" = "docs: first merge request through the wall" ] \
+   && "$real_git" -C "$o/probe" show docs/first-mr:README.md | grep -qx '## First day'
+then ok gl-plan "opens one merge request from docs/first-mr, in the template's shape, with First day in README.md"
+else bad gl-plan "the first merge request is not what #534 says"; grep -E -- 'merge_requests|first-mr' "$o/calls.log" | cut -c1-200 | sed 's/^/        /'; sed 's/^/        desc: /' "$o/mr-description" 2>/dev/null | head -20; fi
+want_tail='  first merge request: https://gitlab.com/tester/probe/-/merge_requests/1
+  first pipeline on main: success: https://gitlab.com/tester/probe/-/pipelines/77'
+if grep -qF "done: https://gitlab.com/tester/probe (private, MIT, cli, coolbress/plinth-template@" "$o/out" \
+   && grep -qF -- "$want_tail" "$o/out" \
+   && grep -qF "  compute minutes: each pipeline uses the namespace's GitLab.com compute minutes, about 4 to 5 for this one (measured on #353); the quota is at https://gitlab.com/-/profile/usage_quotas" "$o/out" \
+   && grep -qF "  next: cd $o/probe && claude" "$o/out" && ! grep -q "not done yet" "$o/out"
+then ok gl-plan "the last lines name the project, the merge request, the baseline, the wall and both Free limits"
+else bad gl-plan "the last lines are not what #534 says"; tail -12 "$o/out" | sed 's/^/        /'; fi
+E="PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" gl_run gl-assisted ok yes no "first merge request: https://gitlab.com/tester/probe/-/merge_requests/1" -- probe --host gitlab
+if [ "$(tail -1 "$work/home-gl-assisted/mr-description")" = "Assisted-by: Claude:claude-opus-5-5" ]
+then ok gl-assisted "an AI-assisted run ends the description with its Assisted-by line"
+else bad gl-assisted "no Assisted-by line last"; tail -3 "$work/home-gl-assisted/mr-description" 2>/dev/null | sed 's/^/        /'; fi
+E="PLINTH_ASSISTED_BY=Claude" gl_run gl-assisted-bad err no no "PLINTH_ASSISTED_BY must be <agent>:<model>" -- probe --host gitlab
+E="MOCK_GL_MR=fail" gl_run gl-mr-fail ok yes no "first merge request: not opened (GitLab answered: {\"message\":[\"Another open merge request already exists\"]}); open it: cd $work/home-gl-mr-fail/probe && glab mr create --source-branch docs/first-mr --target-branch main --fill" -- probe --host gitlab
+E="FAIL_AT=push-branch" gl_run gl-mr-push-fail ok yes no "first merge request: not opened (the push of docs/first-mr failed: mock git: branch push refused on purpose)" -- probe --host gitlab
+grep -q -- '-X POST projects/555/merge_requests ' "$work/home-gl-mr-push-fail/calls.log" \
+  && bad gl-mr-push-fail "a merge request was asked for after its branch failed to push" || ok gl-mr-push-fail "no merge request without its branch"
+E="MOCK_GL_BASELINE=running PLINTH_FIRST_PR_WAIT=20" gl_run gl-baseline-running ok yes no "first pipeline on main: not confirmed: still running after 20 s: https://gitlab.com/tester/probe/-/pipelines/77" -- probe --host gitlab
+[ "$(grep -c 'pipelines?ref=main$' "$work/home-gl-baseline-running/calls.log")" = 3 ] \
+  && ok gl-baseline-running "polls every 10 s until the wait ends" || bad gl-baseline-running "polls: $(grep -c 'pipelines?ref=main$' "$work/home-gl-baseline-running/calls.log")"
+E="MOCK_GL_BASELINE=none PLINTH_FIRST_PR_WAIT=0" gl_run gl-baseline-none ok yes no "first pipeline on main: not confirmed: not listed within 0 s" -- probe --host gitlab
+E="MOCK_GL_BASELINE=error PLINTH_FIRST_PR_WAIT=0" gl_run gl-baseline-error ok yes no "first pipeline on main: not confirmed: could not be read (500 Internal Server Error)" -- probe --host gitlab
+E="MOCK_GL_BASELINE=failed" gl_run gl-baseline-failed ok yes no "first pipeline on main: failed (failed jobs: test, deps), not re-run: https://gitlab.com/tester/probe/-/pipelines/77" -- probe --host gitlab
+grep -q '/retry' "$work/home-gl-baseline-failed/calls.log" && bad gl-baseline-failed "a red baseline was re-run" || ok gl-baseline-failed "a red baseline is not re-run"
 E="MOCK_GL_LABEL_FAIL=task" gl_run gl-label-fail ok yes no "could not create the label task: GitLab answered: {\"message\":\"400 Bad request\"}" -- probe --host gitlab
 E="MOCK_GL_SUBGROUP=1" gl_run gl-subgroup err no no "a subgroup already holds that path" -- someorg/probe --host gitlab
 if [ ! -e "$work/home-gl-bad-name/9lives" ]; then ok gl-bad-name "a name the template refuses stops before the render"

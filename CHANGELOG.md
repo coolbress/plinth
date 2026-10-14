@@ -13,6 +13,22 @@ pull requests and have no tag.
 
 ### Added
 
+- `/plinth:new-project <name> --host gitlab` opens the first merge request
+  and reports `main`'s first pipeline (#534, part of #353):
+  - the merge request adds a First day section to `README.md` on
+    `docs/first-mr`, with a description in the rendered template's shape,
+    ending with `Assisted-by: <agent>:<model>` when `PLINTH_ASSISTED_BY`
+    is set (the skill sets it);
+  - `main`'s first pipeline is read every 10 seconds until it completes or
+    `PLINTH_FIRST_PR_WAIT` (300 s) ends. A red one is named with its failed
+    jobs and not re-run; one still running or unread is named as not
+    confirmed.
+
+  The last lines name the project, the merge request, that pipeline, the
+  wall, and both GitLab Free limits: no required checks by name, and
+  compute minutes, about 4 to 5 a pipeline. A merge request that fails is
+  named with the command that opens it, and nothing is rolled back.
+
 - `/plinth:new-project <name> --host gitlab` raises the wall after the push
   (#533, part of #353), the settings #353 measured on GitLab.com Free:
   - GitLab's default protection of `main` is replaced by plinth's: no one

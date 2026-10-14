@@ -4,10 +4,12 @@
 #                  [--archetype=<a>] [--dir=<path>] [--private|--public]
 #
 # It checks, renders and prints the plan (#531), creates the project and
-# pushes main (#532), and raises the wall (#533). The first merge request
-# (#534) comes next. A failure after the create, until the wall is up and
-# read back, rolls the project back: deleted for good where the login can
-# delete it, named where it cannot. A label that fails is named and left.
+# pushes main (#532), raises the wall (#533), then opens the first merge
+# request and reports main's first pipeline (#534). A failure after the
+# create, until the wall is up and read back, rolls the project back: deleted
+# for good where the login can delete it, named where it cannot. After that
+# the project is right, so a label or the merge request that fails is named
+# and left.
 #
 # Every API read names gitlab.com (`glab api --hostname`): without it glab may
 # answer for the GitLab host of the repository it is run from.
@@ -63,6 +65,15 @@ except ValueError: sys.exit(1)
 v = eval(sys.argv[1], {"d": d})
 print("" if v is None else v)' "$1" 2>/dev/null
 }
+
+# How long main's first pipeline is waited for, as on the GitHub path; and the
+# Assisted-by line the first merge request ends with when an agent runs this
+# (the skill sets it to its own <agent>:<model>, as CONTRIBUTING.md asks).
+first_pr_wait="${PLINTH_FIRST_PR_WAIT:-300}"
+case "$first_pr_wait" in ''|*[!0-9]*) stop "PLINTH_FIRST_PR_WAIT must be a whole number of seconds (got: $first_pr_wait)" "  fix: unset PLINTH_FIRST_PR_WAIT" ;; esac
+assisted_by="${PLINTH_ASSISTED_BY:-}"
+[ -z "$assisted_by" ] || [[ "$assisted_by" =~ ^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$ ]] \
+  || stop "PLINTH_ASSISTED_BY must be <agent>:<model>, e.g. Claude:claude-opus-5-5 (got: $assisted_by)" "  fix: unset it, or set it in that form"
 
 # ── 1 tools ──────────────────────────────────────────────────────────────
 command -v git >/dev/null || stop "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
@@ -372,6 +383,89 @@ grep -vE '^[[:space:]]*(#|$)' "$here/../labels.txt" | while IFS='|' read -r lbl 
     warn "could not create the label $lbl:$why; create it in $url/-/labels"
 done
 
-echo "wall: main protected (no push, Maintainers merge, no force push); merges only when the pipeline succeeds, a skipped one not counted; squash, fast-forward"
-echo "GitLab Free has no required checks by name: a merge request that drops a job from .gitlab-ci.yml still merges when what is left passes (docs/reference/gitlab-ci.md)"
-echo "not done yet: the first merge request, the next stage of the GitLab door (#353)"
+# ── the first merge request ──────────────────────────────────────────────
+# As on the GitHub path: a First day section in README.md, on a branch, in a
+# merge request whose description has the rendered template's shape
+# (.gitlab/merge_request_templates/Default.md). The wall stands already, so
+# a failure here is named with the command that finishes it, not rolled back.
+if [ "$ns" = "$login" ]; then quota_url="https://$gitlab/-/profile/usage_quotas"
+else quota_url="https://$gitlab/groups/$ns/-/usage_quotas"; fi
+first_day="- A merge request merges only when its pipeline succeeds. GitLab Free has no required checks by name: a merge request that removes a job from \`.gitlab-ci.yml\` still merges when what is left passes, so read the job list of one that changes that file.
+- Each pipeline uses the namespace's GitLab.com compute minutes, about 4 to 5 for this project's pipeline. The quota: $quota_url
+- Merge with the command in CONTRIBUTING.md: squash, with the description as the commit body."
+printf '\n## First day\n\n%s\n\nMade with [plinth](https://github.com/coolbress/plinth).\n' "$first_day" >> "$dir/README.md"
+branch="docs/first-mr"
+mr_title="docs: first merge request through the wall"
+git -C "$dir" switch -q -c "$branch"
+git -C "$dir" commit -q -am "$mr_title"
+mr_body="## What and why
+
+Opened by /plinth:new-project to prove the wall. A merge request merges only when its pipeline succeeds, so merging this one shows the wall stands and can be passed. It adds a First day section to README.md and changes nothing else.
+
+## How it was verified
+
+Nothing yet: when this was written the pipeline had not run, and running it is what this merge request is for. A failed job: open it and read the last lines of its log.
+
+## First day
+
+$first_day${assisted_by:+
+
+Assisted-by: $assisted_by}"
+if ! push_err="$(git -C "$dir" push -u origin "$branch" 2>&1 >/dev/null)"; then
+  mr_line="not opened (the push of $branch failed: $(tail -1 <<<"$push_err")); push and open it: cd $dir && git push -u origin $branch && glab mr create --source-branch $branch --target-branch main --fill"
+else
+  mr_err="$(mktemp)"
+  if mr_out="$(glab api --hostname "$gitlab" -X POST "projects/$project_id/merge_requests" -f "source_branch=$branch" -f target_branch=main \
+        -f "title=$mr_title" -F remove_source_branch=true -f "description=$mr_body" 2>"$mr_err")" \
+     && mr_url="$(json 'd["web_url"]' <<<"$mr_out")" && [ -n "$mr_url" ]; then
+    mr_line="$mr_url"
+  else
+    mr_line="not opened (GitLab answered: $(head -c 300 <<<"$mr_out" | tr '\n' ' ' | sed 's/ *$//')); open it: cd $dir && glab mr create --source-branch $branch --target-branch main --fill"
+  fi
+  rm -f "$mr_err"
+fi
+
+# ── main's first pipeline ────────────────────────────────────────────────
+# The push of main started it before the wall stood. Read until it completes
+# or the wait ends, every 10 s; its ending is reported, and a red one is named
+# with its failed jobs and not re-run: re-running blindly hides a real failure.
+polls=$(( first_pr_wait / 10 + 1 )); poll=0; b_line=""; b_status=""; b_url=""; b_err=""
+while [ -z "$b_line" ]; do
+  poll=$((poll + 1))
+  if b_out="$(glab api --hostname "$gitlab" "projects/$project_id/pipelines?ref=main" 2>/dev/null)"; then
+    b_err=""
+    # The list is newest first; main's first pipeline is the oldest.
+    read -r b_id b_status b_url < <(json '" ".join(str(d[-1].get(k, "")) for k in ("id", "status", "web_url")) if d else ""' <<<"$b_out") || true
+    case "${b_status:-}" in
+      success) b_line="success: $b_url" ;;
+      failed)
+        jobs="$(glab api --hostname "$gitlab" "projects/$project_id/pipelines/$b_id/jobs?scope[]=failed" 2>/dev/null \
+          | json '", ".join(j["name"] for j in d)')" || jobs=""
+        b_line="failed (failed jobs: ${jobs:-could not be read}), not re-run: $b_url" ;;
+      canceled|skipped) b_line="ended $b_status, so not confirmed: $b_url" ;;
+    esac
+  else
+    b_err="$(json 'd.get("message", "") if isinstance(d, dict) else ""' <<<"$b_out")" || b_err=""
+    b_err="${b_err:-no answer}"; b_status=""
+  fi
+  [ -n "$b_line" ] && break
+  if [ "$poll" -ge "$polls" ]; then
+    if [ -n "$b_err" ]; then b_line="not confirmed: could not be read ($b_err)"
+    elif [ -z "${b_status:-}" ]; then b_line="not confirmed: not listed within $first_pr_wait s"
+    else b_line="not confirmed: still $b_status after $first_pr_wait s: $b_url"; fi
+    break
+  fi
+  sleep 10
+done
+
+cat <<EOF
+done: $url ($visibility, $spdx, $arch, $template_repo@$template_ref)
+  local: $dir
+  first merge request: $mr_line
+    wait for its pipeline to pass, then merge it with the command in CONTRIBUTING.md (squash, the description as the commit body)
+  first pipeline on main: $b_line
+  wall: main protected (no push, Maintainers merge, no force push); merges only when the pipeline succeeds, a skipped one not counted; squash, fast-forward
+  GitLab Free has no required checks by name: a merge request that drops a job from .gitlab-ci.yml still merges when what is left passes (docs/reference/gitlab-ci.md)
+  compute minutes: each pipeline uses the namespace's GitLab.com compute minutes, about 4 to 5 for this one (measured on #353); the quota is at $quota_url
+  next: cd $dir && claude
+EOF
