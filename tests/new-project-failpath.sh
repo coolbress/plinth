@@ -223,6 +223,7 @@ cat > "$work/bin/uvx" <<'MOCK'
 set -u
 printf 'uvx %s\n' "$*" >> "$GH_LOG"
 case "$*" in *copier*copy*) ;; *) exit 0 ;; esac
+[ "${MOCK_UVX_ENV:-0}" = 1 ] && env > "$HOME/uvx-env"
 if [ "${FAIL_AT:-}" = copier ]; then echo "mock copier: refusing on purpose" >&2; exit 1; fi
 dst="${!#}"; pname=""; plic=""; powner=""
 for a in "$@"; do case "$a" in project_name=*) pname="${a#*=}" ;; license=*) plic="${a#*=}" ;; owner=*) powner="${a#*=}" ;; esac; done
@@ -1126,9 +1127,12 @@ gl_run gl-slug-double err "is not a GitLab project path" -- foo..bar --host gitl
 gl_run gl-exists-404-in-name err "could not tell whether" -- foo404 --host gitlab
 if [ ! -e "$work/home-gl-bad-name/9lives" ]; then ok gl-bad-name "a name the template refuses stops before the render"
 else bad gl-bad-name "a refused name left a directory behind"; fi
-if grep -q 'GITLAB_TOKEN' "$root/scripts/new-project-gitlab.sh" && grep -qE 'env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN uvx' "$root/scripts/new-project-gitlab.sh"
-then ok gl-render-env "copier runs without the GitHub or GitLab token in its environment"
-else bad gl-render-env "copier runs with a token in reach"; fi
+# Run it with every token name glab and gh read set, and look at what copier
+# was given: none of them may reach it (#535 review round 3).
+E="GH_TOKEN=gh1 GITHUB_TOKEN=gh2 GITLAB_TOKEN=gl1 GITLAB_ACCESS_TOKEN=gl2 OAUTH_TOKEN=gl3 MOCK_UVX_ENV=1" gl_run gl-render-env ok "create gitlab.com/tester/probe" -- probe --host gitlab
+if [ -f "$work/home-gl-render-env/uvx-env" ] && ! grep -qE '^(GH_TOKEN|GITHUB_TOKEN|GITLAB_TOKEN|GITLAB_ACCESS_TOKEN|OAUTH_TOKEN)=' "$work/home-gl-render-env/uvx-env"
+then ok gl-render-env "copier's environment holds none of gh's or glab's token variables"
+else bad gl-render-env "a token variable reached copier"; grep -E 'TOKEN' "$work/home-gl-render-env/uvx-env" 2>/dev/null | cut -d= -f1 | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

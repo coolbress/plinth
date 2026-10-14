@@ -26,7 +26,8 @@ pull requests and have no tag.
   - that the project does not exist, where only a 404 counts as absent.
 
   It then checks the license and archetype against the template's choices,
-  renders the template with `host=gitlab`, and prints the plan. It creates nothing on
+  renders the template with `host=gitlab`, with none of gh's or glab's token
+  variables in copier's environment, and prints the plan. It creates nothing on
   GitLab yet. Private is the default, `--public` the other choice. Without
   `--host`, or with `--host github`, the door runs as before.
 

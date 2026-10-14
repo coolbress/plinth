@@ -184,9 +184,10 @@ spdx="$(grep -ixF "$lic" <<<"$lic_choices" | head -1)" || spdx=""
 [ -n "$spdx" ] || stop "the template does not carry the license $lic" "  it accepts: $(tr '\n' ' ' <<<"$lic_choices")"
 
 # Render, as the GitHub door does: copier at its pinned version and date,
-# without a token in its environment, into a plain directory whose .git is
-# removed, then initialised (#118).
-env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+# into a plain directory whose .git is removed, then initialised (#118).
+# Without a token in its environment: gh's two names, and the three glab reads
+# (GITLAB_TOKEN, GITLAB_ACCESS_TOKEN, OAUTH_TOKEN; its configuration reference).
+env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$ns" --data "license=$spdx" --data "archetype=$arch" \
   --data "host=gitlab" \
