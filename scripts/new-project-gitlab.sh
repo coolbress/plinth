@@ -3,10 +3,11 @@
 #   new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>]
 #                  [--archetype=<a>] [--dir=<path>] [--private|--public]
 #
-# It checks, renders and prints the plan (#531), then creates the project and
-# pushes main (#532). Raising the wall (#533) and the first merge request
-# (#534) come next. A failure after the create rolls the project back:
-# deleted for good where the login can delete it, named where it cannot.
+# It checks, renders and prints the plan (#531), creates the project and
+# pushes main (#532), and raises the wall (#533). The first merge request
+# (#534) comes next. A failure after the create, until the wall is up and
+# read back, rolls the project back: deleted for good where the login can
+# delete it, named where it cannot. A label that fails is named and left.
 #
 # Every API read names gitlab.com (`glab api --hostname`): without it glab may
 # answer for the GitLab host of the repository it is run from.
@@ -264,7 +265,7 @@ fi
 rm -f "$create_err"
 project_id="$(json 'd["id"]' <<<"$create_out")" || project_id=""
 [ -n "$project_id" ] || { printf '%s\n' "the create call answered without a project id; check $url and delete it by hand if it exists" >&2; exit 1; }
-created=1; pushed=0
+created=1; finished=0
 
 # The rollback, for a failure after the create: GitLab.com schedules a
 # deletion and renames the path, so the project is deleted, its new path read,
@@ -299,7 +300,7 @@ rollback() {
 cleanup() {
   local rc=$?
   trap - EXIT
-  if [ "${created:-0}" = 1 ] && [ "${pushed:-0}" != 1 ]; then
+  if [ "${created:-0}" = 1 ] && [ "${finished:-0}" != 1 ]; then
     rollback
     [ "$rc" -ne 0 ] || rc=1
   fi
@@ -313,7 +314,64 @@ trap cleanup EXIT
 git -C "$dir" config --local --replace-all credential.https://gitlab.com.helper ''
 git -C "$dir" config --local --add credential.https://gitlab.com.helper '!glab auth git-credential'
 git -C "$dir" push -u origin main
-
-pushed=1
 echo "created $url ($visibility) and pushed main"
-echo "not raised yet: the wall (protected main, Pipelines must succeed, squash, fast-forward) and the first merge request, the next stages of the GitLab door (#353); until then set them in $url/-/settings/repository and $url/edit"
+
+# ── the wall ─────────────────────────────────────────────────────────────
+# What #353 measured on GitLab.com Free. GitLab protects the default branch
+# on the first push with its own levels, so that protection is replaced:
+# no one pushes, Maintainers merge, no force push. Then the merge checks
+# (the pipeline must succeed, a skipped one not counted), squash required and
+# fast-forward merges, so main gains one commit per merge request. Each part
+# is read back; a call or a read-back that fails rolls the project back.
+# A call that fails prints GitLab's answer after the caller's message.
+wall() {
+  local out
+  out="$(glab api --hostname "$gitlab" "$@" 2>&1)" && return 0
+  printf ' GitLab answered: %s' "$(head -c 300 <<<"$out" | tr '\n' ' ')"
+  return 1
+}
+unprotect_out="$(glab api --hostname "$gitlab" -X DELETE "projects/$project_id/protected_branches/main" 2>/dev/null)" || {
+  unprotect_msg="$(json 'd.get("message", "") if isinstance(d, dict) else ""' <<<"$unprotect_out")" || unprotect_msg="$unprotect_out"
+  case "$unprotect_msg" in
+    "404 "*) ;;   # not protected yet: nothing to replace
+    *) printf '%s\n' "could not remove GitLab's default protection of main: $(head -c 300 <<<"$unprotect_msg" | tr '\n' ' ')" >&2; exit 1 ;;
+  esac; }
+protect() { wall -X POST "projects/$project_id/protected_branches" -f name=main -F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false; }
+if ! why="$(protect)"; then
+  # GitLab protects the default branch in a job after the push, which can
+  # land between the DELETE and the POST: delete that protection, post once more.
+  case "$why" in
+    *"already exists"*) why="$(wall -X DELETE "projects/$project_id/protected_branches/main")" && why="$(protect)" ;;
+    *) false ;;
+  esac || { printf '%s\n' "could not protect main:$why" >&2; exit 1; }
+fi
+if ! why="$(wall -X PUT "projects/$project_id" -F only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false)"; then
+  printf '%s\n' "could not set the merge checks:$why" >&2; exit 1
+fi
+if ! why="$(wall -X PUT "projects/$project_id" -f squash_option=always -f merge_method=ff)"; then
+  printf '%s\n' "could not require squash and fast-forward merges:$why" >&2; exit 1
+fi
+glab api --hostname "$gitlab" "projects/$project_id/protected_branches/main" 2>/dev/null | python3 -c 'import json, sys
+d = json.load(sys.stdin)
+ok = (d.get("allow_force_push") is False
+      and [a.get("access_level") for a in d.get("push_access_levels", [])] == [0]
+      and [a.get("access_level") for a in d.get("merge_access_levels", [])] == [40])
+sys.exit(0 if ok else 1)' 2>/dev/null || { printf '%s\n' "main's protection did not read back as set (no push, Maintainers merge, no force push)" >&2; exit 1; }
+glab api --hostname "$gitlab" "projects/$project_id" 2>/dev/null | python3 -c 'import json, sys
+d = json.load(sys.stdin)
+ok = (d.get("only_allow_merge_if_pipeline_succeeds") is True and d.get("allow_merge_on_skipped_pipeline") is False
+      and d.get("squash_option") == "always" and d.get("merge_method") == "ff")
+sys.exit(0 if ok else 1)' 2>/dev/null || { printf '%s\n' "the merge settings did not read back as set (pipeline must succeed, skipped not counted, squash, fast-forward)" >&2; exit 1; }
+finished=1
+
+# Labels. The list is labels.txt, shared with the GitHub door and
+# scripts/floor-check.py (#84). GitLab wants the colour with its #. A label
+# that fails is named and left: a convenience, not a wall stone.
+grep -vE '^[[:space:]]*(#|$)' "$here/../labels.txt" | while IFS='|' read -r lbl color desc; do
+  why="$(wall -X POST "projects/$project_id/labels" -f "name=$lbl" -f "color=#$color" -f "description=$desc")" ||
+    warn "could not create the label $lbl:$why; create it in $url/-/labels"
+done
+
+echo "wall: main protected (no push, Maintainers merge, no force push); merges only when the pipeline succeeds, a skipped one not counted; squash, fast-forward"
+echo "GitLab Free has no required checks by name: a merge request that drops a job from .gitlab-ci.yml still merges when what is left passes (docs/reference/gitlab-ci.md)"
+echo "not done yet: the first merge request, the next stage of the GitLab door (#353)"

@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project, so far without its wall). User-invoked only; creates a remote repository, and if a step after creating it fails, deletes it when the token can or names it when it cannot.
+description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
 argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>] [--private] [--host=github|gitlab]"
 disable-model-invocation: true
 ---
@@ -37,11 +37,14 @@ readable), the namespace (a bare name under the login, or a group where the
 login is Maintainer or above) and the path (GitLab's rules, not reserved, no
 project or subgroup there, no more public than its group). It then renders
 the template with `host=gitlab`, prints the plan line, creates the project,
-and pushes `main`. If a step after the create fails, it deletes the project
-for good where the login can, says so when GitLab only scheduled the
-deletion, and names the project where the login cannot delete it. The wall and the
-first merge request are the next stages of #353, so the project has no wall
-yet. The project is private unless `--public` is given.
+pushes `main`, and raises the wall: main protected (no push, Maintainers
+merge, no force push), merges only when the pipeline succeeds, squash and
+fast-forward, each read back; then the labels. If a step after the create
+fails before the wall reads back, it deletes the project for good where the
+login can, says so when GitLab only scheduled the deletion, and names the
+project where the login cannot delete it. A label that fails is named and
+left. The first merge request is the next stage of #353. The project is
+private unless `--public` is given.
 
 What to do with the output:
 
@@ -59,12 +62,12 @@ What to do with the output:
   repeat the URL and that the repository exists without a wall.
 - **It created the GitLab project** (`--host gitlab`, exit 0): show the
   `create gitlab.com/…` plan line, the `token scopes:` line when there is
-  one, the `created … and pushed main` line, and the `not raised yet:` line,
-  the last one printed: the project has no wall yet, and that line says
-  where to set it.
+  one, the `created … and pushed main` line, any `warning:` line about a
+  label, the `wall:` line, the `GitLab Free has no required checks by name`
+  line, and the `not done yet:` line, the last one printed.
 - **The GitLab run rolled back** (exit 1): show the message. If it says
   `ROLLBACK FAILED` or `ROLLBACK PARTLY DONE`, repeat the URL and that the
-  project exists without a wall.
+  project exists with part of its wall or none.
 - **It finished** (exit 0): show the final lines, the `administration:` line
   and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
   and `not verified:` line as printed. The next step for the user is to open

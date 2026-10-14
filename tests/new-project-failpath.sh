@@ -1083,12 +1083,44 @@ case "$all" in
                            [ "${MOCK_GL_DELETE_FAILS:-0}" = 1 ] && { echo '{"message":"403 Forbidden"}'; exit 1; }
                            : > "$HOME/scheduled"; echo '{"message":"202 Accepted"}' ;;
   "api --hostname gitlab.com projects/555")
-                           [ -e "$HOME/scheduled" ] || { echo '{"id": 555, "path_with_namespace": "tester/probe"}'; exit 0; }
+                           if [ ! -e "$HOME/scheduled" ]; then
+                             skip=false; [ "${MOCK_GL_WALL_FAIL:-}" = readback-checks ] && skip=true
+                             squash=always; [ "${MOCK_GL_WALL_FAIL:-}" = readback-squash ] && squash=default_off
+                             method=ff; [ "${MOCK_GL_WALL_FAIL:-}" = readback-method ] && method=merge
+                             echo "{\"id\": 555, \"path_with_namespace\": \"tester/probe\", \"only_allow_merge_if_pipeline_succeeds\": true, \"allow_merge_on_skipped_pipeline\": $skip, \"squash_option\": \"$squash\", \"merge_method\": \"$method\"}"; exit 0
+                           fi
                            [ "${MOCK_GL_GONE:-0}" = 1 ] && { echo '{"message":"404 Project Not Found"}'; exit 1; }
                            echo '{"id": 555, "path_with_namespace": "tester/probe-deletion_scheduled-555"}' ;;
   "api --hostname gitlab.com -X DELETE projects/555?permanently_remove=true&full_path=tester%2Fprobe-deletion_scheduled-555")
                            [ "${MOCK_GL_PERM_FAILS:-0}" = 1 ] && { echo '{"message":"400 Bad request"}'; exit 1; }
                            echo '{"message":"202 Accepted"}' ;;
+  # The wall (#533): main's default protection replaced by plinth's, the
+  # merge checks, squash and fast-forward, each read back; then the labels.
+  "api --hostname gitlab.com -X DELETE projects/555/protected_branches/main")
+                           [ "${MOCK_GL_WALL_FAIL:-}" = unprotect ] && { echo '{"message":"403 Forbidden"}'; exit 1; }
+                           # GitLab protects the default branch in a job after the push: it may not be protected yet.
+                           [ "${MOCK_GL_WALL_FAIL:-}" = unprotect404 ] && { echo '{"message":"404 Not found"}'; exit 1; }
+                           # race: not protected yet at the first DELETE; GitLab's job protects it before the POST.
+                           case "${MOCK_GL_WALL_FAIL:-}" in race|race2) [ -e "$HOME/raced" ] || { echo '{"message":"404 Not found"}'; exit 1; } ;; esac ;;
+  "api --hostname gitlab.com -X POST projects/555/protected_branches -f name=main -F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false")
+                           [ "${MOCK_GL_WALL_FAIL:-}" = protect ] && { echo '{"message":"403 Forbidden"}'; exit 1; }
+                           if [ "${MOCK_GL_WALL_FAIL:-}" = race2 ] || { [ "${MOCK_GL_WALL_FAIL:-}" = race ] && [ ! -e "$HOME/raced" ]; }; then
+                             : > "$HOME/raced"; echo '{"message":"Protected branch '"'"'main'"'"' already exists"}'; exit 1
+                           fi
+                           echo '{"name":"main"}' ;;
+  "api --hostname gitlab.com -X PUT projects/555 -F only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false")
+                           [ "${MOCK_GL_WALL_FAIL:-}" = checks ] && { echo '{"message":"400 Bad request"}'; exit 1; }
+                           echo '{"id": 555}' ;;
+  "api --hostname gitlab.com -X PUT projects/555 -f squash_option=always -f merge_method=ff")
+                           [ "${MOCK_GL_WALL_FAIL:-}" = squash ] && { echo '{"message":"400 Bad request"}'; exit 1; }
+                           echo '{"id": 555}' ;;
+  "api --hostname gitlab.com projects/555/protected_branches/main")
+                           force=false; [ "${MOCK_GL_WALL_FAIL:-}" = readback-protect ] && force=true
+                           push=0; [ "${MOCK_GL_WALL_FAIL:-}" = readback-push ] && push=30
+                           echo "{\"name\":\"main\",\"allow_force_push\":$force,\"push_access_levels\":[{\"access_level\":$push}],\"merge_access_levels\":[{\"access_level\":40}]}" ;;
+  "api --hostname gitlab.com -X POST projects/555/labels "*)
+                           [ "${MOCK_GL_LABEL_FAIL:-}" != "" ] && case "$all" in *"name=${MOCK_GL_LABEL_FAIL} "*) echo '{"message":"400 Bad request"}'; exit 1 ;; esac
+                           echo '{"id": 1}' ;;
   *"-X "*|*"--method"*)    echo "mock glab: an unexpected write: $all" >&2; exit 3 ;;
   *)                       echo "mock glab: unexpected call: $all" >&2; exit 4 ;;
 esac
@@ -1164,7 +1196,7 @@ gl_run gl-exists-404-in-name err no no "could not tell whether" -- foo404 --host
 # helper the push uses, and the rollback when a step after the create fails.
 log="$work/home-gl-plan/calls.log"
 if grep -q '^glab api --hostname gitlab.com -X POST projects -f name=probe -f path=probe -F namespace_id=70 -f visibility=private -f default_branch=main' "$log" \
-   && [ "$(grep -c -- '-X POST projects' "$log")" = 1 ] && grep -q '^git .*push -u origin main' "$log" \
+   && [ "$(grep -c -- '-X POST projects -f ' "$log")" = 1 ] && grep -q '^git .*push -u origin main' "$log" \
    && "$real_git" -C "$work/home-gl-plan/probe" config --local --get-all credential.https://gitlab.com.helper | grep -qx '!glab auth git-credential'
 then ok gl-plan "creates the project once with its name, namespace, visibility and default branch, and pushes main through glab's credential helper"
 else bad gl-plan "the create call or the push is not what #532 says"; grep -E -- '-X POST|push' "$log" | sed 's/^/        /'; fi
@@ -1191,6 +1223,52 @@ E="MOCK_GL_GROUP_VIS=internal" gl_run gl-public-internal-group err no no "is int
 E="MOCK_GL_GROUP_VIS=private" gl_run gl-private-private-group ok yes no "create gitlab.com/someorg/probe (private," -- someorg/probe --host gitlab
 E="MOCK_GL_TOKEN=noscope" gl_run gl-token-noscope err no no "lacks the api scope" -- probe --host gitlab
 gl_run gl-reserved err no no "is a name GitLab reserves" -- raw --host gitlab
+# The wall (#533): the calls with their values, the read-back, the labels; a
+# wall call or a read-back that fails rolls the project back, a label does not.
+log="$work/home-gl-plan/calls.log"
+want_wall='-X DELETE projects/555/protected_branches/main
+-X POST projects/555/protected_branches -f name=main -F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false
+-X PUT projects/555 -F only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false
+-X PUT projects/555 -f squash_option=always -f merge_method=ff'
+missing=""; while IFS= read -r w; do grep -qF -- "glab api --hostname gitlab.com $w" "$log" || missing="$missing [$w]"; done <<<"$want_wall"
+labels_n="$(grep -vcE '^[[:space:]]*(#|$)' "$root/labels.txt")"
+if [ -z "$missing" ] && [ "$(grep -c -- '-X POST projects/555/labels ' "$log")" = "$labels_n" ] \
+   && grep -qF -- '-X POST projects/555/labels -f name=feat -f color=#ededed -f description=PR title type' "$log" \
+   && grep -q 'glab api --hostname gitlab.com projects/555/protected_branches/main$' "$log"
+then ok gl-plan "raises the wall with its values, reads it back, and creates every label in labels.txt"
+else bad gl-plan "the wall calls are not what #533 says:$missing"; grep -E -- 'protected_branches|-X PUT|labels' "$log" | head -8 | sed 's/^/        /'; fi
+if grep -qF "wall: main protected (no push, Maintainers merge, no force push); merges only when the pipeline succeeds, a skipped one not counted; squash, fast-forward" "$work/home-gl-plan/out" \
+   && grep -qF "GitLab Free has no required checks by name: a merge request that drops a job from .gitlab-ci.yml still merges when what is left passes (docs/reference/gitlab-ci.md)" "$work/home-gl-plan/out"
+then ok gl-plan "the last lines name the wall and what GitLab Free cannot hold"
+else bad gl-plan "the last lines do not name the wall or GitLab Free's limit"; tail -4 "$work/home-gl-plan/out" | sed 's/^/        /'; fi
+# Each failing step names itself (with GitLab's answer for a call), rolls the
+# project back, and makes no wall call after it.
+while IFS='|' read -r f msg after; do
+  E="MOCK_GL_WALL_FAIL=$f" gl_run "gl-wall-$f" err yes yes "$msg" -- probe --host gitlab
+  o="$work/home-gl-wall-$f"
+  if grep -qF "rolled back: deleted https://gitlab.com/tester/probe for good" "$o/out" \
+     && { [ -z "$after" ] || ! grep -qF -- "$after" "$o/calls.log"; } && ! grep -qF -- "/labels " "$o/calls.log"
+  then ok "gl-wall-$f" "rolled back, no later wall call or label"
+  else bad "gl-wall-$f" "no rollback line, or a call after the failing step"; grep -E -- 'protected_branches|-X PUT|labels' "$o/calls.log" | head -6 | sed 's/^/        /'; fi
+done <<'CASES'
+unprotect|could not remove GitLab's default protection of main: 403 Forbidden|-X POST projects/555/protected_branches
+protect|could not protect main: GitLab answered: {"message":"403 Forbidden"}|-X PUT projects/555
+checks|could not set the merge checks: GitLab answered: {"message":"400 Bad request"}|squash_option=always
+squash|could not require squash and fast-forward merges: GitLab answered: {"message":"400 Bad request"}|gitlab.com projects/555/protected_branches/main
+readback-protect|main's protection did not read back as set|
+readback-push|main's protection did not read back as set|
+readback-checks|the merge settings did not read back as set|
+readback-squash|the merge settings did not read back as set|
+readback-method|the merge settings did not read back as set|
+CASES
+E="MOCK_GL_WALL_FAIL=unprotect404" gl_run gl-wall-unprotect404 ok yes no "wall: main protected" -- probe --host gitlab
+E="MOCK_GL_WALL_FAIL=race" gl_run gl-wall-race ok yes no "wall: main protected" -- probe --host gitlab
+if [ "$(grep -c -- '-X POST projects/555/protected_branches ' "$work/home-gl-wall-race/calls.log")" = 2 ] \
+   && [ "$(grep -c -- '-X DELETE projects/555/protected_branches/main' "$work/home-gl-wall-race/calls.log")" = 2 ]
+then ok gl-wall-race "GitLab's protection landing between the DELETE and the POST is deleted again, and the POST retried once"
+else bad gl-wall-race "the race was not retried as delete then post"; grep protected_branches "$work/home-gl-wall-race/calls.log" | sed 's/^/        /'; fi
+E="MOCK_GL_WALL_FAIL=race2" gl_run gl-wall-race2 err yes yes "could not protect main: GitLab answered: {\"message\":\"Protected branch 'main' already exists\"}" -- probe --host gitlab
+E="MOCK_GL_LABEL_FAIL=task" gl_run gl-label-fail ok yes no "could not create the label task: GitLab answered: {\"message\":\"400 Bad request\"}" -- probe --host gitlab
 E="MOCK_GL_SUBGROUP=1" gl_run gl-subgroup err no no "a subgroup already holds that path" -- someorg/probe --host gitlab
 if [ ! -e "$work/home-gl-bad-name/9lives" ]; then ok gl-bad-name "a name the template refuses stops before the render"
 else bad gl-bad-name "a refused name left a directory behind"; fi
