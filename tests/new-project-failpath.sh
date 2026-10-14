@@ -1309,7 +1309,12 @@ if [ "$(tail -1 "$work/home-gl-assisted/mr-description")" = "Assisted-by: Claude
 then ok gl-assisted "an AI-assisted run ends the description with its Assisted-by line"
 else bad gl-assisted "no Assisted-by line last"; tail -3 "$work/home-gl-assisted/mr-description" 2>/dev/null | sed 's/^/        /'; fi
 E="PLINTH_ASSISTED_BY=Claude" gl_run gl-assisted-bad err no no "PLINTH_ASSISTED_BY must be <agent>:<model>" -- probe --host gitlab
-E="MOCK_GL_MR=fail" gl_run gl-mr-fail ok yes no "first merge request: not opened (GitLab answered: {\"message\":[\"Another open merge request already exists\"]}); open it: cd $work/home-gl-mr-fail/probe && glab mr create --source-branch docs/first-mr --target-branch main --fill" -- probe --host gitlab
+E="MOCK_GL_MR=fail PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" gl_run gl-mr-fail ok yes no "first merge request: not opened (GitLab answered: {\"message\":[\"Another open merge request already exists\"]}); open it: cd $work/home-gl-mr-fail/probe && glab mr create --source-branch docs/first-mr --target-branch main --title 'docs: first merge request through the wall' --description-file .git/plinth-first-mr.md --remove-source-branch --yes" -- probe --host gitlab
+# The printed command opens the same merge request: its description is kept.
+if [ "$(cat "$work/home-gl-mr-fail/mr-description")" = "$(cat "$work/home-gl-mr-fail/probe/.git/plinth-first-mr.md")" ] \
+   && [ "$(tail -1 "$work/home-gl-mr-fail/probe/.git/plinth-first-mr.md")" = "Assisted-by: Claude:claude-opus-5-5" ]
+then ok gl-mr-fail "the description the call sent is kept for the command that opens it"
+else bad gl-mr-fail "the recovery command would open a different merge request"; fi
 E="FAIL_AT=push-branch" gl_run gl-mr-push-fail ok yes no "first merge request: not opened (the push of docs/first-mr failed: mock git: branch push refused on purpose)" -- probe --host gitlab
 grep -q -- '-X POST projects/555/merge_requests ' "$work/home-gl-mr-push-fail/calls.log" \
   && bad gl-mr-push-fail "a merge request was asked for after its branch failed to push" || ok gl-mr-push-fail "no merge request without its branch"

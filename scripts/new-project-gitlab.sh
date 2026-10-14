@@ -411,8 +411,12 @@ Nothing yet: when this was written the pipeline had not run, and running it is w
 $first_day${assisted_by:+
 
 Assisted-by: $assisted_by}"
+# Kept untracked in .git, so the command that finishes a failed open sends the
+# same description: --fill would rebuild it from a commit that has only a subject.
+printf '%s\n' "$mr_body" > "$dir/.git/plinth-first-mr.md"
+mr_create="glab mr create --source-branch $branch --target-branch main --title '$mr_title' --description-file .git/plinth-first-mr.md --remove-source-branch --yes"
 if ! push_err="$(git -C "$dir" push -u origin "$branch" 2>&1 >/dev/null)"; then
-  mr_line="not opened (the push of $branch failed: $(tail -1 <<<"$push_err")); push and open it: cd $dir && git push -u origin $branch && glab mr create --source-branch $branch --target-branch main --fill"
+  mr_line="not opened (the push of $branch failed: $(tail -1 <<<"$push_err")); push and open it: cd $dir && git push -u origin $branch && $mr_create"
 else
   mr_err="$(mktemp)"
   if mr_out="$(glab api --hostname "$gitlab" -X POST "projects/$project_id/merge_requests" -f "source_branch=$branch" -f target_branch=main \
@@ -420,7 +424,7 @@ else
      && mr_url="$(json 'd["web_url"]' <<<"$mr_out")" && [ -n "$mr_url" ]; then
     mr_line="$mr_url"
   else
-    mr_line="not opened (GitLab answered: $(head -c 300 <<<"$mr_out" | tr '\n' ' ' | sed 's/ *$//')); open it: cd $dir && glab mr create --source-branch $branch --target-branch main --fill"
+    mr_line="not opened (GitLab answered: $(head -c 300 <<<"$mr_out" | tr '\n' ' ' | sed 's/ *$//')); open it: cd $dir && $mr_create"
   fi
   rm -f "$mr_err"
 fi
