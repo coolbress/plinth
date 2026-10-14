@@ -155,11 +155,16 @@ pkg="$(lower "$name" | sed 's/[-. ]/_/g')"
 python3 -c 'import keyword, re, sys; p = sys.argv[1]; sys.exit(0 if re.fullmatch(r"[a-z_][a-z0-9_]*", p) and not keyword.iskeyword(p) else 1)' "$pkg" \
   || stop "No Python package name can be made from '$name': '$pkg' is not an identifier or is a Python keyword" "  fix: choose another project name"
 # Only a 404 is "not there": a network error, a 401 or a 5xx is not an answer.
-if exists_out="$(glab api --hostname "$gitlab" "projects/$(enc "$project")" 2>&1)"; then
+# The status is read from the answer's JSON `message` ("404 Project Not
+# Found"), never from glab's error text, which can carry the request path.
+if exists_out="$(glab api --hostname "$gitlab" "projects/$(enc "$project")" 2>/dev/null)"; then
   stop "$url already exists; the door creates new projects only"
-elif ! grep -q '404' <<<"$exists_out"; then
-  stop "could not tell whether $url exists; GitLab answered: $(head -c 200 <<<"$exists_out" | tr '\n' ' ')" "  fix: run it again"
 fi
+exists_msg="$(json 'd.get("message", "") if isinstance(d, dict) else ""' <<<"$exists_out")" || exists_msg=""
+case "$exists_msg" in
+  "404 "*) ;;
+  *) stop "could not tell whether $url exists; GitLab answered: $(head -c 200 <<<"${exists_msg:-$exists_out}" | tr '\n' ' ')" "  fix: run it again" ;;
+esac
 [ ! -e "$dir" ] || { entries="$(ls -A "$dir" 2>/dev/null)" && [ -z "$entries" ]; } \
   || stop "$dir already exists and is not an empty directory" "  fix: --dir=<another path>   (the door creates ~/<name> itself; an empty directory is fine)"
 if git -C "$(dirname "$dir")" rev-parse --is-inside-work-tree >/dev/null 2>&1; then

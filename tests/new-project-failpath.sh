@@ -1051,6 +1051,11 @@ case "$all" in
                              500) echo '{"message":"500 Internal Server Error"}'; echo "glab: 500 Internal Server Error" >&2; exit 1 ;;
                              *)   echo '{"message":"404 Project Not Found"}'; echo "glab: 404 Project Not Found (HTTP 404)" >&2; exit 1 ;;
                            esac ;;
+  # A failure that is not a 404, whose words carry the request path, and the
+  # path holds "404": only the answer's status may count as not found.
+  "api --hostname gitlab.com projects/tester%2Ffoo404")
+                           echo '{"message":"500 Internal Server Error"}'
+                           echo "glab: GET https://gitlab.com/api/v4/projects/tester%2Ffoo404: 500 Internal Server Error" >&2; exit 1 ;;
   *"-X "*|*"--method"*)    echo "mock glab: a write in the plan-only door: $all" >&2; exit 3 ;;
   *)                       echo "mock glab: unexpected call: $all" >&2; exit 4 ;;
 esac
@@ -1118,6 +1123,7 @@ gl_run gl-bad-name err "No Python package name can be made from '9lives'" -- 9li
 gl_run gl-slug-git err "is not a GitLab project path" -- foo.git --host gitlab
 gl_run gl-slug-end err "is not a GitLab project path" -- foo- --host gitlab
 gl_run gl-slug-double err "is not a GitLab project path" -- foo..bar --host gitlab
+gl_run gl-exists-404-in-name err "could not tell whether" -- foo404 --host gitlab
 if [ ! -e "$work/home-gl-bad-name/9lives" ]; then ok gl-bad-name "a name the template refuses stops before the render"
 else bad gl-bad-name "a refused name left a directory behind"; fi
 if grep -q 'GITLAB_TOKEN' "$root/scripts/new-project-gitlab.sh" && grep -qE 'env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN uvx' "$root/scripts/new-project-gitlab.sh"
