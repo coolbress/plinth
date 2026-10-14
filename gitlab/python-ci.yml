@@ -754,8 +754,39 @@ floor-check:
       except (OSError, UnicodeDecodeError) as e:
           print(f"fail: {STD}, it could not be read ({e.__class__.__name__})")
           sys.exit(1)
-      def code(l):   # the line without a comment; a `#` inside a URL is not one
-          return re.sub(r"(^|\s)#.*$", "", l)
+      def quoted(text):
+          """For each character, whether it is inside a quoted scalar, and
+          whether a quote is still open at the end. A quote opens one only
+          where a scalar starts (at the start, or after a space, `[`, `{`,
+          `,`, `:` or `-`), so `it's` stays plain; inside double quotes a
+          backslash escapes the next character, and inside single quotes
+          `''` is one quote (#521)."""
+          mask, quote, prev, i = [False] * len(text), "", "", 0
+          while i < len(text):
+              ch = text[i]
+              if quote:
+                  mask[i] = True
+                  if (quote == '"' and ch == "\\" and i + 1 < len(text)) or \
+                          (quote == "'" and ch == "'" and text[i + 1:i + 2] == "'"):
+                      mask[i + 1] = True
+                      i += 2
+                      continue
+                  if ch == quote:
+                      quote = ""
+              elif ch in "'\"" and prev in ("", "[", "{", ",", ":", "-"):
+                  quote, mask[i] = ch, True
+              if not ch.isspace():
+                  prev = ch
+              i += 1
+          return mask, bool(quote)
+      def code(l):
+          """The line without a comment: a `#` at the start or after a space,
+          outside a quoted scalar. A `#` inside a URL or a quote is not one."""
+          mask, _ = quoted(l)
+          for i, ch in enumerate(l):
+              if ch == "#" and not mask[i] and (i == 0 or l[i - 1] in " \t"):
+                  return l[:i].rstrip()
+          return l
       def indent(c):
           return len(c) - len(c.lstrip(" "))
       # Only the top-level `include:` node gives a URL its meaning: its inline
@@ -763,28 +794,72 @@ floor-check:
       # URL anywhere else (a variable, a script list) is not an include, and
       # an include of plinth from a nested local file is not read here.
       top = next((i for i, l in enumerate(lines) if re.match(r"include\s*:", code(l))), None)
+      def split_flow(text):
+          """The top-level comma-separated parts inside a flow collection, or
+          None when a bracket or a quote does not close on the line."""
+          mask, still_open = quoted(text)
+          if still_open:
+              return None
+          parts, depth, cur = [], 0, ""
+          for i, ch in enumerate(text):
+              if not mask[i]:
+                  if ch in "[{":
+                      depth += 1
+                  elif ch in "]}":
+                      depth -= 1
+                      if depth < 0:
+                          return None
+                  elif ch == "," and depth == 0:
+                      parts.append(cur.strip())
+                      cur = ""
+                      continue
+              cur += ch
+          if depth:
+              return None
+          return parts + ([cur.strip()] if cur.strip() else [])
+      unsplit = []   # line numbers of inline values that could not be split (#521)
+      def flow(value, n):
+          """The includes an inline value names, each as its lines: a flow
+          sequence gives one per element, a flow mapping one with a line per
+          key, anything else one."""
+          v = value.strip()
+          close = {"[": "]", "{": "}"}.get(v[:1])
+          if not close:
+              return [[v]]
+          inner = split_flow(v[1:-1]) if v.endswith(close) else None
+          if inner is None:
+              unsplit.append(n)
+              return []
+          if close == "}":
+              return [inner]
+          return [i for part in inner for i in flow(part, n)]
       items = []   # each include: its text, as lines
       if top is not None:
           inline = code(lines[top]).split(":", 1)[1].strip()
           if inline:
-              items = [[inline]]
+              items = flow(inline, top + 1)
           block = []
-          for l in lines[top + 1:]:
+          for n, l in enumerate(lines[top + 1:], top + 2):
               c = code(l)
               if c.strip() and indent(c) == 0 and not c.startswith("-"):
                   break
               if c.strip():
-                  block.append(c)
+                  block.append((n, c))
           if block:
-              dash = min((indent(c) for c in block if c.lstrip(" ").startswith("-")), default=None)
+              dash = min((indent(c) for _, c in block if c.lstrip(" ").startswith("-")), default=None)
               if dash is None:
-                  items.append(block)   # one include as a mapping
+                  items.append([c for _, c in block])   # one include as a mapping
               else:
-                  for c in block:
+                  for n, c in block:
                       if indent(c) == dash and c.lstrip(" ").startswith("-"):
-                          items.append([c])
+                          head = re.sub(r"^\s*-\s*", "", c)
+                          items += flow(head, n) if head.startswith(("[", "{")) else [[c]]
                       elif items and indent(c) > dash:
                           items[-1].append(c)
+      if unsplit:
+          print(f"fail: {STD}, cannot split the include on line {', '.join(map(str, unsplit))}: "
+                "a flow collection that does not close on its line; write each include as a list item")
+          sys.exit(1)
       def plinth(item):
           """The plinth URL an include names as `remote:` or as a bare
           string, or None; and whether it names a checksum."""
