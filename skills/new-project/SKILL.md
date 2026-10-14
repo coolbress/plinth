@@ -1,7 +1,7 @@
 ---
 name: new-project
-description: Create a new GitHub repository with required checks already enforced. User-invoked only; creates a remote repository, and if a check cannot be raised, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>] [--private]"
+description: Create a new GitHub repository with required checks already enforced (with --host gitlab, the GitLab.com path, which so far checks and plans only). User-invoked only; creates a remote repository, and if a check cannot be raised, deletes it when the token can or names it when it cannot.
+argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>] [--private] [--host=github|gitlab]"
 disable-model-invocation: true
 ---
 
@@ -31,6 +31,14 @@ creation, it deletes the repository when its token can and names it when it
 cannot; a label that fails is named and left. If the create's own answer is
 lost, it does neither.
 
+With `--host gitlab` the target is a GitLab.com project, and the run so far
+stops at the plan. It checks `glab` (installed, recent enough, logged in to
+gitlab.com), the namespace (a bare name under the login, or a group where the
+login is Maintainer or above) and that the project does not exist, then
+renders the template with `host=gitlab` and prints the plan line. Nothing is
+created on GitLab yet. The project, its wall and the first merge request are
+the next stages of #353. The project is private unless `--public` is given.
+
 What to do with the output:
 
 - **It stopped before creating anything** (exit 2): show the user the message
@@ -45,6 +53,10 @@ What to do with the output:
   or in a file, and never ask the user to paste one into the chat.
 - **It rolled back** (exit 1): show the message. If it says `ROLLBACK FAILED`,
   repeat the URL and that the repository exists without a wall.
+- **It printed the GitLab plan** (`--host gitlab`, exit 0): show the
+  `create gitlab.com/…` plan line, the `token scopes:` line when there is
+  one, and the `rendered into …; nothing is created on GitLab yet` line, the
+  last one printed.
 - **It finished** (exit 0): show the final lines, the `administration:` line
   and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
   and `not verified:` line as printed. The next step for the user is to open
