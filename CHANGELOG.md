@@ -11,6 +11,25 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:new-project <name> --host gitlab`, the first stage of the GitLab
+  door (#531, part of #353). It checks:
+  - `glab`: installed, at least the version it was run with, and logged in
+    to gitlab.com;
+  - the token: a personal access token needs the `api` scope; a browser
+    login's scopes are not readable, so rollback is best effort;
+  - the namespace: a bare name goes under the login in any case; a group
+    needs the login to be Maintainer or above and to be allowed by the
+    group's project creation setting, and rollback is off below Owner;
+  - the name: one the template turns into no Python package is refused;
+  - that the project does not exist, where only a 404 counts as absent.
+
+  It then checks the license and archetype against the template's choices,
+  renders the template with `host=gitlab`, and prints the plan. It creates nothing on
+  GitLab yet. Private is the default, `--public` the other choice. Without
+  `--host`, or with `--host github`, the door runs as before.
+
 ## [1.17.2] - 2026-10-14
 
 Three fixes to `floor-check`. The GitHub checker reported a `*.md` symbolic link to a missing file as a crash with no verdict, and now names it in a FAIL (#525). The GitLab pipeline's `floor-check` judged only the first URL of an inline include, and then could be misled by crafted YAML (#521, #528). It now reads the definition with PyYAML pinned by hash, as GitLab reads it, and fails on any other URL form that names plinth.

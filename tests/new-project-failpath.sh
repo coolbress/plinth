@@ -1015,5 +1015,110 @@ is "security_and_analysis null is unread"   "unread unread" "$(sec '{"security_a
 is "security_and_analysis absent is unread" "unread unread" "$(sec '{"name":"probe"}')"
 is "push protection on is not Secret Protection on" "unread unread" "$(sec '{"security_and_analysis":{"secret_scanning_push_protection":{"status":"enabled"}}}')"
 
+# ── the GitLab door (#353 slice 2, #531) ─────────────────────────────────
+# `--host gitlab` checks, renders and prints the plan, and creates nothing yet.
+# `glab` and `curl` (the template's copier.yml, read from GitHub's raw files)
+# are mocks; the git, uvx and claude mocks above are shared.
+mkdir -p "$work/glbin"
+cat > "$work/glbin/glab" <<'MOCK'
+#!/usr/bin/env bash
+set -u
+printf 'glab %s\n' "$*" >> "$GH_LOG"
+all="$*"
+case "$all" in
+  --version)               case "${MOCK_GLAB_VERSION_FORMAT:-new}" in
+                             old)  echo "glab version ${MOCK_GLAB_VERSION:-1.122.0} (2023-01-01)" ;;
+                             none) echo "glab (development build)" ;;
+                             *)    echo "glab ${MOCK_GLAB_VERSION:-1.122.0} (mock)" ;;
+                           esac ;;
+  "auth status"*)          [ "${MOCK_GLAB_NOAUTH:-0}" = 1 ] && { echo "x gitlab.com: not logged in" >&2; exit 1; }; echo "gitlab.com: logged in" ;;
+  "api user")              echo '{"id": 7, "username": "tester"}' ;;
+  "api personal_access_tokens/self")
+                           case "${MOCK_GL_TOKEN:-api}" in
+                             oauth) echo '{"message":"401 Unauthorized"}'; exit 1 ;;
+                             *)     echo "{\"scopes\": [\"${MOCK_GL_TOKEN:-api}\"]}" ;;
+                           esac ;;
+  "api groups/someorg")    [ "${MOCK_GL_GROUP:-1}" = 1 ] || { echo '{"message":"404 Group Not Found"}'; exit 1; }
+                           echo "{\"id\": 9, \"full_path\": \"someorg\", \"project_creation_level\": \"${MOCK_GL_CREATION:-maintainer}\"}" ;;
+  "api groups/9/members/all/7")
+                           [ "${MOCK_GL_LEVEL:-50}" = none ] && { echo '{"message":"404 Not found"}'; exit 1; }
+                           echo "{\"access_level\": ${MOCK_GL_LEVEL:-50}}" ;;
+  # Only the encoded path is a project read; an unencoded one falls through.
+  "api projects/tester%2Fprobe"|"api projects/someorg%2Fprobe")
+                           case "${MOCK_GL_EXISTS:-0}" in
+                             1)   echo '{"id": 1, "path_with_namespace": "x/y"}' ;;
+                             500) echo '{"message":"500 Internal Server Error"}'; echo "glab: 500 Internal Server Error" >&2; exit 1 ;;
+                             *)   echo '{"message":"404 Project Not Found"}'; echo "glab: 404 Project Not Found (HTTP 404)" >&2; exit 1 ;;
+                           esac ;;
+  *"-X "*|*"--method"*)    echo "mock glab: a write in the plan-only door: $all" >&2; exit 3 ;;
+  *)                       echo "mock glab: unexpected call: $all" >&2; exit 4 ;;
+esac
+exit 0
+MOCK
+cat > "$work/glbin/curl" <<'MOCK'
+#!/usr/bin/env bash
+printf 'curl %s\n' "$*" >> "$GH_LOG"
+case "$*" in *"/copier.yml"*) [ "${MOCK_GL_CHOICES:-1}" = 1 ] || exit 22
+  printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nplinth_sha:\n' ;;
+  *) exit 22 ;; esac
+MOCK
+chmod +x "$work/glbin/"*
+for f in git uvx uv claude sleep; do cp "$work/bin/$f" "$work/glbin/"; done
+mkdir -p "$work/glbin-noglab"; for f in git uvx uv claude sleep curl; do cp "$work/glbin/$f" "$work/glbin-noglab/"; done
+# gl_run <case> <want exit: ok|err> <expected output substring> -- <script args...>
+# Nothing may be written to GitLab, and nothing may call gh.
+gl_run() {
+  local case="$1" want_exit="$2" want_text="$3"; shift 3; [ "$1" = -- ] && shift
+  local home="$work/home-$case" rc ok=1
+  mkdir -p "$home"; export HOME="$home" GH_LOG="$home/calls.log" FIRST_PUSHED_FILE="$home/first-pushed"
+  : > "$GH_LOG"
+  ( cd "$home" && env ${E:-} PATH="${P:-$work/glbin}:/usr/bin:/bin" "$root/scripts/new-project.sh" "$@" ) >"$home/out" 2>&1; rc=$?
+  [ "$want_exit" = ok ] && [ "$rc" -ne 0 ] && ok=0
+  [ "$want_exit" = err ] && [ "$rc" -eq 0 ] && ok=0
+  grep -qE '^glab api .*(-X |--method)' "$GH_LOG" && ok=0
+  grep -q '^gh ' "$GH_LOG" && ok=0
+  [ -z "$want_text" ] || grep -qF -- "$want_text" "$home/out" || ok=0
+  if [ "$ok" = 1 ]; then ok "$case" "exit=$rc, nothing written to GitLab"
+  else bad "$case" "exit=$rc (want $want_exit) text=${want_text:-any}"; sed 's/^/        /' "$home/out"; grep -E '^(gh |glab api .*-X)' "$GH_LOG" | sed 's/^/        log: /'; fi
+  E=""; P=""
+}
+
+echo "the GitLab door: checks, render and plan, nothing created (#531)"
+gl_run gl-plan ok "create gitlab.com/tester/probe (private, MIT, cli, as owner) from coolbress/plinth-template@" -- probe --host gitlab
+if grep -q 'host=gitlab' "$work/home-gl-plan/calls.log" && grep -q 'owner=tester' "$work/home-gl-plan/calls.log" \
+   && [ -f "$work/home-gl-plan/probe/LICENSE" ] && grep -qF "nothing is created on GitLab yet" "$work/home-gl-plan/out" \
+   && [ "$("$real_git" -C "$work/home-gl-plan/probe" remote get-url origin 2>/dev/null)" = https://gitlab.com/tester/probe.git ]
+then ok gl-plan "renders with host=gitlab and owner, points origin at gitlab.com, and says nothing is created yet"
+else bad gl-plan "the render or its remote is not GitLab's"; grep -E '^uvx' "$work/home-gl-plan/calls.log" | sed 's/^/        /'; fi
+gl_run gl-plan-eq ok "create gitlab.com/tester/probe" -- probe --host=gitlab
+gl_run gl-public ok "(public, MIT, cli, as owner)" -- probe --host gitlab --public
+gl_run gl-group ok "create gitlab.com/someorg/probe (private, Apache-2.0, library, as owner)" -- someorg/probe --host gitlab --license=apache-2.0 --archetype=library
+E="MOCK_GL_LEVEL=40" gl_run gl-group-maintainer ok "rollback: off" -- someorg/probe --host gitlab
+P="$work/glbin-noglab" gl_run gl-no-glab err "glab (GitLab CLI) is not installed" -- probe --host gitlab
+E="MOCK_GLAB_VERSION=1.40.0" gl_run gl-glab-old err "glab 1.40.0 is below" -- probe --host gitlab
+E="MOCK_GLAB_NOAUTH=1" gl_run gl-logged-out err "glab auth login --hostname gitlab.com" -- probe --host gitlab
+E="MOCK_GL_GROUP=0" gl_run gl-group-missing err "group 'someorg' does not exist on GitLab.com" -- someorg/probe --host gitlab
+E="MOCK_GL_LEVEL=30" gl_run gl-group-developer err "needs the Maintainer role" -- someorg/probe --host gitlab
+E="MOCK_GL_LEVEL=none" gl_run gl-group-nonmember err "needs the Maintainer role" -- someorg/probe --host gitlab
+E="MOCK_GL_EXISTS=1" gl_run gl-exists err "already exists" -- probe --host gitlab
+gl_run gl-bad-license err "the template does not carry the license" -- probe --host gitlab --license=gpl-3.0
+gl_run gl-bad-arch err "unknown archetype: web" -- probe --host gitlab --archetype=web
+gl_run gl-bad-host err "--host is github or gitlab" -- probe --host bitbucket
+gl_run gl-github-public err "unknown option: --public" -- probe --public
+gl_run gl-case ok "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- Tester/probe --host gitlab
+E="MOCK_GLAB_VERSION_FORMAT=old MOCK_GLAB_VERSION=1.36.0" gl_run gl-glab-old-format err "glab 1.36.0 is below" -- probe --host gitlab
+E="MOCK_GLAB_VERSION_FORMAT=none" gl_run gl-glab-no-version err "could not read glab's version" -- probe --host gitlab
+E="MOCK_GL_EXISTS=500" gl_run gl-exists-unread err "could not tell whether" -- probe --host gitlab
+E="MOCK_GL_TOKEN=read_api" gl_run gl-token-read-only err "lacks the api scope" -- probe --host gitlab
+E="MOCK_GL_TOKEN=oauth" gl_run gl-token-oauth ok "rollback: best effort" -- probe --host gitlab
+E="MOCK_GL_CREATION=owner MOCK_GL_LEVEL=40" gl_run gl-group-owner-only err "lets only Owners create projects" -- someorg/probe --host gitlab
+E="MOCK_GL_CREATION=noone" gl_run gl-group-noone err "lets no one create projects" -- someorg/probe --host gitlab
+gl_run gl-bad-name err "No Python package name can be made from '9lives'" -- 9lives --host gitlab
+if [ ! -e "$work/home-gl-bad-name/9lives" ]; then ok gl-bad-name "a name the template refuses stops before the render"
+else bad gl-bad-name "a refused name left a directory behind"; fi
+if grep -q 'GITLAB_TOKEN' "$root/scripts/new-project-gitlab.sh" && grep -qE 'env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN uvx' "$root/scripts/new-project-gitlab.sh"
+then ok gl-render-env "copier runs without the GitHub or GitLab token in its environment"
+else bad gl-render-env "copier runs with a token in reach"; fi
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

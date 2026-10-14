@@ -2,7 +2,9 @@
 # The door: create a repository with the wall already up, or create nothing.
 #
 #   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
-#                  [--private] [--force-defaults]
+#                  [--private] [--force-defaults] [--host=github|gitlab]
+#
+# --host gitlab hands the run to scripts/new-project-gitlab.sh (#353).
 #
 # Preflight, in order; the first miss stops with the one line that fixes it,
 # before anything exists:
@@ -55,7 +57,26 @@ copier_newer="2026-09-09"
 claude_floor="2.1.274"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private] [--force-defaults]"
+# --host: github (this script) or gitlab (scripts/new-project-gitlab.sh, #353).
+# Taken out before the rest is parsed, so a GitHub run without it reads its
+# arguments exactly as before. The GitLab door gets the pins above from here,
+# so the template tag and copier's version have one source.
+host=github; rest=(); host_next=0
+for a in "$@"; do
+  if [ "$host_next" = 1 ]; then host="$a"; host_next=0; continue; fi
+  case "$a" in --host) host_next=1 ;; --host=*) host="${a#*=}" ;; *) rest+=("$a") ;; esac
+done
+[ "$host_next" = 0 ] || { echo "--host needs a value: github or gitlab" >&2; exit 2; }
+case "$host" in
+  github) set -- ${rest[@]+"${rest[@]}"} ;;
+  gitlab) PLINTH_DOOR_TEMPLATE_REPO="$template_repo" PLINTH_DOOR_TEMPLATE_REF="$template_ref" \
+            PLINTH_DOOR_COPIER_VERSION="$copier_version" PLINTH_DOOR_COPIER_NEWER="$copier_newer" \
+            PLINTH_DOOR_CLAUDE_FLOOR="$claude_floor" \
+            exec "$here/new-project-gitlab.sh" ${rest[@]+"${rest[@]}"} ;;
+  *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
+esac
+
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private] [--force-defaults] [--host=github|gitlab]"
 target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0
 for a in "$@"; do case "$a" in
   --private)     private=1 ;;
