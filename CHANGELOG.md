@@ -13,6 +13,13 @@ pull requests and have no tag.
 
 ### Fixed
 
+- The GitLab pipeline's `floor-check` judges every include in an inline flow
+  sequence or mapping (#521). `include: ['<full-SHA URL>', '<URL at main>']`
+  was read as one include, and only its first URL was judged, so it passed.
+  Each element is now judged on its own, and a flow mapping counts as an
+  include with its `integrity`, inline or as a list item. A flow collection
+  that does not close on its line fails, naming the line.
+
 - `/plinth:floor-check` no longer stops on a `*.md` symbolic link whose
   target is missing (#525). It read the link like a file and crashed before
   writing any verdict, so `ci / floor-check` said only that the checker wrote

@@ -300,6 +300,24 @@ fc "include:
   remote: $url
   integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
 expect "the mapping form with a checksum passes" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
+# An inline flow sequence or mapping is split into its includes, each judged
+# on its own (#521); inline syntax that cannot be split fails, naming the line.
+main_url="https://raw.githubusercontent.com/coolbress/plinth/main/gitlab/python-ci.yml"
+sha2=fedcba9876543210fedcba9876543210fedcba98
+url2="https://raw.githubusercontent.com/coolbress/plinth/$sha2/gitlab/python-ci.yml"
+fc "include: ['$url', '$main_url']"
+expect "a flow sequence with an unpinned second URL fails, naming it (#521)" 1 "it includes it at main"
+fc "include: ['$url', \"$url2\"]"
+expect "a flow sequence of two pinned URLs passes, and neither names a checksum" 0 "pass: .gitlab-ci.yml includes" "2 of 2 includes names no checksum"
+fc "include: ['$url',
+  '$main_url']"
+expect "inline syntax that cannot be split fails, naming the line" 1 "cannot split the include on line 1"
+fc "include: {remote: '$url', integrity: 'sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8='}"
+expect "an inline flow mapping is an include with its checksum" 0 "pass: .gitlab-ci.yml includes" "pass: the include names a checksum"
+fc "include:
+  - {remote: '$url', integrity: 'sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8='}
+  - {remote: '$main_url'}"
+expect "flow mappings as list items are judged one by one" 1 "it includes it at main"
 fc "# include:
 #   - remote: $url
 lint:
