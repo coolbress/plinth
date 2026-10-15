@@ -11,10 +11,13 @@
 #       when copier leaves no conflict, commits, pushes the branch and opens
 #       a draft pull request. A conflict stops here (exit 3), left as copier
 #       left it for a person to resolve.
-#   template-update.sh --finish <worktree> [--assisted-by <agent>:<model>]
+#   template-update.sh --finish <worktree> [--resolved <path> <how>]... [--assisted-by <agent>:<model>]
 #       After a person resolved the conflicts: checks nothing is left, then
 #       commits, pushes and opens the draft pull request. Also finishes an
 #       update whose push or pull request failed, without a second commit.
+#       Each --resolved says how one conflicted file was resolved (which
+#       side, on whose word) for the description; it is a record, not a
+#       check, and names only a file copier left in conflict (#556).
 #
 # The command is the checker's own line (floor-check.py
 # --print-update-command), run word for word: never a second construction of
@@ -24,7 +27,8 @@
 # (#511). The plan prints both when there are two; nothing chooses for the
 # person. The draft is opened as soon as the tree is clean; nothing waits for the
 # branch's checks. Nothing is pushed to the default branch, and nothing
-# resolves a conflict by choosing a side (#88).
+# here resolves a conflict by choosing a side (#88): a person, or the agent
+# on a person's word for that file (#556), resolves it in the worktree.
 #
 # Exit: 0 done (a plan printed, or a draft opened), 1 stopped or nothing to
 # update, 2 usage, 3 a conflict is waiting for a person.
@@ -36,14 +40,17 @@ state_name="plinth-template-update"
 # A path as a shell word, for a line the user or the skill runs as printed.
 q() { printf '%q' "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
-usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested] | --finish <worktree>] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
+usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested] | --finish <worktree> [--resolved <path> <how>]...] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 
-mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""
+mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)       [ $# -ge 2 ] || usage; mode=apply; base_arg="$2"; shift 2 ;;
     --finish)      [ $# -ge 2 ] || usage; mode=finish; wt_arg="$2"; shift 2 ;;
     --assisted-by) [ $# -ge 2 ] || usage; assisted="$2"; shift 2 ;;
+    --resolved)    [ $# -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] || usage
+                   case "$2$3" in *$'\n'* | *$'\t'*) usage ;; esac
+                   resolutions+=("$2" "$3"); shift 3 ;;
     --plinth-pin)  [ $# -ge 2 ] || usage; pin="$2"; shift 2
                    case "$pin" in live|tested) ;; *) usage ;; esac ;;
     *) usage ;;
@@ -52,6 +59,7 @@ done
 # The pin is chosen on --apply, where copier runs; anywhere else it would be
 # a choice that does nothing.
 [ -z "$pin" ] || [ "$mode" = apply ] || usage
+[ ${#resolutions[@]} = 0 ] || [ "$mode" = finish ] || usage
 pin="${pin:-live}"
 
 for tool in git gh python3 uvx; do
@@ -112,14 +120,32 @@ finish() { # <worktree>
   [ -n "$branch" ] && [ "$on" = "$branch" ] && [ "$branch" != "$default" ] \
     || die "the worktree is on '$on', not the update branch '$branch'; nothing committed or pushed. Switch back: git -C $wt switch $branch"
 
+  # How each conflict was resolved: only a file copier left in conflict;
+  # anything else is a usage error, before anything is committed.
+  local i
+  for ((i = 0; i < ${#resolutions[@]}; i += 2)); do
+    grep -qxF "conflict=${resolutions[i]}" "$sf" || {
+      printf 'template-update: --resolved %s: not a file copier left in conflict here; the conflicts were:\n' "${resolutions[i]}" >&2
+      sed -n 's/^conflict=/  /p' "$sf" >&2
+      exit 2
+    }
+  done
+
   left="$(conflicts_in "$wt" "$base")"
   if [ -n "$left" ]; then
     echo "Not resolved yet, in $wt:"
     indent <<<"$left"
     echo "Resolve each (remove every conflict marker, delete each .rej once applied), git add it, then run:"
     echo "  $(q "$0") --finish $(q "$wt")"
+    [ ${#resolutions[@]} = 0 ] || echo "(--resolved was not kept: state it again on that run.)"
     exit 3
   fi
+  # Kept only once nothing is left: a statement made while a file was still
+  # in conflict may not be the side it ends on (Codex review on #558). A
+  # --finish run again after a failed push keeps what this one said.
+  for ((i = 0; i < ${#resolutions[@]}; i += 2)); do
+    printf 'resolved=%s\t%s\n' "${resolutions[i]}" "${resolutions[i+1]}" >> "$sf"
+  done
 
   git -C "$wt" add -A || die "git add failed in $wt"
   # A commit already made here is an earlier --finish whose push or pull
@@ -135,7 +161,15 @@ finish() { # <worktree>
   # What went in, by who: copier's clean merges (unchanged since copier left
   # them), the files it left in conflict, and anything else a person changed.
   local clean="" resolved="" edited="" path h
-  resolved="$(sed -n 's/^conflict=//p' "$sf")"
+  # Each conflicted file with how it was resolved, the last statement for it
+  # winning; none stated claims no side.
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    # ENVIRON, not -v: -v would read a backslash in the path as an escape.
+    h="$(P="$path" awk -F '\t' 'sub(/^resolved=/, "") && $1 == ENVIRON["P"] { sub(/^[^\t]*\t/, ""); how = $0 } END { print how }' "$sf")"
+    if [ -n "$h" ]; then resolved="$resolved$path: $h"$'\n'
+    else resolved="$resolved$path (how it was resolved was not stated)"$'\n'; fi
+  done < <(sed -n 's/^conflict=//p' "$sf")
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     grep -qxF "conflict=$path" "$sf" && continue
@@ -170,7 +204,7 @@ finish() { # <worktree>
     echo
     list "$clean"
     echo
-    echo "Resolved by a person (copier left a conflict):"
+    echo "Left in conflict by copier, each with how it was resolved as stated to \`--finish\`:"
     echo
     list "$resolved"
     echo
@@ -183,7 +217,9 @@ finish() { # <worktree>
     echo "Opened as a draft once no conflict was left: no unmerged path, and no"
     echo "\`.rej\` file or conflict marker in a file the update changed (files unchanged"
     echo "since $(printf '%.12s' "$base") were not read). This repository's own checks had not run"
-    echo "when it was opened; they run on it now. No conflict was resolved automatically."
+    echo "when it was opened; they run on it now. This script resolved no conflict;"
+    echo "how each was resolved is what \`--resolved\` stated, which the script does"
+    echo "not check, and \"not stated\" where nothing was."
     echo "copier's questions were answered with \`--defaults\`: each takes this"
     echo "repository's recorded answer, and a question it never answered takes the"
     echo "template's default (\`.copier-answers.yml\` in the diff shows any)."

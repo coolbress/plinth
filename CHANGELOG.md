@@ -21,6 +21,14 @@ pull requests and have no tag.
   that reader and not yet tried by anyone but its author. The evidence rule
   now reads: every "done" needs something you can see and check yourself,
   whether or not you read the code.
+- `/plinth:template-update` no longer leaves a conflict as bare markers: for
+  each conflicted file it says what the template and the repository changed,
+  recommends one side or a named combination with a reason, and resolves the
+  file only on the person's word for it (#556). `template-update.sh --finish`
+  takes `--resolved <path> <how>` per file, and the pull-request description
+  lists each conflicted file with which side was taken and on whose word. A
+  stated resolution does not let an unresolved file through: `--finish`
+  still exits 3 while a marker or `.rej` remains.
 
 ## [1.19.0] - 2026-10-15
 

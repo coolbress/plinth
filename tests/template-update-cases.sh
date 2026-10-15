@@ -158,7 +158,7 @@ body="$(cat "$work/gh.log.body" 2>/dev/null)"
 if grep -q "^- AGENTS.md" <<<"$body" && grep -q "^- .copier-answers.yml" <<<"$body" && grep -qF "$want" <<<"$body"
 then ok "the description lists what merged cleanly and the command that ran"
 else bad "description (merged cleanly)"; printf '%s\n' "$body" | sed 's/^/        /'; fi
-if grep -A2 -i "resolved by a person" <<<"$body" | grep -q "^- none"; then ok "the description says nothing was resolved by a person"
+if grep -A2 -i "left in conflict by copier" <<<"$body" | grep -q "^- none"; then ok "the description says copier left no conflict"
 else bad "description (resolved: none)"; printf '%s\n' "$body" | sed 's/^/        /'; fi
 if [ "$(tail -n 1 <<<"$body")" = "Assisted-by: Claude:claude-test-1" ]; then ok "the description ends with the Assisted-by line it was given"
 else bad "Assisted-by last line: '$(tail -n 1 <<<"$body")'"; fi
@@ -199,15 +199,33 @@ run --finish "$wt"
 if [ "$rc" = 3 ] && ! grep -q "pr create" "$work/gh.log" && grep -q "CONTRIBUTING.md" <<<"$out"
 then ok "markers staged with git add are still a conflict: stops, opens nothing"
 else bad "finish with staged markers (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A resolution named for a file copier did not leave in conflict is refused
+# before anything is committed (#556).
+reset_logs
+run --finish "$wt" --resolved AGENTS.md "template's side, on the person's word"
+if [ "$rc" = 2 ] && ! grep -q "pr create" "$work/gh.log" && grep -q "AGENTS.md" <<<"$out" \
+   && [ "$(git -C "$wt" rev-parse HEAD)" = "$base" ]
+then ok "--resolved naming a file that was not in conflict is refused: nothing committed, nothing opened"
+else bad "resolved for a non-conflict (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A resolution stated while a marker is still there does not let it through:
+# the refusal on anything unresolved stays the script's.
+reset_logs
+run --finish "$wt" --resolved CONTRIBUTING.md "template's side, on the person's word"
+if [ "$rc" = 3 ] && ! grep -q "pr create" "$work/gh.log"
+then ok "a stated resolution does not finish while the marker remains: exit 3, opens nothing"
+else bad "resolved with markers left (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 printf '# Contributing\nresolved by hand\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add CONTRIBUTING.md
 printf '# Agents\nedited after the update\n' > "$wt/AGENTS.md"
 reset_logs
-run --finish "$wt"
+run --finish "$wt" --resolved CONTRIBUTING.md "repository's side, applied by the agent on the person's word"
 body="$(cat "$work/gh.log.body" 2>/dev/null)"
-if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -A2 -i "resolved by a person" <<<"$body" | grep -q "^- CONTRIBUTING.md" \
-   && grep -A3 -i "resolved by a person" <<<"$body" | sed -n 4p | grep -q '^$'
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -A2 -i "left in conflict by copier" <<<"$body" | grep -q "^- CONTRIBUTING.md" \
+   && grep -A3 -i "left in conflict by copier" <<<"$body" | sed -n 4p | grep -q '^$'
 then ok "once resolved, --finish opens the draft and the description names the file a person resolved, as its own list"
 else bad "finish after resolving (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
+if grep -qxF -- "- CONTRIBUTING.md: repository's side, applied by the agent on the person's word" <<<"$body"
+then ok "the description says how each conflict was resolved: which side, on whose word"
+else bad "resolution not in the description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
 if grep -A2 -i "edited by a person" <<<"$body" | grep -q "^- AGENTS.md"
 then ok "a cleanly merged file a person changed afterwards is named as such, not as merged cleanly"
 else bad "edited-after list"; printf '%s\n' "$body" | sed 's/^/        /'; fi
@@ -384,6 +402,12 @@ reset_logs
 out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" bash -c "$line" 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log"; then ok "the printed --finish line runs as printed under a directory with a space"
 else bad "spaced path (rc=$rc): '$line'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Finished as printed, with no --resolved: the description claims no side
+# and no one's word for it (Codex review on #558).
+if grep -qxF -- "- CONTRIBUTING.md (how it was resolved was not stated)" "$work/gh.log.body" \
+   && ! grep -qi "on a person's word" "$work/gh.log.body"
+then ok "a conflict finished without --resolved is listed as not stated, with no claim of anyone's word"
+else bad "unstated resolution"; sed 's/^/        /' "$work/gh.log.body" 2>/dev/null; fi
 
 # ── only the recorded update branch is finished ─────────────────────────
 fixture other; reset_logs
@@ -410,6 +434,18 @@ out="$(cd "$repo" && MOCK_COPIER=rej PATH="$work/bin:$PATH" GH_LOG="$work/gh.log
 if [ "$rc" = 3 ] && grep -q "CONTRIBUTING.md.rej" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
 then ok "a .rej file is a conflict: stops, names it, opens nothing"
 else bad ".rej (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+wt="$(wt_of rej)"
+reset_logs
+run --finish "$wt" --resolved CONTRIBUTING.md.rej "the template's side, applied by the agent on the person's word"
+if [ "$rc" = 3 ] && ! grep -q "pr create" "$work/gh.log"
+then ok "a stated resolution does not finish while the .rej remains: exit 3, opens nothing"
+else bad ".rej resolved but present (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+rm "$wt/CONTRIBUTING.md.rej"
+reset_logs
+run --finish "$wt"
+if [ "$rc" = 0 ] && grep -qxF -- "- CONTRIBUTING.md.rej (how it was resolved was not stated)" "$work/gh.log.body"
+then ok "a resolution stated while the file was still in conflict is not kept: the side may change before it is resolved"
+else bad ".rej finish (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$work/gh.log.body" 2>/dev/null | sed 's/^/        /'; fi
 
 # ── copier fails ────────────────────────────────────────────────────────
 fixture broken; reset_logs

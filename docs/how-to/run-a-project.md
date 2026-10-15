@@ -51,7 +51,8 @@ safeguards, or not do it at all. Those safeguards differ by skill:
 `/plinth:new-project` tries to delete a repository it could not finish
 setting up, and names it when its token cannot;
 `/plinth:template-update` asks before each step and works in a separate
-folder, leaving any conflict for you. Type the skill.
+folder; on a conflict it recommends a resolution for each file and applies
+one only on your word for that file. Type the skill.
 
 ## Pick the size of the job first
 
@@ -352,7 +353,8 @@ moving work somewhere else: another tool, another folder, another person.
   being scanned; the scan runs on `main` after the merge.
 - **After each plinth release:** `/plinth:floor-check` says whether the
   repository is behind the template; `/plinth:template-update` takes the
-  update as a draft pull request and leaves any conflict for you.
+  update as a draft pull request; on a conflict it recommends a resolution
+  for each file and applies it only on your word.
 - **Every week or two, or after a burst of work:** `/ponytail-audit` lists
   what to delete or replace with the standard library, biggest cut first;
   `/improve-codebase-architecture` finds places to deepen. Each becomes a new
