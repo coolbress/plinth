@@ -86,11 +86,14 @@ remembers."
 
 ## About the scope
 
-plinth is for someone who runs a software project through an AI agent and
-leads it rather than reads it: someone who directs the work, reads the checks
-and the record, and needs to know what was confirmed without reading the
-code, so the checks have to carry what a reader of the diff would otherwise
-carry.
+plinth is for a beginner engineer or a non-engineer who runs a software
+project through an AI agent. It guides them in plain words through each step
+and each decision it asks of them. They may not judge a diff yet, so the
+checks have to carry what an experienced reader of the diff would otherwise
+carry, and the record says what was confirmed.
+
+The guidance is designed for that reader, not shown to work for them: no one
+but its author has used plinth yet ([#163](https://github.com/coolbress/plinth/issues/163)).
 
 It covers GitHub.com and GitLab.com ([about GitLab](#about-gitlab)), Python
 projects managed with uv, and Claude Code as the harness. New repositories are created by `/plinth:new-project`. An existing

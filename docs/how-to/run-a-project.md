@@ -1,7 +1,7 @@
 # How to run a project with plinth
 
-You say what you want; an AI agent writes the code; you do not read it. This
-page is the loop you walk, stage by stage: what you type, what the agent does,
+You say what you want and an AI agent writes the code, whether or not you
+can read it yet. This page is the loop you walk, stage by stage: what you type, what the agent does,
 what you check, and where plinth holds the line. It assumes the install and a
 first repository from [Getting started](../tutorials/getting-started.md).
 
@@ -64,9 +64,9 @@ folder, leaving any conflict for you. Type the skill.
 
 ## The one rule: say what proves it
 
-Every "done" needs something you can see without reading code: a command's
-output, a page, a number you can check by hand, or a test's name that says what
-it checks. Ask for it in the interview, find it in each ticket, and look for it
+Every "done" needs something you can see and check yourself, whether or not
+you read the code: a command's output, a page, a number you can check by hand,
+or a test's name that says what it checks. Ask for it in the interview, find it in each ticket, and look for it
 in the pull request before you merge. For example: *"Done means: with my
 sample file, it prints 33,000 won for September, and the next payment dates in
 order."*
