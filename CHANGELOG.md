@@ -26,9 +26,10 @@ pull requests and have no tag.
   recommends one side or a named combination with a reason, and resolves the
   file only on the person's word for it (#556). `template-update.sh --finish`
   takes `--resolved <path> <how>` per file, and the pull-request description
-  lists each conflicted file with which side was taken and on whose word. A
-  stated resolution does not let an unresolved file through: `--finish`
-  still exits 3 while a marker or `.rej` remains.
+  lists each conflicted file with which side was taken and on whose word, as
+  stated with `--resolved`, or says it was not stated. A stated resolution
+  does not let an unresolved file through: `--finish` still exits 3 while a
+  marker or `.rej` remains.
 
 ## [1.19.0] - 2026-10-15
 
