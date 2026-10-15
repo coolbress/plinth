@@ -30,6 +30,17 @@ pull requests and have no tag.
   stated with `--resolved`, or says it was not stated. A stated resolution
   does not let an unresolved file through: `--finish` still exits 3 while a
   marker or `.rej` remains.
+- `/plinth:new-project` renders plinth-template v1.14.0 (#555). Its agent
+  explains its work for a beginner engineer or a non-engineer by default: the
+  output style `Beginner or non-engineer` is on, and adds a decision report at
+  a merge, a template update or a failure, one recommended option before any
+  choice, the command to type when a request matches `/plinth:new-project` or
+  `/plinth:template-update`, and a plain clause for a term at its first use.
+  A person turns it off for themselves with `/output-style default`. A
+  repository the door already made gets the style only after
+  `/plinth:template-update` to v1.14.0; `/plinth:floor-check` now reports a
+  repository on v1.13.0 as behind. The template's `plinth_sha` did not move,
+  so the update leaves the plinth pin as it is.
 
 ## [1.19.0] - 2026-10-15
 
