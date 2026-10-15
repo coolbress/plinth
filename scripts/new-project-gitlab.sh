@@ -71,6 +71,8 @@ print("" if v is None else v)' "$1" 2>/dev/null
 # (the skill sets it to its own <agent>:<model>, as CONTRIBUTING.md asks).
 first_pr_wait="${PLINTH_FIRST_PR_WAIT:-300}"
 case "$first_pr_wait" in ''|*[!0-9]*) stop "PLINTH_FIRST_PR_WAIT must be a whole number of seconds (got: $first_pr_wait)" "  fix: unset PLINTH_FIRST_PR_WAIT" ;; esac
+# Base 10, as on the GitHub path: 08 is not octal here (#539).
+first_pr_wait=$((10#$first_pr_wait))
 assisted_by="${PLINTH_ASSISTED_BY:-}"
 [ -z "$assisted_by" ] || [[ "$assisted_by" =~ ^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$ ]] \
   || stop "PLINTH_ASSISTED_BY must be <agent>:<model>, e.g. Claude:claude-opus-5-5 (got: $assisted_by)" "  fix: unset it, or set it in that form"

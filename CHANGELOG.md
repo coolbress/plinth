@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `PLINTH_FIRST_PR_WAIT` is read as base 10 by both doors of
+  `/plinth:new-project` (#539). A value with a leading zero such as `08`
+  passed the digits-only check, then bash arithmetic took it as octal and
+  stopped the run after the repository existed: the GitHub door rolled back
+  and deleted it, and the GitLab door exited without its summary. The
+  default of 300 was not affected.
+
 ## [1.18.0] - 2026-10-15
 
 This release ships the GitLab door: `/plinth:new-project <name> --host gitlab` takes an empty GitLab.com namespace to a project whose `main` is protected, merges only on a green pipeline, squashes and fast-forwards, and has its first merge request open (#353, slice 2). One run on GitLab.com Free went end to end before release, recorded on #353: create, wall, labels, merge request, three green pipelines, and a merge with the rendered CONTRIBUTING.md's command. Without `--host`, or with `--host github`, the door runs as before.

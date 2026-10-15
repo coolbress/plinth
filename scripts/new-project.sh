@@ -115,6 +115,9 @@ gh auth status >/dev/null 2>&1 || stop "gh is not logged in" "  fix: gh auth log
 # stop here, not after the repository exists.
 first_pr_wait="${PLINTH_FIRST_PR_WAIT:-300}"
 case "$first_pr_wait" in ''|*[!0-9]*) stop "PLINTH_FIRST_PR_WAIT must be a whole number of seconds (got: $first_pr_wait)" "  fix: unset PLINTH_FIRST_PR_WAIT" ;; esac
+# Read as base 10: bash arithmetic takes a leading zero as octal, so 08 would
+# abort with "value too great for base" after the repository exists (#539).
+first_pr_wait=$((10#$first_pr_wait))
 
 if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
   for v in GH_TOKEN GITHUB_TOKEN; do
