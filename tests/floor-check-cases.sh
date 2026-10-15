@@ -1983,7 +1983,7 @@ echo "-- a GitLab project's wall, read through glab (#544)"
 glwall_api() { # -- writes the passing set to $work/glapi
   local d="$work/glapi" p="projects/o%2Fr"; rm -rf "$d"; mkdir -p "$d/$p/protected_branches" "$d/$p/repository/files/.gitlab-ci.yml"
   printf '{"default_branch":"main","only_allow_merge_if_pipeline_succeeds":true,"allow_merge_on_skipped_pipeline":false,"squash_option":"always","merge_method":"ff","ci_config_path":""}' > "$d/$p.json"
-  printf '{"name":"main","push_access_levels":[{"access_level":0,"access_level_description":"No one","deploy_key_id":null,"user_id":null,"group_id":null}],"merge_access_levels":[{"access_level":40,"access_level_description":"Maintainers","user_id":null,"group_id":null}],"allow_force_push":false}' > "$d/$p/protected_branches/main.json"
+  printf '[{"name":"main","push_access_levels":[{"access_level":0,"access_level_description":"No one","deploy_key_id":null,"user_id":null,"group_id":null}],"merge_access_levels":[{"access_level":40,"access_level_description":"Maintainers","user_id":null,"group_id":null}],"allow_force_push":false}]' > "$d/$p/protected_branches?per_page=100.json"
   cp "$glgood/.gitlab-ci.yml" "$d/$p/repository/files/.gitlab-ci.yml/raw?ref=main"
   python3 -c 'import json,sys; print(json.dumps([{"name": l.split("|")[0]} for l in open(sys.argv[1]) if l.strip() and not l.lstrip().startswith("#")]))' "$root/labels.txt" > "$d/$p/labels?per_page=100.json"
 }
@@ -1992,21 +1992,31 @@ glw() { # <description> <shell run in $work/glapi/projects/o%2Fr> <ERE one outpu
   out="$(FLOOR_CHECK_API_DIR="$work/noapi" FLOOR_CHECK_GITLAB_API_DIR="$work/glapi" python3 "$checker" --root "$glgood" --repo o/r 2>&1)"; rc=$?
   if grep -qE -- "$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -vE '^  PASS  ' | sed 's/^/        /'; fi
 }
-setp() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.update(json.loads(sys.argv[2])); json.dump(d,open(p,"w"))' "$@"; }
+setp() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); (d[0] if isinstance(d, list) else d).update(json.loads(sys.argv[2])); json.dump(d,open(p,"w"))' "$@"; }
+addrule() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.append(json.loads(sys.argv[2])); json.dump(d,open(p,"w"))' "$@"; }
+pb="protected_branches?per_page=100.json"
 glw "the door's wall passes, with nothing unverified" ":" "^-- 0 failed, 0 not verified$"
 for line in "PASS  main is protected on o/r: no one pushes, Maintainers merge, no force push" \
   "PASS  o/r merges only on a green pipeline" "PASS  o/r squashes every merge request and fast-forwards" \
   "PASS  \.gitlab-ci\.yml on main includes plinth's GitLab pipeline at a full commit SHA" "PASS  every label the door creates is present"; do
   grep -qE -- "$line" <<<"$out" && ok "the passing wall: $line" || bad "the passing wall: missing $line"
 done
-glw "an unprotected default branch fails, with the call that protects it" "rm protected_branches/main.json" "FAIL  main is not a protected branch on o/r"
+glw "an unprotected default branch fails, with the call that protects it" "printf [] > 'protected_branches?per_page=100.json'" "FAIL  main is not a protected branch on o/r"
 grep -q 'INFO    glab api --hostname gitlab.com -X POST projects/o%2Fr/protected_branches -f name=main -F push_access_level=0' <<<"$out" \
   && ok "the unprotected branch names the POST" || bad "the unprotected branch names the POST"
-glw "Developers allowed to push fails" "setp protected_branches/main.json '{\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  main's protection on o/r is weaker than the door's: push allowed"
-glw "a user allowed to push fails" "setp protected_branches/main.json '{\"push_access_levels\":[{\"access_level\":0},{\"access_level\":40,\"user_id\":7}]}'" "FAIL  .*push allowed"
-glw "Developers allowed to merge fails" "setp protected_branches/main.json '{\"merge_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  .*merge allowed to \['Developers \+ Maintainers'\]"
-glw "force push allowed fails" "setp protected_branches/main.json '{\"allow_force_push\":true}'" "FAIL  .*force push True, want false"
-glw "an unreadable protection is a SKIP" "rm protected_branches/main.json; : > protected_branches/main.error" "SKIP  the protection of main not verified"
+glw "Developers allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  main's protection on o/r is weaker than the door's \(rules that apply: main\): push allowed"
+glw "a user allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":0},{\"access_level\":40,\"user_id\":7}]}'" "FAIL  .*push allowed"
+glw "Developers allowed to merge fails" "setp \"\$pb\" '{\"merge_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  .*merge allowed to \['Developers \+ Maintainers'\]"
+glw "a wildcard rule that lets Developers push opens main: FAIL" "addrule \"\$pb\" '{\"name\":\"*\",\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":false}'" \
+  "FAIL  main's protection on o/r is weaker than the door's \(rules that apply: main, \*\): push allowed"
+glw "a wildcard rule with force push opens main: FAIL" "addrule \"\$pb\" '{\"name\":\"ma*\",\"push_access_levels\":[{\"access_level\":0}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":true}'" \
+  "FAIL  .*rules that apply: main, ma\*.*force push True"
+glw "a rule for other branches does not apply" "addrule \"\$pb\" '{\"name\":\"release/*\",\"push_access_levels\":[{\"access_level\":30}],\"merge_access_levels\":[{\"access_level\":30}],\"allow_force_push\":true}'" \
+  "PASS  main is protected on o/r: .*\(rules that apply: main\)"
+glw "a wildcard rule alone protects main" "printf '[{\"name\":\"*\",\"push_access_levels\":[{\"access_level\":0}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":false}]' > \"\$pb\"" \
+  "PASS  main is protected on o/r: .*\(rules that apply: \*\)"
+glw "force push allowed fails" "setp \"\$pb\" '{\"allow_force_push\":true}'" "FAIL  .*force push True, want false"
+glw "an unreadable protection is a SKIP" "rm \"\$pb\"; : > 'protected_branches?per_page=100.error'" "SKIP  the protection of main not verified"
 glw "pipelines need not succeed: FAIL" "setp ../o%2Fr.json '{\"only_allow_merge_if_pipeline_succeeds\":false}'" "FAIL  the merge checks of o/r let a merge request merge without a green pipeline: only_allow_merge_if_pipeline_succeeds=False"
 glw "skipped pipelines counted: FAIL" "setp ../o%2Fr.json '{\"allow_merge_on_skipped_pipeline\":true}'" "FAIL  .*allow_merge_on_skipped_pipeline=True"
 glw "squash not required: FAIL" "setp ../o%2Fr.json '{\"squash_option\":\"default_on\"}'" "FAIL  o/r merges other than squash and fast-forward: squash_option='default_on'"

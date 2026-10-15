@@ -1683,34 +1683,49 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
         result("SKIP", f"{repo} has no default branch GitLab names; its protection, merge checks and include not verified")
         return
 
-    prot = gl_api(f"projects/{enc}/protected_branches/{urllib.parse.quote(branch, safe='')}", network)
-    if prot is ABSENT:
-        result("FAIL", f"{branch} is not a protected branch on {repo}: anyone with Developer can push to it")
-        result("INFO", f"  glab api --hostname {GITLAB_HOST} -X POST projects/{enc}/protected_branches -f name={branch} "
-                       "-F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false   (a Maintainer)")
-    elif not isinstance(prot, dict):
+    # Every rule whose name or wildcard pattern matches the branch applies, and
+    # GitLab takes the most permissive of them (#548 review): a `*` rule that
+    # lets Developers push opens `main` whatever its own rule says. Group-level
+    # protected branches (Premium) are not read.
+    rules = gl_api(f"projects/{enc}/protected_branches?per_page=100", network, paginate=True)
+    if not isinstance(rules, list):
         result("SKIP", f"the protection of {branch} not verified: protected branches are not readable with this login "
                        "(it needs the Maintainer role on GitLab.com), or an API error")
     else:
+        def matches(pattern: object) -> bool:
+            return isinstance(pattern, str) and re.fullmatch(".*".join(map(re.escape, pattern.split("*"))), branch) is not None
+        applying = [r for r in rules if isinstance(r, dict) and matches(r.get("name"))]
+
         def levels(key: str) -> list:
-            return [a for a in prot.get(key, []) if isinstance(a, dict)] if isinstance(prot.get(key), list) else []
-        push, merge = levels("push_access_levels"), levels("merge_access_levels")
+            return [a for r in applying if isinstance(r.get(key), list) for a in r[key] if isinstance(a, dict)]
 
         def named(xs: list) -> list:
             return [a for a in xs if a.get("user_id") or a.get("group_id") or a.get("deploy_key_id")]
+
+        def described(xs: list) -> list:
+            return [a.get("access_level_description") or a.get("access_level") for a in xs]
+        push, merge = levels("push_access_levels"), levels("merge_access_levels")
+        names = ", ".join(str(r.get("name")) for r in applying)
         bad = []
-        if not push or any(a.get("access_level") != 0 for a in push) or named(push):
-            bad.append(f"push allowed ({[a.get('access_level_description') or a.get('access_level') for a in push]}), want No one")
-        if not merge or any(not isinstance(a.get("access_level"), int) or a.get("access_level") < 40 for a in merge) or named(merge):
-            bad.append(f"merge allowed to {[a.get('access_level_description') or a.get('access_level') for a in merge]}, want Maintainers")
-        if prot.get("allow_force_push") is not False:
-            bad.append(f"force push {prot.get('allow_force_push')!r}, want false")
-        if bad:
-            result("FAIL", f"{branch}'s protection on {repo} is weaker than the door's: {'; '.join(bad)}")
-            result("INFO", f"  {edit}#js-protected-branches-settings   (Protected branches: Allowed to push and merge: No one; "
-                           "Allowed to merge: Maintainers; Allowed to force push: off)")
+        if not applying:
+            result("FAIL", f"{branch} is not a protected branch on {repo}: anyone with Developer can push to it")
+            result("INFO", f"  glab api --hostname {GITLAB_HOST} -X POST projects/{enc}/protected_branches -f name={branch} "
+                           "-F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false   (a Maintainer)")
         else:
-            result("PASS", f"{branch} is protected on {repo}: no one pushes, Maintainers merge, no force push")
+            if not push or any(a.get("access_level") != 0 for a in push) or named(push):
+                bad.append(f"push allowed ({described(push)}), want No one")
+            if not merge or any(not isinstance(a.get("access_level"), int) or a.get("access_level") < 40 for a in merge) or named(merge):
+                bad.append(f"merge allowed to {described(merge)}, want Maintainers")
+            force = [r.get("allow_force_push") for r in applying if r.get("allow_force_push") is not False]
+            if force:
+                bad.append(f"force push {force[0]!r}, want false")
+            if bad:
+                result("FAIL", f"{branch}'s protection on {repo} is weaker than the door's (rules that apply: {names}): {'; '.join(bad)}")
+                result("INFO", f"  {edit}#js-protected-branches-settings   (each rule that matches {branch}: Allowed to push "
+                               "and merge: No one; Allowed to merge: Maintainers; Allowed to force push: off)")
+            else:
+                result("PASS", f"{branch} is protected on {repo}: no one pushes, Maintainers merge, no force push "
+                               f"(rules that apply: {names})")
 
     settings = {"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False,
                 "squash_option": "always", "merge_method": "ff"}
