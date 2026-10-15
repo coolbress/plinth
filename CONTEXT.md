@@ -3,16 +3,21 @@
 One meaning per term, in code, docs and issues. The Korean metaphors these came
 from stay in the lab.
 
-- **wall**: the required status checks and branch rules a repository's ruleset
-  enforces on `main`. An automated check, not a review: green means the
-  asserted properties hold. Raised on GitHub, not in the plugin, so an agent
-  cannot turn it off from inside Claude Code; an agent whose token has
-  administration on the repository can still edit it, as anyone with that
+- **wall**: what the host enforces on `main` before a merge. On GitHub, the
+  required status checks and branch rules a repository's ruleset enforces; on
+  GitLab.com Free, a lower one: the protected `main`, "Pipelines must succeed"
+  over the pipeline as a whole with no checks by name, and squash with
+  fast-forward ([about GitLab](docs/explanation/concepts.md#about-gitlab)). An
+  automated check, not a review: green means the asserted properties hold.
+  Raised on the host, not in the plugin, so an agent cannot turn it off from
+  inside Claude Code; an agent whose login can administer the repository (a
+  Maintainer or Owner on GitLab) can still edit it, as anyone with that
   access can. The checks, and what each asserts:
   [docs/reference/required-checks.md](docs/reference/required-checks.md).
 - **host**: the service that holds the repository and enforces the wall
-  outside the agent, by refusing a merge while a required check is red. Today
-  GitHub.com; GitLab.com Free is specified in #353 and not supported. plinth
+  outside the agent, by refusing a merge while a required check is red:
+  GitHub.com, or GitLab.com (#353), where Free refuses a merge while the
+  pipeline as a whole is red, with no required checks by name. plinth
   configures the host; the host refuses the merge.
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
   the wall, opens the first pull request. If a step it cannot go on without

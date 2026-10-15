@@ -58,7 +58,8 @@ pull requests and have no tag.
   scope (GitLab.com Free and up; not Self-Managed or Dedicated), a concepts
   section on what GitLab Free's wall holds and what it cannot, a tutorial
   section for `--host gitlab`, and the GitLab job names in the required
-  checks reference.
+  checks reference. The glossary's **host** entry and concepts' direction
+  list no longer call it unshipped (#550).
 
 ### Fixed
 

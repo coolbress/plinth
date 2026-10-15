@@ -135,7 +135,6 @@ it shipped.
 - Candidate checks specified and measured before any is adopted: mutation
   testing, changed-line coverage, and ruff's complexity, commented-out code
   and unused-argument rules (#406).
-- GitLab, after those (#353).
 
 Shipped from this list since it was written: the record of a project run on
 a token without workflow permission (#403, in
@@ -143,7 +142,8 @@ a token without workflow permission (#403, in
 a lowered standard made visible (#404: `/plinth:floor-check` warns on a
 lowered `ci` input and `ci / diff-size` lists a test that lost lines or gained
 a skip), the template's `verify` skill (#409), the
-arsenal's concern index with its selection criteria (#478), and
+arsenal's concern index with its selection criteria (#478), the GitLab path
+([about GitLab](#about-gitlab), #353), and
 [step 2 of run a project](../how-to/run-a-project.md#2-shape-the-idea-grill-with-docs)
 asking for the things recorded runs left out: who else is affected, the
 limits and outside rules, and how long the project lasts and how it ends
