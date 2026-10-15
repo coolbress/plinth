@@ -1876,6 +1876,7 @@ for d in 'glab auth status --show-token' 'glab auth status -t' 'glab config get 
   gl "a deny list without $what fails" "python3 -c 'import json,sys; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if sys.argv[1] not in x]; json.dump(j,open(p,\"w\"))' '$d'" \
     "FAIL  \.claude/settings\.json does not deny $what" --no-network
 done
+gl "no SECURITY.md fails on GitLab, with no inheritance to look for" "rm SECURITY.md" "FAIL  SECURITY\.md missing: on GitLab nothing is inherited" --no-network
 gl "no issue template fails" "rm -r .gitlab/issue_templates" "FAIL  no issue template under \.gitlab/issue_templates/" --no-network
 gl "no merge request template fails" "rm -r .gitlab/merge_request_templates" "FAIL  no merge request template under \.gitlab/merge_request_templates/" --no-network
 gl "an issue template without /label is a WARN" "printf '## What\n' > .gitlab/issue_templates/Bug.md" "WARN  Bug\.md has no \`/label ~name\` line" --no-network
@@ -1975,6 +1976,71 @@ glpin_api -
 printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command --plinth-pin tested 2>"$work/glpin-err")"; rc=$?
 [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "its checksum was not read" "$work/glpin-err" \
   && ok "no tested checksum: no tested line, the live pin kept" || { bad "tested without checksum: rc=$rc '$printed'"; sed 's/^/        /' "$work/glpin-err"; }
+
+echo "-- a GitLab project's wall, read through glab (#544)"
+# Fixtures laid out like gitlab.com/api/v4 paths, as the probe project
+# answered them (measured 2026-10-15): o/r is protected and merges as the door set it.
+glwall_api() { # -- writes the passing set to $work/glapi
+  local d="$work/glapi" p="projects/o%2Fr"; rm -rf "$d"; mkdir -p "$d/$p/protected_branches" "$d/$p/repository/files/.gitlab-ci.yml"
+  printf '{"default_branch":"main","only_allow_merge_if_pipeline_succeeds":true,"allow_merge_on_skipped_pipeline":false,"squash_option":"always","merge_method":"ff","ci_config_path":""}' > "$d/$p.json"
+  printf '[{"name":"main","push_access_levels":[{"access_level":0,"access_level_description":"No one","deploy_key_id":null,"user_id":null,"group_id":null}],"merge_access_levels":[{"access_level":40,"access_level_description":"Maintainers","user_id":null,"group_id":null}],"allow_force_push":false}]' > "$d/$p/protected_branches?per_page=100.json"
+  cp "$glgood/.gitlab-ci.yml" "$d/$p/repository/files/.gitlab-ci.yml/raw?ref=main"
+  python3 -c 'import json,sys; print(json.dumps([{"name": l.split("|")[0]} for l in open(sys.argv[1]) if l.strip() and not l.lstrip().startswith("#")]))' "$root/labels.txt" > "$d/$p/labels?per_page=100.json"
+}
+glw() { # <description> <shell run in $work/glapi/projects/o%2Fr> <ERE one output line must match>
+  glwall_api; ( cd "$work/glapi/projects/o%2Fr" && eval "$2" )
+  out="$(FLOOR_CHECK_API_DIR="$work/noapi" FLOOR_CHECK_GITLAB_API_DIR="$work/glapi" python3 "$checker" --root "$glgood" --repo o/r 2>&1)"; rc=$?
+  if grep -qE -- "$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -vE '^  PASS  ' | sed 's/^/        /'; fi
+}
+setp() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); (d[0] if isinstance(d, list) else d).update(json.loads(sys.argv[2])); json.dump(d,open(p,"w"))' "$@"; }
+addrule() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.append(json.loads(sys.argv[2])); json.dump(d,open(p,"w"))' "$@"; }
+pb="protected_branches?per_page=100.json"
+glw "the door's wall passes, with nothing unverified" ":" "^-- 0 failed, 0 not verified$"
+for line in "PASS  main is protected on o/r: no one pushes, Maintainers merge, no force push" \
+  "PASS  o/r merges only on a green pipeline" "PASS  o/r squashes every merge request and fast-forwards" \
+  "PASS  \.gitlab-ci\.yml on main includes plinth's GitLab pipeline at a full commit SHA" "PASS  every label the door creates is present"; do
+  grep -qE -- "$line" <<<"$out" && ok "the passing wall: $line" || bad "the passing wall: missing $line"
+done
+glw "an unprotected default branch fails, with the call that protects it" "printf [] > 'protected_branches?per_page=100.json'" "FAIL  main is not a protected branch on o/r"
+grep -q 'INFO    glab api --hostname gitlab.com -X POST projects/o%2Fr/protected_branches -f name=main -F push_access_level=0' <<<"$out" \
+  && ok "the unprotected branch names the POST" || bad "the unprotected branch names the POST"
+glw "Developers allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  main's protection on o/r is weaker than the door's \(rules that apply: main\): push allowed"
+glw "a user allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":0},{\"access_level\":40,\"user_id\":7}]}'" "FAIL  .*push allowed"
+glw "Developers allowed to merge fails" "setp \"\$pb\" '{\"merge_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  .*merge allowed to \['Developers \+ Maintainers'\]"
+glw "a wildcard rule that lets Developers push opens main: FAIL" "addrule \"\$pb\" '{\"name\":\"*\",\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":false}'" \
+  "FAIL  main's protection on o/r is weaker than the door's \(rules that apply: main, \*\): push allowed"
+glw "a wildcard rule with force push opens main: FAIL" "addrule \"\$pb\" '{\"name\":\"ma*\",\"push_access_levels\":[{\"access_level\":0}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":true}'" \
+  "FAIL  .*rules that apply: main, ma\*.*force push True"
+glw "a rule for other branches does not apply" "addrule \"\$pb\" '{\"name\":\"release/*\",\"push_access_levels\":[{\"access_level\":30}],\"merge_access_levels\":[{\"access_level\":30}],\"allow_force_push\":true}'" \
+  "PASS  main is protected on o/r: .*\(rules that apply: main\)"
+glw "a wildcard rule alone protects main" "printf '[{\"name\":\"*\",\"push_access_levels\":[{\"access_level\":0}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":false}]' > \"\$pb\"" \
+  "PASS  main is protected on o/r: .*\(rules that apply: \*\)"
+glw "force push allowed fails" "setp \"\$pb\" '{\"allow_force_push\":true}'" "FAIL  .*force push True, want false"
+glw "an unreadable protection is a SKIP" "rm \"\$pb\"; : > 'protected_branches?per_page=100.error'" "SKIP  the protection of main not verified"
+glw "pipelines need not succeed: FAIL" "setp ../o%2Fr.json '{\"only_allow_merge_if_pipeline_succeeds\":false}'" "FAIL  the merge checks of o/r let a merge request merge without a green pipeline: only_allow_merge_if_pipeline_succeeds=False"
+glw "skipped pipelines counted: FAIL" "setp ../o%2Fr.json '{\"allow_merge_on_skipped_pipeline\":true}'" "FAIL  .*allow_merge_on_skipped_pipeline=True"
+glw "squash not required: FAIL" "setp ../o%2Fr.json '{\"squash_option\":\"default_on\"}'" "FAIL  o/r merges other than squash and fast-forward: squash_option='default_on'"
+glw "a merge commit method: FAIL" "setp ../o%2Fr.json '{\"merge_method\":\"merge\"}'" "FAIL  .*merge_method='merge'"
+glw "merge settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"squash_option\",\"merge_method\")]; json.dump(d,open(p,\"w\"))'" "SKIP  squash_option, merge_method of o/r not verified: GitLab did not return them"
+grep -q "PASS  o/r merges only on a green pipeline" <<<"$out" && ok "the merge checks returned are still judged" || bad "the merge checks returned are still judged"
+glw "a readable mismatch fails beside a missing field" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); d.pop(\"squash_option\"); d[\"only_allow_merge_if_pipeline_succeeds\"]=False; d[\"merge_method\"]=\"merge\"; json.dump(d,open(p,\"w\"))'" \
+  "FAIL  the merge checks of o/r let a merge request merge without a green pipeline: only_allow_merge_if_pipeline_succeeds=False"
+grep -q "FAIL  o/r merges other than squash and fast-forward: merge_method='merge'" <<<"$out" && grep -q "SKIP  squash_option of o/r not verified: GitLab did not return it" <<<"$out" \
+  && ok "the readable merge method fails and only the missing squash option is a SKIP" || { bad "partial merge shape"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP' | sed 's/^/        /'; }
+glw "an unreadable project is a SKIP, and the checkout's include is read" "rm ../o%2Fr.json" "SKIP  the GitLab wall of o/r not verified: it was not found"
+grep -q "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline" <<<"$out" && ok "the checkout's include stands in" || bad "the checkout's include stands in"
+glw "the include on the default branch is read, not the checkout's" "glci 'include:
+  - remote: https://raw.githubusercontent.com/coolbress/plinth/main/gitlab/python-ci.yml' > 'repository/files/.gitlab-ci.yml/raw?ref=main'" \
+  "FAIL  \.gitlab-ci\.yml on main includes plinth's GitLab pipeline at a full commit SHA, it includes it at main"
+glw "no definition on the default branch fails" "rm 'repository/files/.gitlab-ci.yml/raw?ref=main'" "FAIL  no \.gitlab-ci\.yml on main of o/r"
+glw "ci_config_path is the definition read" "setp ../o%2Fr.json '{\"ci_config_path\":\"ci/main.yml\"}'; mkdir -p repository/files/ci%2Fmain.yml; cp 'repository/files/.gitlab-ci.yml/raw?ref=main' 'repository/files/ci%2Fmain.yml/raw?ref=main'" \
+  "PASS  ci/main\.yml on main includes plinth's GitLab pipeline"
+glw "a definition in another project is a SKIP" "setp ../o%2Fr.json '{\"ci_config_path\":\".gitlab-ci.yml@g/other\"}'" "SKIP  the include on main not verified: the pipeline definition is \.gitlab-ci\.yml@g/other"
+glw "a missing label is a WARN with glab's command" "printf '[]' > 'labels?per_page=100.json'" "WARN  labels the door creates that are missing: feat, "
+grep -q "INFO    glab label create --name feat --color '#ededed' --repo o/r" <<<"$out" && ok "the missing label names glab label create" || bad "the missing label names glab label create"
+glw "unreadable labels are a SKIP" "rm 'labels?per_page=100.json'; : > 'labels?per_page=100.error'" "SKIP  labels not verified"
+out="$(FLOOR_CHECK_API_DIR="$work/noapi" FLOOR_CHECK_GITLAB_API_DIR="$work/glapi" python3 "$checker" --root "$glgood" --repo o/r --no-network 2>&1)"
+grep -q "SKIP  --no-network: the GitLab wall not checked" <<<"$out" && ok "--no-network with --repo: the wall is a SKIP" || bad "--no-network with --repo: the wall is a SKIP"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

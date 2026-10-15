@@ -68,8 +68,22 @@ read from the root and reported missing although they exist one level down.
 ## A GitLab checkout
 
 A checkout rendered with `host: gitlab` (its `.copier-answers.yml` says so,
-or pass `--host gitlab`) is read as a GitLab project. `gh repo view` finds no
-GitHub repository there, so run it without `--repo`. `--credentials` reads
+or pass `--host gitlab`) is read as a GitLab project. When `origin` is on
+gitlab.com, run this instead of the command above, with the project's path
+(`group/name`) as `--repo`, or the argument if the user gave one:
+
+```bash
+repo="$(git remote get-url origin 2>/dev/null | sed -nE 's#^(https://gitlab\.com/|git@gitlab\.com:)(.+)$#\2#p' | sed 's#\.git$##')"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --host gitlab --sandbox --credentials ${repo:+--repo} ${repo:+"$repo"}
+```
+
+The wall is read through `glab api` with the user's own login: the
+protected default branch (no one pushes, Maintainers merge, no force push),
+"Pipelines must succeed" with skipped pipelines not counted, squash always
+and fast-forward, the labels, and the include on the default branch. Reading
+the protection needs the Maintainer role; with less it is a SKIP. Without
+`glab` or its login (`glab auth login --hostname gitlab.com`), the wall is a
+SKIP and the checkout's include is read instead. `--credentials` reads
 gitlab.com there: `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN` or `OAUTH_TOKEN` set,
 git helpers for gitlab.com other than glab's, an `Authorization` header and a
 gitlab.com login in `~/.netrc`; the login glab itself stores is a SKIP. Relay
@@ -84,9 +98,10 @@ read from `${CLAUDE_PLUGIN_ROOT}/gitlab/python-ci.yml`. That rule needs
 PyYAML: without it, the job's PyYAML is installed by hash into a temporary
 directory from PyPI (its wheels cover CPython 3.11 to 3.14; another Python
 without PyYAML gets a SKIP saying so), and with `--no-network` the include is
-a SKIP unless PyYAML is already there. The
-project's settings on GitLab (the protected branch, the merge checks) are not
-read yet (#544).
+a SKIP unless PyYAML is already there.
+
+A FAIL in the wall carries its fix as a `glab api` line or a settings URL;
+it needs the Maintainer role, so give it to the user to run, not yourself.
 
 ## Report
 

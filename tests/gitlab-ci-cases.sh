@@ -250,7 +250,7 @@ fc "include:
     inputs:
       max-diff-lines: 400"
 expect "an include at a full SHA with a checksum passes" 0 "pass: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA ($sha)" "pass: the include names a checksum"
-expect "the GitLab settings it does not read are not yet confirmed" 0 "not yet confirmed: the protected default branch" "not yet confirmed: the merge check \"Pipelines must succeed\"" "not yet confirmed: every job of this pipeline"
+expect "the GitLab settings it does not read are not yet confirmed" 0 "not yet confirmed: the protected default branch" "not yet confirmed: the merge check \"Pipelines must succeed\"" "not yet confirmed: this include on the default branch, after the merge" "the rest of the floor (the document set, agent settings, the project files); left to /plinth:floor-check"
 refuse "nothing it does not read is a pass" "pass: the protected"
 refuse "a checksum leaves nothing about it unconfirmed" "not yet confirmed: the bytes GitLab fetched"
 fc "include:

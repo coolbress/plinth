@@ -734,9 +734,9 @@ build:
 # include names a checksum. GitLab.com Free checks one: a wrong checksum
 # fails the pipeline before any job, "failed integrity check" (measured on
 # #353). The protected default branch, the merge checks
-# and the rest of the floor are GitLab settings and files /plinth:floor-check
-# does not read on GitLab yet (#353); each is a not yet confirmed line, never
-# a pass. It reads the merge request's own definition, so a merge request
+# and the rest of the floor are GitLab settings and files this job cannot
+# read and /plinth:floor-check does (#544); each is a not yet confirmed line
+# left to it, never a pass. It reads the merge request's own definition, so a merge request
 # that removes this include or this job removes this check too: only a read
 # from outside the merge request, after the merge, sees that.
 floor-check:
@@ -857,11 +857,13 @@ floor-check:
       [ -s "$PLINTH_TMP/floor.verdicts" ] || { say "fail: the floor, the check wrote no verdicts"; plinth_failed=1; }
       # The block above is the include rule alone: /plinth:floor-check runs
       # it from this file on a checkout (#543), so these lines stay outside it.
+      # A job token reads none of these; /plinth:floor-check, run with a
+      # Maintainer's glab login, reads them from GitLab (#544).
       for what in \
         "the protected default branch (no force push, merge requests only, Maintainers merge)" \
         "the merge check \"Pipelines must succeed\", with \"Skipped pipelines are considered successful\" off" \
-        "every job of this pipeline in the merge request's own pipeline definition (GitLab Free has no required checks by name)" \
+        "this include on the default branch, after the merge (GitLab Free has no required checks by name, so a merge request that drops it or a job still merges)" \
         "the rest of the floor (the document set, agent settings, the project files)"; do
-        say "not yet confirmed: $what, floor-check does not read GitLab yet (#353); a floor-check that reads it confirms it"
+        say "not yet confirmed: $what; left to /plinth:floor-check"
       done
       verdict
