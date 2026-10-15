@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-15
+
+This release lets `/plinth:floor-check` read a GitLab project (#353, slices 3 and 4). On a checkout rendered with `host: gitlab` it reads the files as GitLab's, and checks the include of plinth's pipeline with the pipeline's own rule. With `--repo group/name` it reads the wall through `glab`: every protection rule that matches `main`, "Pipelines must succeed", squash and fast-forward, the labels, and the include on the default branch. Read-only against the project the door made in v1.18.0's recorded run, it reports no FAIL and nothing unverified. The docs now name the GitLab path, including the Developer login to hand the agent. It also fixes a leading zero in `PLINTH_FIRST_PR_WAIT`, which made the GitHub door delete the repository it had just created. A checkout without a host reads as before.
+
+tested with plinth-template v1.13.0
+
 ### Added
 
 - `/plinth:floor-check` reads a GitLab checkout as one (#543, part of #353).
@@ -2786,7 +2792,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.19.0...HEAD
+[1.19.0]: https://github.com/coolbress/plinth/releases/tag/v1.19.0
 [1.18.0]: https://github.com/coolbress/plinth/releases/tag/v1.18.0
 [1.17.2]: https://github.com/coolbress/plinth/releases/tag/v1.17.2
 [1.17.1]: https://github.com/coolbress/plinth/releases/tag/v1.17.1
