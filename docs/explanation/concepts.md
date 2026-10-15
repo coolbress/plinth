@@ -519,6 +519,13 @@ the merge checks, and squash and fast-forward. The pipeline's own
 `floor-check` job reads only the merge request's copy, and leaves the rest
 to `/plinth:floor-check`.
 
+**Who can change it.** As on GitHub, the wall holds only against a login
+that cannot change it. A Maintainer or Owner can change the protection and
+the merge checks, and an Owner can delete the project. An agent working with
+such a login can do the same. The agent's login should have the Developer
+role. On GitLab.com Free that is a second account, because project access
+tokens need Premium or Ultimate there.
+
 **The pipeline** is plinth's `gitlab/python-ci.yml`, included from GitHub at
 a full commit SHA with its checksum (`include:integrity`, which GitLab.com Free
 checks before any job runs). Its jobs carry the names of the GitHub checks

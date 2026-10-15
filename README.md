@@ -46,21 +46,24 @@ deployed app are outside every check
 ([what plinth does not do](docs/explanation/concepts.md#about-what-plinth-does-not-do));
 [four things to set by hand](docs/how-to/run-a-project.md#set-four-things-by-hand-that-no-check-covers)
 cover them as guidance, not checks.
-No one but the author has used plinth yet. It covers GitHub.com, Python
-projects managed with uv, and Claude Code as the harness. An existing
+No one but the author has used plinth yet. It covers GitHub.com and, with a
+lower wall, GitLab.com ([about GitLab](docs/explanation/concepts.md#about-gitlab)),
+Python projects managed with uv, and Claude Code as the harness. An existing
 repository is only read, except that one made from plinth's template is
 offered template updates as a draft pull request. A private repository needs a paid
-GitHub plan, and some protections need more ([about private repositories](docs/explanation/concepts.md#about-private-repositories)).
+GitHub plan, and some protections need more ([about private repositories](docs/explanation/concepts.md#about-private-repositories));
+GitLab.com Free protects a private project.
 
 ## What plinth is
 
-The base a vibe-coded project stands on: required checks on GitHub that no
-change merges past while they are red, a curated set of agent skills, and a
+The base a vibe-coded project stands on: required checks that no change
+merges past while they are red, a curated set of agent skills, and a
 generator that starts a new repository with both already in place. Most of
 the checks run established tools (ruff, pytest, gitleaks, CodeQL and others),
-a few are plinth's own, and plinth configures the host (today GitHub) to
-require them before a merge, so the host, not plinth, refuses a merge while
-they are red.
+a few are plinth's own, and plinth configures the host (GitHub, or GitLab.com)
+to require them before a merge, so the host, not plinth, refuses a merge while
+they are red. On GitLab Free the host requires the pipeline as a whole, not
+each check by name.
 
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing

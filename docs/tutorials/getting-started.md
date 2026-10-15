@@ -146,8 +146,18 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
 - Wait for the merge request's pipeline to pass, then merge it with the
   command in the project's `CONTRIBUTING.md`, which squashes it with the
   description as the commit body.
+- Before the agent works on its own, take your login away from it. The
+  browser login is your Maintainer or Owner role with the `api` scope, so an
+  agent working with it can change `main`'s protection and the merge checks,
+  or as Owner delete the project. Give the agent a login with the Developer
+  role instead. A Developer pushes branches and opens merge requests, and
+  cannot push to the protected `main` or change the project's settings. On
+  GitLab.com Free, that login is a second account added to the project as a
+  Developer, logged in to `glab` where the agent runs: project access tokens
+  need Premium or Ultimate on GitLab.com. Keep your own login for merging
+  and for `/plinth:floor-check`.
 - Later, `/plinth:floor-check` in the project reads the wall back through
-  `glab`.
+  `glab`, with your Maintainer login.
 
 ## Next
 
