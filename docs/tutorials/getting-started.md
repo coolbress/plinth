@@ -127,6 +127,42 @@ the branch and push; the checks run again.
 When everything is green, **Squash and merge**. That is the whole journey:
 install, create, merge.
 
+## On GitLab instead
+
+The same walk on GitLab.com, for a project that must stay private on a free
+plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
+
+- Install `glab` 1.122.0 or newer (`brew install glab` on macOS), and log in
+  with `glab auth login --hostname gitlab.com --web --git-protocol https`.
+  The browser login keeps the token in the system keyring where there is
+  one. Without one (a Linux or WSL machine with no Secret Service), glab
+  writes it in plain text to `~/.config/glab-cli/config.yml` and prints a
+  warning. The project's agent settings deny reading that directory, but the
+  file stays on disk until you log in again with a keyring available. A
+  personal access token needs the `api` scope.
+- Type `/plinth:new-project my-app --host gitlab`. The project is created
+  private under your GitLab username, or under `group/my-app` where you are a
+  Maintainer or above. Rollback, which deletes the project if a later step
+  fails, needs the Owner role.
+- Its last lines name the first merge request, the first pipeline on `main`,
+  and the wall. One line says what GitLab Free cannot hold: a merge request
+  that drops a job still merges when what is left passes.
+- Wait for the merge request's pipeline to pass, then merge it with the
+  command in the project's `CONTRIBUTING.md`, which squashes it with the
+  description as the commit body.
+- Before the agent works on its own, take your login away from it. The
+  browser login is your Maintainer or Owner role with the `api` scope, so an
+  agent working with it can change `main`'s protection and the merge checks,
+  or as Owner delete the project. Give the agent a login with the Developer
+  role instead. A Developer pushes branches and opens merge requests, and
+  cannot push to the protected `main` or change the project's settings. On
+  GitLab.com Free, that login is a second account added to the project as a
+  Developer, logged in to `glab` where the agent runs: project access tokens
+  need Premium or Ultimate on GitLab.com. Keep your own login for merging
+  and for `/plinth:floor-check`.
+- Later, `/plinth:floor-check` in the project reads the wall back through
+  `glab`, with your Maintainer login.
+
 ## Next
 
 - [Run a project](../how-to/run-a-project.md): the loop from an idea to a

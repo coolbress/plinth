@@ -92,8 +92,8 @@ and the record, and needs to know what was confirmed without reading the
 code, so the checks have to carry what a reader of the diff would otherwise
 carry.
 
-It covers GitHub.com, Python projects managed with uv, and Claude Code as the
-harness. New repositories are created by `/plinth:new-project`. An existing
+It covers GitHub.com and GitLab.com ([about GitLab](#about-gitlab)), Python
+projects managed with uv, and Claude Code as the harness. New repositories are created by `/plinth:new-project`. An existing
 repository is only read: `/plinth:floor-check` reports what it is missing and
 changes nothing. A template update is proposed, as a draft pull request by
 `/plinth:template-update`, only for a repository made from plinth's template;
@@ -486,6 +486,50 @@ CI runs on the plan's Actions minutes. Measured on that run: each CI run is 9
 jobs, about 9 billed minutes with each job rounded up, and the first pull
 request took four CI runs.
 
-GitLab Free remains an alternative for code that must stay private on a free
-plan: it has protected branches and requires pipelines to pass, with no CodeQL
-and no push protection.
+GitLab Free is the alternative for code that must stay private on a free
+plan ([about GitLab](#about-gitlab)).
+
+## About GitLab
+
+`/plinth:new-project <name> --host gitlab` creates the project on GitLab.com
+through `glab`, GitLab's CLI, in the role `gh` has on GitHub. The project is
+private by default, because GitLab.com Free protects a private project's
+default branch. It is rendered from the same template with `host: gitlab`.
+That gives it `.gitlab-ci.yml`, merge request and issue templates under
+`.gitlab/`, and nothing under `.github/`.
+
+The wall on GitLab Free is lower than GitHub's ruleset:
+
+| GitHub ruleset | GitLab Free |
+| --- | --- |
+| Changes land through a pull request; no force push | `main` is protected: no one pushes, Maintainers merge, no force push |
+| Each required check passes, by name | "Pipelines must succeed": the pipeline passes as a whole, and "Skipped pipelines are considered successful" is off |
+| Squash is the only merge method | Squash always, and fast-forward merges |
+| CodeQL's `code_scanning` rule; push protection | Neither; `lint`'s security rules and `secrets` after the push stand in |
+
+**What it cannot hold.** GitLab Free has no required checks by name. A merge
+request's pipeline is built from that merge request's own `.gitlab-ci.yml`,
+so one that drops plinth's include or a job still merges when what is left
+passes. Holding it before the merge takes GitLab Ultimate's pipeline
+execution policies, which plinth does not set up. What plinth does instead
+is read it after the merge. `/plinth:floor-check`, run with a Maintainer's
+`glab` login, reads the default branch's definition and fails when plinth's
+pipeline is not included at a full commit SHA. It also reads the protection,
+the merge checks, and squash and fast-forward. The pipeline's own
+`floor-check` job reads only the merge request's copy, and leaves the rest
+to `/plinth:floor-check`.
+
+**Who can change it.** As on GitHub, the wall holds only against a login
+that cannot change it. A Maintainer or Owner can change the protection and
+the merge checks, and an Owner can delete the project. An agent working with
+such a login can do the same. The agent's login should have the Developer
+role. On GitLab.com Free that is a second account, because project access
+tokens need Premium or Ultimate there.
+
+**The pipeline** is plinth's `gitlab/python-ci.yml`, included from GitHub at
+a full commit SHA with its checksum (`include:integrity`, which GitLab.com Free
+checks before any job runs). Its jobs carry the names of the GitHub checks
+([GitLab pipeline](../reference/gitlab-ci.md)). Each pipeline uses the
+namespace's compute minutes: about 4 to 5 per pipeline, measured on #353.
+
+GitLab Self-Managed and GitLab Dedicated are not covered.
