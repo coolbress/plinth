@@ -31,8 +31,26 @@ pull requests and have no tag.
   helpers other than glab's, an `Authorization` header and `~/.netrc`. The
   template drift item's `copier update` line carries the include's commit
   and checksum together, since a commit moved without its checksum fails
-  every pipeline. The project's settings on GitLab are not read yet (#544).
-  A checkout without a host reads as before.
+  every pipeline. A checkout without a host reads as before.
+- `/plinth:floor-check` reads a GitLab.com project's wall through `glab`
+  with `--repo group/name` (#544, part of #353). It reads the wall the
+  GitLab door raises:
+  - the protected default branch: no one pushes, Maintainers merge, no
+    force push;
+  - "Pipelines must succeed", with skipped pipelines not counted;
+  - squash always and fast-forward;
+  - the labels from `labels.txt`;
+  - the include on the default branch, read from the file `ci_config_path`
+    names. That is the read from outside a merge request that the GitLab
+    pipeline's own job cannot make.
+
+  A setting that differs is a FAIL with a `glab api` line or settings URL to
+  fix it; a missing label is a WARN; a read that fails is a SKIP. The skill
+  takes the project from a gitlab.com `origin`. The GitLab pipeline's
+  `floor-check` job now leaves those reads to `/plinth:floor-check` instead
+  of saying it does not read GitLab. A GitLab checkout without `SECURITY.md`
+  is a FAIL, since nothing is inherited from an owner's `.github` repository
+  there.
 
 ### Fixed
 

@@ -251,6 +251,9 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
 
     if (root / "SECURITY.md").is_file():
         result("PASS", "SECURITY.md present")
+    elif host == "gitlab":
+        # GitLab has no owner-level `.github` repository to inherit from (#547 review, round 3).
+        result("FAIL", "SECURITY.md missing: on GitLab nothing is inherited from an owner's .github repository")
     else:
         got = inherited_file(owner, "SECURITY.md", network)
         if got is ERROR:
@@ -1583,14 +1586,15 @@ def gitlab_rule_python(tmp: Path, network: bool) -> tuple[str | None, str]:
     return str(py), ""
 
 
-def check_gitlab_include(root: Path, network: bool) -> None:
+def check_gitlab_include(root: Path, network: bool, text: str | None = None, shown: str = ".gitlab-ci.yml") -> None:
     """.gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA,
     with a checksum: the GitLab pipeline's floor-check rule, run here on the
-    checkout (#543). Its `pass:` is a PASS, `fail:` a FAIL, `not yet
-    confirmed:` a SKIP. The rule runs from a temporary directory and reads the
-    file by its absolute path, so a module in the checkout is never imported
-    in place of PyYAML; the path is shown as `.gitlab-ci.yml`."""
-    what = ".gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA"
+    checkout (#543), or on `text`, the definition read from the default
+    branch (#544), shown as `shown`. Its `pass:` is a PASS, `fail:` a FAIL,
+    `not yet confirmed:` a SKIP. The rule runs from a temporary directory and
+    reads the file by its absolute path, so a module in the checkout is never
+    imported in place of PyYAML; the path is shown as `shown`."""
+    what = f"{shown} includes plinth's GitLab pipeline at a full commit SHA"
     rule = gitlab_job_block("PY")
     if rule is None:
         result("SKIP", f"{what} not verified: the rule in {GITLAB_PIPELINE.name}'s floor-check job could not be read")
@@ -1601,13 +1605,16 @@ def check_gitlab_include(root: Path, network: bool) -> None:
             result("SKIP", f"{what} not verified: {why}")
             return
         config = str(root / ".gitlab-ci.yml")
+        if text is not None:
+            config = str(Path(tmp) / "definition.yml")
+            Path(config).write_text(text, encoding="utf-8")
         try:
             run = subprocess.run([py, "-c", rule], cwd=tmp, capture_output=True, text=True,
                                  env={**os.environ, "CONFIG": config}, timeout=60, check=False)
         except (OSError, subprocess.TimeoutExpired) as e:
             result("SKIP", f"{what} not verified: the rule did not run ({e.__class__.__name__})")
             return
-    lines = [ln.replace(config, ".gitlab-ci.yml") for ln in run.stdout.splitlines() if ln.strip()]
+    lines = [ln.replace(config, shown) for ln in run.stdout.splitlines() if ln.strip()]
     kinds = {"pass": "PASS", "fail": "FAIL", "not yet confirmed": "SKIP"}
     for ln in lines:
         kind, _, msg = ln.partition(": ")
@@ -1615,6 +1622,155 @@ def check_gitlab_include(root: Path, network: bool) -> None:
     if not lines:
         why = " ".join(run.stderr.split())[-200:] or f"exit {run.returncode}"
         result("SKIP", f"{what} not verified: the rule printed no verdict ({why})")
+
+
+GITLAB_HOST = "gitlab.com"
+
+
+def gl_api(path: str, network: bool, raw: bool = False, paginate: bool = False):
+    """GET gitlab.com/api/v4/<path> through `glab api` with the user's own
+    login (#544). JSON, or the text with raw; ABSENT on a 404; ERROR when
+    offline, not logged in, or on any other failure. FLOOR_CHECK_GITLAB_API_DIR
+    serves fixtures: <path>.json, or <path> as is with raw; a missing file is
+    a 404 and `<path>.error` an error."""
+    fixture_dir = os.environ.get("FLOOR_CHECK_GITLAB_API_DIR")
+    if fixture_dir:
+        f = Path(fixture_dir) / (path if raw else path + ".json")
+        if (Path(fixture_dir) / (path + ".error")).is_file():
+            return ERROR
+        if not f.is_file():
+            return ABSENT
+        return read(f) if raw else json.loads(read(f))
+    if not network or not shutil.which("glab"):
+        return ERROR
+    cmd = ["glab", "api", "--hostname", GITLAB_HOST, path] + (["--paginate"] if paginate else [])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return ERROR
+    if r.returncode != 0:
+        # glab prints GitLab's error body on stdout: {"message":"404 Not found"} (measured, #533).
+        return ABSENT if re.search(r'"message"\s*:\s*"404\b', r.stdout) or "HTTP 404" in r.stderr else ERROR
+    if raw:
+        return r.stdout
+    try:
+        return json.loads(r.stdout)
+    except ValueError:
+        return ERROR
+
+
+def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
+    """The wall /plinth:new-project --host gitlab raises (#533), read live
+    through glab (#544): the default branch protected (no one pushes,
+    Maintainers merge, no force push), "Pipelines must succeed" with skipped
+    pipelines not counted, squash always and fast-forward, the labels, and
+    the include read from the default branch -- the read from outside a merge
+    request that the GitLab pipeline's own floor-check job cannot make.
+    A setting that differs is a FAIL, the labels a WARN as on GitHub; a read
+    that fails is a SKIP, never a PASS."""
+    enc = urllib.parse.quote(repo, safe="")
+    edit = f"https://{GITLAB_HOST}/{repo}/-/settings/repository"
+    login = f"glab auth login --hostname {GITLAB_HOST}"
+    project = gl_api(f"projects/{enc}", network)
+    if not isinstance(project, dict):
+        why = ("it was not found, or this login cannot see it" if project is ABSENT
+               else f"offline, glab missing or not logged in ({login}), or an API error")
+        result("SKIP", f"the GitLab wall of {repo} not verified: {why}")
+        check_gitlab_include(root, network)
+        return
+    branch = project.get("default_branch")
+    if not isinstance(branch, str) or not branch:
+        result("SKIP", f"{repo} has no default branch GitLab names; its protection, merge checks and include not verified")
+        return
+
+    prot = gl_api(f"projects/{enc}/protected_branches/{urllib.parse.quote(branch, safe='')}", network)
+    if prot is ABSENT:
+        result("FAIL", f"{branch} is not a protected branch on {repo}: anyone with Developer can push to it")
+        result("INFO", f"  glab api --hostname {GITLAB_HOST} -X POST projects/{enc}/protected_branches -f name={branch} "
+                       "-F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false   (a Maintainer)")
+    elif not isinstance(prot, dict):
+        result("SKIP", f"the protection of {branch} not verified: protected branches are not readable with this login "
+                       "(it needs the Maintainer role on GitLab.com), or an API error")
+    else:
+        def levels(key: str) -> list:
+            return [a for a in prot.get(key, []) if isinstance(a, dict)] if isinstance(prot.get(key), list) else []
+        push, merge = levels("push_access_levels"), levels("merge_access_levels")
+
+        def named(xs: list) -> list:
+            return [a for a in xs if a.get("user_id") or a.get("group_id") or a.get("deploy_key_id")]
+        bad = []
+        if not push or any(a.get("access_level") != 0 for a in push) or named(push):
+            bad.append(f"push allowed ({[a.get('access_level_description') or a.get('access_level') for a in push]}), want No one")
+        if not merge or any(not isinstance(a.get("access_level"), int) or a.get("access_level") < 40 for a in merge) or named(merge):
+            bad.append(f"merge allowed to {[a.get('access_level_description') or a.get('access_level') for a in merge]}, want Maintainers")
+        if prot.get("allow_force_push") is not False:
+            bad.append(f"force push {prot.get('allow_force_push')!r}, want false")
+        if bad:
+            result("FAIL", f"{branch}'s protection on {repo} is weaker than the door's: {'; '.join(bad)}")
+            result("INFO", f"  {edit}#js-protected-branches-settings   (Protected branches: Allowed to push and merge: No one; "
+                           "Allowed to merge: Maintainers; Allowed to force push: off)")
+        else:
+            result("PASS", f"{branch} is protected on {repo}: no one pushes, Maintainers merge, no force push")
+
+    settings = {"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False,
+                "squash_option": "always", "merge_method": "ff"}
+    unread = [k for k in settings if k not in project]
+    if unread:
+        result("SKIP", f"the merge settings of {repo} not verified: GitLab did not return {', '.join(unread)} "
+                       "to this login (a project member reads them)")
+    else:
+        merge_url = f"https://{GITLAB_HOST}/{repo}/-/settings/merge_requests"
+        checks = {k: settings[k] for k in ("only_allow_merge_if_pipeline_succeeds", "allow_merge_on_skipped_pipeline")}
+        off = {k: project[k] for k, v in checks.items() if project[k] != v}
+        if off:
+            result("FAIL", f"the merge checks of {repo} let a merge request merge without a green pipeline: "
+                           + ", ".join(f"{k}={v!r}" for k, v in off.items()))
+            result("INFO", f"  glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -F only_allow_merge_if_pipeline_succeeds=true "
+                           f"-F allow_merge_on_skipped_pipeline=false   (a Maintainer; or {merge_url})")
+        else:
+            result("PASS", f"{repo} merges only on a green pipeline (\"Pipelines must succeed\" on, skipped pipelines not counted)")
+        shape = {k: project[k] for k in ("squash_option", "merge_method") if project[k] != settings[k]}
+        if shape:
+            result("FAIL", f"{repo} merges other than squash and fast-forward: "
+                           + ", ".join(f"{k}={v!r}" for k, v in shape.items())
+                           + "; main gains commits that are not one squash per merge request")
+            result("INFO", f"  glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -f squash_option=always -f merge_method=ff"
+                           f"   (a Maintainer; or {merge_url})")
+        else:
+            result("PASS", f"{repo} squashes every merge request and fast-forwards")
+
+    # The definition GitLab runs: ci_config_path, .gitlab-ci.yml when empty.
+    # One in another project or at a URL (`path@group/project`, http) is not read.
+    cfg = project.get("ci_config_path") or ".gitlab-ci.yml"
+    shown = f"{cfg} on {branch}"
+    if "@" in cfg or "://" in cfg:
+        result("SKIP", f"the include on {branch} not verified: the pipeline definition is {cfg}, outside this project")
+    else:
+        text = gl_api(f"projects/{enc}/repository/files/{urllib.parse.quote(cfg, safe='')}/raw?ref="
+                      f"{urllib.parse.quote(branch, safe='')}", network, raw=True)
+        if text is ABSENT:
+            result("FAIL", f"no {cfg} on {branch} of {repo}: no pipeline runs, so \"Pipelines must succeed\" holds nothing back")
+        elif not isinstance(text, str):
+            result("SKIP", f"the include on {branch} not verified: {cfg} could not be read (an API error)")
+        else:
+            check_gitlab_include(root, network, text, shown)
+
+    labels = gl_api(f"projects/{enc}/labels?per_page=100", network, paginate=True)
+    f = labels_file()
+    if f is None:
+        result("SKIP", "labels.txt not found next to the checker; labels not checked")
+    elif not isinstance(labels, list):
+        result("SKIP", "labels not verified (offline, not logged in, or API error)")
+    else:
+        rows = [ln.split("|") for ln in read(f).splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+        have = {e.get("name") for e in labels if isinstance(e, dict)}
+        missing = [r for r in rows if r[0] not in have]
+        if not missing:
+            result("PASS", f"every label the door creates is present ({len(rows)})")
+        else:
+            result("WARN", f"labels the door creates that are missing: {', '.join(r[0] for r in missing)}")
+            for r in missing:
+                result("INFO", f"  glab label create --name {shlex.quote(r[0])} --color '#{r[1]}' --repo {repo}")
 
 
 def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -> dict:
@@ -2294,7 +2450,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", default=".", help="repository checkout")
     ap.add_argument("--project", default=".", help="project root, relative to --root and inside it (the repository itself, or a directory under it)")
-    ap.add_argument("--repo", help="owner/name on GitHub; enables inheritance and wall checks")
+    ap.add_argument("--repo", help="owner/name on GitHub, or group/name on GitLab.com; enables inheritance and wall checks")
     ap.add_argument("--host", choices=("github", "gitlab"),
                     help="where the repository lives; default: `host:` in .copier-answers.yml, else github")
     ap.add_argument("--ruleset", help="ruleset.json the door applies; its contexts are the expected checks and its CodeQL thresholds the expected policy")
@@ -2370,11 +2526,11 @@ def main() -> int:
         (check_gitlab_image_job if host == "gitlab" else check_image_job)(root)
 
     if host == "gitlab":
-        check_gitlab_include(root, network)
-        if a.repo:
-            result("SKIP", f"the GitLab wall of {a.repo} not read: floor-check reads only the checkout on GitLab so far (#544)")
+        if a.repo and network:
+            check_gitlab_wall(root, a.repo, network)
         else:
-            result("SKIP", "no --repo: wall not checked")
+            check_gitlab_include(root, network)
+            result("SKIP", "no --repo: wall not checked" if not a.repo else "--no-network: the GitLab wall not checked")
     else:
         check_caller(root, a.repo, network, a.caller_from_checkout)
         check_plinth_pins_agree(root)
