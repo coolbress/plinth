@@ -24,8 +24,8 @@ pull requests and have no tag.
   - the top-level include of `.gitlab-ci.yml` is judged by the GitLab
     pipeline's own `floor-check` rule, run from `gitlab/python-ci.yml`.
     Without PyYAML, that rule installs the job's PyYAML by hash from PyPI
-    into a temporary directory. With `--no-network`, the include is not
-    verified.
+    into a temporary directory (CPython 3.11 to 3.14). With `--no-network`
+    and no PyYAML, the include is not verified.
 
   The project's settings on GitLab are not read yet (#544). A checkout
   without a host reads as before.

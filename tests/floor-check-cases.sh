@@ -1856,12 +1856,17 @@ hgh="$work/hostgithub"; rm -rf "$hgh"; cp -R "$good" "$hgh"; printf 'host: githu
 if [ "$(python3 "$checker" --root "$good" --no-network 2>&1 | sed 1d)" = "$(python3 "$checker" --root "$hgh" --no-network 2>&1 | sed 1d)" ]
 then ok "host: github reports exactly what no host reports"
 else bad "host: github changed the report"; diff <(python3 "$checker" --root "$good" --no-network 2>&1 | sed 1d) <(python3 "$checker" --root "$hgh" --no-network 2>&1 | sed 1d) | sed 's/^/        /'; fi
-gl "a complete GitLab backend checkout has no FAIL offline" ":" "^-- 0 failed, 2 not verified$" --no-network
+gl "a complete GitLab backend checkout has no FAIL offline" ":" "^-- 0 failed, [12] not verified$" --no-network
 for gone in 'gh auth token' 'gh config reads' '\.github/dependabot\.yml' 'issue forms' 'the ci job'; do
   grep -qE -- "$gone" <<<"$out" && bad "GitHub-only item not read on GitLab: $gone" || ok "GitHub-only item not read on GitLab: $gone"
 done
 gl "Dependabot's absence is an INFO, not a FAIL" ":" "INFO  Dependabot does not run on GitLab" --no-network
-gl "--no-network: the include is a SKIP, not a pass" ":" "SKIP  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA not verified: .*--no-network" --no-network
+# Offline, the rule runs only with a PyYAML already here; without one, nothing is installed.
+if python3 -c 'import yaml' 2>/dev/null; then
+  gl "--no-network with PyYAML here: the include is read" ":" "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA" --no-network
+else
+  gl "--no-network without PyYAML: the include is a SKIP, not a pass" ":" "SKIP  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA not verified: .*--no-network" --no-network
+fi
 gl "the host comes from .copier-answers.yml" ":" "host=gitlab" --no-network
 gl "--host gitlab reads it without the answer" "sed -i.bak '/^host:/d' .copier-answers.yml" "^-- 0 failed" --no-network --host gitlab
 gl "--host github overrides the answer" ":" "FAIL  \.github/dependabot\.yml missing" --no-network --host github
@@ -1877,7 +1882,13 @@ gl "an issue template without /label is a WARN" "printf '## What\n' > .gitlab/is
 gl "a backend without the docker-image job fails" "printf 'include: []\n' > .gitlab-ci.yml" "FAIL  \.gitlab-ci\.yml has no \`docker-image\` job" --no-network
 # The include rule is gitlab/python-ci.yml's own; these read it through the
 # checker. With no PyYAML here, the job's pinned PyYAML is installed from
-# PyPI, so these need the network, as tests/gitlab-ci-cases.sh does.
+# PyPI, so these need the network, as tests/gitlab-ci-cases.sh does. A
+# python3 with neither PyYAML nor a version those wheels cover gets a SKIP
+# that says so, and the rule's cases cannot run on it.
+if ! python3 -c 'import yaml' 2>/dev/null && ! python3 -c 'import sys; sys.exit(not (3, 11) <= sys.version_info[:2] <= (3, 14))'; then
+  gl "no PyYAML on a python3 outside 3.11 to 3.14: a SKIP naming the range" ":" "SKIP  .*pinned for CPython 3\.11 to 3\.14 only"
+  echo "  NOTE  the include rule's cases need a python3 with PyYAML, or 3.11 to 3.14: $(python3 --version 2>&1)"
+else
 gl "an include at a full SHA with a checksum passes" ":" "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA \($glsha\)"
 grep -q "PASS  the include names a checksum" <<<"$out" && ok "the checksum is a PASS" || bad "the checksum is a PASS"
 gl "no checksum is a SKIP, not a pass" "glci 'include:
@@ -1892,6 +1903,7 @@ gl "no include fails" "glci 'include: []' > .gitlab-ci.yml" "FAIL  .*no include 
 gl "a yaml.py in the checkout is not imported in place of PyYAML" "printf 'print(\"pass: PLANTED\")\n' > yaml.py" \
   "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA"
 grep -q PLANTED <<<"$out" && bad "the planted yaml.py ran" || ok "the planted yaml.py did not run"
+fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

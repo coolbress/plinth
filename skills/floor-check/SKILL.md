@@ -76,7 +76,9 @@ which is an INFO. In place of the `ci` job, the top-level include of
 `.gitlab-ci.yml` is judged by the GitLab pipeline's own `floor-check` rule,
 read from `${CLAUDE_PLUGIN_ROOT}/gitlab/python-ci.yml`. That rule needs
 PyYAML: without it, the job's PyYAML is installed by hash into a temporary
-directory from PyPI, and with `--no-network` the include is a SKIP. The
+directory from PyPI (its wheels cover CPython 3.11 to 3.14; another Python
+without PyYAML gets a SKIP saying so), and with `--no-network` the include is
+a SKIP unless PyYAML is already there. The
 project's settings on GitLab (the protected branch, the merge checks) are not
 read yet (#544).
 

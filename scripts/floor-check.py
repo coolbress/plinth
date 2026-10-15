@@ -1505,12 +1505,16 @@ def gitlab_job_block(tag: str) -> str | None:
 def gitlab_rule_python(tmp: Path, network: bool) -> tuple[str | None, str]:
     """A Python that imports PyYAML: this one if it does, else a venv under
     tmp with the job's own PyYAML pinned by hash, binary wheels only, as the
-    GitLab job installs it (#528). (None, why) when neither."""
-    probe = subprocess.run([sys.executable, "-P", "-c", "import yaml"], cwd=tmp, capture_output=True, check=False)
+    GitLab job installs it (#528). (None, why) when neither. Run from tmp,
+    so the checkout is not on the module path."""
+    probe = subprocess.run([sys.executable, "-c", "import yaml"], cwd=tmp, capture_output=True, check=False)
     if probe.returncode == 0:
         return sys.executable, ""
     if not network:
         return None, f"{sys.executable} has no PyYAML and --no-network leaves it uninstalled"
+    if not (3, 11) <= sys.version_info[:2] <= (3, 14):
+        return None, (f"{sys.executable} ({sys.version.split()[0]}) has no PyYAML, and the job's PyYAML is pinned "
+                      "for CPython 3.11 to 3.14 only; run this checker with one of those")
     req = gitlab_job_block("REQ")
     if req is None:
         return None, f"{sys.executable} has no PyYAML and the job's pinned PyYAML could not be read"
@@ -1534,8 +1538,9 @@ def check_gitlab_include(root: Path, network: bool) -> None:
     """.gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA,
     with a checksum: the GitLab pipeline's floor-check rule, run here on the
     checkout (#543). Its `pass:` is a PASS, `fail:` a FAIL, `not yet
-    confirmed:` a SKIP. The rule runs with `-P`, so a module in the checkout
-    is never imported in place of PyYAML."""
+    confirmed:` a SKIP. The rule runs from a temporary directory and reads the
+    file by its absolute path, so a module in the checkout is never imported
+    in place of PyYAML; the path is shown as `.gitlab-ci.yml`."""
     what = ".gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA"
     rule = gitlab_job_block("PY")
     if rule is None:
@@ -1546,13 +1551,14 @@ def check_gitlab_include(root: Path, network: bool) -> None:
         if py is None:
             result("SKIP", f"{what} not verified: {why}")
             return
+        config = str(root / ".gitlab-ci.yml")
         try:
-            run = subprocess.run([py, "-P", "-c", rule], cwd=root, capture_output=True, text=True,
-                                 env={**os.environ, "CONFIG": ".gitlab-ci.yml"}, timeout=60, check=False)
+            run = subprocess.run([py, "-c", rule], cwd=tmp, capture_output=True, text=True,
+                                 env={**os.environ, "CONFIG": config}, timeout=60, check=False)
         except (OSError, subprocess.TimeoutExpired) as e:
             result("SKIP", f"{what} not verified: the rule did not run ({e.__class__.__name__})")
             return
-    lines = [ln for ln in run.stdout.splitlines() if ln.strip()]
+    lines = [ln.replace(config, ".gitlab-ci.yml") for ln in run.stdout.splitlines() if ln.strip()]
     kinds = {"pass": "PASS", "fail": "FAIL", "not yet confirmed": "SKIP"}
     for ln in lines:
         kind, _, msg = ln.partition(": ")
