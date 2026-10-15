@@ -641,6 +641,8 @@ E="MOCK_RUNS=none PLINTH_FIRST_PR_WAIT=1" run run-never err yes yes "its checks 
 # just listed. `=0` is `=1` with the timing taken out.
 E="MOCK_CODEQL=absent PLINTH_FIRST_PR_WAIT=0" run deadline-zero ok yes no "warning: CodeQL has not picked up the first pull request" -- probe
 E="PLINTH_FIRST_PR_WAIT=soon" run wait-typo err no no "PLINTH_FIRST_PR_WAIT must be a whole number" -- probe
+# A leading zero is base 10, not octal: 08 once aborted after the create (#539).
+E="PLINTH_FIRST_PR_WAIT=08" run wait-leading-zero ok yes no "" -- probe
 # The defect #105 was: a throwaway probe branch was pushed first, GitHub adopted
 # it as the default branch of the empty repository and then refused to delete
 # it, and the ruleset (~DEFAULT_BRANCH) went up on the probe while main was left
@@ -1327,6 +1329,7 @@ E="MOCK_GL_BASELINE=running PLINTH_FIRST_PR_WAIT=20" gl_run gl-baseline-running 
 [ "$(grep -c 'pipelines?ref=main$' "$work/home-gl-baseline-running/calls.log")" = 3 ] \
   && ok gl-baseline-running "polls every 10 s until the wait ends" || bad gl-baseline-running "polls: $(grep -c 'pipelines?ref=main$' "$work/home-gl-baseline-running/calls.log")"
 E="MOCK_GL_BASELINE=none PLINTH_FIRST_PR_WAIT=0" gl_run gl-baseline-none ok yes no "first pipeline on main: not confirmed: not listed within 0 s" -- probe --host gitlab
+E="MOCK_GL_BASELINE=none PLINTH_FIRST_PR_WAIT=08" gl_run gl-wait-leading-zero ok yes no "first pipeline on main: not confirmed: not listed within 8 s" -- probe --host gitlab
 E="MOCK_GL_BASELINE=error PLINTH_FIRST_PR_WAIT=0" gl_run gl-baseline-error ok yes no "first pipeline on main: not confirmed: could not be read (500 Internal Server Error)" -- probe --host gitlab
 E="MOCK_GL_BASELINE=failed" gl_run gl-baseline-failed ok yes no "first pipeline on main: failed (failed jobs: test, deps), not re-run: https://gitlab.com/tester/probe/-/pipelines/77" -- probe --host gitlab
 grep -q '/retry' "$work/home-gl-baseline-failed/calls.log" && bad gl-baseline-failed "a red baseline was re-run" || ok gl-baseline-failed "a red baseline is not re-run"
