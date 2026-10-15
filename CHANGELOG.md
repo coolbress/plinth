@@ -27,8 +27,12 @@ pull requests and have no tag.
     into a temporary directory (CPython 3.11 to 3.14). With `--no-network`
     and no PyYAML, the include is not verified.
 
-  The project's settings on GitLab are not read yet (#544). A checkout
-  without a host reads as before.
+  On GitLab, `--credentials` reads gitlab.com: glab's token variables, git
+  helpers other than glab's, an `Authorization` header and `~/.netrc`. The
+  template drift item's `copier update` line carries the include's commit
+  and checksum together, since a commit moved without its checksum fails
+  every pipeline. The project's settings on GitLab are not read yet (#544).
+  A checkout without a host reads as before.
 
 ### Fixed
 

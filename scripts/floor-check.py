@@ -1054,6 +1054,32 @@ def resolve_plinth_pin(root: Path) -> tuple[str | None, str | None]:
     return None, f"workflow pins disagree: {', '.join(sorted(shas))}"
 
 
+def resolve_gitlab_pin(root: Path) -> tuple[str | None, str | None, str | None]:
+    """On GitLab (#547 review): the commit and checksum of the include of
+    plinth's GitLab pipeline in .gitlab-ci.yml, the pin the pipeline runs
+    today, as resolve_plinth_pin reads the workflows on GitHub. Not a YAML
+    parser: the `remote:` line of the URL, and the `integrity:` line right
+    after it, as the template renders them. Returns (sha, integrity, None),
+    or (None, None, reason) unless there is exactly one such include, at a
+    full commit SHA, with a checksum, and no other line naming plinth."""
+    p = root / ".gitlab-ci.yml"
+    if not p.is_file():
+        return None, None, "no .gitlab-ci.yml"
+    text = read(p)
+    url = r"https://raw\.githubusercontent\.com/coolbress/plinth/([^/\s'\"]+)/gitlab/python-ci\.yml"
+    found = re.findall(rf"^[ \t]*-?[ \t]*remote:[ \t]*['\"]?{url}['\"]?[ \t]*\n[ \t]*integrity:[ \t]*['\"]?sha256-([A-Za-z0-9+/]{{43}}=)['\"]?[ \t]*$",
+                       text, re.MULTILINE)
+    # The template's own comment names coolbress/plinth; only the definition counts.
+    mentions = sum(1 for ln in text.splitlines() if not ln.lstrip().startswith("#") and "coolbress/plinth" in ln.lower())
+    if len(found) != 1 or mentions != 1:
+        return None, None, ("the include of plinth's GitLab pipeline is not one `remote:` line followed by its "
+                            "`integrity:` line, as the template renders it")
+    sha, integrity = found[0]
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+        return None, None, f"the include of plinth's GitLab pipeline is at {sha}, not a full commit SHA"
+    return sha, integrity, None
+
+
 def template_drift(root: Path) -> dict:
     """Where this repository stands against the template tag plinth is
     tested with, and the one `copier update` command that moves it there
@@ -1094,25 +1120,35 @@ def template_drift(root: Path) -> dict:
     if recorded == target:
         return {**out, "state": "current"}
 
-    sha, why_not = resolve_plinth_pin(root)
+    integrity = None
+    if answers.get("host") == "gitlab":
+        sha, integrity, why_not = resolve_gitlab_pin(root)
+    else:
+        sha, why_not = resolve_plinth_pin(root)
     # --defaults: without a terminal copier update stops at "Interactive
     # session required" (measured, copier 9.18.2), and the skill that runs
     # this line has none. It answers each question with the recorded answer.
     out.update(copier_version=copier_version, copier_newer=copier_newer)
-    return {**out, "state": "behind", "cmd": update_line(out, sha) if sha else None, "why_not": why_not, "live": sha}
+    out["integrity"] = integrity
+    return {**out, "state": "behind", "cmd": update_line(out, sha, integrity) if sha else None, "why_not": why_not, "live": sha}
 
 
-def update_line(d: dict, pin: str) -> str:
-    """The `copier update` line to the target tag, carrying plinth pin `pin`."""
+def update_line(d: dict, pin: str, integrity: str | None = None) -> str:
+    """The `copier update` line to the target tag, carrying plinth pin `pin`,
+    and on GitLab the include's checksum at that pin: a pin moved without its
+    checksum fails every pipeline before a job runs."""
     return (f"uvx --from copier=={d['copier_version']} --exclude-newer {d['copier_newer']} "
-            f"copier update --defaults --vcs-ref {d['target']} --data plinth_sha={pin}")
+            f"copier update --defaults --vcs-ref {d['target']} --data plinth_sha={pin}"
+            + (f" --data plinth_gitlab_integrity={shlex.quote(integrity)}" if integrity else ""))
 
 
-def tested_plinth_pin(template_repo: str, target: str, network: bool) -> tuple[str | None, str | None]:
+def tested_plinth_pin(template_repo: str, target: str, network: bool,
+                      key: str = "plinth_sha", value: str = r"[0-9a-fA-F]{40}") -> tuple[str | None, str | None]:
     """The plinth commit the target template tag was tested with: the
-    `plinth_sha` default in that tag's copier.yml (#511). Returns (sha, None),
-    or (None, reason) when it is not read. Not a YAML parser: the `default:`
-    line inside the top-level `plinth_sha:` block."""
+    `plinth_sha` default in that tag's copier.yml (#511), or with key and
+    value another default there (plinth_gitlab_integrity, #547). Returns
+    (value, None), or (None, reason) when it is not read. Not a YAML parser:
+    the `default:` line inside the top-level `<key>:` block."""
     data = api(f"repos/{template_repo}/contents/copier.yml?ref={target}", network)
     if data in (ABSENT, ERROR):
         return None, f"{template_repo} copier.yml at {target}: offline or API error"
@@ -1120,11 +1156,12 @@ def tested_plinth_pin(template_repo: str, target: str, network: bool) -> tuple[s
         text = base64.b64decode(data["content"]).decode()
     except (TypeError, KeyError, ValueError):
         return None, f"{template_repo} copier.yml at {target}: an unexpected contents response"
-    m = re.search(r"^plinth_sha:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)*)", text + "\n", re.MULTILINE)
-    d = re.search(r"^[ \t]+default:[ \t]*[\"']?([0-9a-fA-F]{40})[\"']?[ \t]*$", m.group(1), re.MULTILINE) if m else None
+    m = re.search(rf"^{key}:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)*)", text + "\n", re.MULTILINE)
+    d = re.search(rf"^[ \t]+default:[ \t]*[\"']?({value})[\"']?[ \t]*$", m.group(1), re.MULTILINE) if m else None
     if not d:
-        return None, f"{template_repo} copier.yml at {target} has no plinth_sha default that is a full commit SHA"
-    return d.group(1).lower(), None
+        what = "a full commit SHA" if key == "plinth_sha" else "a checksum"
+        return None, f"{template_repo} copier.yml at {target} has no {key} default that is {what}"
+    return (d.group(1).lower() if key == "plinth_sha" else d.group(1)), None
 
 
 def plinth_pin_choice(d: dict, network: bool) -> dict:
@@ -1136,6 +1173,7 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
     tested pin), equal (`cmd` is the live line), live-ahead or unread (no
     `cmd`); `note` is the one line that says so, naming both SHAs when read."""
     live = d["live"].lower()
+    calls = "the include is at" if d.get("integrity") else "the workflows call"
     target = d["target"]
     tested, why = tested_plinth_pin(d["template_repo"], target, network)
     if tested is None:
@@ -1143,7 +1181,7 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
                                            f"the live pin {live} is kept"}
     if tested == live:
         return {"state": "equal", "tested": tested, "cmd": d["cmd"],
-                "note": f"plinth pin: the workflows call {live}, the one {target} was tested with"}
+                "note": f"plinth pin: {calls} {live}, the one {target} was tested with"}
     url = f"https://github.com/{PLINTH_REPO}/compare/{live}...{tested}"
     tags: dict[str, list[str]] = {}
     listing = api(f"repos/{PLINTH_REPO}/tags?per_page=100", network, paginate=True)
@@ -1162,17 +1200,26 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
     if status == "ahead":
         n = cmp.get("ahead_by")
         by = f", {n} commit(s) newer" if isinstance(n, int) else ", newer"
-        return {"state": "tested-ahead", "tested": tested, "cmd": update_line(d, tested),
-                "note": f"plinth pin: the workflows call {name(live)}; {target} was tested with "
+        integrity = None
+        if d.get("integrity"):
+            # On GitLab the tested pin moves with the checksum the same tag was tested with.
+            integrity, why = tested_plinth_pin(d["template_repo"], target, network,
+                                               "plinth_gitlab_integrity", r"[A-Za-z0-9+/]{43}=")
+            if integrity is None:
+                return {"state": "unread", "tested": tested,
+                        "note": f"plinth pin: the include is at {live}; {target} was tested with {tested}, but its "
+                                f"checksum was not read ({why}); the live pin is kept"}
+        return {"state": "tested-ahead", "tested": tested, "cmd": update_line(d, tested, integrity),
+                "note": f"plinth pin: {calls} {name(live)}; {target} was tested with "
                         f"{name(tested)}{by}{tag_gap}: {url}"}
     if status == "behind":
         return {"state": "live-ahead", "tested": tested,
-                "note": f"plinth pin: the workflows call {name(live)}, newer than {name(tested)} that {target} "
+                "note": f"plinth pin: {calls} {name(live)}, newer than {name(tested)} that {target} "
                         f"was tested with; the live pin is kept, never moved backwards{tag_gap}: {url}"}
     why = ("the two commits have diverged" if status == "diverged"
            else "offline or API error" if cmp in (ABSENT, ERROR) else "an unexpected compare response")
     return {"state": "unread", "tested": tested,
-            "note": f"plinth pin: the workflows call {live}; {target} was tested with {tested}, but the two "
+            "note": f"plinth pin: {calls} {live}; {target} was tested with {tested}, but the two "
                     f"were not compared ({why}); the live pin is kept"}
 
 
@@ -2023,6 +2070,12 @@ def check_sandbox() -> None:
 GH_HELPER = re.compile(r"!('[^']*/gh(\.exe)?'|([\w./~+@%:,-]*/)?gh(\.exe)?)[ \t]+auth[ \t]+git-credential")
 
 
+# glab's credential helper, as the GitLab door writes it (`!glab auth git-credential`).
+GLAB_HELPER = re.compile(r"!('[^']*/glab(\.exe)?'|([\w./~+@%:,-]*/)?glab(\.exe)?)[ \t]+auth[ \t]+git-credential")
+# The variables glab takes a token from, before its stored login.
+GLAB_TOKEN_VARS = ("GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "OAUTH_TOKEN")
+
+
 # One ~/.netrc token: a double-quoted one (group 1), a bare one (group 2), or a
 # quote left open (group 3).
 NETRC_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([^\s"]\S*)|("\S*)')
@@ -2033,22 +2086,24 @@ NETRC_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([^\s"]\S*)|("\S*)')
 # the repository's .git/config (#349).
 CONFIG_MASKS = ("GH_CONFIG_DIR", "XDG_CONFIG_HOME", "GIT_CONFIG", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
                 "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS")
+# The same for glab, whose configuration GLAB_CONFIG_DIR moves.
+GLAB_CONFIG_MASKS = ("GLAB_CONFIG_DIR",) + CONFIG_MASKS[1:]
 
 
-def github_https(url: str | None) -> bool | None:
+def host_https(url: str | None, host: str = "github.com") -> bool | None:
     """Does a config subsection (`credential.<url>.helper`) apply to a push to
-    https://github.com? git applies every entry whose URL matches the request,
+    https://<host> (github.com, or gitlab.com for #547)? git applies every entry whose URL matches the request,
     in config order, and an empty helper clears the list read so far
     (`credential_apply_config`, git 2.55.0; #349). True when it names the host
     and nothing narrower; None when it also names a path, a username, a port, a
     query or a fragment, which git applies to some requests or to none (counted, but its empty value is not taken
-    as clearing the list); False otherwise. A scheme-less `github.com` applies:
+    as clearing the list); False otherwise. A scheme-less host name applies:
     git matches it as a partial URL. Raises ValueError for a URL that cannot
     be parsed."""
     if url is None:
         return True
     u = urllib.parse.urlsplit(url if "://" in url else "https://" + url)
-    if u.scheme != "https" or (u.hostname or "") != "github.com":
+    if u.scheme != "https" or (u.hostname or "") != host:
         return False
     port = u.port   # raises ValueError for a port that is not a number
     if u.username is not None or port not in (None, 443) or u.path.strip("/") or u.query or u.fragment or "?" in url or "#" in url:
@@ -2056,8 +2111,8 @@ def github_https(url: str | None) -> bool | None:
     return True
 
 
-def netrc_github(words: list[str]) -> bool | None:
-    """Does ~/.netrc hold an entry for github.com, or a default one? A keyword
+def netrc_has_host(words: list[str], host: str = "github.com") -> bool | None:
+    """Does ~/.netrc hold an entry for host, or a default one? A keyword
     opens an entry (`machine <host>`, `default`) or takes one value inside it
     (`login`, `password`, `account`), so `default` counts only where a keyword
     stands. Any other sequence (a stray word, a keyword without its value,
@@ -2068,7 +2123,7 @@ def netrc_github(words: list[str]) -> bool | None:
         if w == "default":
             found, entry, i = True, True, i + 1
         elif w == "machine" and i + 1 < len(words):
-            found, entry, i = found or words[i + 1].lower() == "github.com", True, i + 2
+            found, entry, i = found or words[i + 1].lower() == host, True, i + 2
         elif w in ("login", "password", "account") and entry and i + 1 < len(words):
             i += 2
         else:
@@ -2083,7 +2138,7 @@ def none_found(what: str) -> None:
     result("INFO", f"{what}; no other credential found by these rules; best effort, see the guide's list")
 
 
-def check_credentials(root: Path) -> None:
+def check_credentials(root: Path, host: str = "github") -> None:
     """What on this machine can push to github.com besides the token the agent
     was given (#336). Measured with gh 2.101.0 and git 2.55.0: a second account
     stored in gh is one `gh auth switch` away, and a git helper other than gh's
@@ -2093,48 +2148,59 @@ def check_credentials(root: Path) -> None:
     verified; SSH is never read here, since the key that counts is the one
     GitHub accepts. `gh auth status` checks each stored token with GitHub, so
     this item goes online even under --no-network; offline, gh's answer is
-    what it is, and one that is not its JSON is not verified."""
-    env_tokens = [var for var in ("GH_TOKEN", "GITHUB_TOKEN") if os.environ.get(var)]
+    what it is, and one that is not its JSON is not verified.
+
+    On GitLab (#547) the same reads for gitlab.com: glab's token variables,
+    git helpers other than glab's, an Authorization header and ~/.netrc. The
+    login glab stores is not counted (its configuration is not read), a SKIP."""
+    gitlab = host == "gitlab"
+    name, cli = ("gitlab.com", "glab") if gitlab else ("github.com", "gh")
+    token_vars = GLAB_TOKEN_VARS if gitlab else ("GH_TOKEN", "GITHUB_TOKEN")
+    env_tokens = [var for var in token_vars if os.environ.get(var)]
     for var in env_tokens:
-        result("WARN", f"{var} is set in this environment: gh, and the git push it serves, use it before any stored login")
+        result("WARN", f"{var} is set in this environment: {cli}, and the git push it serves, use it before any stored login")
         result("INFO", f"  remove {var} where it is set (a shell startup file), then restart Claude Code")
 
     # Each points gh or git away from, or adds to, the configuration read by
     # default; that one is not read here, and the agent can unset the variable.
-    for var in CONFIG_MASKS:
+    for var in (GLAB_CONFIG_MASKS if gitlab else CONFIG_MASKS):
         if var in os.environ:   # set but empty counts: `GIT_CONFIG_GLOBAL=` reads no global file
             result("SKIP", f"{var} is set: the gh or git configuration read without it was not read, "
                    "and the agent can unset it")
 
-    env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
-    try:
-        r = subprocess.run(["gh", "auth", "status", "--hostname", "github.com", "--json", "hosts"],
-                           capture_output=True, text=True, timeout=30, check=False, env=env)
-        accounts = json.loads(r.stdout)["hosts"].get("github.com", []) if r.returncode == 0 else None
-    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError, AttributeError):
-        accounts = None
-    if not isinstance(accounts, list):
-        result("SKIP", "accounts stored in gh not verified: `gh auth status --json hosts` could not be read")
+    if gitlab:
+        result("SKIP", "the login glab stores for gitlab.com not verified: glab's configuration is not read here; "
+               "`glab auth status --hostname gitlab.com` shows it")
     else:
-        logins = [str(acct.get("login", "?")) if isinstance(acct, dict) else "?" for acct in accounts]
-        active = [str(acct.get("login", "?")) for acct in accounts if isinstance(acct, dict) and acct.get("active")]
-        if len(logins) > 1:
-            result("WARN", f"gh stores {len(logins)} accounts for github.com (active: {', '.join(active) or 'none'}): "
-                   "each is one `gh auth switch` away")
-            # Which account holds the agent's token is not known here, active or
-            # not (third-party review round 9 on #344): the person chooses.
-            result("INFO", "  keep only the account that holds the agent's token; log out each of the others:")
-            for login in logins:
-                result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
-        elif logins and env_tokens:
-            # The agent can unset the variable itself, and the stored login answers.
-            result("WARN", f"gh stores 1 account for github.com ({logins[0]}) besides {' and '.join(env_tokens)}: "
-                   "unsetting the variable uses it")
-            result("INFO", "  keep one: the agent's token stored in gh with the variable removed, or "
-                   f"gh auth logout --hostname github.com --user {shlex.quote(logins[0])}")
+        env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
+        try:
+            r = subprocess.run(["gh", "auth", "status", "--hostname", "github.com", "--json", "hosts"],
+                               capture_output=True, text=True, timeout=30, check=False, env=env)
+            accounts = json.loads(r.stdout)["hosts"].get("github.com", []) if r.returncode == 0 else None
+        except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError, AttributeError):
+            accounts = None
+        if not isinstance(accounts, list):
+            result("SKIP", "accounts stored in gh not verified: `gh auth status --json hosts` could not be read")
         else:
-            none_found(f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
-                       + (f": {logins[0]}" if logins else ""))
+            logins = [str(acct.get("login", "?")) if isinstance(acct, dict) else "?" for acct in accounts]
+            active = [str(acct.get("login", "?")) for acct in accounts if isinstance(acct, dict) and acct.get("active")]
+            if len(logins) > 1:
+                result("WARN", f"gh stores {len(logins)} accounts for github.com (active: {', '.join(active) or 'none'}): "
+                       "each is one `gh auth switch` away")
+                # Which account holds the agent's token is not known here, active or
+                # not (third-party review round 9 on #344): the person chooses.
+                result("INFO", "  keep only the account that holds the agent's token; log out each of the others:")
+                for login in logins:
+                    result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
+            elif logins and env_tokens:
+                # The agent can unset the variable itself, and the stored login answers.
+                result("WARN", f"gh stores 1 account for github.com ({logins[0]}) besides {' and '.join(env_tokens)}: "
+                       "unsetting the variable uses it")
+                result("INFO", "  keep one: the agent's token stored in gh with the variable removed, or "
+                       f"gh auth logout --hostname github.com --user {shlex.quote(logins[0])}")
+            else:
+                none_found(f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
+                           + (f": {logins[0]}" if logins else ""))
 
     g: subprocess.CompletedProcess[str] | None
     try:
@@ -2153,14 +2219,14 @@ def check_credentials(root: Path) -> None:
             section, _, rest = key.partition(".")
             sub = rest.rpartition(".")[0]
             try:
-                applies = github_https(sub or None)
+                applies = host_https(sub or None, name)
             except ValueError:
                 # Named by what follows its last `@` only: a user or password
                 # before it, with or without a scheme, is never printed.
                 shown = "…@" + sub.rpartition("@")[2] if "@" in sub else sub
                 shown = shown if shown.isprintable() else "a URL with a control character"
                 result("SKIP", f'git config [{section} "{shown}"] not verified: its URL could not be parsed, '
-                       "so whether it applies to github.com is unknown")
+                       f"so whether it applies to {name} is unknown")
                 continue
             if applies is False:
                 continue
@@ -2172,18 +2238,18 @@ def check_credentials(root: Path) -> None:
                 helpers = []
         # Named by its first word only: a `!` helper is a shell command that may carry the token itself.
         others = ["a `!` shell command" if h.startswith("!") else h.split()[0]
-                  for h in helpers if not GH_HELPER.fullmatch(h)]
+                  for h in helpers if not (GLAB_HELPER if gitlab else GH_HELPER).fullmatch(h)]
         if others:
-            result("WARN", f"git has {len(others)} credential helper{'s' if len(others) > 1 else ''} for github.com "
-                   f"besides gh's: {', '.join(others)} (`git config --show-origin --get-regexp 'credential.*helper'` "
+            result("WARN", f"git has {len(others)} credential helper{'s' if len(others) > 1 else ''} for {name} "
+                   f"besides {cli}'s: {', '.join(others)} (`git config --show-origin --get-regexp 'credential.*helper'` "
                    "shows where)")
-            result("INFO", "  one listed before gh's, or any while gh has no login, answers the push; one listed after "
-                   "gh's was seen storing the credential a push succeeded with. Delete its github.com entry, then clear the list with an "
-                   "empty `helper =` before gh's under `[credential \"https://github.com\"]` in ~/.gitconfig")
+            result("INFO", f"  one listed before {cli}'s, or any while {cli} has no login, answers the push; one listed after "
+                   f"{cli}'s was seen storing the credential a push succeeded with. Delete its {name} entry, then clear the list with an "
+                   f"empty `helper =` before {cli}'s under `[credential \"https://{name}\"]` in ~/.gitconfig")
         else:
-            none_found(f"git asks {'only gh' if helpers else 'no credential helper'} for github.com")
+            none_found(f"git asks {'only ' + cli if helpers else 'no credential helper'} for {name}")
         if headers:
-            result("WARN", "git config sends an Authorization header to github.com (http.extraHeader): "
+            result("WARN", f"git config sends an Authorization header to {name} (http.extraHeader): "
                    "`git config --show-origin --get-regexp extraheader` shows where")
 
     netrc = Path(os.environ.get("HOME") or Path.home()) / ".netrc"
@@ -2196,7 +2262,7 @@ def check_credentials(root: Path) -> None:
     # word without the quotes; a quote left open is not guessed at.
     tokens = [m for line in lines or [] for m in NETRC_TOKEN.finditer(line)]
     words = [re.sub(r"\\(.)", r"\1", m.group(1)) if m.group(1) is not None else m.group(2) or "" for m in tokens]
-    github = netrc_github(words)
+    github = netrc_has_host(words, name)
     if lines is None:
         result("SKIP", f"{netrc} not verified: it exists and could not be read")
     elif any(m.group(3) is not None for m in tokens):
@@ -2206,12 +2272,16 @@ def check_credentials(root: Path) -> None:
         result("SKIP", f"{netrc} not verified: a token sequence this reader does not place (a stray word, "
                "a keyword without its value, or macdef)")
     elif github:
-        result("WARN", f"{netrc} holds a login for github.com (or a default one): git over HTTPS uses it")
+        result("WARN", f"{netrc} holds a login for {name} (or a default one): git over HTTPS uses it")
     else:
-        none_found(f"no github.com login in {netrc}")
+        none_found(f"no {name} login in {netrc}")
 
-    result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
-           "say which keys push; see docs/how-to/run-a-project.md")
+    if gitlab:
+        result("SKIP", "SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, "
+               "say which keys push")
+    else:
+        result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
+               "say which keys push; see docs/how-to/run-a-project.md")
     result("INFO", "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file")
 
 
@@ -2243,7 +2313,8 @@ def main() -> int:
                          "or a pass line, to FILE (ci / floor-check's job summary)")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--credentials", action="store_true",
-                    help="also report what else on this machine can push to github.com: gh accounts, git helpers, ~/.netrc")
+                    help="also report what else on this machine can push to github.com (gitlab.com with --host gitlab): "
+                         "gh accounts, git helpers, ~/.netrc")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
@@ -2344,7 +2415,7 @@ def main() -> int:
     if a.sandbox:
         check_sandbox()
     if a.credentials:
-        check_credentials(root)
+        check_credentials(root, host)
 
     print(f"-- {fails} failed, {skips} not verified" + (f", {left} left to /plinth:floor-check" if left else ""))
     if a.verdicts:

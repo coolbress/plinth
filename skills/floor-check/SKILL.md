@@ -69,7 +69,13 @@ read from the root and reported missing although they exist one level down.
 
 A checkout rendered with `host: gitlab` (its `.copier-answers.yml` says so,
 or pass `--host gitlab`) is read as a GitLab project. `gh repo view` finds no
-GitHub repository there, so run it without `--repo`. In place of `gh`'s denies,
+GitHub repository there, so run it without `--repo`. `--credentials` reads
+gitlab.com there: `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN` or `OAUTH_TOKEN` set,
+git helpers for gitlab.com other than glab's, an `Authorization` header and a
+gitlab.com login in `~/.netrc`; the login glab itself stores is a SKIP. Relay
+them as on GitHub. The template drift item's `copier update` line carries
+the include's commit and its checksum together (`plinth_sha` and
+`plinth_gitlab_integrity`). In place of `gh`'s denies,
 the agent settings must deny `glab`'s token and config reads. The issue and
 merge request templates are under `.gitlab/`. Dependabot does not run there,
 which is an INFO. In place of the `ci` job, the top-level include of

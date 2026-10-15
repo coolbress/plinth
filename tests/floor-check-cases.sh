@@ -1905,5 +1905,69 @@ gl "a yaml.py in the checkout is not imported in place of PyYAML" "printf 'print
 grep -q PLANTED <<<"$out" && bad "the planted yaml.py ran" || ok "the planted yaml.py did not run"
 fi
 
+echo "-- --credentials on a GitLab checkout reads gitlab.com (#547 review)"
+glc="$work/glcred"; mkdir -p "$glc/bin" "$glc/home"; ln -s ../gitconfig "$glc/home/.gitconfig"
+glcred() { # extra env assignments as arguments; sets out
+  out="$(env -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN -u GLAB_CONFIG_DIR -u GH_TOKEN -u GITHUB_TOKEN -u GIT_CONFIG \
+    -u GH_CONFIG_DIR -u XDG_CONFIG_HOME -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    HOME="$glc/home" GIT_CONFIG_NOSYSTEM=1 "$@" python3 "$checker" --root "$glgood" --no-network --credentials 2>&1)"
+}
+printf '[credential "https://gitlab.com"]\n\thelper =\n\thelper = !glab auth git-credential\n[credential "https://github.com"]\n\thelper = osxkeychain\n' > "$glc/gitconfig"
+printf 'machine github.com login me password x\n' > "$glc/home/.netrc"
+glcred
+has "only glab's helper for gitlab.com: an INFO, not a PASS" "INFO  git asks only glab for gitlab\.com; no other credential found"
+has "a github.com login in ~/.netrc is not gitlab.com's" "INFO  no gitlab\.com login in "
+has "the login glab stores is a SKIP" "SKIP  the login glab stores for gitlab\.com not verified"
+has "SSH points at GitLab's keys" "SKIP  SSH keys not verified here: GitLab's Preferences"
+lacks "a helper for github.com alone is not reported on GitLab" "WARN"
+lacks "gh is not asked about on GitLab" "gh stores|accounts stored in gh"
+glcred GITLAB_TOKEN=x
+has "GITLAB_TOKEN set is a WARN" "WARN  GITLAB_TOKEN is set in this environment: glab"
+glcred GLAB_CONFIG_DIR=/elsewhere
+has "GLAB_CONFIG_DIR set is a SKIP" "SKIP  GLAB_CONFIG_DIR is set"
+printf '[credential]\n\thelper = osxkeychain\n[credential "https://gitlab.com"]\n\thelper = !glab auth git-credential\n' > "$glc/gitconfig"
+glcred
+has "another helper that applies to gitlab.com is a WARN" "WARN  git has 1 credential helper for gitlab\.com besides glab's: osxkeychain"
+printf 'machine gitlab.com login me password x\n' > "$glc/home/.netrc"
+glcred
+has "a gitlab.com login in ~/.netrc is a WARN" "WARN  .*\.netrc holds a login for gitlab\.com"
+
+echo "-- the update line on GitLab carries the include's checksum (#547 review)"
+glold="$work/glold"; rm -rf "$glold"; cp -R "$glgood" "$glold"
+sed -i.bak 's/^_commit: .*/_commit: v1.0.0/' "$glold/.copier-answers.yml"
+glint="L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+case "$printed" in *"--data plinth_sha=$glsha --data plinth_gitlab_integrity=$glint") [ "$rc" = 0 ] && ok "the live pin and its checksum from .gitlab-ci.yml" || bad "update line rc=$rc" ;;
+  *) bad "the GitLab update line: '$printed'" ;; esac
+glci "include:
+  - remote: $glurl" > "$glold/.gitlab-ci.yml"
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+[ "$rc" = 1 ] && grep -q "not one \`remote:\` line followed by its \`integrity:\` line" <<<"$printed" \
+  && ok "an include without a checksum gives no update line, saying why" || bad "no checksum: rc=$rc '$printed'"
+glci "include:
+  - remote: https://raw.githubusercontent.com/coolbress/plinth/v1.16.0/gitlab/python-ci.yml
+    integrity: sha256-$glint" > "$glold/.gitlab-ci.yml"
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+[ "$rc" = 1 ] && grep -q "is at v1.16.0, not a full commit SHA" <<<"$printed" && ok "an include at a tag gives no update line" || bad "tag: rc=$rc '$printed'"
+cp "$glgood/.gitlab-ci.yml" "$glold/.gitlab-ci.yml"
+glpin_api() { # <plinth_gitlab_integrity default or "-"> → $work/api-glpin, the tested pin ahead of the live one
+  local d="$work/api-glpin"; rm -rf "$d"; mkdir -p "$d/repos/coolbress/plinth-template/contents" "$d/repos/coolbress/plinth/compare"
+  { printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$tested"
+    [ "$1" = - ] || printf 'plinth_gitlab_integrity:\n  type: str\n  default: "%s"\n' "$1"; } \
+    | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$d/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+  jq -n '{status: "ahead", ahead_by: 2, behind_by: 0}' > "$d/repos/coolbress/plinth/compare/$glsha...$tested.json"
+  printf '[]' > "$d/repos/coolbress/plinth/tags?per_page=100.json"
+}
+newint="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+glpin_api "$newint"
+printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command --plinth-pin tested 2>"$work/glpin-err")"; rc=$?
+case "$printed" in *"--data plinth_sha=$tested --data plinth_gitlab_integrity=$newint") [ "$rc" = 0 ] && ok "the tested pin moves with the checksum that tag was tested with" || bad "tested rc=$rc" ;;
+  *) bad "the tested GitLab line: '$printed'"; sed 's/^/        /' "$work/glpin-err" ;; esac
+grep -q "plinth pin: the include is at $glsha" "$work/glpin-err" && ok "the note says the include, not the workflows" || { bad "the GitLab note"; sed 's/^/        /' "$work/glpin-err"; }
+glpin_api -
+printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command --plinth-pin tested 2>"$work/glpin-err")"; rc=$?
+[ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "its checksum was not read" "$work/glpin-err" \
+  && ok "no tested checksum: no tested line, the live pin kept" || { bad "tested without checksum: rc=$rc '$printed'"; sed 's/^/        /' "$work/glpin-err"; }
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
