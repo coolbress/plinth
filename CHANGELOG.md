@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-10-16
+
+This release turns plinth towards the reader it now names, a beginner engineer or a non-engineer running a project through an AI agent (#514). A new repository's agent explains its work for that reader by default: plinth-template v1.14.0 turns on an output style that gives a decision report at a merge, a template update or a failure, and one recommended option before any choice (#555). `/plinth:template-update` no longer leaves a conflict as bare markers: it recommends a resolution per file and applies it only on the person's word (#556). The guidance is designed for this reader and not yet tried by anyone but its author.
+
+tested with plinth-template v1.14.0
+
 ### Changed
 
 - plinth now says who it is for: a beginner engineer or a non-engineer
@@ -2823,7 +2829,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.19.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/coolbress/plinth/releases/tag/v1.20.0
 [1.19.0]: https://github.com/coolbress/plinth/releases/tag/v1.19.0
 [1.18.0]: https://github.com/coolbress/plinth/releases/tag/v1.18.0
 [1.17.2]: https://github.com/coolbress/plinth/releases/tag/v1.17.2
