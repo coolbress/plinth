@@ -11,8 +11,9 @@ from stay in the lab.
   access can. The checks, and what each asserts:
   [docs/reference/required-checks.md](docs/reference/required-checks.md).
 - **host**: the service that holds the repository and enforces the wall
-  outside the agent, by refusing a merge while a required check is red. Today
-  GitHub.com; GitLab.com Free is specified in #353 and not supported. plinth
+  outside the agent, by refusing a merge while a required check is red:
+  GitHub.com, or GitLab.com (#353), where Free refuses a merge while the
+  pipeline as a whole is red, with no required checks by name. plinth
   configures the host; the host refuses the merge.
 - **door**: `/plinth:new-project`. Creates a repository, renders the box, raises
   the wall, opens the first pull request. If a step it cannot go on without
