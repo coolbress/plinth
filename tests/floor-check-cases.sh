@@ -1950,6 +1950,13 @@ glci "include:
 printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
 [ "$rc" = 1 ] && grep -q "is at v1.16.0, not a full commit SHA" <<<"$printed" && ok "an include at a tag gives no update line" || bad "tag: rc=$rc '$printed'"
 cp "$glgood/.gitlab-ci.yml" "$glold/.gitlab-ci.yml"
+sed -i.bak '/^host:/d' "$glold/.copier-answers.yml"
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --host gitlab --print-update-command 2>&1)"; rc=$?
+case "$printed" in *"--data plinth_gitlab_integrity=$glint") [ "$rc" = 0 ] && ok "--host gitlab without the answer: the update line reads the include" || bad "--host gitlab update rc=$rc" ;;
+  *) bad "--host gitlab without the answer: '$printed'" ;; esac
+out="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --host gitlab --no-network 2>&1)"
+has "--host gitlab without the answer: the drift item carries the GitLab line" "INFO    uvx .*--data plinth_gitlab_integrity=$glint"
+printf 'host: gitlab\n' >> "$glold/.copier-answers.yml"
 glpin_api() { # <plinth_gitlab_integrity default or "-"> → $work/api-glpin, the tested pin ahead of the live one
   local d="$work/api-glpin"; rm -rf "$d"; mkdir -p "$d/repos/coolbress/plinth-template/contents" "$d/repos/coolbress/plinth/compare"
   { printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$tested"

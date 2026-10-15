@@ -267,7 +267,7 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
         check_agent_settings(root, host)
         check_doc_links(root)
         check_tracked_dotenv(root)
-        check_template_drift(root, network)
+        check_template_drift(root, network, host)
         return
 
     forms = root / ".github" / "ISSUE_TEMPLATE"
@@ -318,7 +318,7 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
     check_doc_links(root)
     check_tracked_dotenv(root)
     check_action_pins(root)
-    check_template_drift(root, network)
+    check_template_drift(root, network, host)
 
 
 def md_front_matter_name(text: str) -> str:
@@ -1080,7 +1080,7 @@ def resolve_gitlab_pin(root: Path) -> tuple[str | None, str | None, str | None]:
     return sha, integrity, None
 
 
-def template_drift(root: Path) -> dict:
+def template_drift(root: Path, host: str | None = None) -> dict:
     """Where this repository stands against the template tag plinth is
     tested with, and the one `copier update` command that moves it there
     (#219). Offline. The drift item below prints it; --print-update-command
@@ -1088,7 +1088,9 @@ def template_drift(root: Path) -> dict:
     command that runs is the one this item prints, never a second
     construction of it. `state` is skip, ahead, current or behind; `reason`
     says why a skip was not verified; `cmd` is set only when behind and the
-    plinth pin is established, and `why_not` says why it is not."""
+    plinth pin is established, and `why_not` says why it is not. `host` is
+    the host the run resolved (--host first, then the answers); without it,
+    the answers' `host:` (#547 review)."""
     pin = new_project_pin()
     if pin is None:
         return {"state": "skip", "reason": "scripts/new-project.sh not found beside the checker, or unreadable"}
@@ -1121,7 +1123,7 @@ def template_drift(root: Path) -> dict:
         return {**out, "state": "current"}
 
     integrity = None
-    if answers.get("host") == "gitlab":
+    if (host or answers.get("host")) == "gitlab":
         sha, integrity, why_not = resolve_gitlab_pin(root)
     else:
         sha, why_not = resolve_plinth_pin(root)
@@ -1223,14 +1225,14 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
                     f"were not compared ({why}); the live pin is kept"}
 
 
-def check_template_drift(root: Path, network: bool) -> None:
+def check_template_drift(root: Path, network: bool, host: str | None = None) -> None:
     """#219 stage 1: has the template plinth is tested with today moved past
     the tag this repository was rendered from? Reports the drift and an
     update command; runs nothing that writes. A PASS means only that the
     recorded tag is the target tag -- not that this repository's own render
     matches it file for file: another archetype, inherited forms or a
     hand-made edit can mean a changed template file was never rendered here."""
-    d = template_drift(root)
+    d = template_drift(root, host)
     if d["state"] == "skip":
         result("SKIP", f"template drift not verified ({d['reason']})")
         return
@@ -1285,13 +1287,13 @@ def check_template_drift(root: Path, network: bool) -> None:
         result("INFO", f"  {choice['cmd']}")
 
 
-def print_update_command(root: Path, plinth_pin: str = "live", network: bool = True) -> int:
+def print_update_command(root: Path, plinth_pin: str = "live", network: bool = True, host: str | None = None) -> int:
     """--print-update-command: the drift item's command line alone on
     stdout, exit 0; otherwise why there is none on stderr, exit 1. With
     --plinth-pin tested, the line with the tested pin, and the comparison
     on stderr whether or not there is one: --plinth-pin tested never prints
     a line that would move the pin backwards or past an unread comparison."""
-    d = template_drift(root)
+    d = template_drift(root, host)
     if d.get("cmd") and plinth_pin == "tested":
         choice = plinth_pin_choice(d, network)
         print(choice["note"], file=sys.stderr)
@@ -2343,7 +2345,7 @@ def main() -> int:
     if a.plinth_pin != "live" and not a.print_update_command:
         ap.error("--plinth-pin needs --print-update-command")
     if a.print_update_command:
-        return print_update_command(root, a.plinth_pin, not a.no_network)
+        return print_update_command(root, a.plinth_pin, not a.no_network, a.host)
     project = (root / a.project).resolve()
     if project != root and root not in project.parents:
         # Every item reads one repository: .github/, AGENTS.md, the ruleset at
