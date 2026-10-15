@@ -52,6 +52,14 @@ pull requests and have no tag.
   is a FAIL, since nothing is inherited from an owner's `.github` repository
   there.
 
+### Changed
+
+- The docs name the GitLab path (#545, part of #353): README's support
+  scope (GitLab.com Free and up; not Self-Managed or Dedicated), a concepts
+  section on what GitLab Free's wall holds and what it cannot, a tutorial
+  section for `--host gitlab`, and the GitLab job names in the required
+  checks reference.
+
 ### Fixed
 
 - `PLINTH_FIRST_PR_WAIT` is read as base 10 by both doors of

@@ -64,7 +64,10 @@ they are red.
 
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
-> ones get a read-only `floor-check` · **Claude Code 2.1.274 or newer** as the
+> ones get a read-only `floor-check` · GitLab.com projects too, Free and up,
+> with `/plinth:new-project <name> --host gitlab` and `glab` 1.122.0 or newer:
+> a lower wall, no required checks by name
+> ([about GitLab](docs/explanation/concepts.md#about-gitlab)) · **Claude Code 2.1.274 or newer** as the
 > harness (CI installs plinth on that version and on the stable channel; the
 > user tasks ran on 2.1.282 and 2.1.283; skills follow the Agent Skills
 > format and may load elsewhere, but only Claude Code is tested) · macOS / Linux (Windows via WSL) · tools: `claude`,
@@ -79,7 +82,8 @@ they are red.
 > protection only where GitHub Code Security and Secret Protection are
 > enabled; the door names each part it left out and what stands in its place
 > ([about private repositories](docs/explanation/concepts.md#about-private-repositories)).
-> Other mismatches warn and continue.
+> Other mismatches warn and continue. GitLab Self-Managed and GitLab Dedicated
+> are not supported.
 
 ## Install, in detail
 

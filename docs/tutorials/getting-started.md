@@ -127,6 +127,28 @@ the branch and push; the checks run again.
 When everything is green, **Squash and merge**. That is the whole journey:
 install, create, merge.
 
+## On GitLab instead
+
+The same walk on GitLab.com, for a project that must stay private on a free
+plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
+
+- Install `glab` 1.122.0 or newer (`brew install glab` on macOS), and log in
+  with `glab auth login --hostname gitlab.com --web --git-protocol https`.
+  The browser login keeps the token in the keyring; a personal access token
+  needs the `api` scope.
+- Type `/plinth:new-project my-app --host gitlab`. The project is created
+  private under your GitLab username, or under `group/my-app` where you are a
+  Maintainer or above. Rollback, which deletes the project if a later step
+  fails, needs the Owner role.
+- Its last lines name the first merge request, the first pipeline on `main`,
+  and the wall. One line says what GitLab Free cannot hold: a merge request
+  that drops a job still merges when what is left passes.
+- Wait for the merge request's pipeline to pass, then merge it with the
+  command in the project's `CONTRIBUTING.md`, which squashes it with the
+  description as the commit body.
+- Later, `/plinth:floor-check` in the project reads the wall back through
+  `glab`.
+
 ## Next
 
 - [Run a project](../how-to/run-a-project.md): the loop from an idea to a
