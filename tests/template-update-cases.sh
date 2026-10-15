@@ -199,15 +199,33 @@ run --finish "$wt"
 if [ "$rc" = 3 ] && ! grep -q "pr create" "$work/gh.log" && grep -q "CONTRIBUTING.md" <<<"$out"
 then ok "markers staged with git add are still a conflict: stops, opens nothing"
 else bad "finish with staged markers (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A resolution named for a file copier did not leave in conflict is refused
+# before anything is committed (#556).
+reset_logs
+run --finish "$wt" --resolved AGENTS.md "template's side, on the person's word"
+if [ "$rc" = 2 ] && ! grep -q "pr create" "$work/gh.log" && grep -q "AGENTS.md" <<<"$out" \
+   && [ "$(git -C "$wt" rev-parse HEAD)" = "$base" ]
+then ok "--resolved naming a file that was not in conflict is refused: nothing committed, nothing opened"
+else bad "resolved for a non-conflict (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A resolution stated while a marker is still there does not let it through:
+# the refusal on anything unresolved stays the script's.
+reset_logs
+run --finish "$wt" --resolved CONTRIBUTING.md "template's side, on the person's word"
+if [ "$rc" = 3 ] && ! grep -q "pr create" "$work/gh.log"
+then ok "a stated resolution does not finish while the marker remains: exit 3, opens nothing"
+else bad "resolved with markers left (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 printf '# Contributing\nresolved by hand\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add CONTRIBUTING.md
 printf '# Agents\nedited after the update\n' > "$wt/AGENTS.md"
 reset_logs
-run --finish "$wt"
+run --finish "$wt" --resolved CONTRIBUTING.md "repository's side, applied by the agent on the person's word"
 body="$(cat "$work/gh.log.body" 2>/dev/null)"
 if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -A2 -i "resolved by a person" <<<"$body" | grep -q "^- CONTRIBUTING.md" \
    && grep -A3 -i "resolved by a person" <<<"$body" | sed -n 4p | grep -q '^$'
 then ok "once resolved, --finish opens the draft and the description names the file a person resolved, as its own list"
 else bad "finish after resolving (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
+if grep -qxF -- "- CONTRIBUTING.md: repository's side, applied by the agent on the person's word" <<<"$body"
+then ok "the description says how each conflict was resolved: which side, on whose word"
+else bad "resolution not in the description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
 if grep -A2 -i "edited by a person" <<<"$body" | grep -q "^- AGENTS.md"
 then ok "a cleanly merged file a person changed afterwards is named as such, not as merged cleanly"
 else bad "edited-after list"; printf '%s\n' "$body" | sed 's/^/        /'; fi
@@ -410,6 +428,18 @@ out="$(cd "$repo" && MOCK_COPIER=rej PATH="$work/bin:$PATH" GH_LOG="$work/gh.log
 if [ "$rc" = 3 ] && grep -q "CONTRIBUTING.md.rej" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
 then ok "a .rej file is a conflict: stops, names it, opens nothing"
 else bad ".rej (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+wt="$(wt_of rej)"
+reset_logs
+run --finish "$wt" --resolved CONTRIBUTING.md.rej "the template's side, applied by the agent on the person's word"
+if [ "$rc" = 3 ] && ! grep -q "pr create" "$work/gh.log"
+then ok "a stated resolution does not finish while the .rej remains: exit 3, opens nothing"
+else bad ".rej resolved but present (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+rm "$wt/CONTRIBUTING.md.rej"
+reset_logs
+run --finish "$wt"
+if [ "$rc" = 0 ] && grep -qxF -- "- CONTRIBUTING.md.rej: the template's side, applied by the agent on the person's word" "$work/gh.log.body"
+then ok "a resolution stated on an earlier --finish is kept in the description"
+else bad ".rej finish (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$work/gh.log.body" 2>/dev/null | sed 's/^/        /'; fi
 
 # ── copier fails ────────────────────────────────────────────────────────
 fixture broken; reset_logs

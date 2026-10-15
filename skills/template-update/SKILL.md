@@ -1,6 +1,6 @@
 ---
 name: template-update
-description: Apply the plinth-template update /plinth:floor-check reports as a draft pull request, from a worktree branched off the verified default branch. User-invoked only; it pushes a branch and opens a pull request, and it leaves every conflict for a person.
+description: Apply the plinth-template update /plinth:floor-check reports as a draft pull request, from a worktree branched off the verified default branch. User-invoked only; it pushes a branch and opens a pull request, and it resolves a conflict only on the person's word for that file.
 disable-model-invocation: true
 ---
 
@@ -58,23 +58,44 @@ the plan; then show the plan again and ask again.
 - **Exit 0**: it made one commit in the worktree, pushed that branch, and
   opened a draft pull request. Show the URL. Its checks start now and nothing
   waited for them. Do not wait for them, mark it ready or merge it.
-- **Exit 3, a conflict**: copier left files a person has to resolve. The
+- **Exit 3, a conflict**: copier left files that need a resolution. The
   script names them and the worktree, and nothing is pushed yet. Show the list
-  and the path. Do not resolve a conflict yourself and do not pick a side, not
-  even one that looks obvious: the user resolves it, in the worktree (remove
-  every marker, delete each `.rej` once applied, `git add`). If they ask for
-  help, show both sides and let them decide. When they say it is done, run
-  the `--finish` line the script printed, adding the same `--assisted-by`.
-  If anything is still unresolved it stops again with exit 3 and opens
-  nothing.
+  and the path, then recommend, and resolve only on the user's word:
+  1. For each file the script named, read it in the worktree (the markers,
+     or the `.rej` beside its file) and say in plain words what the template
+     changed and what this repository changed. Recommend one resolution:
+     the template's side, the repository's side, or a combination you name
+     (which lines from each). Give its reason in one sentence.
+  2. Wait for the user's word on each file. Their word names the file, or
+     answers a question about that one file: "yes to CONTRIBUTING.md",
+     "the template's side for both". Silence, or a general "go ahead" or
+     "fix it" that does not name the files, is not a word on any of them:
+     ask again, file by file. They may choose another side than the one you
+     recommended, or resolve a file themselves; either is their word.
+  3. Apply exactly the resolution they chose, for that file only, in the
+     worktree: remove every marker, apply each `.rej` by hand and delete it,
+     `git add` the file. Nothing else in the worktree changes.
+  4. When every file has its word and is resolved, run the `--finish` line
+     the script printed, adding the same `--assisted-by` and one
+     `--resolved <path> "<how>"` per file, its path exactly as the script
+     named it (for a `.rej`, the `.rej` path).
+     `<how>` says which side and on whose word, for example
+     `--resolved CONTRIBUTING.md "the template's side, applied by the agent on the user's word"`,
+     or `"resolved by the user"` for a file they resolved themselves.
+
+  If anything is still unresolved, `--finish` stops again with exit 3 and
+  opens nothing; show what it names and go back to step 1 for those files.
+  `--resolved` is a record for the description, not a check, so it never
+  lets an unresolved file through.
 - **Exit 1**: it stopped. Show the message; it names what to do. When the
   push or the pull request failed, that is the same `--finish` line again,
   which pushes the commit already made and does not make a second one. Do not
   work around it: do not run copier, `git push` or `gh pr create` yourself.
 
 The pull request's description says which plinth pin was chosen and names
-both SHAs, and lists what copier merged cleanly, what a
-person resolved, and anything else a person changed after the update. It
+both SHAs, and lists what copier merged cleanly, each conflicted file with
+how it was resolved (from `--resolved`), and anything else a person changed
+after the update. It
 uses the two headings of the pull-request template plinth-template renders;
 it does not read a template this repository or its owner changed. If theirs
 differs, tell the user, and leave the rewording to them. The
