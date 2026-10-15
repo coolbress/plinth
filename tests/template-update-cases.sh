@@ -158,7 +158,7 @@ body="$(cat "$work/gh.log.body" 2>/dev/null)"
 if grep -q "^- AGENTS.md" <<<"$body" && grep -q "^- .copier-answers.yml" <<<"$body" && grep -qF "$want" <<<"$body"
 then ok "the description lists what merged cleanly and the command that ran"
 else bad "description (merged cleanly)"; printf '%s\n' "$body" | sed 's/^/        /'; fi
-if grep -A2 -i "resolved by a person" <<<"$body" | grep -q "^- none"; then ok "the description says nothing was resolved by a person"
+if grep -A2 -i "left in conflict by copier" <<<"$body" | grep -q "^- none"; then ok "the description says copier left no conflict"
 else bad "description (resolved: none)"; printf '%s\n' "$body" | sed 's/^/        /'; fi
 if [ "$(tail -n 1 <<<"$body")" = "Assisted-by: Claude:claude-test-1" ]; then ok "the description ends with the Assisted-by line it was given"
 else bad "Assisted-by last line: '$(tail -n 1 <<<"$body")'"; fi
@@ -219,8 +219,8 @@ printf '# Agents\nedited after the update\n' > "$wt/AGENTS.md"
 reset_logs
 run --finish "$wt" --resolved CONTRIBUTING.md "repository's side, applied by the agent on the person's word"
 body="$(cat "$work/gh.log.body" 2>/dev/null)"
-if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -A2 -i "resolved by a person" <<<"$body" | grep -q "^- CONTRIBUTING.md" \
-   && grep -A3 -i "resolved by a person" <<<"$body" | sed -n 4p | grep -q '^$'
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -A2 -i "left in conflict by copier" <<<"$body" | grep -q "^- CONTRIBUTING.md" \
+   && grep -A3 -i "left in conflict by copier" <<<"$body" | sed -n 4p | grep -q '^$'
 then ok "once resolved, --finish opens the draft and the description names the file a person resolved, as its own list"
 else bad "finish after resolving (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
 if grep -qxF -- "- CONTRIBUTING.md: repository's side, applied by the agent on the person's word" <<<"$body"
@@ -402,6 +402,12 @@ reset_logs
 out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" bash -c "$line" 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log"; then ok "the printed --finish line runs as printed under a directory with a space"
 else bad "spaced path (rc=$rc): '$line'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Finished as printed, with no --resolved: the description claims no side
+# and no one's word for it (Codex review on #558).
+if grep -qxF -- "- CONTRIBUTING.md (how it was resolved was not stated)" "$work/gh.log.body" \
+   && ! grep -qi "on a person's word" "$work/gh.log.body"
+then ok "a conflict finished without --resolved is listed as not stated, with no claim of anyone's word"
+else bad "unstated resolution"; sed 's/^/        /' "$work/gh.log.body" 2>/dev/null; fi
 
 # ── only the recorded update branch is finished ─────────────────────────
 fixture other; reset_logs
