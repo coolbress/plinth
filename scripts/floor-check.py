@@ -1685,8 +1685,9 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
 
     # Every rule whose name or wildcard pattern matches the branch applies, and
     # GitLab takes the most permissive of them (#548 review): a `*` rule that
-    # lets Developers push opens `main` whatever its own rule says. Group-level
-    # protected branches (Premium) are not read.
+    # lets Developers push opens `main` whatever its own rule says. On Premium
+    # the list carries the parent group's rules too (`inherited: true`), and
+    # they count the same way.
     rules = gl_api(f"projects/{enc}/protected_branches?per_page=100", network, paginate=True)
     if not isinstance(rules, list):
         result("SKIP", f"the protection of {branch} not verified: protected branches are not readable with this login "
@@ -1735,8 +1736,8 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
         ({"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False},
          f"the merge checks of {repo} let a merge request merge without a green pipeline",
          f"{repo} merges only on a green pipeline (\"Pipelines must succeed\" on, skipped pipelines not counted)",
-         f"glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -F only_allow_merge_if_pipeline_succeeds=true "
-         "-F allow_merge_on_skipped_pipeline=false", ""),
+         (f"glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -F only_allow_merge_if_pipeline_succeeds=true "
+          "-F allow_merge_on_skipped_pipeline=false"), ""),
         ({"squash_option": "always", "merge_method": "ff"},
          f"{repo} merges other than squash and fast-forward",
          f"{repo} squashes every merge request and fast-forwards",
