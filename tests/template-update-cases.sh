@@ -443,8 +443,8 @@ else bad ".rej resolved but present (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/ 
 rm "$wt/CONTRIBUTING.md.rej"
 reset_logs
 run --finish "$wt"
-if [ "$rc" = 0 ] && grep -qxF -- "- CONTRIBUTING.md.rej: the template's side, applied by the agent on the person's word" "$work/gh.log.body"
-then ok "a resolution stated on an earlier --finish is kept in the description"
+if [ "$rc" = 0 ] && grep -qxF -- "- CONTRIBUTING.md.rej (how it was resolved was not stated)" "$work/gh.log.body"
+then ok "a resolution stated while the file was still in conflict is not kept: the side may change before it is resolved"
 else bad ".rej finish (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$work/gh.log.body" 2>/dev/null | sed 's/^/        /'; fi
 
 # ── copier fails ────────────────────────────────────────────────────────

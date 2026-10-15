@@ -84,7 +84,9 @@ the plan; then show the plan again and ask again.
      or `"resolved by the user"` for a file they resolved themselves.
 
   If anything is still unresolved, `--finish` stops again with exit 3 and
-  opens nothing; show what it names and go back to step 1 for those files.
+  opens nothing and keeps none of the `--resolved` it was given; show what
+  it names, go back to step 1 for those files, and give every `--resolved`
+  again on the run that finishes.
   `--resolved` is a record for the description, not a check, so it never
   lets an unresolved file through.
 - **Exit 1**: it stopped. Show the message; it names what to do. When the

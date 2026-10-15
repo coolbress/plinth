@@ -120,10 +120,8 @@ finish() { # <worktree>
   [ -n "$branch" ] && [ "$on" = "$branch" ] && [ "$branch" != "$default" ] \
     || die "the worktree is on '$on', not the update branch '$branch'; nothing committed or pushed. Switch back: git -C $wt switch $branch"
 
-  # How each conflict was resolved, as stated on this run or an earlier one
-  # (a --finish run again after a failed push keeps what the first said).
-  # Only a file copier left in conflict: anything else is a usage error,
-  # before anything is committed.
+  # How each conflict was resolved: only a file copier left in conflict;
+  # anything else is a usage error, before anything is committed.
   local i
   for ((i = 0; i < ${#resolutions[@]}; i += 2)); do
     grep -qxF "conflict=${resolutions[i]}" "$sf" || {
@@ -132,9 +130,6 @@ finish() { # <worktree>
       exit 2
     }
   done
-  for ((i = 0; i < ${#resolutions[@]}; i += 2)); do
-    printf 'resolved=%s\t%s\n' "${resolutions[i]}" "${resolutions[i+1]}" >> "$sf"
-  done
 
   left="$(conflicts_in "$wt" "$base")"
   if [ -n "$left" ]; then
@@ -142,8 +137,15 @@ finish() { # <worktree>
     indent <<<"$left"
     echo "Resolve each (remove every conflict marker, delete each .rej once applied), git add it, then run:"
     echo "  $(q "$0") --finish $(q "$wt")"
+    [ ${#resolutions[@]} = 0 ] || echo "(--resolved was not kept: state it again on that run.)"
     exit 3
   fi
+  # Kept only once nothing is left: a statement made while a file was still
+  # in conflict may not be the side it ends on (Codex review on #558). A
+  # --finish run again after a failed push keeps what this one said.
+  for ((i = 0; i < ${#resolutions[@]}; i += 2)); do
+    printf 'resolved=%s\t%s\n' "${resolutions[i]}" "${resolutions[i+1]}" >> "$sf"
+  done
 
   git -C "$wt" add -A || die "git add failed in $wt"
   # A commit already made here is an earlier --finish whose push or pull
