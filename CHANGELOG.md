@@ -11,6 +11,29 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:floor-check` reads a GitLab checkout as one (#543, part of #353).
+  The host comes from `--host gitlab` or from `host: gitlab` in
+  `.copier-answers.yml`. On a project rendered with `host: gitlab`, three
+  GitHub-only FAILs are gone (Dependabot, and `gh`'s two denies). In their
+  place:
+  - the agent settings must deny `glab`'s token and config reads;
+  - `.gitlab/` issue and merge request templates must be present;
+  - a backend or data-ml project's `.gitlab-ci.yml` must carry `docker-image`;
+  - the top-level include of `.gitlab-ci.yml` is judged by the GitLab
+    pipeline's own `floor-check` rule, run from `gitlab/python-ci.yml`.
+    Without PyYAML, that rule installs the job's PyYAML by hash from PyPI
+    into a temporary directory (CPython 3.11 to 3.14). With `--no-network`
+    and no PyYAML, the include is not verified.
+
+  On GitLab, `--credentials` reads gitlab.com: glab's token variables, git
+  helpers other than glab's, an `Authorization` header and `~/.netrc`. The
+  template drift item's `copier update` line carries the include's commit
+  and checksum together, since a commit moved without its checksum fails
+  every pipeline. The project's settings on GitLab are not read yet (#544).
+  A checkout without a host reads as before.
+
 ### Fixed
 
 - `PLINTH_FIRST_PR_WAIT` is read as base 10 by both doors of

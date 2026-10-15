@@ -5,8 +5,11 @@ beside the GitHub workflow `python-ci.yml`. It is the first part of a GitLab
 path on GitLab.com Free ([#353](https://github.com/coolbress/plinth/issues/353)).
 It has run green on a GitLab.com Free private project, on the default branch
 and on a merge request ([measured](#measured-on-gitlabcom-free)).
-`/plinth:new-project` and `/plinth:floor-check` do not handle GitLab yet, and
-plinth-template does not render it yet.
+plinth-template renders a project that includes it (`host: gitlab`, from
+v1.13.0), and `/plinth:new-project <name> --host gitlab` creates one.
+`/plinth:floor-check` reads a GitLab checkout: its files and this include,
+judged by this pipeline's own `floor-check` rule. It does not read the
+project's settings on GitLab yet ([#544](https://github.com/coolbress/plinth/issues/544)).
 
 ## Include it
 

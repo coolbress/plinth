@@ -1824,5 +1824,157 @@ from_api "another local workflow is a FAIL even for coolbress/plinth" \
 from_api "the same file under any other --repo is a FAIL" "$own" "$own" \
   "FAIL  .*calls \./\.github/workflows/plinth-ci\.yml"
 
+echo "-- a GitLab checkout is read as one (#543)"
+# The good backend fixture as plinth-template v1.13.0 renders it for
+# host: gitlab: no .github/, glab's denies, .gitlab/ templates, the include.
+glgood="$work/glgood"; rm -rf "$glgood"; cp -R "$good" "$glgood"; rm -rf "$glgood/.git" "$glgood/.github"
+mkdir -p "$glgood/.gitlab/issue_templates" "$glgood/.gitlab/merge_request_templates"
+for f in Bug:bug Feature:enhancement Task:task; do printf '## What\n\n/label ~%s\n' "${f#*:}" > "$glgood/.gitlab/issue_templates/${f%%:*}.md"; done
+printf '## What and why\n' > "$glgood/.gitlab/merge_request_templates/Default.md"
+cat > "$glgood/.claude/settings.json" <<'JSON'
+{"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(glab auth status --show-token*)","Bash(glab auth status -t*)","Bash(glab config get token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Bash(cat *.env)","Bash(grep *.env)","Read(~/.config/glab-cli/**)"]}}
+JSON
+printf 'archetype: backend\nhost: gitlab\n_src_path: gh:coolbress/plinth-template\n_commit: %s\n' "$target_ref" > "$glgood/.copier-answers.yml"
+glsha=0123456789abcdef0123456789abcdef01234567
+glurl="https://raw.githubusercontent.com/coolbress/plinth/$glsha/gitlab/python-ci.yml"
+glci() { # <include lines> -- a .gitlab-ci.yml with these include lines and the docker-image job
+  printf '%s\n' "$1"
+  printf '\ndocker-image:\n  stage: test\n  script:\n    - |\n      docker build -t image-under-test .\n      out="$(docker run --rm image-under-test)"\n'
+}
+glci "$(printf 'include:\n  - remote: %s\n    integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=' "$glurl")" > "$glgood/.gitlab-ci.yml"
+git -C "$glgood" init -q 2>/dev/null && git -C "$glgood" add -A
+mkdir -p "$work/noapi"
+gl() { # <description> <shell to change the copy> <ERE one output line must match> [checker args...]
+  local desc="$1" edit="$2" want="$3"; shift 3
+  local copy="$work/glcase"; rm -rf "$copy"; cp -R "$glgood" "$copy"
+  ( cd "$copy" && eval "$edit" )
+  out="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$copy" "$@" 2>&1)"; rc=$?
+  if grep -qE -- "$want" <<<"$out"; then ok "$desc"; else bad "$desc (expected a line matching '$want')"; printf '%s\n' "$out" | grep -E 'FAIL|WARN|SKIP|gitlab' | sed 's/^/        /'; fi
+}
+# host: github is today's reading, line for line.
+hgh="$work/hostgithub"; rm -rf "$hgh"; cp -R "$good" "$hgh"; printf 'host: github\n' >> "$hgh/.copier-answers.yml"
+if [ "$(python3 "$checker" --root "$good" --no-network 2>&1 | sed 1d)" = "$(python3 "$checker" --root "$hgh" --no-network 2>&1 | sed 1d)" ]
+then ok "host: github reports exactly what no host reports"
+else bad "host: github changed the report"; diff <(python3 "$checker" --root "$good" --no-network 2>&1 | sed 1d) <(python3 "$checker" --root "$hgh" --no-network 2>&1 | sed 1d) | sed 's/^/        /'; fi
+gl "a complete GitLab backend checkout has no FAIL offline" ":" "^-- 0 failed, [12] not verified$" --no-network
+for gone in 'gh auth token' 'gh config reads' '\.github/dependabot\.yml' 'issue forms' 'the ci job'; do
+  grep -qE -- "$gone" <<<"$out" && bad "GitHub-only item not read on GitLab: $gone" || ok "GitHub-only item not read on GitLab: $gone"
+done
+gl "Dependabot's absence is an INFO, not a FAIL" ":" "INFO  Dependabot does not run on GitLab" --no-network
+# Offline, the rule runs only with a PyYAML already here; without one, nothing is installed.
+if python3 -c 'import yaml' 2>/dev/null; then
+  gl "--no-network with PyYAML here: the include is read" ":" "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA" --no-network
+else
+  gl "--no-network without PyYAML: the include is a SKIP, not a pass" ":" "SKIP  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA not verified: .*--no-network" --no-network
+fi
+gl "the host comes from .copier-answers.yml" ":" "host=gitlab" --no-network
+gl "--host gitlab reads it without the answer" "sed -i.bak '/^host:/d' .copier-answers.yml" "^-- 0 failed" --no-network --host gitlab
+gl "--host github overrides the answer" ":" "FAIL  \.github/dependabot\.yml missing" --no-network --host github
+gl "an unknown host in the answers is a SKIP, read as github" "sed -i.bak 's/^host: gitlab/host: bitbucket/' .copier-answers.yml" "SKIP  \.copier-answers\.yml says host: bitbucket" --no-network
+for d in 'glab auth status --show-token' 'glab auth status -t' 'glab config get token' 'glab-cli'; do
+  case "$d" in glab-cli) what="glab config reads" ;; *) what="$d" ;; esac
+  gl "a deny list without $what fails" "python3 -c 'import json,sys; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if sys.argv[1] not in x]; json.dump(j,open(p,\"w\"))' '$d'" \
+    "FAIL  \.claude/settings\.json does not deny $what" --no-network
+done
+gl "no issue template fails" "rm -r .gitlab/issue_templates" "FAIL  no issue template under \.gitlab/issue_templates/" --no-network
+gl "no merge request template fails" "rm -r .gitlab/merge_request_templates" "FAIL  no merge request template under \.gitlab/merge_request_templates/" --no-network
+gl "an issue template without /label is a WARN" "printf '## What\n' > .gitlab/issue_templates/Bug.md" "WARN  Bug\.md has no \`/label ~name\` line" --no-network
+gl "a backend without the docker-image job fails" "printf 'include: []\n' > .gitlab-ci.yml" "FAIL  \.gitlab-ci\.yml has no \`docker-image\` job" --no-network
+# The include rule is gitlab/python-ci.yml's own; these read it through the
+# checker. With no PyYAML here, the job's pinned PyYAML is installed from
+# PyPI, so these need the network, as tests/gitlab-ci-cases.sh does. A
+# python3 with neither PyYAML nor a version those wheels cover gets a SKIP
+# that says so, and the rule's cases cannot run on it.
+if ! python3 -c 'import yaml' 2>/dev/null && ! python3 -c 'import sys; sys.exit(not (3, 11) <= sys.version_info[:2] <= (3, 14))'; then
+  gl "no PyYAML on a python3 outside 3.11 to 3.14: a SKIP naming the range" ":" "SKIP  .*pinned for CPython 3\.11 to 3\.14 only"
+  echo "  NOTE  the include rule's cases need a python3 with PyYAML, or 3.11 to 3.14: $(python3 --version 2>&1)"
+else
+gl "an include at a full SHA with a checksum passes" ":" "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA \($glsha\)"
+grep -q "PASS  the include names a checksum" <<<"$out" && ok "the checksum is a PASS" || bad "the checksum is a PASS"
+gl "no checksum is a SKIP, not a pass" "glci 'include:
+  - remote: $glurl' > .gitlab-ci.yml" "SKIP  the bytes GitLab fetched are plinth's file, the include names no checksum"
+gl "an include at a tag fails" "glci 'include:
+  - remote: https://raw.githubusercontent.com/coolbress/plinth/v1.16.0/gitlab/python-ci.yml' > .gitlab-ci.yml" \
+  "FAIL  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA, it includes it at v1\.16\.0"
+gl "plinth by another URL fails" "glci 'include:
+  - remote: https://github.com/coolbress/plinth/raw/$glsha/gitlab/python-ci.yml' > .gitlab-ci.yml" \
+  "FAIL  .*it includes plinth by a URL that is not"
+gl "no include fails" "glci 'include: []' > .gitlab-ci.yml" "FAIL  .*no include of https://raw\.githubusercontent\.com/coolbress/plinth/<commit-sha>/gitlab/python-ci\.yml was found"
+gl "a yaml.py in the checkout is not imported in place of PyYAML" "printf 'print(\"pass: PLANTED\")\n' > yaml.py" \
+  "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA"
+grep -q PLANTED <<<"$out" && bad "the planted yaml.py ran" || ok "the planted yaml.py did not run"
+fi
+
+echo "-- --credentials on a GitLab checkout reads gitlab.com (#547 review)"
+glc="$work/glcred"; mkdir -p "$glc/bin" "$glc/home"; ln -s ../gitconfig "$glc/home/.gitconfig"
+glcred() { # extra env assignments as arguments; sets out
+  out="$(env -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN -u GLAB_CONFIG_DIR -u GH_TOKEN -u GITHUB_TOKEN -u GIT_CONFIG \
+    -u GH_CONFIG_DIR -u XDG_CONFIG_HOME -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    HOME="$glc/home" GIT_CONFIG_NOSYSTEM=1 "$@" python3 "$checker" --root "$glgood" --no-network --credentials 2>&1)"
+}
+printf '[credential "https://gitlab.com"]\n\thelper =\n\thelper = !glab auth git-credential\n[credential "https://github.com"]\n\thelper = osxkeychain\n' > "$glc/gitconfig"
+printf 'machine github.com login me password x\n' > "$glc/home/.netrc"
+glcred
+has "only glab's helper for gitlab.com: an INFO, not a PASS" "INFO  git asks only glab for gitlab\.com; no other credential found"
+has "a github.com login in ~/.netrc is not gitlab.com's" "INFO  no gitlab\.com login in "
+has "the login glab stores is a SKIP" "SKIP  the login glab stores for gitlab\.com not verified"
+has "SSH points at GitLab's keys" "SKIP  SSH keys not verified here: GitLab's Preferences"
+lacks "a helper for github.com alone is not reported on GitLab" "WARN"
+lacks "gh is not asked about on GitLab" "gh stores|accounts stored in gh"
+glcred GITLAB_TOKEN=x
+has "GITLAB_TOKEN set is a WARN" "WARN  GITLAB_TOKEN is set in this environment: glab"
+glcred GLAB_CONFIG_DIR=/elsewhere
+has "GLAB_CONFIG_DIR set is a SKIP" "SKIP  GLAB_CONFIG_DIR is set"
+printf '[credential]\n\thelper = osxkeychain\n[credential "https://gitlab.com"]\n\thelper = !glab auth git-credential\n' > "$glc/gitconfig"
+glcred
+has "another helper that applies to gitlab.com is a WARN" "WARN  git has 1 credential helper for gitlab\.com besides glab's: osxkeychain"
+printf 'machine gitlab.com login me password x\n' > "$glc/home/.netrc"
+glcred
+has "a gitlab.com login in ~/.netrc is a WARN" "WARN  .*\.netrc holds a login for gitlab\.com"
+
+echo "-- the update line on GitLab carries the include's checksum (#547 review)"
+glold="$work/glold"; rm -rf "$glold"; cp -R "$glgood" "$glold"
+sed -i.bak 's/^_commit: .*/_commit: v1.0.0/' "$glold/.copier-answers.yml"
+glint="L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+case "$printed" in *"--data plinth_sha=$glsha --data plinth_gitlab_integrity=$glint") [ "$rc" = 0 ] && ok "the live pin and its checksum from .gitlab-ci.yml" || bad "update line rc=$rc" ;;
+  *) bad "the GitLab update line: '$printed'" ;; esac
+glci "include:
+  - remote: $glurl" > "$glold/.gitlab-ci.yml"
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+[ "$rc" = 1 ] && grep -q "not one \`remote:\` line followed by its \`integrity:\` line" <<<"$printed" \
+  && ok "an include without a checksum gives no update line, saying why" || bad "no checksum: rc=$rc '$printed'"
+glci "include:
+  - remote: https://raw.githubusercontent.com/coolbress/plinth/v1.16.0/gitlab/python-ci.yml
+    integrity: sha256-$glint" > "$glold/.gitlab-ci.yml"
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+[ "$rc" = 1 ] && grep -q "is at v1.16.0, not a full commit SHA" <<<"$printed" && ok "an include at a tag gives no update line" || bad "tag: rc=$rc '$printed'"
+cp "$glgood/.gitlab-ci.yml" "$glold/.gitlab-ci.yml"
+sed -i.bak '/^host:/d' "$glold/.copier-answers.yml"
+printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --host gitlab --print-update-command 2>&1)"; rc=$?
+case "$printed" in *"--data plinth_gitlab_integrity=$glint") [ "$rc" = 0 ] && ok "--host gitlab without the answer: the update line reads the include" || bad "--host gitlab update rc=$rc" ;;
+  *) bad "--host gitlab without the answer: '$printed'" ;; esac
+out="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --host gitlab --no-network 2>&1)"
+has "--host gitlab without the answer: the drift item carries the GitLab line" "INFO    uvx .*--data plinth_gitlab_integrity=$glint"
+printf 'host: gitlab\n' >> "$glold/.copier-answers.yml"
+glpin_api() { # <plinth_gitlab_integrity default or "-"> → $work/api-glpin, the tested pin ahead of the live one
+  local d="$work/api-glpin"; rm -rf "$d"; mkdir -p "$d/repos/coolbress/plinth-template/contents" "$d/repos/coolbress/plinth/compare"
+  { printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$tested"
+    [ "$1" = - ] || printf 'plinth_gitlab_integrity:\n  type: str\n  default: "%s"\n' "$1"; } \
+    | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$d/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+  jq -n '{status: "ahead", ahead_by: 2, behind_by: 0}' > "$d/repos/coolbress/plinth/compare/$glsha...$tested.json"
+  printf '[]' > "$d/repos/coolbress/plinth/tags?per_page=100.json"
+}
+newint="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+glpin_api "$newint"
+printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command --plinth-pin tested 2>"$work/glpin-err")"; rc=$?
+case "$printed" in *"--data plinth_sha=$tested --data plinth_gitlab_integrity=$newint") [ "$rc" = 0 ] && ok "the tested pin moves with the checksum that tag was tested with" || bad "tested rc=$rc" ;;
+  *) bad "the tested GitLab line: '$printed'"; sed 's/^/        /' "$work/glpin-err" ;; esac
+grep -q "plinth pin: the include is at $glsha" "$work/glpin-err" && ok "the note says the include, not the workflows" || { bad "the GitLab note"; sed 's/^/        /' "$work/glpin-err"; }
+glpin_api -
+printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command --plinth-pin tested 2>"$work/glpin-err")"; rc=$?
+[ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "its checksum was not read" "$work/glpin-err" \
+  && ok "no tested checksum: no tested line, the live pin kept" || { bad "tested without checksum: rc=$rc '$printed'"; sed 's/^/        /' "$work/glpin-err"; }
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
