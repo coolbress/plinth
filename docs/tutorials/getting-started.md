@@ -134,8 +134,12 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
 
 - Install `glab` 1.122.0 or newer (`brew install glab` on macOS), and log in
   with `glab auth login --hostname gitlab.com --web --git-protocol https`.
-  The browser login keeps the token in the keyring; a personal access token
-  needs the `api` scope.
+  The browser login keeps the token in the system keyring where there is
+  one. Without one (a Linux or WSL machine with no Secret Service), glab
+  writes it in plain text to `~/.config/glab-cli/config.yml` and prints a
+  warning. The project's agent settings deny reading that directory, but the
+  file stays on disk until you log in again with a keyring available. A
+  personal access token needs the `api` scope.
 - Type `/plinth:new-project my-app --host gitlab`. The project is created
   private under your GitLab username, or under `group/my-app` where you are a
   Maintainer or above. Rollback, which deletes the project if a later step
