@@ -1727,32 +1727,33 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
                 result("PASS", f"{branch} is protected on {repo}: no one pushes, Maintainers merge, no force push "
                                f"(rules that apply: {names})")
 
-    settings = {"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False,
-                "squash_option": "always", "merge_method": "ff"}
-    unread = [k for k in settings if k not in project]
-    if unread:
-        result("SKIP", f"the merge settings of {repo} not verified: GitLab did not return {', '.join(unread)} "
-                       "to this login (a project member reads them)")
-    else:
-        merge_url = f"https://{GITLAB_HOST}/{repo}/-/settings/merge_requests"
-        checks = {k: settings[k] for k in ("only_allow_merge_if_pipeline_succeeds", "allow_merge_on_skipped_pipeline")}
-        off = {k: project[k] for k, v in checks.items() if project[k] != v}
+    # Each group is judged on the fields GitLab returned (#548 review, round 2):
+    # a readable mismatch is a FAIL even when another field is missing, and
+    # only the missing fields are a SKIP.
+    merge_url = f"https://{GITLAB_HOST}/{repo}/-/settings/merge_requests"
+    groups = (
+        ({"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False},
+         f"the merge checks of {repo} let a merge request merge without a green pipeline",
+         f"{repo} merges only on a green pipeline (\"Pipelines must succeed\" on, skipped pipelines not counted)",
+         f"glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -F only_allow_merge_if_pipeline_succeeds=true "
+         "-F allow_merge_on_skipped_pipeline=false", ""),
+        ({"squash_option": "always", "merge_method": "ff"},
+         f"{repo} merges other than squash and fast-forward",
+         f"{repo} squashes every merge request and fast-forwards",
+         f"glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -f squash_option=always -f merge_method=ff",
+         "; main gains commits that are not one squash per merge request"),
+    )
+    for want, bad_msg, good_msg, fix, why in groups:
+        off = {k: project[k] for k, v in want.items() if k in project and project[k] != v}
+        absent = [k for k in want if k not in project]
         if off:
-            result("FAIL", f"the merge checks of {repo} let a merge request merge without a green pipeline: "
-                           + ", ".join(f"{k}={v!r}" for k, v in off.items()))
-            result("INFO", f"  glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -F only_allow_merge_if_pipeline_succeeds=true "
-                           f"-F allow_merge_on_skipped_pipeline=false   (a Maintainer; or {merge_url})")
-        else:
-            result("PASS", f"{repo} merges only on a green pipeline (\"Pipelines must succeed\" on, skipped pipelines not counted)")
-        shape = {k: project[k] for k in ("squash_option", "merge_method") if project[k] != settings[k]}
-        if shape:
-            result("FAIL", f"{repo} merges other than squash and fast-forward: "
-                           + ", ".join(f"{k}={v!r}" for k, v in shape.items())
-                           + "; main gains commits that are not one squash per merge request")
-            result("INFO", f"  glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -f squash_option=always -f merge_method=ff"
-                           f"   (a Maintainer; or {merge_url})")
-        else:
-            result("PASS", f"{repo} squashes every merge request and fast-forwards")
+            result("FAIL", f"{bad_msg}: " + ", ".join(f"{k}={v!r}" for k, v in off.items()) + why)
+            result("INFO", f"  {fix}   (a Maintainer; or {merge_url})")
+        if absent:
+            result("SKIP", f"{', '.join(absent)} of {repo} not verified: GitLab did not return "
+                           f"{'it' if len(absent) == 1 else 'them'} to this login (a project member reads them)")
+        if not off and not absent:
+            result("PASS", good_msg)
 
     # The definition GitLab runs: ci_config_path, .gitlab-ci.yml when empty.
     # One in another project or at a URL (`path@group/project`, http) is not read.

@@ -2021,7 +2021,12 @@ glw "pipelines need not succeed: FAIL" "setp ../o%2Fr.json '{\"only_allow_merge_
 glw "skipped pipelines counted: FAIL" "setp ../o%2Fr.json '{\"allow_merge_on_skipped_pipeline\":true}'" "FAIL  .*allow_merge_on_skipped_pipeline=True"
 glw "squash not required: FAIL" "setp ../o%2Fr.json '{\"squash_option\":\"default_on\"}'" "FAIL  o/r merges other than squash and fast-forward: squash_option='default_on'"
 glw "a merge commit method: FAIL" "setp ../o%2Fr.json '{\"merge_method\":\"merge\"}'" "FAIL  .*merge_method='merge'"
-glw "merge settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"squash_option\",\"merge_method\")]; json.dump(d,open(p,\"w\"))'" "SKIP  the merge settings of o/r not verified: GitLab did not return squash_option, merge_method"
+glw "merge settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"squash_option\",\"merge_method\")]; json.dump(d,open(p,\"w\"))'" "SKIP  squash_option, merge_method of o/r not verified: GitLab did not return them"
+grep -q "PASS  o/r merges only on a green pipeline" <<<"$out" && ok "the merge checks returned are still judged" || bad "the merge checks returned are still judged"
+glw "a readable mismatch fails beside a missing field" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); d.pop(\"squash_option\"); d[\"only_allow_merge_if_pipeline_succeeds\"]=False; d[\"merge_method\"]=\"merge\"; json.dump(d,open(p,\"w\"))'" \
+  "FAIL  the merge checks of o/r let a merge request merge without a green pipeline: only_allow_merge_if_pipeline_succeeds=False"
+grep -q "FAIL  o/r merges other than squash and fast-forward: merge_method='merge'" <<<"$out" && grep -q "SKIP  squash_option of o/r not verified: GitLab did not return it" <<<"$out" \
+  && ok "the readable merge method fails and only the missing squash option is a SKIP" || { bad "partial merge shape"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP' | sed 's/^/        /'; }
 glw "an unreadable project is a SKIP, and the checkout's include is read" "rm ../o%2Fr.json" "SKIP  the GitLab wall of o/r not verified: it was not found"
 grep -q "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline" <<<"$out" && ok "the checkout's include stands in" || bad "the checkout's include stands in"
 glw "the include on the default branch is read, not the checkout's" "glci 'include:
