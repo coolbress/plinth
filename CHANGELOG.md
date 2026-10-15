@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- plinth now says who it is for: a beginner engineer or a non-engineer
+  running a project through an AI agent, guided in plain words through each
+  step and decision (#514). README, the concepts' scope, the plugin's
+  description and run-a-project's opening and evidence rule drop "does not
+  read the code" and "vibe-coded". The text says the guidance is designed for
+  that reader and not yet tried by anyone but its author. The evidence rule
+  now reads: every "done" needs something you can see and check yourself,
+  whether or not you read the code.
+
 ## [1.19.0] - 2026-10-15
 
 This release lets `/plinth:floor-check` read a GitLab project (#353, slices 3 and 4). On a checkout rendered with `host: gitlab` it reads the files as GitLab's, and checks the include of plinth's pipeline with the pipeline's own rule. With `--repo group/name` it reads the wall through `glab`: every protection rule that matches `main`, "Pipelines must succeed", squash and fast-forward, the labels, and the include on the default branch. Read-only against the project the door made in v1.18.0's recorded run, it reports no FAIL and nothing unverified. The docs now name the GitLab path, including the Developer login to hand the agent. It also fixes a leading zero in `PLINTH_FIRST_PR_WAIT`, which made the GitHub door delete the repository it had just created. A checkout without a host reads as before.

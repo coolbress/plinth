@@ -2,7 +2,7 @@
   "name": "plinth",
   "displayName": "plinth",
   "version": "1.19.0",
-  "description": "A base for vibe-coded projects: required checks on GitHub, a curated set of agent skills, and a generator for new repositories.",
+  "description": "A base for projects run through an AI agent, with guidance designed for beginner engineers and non-engineers and not yet tried by anyone but its author: required checks on GitHub, a curated set of agent skills, and a generator for new repositories.",
   "author": {
     "name": "coolbress"
   },

@@ -1,14 +1,16 @@
 # plinth
 
-For someone who runs a software project through an AI agent and leads it
-rather than reads it: you direct the work, read the checks and the record,
-and need to know what was confirmed without reading the code.
+For a beginner engineer or a non-engineer who runs a software project
+through an AI agent: plinth guides you in plain words through each step and
+each decision it asks of you, and the checks tell you what was confirmed. The
+guidance is designed for that reader, and not yet tried by anyone but its
+author.
 
 Gated where a check can. Guided where it can't.
 
-**What makes a project professional when you don't read the code?**
-Not the code you won't read: the setup around it, the checks the code has
-to pass and a record another person can read.
+**What makes a project professional when you are new to code?**
+Not the code alone: the setup around it, the checks the code has to pass and
+a record another person can read.
 
 **How do I get better code out of an agent?**
 Small steps the checks can answer, each with something you can see that
@@ -56,8 +58,8 @@ GitLab.com Free protects a private project.
 
 ## What plinth is
 
-The base a vibe-coded project stands on: required checks that no change
-merges past while they are red, a curated set of agent skills, and a
+The base a project run through an AI agent stands on: required checks that
+no change merges past while they are red, a curated set of agent skills, and a
 generator that starts a new repository with both already in place. Most of
 the checks run established tools (ruff, pytest, gitleaks, CodeQL and others),
 a few are plinth's own, and plinth configures the host (GitHub, or GitLab.com)
