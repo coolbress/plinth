@@ -852,14 +852,16 @@ floor-check:
           which = "the include names" if len(found) == 1 else f"{bare} of {len(found)} includes names"
           print(f"not yet confirmed: the bytes GitLab fetched are plinth's file, {which} no checksum "
                 "(include:integrity), which GitLab.com Free checks; a checksum on each include confirms it")
-      for what in (
-          "the protected default branch (no force push, merge requests only, Maintainers merge)",
-          "the merge check \"Pipelines must succeed\", with \"Skipped pipelines are considered successful\" off",
-          "every job of this pipeline in the merge request's own pipeline definition (GitLab Free has no required checks by name)",
-          "the rest of the floor (the document set, agent settings, the project files)",
-      ):
-          print(f"not yet confirmed: {what}, floor-check does not read GitLab yet (#353); a floor-check that reads it confirms it")
       PY
       while IFS= read -r l || [ -n "$l" ]; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/floor.verdicts"
       [ -s "$PLINTH_TMP/floor.verdicts" ] || { say "fail: the floor, the check wrote no verdicts"; plinth_failed=1; }
+      # The block above is the include rule alone: /plinth:floor-check runs
+      # it from this file on a checkout (#543), so these lines stay outside it.
+      for what in \
+        "the protected default branch (no force push, merge requests only, Maintainers merge)" \
+        "the merge check \"Pipelines must succeed\", with \"Skipped pipelines are considered successful\" off" \
+        "every job of this pipeline in the merge request's own pipeline definition (GitLab Free has no required checks by name)" \
+        "the rest of the floor (the document set, agent settings, the project files)"; do
+        say "not yet confirmed: $what, floor-check does not read GitLab yet (#353); a floor-check that reads it confirms it"
+      done
       verdict

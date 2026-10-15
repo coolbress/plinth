@@ -61,6 +61,15 @@ the workflows call today (#219); when the target tag was tested with a newer
 plinth commit, a second line carries that one, for a person to choose
 (--plinth-pin tested), after three more reads: the tag's copier.yml,
 plinth's tags and a compare of the two plinth commits (#511).
+
+A GitLab checkout (--host gitlab, or `host: gitlab` in .copier-answers.yml)
+is read as one (#543): glab's token and config reads in the agent settings,
+.gitlab/ issue and merge request templates, and in place of the ci caller the
+top-level include of .gitlab-ci.yml, judged by the rule of the GitLab
+pipeline's own floor-check job, run from gitlab/python-ci.yml beside this
+script so the two cannot drift. That rule needs PyYAML: without it here, the
+job's own pin is installed by hash into a temporary venv (pypi.org), and with
+--no-network the item is a SKIP. GitHub-only items (Dependabot, the workflows) are not read there.
 """
 
 from __future__ import annotations
@@ -76,6 +85,8 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
+import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -93,6 +104,10 @@ CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
 # the expectation below adds the same name, so the two cannot disagree. It comes
 # from the same app as the nine (their integration_id), not a second literal.
 IMAGE_CHECK = "image"
+# GitLab's name for the same job: `image` is a GitLab CI keyword (plinth-template v1.13.0).
+GITLAB_IMAGE_JOB = "docker-image"
+# The GitLab pipeline beside this script; its floor-check job holds the include rule (#543).
+GITLAB_PIPELINE = Path(__file__).resolve().parent.parent / "gitlab" / "python-ci.yml"
 
 # This repository's own identity, as consumer workflows pin it (#219): the
 # `uses:` lines that call plinth's reusable workflows.
@@ -214,7 +229,7 @@ def inherited_file(owner: str | None, path: str, network: bool):
 # ── repository-level floor ────────────────────────────────────────────────
 
 
-def check_files(root: Path, owner: str | None, network: bool) -> None:
+def check_files(root: Path, owner: str | None, network: bool, host: str = "github") -> None:
     for name in ("LICENSE", "README.md", "CHANGELOG.md", "AGENTS.md"):
         p = root / name
         ok(p.is_file() and p.stat().st_size > 0, f"{name} present", f"{name} missing or empty")
@@ -243,6 +258,17 @@ def check_files(root: Path, owner: str | None, network: bool) -> None:
         else:
             ok(got is not ABSENT, "SECURITY.md inherited from the owner's .github repository",
                "SECURITY.md neither local nor in the owner's .github repository")
+
+    if host == "gitlab":
+        check_gitlab_templates(root)
+        result("INFO", "Dependabot does not run on GitLab: nothing raises the plinth include or uv.lock's pins "
+                       "for you; `deps` scans uv.lock on each merge request")
+        check_gitattributes(root)
+        check_agent_settings(root, host)
+        check_doc_links(root)
+        check_tracked_dotenv(root)
+        check_template_drift(root, network)
+        return
 
     forms = root / ".github" / "ISSUE_TEMPLATE"
     local = {p.name: read(p) for p in sorted(forms.iterdir())
@@ -379,6 +405,26 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
            f"no usable issue template ({where}): every file found is missing what GitHub needs to offer it")
 
 
+def check_gitlab_templates(root: Path) -> None:
+    """GitLab offers every `.md` under .gitlab/issue_templates/ and
+    .gitlab/merge_request_templates/ by file name; no front matter. An issue
+    template labels its issues with a `/label ~name` quick action, as
+    plinth-template renders them; one without it is a WARN, as on GitHub."""
+    for where, what, bad in ((".gitlab/issue_templates", "issue templates",
+                              "every issue arrives in whatever shape its writer chose"),
+                             (".gitlab/merge_request_templates", "merge request templates",
+                              "the squash commit is made from whatever description the merge request has")):
+        d = root / where
+        found = sorted(p.name for p in d.iterdir() if p.is_file() and p.suffix == ".md" and p.stat().st_size > 0) \
+            if d.is_dir() else []
+        ok(bool(found), f"{what} found ({where}): {', '.join(found)}", f"no {what[:-1]} under {where}/: {bad}")
+        if where.endswith("issue_templates"):
+            for name in found:
+                labelled = re.search(r"^/label\s+~\S", read(d / name), re.MULTILINE)
+                result("PASS" if labelled else "WARN", f"{name} labels its issues" if labelled else
+                       f"{name} has no `/label ~name` line: those issues never sort in a list")
+
+
 def check_gitattributes(root: Path) -> None:
     p = root / ".gitattributes"
     if not ok(p.is_file(), ".gitattributes present", ".gitattributes missing"):
@@ -411,7 +457,7 @@ def check_gitattributes(root: Path) -> None:
        f".gitattributes rules need local git config: {local_only}")
 
 
-def check_agent_settings(root: Path) -> None:
+def check_agent_settings(root: Path, host: str = "github") -> None:
     p = root / ".claude" / "settings.json"
     if not ok(p.is_file(), ".claude/settings.json present", ".claude/settings.json missing"):
         return
@@ -443,6 +489,14 @@ def check_agent_settings(root: Path) -> None:
         "`grep KEY .env`": lambda d: bash_rule_stops("grep KEY .env", d),
         "gh config reads": lambda d: d.startswith("Read(~/.config/gh"),
     }
+    if host == "gitlab":
+        # glab in gh's place (plinth-template v1.13.0): `-t` is `--show-token`
+        # spelled short, so a deny of one alone leaves the other open.
+        del wants["gh auth token"], wants["gh config reads"]
+        wants["glab auth status --show-token"] = lambda d: bash_rule_stops("glab auth status --show-token", d)
+        wants["glab auth status -t"] = lambda d: bash_rule_stops("glab auth status -t", d)
+        wants["glab config get token"] = lambda d: bash_rule_stops("glab config get token", d)
+        wants["glab config reads"] = lambda d: d.startswith("Read(~/.config/glab-cli")
     for what, match in wants.items():
         ok(any(match(d) for d in deny), f".claude/settings.json denies {what}",
            f".claude/settings.json does not deny {what}")
@@ -1423,6 +1477,91 @@ def check_image_job(root: Path) -> None:
        "ci.yml has no `image` job that builds and runs the container; the ruleset requires that check for this archetype")
 
 
+def check_gitlab_image_job(root: Path) -> None:
+    """A service archetype's .gitlab-ci.yml carries `docker-image`, the
+    template's job that builds and runs the container (#127, #543)."""
+    p = root / ".gitlab-ci.yml"
+    text = read(p) if p.is_file() else ""
+    m = re.search(rf"^{GITLAB_IMAGE_JOB}:\s*$", text, re.MULTILINE)
+    block = re.split(r"^\S", text[m.end():], maxsplit=1, flags=re.MULTILINE)[0] if m else ""
+    ok(m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
+       f".gitlab-ci.yml carries the {GITLAB_IMAGE_JOB} job (docker build, docker run)",
+       f".gitlab-ci.yml has no `{GITLAB_IMAGE_JOB}` job that builds and runs the container; this archetype's floor has one")
+
+
+def gitlab_job_block(tag: str) -> str | None:
+    """The one `<<'<tag>'` heredoc of gitlab/python-ci.yml's floor-check job,
+    dedented: PY is its include rule, REQ its PyYAML pinned by hash. None
+    when the file or the block is not there."""
+    try:
+        text = GITLAB_PIPELINE.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    job = re.search(r"^floor-check:\n(.*?)(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
+    blocks = re.findall(rf"<<'{tag}'[^\n]*\n(.*?)\n[ \t]*{tag}\n", job.group(1), re.DOTALL) if job else []
+    return textwrap.dedent(blocks[0]) if len(blocks) == 1 else None
+
+
+def gitlab_rule_python(tmp: Path, network: bool) -> tuple[str | None, str]:
+    """A Python that imports PyYAML: this one if it does, else a venv under
+    tmp with the job's own PyYAML pinned by hash, binary wheels only, as the
+    GitLab job installs it (#528). (None, why) when neither."""
+    probe = subprocess.run([sys.executable, "-P", "-c", "import yaml"], cwd=tmp, capture_output=True, check=False)
+    if probe.returncode == 0:
+        return sys.executable, ""
+    if not network:
+        return None, f"{sys.executable} has no PyYAML and --no-network leaves it uninstalled"
+    req = gitlab_job_block("REQ")
+    if req is None:
+        return None, f"{sys.executable} has no PyYAML and the job's pinned PyYAML could not be read"
+    (tmp / "req.txt").write_text(req, encoding="utf-8")
+    venv = tmp / "yaml"
+    try:
+        made = subprocess.run([sys.executable, "-m", "venv", str(venv)], capture_output=True, text=True, timeout=120, check=False)
+        py = venv / "bin" / "python"
+        got = made.returncode == 0 and subprocess.run(
+            [str(py), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--require-hashes",
+             "--only-binary", ":all:", "--no-deps", "-r", str(tmp / "req.txt")],
+            capture_output=True, text=True, timeout=300, check=False).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        got = False
+    if not got:
+        return None, f"{sys.executable} has no PyYAML and the job's pinned PyYAML did not install"
+    return str(py), ""
+
+
+def check_gitlab_include(root: Path, network: bool) -> None:
+    """.gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA,
+    with a checksum: the GitLab pipeline's floor-check rule, run here on the
+    checkout (#543). Its `pass:` is a PASS, `fail:` a FAIL, `not yet
+    confirmed:` a SKIP. The rule runs with `-P`, so a module in the checkout
+    is never imported in place of PyYAML."""
+    what = ".gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA"
+    rule = gitlab_job_block("PY")
+    if rule is None:
+        result("SKIP", f"{what} not verified: the rule in {GITLAB_PIPELINE.name}'s floor-check job could not be read")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        py, why = gitlab_rule_python(Path(tmp), network)
+        if py is None:
+            result("SKIP", f"{what} not verified: {why}")
+            return
+        try:
+            run = subprocess.run([py, "-P", "-c", rule], cwd=root, capture_output=True, text=True,
+                                 env={**os.environ, "CONFIG": ".gitlab-ci.yml"}, timeout=60, check=False)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            result("SKIP", f"{what} not verified: the rule did not run ({e.__class__.__name__})")
+            return
+    lines = [ln for ln in run.stdout.splitlines() if ln.strip()]
+    kinds = {"pass": "PASS", "fail": "FAIL", "not yet confirmed": "SKIP"}
+    for ln in lines:
+        kind, _, msg = ln.partition(": ")
+        result(kinds.get(kind, "SKIP"), msg if kind in kinds else f"{what} not verified: the rule printed {ln[:200]!r}")
+    if not lines:
+        why = " ".join(run.stderr.split())[-200:] or f"exit {run.returncode}"
+        result("SKIP", f"{what} not verified: the rule printed no verdict ({why})")
+
+
 def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -> dict:
     """ruleset.json as the door applies it: with the image check for a service
     archetype, and without the code_scanning rule for a private repository
@@ -2078,6 +2217,8 @@ def main() -> int:
     ap.add_argument("--root", default=".", help="repository checkout")
     ap.add_argument("--project", default=".", help="project root, relative to --root and inside it (the repository itself, or a directory under it)")
     ap.add_argument("--repo", help="owner/name on GitHub; enables inheritance and wall checks")
+    ap.add_argument("--host", choices=("github", "gitlab"),
+                    help="where the repository lives; default: `host:` in .copier-answers.yml, else github")
     ap.add_argument("--ruleset", help="ruleset.json the door applies; its contexts are the expected checks and its CodeQL thresholds the expected policy")
     ap.add_argument("--expect-checks", help="required check names, comma separated; overrides --ruleset")
     ap.add_argument("--archetype", help="override the archetype in .copier-answers.yml")
@@ -2136,17 +2277,32 @@ def main() -> int:
     network = not a.no_network
     owner = a.repo.split("/")[0] if a.repo else None
 
-    print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}")
-    check_files(root, owner, network)
+    host = a.host or (copier_answers(root) or {}).get("host") or "github"
+    if host not in ("github", "gitlab"):
+        result("SKIP", f".copier-answers.yml says host: {host}, which this checker does not read; "
+                       "read as github (pass --host to choose)")
+        host = "github"
+    print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
+          + (" host=gitlab" if host == "gitlab" else ""))
+    check_files(root, owner, network, host)
     archetype = archetype_of(project, a.archetype)
     check_project(project, root, archetype)
     if archetype in CONDITIONAL_ARCHETYPES:
-        check_image_job(root)
+        (check_gitlab_image_job if host == "gitlab" else check_image_job)(root)
 
-    check_caller(root, a.repo, network, a.caller_from_checkout)
-    check_plinth_pins_agree(root)
+    if host == "gitlab":
+        check_gitlab_include(root, network)
+        if a.repo:
+            result("SKIP", f"the GitLab wall of {a.repo} not read: floor-check reads only the checkout on GitLab so far (#544)")
+        else:
+            result("SKIP", "no --repo: wall not checked")
+    else:
+        check_caller(root, a.repo, network, a.caller_from_checkout)
+        check_plinth_pins_agree(root)
 
-    if a.repo:
+    if host == "gitlab":
+        pass
+    elif a.repo:
         expected: list[str] = []
         merge_methods = {"squash"}
         policy = None

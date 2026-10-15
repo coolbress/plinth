@@ -65,6 +65,21 @@ directory the repository's own CI gives `python-ci.yml` as its
 `working-directory` — because without it `pyproject.toml` and `uv.lock` are
 read from the root and reported missing although they exist one level down.
 
+## A GitLab checkout
+
+A checkout rendered with `host: gitlab` (its `.copier-answers.yml` says so,
+or pass `--host gitlab`) is read as a GitLab project. `gh repo view` finds no
+GitHub repository there, so run it without `--repo`. In place of `gh`'s denies,
+the agent settings must deny `glab`'s token and config reads. The issue and
+merge request templates are under `.gitlab/`. Dependabot does not run there,
+which is an INFO. In place of the `ci` job, the top-level include of
+`.gitlab-ci.yml` is judged by the GitLab pipeline's own `floor-check` rule,
+read from `${CLAUDE_PLUGIN_ROOT}/gitlab/python-ci.yml`. That rule needs
+PyYAML: without it, the job's PyYAML is installed by hash into a temporary
+directory from PyPI, and with `--no-network` the include is a SKIP. The
+project's settings on GitLab (the protected branch, the merge checks) are not
+read yet (#544).
+
 ## Report
 
 Give the checker's output whole. Do not summarise it, shorten it, or drop
