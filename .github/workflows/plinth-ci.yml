@@ -158,6 +158,9 @@ jobs:
       - name: The e2e driver deletes what it made on every failure, and names what it could not
         run: ./tests/e2e-driver.sh
 
+      - name: The upgrade e2e passes only when the tested pin landed, and deletes what it made on every failure
+        run: ./tests/e2e-upgrade-driver.sh
+
       - name: An interrupted install smoke leaves nothing writing into the dir it removes, and Ctrl-C stops it
         run: ./tests/install-smoke-interrupt.sh
 
