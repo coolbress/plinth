@@ -378,8 +378,9 @@ Read the report's `not yet confirmed` lines before you say "merge": a green
 check can carry one, naming something it passed without confirming. To turn
 the style off for yourself, type `/output-style default` in the repository;
 it writes `"outputStyle": "default"` to `.claude/settings.local.json`, which
-the repository's `.gitignore` keeps out of commits, and deleting that line
-brings the style back. The same line in your own `~/.claude/settings.json`
+the repository's `.gitignore` keeps out of commits. Removing that setting,
+with the comma that joins it to another one if there is one, brings the style
+back. The same setting in your own `~/.claude/settings.json`
 did not turn it off when this was measured (#555): the project's setting
 takes precedence. A repository made before plinth-template v1.14.0 gets the
 style through `/plinth:template-update`.

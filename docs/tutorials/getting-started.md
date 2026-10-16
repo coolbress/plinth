@@ -141,7 +141,9 @@ shows what each part looks like.
 To turn it off for yourself, type `/output-style default` in Claude Code
 inside the repository. It writes `"outputStyle": "default"` to
 `.claude/settings.local.json`, a file the repository's `.gitignore` keeps out
-of commits; delete that line to have the style again.
+of commits. To have the style again, remove `"outputStyle": "default"` from
+that file, with the comma that joins it to another setting if there is one,
+so the file stays valid JSON.
 
 ## On GitLab instead
 
