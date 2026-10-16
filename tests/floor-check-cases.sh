@@ -1448,6 +1448,11 @@ else bad "current tag moved"; printf '%s\n' "$out" | grep -E 'template' | sed 's
 out="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$good" 2>&1)"
 if grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<<"$out"; then ok "a repository on the target tag, the tag still on its commit: PASS"
 else bad "current tag pinned"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
+out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
+if grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<<"$out" \
+   && grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error)" <<<"$out"
+then ok "a repository on the target tag, the tag's commit not read: the PASS says the tags only, and a line says the commit was not verified"
+else bad "current tag unread"; printf '%s\n' "$out" | grep -E 'template|verified' | sed 's/^/        /'; fi
 out="$(python3 "$checker" --root "$pcopy" --no-network 2>&1)"
 if grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error); the template-update skill checks it before it runs this line:" <<<"$out" \
    && grep -q "INFO    uvx .*copier update" <<<"$out"

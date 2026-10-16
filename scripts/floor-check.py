@@ -1282,7 +1282,13 @@ def check_template_drift(root: Path, network: bool, host: str | None = None) -> 
             result("WARN", f"template: the recorded tag is the target tag ({target}), but {target} now names "
                            f"commit {now}, not {d['target_sha']}, the commit plinth was tested with")
             return
+        # The PASS claims the tags only; whether the tag still names its
+        # commit is said beside it when unread, not counted: every offline
+        # run would otherwise count it as not verified.
         result("PASS", f"template: the recorded tag is the target tag ({target})")
+        if tag == "unread":
+            result("INFO", f"  not verified that {target} still names {d['target_sha']}, the commit "
+                           f"plinth was tested with ({now})")
         return
 
     cmp = api(f"repos/{template_repo}/compare/{recorded}...{target}", network)
