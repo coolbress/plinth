@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:floor-check` opens its report with a summary in plain words: how
+  many items fail, how many were not verified and how many warn, what each
+  FAIL means for the person, and which to fix first with the reason (#557).
+  The checker's output follows whole, then the FAIL and WARN list with one
+  fixing line each, as before.
+- Getting started and run-a-project name the output style a new repository
+  turns on, `Beginner or non-engineer`: what it adds and how a person turns
+  it off for themselves with `/output-style default` (#557). README's
+  opening, the concepts' scope and the plugin's description now say what
+  ships, the agent's plain words and one recommended option in a repository
+  plinth makes, in place of "guides you in plain words through each step";
+  the plugin's description also names GitLab's passing pipeline beside
+  GitHub's required checks.
+
 ## [1.20.0] - 2026-10-16
 
 This release turns plinth towards the reader it now names, a beginner engineer or a non-engineer running a project through an AI agent (#514). A new repository's agent explains its work for that reader by default: plinth-template v1.14.0 turns on an output style that gives a decision report at a merge, a template update or a failure, and one recommended option before any choice (#555). `/plinth:template-update` no longer leaves a conflict as bare markers: it recommends a resolution per file and applies it only on the person's word (#556). The guidance is designed for this reader and not yet tried by anyone but its author.

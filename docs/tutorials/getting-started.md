@@ -127,6 +127,24 @@ the branch and push; the checks run again.
 When everything is green, **Squash and merge**. That is the whole journey:
 install, create, merge.
 
+## How the agent explains its work
+
+When you open the new repository in Claude Code, its agent explains its work
+in plain words: the repository turns on an output style named
+`Beginner or non-engineer` for everyone who opens it. After each change the
+agent says what changed and what you can check yourself; at a merge, a
+template update or a failure it gives a decision report; before any choice it
+recommends one option and asks you to confirm.
+[What the agent tells you](../how-to/run-a-project.md#what-the-agent-tells-you-and-when)
+shows what each part looks like.
+
+To turn it off for yourself, type `/output-style default` in Claude Code
+inside the repository. It writes `"outputStyle": "default"` to
+`.claude/settings.local.json`, a file the repository's `.gitignore` keeps out
+of commits. To have the style again, remove `"outputStyle": "default"` from
+that file, with the comma that joins it to another setting if there is one,
+so the file stays valid JSON.
+
 ## On GitLab instead
 
 The same walk on GitLab.com, for a project that must stay private on a free

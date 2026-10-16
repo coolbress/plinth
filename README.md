@@ -1,10 +1,10 @@
 # plinth
 
 For a beginner engineer or a non-engineer who runs a software project
-through an AI agent: plinth guides you in plain words through each step and
-each decision it asks of you, and the checks tell you what was confirmed. The
-guidance is designed for that reader, and not yet tried by anyone but its
-author.
+through an AI agent: in a repository plinth makes, the agent explains each
+change in plain words and recommends one option at each decision it asks of
+you, and the checks tell you what was confirmed. The guidance is designed for
+that reader, and not yet tried by anyone but its author.
 
 Gated where a check can. Guided where it can't.
 

@@ -87,10 +87,12 @@ remembers."
 ## About the scope
 
 plinth is for a beginner engineer or a non-engineer who runs a software
-project through an AI agent. It guides them in plain words through each step
-and each decision it asks of them. They may not judge a diff yet, so the
-checks have to carry what an experienced reader of the diff would otherwise
-carry, and the record says what was confirmed.
+project through an AI agent. In a repository plinth makes, an output style
+asks the agent to explain each change in plain words, to report what shows it
+and what is still unknown at a merge, a template update or a failure, and to
+recommend one option at each decision it asks of them. They may not judge a
+diff yet, so the checks have to carry what an experienced reader of the diff
+would otherwise carry, and the record says what was confirmed.
 
 The guidance is designed for that reader, not shown to work for them: no one
 but its author has used plinth yet ([#163](https://github.com/coolbress/plinth/issues/163)).
