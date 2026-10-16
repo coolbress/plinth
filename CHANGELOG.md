@@ -37,7 +37,13 @@ pull requests and have no tag.
   commits, also for a repository already on that tag), its update line
   fetches the commit, and `/plinth:template-update` stops before copier
   unless the tag is read naming that commit.
-
+- `/plinth:template-update` recommends the tested plinth pin when it is newer
+  than the one the workflows call (#519): the plan prints a `Recommended:`
+  line saying in one sentence what the repository gains, and offers
+  `--plinth-pin tested` first; the person confirms, and may keep the live
+  pin. This narrows #511's "does not choose for the person" (v1.16.0) to
+  "recommends, the person confirms". A live pin newer than the tested one
+  is still kept, never moved backwards, with no recommendation.
 - `/plinth:floor-check` opens its report with a summary in plain words: how
   many items fail, how many were not verified and how many warn, what each
   FAIL means for the person, and which to fix first with the reason (#557).

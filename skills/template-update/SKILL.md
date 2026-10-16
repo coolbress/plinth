@@ -29,18 +29,24 @@ show the message and stop there.
 The command keeps the plinth commit the repository's workflows call today,
 so an update never undoes a pin Dependabot moved. When the target tag was
 tested with a newer plinth commit, the plan also prints a `Plinth pin:` line
-comparing the two, a second command `With the tested pin:`, and two `--apply`
-lines, `--plinth-pin live` and `--plinth-pin tested`.
+comparing the two, a second command `With the tested pin:`, a `Recommended:`
+line saying in one sentence what moving to the tested pin gains, and two
+`--apply` lines, `--plinth-pin tested` (recommended) first, then
+`--plinth-pin live`. A live pin newer than the tested one is kept, never
+moved backwards: the plan then prints one `--apply` line and no
+recommendation.
 
 ## 2. The user's yes
 
 Ask the user whether to apply exactly that plan. Invoking this skill is not
 the yes: the yes is to the plan they have just read. Without it, stop.
 
-When the plan printed two `--apply` lines, the question names both, and the
-user picks one: keep the pin the workflows call today, or move it to the one
-the target tag was tested with. Do not pick for them or recommend one as the
-default; the `Plinth pin:` line is what they decide on.
+When the plan printed two `--apply` lines, recommend the tested pin: give
+the `Recommended:` line's reason in plain words, and ask whether to apply the
+plan with the tested pin, as recommended, or to keep the pin the workflows
+call today. A yes to that question is a yes to the tested pin; the user may
+pick the live one instead. Never recommend a pin older than the live one:
+the plan does not offer it.
 
 On a yes, run the `--apply` line the plan printed, as printed (the one the
 user picked, when there were two), adding your own agent and model:

@@ -24,8 +24,9 @@
 # it. It carries the plinth pin the workflows call today (#219), unless the
 # person chose --plinth-pin tested: then the line with the pin the target tag
 # was tested with, which the checker gives only when that one is newer
-# (#511). The plan prints both when there are two; nothing chooses for the
-# person. The draft is opened as soon as the tree is clean; nothing waits for the
+# (#511). The plan prints both when there are two, and recommends the tested
+# one with the checker's one-sentence reason; only the person's confirmation
+# applies it (#519). The draft is opened as soon as the tree is clean; nothing waits for the
 # branch's checks. Nothing is pushed to the default branch, and nothing
 # here resolves a conflict by choosing a side (#88): a person, or the agent
 # on a person's word for that file (#556), resolves it in the worktree.
@@ -192,7 +193,7 @@ finish() { # <worktree>
     echo '```'
     echo
     if [ "$chosen" = tested ]; then
-      echo "The plinth pin: moved to the one $to was tested with (\`--plinth-pin tested\`, a person's choice)."
+      echo "The plinth pin: moved to the one $to was tested with (\`--plinth-pin tested\`, recommended, on a person's word)."
     elif [ "$chosen" = same ]; then
       echo "The plinth pin: unchanged; the workflows already called the one $to was tested with."
     else
@@ -303,14 +304,15 @@ if [ "$mode" = plan ]; then
   sed -n 's/^plinth pin: /Plinth pin: /p' "$tmp/pin-note"
   if [ -n "$tested_cmd" ]; then
     echo "With the tested pin: $tested_cmd"
+    sed -n 's/^recommended: /Recommended: /p' "$tmp/pin-note"
   fi
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
   if [ -n "$tested_cmd" ]; then
-    echo "  keeping the plinth pin the workflows call today:"
-    echo "  $(q "$0") --apply $base --plinth-pin live"
-    echo "  or moving it to the one $to was tested with:"
+    echo "  moving it to the one $to was tested with (recommended):"
     echo "  $(q "$0") --apply $base --plinth-pin tested"
+    echo "  or keeping the plinth pin the workflows call today:"
+    echo "  $(q "$0") --apply $base --plinth-pin live"
   else
     echo "  $(q "$0") --apply $base"
   fi

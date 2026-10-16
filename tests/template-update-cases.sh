@@ -283,6 +283,19 @@ if [ "$rc" = 0 ] && grep -q "^Command: .*plinth_sha=$sha40\$" <<<"$out" && grep 
    && grep -qF -- "--apply $base --plinth-pin live" <<<"$out" && grep -qF -- "--apply $base --plinth-pin tested" <<<"$out"
 then ok "a tested pin newer than the live one: the plan prints the comparison, both lines and an --apply line for each choice"
 else bad "plan with two pins (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The tested pin is recommended, with what it gains, and offered first (#519).
+if grep -q "^Recommended: move the plinth pin to $tested: this repository's checks then run the plinth commit $target_ref was tested with, 2 commit(s) newer than the one they run now" <<<"$out" \
+   && [ "$(grep -n -- "--plinth-pin tested\$" <<<"$out" | cut -d: -f1)" -lt "$(grep -n -- "--plinth-pin live\$" <<<"$out" | cut -d: -f1)" ] \
+   && grep -q "moving it to the one $target_ref was tested with (recommended):" <<<"$out"
+then ok "a newer tested pin is recommended in one sentence on what it gains, and its --apply line comes first"
+else bad "recommendation (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A live pin newer than the tested one is kept: no recommendation, one line.
+behind_api="$work/api-behind"; rm -rf "$behind_api"; cp -R "$pin_api" "$behind_api"
+printf '{"status":"behind","behind_by":3}\n' > "$behind_api/repos/coolbress/plinth/compare/$sha40...$tested.json"
+reset_logs; pinrun "$behind_api"
+if [ "$rc" = 0 ] && ! grep -q "^Recommended:" <<<"$out" && ! grep -q -- "--plinth-pin" <<<"$out" && grep -q "never moved backwards" <<<"$out"
+then ok "a live pin newer than the tested one: no recommendation, one --apply line, kept and said so"
+else bad "plan, live ahead (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 reset_logs; pinrun "$work/api-none"
 if [ "$rc" = 0 ] && ! grep -q "With the tested pin" <<<"$out" && ! grep -q -- "--plinth-pin" <<<"$out" && grep -q "^Plinth pin: .*was not read" <<<"$out"
 then ok "the tested pin not read: the plan prints one line, one --apply line, and says it was not read"

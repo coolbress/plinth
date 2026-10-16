@@ -1537,8 +1537,9 @@ has "the comparison names both SHAs, the tested pin's tag and the compare URL" \
   "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested \(v9\.0\.0\), 4 commit\(s\) newer: https://github\.com/coolbress/plinth/compare/$sha40\.\.\.$tested\$"
 has "the second line is offered, not chosen" "the line above keeps the live pin; this one moves it to the tested pin, if you choose it:"
 printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
-if [ "$rc" = 0 ] && [ "$printed" = "$(sed -n 's/^  INFO    \(uvx .*plinth_sha='"$tested"'\)$/\1/p' <<<"$out")" ] && grep -q "4 commit(s) newer" "$work/print-err"
-then ok "--print-update-command --plinth-pin tested prints exactly the second line, the comparison on stderr"
+if [ "$rc" = 0 ] && [ "$printed" = "$(sed -n 's/^  INFO    \(uvx .*plinth_sha='"$tested"'\)$/\1/p' <<<"$out")" ] && grep -q "4 commit(s) newer" "$work/print-err" \
+   && grep -q "^recommended: move the plinth pin to $tested (v9.0.0): this repository's checks then run the plinth commit $target_ref was tested with, 4 commit(s) newer than the one they run now" "$work/print-err"
+then ok "--print-update-command --plinth-pin tested prints exactly the second line, the comparison and the recommendation on stderr"
 else bad "--plinth-pin tested, ahead (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command 2>/dev/null)"
 case "$printed" in *"$live_line") ok "--print-update-command without --plinth-pin still prints the live line" ;;
@@ -1555,7 +1556,7 @@ if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
 then ok "live pin ahead of the tested one: one line, kept because it is newer"
 else bad "live ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
-if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "never moved backwards" "$work/print-err"; then ok "--plinth-pin tested never prints a line that moves the pin backwards: exit 1, says why"
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "never moved backwards" "$work/print-err" && ! grep -q "^recommended:" "$work/print-err"; then ok "--plinth-pin tested never prints a line that moves the pin backwards, nor recommends one: exit 1, says why"
 else bad "--plinth-pin tested, live ahead (rc=$rc, stdout '$printed')"; fi
 
 pin_api "$sha40" -; pin_out
