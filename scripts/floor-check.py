@@ -60,7 +60,11 @@ template-update skill (#232), which runs it. The line carries the plinth pin
 the workflows call today (#219); when the target tag was tested with a newer
 plinth commit, a second line carries that one, for a person to choose
 (--plinth-pin tested), after three more reads: the tag's copier.yml,
-plinth's tags and a compare of the two plinth commits (#511).
+plinth's tags and a compare of the two plinth commits (#511). Each line is
+printed only while the target tag still names new-project.sh's template_sha,
+the commit plinth was tested with, read with one more call: a moved tag is a
+WARN with no line, and an unread one prints the line here but not from
+--print-update-command, the line that runs (#519).
 
 A GitLab checkout (--host gitlab, or `host: gitlab` in .copier-answers.yml)
 is read as one (#543): glab's token and config reads in the agent settings,
@@ -987,8 +991,8 @@ def check_plinth_pins_agree(root: Path) -> None:
                                "(moves it to the SHA the ci job calls)")
 
 
-def new_project_pin() -> tuple[str, str, str, str] | None:
-    """(template_repo, template_ref, copier_version, copier_newer) as
+def new_project_pin() -> tuple[str, str, str, str, str] | None:
+    """(template_repo, template_ref, template_sha, copier_version, copier_newer) as
     scripts/new-project.sh pins them -- read from that file and nowhere else
     (#219), so a template release only has to move the pin once. Found beside
     this file: locally, where both live in scripts/; in CI's floor-check job,
@@ -998,12 +1002,15 @@ def new_project_pin() -> tuple[str, str, str, str] | None:
         return None
     text = read(p)
     fields = {}
-    for name in ("template_repo", "template_ref", "copier_version", "copier_newer"):
+    for name in ("template_repo", "template_ref", "template_sha", "copier_version", "copier_newer"):
         m = re.search(rf'^{name}="([^"]+)"$', text, re.MULTILINE)
         if not m:
             return None
         fields[name] = m.group(1)
-    return fields["template_repo"], fields["template_ref"], fields["copier_version"], fields["copier_newer"]
+    if not re.fullmatch(r"[0-9a-f]{40}", fields["template_sha"]):
+        return None
+    return (fields["template_repo"], fields["template_ref"], fields["template_sha"],
+            fields["copier_version"], fields["copier_newer"])
 
 
 def copier_answers(root: Path) -> dict[str, str] | None:
@@ -1097,8 +1104,8 @@ def template_drift(root: Path, host: str | None = None) -> dict:
     pin = new_project_pin()
     if pin is None:
         return {"state": "skip", "reason": "scripts/new-project.sh not found beside the checker, or unreadable"}
-    template_repo, target, copier_version, copier_newer = pin
-    out: dict = {"template_repo": template_repo, "target": target}
+    template_repo, target, target_sha, copier_version, copier_newer = pin
+    out: dict = {"template_repo": template_repo, "target": target, "target_sha": target_sha}
 
     answers = copier_answers(root)
     if answers is None:
@@ -1148,13 +1155,15 @@ def update_line(d: dict, pin: str, integrity: str | None = None) -> str:
 
 
 def tested_plinth_pin(template_repo: str, target: str, network: bool,
-                      key: str = "plinth_sha", value: str = r"[0-9a-fA-F]{40}") -> tuple[str | None, str | None]:
+                      key: str = "plinth_sha", value: str = r"[0-9a-fA-F]{40}",
+                      at: str | None = None) -> tuple[str | None, str | None]:
     """The plinth commit the target template tag was tested with: the
     `plinth_sha` default in that tag's copier.yml (#511), or with key and
-    value another default there (plinth_gitlab_integrity, #547). Returns
+    value another default there (plinth_gitlab_integrity, #547), read at
+    commit `at`, the one the tag is pinned to (#519). Returns
     (value, None), or (None, reason) when it is not read. Not a YAML parser:
     the `default:` line inside the top-level `<key>:` block."""
-    data = api(f"repos/{template_repo}/contents/copier.yml?ref={target}", network)
+    data = api(f"repos/{template_repo}/contents/copier.yml?ref={at or target}", network)
     if data in (ABSENT, ERROR):
         return None, f"{template_repo} copier.yml at {target}: offline or API error"
     try:
@@ -1169,6 +1178,26 @@ def tested_plinth_pin(template_repo: str, target: str, network: bool,
     return (d.group(1).lower() if key == "plinth_sha" else d.group(1)), None
 
 
+def target_tag(d: dict, network: bool) -> tuple[str, str]:
+    """Does the target tag still name the commit plinth was tested with,
+    new-project.sh's template_sha beside its template_ref (#519)? The doors
+    stop before rendering when it does not; the update command is the same
+    render, so it is offered only on the same pair. Returns ("pinned", ""),
+    ("moved", <the commit it names now>) or ("unread", <why>)."""
+    data = api(f"repos/{d['template_repo']}/commits/{d['target']}", network)
+    if data in (ABSENT, ERROR):
+        return "unread", ("the tag was not found" if data is ABSENT else "offline or API error")
+    now = data.get("sha") if isinstance(data, dict) else None
+    if not isinstance(now, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", now):
+        return "unread", "an unexpected commit response"
+    return ("pinned", "") if now.lower() == d["target_sha"] else ("moved", now.lower())
+
+
+def moved_note(d: dict, now: str) -> str:
+    return (f"template: {d['target']} now names commit {now}, not {d['target_sha']}, the commit plinth was "
+            f"tested with; no update command until a plinth release names the tag's commit again")
+
+
 def plinth_pin_choice(d: dict, network: bool) -> dict:
     """When the update is behind and the live pin is known: the live pin
     against the one the target tag was tested with (#511). #219 carries the
@@ -1180,7 +1209,7 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
     live = d["live"].lower()
     calls = "the include is at" if d.get("integrity") else "the workflows call"
     target = d["target"]
-    tested, why = tested_plinth_pin(d["template_repo"], target, network)
+    tested, why = tested_plinth_pin(d["template_repo"], target, network, at=d["target_sha"])
     if tested is None:
         return {"state": "unread", "note": f"plinth pin: the one {target} was tested with was not read ({why}); "
                                            f"the live pin {live} is kept"}
@@ -1209,7 +1238,7 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
         if d.get("integrity"):
             # On GitLab the tested pin moves with the checksum the same tag was tested with.
             integrity, why = tested_plinth_pin(d["template_repo"], target, network,
-                                               "plinth_gitlab_integrity", r"[A-Za-z0-9+/]{43}=")
+                                               "plinth_gitlab_integrity", r"[A-Za-z0-9+/]{43}=", d["target_sha"])
             if integrity is None:
                 return {"state": "unread", "tested": tested,
                         "note": f"plinth pin: the include is at {live}; {target} was tested with {tested}, but its "
@@ -1280,6 +1309,13 @@ def check_template_drift(root: Path, network: bool, host: str | None = None) -> 
     if not d["cmd"]:
         result("INFO", f"  no update command: {d['why_not']}")
         return
+    tag, why = target_tag(d, network)
+    if tag == "moved":
+        result("WARN", moved_note(d, why))
+        return
+    if tag == "unread":
+        result("INFO", f"  not verified that {target} still names {d['target_sha']}, the commit plinth was tested "
+                       f"with ({why}); the template-update skill checks it before it runs this line:")
     result("INFO", f"  {d['cmd']}")
     choice = plinth_pin_choice(d, network)
     if choice["state"] == "equal":
@@ -1297,6 +1333,14 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
     on stderr whether or not there is one: --plinth-pin tested never prints
     a line that would move the pin backwards or past an unread comparison."""
     d = template_drift(root, host)
+    if d.get("cmd"):
+        # Fail closed: this is the line that runs.
+        tag, why = target_tag(d, network)
+        if tag != "pinned":
+            print("no update command: " + (moved_note(d, why) if tag == "moved" else
+                  f"not verified that {d['target']} still names {d['target_sha']}, the commit plinth was tested with ({why})"),
+                  file=sys.stderr)
+            return 1
     if d.get("cmd") and plinth_pin == "tested":
         choice = plinth_pin_choice(d, network)
         print(choice["note"], file=sys.stderr)

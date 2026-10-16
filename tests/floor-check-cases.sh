@@ -9,7 +9,12 @@ checker="$root/scripts/floor-check.py"
 # #219 reads scripts/new-project.sh beside the checker (the real one here, not
 # a fixture): captured once so the fixtures stay a PASS across a pin raise.
 target_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub (#519)
+  mkdir -p "$1/repos/coolbress/plinth-template/commits"
+  printf '{"sha":"%s"}\n' "$2" > "$1/repos/coolbress/plinth-template/commits/$target_ref.json"
+}
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
@@ -1414,11 +1419,36 @@ fixed "while the plinth reference moves" "pr-label\.yml@$sha40\$"
 pcopy="$work/print-cmd"; rm -rf "$pcopy"; cp -R "$good" "$pcopy"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy/.copier-answers.yml"
 warned="$(python3 "$checker" --root "$pcopy" --no-network 2>&1 | sed -n 's/^  INFO    \(uvx .*copier update.*\)$/\1/p')"
-printed="$(python3 "$checker" --root "$pcopy" --print-update-command 2>/dev/null)"; rc=$?
+pinned_api="$work/api-pinned"; tag_names "$pinned_api" "$target_sha"
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$pcopy" --print-update-command 2>/dev/null)"; rc=$?
 if [ "$rc" = 0 ] && [ -n "$warned" ] && [ "$printed" = "$warned" ]; then ok "--print-update-command prints exactly the line the drift WARN prints"
 else bad "--print-update-command (rc=$rc): printed '$printed', WARN printed '$warned'"; fi
 case "$printed" in *"copier update --defaults "*) ok "the update command runs without a terminal (--defaults)" ;;
   *) bad "the update command has no --defaults: '$printed'" ;; esac
+# The target tag must still name the commit plinth was tested with (#519):
+# the doors check the same pair before rendering, and so does the line.
+moved="$(printf '%040d' 5)"
+moved_api="$work/api-moved"; tag_names "$moved_api" "$moved"
+out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" 2>&1)"
+if grep -q "WARN  template: $target_ref now names commit $moved, not $target_sha, the commit plinth was tested with; no update command" <<<"$out" \
+   && ! grep -q "copier update" <<<"$out"
+then ok "a moved target tag: a WARN naming both commits, and no update command"
+else bad "moved tag, drift item"; printf '%s\n' "$out" | grep -E 'template|copier' | sed 's/^/        /'; fi
+printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved, not $target_sha" "$work/print-err"; then ok "a moved target tag: --print-update-command prints no line, exit 1, names both commits"
+else bad "--print-update-command, moved tag (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved" "$work/print-err"; then ok "a moved target tag: --plinth-pin tested prints no line either"
+else bad "--plinth-pin tested, moved tag (rc=$rc, stdout '$printed')"; fi
+out="$(python3 "$checker" --root "$pcopy" --no-network 2>&1)"
+if grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error); the template-update skill checks it before it runs this line:" <<<"$out" \
+   && grep -q "INFO    uvx .*copier update" <<<"$out"
+then ok "the target tag's commit not read: the drift item still shows the line, and says it was not verified"
+else bad "unread tag, drift item"; printf '%s\n' "$out" | grep -E 'template|copier|verified' | sed 's/^/        /'; fi
+printed="$(FLOOR_CHECK_API_DIR="$work/api-none-at-all" python3 "$checker" --root "$pcopy" --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "not verified that $target_ref still names $target_sha, the commit plinth was tested with (the tag was not found)" "$work/print-err"
+then ok "the target tag's commit not read: --print-update-command, the line that runs, prints none (fail closed)"
+else bad "--print-update-command, tag unread (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 printed="$(python3 "$checker" --root "$good" --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "the recorded tag is the target tag" "$work/print-err"; then ok "--print-update-command at the target tag prints no command, says why, exit 1"
 else bad "--print-update-command at the target (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
@@ -1439,6 +1469,7 @@ jq -n --arg patch "$patch_agents" '{files: [
     {filename: "template/.gitignore", status: "modified"},
     {filename: "docs/README.md", status: "modified"}
   ]}' > "$tmpl_api/repos/coolbress/plinth-template/compare/v1.0.0...${target_ref}.json"
+tag_names "$tmpl_api" "$target_sha"
 tcopy="$work/tmpl-drift"; rm -rf "$tcopy"; cp -R "$good" "$tcopy"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy/.copier-answers.yml"
 out="$(FLOOR_CHECK_API_DIR="$tmpl_api" python3 "$checker" --root "$tcopy" 2>&1)"
@@ -1474,10 +1505,11 @@ pin_api() { # <copier.yml plinth_sha default or "-" for none> <compare status or
   mkdir -p "$pin_dir/repos/coolbress/plinth-template/contents" "$pin_dir/repos/coolbress/plinth/compare"
   if [ "$1" != - ]; then
     printf 'plinth_sha:\n  type: str\n  help: |\n    Commit of coolbress/plinth.\n  default: "%s"\n\nowner_github_defaults:\n  default: "0000000000000000000000000000000000000009"\n' "$1" \
-      | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$pin_dir/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+      | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$pin_dir/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
   fi
   [ "$2" = - ] || jq -n --arg s "$2" '{status: $s, ahead_by: 4, behind_by: 0}' > "$pin_dir/repos/coolbress/plinth/compare/$sha40...$tested.json"
   jq -n --arg t "$tested" '[{name: "v9.0.0", commit: {sha: $t}}]' > "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"
+  tag_names "$pin_dir" "$target_sha"
 }
 pcopy2="$work/pin-choice"; rm -rf "$pcopy2"; cp -R "$good" "$pcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy2/.copier-answers.yml"
@@ -1843,7 +1875,7 @@ glci() { # <include lines> -- a .gitlab-ci.yml with these include lines and the 
 }
 glci "$(printf 'include:\n  - remote: %s\n    integrity: sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=' "$glurl")" > "$glgood/.gitlab-ci.yml"
 git -C "$glgood" init -q 2>/dev/null && git -C "$glgood" add -A
-mkdir -p "$work/noapi"
+mkdir -p "$work/noapi"; tag_names "$work/noapi" "$target_sha"
 gl() { # <description> <shell to change the copy> <ERE one output line must match> [checker args...]
   local desc="$1" edit="$2" want="$3"; shift 3
   local copy="$work/glcase"; rm -rf "$copy"; cp -R "$glgood" "$copy"
@@ -1962,9 +1994,10 @@ glpin_api() { # <plinth_gitlab_integrity default or "-"> → $work/api-glpin, th
   local d="$work/api-glpin"; rm -rf "$d"; mkdir -p "$d/repos/coolbress/plinth-template/contents" "$d/repos/coolbress/plinth/compare"
   { printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$tested"
     [ "$1" = - ] || printf 'plinth_gitlab_integrity:\n  type: str\n  default: "%s"\n' "$1"; } \
-    | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$d/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+    | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$d/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
   jq -n '{status: "ahead", ahead_by: 2, behind_by: 0}' > "$d/repos/coolbress/plinth/compare/$glsha...$tested.json"
   printf '[]' > "$d/repos/coolbress/plinth/tags?per_page=100.json"
+  tag_names "$d" "$target_sha"
 }
 newint="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 glpin_api "$newint"

@@ -37,6 +37,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The pins come from new-project.sh, their one source: run through it.
 template_repo="${PLINTH_DOOR_TEMPLATE_REPO:?run it as new-project.sh <name> --host gitlab}"
 template_ref="${PLINTH_DOOR_TEMPLATE_REF:?run it as new-project.sh <name> --host gitlab}"
+template_sha="${PLINTH_DOOR_TEMPLATE_SHA:?run it as new-project.sh <name> --host gitlab}"
 copier_version="${PLINTH_DOOR_COPIER_VERSION:?run it as new-project.sh <name> --host gitlab}"
 copier_newer="${PLINTH_DOOR_COPIER_NEWER:?run it as new-project.sh <name> --host gitlab}"
 claude_floor="${PLINTH_DOOR_CLAUDE_FLOOR:?run it as new-project.sh <name> --host gitlab}"
@@ -234,9 +235,10 @@ if git -C "$(dirname "$dir")" rev-parse --is-inside-work-tree >/dev/null 2>&1; t
 fi
 
 # The license and the archetype against the template's own choices, read from
-# its copier.yml at the pinned tag (public, over GitHub's raw files): copier
-# refuses anything else, and that would come after the project exists.
-copier_yml="$(curl -fsSL --retry 2 "https://raw.githubusercontent.com/$template_repo/$template_ref/copier.yml" 2>/dev/null)" || copier_yml=""
+# its copier.yml at the pinned tag's commit (public, over GitHub's raw files):
+# copier refuses anything else, and that would come after the project exists.
+template_pinned
+copier_yml="$(curl -fsSL --retry 2 "https://raw.githubusercontent.com/$template_repo/$template_sha/copier.yml" 2>/dev/null)" || copier_yml=""
 arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
 [ -n "$arch_choices" ] && [ -n "$lic_choices" ] \
   || stop "could not read the template's archetype and license choices ($template_repo@$template_ref copier.yml)" "  fix: run it again; it needs raw.githubusercontent.com"

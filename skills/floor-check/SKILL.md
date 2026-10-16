@@ -294,7 +294,12 @@ compared with the live pin on GitHub), a second line carries that one, under
 a line naming both SHAs, their release tags and the compare URL: the person
 chooses, the item never does. A live pin newer than the tested one is kept
 and said so, with no second line; a comparison that could not be read is
-said so too, with only the first line (#511). When that pin cannot be
+said so too, with only the first line (#511). Each line is printed only
+while the target tag still names the commit plinth was tested with
+(`scripts/new-project.sh`'s `template_sha`): a tag that names another commit
+is a WARN naming both, with no line; a tag whose commit could not be read
+still shows the line, said to be not verified, and `/plinth:template-update`
+refuses to run it until it is (#519). When that pin cannot be
 established (no such `uses:` line, or two that disagree) the tags and file
 list still print, with no command. A repository the door did not make, or
 whose recorded tag is not an exact release tag, is a SKIP, not a PASS. It

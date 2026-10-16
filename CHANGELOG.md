@@ -13,6 +13,15 @@ pull requests and have no tag.
 
 ### Changed
 
+- The template is pinned by commit as well as by tag (#519):
+  `scripts/new-project.sh` records `template_sha`, the commit `template_ref`
+  named when it was tested. Both doors, GitHub's and GitLab's, stop before
+  creating anything when the tag names another commit, or when it cannot be
+  read, and read the template's `copier.yml` at that commit.
+  `/plinth:floor-check`'s template drift item prints no update line for a
+  moved tag (a WARN naming both commits), and `/plinth:template-update`
+  stops before copier unless the tag is read naming that commit.
+
 - `/plinth:floor-check` opens its report with a summary in plain words: how
   many items fail, how many were not verified and how many warn, what each
   FAIL means for the person, and which to fix first with the reason (#557).

@@ -246,6 +246,19 @@ cat > "$work/bin/git" <<'MOCK'
 #!/usr/bin/env bash
 set -u
 [ "$1" = --version ] && { echo "git version ${MOCK_GIT_VERSION:-2.45.0}"; exit 0; }
+# The template tag's commit (#519): as GitHub answers an annotated tag, the
+# tag object then its commit; MOCK_TAG=moved names another commit, gone
+# answers nothing, error fails as an unreachable github.com does.
+if [ "$1" = ls-remote ]; then
+  printf 'git %s\n' "$*" >> "$GH_LOG"
+  case "${MOCK_TAG:-pinned}" in
+    pinned) printf '%040d\trefs/tags/%s\n%s\trefs/tags/%s^{}\n' 9 "$TEMPLATE_REF" "$TEMPLATE_SHA" "$TEMPLATE_REF" ;;
+    moved)  printf '%040d\trefs/tags/%s\n%040d\trefs/tags/%s^{}\n' 9 "$TEMPLATE_REF" 1 "$TEMPLATE_REF" ;;
+    gone)   ;;
+    error)  echo "fatal: unable to access 'https://github.com/x/': Could not resolve host" >&2; exit 128 ;;
+  esac
+  exit 0
+fi
 for a in "$@"; do
   if [ "$a" = push ]; then
     printf 'git %s\n' "$*" >> "$GH_LOG"
@@ -269,6 +282,9 @@ chmod +x "$work/bin/"*
 mkdir -p "$work/bin-nouv"; for f in gh git uvx claude sleep; do cp "$work/bin/$f" "$work/bin-nouv/"; done
 
 export REAL_GIT="$real_git"
+TEMPLATE_REF="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+TEMPLATE_SHA="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$root/scripts/new-project.sh")"
+export TEMPLATE_REF TEMPLATE_SHA
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 export CLAUDE_CONFIG_DIR="$work/claude"
@@ -441,6 +457,13 @@ run license-typo   err no no "unknown license: bogus"                           
 # the door reads the template's own list and stops before creating anything.
 run license-unsupported err no no "the template does not carry the license GPL-3.0"          -- probe --license=gpl-3.0
 run archetype-typo err no no "the template accepts: cli library backend data-ml"            -- probe --archetype=service
+# The template tag must still name the commit this plinth was tested with
+# (#519): moved, gone or unreadable, the door stops before creating anything.
+E="MOCK_TAG=moved" run tag-moved err no no "names commit $(printf '%040d' 1), not $TEMPLATE_SHA, the one this plinth was tested with" -- probe
+E="MOCK_TAG=gone"  run tag-gone  err no no "could not read which commit coolbress/plinth-template@$TEMPLATE_REF names" -- probe
+E="MOCK_TAG=error" run tag-unread err no no "could not read which commit coolbress/plinth-template@$TEMPLATE_REF names" -- probe
+if grep -qF "contents/copier.yml" "$work/home-tag-gone/calls.log"; then bad tag-gone "the template's copier.yml was read although its tag was not verified"
+else ok tag-gone "nothing is read from the template before its tag is verified"; fi
 # `mkdir ~/x; cd ~/x; claude` then the door: an empty directory is where the
 # user wants the project, not a collision (#125). A non-empty one still is.
 mkdir -p "$work/home-dir-exists/probe"; : > "$work/home-dir-exists/probe/notes.txt"
@@ -747,6 +770,8 @@ check "a backend ruleset is the wall plus image, from the same app (check-rulese
   '"$root/scripts/check-ruleset.sh" "$work/home-backend/ruleset-posted.json" image >/dev/null'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
   'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.14.0 in " "$work/home-none/out"'
+check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
+  'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
 
 # The end says whether the credential the agent inherits can change the wall
 # (#300), read once setup is done. `permissions.admin` is the account's role,
@@ -1192,6 +1217,13 @@ E="MOCK_GL_LEVEL=30" gl_run gl-group-developer err no no "needs the Maintainer r
 E="MOCK_GL_LEVEL=none" gl_run gl-group-nonmember err no no "needs the Maintainer role" -- someorg/probe --host gitlab
 E="MOCK_GL_EXISTS=1" gl_run gl-exists err no no "already exists" -- probe --host gitlab
 gl_run gl-bad-license err no no "the template does not carry the license" -- probe --host gitlab --license=gpl-3.0
+E="MOCK_TAG=moved" gl_run gl-tag-moved err no no "names commit $(printf '%040d' 1), not $TEMPLATE_SHA, the one this plinth was tested with" -- probe --host gitlab
+E="MOCK_TAG=error" gl_run gl-tag-unread err no no "could not read which commit coolbress/plinth-template@$TEMPLATE_REF names" -- probe --host gitlab
+if grep -qF "/copier.yml" "$work/home-gl-tag-moved/calls.log"; then bad gl-tag-moved "the template's copier.yml was read although its tag names another commit"
+else ok gl-tag-moved "nothing is read from the template before its tag is verified"; fi
+if grep -qF "raw.githubusercontent.com/coolbress/plinth-template/$TEMPLATE_SHA/copier.yml" "$work/home-gl-plan/calls.log"
+then ok gl-plan "the template's copier.yml is read at the tag's pinned commit (#519)"
+else bad gl-plan "the template's copier.yml is not read at the pinned commit"; fi
 gl_run gl-bad-arch err no no "unknown archetype: web" -- probe --host gitlab --archetype=web
 gl_run gl-bad-host err no no "--host is github or gitlab" -- probe --host bitbucket
 gl_run gl-github-public err no no "unknown option: --public" -- probe --public

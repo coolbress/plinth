@@ -43,14 +43,16 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# The box, at the one tag this version of plinth is tested with, and the
-# workflow file it ships (the first pull request's run is looked up by it).
+# The box, at the one tag this version of plinth is tested with and the
+# commit that tag named then (checked before anything is created, #519), and
+# the workflow file it ships (the first pull request's run is looked up by it).
 # Then the renderer, at one version, with its dependencies as they were on
 # one date: copier runs as you, with your git configuration in reach, and
 # an unpinned resolution would let any package published later run there.
-# Raising the tag, the version or the date is the only edit here.
+# Raising the tag with its commit, the version or the date is the only edit here.
 template_repo="coolbress/plinth-template"
 template_ref="v1.14.0"
+template_sha="0a0c183786b85839aba52c564765b05cb6ca4d11"
 template_ci=".github/workflows/ci.yml"
 copier_version="9.18.2"
 copier_newer="2026-09-09"
@@ -70,6 +72,7 @@ done
 case "$host" in
   github) set -- ${rest[@]+"${rest[@]}"} ;;
   gitlab) PLINTH_DOOR_TEMPLATE_REPO="$template_repo" PLINTH_DOOR_TEMPLATE_REF="$template_ref" \
+            PLINTH_DOOR_TEMPLATE_SHA="$template_sha" \
             PLINTH_DOOR_COPIER_VERSION="$copier_version" PLINTH_DOOR_COPIER_NEWER="$copier_newer" \
             PLINTH_DOOR_CLAUDE_FLOOR="$claude_floor" \
             exec "$here/new-project-gitlab.sh" ${rest[@]+"${rest[@]}"} ;;
@@ -277,7 +280,9 @@ spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
 # is not in ['MIT', 'Apache-2.0']`) and that refusal lands after the repository
 # exists, so an unsupported license would create and delete. Unreadable is not
 # a stop: copier is the judge, and a refusal rolls back.
-copier_yml="$(gh api "repos/$template_repo/contents/copier.yml?ref=$template_ref" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || copier_yml=""
+# The tag must still name the commit this plinth was tested with (#519).
+template_pinned
+copier_yml="$(gh api "repos/$template_repo/contents/copier.yml?ref=$template_sha" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || copier_yml=""
 arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
 if [ -n "$arch_choices" ] && [ -n "$lic_choices" ]; then
   grep -qxF "$arch" <<<"$arch_choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$arch_choices")"

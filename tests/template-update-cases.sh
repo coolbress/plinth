@@ -16,6 +16,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 script="$root/scripts/template-update.sh"
 checker="$root/scripts/floor-check.py"
 target_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 work="$(cd "$(mktemp -d)" && pwd -P)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -24,10 +25,15 @@ mkdir -p "$work/bin"
 sha40="$(printf '%040d' 7)"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-# The checker's GitHub reads come from fixtures, never the network: an empty
-# directory answers 404 to each, so the tested pin is "not read" unless a
-# case writes one (#511).
-export FLOOR_CHECK_API_DIR="$work/api-none"; mkdir -p "$FLOOR_CHECK_API_DIR"
+# The checker's GitHub reads come from fixtures, never the network: a
+# missing file answers 404, so the tested pin is "not read" unless a case
+# writes one (#511). Each directory answers that the target tag still names
+# the commit plinth was tested with (#519), unless a case says otherwise.
+tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub
+  mkdir -p "$1/repos/coolbress/plinth-template/commits"
+  printf '{"sha":"%s"}\n' "$2" > "$1/repos/coolbress/plinth-template/commits/$target_ref.json"
+}
+export FLOOR_CHECK_API_DIR="$work/api-none"; tag_names "$FLOOR_CHECK_API_DIR" "$target_sha"
 
 # ── mock: gh ─────────────────────────────────────────────────────────────
 # repo view names o/r with default branch main; the branch API answers the
@@ -259,8 +265,9 @@ tested="$(printf '%040d' 8)"
 pin_api="$work/api-pin"
 mkdir -p "$pin_api/repos/coolbress/plinth-template/contents" "$pin_api/repos/coolbress/plinth/compare"
 printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$tested" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
-  > "$pin_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+  > "$pin_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
 printf '{"status":"ahead","ahead_by":2}\n' > "$pin_api/repos/coolbress/plinth/compare/$sha40...$tested.json"
+tag_names "$pin_api" "$target_sha"
 pinrun() { # <fixture dir> <args...>: run with that API fixture
   local api="$1"; shift
   out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$api" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" "$@" 2>&1)"; rc=$?
@@ -296,7 +303,8 @@ done
 # line, and the description does not claim a move.
 same_api="$work/api-same"; rm -rf "$same_api"; mkdir -p "$same_api/repos/coolbress/plinth-template/contents"
 printf 'plinth_sha:\n  default: "%s"\n' "$sha40" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
-  > "$same_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_ref.json"
+  > "$same_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
+tag_names "$same_api" "$target_sha"
 fixture pinsame; reset_logs
 pinrun "$same_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin tested
 body="$(cat "$work/gh.log.body" 2>/dev/null)"
@@ -316,6 +324,33 @@ else bad "--plinth-pin newest (rc=$rc)"; fi
 pinrun "$pin_api" --plinth-pin tested
 if [ "$rc" = 2 ]; then ok "--plinth-pin without --apply exits 2: the choice is made where copier runs"
 else bad "--plinth-pin on the plan (rc=$rc)"; fi
+
+# ── the target tag names another commit than plinth was tested with (#519)
+moved_api="$work/api-moved"; rm -rf "$moved_api"; cp -R "$pin_api" "$moved_api"
+tag_names "$moved_api" "$(printf '%040d' 5)"
+fixture tagmoved; reset_logs
+pinrun "$moved_api"
+if [ "$rc" = 1 ] && grep -q "$target_ref now names commit $(printf '%040d' 5), not $target_sha" <<<"$out" && ! grep -q -- "--apply" <<<"$out"
+then ok "a moved target tag: the plan stops, names both commits, and offers no --apply line"
+else bad "plan, moved tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+for choice in live tested; do
+  reset_logs
+  pinrun "$moved_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin "$choice"
+  if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.log" && grep -q "now names commit" <<<"$out"
+  then ok "a moved target tag: --apply --plinth-pin $choice stops before copier, opens nothing"
+  else bad "--apply, moved tag, $choice (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+  git -C "$repo" worktree remove --force "$(dirname "$repo")/$(basename "$repo")-template-$target_ref" 2>/dev/null
+  git -C "$repo" branch -q -D "chore/template-$target_ref" 2>/dev/null
+done
+unread_api="$work/api-tag-unread"; rm -rf "$unread_api"; cp -R "$pin_api" "$unread_api"
+rm "$unread_api/repos/coolbress/plinth-template/commits/$target_ref.json"
+reset_logs
+pinrun "$unread_api" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && grep -q "not verified that $target_ref still names $target_sha" <<<"$out"
+then ok "the target tag's commit not read: --apply stops before copier (the line that runs is checked, fail closed)"
+else bad "--apply, tag unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+git -C "$repo" worktree remove --force "$(dirname "$repo")/$(basename "$repo")-template-$target_ref" 2>/dev/null
+git -C "$repo" branch -q -D "chore/template-$target_ref" 2>/dev/null
 
 # ── a pull request GitHub made although gh reported failure is adopted ──
 fixture adopt; reset_logs
