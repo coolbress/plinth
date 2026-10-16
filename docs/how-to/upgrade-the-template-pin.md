@@ -19,7 +19,15 @@ its own checks must have passed on the commit it tags.
    gh release view vA.B.C --repo coolbress/plinth-template
    ```
 
-3. In `scripts/new-project.sh`, set `template_ref="vA.B.C"`. If the new tag
+3. In `scripts/new-project.sh`, set `template_ref="vA.B.C"`, and
+   `template_sha` to the commit that tag names, from:
+
+   ```bash
+   gh api repos/coolbress/plinth-template/commits/vA.B.C --jq .sha
+   ```
+
+   Both doors stop before creating anything, and `/plinth:floor-check` prints
+   no update line, while the tag names any other commit (#519). If the new tag
    needs a newer copier, raise `copier_version` and `copier_newer` in the same
    block.
 4. List every other place the old tag appears:

@@ -17,6 +17,12 @@ to tracked files, and `gh` logged in with write access to the repository.
    sed -nE 's/^template_ref="([^"]+)"$/\1/p' scripts/new-project.sh
    ```
 
+   Beside it, `template_sha` is the commit that tag named when it was
+   tested. It moves only with `template_ref`, in the pin pull request
+   ([How to upgrade the template pin](upgrade-the-template-pin.md)), never
+   in a release: both doors, `/plinth:floor-check` and
+   `/plinth:template-update` stop when the tag names another commit (#519).
+
 2. Write the why in a file outside the repository, for example
    `${TMPDIR:-/tmp}/why.md`: a short paragraph on why this release exists, and one
    line `tested with plinth-template <tag>` with the tag from step 1. Use no
