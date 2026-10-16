@@ -110,9 +110,10 @@ checker's terms yet. It comes before the checker's output and replaces none
 of it:
 
 1. How many items fail and how many were not verified, the two numbers on
-   the checker's last line, which starts `-- N failed, M not verified`, and how many
-   WARN lines there are. With no FAIL, say that no check failed in what was
-   read, and that the not-verified count is what was not read.
+   the checker's last line, which starts `-- N failed, M not verified`, and
+   how many WARN lines there are. With no FAIL, say that no check failed in
+   what was verified, and that the not-verified count is what could not be
+   verified, whether or not the checker read it.
 2. For each FAIL, one plain sentence on what it means for the person: what
    can happen to their project or their merge while it stays, not what the
    checker compared. For example, "a pull request can merge without the
