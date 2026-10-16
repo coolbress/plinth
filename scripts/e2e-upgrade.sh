@@ -112,7 +112,13 @@ git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$from_ref, as $start's door"
 
 # ── 2 the repository ─────────────────────────────────────────────────────
+# created: 0 nothing made, 1 gh repo create answered that it made it, ?
+# asked and no answer (a cancellation while it ran, or an error that does
+# not say). The create carries a description no one else can guess, so a ?
+# deletes the repository only when it answers with that description: a name
+# someone else took in between is never deleted from here.
 created=0
+marker="plinth e2e upgrade, run ${GITHUB_RUN_ID:-local} $(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 cleanup() {
   local rc=$? out
   trap - EXIT
@@ -120,6 +126,20 @@ cleanup() {
   if [ "$created" = 0 ]; then
     echo "the upgrade path failed before anything was created; nothing to delete (the local copy $work stays)" >&2
     exit "$rc"
+  fi
+  if [ "$created" = "?" ]; then
+    if out="$(gh api "repos/$repo" --jq .description 2>&1)"; then
+      if [ "$out" != "$marker" ]; then
+        loud "UPGRADE REPOSITORY NOT DELETED: $url exists without this run's description, so it may be someone else's; if it is this run's, delete it: $url/settings"
+        exit "$rc"
+      fi
+    elif grep -qE 'HTTP 404|Not Found' <<<"$out"; then
+      echo "the upgrade path failed while $url was being created, and it does not exist; nothing to delete" >&2
+      exit "$rc"
+    else
+      loud "UPGRADE REPOSITORY NOT DELETED: whether $url was made by this run could not be read ($out); if it exists with the description \"$marker\", delete it: $url/settings"
+      exit "$rc"
+    fi
   fi
   echo "the upgrade path did not finish (exit $rc); deleting $url (the local copy $work stays)" >&2
   if out="$(gh repo delete "$repo" --yes 2>&1)"; then echo "deleted $url" >&2
@@ -129,24 +149,18 @@ cleanup() {
 }
 trap cleanup EXIT
 # A name that already exists is not this run's (a rerun after a deletion
-# that failed, or anyone's): never deleted from here. It is read before the
-# create, so that from the create on, whatever answers at that name is this
-# run's: a cancellation while gh repo create runs (GitHub may have made it,
-# the answer never came back) is deleted like any other failure, and the
-# deletion's 404 is what says nothing exists.
+# that failed, or anyone's): refused before anything is made.
 if out="$(gh api "repos/$repo" --jq .full_name 2>&1)"; then
   fail "$url already exists and this run did not create it; delete or rename it, then run again"
 elif ! grep -qE 'HTTP 404|Not Found' <<<"$out"; then
   fail "could not read whether $url exists ($out); nothing was created"
 fi
-created=1
-if ! out="$(gh repo create "$repo" --public 2>&1)"; then
-  if grep -qi 'already exists' <<<"$out"; then
-    created=0  # made by someone else between the read and the create
-    fail "$url already exists and this run did not create it; delete or rename it, then run again"
-  fi
-  fail "creating $url failed ($out)"
-fi
+created="?"
+if out="$(gh repo create "$repo" --public --description "$marker" 2>&1)"; then created=1
+elif grep -qi 'already exists' <<<"$out"; then
+  created=0  # made by someone else between the read and the create
+  fail "$url already exists and this run did not create it; delete or rename it, then run again"
+else fail "creating $url failed ($out)"; fi
 gh api -X PUT "repos/$repo/actions/permissions" -F enabled=false >/dev/null \
   || fail "could not turn Actions off on $url"
 git -C "$dir" remote add origin "$url.git"

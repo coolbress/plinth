@@ -79,11 +79,18 @@ case "$*" in
   "api repos/coolbress/plinth-template/contents/copier.yml?ref=v1.0.0 "*) copier_yml "$OLD_PIN" ;;
   "api repos/coolbress/plinth-template/contents/copier.yml?ref=v1.0.5 "*) copier_yml "$NEW_PIN" ;;
   "api repos/coolbress/plinth-template/contents/copier.yml?ref=v1.1.0 "*) [ "${NO_TESTED:-0}" = 0 ] || exit 1; copier_yml "$NEW_PIN" ;;
+  "api repos/tester/plinth-e2e-upgrade-42 --jq .description")
+                                      [ "${OWNER_RC:-0}" = 0 ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+                                      [ "${CREATE_RC:-0}" = 0 ] || [ "${CREATE_MADE:-0}" = 1 ] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+                                      [ -z "${OTHERS:-}" ] || { echo "$OTHERS"; exit 0; }
+                                      cat "$GH_LOG.marker" ;;
   "api repos/tester/plinth-e2e-upgrade-42 --jq .full_name")
                                       [ "${EXISTS_RC:-0}" = 0 ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
                                       [ "${CREATE_EXISTS:-0}" = 0 ] || { echo "tester/plinth-e2e-upgrade-42"; exit 0; }
                                       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
-  "repo create "*)                    [ "${CREATE_RACE:-0}" = 0 ] || { echo "GraphQL: Name already exists on this account (createRepository)" >&2; exit 1; }
+  "repo create "*)                    a="$*"; printf '%s\n' "${a##*--description }" > "$GH_LOG.marker"
+                                      [ "${CREATE_RC:-0}" = 0 ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+                                      [ "${CREATE_RACE:-0}" = 0 ] || { echo "GraphQL: Name already exists on this account (createRepository)" >&2; exit 1; }
                                       # made on GitHub, then the job is cancelled before the answer
                                       [ "${CREATE_KILL:-0}" = 0 ] || { kill -TERM "$PPID"; exit 143; } ;;
   "api -X PUT repos/"*"/actions/permissions "*) [ "${ACTIONS_RC:-0}" = 0 ] || { echo "HTTP 403" >&2; exit 1; } ;;
@@ -199,6 +206,18 @@ is "nothing deleted"           deletes 0
 run CREATE_KILL=1;             check "cancelled while the create runs: a failure" no $?
 is "what the create may have made is deleted" deletes 1
 is "not called nothing to delete" not said "nothing to delete"
+is "it said the create's answer was lost" said "deleting https://github.com/tester/plinth-e2e-upgrade-42"
+run CREATE_KILL=1 OTHERS="someone else's";  check "cancelled while the create runs, and the name is someone else's" no $?
+is "it is not deleted"         deletes 0
+is "it is named, not deleted"  said "exists without this run's description"
+run CREATE_KILL=1 OWNER_RC=1;  check "cancelled while the create runs, and whose it is cannot be read" no $?
+is "it is not deleted"         deletes 0
+is "named loudly"              said "could not be read"
+run CREATE_RC=1;               check "a create that fails without saying, and nothing was made" no $?
+is "nothing deleted"           deletes 0
+is "it says so"                said "does not exist; nothing to delete"
+run CREATE_RC=1 CREATE_MADE=1; check "a create that fails without saying, but made it" no $?
+is "deleted, its description being this run's" deletes 1
 run ACTIONS_RC=1;              check "Actions that cannot be turned off: a failure" no $?
 is "deleted"                   deletes 1
 run DELETE_RC1=1;              check "landed but not deleted is a failure, and cleanup tries once more" no $?
