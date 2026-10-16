@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-10-16
+
+A release now proves what it advertises reaches a repository, and the
+template it renders is pinned as fixedly as every other input (#519): the
+door stops when the template tag names another commit than the one plinth
+was tested with, e2e updates a repository an earlier release made and reads
+that the tested plinth pin landed, and `/plinth:template-update` recommends
+that pin for the person to confirm. `/plinth:floor-check` also leads with a
+plain-word summary, and the docs name the output style a new repository
+turns on (#557).
+
+tested with plinth-template v1.14.0
+
 ### Added
 
 - The `e2e` workflow gains an `upgrade` job (#519), so a release is checked
@@ -2876,7 +2889,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.20.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.21.0...HEAD
+[1.21.0]: https://github.com/coolbress/plinth/releases/tag/v1.21.0
 [1.20.0]: https://github.com/coolbress/plinth/releases/tag/v1.20.0
 [1.19.0]: https://github.com/coolbress/plinth/releases/tag/v1.19.0
 [1.18.0]: https://github.com/coolbress/plinth/releases/tag/v1.18.0
