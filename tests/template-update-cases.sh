@@ -17,6 +17,7 @@ script="$root/scripts/template-update.sh"
 checker="$root/scripts/floor-check.py"
 target_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+export TARGET_REF="$target_ref" TARGET_SHA="$target_sha"
 work="$(cd "$(mktemp -d)" && pwd -P)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -69,6 +70,8 @@ printf '%s\n' "$*" > "$UVX_LOG"
 ref=""; prev=""
 for a in "$@"; do [ "$prev" = --vcs-ref ] && ref="$a"; prev="$a"; done
 [ "${MOCK_COPIER:-clean}" = fail ] && { echo "copier: something broke" >&2; exit 1; }
+# copier records the tag a commit carries, not the commit (measured, 9.18.2).
+[ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
 printf 'template line\n' >> AGENTS.md
 case "${MOCK_COPIER:-clean}" in
@@ -291,7 +294,7 @@ for choice in tested live default; do
   if [ "$choice" = default ]; then pinrun "$pin_api" --apply "$base"; else pinrun "$pin_api" --apply "$base" --plinth-pin "$choice"; fi
   want_sha="$sha40"; [ "$choice" = tested ] && want_sha="$tested"
   body="$(cat "$work/gh.log.body" 2>/dev/null)"
-  if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_ref --data plinth_sha=$want_sha\$" "$work/uvx.log"
+  if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_sha --data plinth_sha=$want_sha\$" "$work/uvx.log"
   then ok "--apply $([ "$choice" = default ] && echo "without --plinth-pin" || echo "--plinth-pin $choice") runs copier with the $([ "$choice" = tested ] && echo tested || echo live) SHA"
   else bad "--plinth-pin $choice (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
   if grep -qF -- "--plinth-pin $([ "$choice" = tested ] && echo tested || echo live)" <<<"$body" && grep -q "$sha40" <<<"$body" && grep -q "$tested" <<<"$body"

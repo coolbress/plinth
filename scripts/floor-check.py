@@ -1148,9 +1148,11 @@ def template_drift(root: Path, host: str | None = None) -> dict:
 def update_line(d: dict, pin: str, integrity: str | None = None) -> str:
     """The `copier update` line to the target tag, carrying plinth pin `pin`,
     and on GitLab the include's checksum at that pin: a pin moved without its
-    checksum fails every pipeline before a job runs."""
+    checksum fails every pipeline before a job runs. It fetches the tag's
+    pinned commit, not the tag (#519): copier still records the tag as
+    `_commit` (measured, copier 9.18.2)."""
     return (f"uvx --from copier=={d['copier_version']} --exclude-newer {d['copier_newer']} "
-            f"copier update --defaults --vcs-ref {d['target']} --data plinth_sha={pin}"
+            f"copier update --defaults --vcs-ref {d['target_sha']} --data plinth_sha={pin}"
             + (f" --data plinth_gitlab_integrity={shlex.quote(integrity)}" if integrity else ""))
 
 
@@ -1274,6 +1276,12 @@ def check_template_drift(root: Path, network: bool, host: str | None = None) -> 
         result("INFO", f"template: the recorded tag {recorded} is ahead of {target}, the tag plinth is tested with")
         return
     if d["state"] == "current":
+        # A tag moved since this repository was rendered from it (#519).
+        tag, now = target_tag(d, network)
+        if tag == "moved":
+            result("WARN", f"template: the recorded tag is the target tag ({target}), but {target} now names "
+                           f"commit {now}, not {d['target_sha']}, the commit plinth was tested with")
+            return
         result("PASS", f"template: the recorded tag is the target tag ({target})")
         return
 

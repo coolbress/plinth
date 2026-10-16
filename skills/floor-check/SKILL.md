@@ -297,7 +297,8 @@ and said so, with no second line; a comparison that could not be read is
 said so too, with only the first line (#511). Each line is printed only
 while the target tag still names the commit plinth was tested with
 (`scripts/new-project.sh`'s `template_sha`): a tag that names another commit
-is a WARN naming both, with no line; a tag whose commit could not be read
+is a WARN naming both, with no line, and so is a repository already on that
+tag, in place of the PASS; a tag whose commit could not be read
 still shows the line, said to be not verified, and `/plinth:template-update`
 refuses to run it until it is (#519). When that pin cannot be
 established (no such `uses:` line, or two that disagree) the tags and file

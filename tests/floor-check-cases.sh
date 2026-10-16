@@ -1277,7 +1277,7 @@ drift "a recorded tag behind the target is named, with both tags" "v1.0.0" \
 drift "offline, the changed files could not be read, and it says so rather than staying silent" "v1.0.0" \
   "the changed files could not be read \(offline or API error\)"
 drift "offline, the update command still carries the pin this repository's own CI calls today" "v1.0.0" \
-  "copier update --defaults --vcs-ref $target_ref --data plinth_sha=$sha40"
+  "copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40"
 drift "a recorded tag ahead of the target is a plain statement, not a not-verified count" "v99.0.0" \
   "INFO  template: the recorded tag v99\.0\.0 is ahead of $target_ref, the tag plinth is tested with"
 quiet "an ahead tag is not counted as not verified" \
@@ -1440,6 +1440,14 @@ else bad "--print-update-command, moved tag (rc=$rc, stdout '$printed')"; sed 's
 printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved" "$work/print-err"; then ok "a moved target tag: --plinth-pin tested prints no line either"
 else bad "--plinth-pin tested, moved tag (rc=$rc, stdout '$printed')"; fi
+out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$good" 2>&1)"
+if grep -q "WARN  template: the recorded tag is the target tag ($target_ref), but $target_ref now names commit $moved, not $target_sha" <<<"$out" \
+   && ! grep -q "PASS  template:" <<<"$out"
+then ok "a repository already on the target tag, and the tag moved since: a WARN, not a PASS"
+else bad "current tag moved"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
+out="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$good" 2>&1)"
+if grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<<"$out"; then ok "a repository on the target tag, the tag still on its commit: PASS"
+else bad "current tag pinned"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
 out="$(python3 "$checker" --root "$pcopy" --no-network 2>&1)"
 if grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error); the template-update skill checks it before it runs this line:" <<<"$out" \
    && grep -q "INFO    uvx .*copier update" <<<"$out"
@@ -1491,7 +1499,7 @@ empty_api="$work/api-template-empty"; mkdir -p "$empty_api/repos/coolbress/plint
 tcopy2="$work/tmpl-drift-404"; rm -rf "$tcopy2"; cp -R "$good" "$tcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy2/.copier-answers.yml"
 out="$(FLOOR_CHECK_API_DIR="$empty_api" python3 "$checker" --root "$tcopy2" 2>&1)"
-if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier update --defaults --vcs-ref $target_ref --data plinth_sha=$sha40" <<<"$out"; then
+if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40" <<<"$out"; then
   ok "a compare call that 404s still prints the update command, and names the file list as unread"
 else bad "a 404 on the compare call"; printf '%s\n' "$out" | grep -E 'template|copier update' | sed 's/^/        /'; fi
 
@@ -1514,8 +1522,8 @@ pin_api() { # <copier.yml plinth_sha default or "-" for none> <compare status or
 pcopy2="$work/pin-choice"; rm -rf "$pcopy2"; cp -R "$good" "$pcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy2/.copier-answers.yml"
 pin_out() { out="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"; }
-live_line="copier update --defaults --vcs-ref $target_ref --data plinth_sha=$sha40"
-tested_line="copier update --defaults --vcs-ref $target_ref --data plinth_sha=$tested"
+live_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40"
+tested_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$tested"
 pin_api "$tested" ahead; pin_out
 if [ "$lines" = 2 ] && grep -qF "$live_line" <<<"$out" && grep -qF "$tested_line" <<<"$out"
 then ok "tested pin ahead of the live one: both update lines are printed, the live one first"

@@ -772,6 +772,8 @@ check "the summary line names owner, visibility, license, archetype, role and th
   'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.14.0 in " "$work/home-none/out"'
 check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
   'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
+check "copier renders the tag's pinned commit, not the tag: a tag moved after the check changes nothing (#519)" \
+  'grep -qE "^uvx .*--vcs-ref $TEMPLATE_SHA gh:coolbress/plinth-template " "$log"'
 
 # The end says whether the credential the agent inherits can change the wall
 # (#300), read once setup is done. `permissions.admin` is the account's role,
@@ -1221,8 +1223,9 @@ E="MOCK_TAG=moved" gl_run gl-tag-moved err no no "names commit $(printf '%040d' 
 E="MOCK_TAG=error" gl_run gl-tag-unread err no no "could not read which commit coolbress/plinth-template@$TEMPLATE_REF names" -- probe --host gitlab
 if grep -qF "/copier.yml" "$work/home-gl-tag-moved/calls.log"; then bad gl-tag-moved "the template's copier.yml was read although its tag names another commit"
 else ok gl-tag-moved "nothing is read from the template before its tag is verified"; fi
-if grep -qF "raw.githubusercontent.com/coolbress/plinth-template/$TEMPLATE_SHA/copier.yml" "$work/home-gl-plan/calls.log"
-then ok gl-plan "the template's copier.yml is read at the tag's pinned commit (#519)"
+if grep -qF "raw.githubusercontent.com/coolbress/plinth-template/$TEMPLATE_SHA/copier.yml" "$work/home-gl-plan/calls.log" \
+   && grep -qE "^uvx .*--vcs-ref $TEMPLATE_SHA gh:coolbress/plinth-template " "$work/home-gl-plan/calls.log"
+then ok gl-plan "the template's copier.yml is read, and the template rendered, at the tag's pinned commit (#519)"
 else bad gl-plan "the template's copier.yml is not read at the pinned commit"; fi
 gl_run gl-bad-arch err no no "unknown archetype: web" -- probe --host gitlab --archetype=web
 gl_run gl-bad-host err no no "--host is github or gitlab" -- probe --host bitbucket

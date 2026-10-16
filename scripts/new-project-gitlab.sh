@@ -254,7 +254,7 @@ env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$ns" --data "license=$spdx" --data "archetype=$arch" \
   --data "host=gitlab" \
-  --vcs-ref "$template_ref" "gh:$template_repo" "$dir" < /dev/null
+  --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
 rm -rf "$dir/.git"
 git init -q -b main "$dir"
 git -C "$dir" remote add origin "$url.git"

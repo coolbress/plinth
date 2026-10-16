@@ -280,7 +280,10 @@ spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
 # is not in ['MIT', 'Apache-2.0']`) and that refusal lands after the repository
 # exists, so an unsupported license would create and delete. Unreadable is not
 # a stop: copier is the judge, and a refusal rolls back.
-# The tag must still name the commit this plinth was tested with (#519).
+# The tag must still name the commit this plinth was tested with (#519);
+# the render below fetches that commit, not the tag, so a tag moved after
+# this check changes nothing. copier records the tag all the same
+# (`_commit: vX.Y.Z`, measured with copier 9.18.2).
 template_pinned
 copier_yml="$(gh api "repos/$template_repo/contents/copier.yml?ref=$template_sha" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || copier_yml=""
 arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
@@ -411,7 +414,7 @@ env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --e
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
-  --vcs-ref "$template_ref" "gh:$template_repo" "$dir" < /dev/null
+  --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
 rm -rf "$dir/.git"
 # init -b main: an empty clone would follow init.defaultBranch, and a `master`
 # there leaves the ruleset (~DEFAULT_BRANCH = main) guarding an empty branch.
