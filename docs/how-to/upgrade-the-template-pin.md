@@ -46,8 +46,9 @@ its own checks must have passed on the commit it tags.
    If the new tag's `plinth_sha` default moved, do not write that an update
    moves an existing repository's plinth pin: `/plinth:template-update` keeps
    the pin its workflows call, so an update does not undo what Dependabot
-   set. When the tag's pin is newer, the plan offers it as a second line,
-   `--plinth-pin tested`, and only the person's choice applies it (#511).
+   set. When the tag's pin is newer, the plan recommends it,
+   `--plinth-pin tested`, and only the person's confirmation applies it
+   (#511, #519).
 6. Run every check in [CONTRIBUTING.md](../../CONTRIBUTING.md#run-the-checks).
    With network, `tests/archetype-single-source.sh` reads the new tag's
    `copier.yml`. If it fails, the template changed which archetypes get a

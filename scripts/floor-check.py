@@ -1204,9 +1204,10 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
     """When the update is behind and the live pin is known: the live pin
     against the one the target tag was tested with (#511). #219 carries the
     live pin on purpose, so an update never overwrites what Dependabot set;
-    this offers the tested pin beside it, for a person to choose, and only
-    when it is newer. `state` is tested-ahead (`cmd` is the line with the
-    tested pin), equal (`cmd` is the live line), live-ahead or unread (no
+    this offers the tested pin beside it, only when it is newer, for a
+    person to confirm. `state` is tested-ahead (`cmd` is the line with the
+    tested pin, `recommend` the one plain sentence on what moving to it
+    gains, #519), equal (`cmd` is the live line), live-ahead or unread (no
     `cmd`); `note` is the one line that says so, naming both SHAs when read."""
     live = d["live"].lower()
     calls = "the include is at" if d.get("integrity") else "the workflows call"
@@ -1245,9 +1246,14 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
                 return {"state": "unread", "tested": tested,
                         "note": f"plinth pin: the include is at {live}; {target} was tested with {tested}, but its "
                                 f"checksum was not read ({why}); the live pin is kept"}
+        newer = f"{n} commit(s) newer than" if isinstance(n, int) else "newer than"
+        checks = "pipeline" if d.get("integrity") else "checks"
         return {"state": "tested-ahead", "tested": tested, "cmd": update_line(d, tested, integrity),
                 "note": f"plinth pin: {calls} {name(live)}; {target} was tested with "
-                        f"{name(tested)}{by}{tag_gap}: {url}"}
+                        f"{name(tested)}{by}{tag_gap}: {url}",
+                "recommend": f"move the plinth pin to {name(tested)}: this repository's {checks} then run "
+                             f"the plinth commit {target} was tested with, {newer} the one they run now, so what "
+                             f"plinth changed in between reaches it"}
     if status == "behind":
         return {"state": "live-ahead", "tested": tested,
                 "note": f"plinth pin: {calls} {name(live)}, newer than {name(tested)} that {target} "
@@ -1358,6 +1364,8 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
     if d.get("cmd") and plinth_pin == "tested":
         choice = plinth_pin_choice(d, network)
         print(choice["note"], file=sys.stderr)
+        if choice.get("recommend"):
+            print(f"recommended: {choice['recommend']}", file=sys.stderr)
         if choice.get("cmd"):
             print(choice["cmd"])
             return 0
