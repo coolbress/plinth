@@ -45,7 +45,10 @@ to tracked files, and `gh` logged in with write access to the repository.
    asked for. To have the release note read, a person posts the summons on
    the pull request; an agent does not write it (`AGENTS.md`).
 5. Update `main`: `git switch main && git pull --ff-only`.
-6. Start the `e2e` workflow on the merged commit, and wait for it to pass:
+6. Start the `e2e` workflow on the merged commit, and wait for it to pass.
+   It runs two jobs: `e2e`, the door's journey, and `upgrade`, which updates
+   a repository rendered at the template tag an earlier release pinned and
+   checks that the tested plinth pin lands in it (#519). Both must pass:
 
    ```bash
    gh workflow run e2e.yml --ref main

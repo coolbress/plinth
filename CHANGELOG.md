@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- The `e2e` workflow gains an `upgrade` job (#519), so a release is checked
+  for the repositories that already exist, not only for new ones. It renders
+  the template tag the newest earlier release with another tag pinned, into a
+  throwaway public repository with Actions off, runs this commit's
+  `scripts/template-update.sh` with `--plinth-pin tested`, and fails unless
+  every plinth `uses:` line and `.copier-answers.yml` name the plinth commit
+  the current template tag was tested with; then it deletes the repository.
+  `scripts/make-release.sh` already asks for a green run of the whole
+  workflow, so the release waits for it. GitHub only: `template-update.sh`
+  has no GitLab path yet.
+
 ### Changed
 
 - `/plinth:floor-check` opens its report with a summary in plain words: how

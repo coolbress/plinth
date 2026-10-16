@@ -9,6 +9,13 @@ name: e2e
 # public repository under the owner, which a pull request from anyone must
 # not be able to trigger.
 #
+# Two jobs, and the run is green only when both are. `e2e` is the door's
+# journey: it creates. `upgrade` (scripts/e2e-upgrade.sh, #519) starts from a
+# repository an earlier release made and updates it with this commit's
+# template-update.sh and the tested plinth pin, then reads that the pin
+# landed: a release that changes what a repository calls is checked for the
+# repositories that already exist, not only for new ones.
+#
 # One secret, PLINTH_E2E_TOKEN: a fine-grained personal access token with
 # Actions, Administration, Contents, Pull requests and Workflows: write on all
 # of the owner's repositories (a repository that does not exist yet is not
@@ -94,3 +101,40 @@ jobs:
           # env -u: the secret reaches the driver through the prompt only, not
           # also under its own name, which copier's environment would inherit.
           printf '%s\n' "$PLINTH_E2E_TOKEN" | env -u PLINTH_E2E_TOKEN ./scripts/with-admin-token.sh ./scripts/e2e.sh
+
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The release tags and their history: the start is an earlier
+          # release's scripts/new-project.sh, read with git show.
+          fetch-depth: 0
+
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+
+      # The token goes in as the e2e job's does, through the prompt, and git
+      # asks gh for it through its environment.
+      - name: "Upgrade: render an earlier release's template, update it with the tested pin, read the pin, delete"
+        env:
+          PLINTH_E2E_TOKEN: ${{ secrets.PLINTH_E2E_TOKEN }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: "!gh auth git-credential"
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$PLINTH_E2E_TOKEN" | env -u PLINTH_E2E_TOKEN ./scripts/with-admin-token.sh ./scripts/e2e-upgrade.sh
