@@ -362,6 +362,28 @@ moving work somewhere else: another tool, another folder, another person.
 
 ## What the agent tells you, and when
 
+A repository `/plinth:new-project` made turns on the output style
+`Beginner or non-engineer`: the agent does the same work and explains it in
+plain words. After each change it ends with an **Insight** block (what
+changed, why this way, what you can check yourself and what is not verified
+yet). At a merge, a template update or a failure it gives a decision report:
+what changed; what shows it, each check as `pass`, `fail` or
+`not yet confirmed` as the run's summary says it; what is still unknown, and
+on GitLab that no check is required by name; and what you are asked to
+decide. Before any choice it recommends one option with its reason and asks
+you to confirm. The first time it uses a term such as "squash" or "token",
+it explains it in one clause.
+
+Read the report's `not yet confirmed` lines before you say "merge": a green
+check can carry one, naming something it passed without confirming. To turn
+the style off for yourself, type `/output-style default` in the repository;
+it writes `"outputStyle": "default"` to `.claude/settings.local.json`, which
+the repository's `.gitignore` keeps out of commits, and deleting that line
+brings the style back. The same line in your own `~/.claude/settings.json`
+did not turn it off when this was measured (#555): the project's setting
+takes precedence. A repository made before plinth-template v1.14.0 gets the
+style through `/plinth:template-update`.
+
 At the start of a task, at an important choice, on a failure, and at the end
 or a resume, the agent reports: the goal now; the next action and why; what
 you decide; the evidence so far; where to return if stuck. You can steer at any

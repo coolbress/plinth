@@ -105,9 +105,26 @@ it needs the Maintainer role, so give it to the user to run, not yourself.
 
 ## Report
 
-Give the checker's output whole. Do not summarise it, shorten it, or drop
-PASS lines; the user reasons from the text they receive, and a FAIL you
-paraphrased is a FAIL they cannot hand to an agent.
+Lead with a summary in plain words, for a person who may not know the
+checker's terms yet. It comes before the checker's output and replaces none
+of it:
+
+1. How many items fail and how many were not verified, the two numbers on
+   the checker's last line, which starts `-- N failed, M not verified`, and how many
+   WARN lines there are. With no FAIL, say that no check failed in what was
+   read, and that the not-verified count is what was not read.
+2. For each FAIL, one plain sentence on what it means for the person: what
+   can happen to their project or their merge while it stays, not what the
+   checker compared. For example, "a pull request can merge without the
+   secret scan running" rather than "required checks dropped".
+3. Which one to fix first, and why: the one that lets a change reach `main`
+   unchecked or reach other people comes before a missing document. With no
+   FAIL, name the WARN to look at first, or say there is none.
+
+Then give the checker's output whole. Do not summarise it, shorten it, or
+drop PASS lines; the user reasons from the text they receive, and a FAIL you
+paraphrased is a FAIL they cannot hand to an agent. The summary above is the
+only paraphrase, and it says what a FAIL means, never that one is fixed.
 
 After the output, list every FAIL and WARN line again as a bulleted list, and
 under each one write one line that fixes it: a command, or a file and what to
