@@ -159,7 +159,9 @@ pushed="$(git -C "$wt" ls-remote origin "refs/heads/$branch" | cut -f1)"
 [ "$pushed" = "$head" ] || fail "$branch on GitHub is ${pushed:-absent}, not the update commit $head"
 bad=""
 # Each plinth reference outside a comment, file by file.
-pins="$(cd "$wt/.github/workflows" && grep -HE '^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*["'\'']?coolbress/plinth/' -- *.yml || true)"
+# Both extensions GitHub reads, as floor-check does.
+pins="$(cd "$wt/.github/workflows" && shopt -s nullglob && set -- *.yml *.yaml && [ "$#" -gt 0 ] \
+  && grep -HE '^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*["'\'']?coolbress/plinth/' -- "$@" || true)"
 for f in ci.yml label.yml; do
   grep -q "^$f:" <<<"$pins" || bad="$bad"$'\n'"  .github/workflows/$f has no coolbress/plinth uses: line"
 done

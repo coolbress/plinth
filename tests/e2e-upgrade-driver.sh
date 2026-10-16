@@ -56,6 +56,7 @@ wt="$(dirname "$top")/$(basename "$top")-template-v1.1.0"
 git -C "$top" worktree add -q -b chore/template-v1.1.0 "$wt"
 printf '_commit: %s\nplinth_sha: %s\n' "${TU_TAG:-v1.1.0}" "${TU_ANSWERS:-$NEW_PIN}" > "$wt/.copier-answers.yml"
 printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "${TU_CI:-$NEW_PIN}" > "$wt/.github/workflows/ci.yml"
+[ -z "${TU_YAML:-}" ] || printf 'jobs:\n  extra:\n    uses: coolbress/plinth/.github/workflows/pr-review.yml@%s\n' "$TU_YAML" > "$wt/.github/workflows/extra.yaml"
 if [ "${TU_NOLABEL:-0}" = 1 ]; then rm "$wt/.github/workflows/label.yml"
 else printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n# uses: coolbress/plinth/.github/workflows/pr-review.yml@<sha>\n' "${TU_LABEL:-$NEW_PIN}" > "$wt/.github/workflows/label.yml"; fi
 git -C "$wt" commit -q -am update
@@ -158,6 +159,10 @@ is "named, with both SHAs"     said "label.yml calls $old_pin, not $new_pin"
 is "deleted"                   deletes 1
 run TU_CI="$old_pin";          check "ci.yml still at the old pin" no $?
 is "named"                     said "ci.yml calls $old_pin, not $new_pin"
+run TU_YAML="$old_pin";        check "a .yaml caller still at the old pin" no $?
+is "named"                     said "extra.yaml calls $old_pin, not $new_pin"
+run TU_YAML="$new_pin";        check "a .yaml caller at the tested pin passes" ok $?
+is "counted with the .yml ones" said "landed on https://github.com/tester/x/pull/1: 3 plinth uses: line(s)"
 run TU_NOLABEL=1;              check "no plinth uses: line in label.yml" no $?
 is "named"                     said "label.yml has no coolbress/plinth uses: line"
 run TU_ANSWERS="$old_pin";     check ".copier-answers.yml still records the old pin" no $?
