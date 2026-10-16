@@ -79,7 +79,13 @@ case "$*" in
   "api repos/coolbress/plinth-template/contents/copier.yml?ref=v1.0.0 "*) copier_yml "$OLD_PIN" ;;
   "api repos/coolbress/plinth-template/contents/copier.yml?ref=v1.0.5 "*) copier_yml "$NEW_PIN" ;;
   "api repos/coolbress/plinth-template/contents/copier.yml?ref=v1.1.0 "*) [ "${NO_TESTED:-0}" = 0 ] || exit 1; copier_yml "$NEW_PIN" ;;
-  "repo create "*)                    [ "${CREATE_EXISTS:-0}" = 0 ] || { echo "GraphQL: Name already exists on this account (createRepository)" >&2; exit 1; } ;;
+  "api repos/tester/plinth-e2e-upgrade-42 --jq .full_name")
+                                      [ "${EXISTS_RC:-0}" = 0 ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+                                      [ "${CREATE_EXISTS:-0}" = 0 ] || { echo "tester/plinth-e2e-upgrade-42"; exit 0; }
+                                      echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+  "repo create "*)                    [ "${CREATE_RACE:-0}" = 0 ] || { echo "GraphQL: Name already exists on this account (createRepository)" >&2; exit 1; }
+                                      # made on GitHub, then the job is cancelled before the answer
+                                      [ "${CREATE_KILL:-0}" = 0 ] || { kill -TERM "$PPID"; exit 143; } ;;
   "api -X PUT repos/"*"/actions/permissions "*) [ "${ACTIONS_RC:-0}" = 0 ] || { echo "HTTP 403" >&2; exit 1; } ;;
   "repo delete "*)                    n="$(count delete)"; rc="DELETE_RC$n"
                                       [ "${!rc:-0}" = 0 ] || { echo "HTTP 403: Must have admin rights" >&2; exit 1; } ;;
@@ -184,6 +190,15 @@ echo "-- the repository"
 run CREATE_EXISTS=1;           check "a name that already exists is not this run's: refused" no $?
 is "nothing deleted"           deletes 0
 is "it says whose it is not"   said "already exists and this run did not create it"
+is "nothing created"           not saw "^gh repo create"
+run CREATE_RACE=1;             check "a name taken between the read and the create: refused" no $?
+is "nothing deleted"           deletes 0
+run EXISTS_RC=1;               check "whether the name is free cannot be read: stops" no $?
+is "nothing created"           not saw "^gh repo create"
+is "nothing deleted"           deletes 0
+run CREATE_KILL=1;             check "cancelled while the create runs: a failure" no $?
+is "what the create may have made is deleted" deletes 1
+is "not called nothing to delete" not said "nothing to delete"
 run ACTIONS_RC=1;              check "Actions that cannot be turned off: a failure" no $?
 is "deleted"                   deletes 1
 run DELETE_RC1=1;              check "landed but not deleted is a failure, and cleanup tries once more" no $?

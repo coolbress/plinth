@@ -129,13 +129,24 @@ cleanup() {
 }
 trap cleanup EXIT
 # A name that already exists is not this run's (a rerun after a deletion
-# that failed, or anyone's): never deleted from here. Any other failure is
-# deleted all the same: a create whose answer was lost still created, and
-# the deletion's 404 is what says nothing exists.
-if out="$(gh repo create "$repo" --public 2>&1)"; then created=1
-elif grep -qi 'already exists' <<<"$out"; then
+# that failed, or anyone's): never deleted from here. It is read before the
+# create, so that from the create on, whatever answers at that name is this
+# run's: a cancellation while gh repo create runs (GitHub may have made it,
+# the answer never came back) is deleted like any other failure, and the
+# deletion's 404 is what says nothing exists.
+if out="$(gh api "repos/$repo" --jq .full_name 2>&1)"; then
   fail "$url already exists and this run did not create it; delete or rename it, then run again"
-else created=1; fail "creating $url failed ($out)"; fi
+elif ! grep -qE 'HTTP 404|Not Found' <<<"$out"; then
+  fail "could not read whether $url exists ($out); nothing was created"
+fi
+created=1
+if ! out="$(gh repo create "$repo" --public 2>&1)"; then
+  if grep -qi 'already exists' <<<"$out"; then
+    created=0  # made by someone else between the read and the create
+    fail "$url already exists and this run did not create it; delete or rename it, then run again"
+  fi
+  fail "creating $url failed ($out)"
+fi
 gh api -X PUT "repos/$repo/actions/permissions" -F enabled=false >/dev/null \
   || fail "could not turn Actions off on $url"
 git -C "$dir" remote add origin "$url.git"
