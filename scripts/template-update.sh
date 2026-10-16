@@ -275,6 +275,7 @@ remote="$(gh api "repos/$repo/branches/$default" --jq .commit.sha 2>/dev/null)" 
 # command itself comes from the checker alone.
 from="$(git -C "$top" show "$base:.copier-answers.yml" 2>/dev/null | sed -n 's/^_commit: *//p')"
 to="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$here/new-project.sh")"
+to_sha="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$here/new-project.sh")"
 wt="$(dirname "$top")/$(basename "$top")-template-$to"
 branch="chore/template-$to"
 
@@ -356,7 +357,7 @@ if [ "$pin" = tested ]; then
 else
   cmd="$(cmd_at "$wt")" || die "no update command at the base (above); $wt left for inspection"
 fi
-case "$cmd" in *" --vcs-ref $to "*) ;; *) die "the command does not update to $to: $cmd" ;; esac
+case "$cmd" in *" --vcs-ref ${to_sha:-?} "*) ;; *) die "the command does not update to $to ($to_sha): $cmd" ;; esac
 read -ra words <<<"$cmd"
 echo "Running in $wt:"
 echo "  $cmd"
