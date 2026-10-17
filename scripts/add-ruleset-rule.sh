@@ -49,8 +49,11 @@ for p in "$@"; do
   fi
 done
 
-# The branch ruleset by target, not the first ruleset: a tag ruleset can have the lower id.
-id="$(gh api "repos/$repo/rulesets" --jq '[.[] | select(.target == "branch")][0].id')"
+# The branch ruleset by target, not the first ruleset: a tag ruleset can have
+# the lower id. And not the merge ruleset (ruleset-merge.json), which targets
+# the branch too and is never edited here.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+id="$(gh api "repos/$repo/rulesets" --jq "[.[] | select(.target == \"branch\") | select(.name != $(jq .name "$here/../ruleset-merge.json"))][0].id")"
 [ -n "$id" ] && [ "$id" != null ] || { echo "no branch ruleset on $repo" >&2; exit 1; }
 cur="$(gh api "repos/$repo/rulesets/$id")"
 

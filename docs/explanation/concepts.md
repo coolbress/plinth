@@ -299,7 +299,11 @@ read back against `ruleset.json`, the wall the door applies:
 required check accepts a status from any source or from an app other than
 the expected one, when the CodeQL alert thresholds were weakened, and when
 the ruleset has a bypass actor, where its token reads them; where it cannot,
-that line is a SKIP. `ci / floor-check` runs the same read on every pull request with the
+that line is a SKIP. The door's second ruleset, `ruleset-merge.json`, is the
+one allowed a bypass actor: it restricts updates to the default branch and
+lets the repository's admin role through by pull request only, so an account
+with write access cannot merge. It is read back in that exact shape, and
+any other shape fails. `ci / floor-check` runs the same read on every pull request with the
 Actions token, which never reads bypass actors, so that line is an INFO left
 to `/plinth:floor-check` there every time. A ruleset edited between two pull requests is seen on the next
 one only in the fields that run reads: the required checks, their source

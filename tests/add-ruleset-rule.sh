@@ -17,9 +17,11 @@ cat > "$work/bin/gh" <<'MOCK'
 set -u
 case "$*" in
   *"/rulesets/1"*) echo '{"id":1,"created_at":"x","_links":{},"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"pull_request","parameters":{"required_approving_review_count":0}}]}' ;;
-  # Branch ruleset id 1, tag ruleset id 7 created first: `.[0].id` would land on 7.
-  *"/rulesets"*'select(.target == "branch")'*) echo 1 ;;
-  *"/rulesets"*)   echo 7 ;;
+  *"/rulesets/2"*) echo '{"id":2,"name":"main: merged by an admin","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"update"}]}' ;;
+  # The listing, filtered by the script's own --jq. The tag ruleset (7) comes
+  # first, then the merge ruleset (2), a branch ruleset too: `.[0].id` lands
+  # on 7, the first branch ruleset on 2. Only the first ruleset (1) is edited.
+  *"/rulesets --jq"*) jq -r "${@: -1}" <<<'[{"id":7,"name":"tags","target":"tag"},{"id":2,"name":"main: merged by an admin","target":"branch"},{"id":1,"name":"r","target":"branch"}]' ;;
 esac
 exit 0
 MOCK
@@ -36,6 +38,7 @@ if grep -q "required_linear_history" "$work/out"; then ok "the rule is added"; e
 if grep -q "deletion" "$work/out"; then ok "existing rules survive"; else bad "an existing rule disappeared"; fi
 if grep -q "pull_request" "$work/out"; then ok "existing rules survive (second)"; else bad "an existing rule disappeared"; fi
 if grep -q "bypass actors: 0, enforcement: active" "$work/out"; then ok "bypass actors and enforcement are untouched"; else bad "the wall got weaker"; fi
+if grep -q "^-- r/r (ruleset 1)$" "$work/out"; then ok "the first ruleset is edited, not the tag or the merge ruleset"; else bad "another ruleset was picked: $(head -1 "$work/out")"; fi
 
 rc=$(run --dry-run r/r no-such-preset)
 if [ "$rc" != 0 ]; then ok "an unknown preset is refused"; else bad "an unknown preset passed"; fi

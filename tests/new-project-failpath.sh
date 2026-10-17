@@ -62,6 +62,7 @@ case "$all" in
   "label create"*)                               step=label ;;
   "pr create"*)                                  step=pr ;;
   *code-scanning*)                               step=codeql ;;
+  *"/rulesets"*"ruleset-merge.json")             step=ruleset-merge ;;
   *"/rulesets"*)                                 step=ruleset ;;
   *security_and_analysis*)                       step=secret ;;
   *vulnerability-alerts*|*automated-security-fixes*) step=dependabot ;;
@@ -161,6 +162,8 @@ case "$step" in
   pr)            echo "https://github.com/tester/probe/pull/1" ;;
   # The door pipes the archetype's ruleset in (`--input -`); keep it for the checks.
   ruleset)       [ -t 0 ] || cat > "$HOME/ruleset-posted.json" ;;
+  # The merge ruleset goes as the committed file (`--input <file>`), the last word.
+  ruleset-merge) cp "${@: -1}" "$HOME/ruleset-merge-posted.json" ;;
   # On main the door asks for default setup's first run, completed: the jq
   # leaves its `updated_at`, so the answer is a time, or nothing.
   runs)          case "$all" in *branch=main*) case "${MOCK_CODEQL_MAIN:-done}" in done) echo 2026-09-10T00:01:00Z ;; error) exit 1 ;; esac; exit 0 ;; esac
@@ -537,7 +540,7 @@ then ok apache "the chosen license reaches copier, and no license text is fetche
 else bad apache "the license did not reach copier, or its text was fetched over the render"; fi
 
 echo "after creation: any failure deletes"
-for at in copier push default-branch codeql ruleset secret dependabot actions allowlist merge pr; do
+for at in copier push default-branch codeql ruleset ruleset-merge secret dependabot actions allowlist merge pr; do
   E="FAIL_AT=$at" run "$at" err yes yes "" -- probe
 done
 # A failing setup call names itself (#356), whatever the error.
@@ -564,6 +567,7 @@ else bad 5xx-stays "a persistent 502 was not tried exactly five times: $(grep -c
 # The ruleset is a POST: sending it again could create a second ruleset, so it
 # is not retried, and its failure keeps its own message.
 E="MOCK_5XX=ruleset:502:1" run 5xx-ruleset err yes yes "could not apply the ruleset" -- probe
+E="MOCK_5XX=ruleset-merge:502:1" run 5xx-ruleset-merge err yes yes "could not apply the merge ruleset" -- probe
 # The push's hint follows what git said (#271): a GitHub server error is not
 # the token, and the fix is to run the door again; an authentication or
 # permission refusal keeps the token hint; anything else names both, as
@@ -687,8 +691,8 @@ echo "success: nothing is deleted, and the order is baseline, wall, first pull r
 run none ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
 log="$work/home-none/calls.log"; proj="$work/home-none/probe"
 check() { if eval "$2"; then ok none "$1"; else bad none "$1"; fi; }
-check "main is pushed before the ruleset, the pull request after it" \
-  '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset pr " ]'
+check "main is pushed before the two rulesets, the first ruleset before the merge one, the pull request after them" \
+  '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*ruleset-merge.json.*/merge/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset merge pr " ]'
 # main must be the *first* push: an empty repository adopts the first branch
 # pushed as its default, and the ruleset targets ~DEFAULT_BRANCH (#105).
 check "main is the first branch pushed" \
@@ -766,6 +770,11 @@ check "render is final: real name, owner and license in pyproject.toml and uv.lo
 # ruleset.json as committed. Read from what the mock saw on stdin.
 check "a cli ruleset is ruleset.json, unchanged" \
   'cmp -s <(jq -S . "$work/home-none/ruleset-posted.json") <(jq -S . "$root/ruleset.json")'
+# The merge ruleset is the same file for every archetype and visibility.
+check "the merge ruleset posted is ruleset-merge.json, unchanged (cli)" \
+  'cmp -s "$work/home-none/ruleset-merge-posted.json" "$root/ruleset-merge.json"'
+check "the merge ruleset posted is ruleset-merge.json, unchanged (backend)" \
+  'cmp -s "$work/home-backend/ruleset-merge-posted.json" "$root/ruleset-merge.json"'
 check "a backend ruleset is the wall plus image, from the same app (check-ruleset.sh passes with image)" \
   '"$root/scripts/check-ruleset.sh" "$work/home-backend/ruleset-posted.json" image >/dev/null'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \

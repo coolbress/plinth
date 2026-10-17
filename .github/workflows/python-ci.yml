@@ -1129,7 +1129,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/plinth"; mkdir -p "$d"
-          for f in scripts/floor-check.py ruleset.json labels.txt scripts/new-project.sh; do
+          for f in scripts/floor-check.py ruleset.json ruleset-merge.json labels.txt scripts/new-project.sh; do
             curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
               "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
           done
@@ -1149,7 +1149,8 @@ jobs:
           t="$RUNNER_TEMP/floor"; rc=0
           python3 "$RUNNER_TEMP/plinth/floor-check.py" \
             --root . --project "$WORKDIR" --repo "$GITHUB_REPOSITORY" \
-            --ruleset "$RUNNER_TEMP/plinth/ruleset.json" --caller-from-checkout --actions-token \
+            --ruleset "$RUNNER_TEMP/plinth/ruleset.json" --merge-ruleset "$RUNNER_TEMP/plinth/ruleset-merge.json" \
+            --caller-from-checkout --actions-token \
             ${EXPECT:+--expect-checks "$EXPECT"} --verdicts "$t.verdicts" > "$t.txt" || rc=$?
           cat "$t.txt"
           if [ ! -f "$t.verdicts" ]; then

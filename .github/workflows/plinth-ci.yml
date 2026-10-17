@@ -122,6 +122,9 @@ jobs:
       - name: Tag ruleset blocks deletion and moving, never creation
         run: ./tests/tag-ruleset.sh
 
+      - name: Merge ruleset is exactly update bypassed by the admin, written once and read back
+        run: ./tests/merge-ruleset.sh
+
       - name: Security settings are read back after the write
         run: ./tests/security-setting.sh
 

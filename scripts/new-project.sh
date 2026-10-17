@@ -539,6 +539,16 @@ if ! err="$(gh api "repos/$repo/rulesets" -X POST --input - <<<"$ruleset_body" 2
     printf '  the plan of %s was not verified: a ruleset on a private repository needs %s. public instead, with the whole wall: %s\n' "$owner" "$needs" "$public_cmd" >&2
   exit 1
 fi
+# The second ruleset (#568): updates to the default branch restricted, and
+# the repository's admin role the one bypass, through a pull request only. An
+# agent working under an account of its own, with write access, cannot merge;
+# the person who administers the repository merges as before. Beside the
+# first ruleset, never inside it: a bypass actor reaches every rule of its
+# ruleset. A POST, so not retried either; its failure rolls back the same way.
+if ! err="$(gh api "repos/$repo/rulesets" -X POST --input "$here/../ruleset-merge.json" 2>&1 >/dev/null)"; then
+  printf 'could not apply the merge ruleset (ruleset-merge.json):\n%s\n' "$err" >&2
+  exit 1
+fi
 # The calls from here to the merge settings set values, so sending one again
 # changes nothing. GitHub answers them 502, 503 or 504 now and then (#356):
 # on 2026-09-30 the Actions allowlist call answered 502 on three tries in a

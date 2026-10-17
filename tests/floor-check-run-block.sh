@@ -33,7 +33,9 @@ base="[/plugin/scripts/floor-check.py]
 [--sandbox]
 [--credentials]
 [--ruleset]
-[/plugin/ruleset.json]"
+[/plugin/ruleset.json]
+[--merge-ruleset]
+[/plugin/ruleset-merge.json]"
 
 for sh in bash zsh; do
   # A missing shell is a failure, not a skip: a skipped zsh is today's bug unseen.
