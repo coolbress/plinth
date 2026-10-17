@@ -17,6 +17,13 @@ gh="$root/.github/workflows/python-ci.yml"
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/gitlab-ci.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
+# The job's before_script makes PLINTH_TMP with a bare `mktemp -d` and never
+# removes it: a runner discards it, this machine would keep one per job run
+# (#575). run_job sends it inside $tmp; the last case counts where a bare
+# `mktemp -d` lands, which on macOS 27 was measured not to be TMPDIR.
+caller_tmp="$(probe="$(mktemp -d)" && dirname "$probe" && rmdir "$probe")"
+caller_dirs() { find "$caller_tmp" -maxdepth 1 -name 'tmp.*' -type d 2>/dev/null | sort; }
+caller_before="$(caller_dirs)"
 
 # 3.11 for tomllib, as the image has; at most 3.14, the newest CPython whose
 # PyYAML wheels floor-check pins by hash (#528). A newer one finds no pinned
@@ -126,13 +133,16 @@ for job in lint typecheck test secrets pr-title deps diff-size build floor-check
   else bad "$job: shellcheck" "$out"; fi
 done
 
+mkdir -p "$tmp/bin" "$tmp/job-tmp"
+# GNU mktemp reads TMPDIR, macOS's did not: a bare `mktemp -d` gets a template.
+printf '#!/usr/bin/env bash\n[ "$*" = -d ] && set -- -d "$TMPDIR/tmp.XXXXXXXXXX"\nexec %q "$@"\n' "$(command -v mktemp)" > "$tmp/bin/mktemp"
+chmod +x "$tmp/bin/mktemp"
 # Runs a job in the current directory with the downloads stubbed; sets $out
 # and $rc.
-mkdir -p "$tmp/bin"
 run_job() { # <job>
   rc=0
   out="$( { cat "$tmp/helpers.sh"; echo 'plinth_uv() { :; }; plinth_osv() { :; }; plinth_gitleaks() { :; }'; cat "$tmp/$1.sh"; } \
-    | PATH="$tmp/bin:$PATH" bash -eo pipefail 2>&1)" || rc=$?
+    | PATH="$tmp/bin:$PATH" TMPDIR="$tmp/job-tmp" bash -eo pipefail 2>&1)" || rc=$?
 }
 expect() { # <label> <rc> <pattern in out>...
   local label="$1" want="$2"; shift 2
@@ -413,6 +423,14 @@ expect "max-diff-lines 0 measures without blocking" 0 "pass: diff size, measured
 (cd "$repo" && CI_MERGE_REQUEST_IID='' CI_OPEN_MERGE_REQUESTS='g/p!3' PLINTH_WORKDIR=. PLINTH_MAX_DIFF_LINES=400 PLINTH_DIFF_SIZE_EXCLUDE="" run_job diff-size \
    && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
 expect "a branch pipeline while a merge request is open fails" 1 "fail: diff size, this is a branch pipeline while merge request g/p!3 is open"
+
+echo "-- temporary directories (#575)"
+made="$(find "$tmp/job-tmp" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+if [ "$made" -gt 0 ]; then ok "the jobs made their $made temporary directories under the test's own"
+else bad "the jobs made no temporary directory under the test's own: TMPDIR did not reach them"; fi
+new="$(comm -13 <(printf '%s\n' "$caller_before") <(caller_dirs) | sed '/^$/d')"
+if [ -z "$new" ]; then ok "no new tmp.* directory where a bare mktemp -d lands ($caller_tmp)"
+else bad "new tmp.* directories where a bare mktemp -d lands: the jobs' leak, or another process's" "$new"; fi
 
 echo "-- $fail failed, $pass passed"
 [ "$fail" = 0 ]
