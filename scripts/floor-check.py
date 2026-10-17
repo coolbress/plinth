@@ -2287,7 +2287,8 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
     an account with write access cannot merge and the admin still can, by
     every path it had. Recognised by its `update` rule; returns the ids judged here, which
     the no-bypass check then leaves alone, and what was found: "stands" (a
-    PASS), "missing" (the WARN) or None (anything else). A ruleset that carries `update`
+    PASS), "never" (its actors unread, but GitHub says this login can never
+    bypass it), "missing" (the WARN) or None (anything else). A ruleset that carries `update`
     beside other rules is not one: its bypass would reach those rules, so it
     stays under the no-bypass check as well."""
     carriers = {r.get("ruleset_id") for r in rules if r.get("type") == "update"
@@ -2335,6 +2336,7 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
     want_actors = sorted(bypass_key(a) for a in merge["bypass_actors"])
     judged = set()
     passed = []
+    cannot_bypass: list[bool] = []
     for rid in sorted(carriers):
         types = sorted({r.get("type") for r in rules if r.get("ruleset_id") == rid})
         if types != want_types:
@@ -2353,6 +2355,8 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
             result("FAIL", f"ruleset {rid}: the merge ruleset applies to {scope}, expected {want_scope}")
             continue
         actors = rs.get("bypass_actors") if isinstance(rs, dict) else None
+        # GitHub's own answer for this login, readable without the actors.
+        cannot_bypass.append(isinstance(rs, dict) and rs.get("current_user_can_bypass") == "never")
         if actors is None and actions_token:
             result("INFO", f"ruleset {rid}: the merge ruleset's bypass actors not visible with this token; "
                            "/plinth:floor-check reads them with a login that administers the repository", deferred=True)
@@ -2366,7 +2370,15 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
         else:
             result("PASS", f"ruleset {rid}: the merge is reserved to the repository admin (update, the admin role exempt)")
             passed.append(rid)
-    return judged, "stands" if passed and len(passed) == len(carriers) else None
+    if passed and len(passed) == len(carriers):
+        return judged, "stands"
+    # A login without the admin role cannot read the bypass actors (#569's
+    # run): the line above is a SKIP, but GitHub still says whether this login
+    # can bypass the ruleset, and "never" on every carrier in its scope means
+    # its merge is refused.
+    if cannot_bypass and len(cannot_bypass) == len(carriers) and all(cannot_bypass):
+        return judged, "never"
+    return judged, None
 
 
 def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_token: bool) -> None:
@@ -2392,6 +2404,10 @@ def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_tok
         result("PASS", f"the merge: boundary. This login is not the repository's admin and the merge ruleset stands "
                        f"on {branch}, so GitHub refuses its merge; you merge, with the button or your own login. "
                        "It holds while no admin login is left where the agent can reach it")
+    elif reserved == "never":
+        result("PASS", f"the merge: boundary. This login is not the repository's admin, and GitHub says it can never "
+                       f"bypass the merge ruleset on {branch}, so GitHub refuses its merge; you merge, with the button "
+                       "or your own login. It holds while no admin login is left where the agent can reach it")
     elif reserved == "missing":
         result("INFO", "the merge: guidance. This login is not the repository's admin, but no ruleset reserves the "
                        "merge to the admin, so it can merge; the WARN above adds that ruleset")

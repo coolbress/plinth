@@ -73,6 +73,9 @@ GitHub lets the admin role past the merge ruleset whatever the token, so the
 account's role decides: `guidance` (an INFO) when the login is the
 repository's admin, or when it is not but no ruleset reserves the merge;
 `boundary` (a PASS) when it is not the admin and the merge ruleset stands.
+A login that is not the admin cannot read that ruleset's bypass actors, so
+its actor line stays a SKIP; the boundary is then read from GitHub's own
+answer on the ruleset, that this login can never bypass it.
 A role it cannot read, or a merge ruleset not found in its shape, is a SKIP:
 never a boundary then. Put the line in the summary in plain words: with
 guidance, the agent could merge and is only asked to wait; with a boundary,

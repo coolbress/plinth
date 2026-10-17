@@ -466,6 +466,14 @@ merge_wall "...and the boundary fails nothing" '^-- 0 failed, 1 not verified$' "
 merge_wall "a non-admin login with no merge ruleset is guidance, not a boundary" '^  INFO  the merge: guidance\. This login is not the repository.s admin, but no ruleset' "$(as_login false); $no_b" "${M[@]}"
 merge_wall "a non-admin login with an unreadable merge ruleset is not verified, never a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' \
   "$(as_login false); printf '{}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
+# As a collaborator's token reads it (#569's run): scope, no actors, and GitHub's answer for this login.
+collab_b() { printf '%s' "jq -c 'del(.bypass_actors) + {current_user_can_bypass: \"$1\"}' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\""; }
+merge_wall "a collaborator that can never bypass the merge ruleset is a boundary, its actors unread" \
+  '^  PASS  the merge: boundary\. This login is not the repository.s admin, and GitHub says it can never bypass' "$(as_login false); $(collab_b never)" "${M[@]}"
+merge_wall "...while the unread actors stay not verified" "^  SKIP  ruleset 2: the merge ruleset's bypass actors not visible" "$(as_login false); $(collab_b never)" "${M[@]}"
+merge_wall "a collaborator GitHub says can bypass it is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' "$(as_login false); $(collab_b exempt)" "${M[@]}"
+merge_wall "no answer for this login is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' \
+  "$(as_login false); printf '%s' \"\$(jq -c 'del(.bypass_actors)' <<<\"\$b_actors\")\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "a role that cannot be read is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent)" "${M[@]}"
 merge_wall "...and counted as not verified, not passed" '^-- 0 failed, 2 not verified$' "$(as_login absent)" "${M[@]}"
 merge_wall "with the Actions token it is not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false)" "${M[@]}" --actions-token

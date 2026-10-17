@@ -17,8 +17,9 @@ pull requests and have no tag.
   boundary for the login it runs with (#569): `the merge: guidance` when that
   login is the repository's admin, or when no ruleset reserves the merge;
   `the merge: boundary` (a PASS) when it is not the admin and the merge
-  ruleset stands. A role or a ruleset it cannot read is not verified, never a
-  boundary. `ci / floor-check` does not decide it: the Actions token is not
+  ruleset stands: for a login that cannot read its bypass actors, GitHub's
+  own answer that the login can never bypass it. A role or a ruleset it
+  cannot read is not verified, never a boundary. `ci / floor-check` does not decide it: the Actions token is not
   the agent's login, so the line there is `not verified here`, left to the
   skill.
 - run-a-project gains "Give the agent its own account": a second GitHub
