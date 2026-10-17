@@ -17,15 +17,23 @@ mkdir -p "$work/bin"
 cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -u
+# The first ruleset is id 1; the tag ruleset (7) and the merge ruleset (2, a
+# branch ruleset too, renamed here) come first, and neither carries
+# pull_request: a regression to `.[0]`, to the first branch ruleset, or to a
+# name lands on one with no required_status_checks rule.
+ruleset_json() {
+  case "$1" in
+    1) if [ "${NO_RSC:-0}" = 1 ]; then echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"deletion"},{"type":"pull_request"}]}'
+       else echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"pull_request"},{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"canary / test","integration_id":15368}]}}]}'; fi ;;
+    2) echo '{"name":"renamed by hand","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}],"conditions":{},"rules":[{"type":"update"}]}' ;;
+    list) echo '[{"id":7,"name":"tags","target":"tag"},{"id":2,"name":"renamed by hand","target":"branch"},{"id":1,"name":"r","target":"branch"}]' ;;
+  esac
+}
+jqmaybe() { case "$*" in *" --jq "*) jq -r "${@: -1}" ;; *) cat ;; esac; }
 case "$*" in
-  *"/rulesets/1"*)      if [ "${NO_RSC:-0}" = 1 ]; then echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"deletion"}]}'
-                        else echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"canary / test","integration_id":15368}]}}]}'; fi ;;
-  *"/rulesets/2"*)      echo '{"name":"main: merged by an admin","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}],"conditions":{},"rules":[{"type":"update"}]}' ;;
-  # The listing, filtered by the script's own --jq. The branch ruleset is id
-  # 1; the tag ruleset (7) and the merge ruleset (2, a branch ruleset too)
-  # come first. A regression to `.[0].id` lands on 7, one to the first branch
-  # ruleset on 2, and neither has a required_status_checks rule.
-  *"/rulesets --jq"*)   jq -r "${@: -1}" <<<'[{"id":7,"name":"tags","target":"tag"},{"id":2,"name":"main: merged by an admin","target":"branch"},{"id":1,"name":"r","target":"branch"}]' ;;
+  *"/rulesets/1"*)      ruleset_json 1 | jqmaybe "$@" ;;
+  *"/rulesets/2"*)      ruleset_json 2 | jqmaybe "$@" ;;
+  *"/rulesets"*)        ruleset_json list | jqmaybe "$@" ;;
   *"/commits?per_page"*) echo "sha1" ;;
   *"/pulls?state"*)      echo "sha1" ;;
   *"check-runs"*)        printf 'canary / deps\ncanary / test\n' ;;

@@ -52,6 +52,8 @@ set -u
 echo "$*" >> "$CALLS"
 case "$*" in
   *"-X POST"*)        [ "${REFUSE:-0}" = 1 ] && { echo "HTTP 403" >&2; exit 1; }; echo 9 ;;
+  # The one already there (ALREADY=1): as the file, or EXISTING as given.
+  *"/rulesets/7"*)    if [ -n "${EXISTING:-}" ]; then echo "$EXISTING"; else jq '. + {id: 7}' "$FILE"; fi ;;
   *"/rulesets/9"*)    if [ -n "${READBACK:-}" ]; then echo "$READBACK"; else
                         jq '. + {id: 9, created_at: "x", rules: [{type: "update", parameters: {update_allows_fetch_and_merge: false}}],
                                  bypass_actors: [.bypass_actors[] | . + {extra: 1}]}' "$FILE"; fi ;;
@@ -69,9 +71,14 @@ else bad "a clean create did not apply"; sed 's/^/        /' "$work/out"; fi
 if grep -q -- "--input $root/scripts/../ruleset-merge.json" "$CALLS"
 then ok "posts ruleset-merge.json itself, the door's file"
 else bad "posted something other than ruleset-merge.json"; sed 's/^/        /' "$CALLS"; fi
-if ALREADY=1 run o/r && grep -q "already exists; skipped" "$work/out" && ! grep -q -- "-X POST" "$CALLS"
-then ok "an existing ruleset of that name is left alone, never a second one"
-else bad "created a second ruleset of that name"; fi
+if ALREADY=1 run o/r && grep -q "already applied (ruleset 7); skipped" "$work/out" && ! grep -q -- "-X POST" "$CALLS"
+then ok "an existing ruleset that reads as the file is left alone, never a second one"
+else bad "created a second ruleset of that name, or did not read the first back"; sed 's/^/        /' "$work/out"; fi
+if ALREADY=1 EXISTING='{"name":"main: merged by an admin","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"update"}],"bypass_actors":[]}' run o/r
+then bad "an existing ruleset of that name in another shape passed as applied"
+elif grep -q "exists but does not read as ruleset-merge.json" "$work/out" && ! grep -q -- "-X POST" "$CALLS"
+then ok "an existing ruleset of that name in another shape fails, says so, and writes nothing"
+else bad "an existing ruleset in another shape: wrong message or a write"; sed 's/^/        /' "$work/out"; fi
 if READBACK='{"name":"main: merged by an admin","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"update"}],"bypass_actors":[]}' run o/r
 then bad "a read-back without the bypass actor passed"
 elif grep -q "not applied as written" "$work/out"; then ok "a read-back that differs fails and says so"

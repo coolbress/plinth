@@ -19,6 +19,7 @@ export TMPDIR="$work/tmp"
 # The driver finds the door and the checker beside itself; copies of the stubs
 # sit there, the real ruleset.json one level up (it is only passed along).
 cp "$root/scripts/e2e.sh" "$work/scripts/"
+mkdir -p "$work/scripts/lib"; cp "$root/scripts/lib/rulesets.sh" "$work/scripts/lib/"
 cp "$root/ruleset.json" "$root/ruleset-merge.json" "$work/"
 cat > "$work/scripts/new-project.sh" <<'DOOR'
 #!/usr/bin/env bash

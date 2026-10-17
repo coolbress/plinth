@@ -26,17 +26,15 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/rulesets.sh
+. "$here/lib/rulesets.sh"
 file="$here/../ruleset-merge.json"
 dry=0
 [ "${1:-}" = "--dry-run" ] && { dry=1; shift; }
 [ $# -gt 0 ] || { echo "usage: create-merge-ruleset.sh [--dry-run] <owner/name> ..." >&2; exit 2; }
 
 name="$(jq -r .name "$file")"
-# What is compared after the write: the fields the file sets, in the order
-# GitHub may return them, bypass actors reduced to the three that matter.
-shape='{name, target, enforcement, conditions, rules: [.rules[] | {type}],
-        bypass_actors: [.bypass_actors[] | {actor_id, actor_type, bypass_mode}]}'
-want="$(jq -cS "$shape" "$file")"
+want="$(jq -cS "$ruleset_shape" "$file")"
 
 fail=0
 for repo in "$@"; do
@@ -44,8 +42,17 @@ for repo in "$@"; do
   if ! ids="$(gh api "repos/$repo/rulesets" --jq ".[] | select(.name == $(jq .name "$file")) | .id")"; then
     echo "-- $repo: could not list its rulesets; not applied" >&2; fail=1; continue
   fi
+  # One already there is applied only if it reads as the file: a write that
+  # did not take, or another ruleset under this name, is said, never skipped
+  # as done. Fixing it is a person's call (delete it, then run this again).
   if [ -n "$ids" ]; then
-    echo "-- $repo: a ruleset named '$name' already exists; skipped"
+    if [ "$(grep -c . <<<"$ids")" = 1 ] && got="$(ruleset_reads_as "$repo" "$ids" "$file")"; then
+      echo "-- $repo: '$name' already applied (ruleset $ids); skipped"
+    else
+      echo "-- $repo: a ruleset named '$name' exists but does not read as ruleset-merge.json: $(tr '\n' ' ' <<<"$ids")${got:+($got)}; not applied" >&2
+      echo "   expected $want; delete it in the repository's Settings → Rules, then run this again" >&2
+      fail=1
+    fi
     continue
   fi
 
@@ -59,8 +66,7 @@ for repo in "$@"; do
   fi
 
   # Written, then read back. A 200 is not proof that it took (measured).
-  got="$(gh api "repos/$repo/rulesets/$id" | jq -cS "$shape" 2>/dev/null || true)"
-  if [ "$got" = "$want" ]; then
+  if got="$(ruleset_reads_as "$repo" "$id" "$file")"; then
     echo "-- $repo: '$name' applied (ruleset $id)"
   else
     echo "-- $repo: ruleset $id reads back as ${got:-nothing}, expected $want: not applied as written" >&2

@@ -2311,6 +2311,15 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
             continue
         judged.add(rid)
         rs = api(f"repos/{repo}/rulesets/{rid}", network)
+        # Its scope as well as its actor: widened to every branch, it still
+        # lists `update` on the default branch, and stops everyone but the
+        # admin from pushing a branch at all.
+        scope_keys = ("target", "enforcement", "conditions")
+        scope = {k: rs[k] for k in scope_keys} if isinstance(rs, dict) and all(k in rs for k in scope_keys) else None
+        want_scope = {k: merge[k] for k in scope_keys}
+        if scope is not None and scope != want_scope:
+            result("FAIL", f"ruleset {rid}: the merge ruleset applies to {scope}, expected {want_scope}")
+            continue
         actors = rs.get("bypass_actors") if isinstance(rs, dict) else None
         if actors is None and actions_token:
             result("INFO", f"ruleset {rid}: the merge ruleset's bypass actors not visible with this token; "
@@ -2318,10 +2327,12 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
         elif actors is None:
             result("SKIP", f"ruleset {rid}: the merge ruleset's bypass actors not visible with this token "
                            "(an admin-read token sees them)")
+        elif sorted(bypass_key(a) for a in actors) != want_actors:
+            result("FAIL", f"ruleset {rid}: the merge ruleset's bypass actors are {actors}, expected {merge['bypass_actors']}")
+        elif scope is None:
+            result("SKIP", f"ruleset {rid}: the merge ruleset's scope (target, enforcement, conditions) not read")
         else:
-            ok(sorted(bypass_key(a) for a in actors) == want_actors,
-               f"ruleset {rid}: the merge is reserved to the repository admin (update, the admin role exempt)",
-               f"ruleset {rid}: the merge ruleset's bypass actors are {actors}, expected {merge['bypass_actors']}")
+            result("PASS", f"ruleset {rid}: the merge is reserved to the repository admin (update, the admin role exempt)")
     return judged
 
 

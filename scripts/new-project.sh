@@ -318,6 +318,8 @@ fi
 # fetched here, so they can be tested on fixtures (tests/shared-github-cases.sh).
 # shellcheck source=scripts/lib/shared-github.sh
 . "$here/lib/shared-github.sh"
+# shellcheck source=scripts/lib/rulesets.sh
+. "$here/lib/rulesets.sh"
 gh_read() { # <gh api args>... -> ok:<output> | err:<output>, both streams: a failure carries gh's own words
   local out
   if out="$(gh api "$@" 2>&1)"; then printf 'ok:%s' "$out"; else printf 'err:%s' "$out"; fi
@@ -544,9 +546,15 @@ fi
 # agent working under an account of its own, with write access, cannot merge;
 # the person who administers the repository merges as before. Beside the
 # first ruleset, never inside it: a bypass actor reaches every rule of its
-# ruleset. A POST, so not retried either; its failure rolls back the same way.
-if ! err="$(gh api "repos/$repo/rulesets" -X POST --input "$here/../ruleset-merge.json" 2>&1 >/dev/null)"; then
-  printf 'could not apply the merge ruleset (ruleset-merge.json):\n%s\n' "$err" >&2
+# ruleset. A POST, so not retried either; its failure rolls back the same way,
+# and so does one that reads back otherwise: a missing exemption would leave
+# the person unable to merge, a wider one would not reserve the merge.
+if ! merge_id="$(gh api "repos/$repo/rulesets" -X POST --input "$here/../ruleset-merge.json" --jq .id 2>&1)"; then
+  printf 'could not apply the merge ruleset (ruleset-merge.json):\n%s\n' "$merge_id" >&2
+  exit 1
+fi
+if ! merge_got="$(ruleset_reads_as "$repo" "$merge_id" "$here/../ruleset-merge.json")"; then
+  printf 'the merge ruleset (%s) reads back as %s, not as ruleset-merge.json\n' "$merge_id" "${merge_got:-nothing}" >&2
   exit 1
 fi
 # The calls from here to the merge settings set values, so sending one again

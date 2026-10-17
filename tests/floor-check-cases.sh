@@ -383,7 +383,8 @@ wall "an unreadable repository is counted, not passed" "-- 0 failed, 2 not verif
 # bypass actor, and only in its exact shape. Its own copy of the fixture API.
 mapi="$work/api-merge"; rm -rf "$mapi"; cp -R "$api" "$mapi"
 b_rule='{"type":"update","ruleset_source_type":"Repository","ruleset_id":2}'
-b_actors='{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}]}'
+# As an admin token reads it: the whole ruleset, scope and actor.
+b_actors="$(jq -c '. + {id: 2}' "$root/ruleset-merge.json")"
 merge_wall() { # <description> <expected regex> [shell that edits $mapi first] [checker args...]
   local desc="$1" want="$2" edit="${3:-}" out; shift; shift; [ $# -gt 0 ] && shift
   jq -c ". + [$b_rule]" <<<"$good_rules" > "$mapi/repos/o/r/rules/branches/main.json"
@@ -416,6 +417,12 @@ merge_wall "update beside other rules in one ruleset is caught" '^  FAIL  main: 
   "jq -c '. + [{\"type\":\"deletion\",\"ruleset_source_type\":\"Repository\",\"ruleset_id\":2}]' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
 merge_wall "...and its bypass actor is then a bypass FAIL as well" '^  FAIL  ruleset 2: bypass actors present' \
   "jq -c '. + [{\"type\":\"deletion\",\"ruleset_source_type\":\"Repository\",\"ruleset_id\":2}]' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+merge_wall "a merge ruleset widened to every branch is caught (it would stop every branch push but the admin's)" "^  FAIL  ruleset 2: the merge ruleset applies to" \
+  "jq -c '.conditions.ref_name.include = [\"~ALL\"]' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
+merge_wall "a merge ruleset with its actor right and its scope unread is not verified, not passed" "^  SKIP  ruleset 2: the merge ruleset's scope \(target, enforcement, conditions\) not read" \
+  "jq -c '{bypass_actors}' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
+merge_wall "...and then no PASS for it" '^-- 0 failed, 2 not verified' \
+  "jq -c '{bypass_actors}' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "a bypass actor on the first ruleset still fails beside a good merge ruleset" '^  FAIL  ruleset 1: bypass actors present' \
   "printf '%s' \"\$b_actors\" > \"$mapi/repos/o/r/rulesets/1.json\"" "${M[@]}"
 merge_wall "unreadable merge bypass actors are SKIP, never PASS" "^  SKIP  ruleset 2: the merge ruleset's bypass actors not visible" \

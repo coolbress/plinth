@@ -155,16 +155,14 @@ python3 "$here/floor-check.py" --root "$dir" --repo "$repo" --ruleset "$here/../
 # is; here the door made this one, so missing or different is a failure. This
 # token administers the repository, so the bypass actor is read.
 merge_file="$here/../ruleset-merge.json"
-merge_shape='{name, target, enforcement, conditions, rules: [.rules[] | {type}],
-              bypass_actors: [.bypass_actors[] | {actor_id, actor_type, bypass_mode}]}'
+# shellcheck source=scripts/lib/rulesets.sh
+. "$here/lib/rulesets.sh"
 merge_id="$(gh api "repos/$repo/rulesets" --jq ".[] | select(.name == $(jq .name "$merge_file")) | .id")" \
   || fail "could not list the rulesets of $url"
 [ "$(grep -c . <<<"$merge_id")" = 1 ] \
   || fail "$url has $(grep -c . <<<"$merge_id") rulesets named $(jq .name "$merge_file"), expected 1 (the door's merge ruleset)"
-merge_got="$(gh api "repos/$repo/rulesets/$merge_id" | jq -cS "$merge_shape")" \
-  || fail "could not read ruleset $merge_id of $url"
-[ "$merge_got" = "$(jq -cS "$merge_shape" "$merge_file")" ] \
-  || fail "the merge ruleset of $url reads back as" "$merge_got" "not as ruleset-merge.json"
+merge_got="$(ruleset_reads_as "$repo" "$merge_id" "$merge_file")" \
+  || fail "the merge ruleset of $url reads back as" "${merge_got:-nothing}" "not as ruleset-merge.json"
 echo "merge ruleset: $merge_id, as ruleset-merge.json (the merge below goes through it)"
 
 # ── through the wall ─────────────────────────────────────────────────────
