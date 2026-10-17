@@ -27,10 +27,11 @@ refuse "with another rule in place of update" '.rules = [{"type":"non_fast_forwa
 refuse "with no rule"                        '.rules = []'
 refuse "with update carrying a parameter"    '.rules = [{"type":"update","parameters":{"update_allows_fetch_and_merge":true}}]'
 refuse "with no bypass actor"                '.bypass_actors = []'
-refuse "bypassed always, not through a pull request" '.bypass_actors[0].bypass_mode = "always"'
+refuse "bypassed always, not exempt"        '.bypass_actors[0].bypass_mode = "always"'
+refuse "bypassed through a pull request, not exempt (the admin's merge reads BLOCKED, #568)" '.bypass_actors[0].bypass_mode = "pull_request"'
 refuse "bypassed by the write role"          '.bypass_actors[0].actor_id = 4'
 refuse "bypassed by an app"                  '.bypass_actors[0].actor_type = "Integration"'
-refuse "with a second bypass actor"          '.bypass_actors += [{"actor_id":1,"actor_type":"Integration","bypass_mode":"pull_request"}]'
+refuse "with a second bypass actor"          '.bypass_actors += [{"actor_id":1,"actor_type":"Integration","bypass_mode":"exempt"}]'
 refuse "in evaluate mode"                    '.enforcement = "evaluate"'
 refuse "on tags"                             '.target = "tag"'
 refuse "on every branch"                     '.conditions.ref_name.include = ["~ALL"]'
@@ -39,7 +40,7 @@ printf 'not json' > "$work/b.json"
 if ./scripts/check-ruleset.sh --merge "$work/b.json" >/dev/null 2>&1; then bad "B that is not JSON passed"; else ok "B that is not JSON fails"; fi
 
 # The first ruleset still has no bypass actor, whatever B has.
-jq '.bypass_actors = [{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}]' ruleset.json > "$work/a.json"
+jq '.bypass_actors = [{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}]' ruleset.json > "$work/a.json"
 if ./scripts/check-ruleset.sh "$work/a.json" >/dev/null 2>&1; then bad "the first ruleset with B's bypass actor passed"
 else ok "the first ruleset with a bypass actor fails"; fi
 

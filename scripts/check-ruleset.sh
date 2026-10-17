@@ -11,9 +11,10 @@ set -euo pipefail
 # Ruleset B, ruleset-merge.json (#568): the merge reserved to the repository
 # admin. Its whole point is one bypass actor, so its shape is exact: the
 # `update` rule alone (a bypass reaches every rule of its ruleset, and on any
-# other rule it would open the wall), the admin role alone, in pull_request
-# mode (the admin merges a pull request; a direct push still meets the first
-# ruleset). `--merge [file]` checks it alone; without arguments both files
+# other rule it would open the wall), the admin role alone, in exempt mode
+# (the rule is not run for the admin, so the admin's pull requests read CLEAN
+# and `gh pr merge` and auto-merge work; `pull_request` mode left them BLOCKED,
+# #568; a direct push still meets the first ruleset, measured on #517). `--merge [file]` checks it alone; without arguments both files
 # are checked.
 merge_invariants() { # <file>
   local f="$1" fail=0
@@ -27,8 +28,8 @@ merge_invariants() { # <file>
   mchk 'enforced, not advisory' '.enforcement' '"active"'
   mchk 'targets the default branch only' '{target, conditions}' '{"target":"branch","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}}}'
   mchk 'the update rule and nothing else (the bypass reaches every rule here)' '.rules' '[{"type":"update"}]'
-  mchk 'bypassed by the repository admin role only, through a pull request only' '.bypass_actors' \
-       '[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}]'
+  mchk 'only the repository admin role, exempt from it' '.bypass_actors' \
+       '[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}]'
   [ "$fail" = 0 ] && { echo "RESULT PASS"; return 0; }
   echo "RESULT FAIL"; return 1
 }

@@ -7,11 +7,13 @@
 # Why: the first ruleset has no bypass actor, so it holds the admin to the
 # same checks as everyone else, and anyone with write access who can open a
 # pull request can also merge it once the checks pass. This second ruleset
-# restricts updates to the default branch and lets the repository's admin
-# role bypass that through a pull request only. While the agent works under
-# the person's own account it changes nothing; an agent with an account of
-# its own (a collaborator with write access) can no longer merge (#568,
-# measured there).
+# restricts updates to the default branch and exempts the repository's admin
+# role from that, so the admin's merges, `gh pr merge` and auto-merge
+# included, go on as before. While the agent works under the person's own
+# account it changes nothing; an agent with an account of its own (a
+# collaborator with write access) can no longer merge, nor can auto-merge it
+# enabled (measured on #568 and #517). The admin's merges past it leave no
+# bypass audit entry, as GitHub documents for `exempt`.
 #
 # The door (new-project.sh) applies it to every new repository. This adds it
 # to one the door made before. A separate ruleset and not a rule added to the
@@ -48,7 +50,7 @@ for repo in "$@"; do
   fi
 
   if [ "$dry" = 1 ]; then
-    echo "-- $repo: would create '$name' (update, bypassed by the admin role in pull_request mode)  (--dry-run: nothing written)"
+    echo "-- $repo: would create '$name' (update, the admin role exempt)  (--dry-run: nothing written)"
     continue
   fi
 

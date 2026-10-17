@@ -58,8 +58,8 @@ Relay the WARN lines with the fix from
 delete a credential yourself.
 
 `--merge-ruleset` expects the second ruleset the door applies: the
-`update` rule alone, which the repository's admin role bypasses through a
-pull request only, so an account with write access cannot merge. It is a
+`update` rule alone, with the repository's admin role exempt from it, so
+an account with write access cannot merge and the admin merges as before. It is a
 PASS in that shape, a FAIL in any other, a WARN when no ruleset carries
 `update` (every repository made before it; the WARN names
 `scripts/create-merge-ruleset.sh`, which needs repository administration, so

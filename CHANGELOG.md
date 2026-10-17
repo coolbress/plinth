@@ -15,11 +15,15 @@ pull requests and have no tag.
 
 - `/plinth:new-project` applies a second ruleset, `ruleset-merge.json`,
   beside the first (#568). It restricts updates to the default branch and
-  lets the repository's admin role bypass that through a pull request only.
+  exempts the repository's admin role from that (`exempt` mode), so the
+  admin's merges, `gh pr merge` and auto-merge included, go on as before.
   While the agent works under the person's own account it changes nothing.
   An agent with an account of its own (a collaborator with write access) can
-  no longer merge: measured on #568, its merge was refused with a 405, and
-  the owner's went through. The first ruleset still has no bypass actor.
+  no longer merge, nor can auto-merge it enabled. Measured on #568 and #517:
+  its merge was refused with a 405, and the owner's went through. The first
+  ruleset still has no bypass actor, and still refused the owner's merge
+  with a missing, failing or stale check. The admin's merges past the new
+  ruleset leave no bypass audit entry, as GitHub documents for `exempt`.
 - `scripts/create-merge-ruleset.sh <owner/name>` adds it to a repository the
   door made before. It needs repository administration, so run it through
   `scripts/with-admin-token.sh`. It never adds a second copy, and it reads

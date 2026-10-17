@@ -17,7 +17,7 @@ cat > "$work/bin/gh" <<'MOCK'
 set -u
 case "$*" in
   *"/rulesets/1"*) echo '{"id":1,"created_at":"x","_links":{},"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"pull_request","parameters":{"required_approving_review_count":0}}]}' ;;
-  *"/rulesets/2"*) echo '{"id":2,"name":"main: merged by an admin","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"update"}]}' ;;
+  *"/rulesets/2"*) echo '{"id":2,"name":"main: merged by an admin","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"update"}]}' ;;
   # The listing, filtered by the script's own --jq. The tag ruleset (7) comes
   # first, then the merge ruleset (2), a branch ruleset too: `.[0].id` lands
   # on 7, the first branch ruleset on 2. Only the first ruleset (1) is edited.

@@ -20,7 +20,7 @@ set -u
 case "$*" in
   *"/rulesets/1"*)      if [ "${NO_RSC:-0}" = 1 ]; then echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"deletion"}]}'
                         else echo '{"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"canary / test","integration_id":15368}]}}]}'; fi ;;
-  *"/rulesets/2"*)      echo '{"name":"main: merged by an admin","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}],"conditions":{},"rules":[{"type":"update"}]}' ;;
+  *"/rulesets/2"*)      echo '{"name":"main: merged by an admin","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}],"conditions":{},"rules":[{"type":"update"}]}' ;;
   # The listing, filtered by the script's own --jq. The branch ruleset is id
   # 1; the tag ruleset (7) and the merge ruleset (2, a branch ruleset too)
   # come first. A regression to `.[0].id` lands on 7, one to the first branch

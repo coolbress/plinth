@@ -540,7 +540,7 @@ if ! err="$(gh api "repos/$repo/rulesets" -X POST --input - <<<"$ruleset_body" 2
   exit 1
 fi
 # The second ruleset (#568): updates to the default branch restricted, and
-# the repository's admin role the one bypass, through a pull request only. An
+# the repository's admin role exempt from that (the one actor allowed). An
 # agent working under an account of its own, with write access, cannot merge;
 # the person who administers the repository merges as before. Beside the
 # first ruleset, never inside it: a bypass actor reaches every rule of its

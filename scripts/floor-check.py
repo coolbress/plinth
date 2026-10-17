@@ -2276,9 +2276,9 @@ def bypass_key(actor: dict) -> tuple[str, str, str]:
 def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None, network: bool,
                         actions_token: bool) -> set:
     """The second ruleset the door applies (ruleset-merge.json, #568): the
-    `update` rule alone, bypassed by the repository's admin in pull_request
-    mode, so an account with write access cannot merge and the admin still
-    can. Recognised by its `update` rule; returns the ids judged here, which
+    `update` rule alone, with the repository's admin role exempt from it, so
+    an account with write access cannot merge and the admin still can, by
+    every path it had. Recognised by its `update` rule; returns the ids judged here, which
     the no-bypass check then leaves alone. A ruleset that carries `update`
     beside other rules is not one: its bypass would reach those rules, so it
     stays under the no-bypass check as well."""
@@ -2320,8 +2320,7 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
                            "(an admin-read token sees them)")
         else:
             ok(sorted(bypass_key(a) for a in actors) == want_actors,
-               f"ruleset {rid}: the merge is reserved to the repository admin (update, bypassed by the admin role "
-               "through a pull request only)",
+               f"ruleset {rid}: the merge is reserved to the repository admin (update, the admin role exempt)",
                f"ruleset {rid}: the merge ruleset's bypass actors are {actors}, expected {merge['bypass_actors']}")
     return judged
 

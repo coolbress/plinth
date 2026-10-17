@@ -383,7 +383,7 @@ wall "an unreadable repository is counted, not passed" "-- 0 failed, 2 not verif
 # bypass actor, and only in its exact shape. Its own copy of the fixture API.
 mapi="$work/api-merge"; rm -rf "$mapi"; cp -R "$api" "$mapi"
 b_rule='{"type":"update","ruleset_source_type":"Repository","ruleset_id":2}'
-b_actors='{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}]}'
+b_actors='{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}]}'
 merge_wall() { # <description> <expected regex> [shell that edits $mapi first] [checker args...]
   local desc="$1" want="$2" edit="${3:-}" out; shift; shift; [ $# -gt 0 ] && shift
   jq -c ". + [$b_rule]" <<<"$good_rules" > "$mapi/repos/o/r/rules/branches/main.json"
@@ -404,10 +404,12 @@ merge_wall "a missing merge ruleset names the upgrade command" \
   'scripts/with-admin-token.sh scripts/create-merge-ruleset.sh o/r' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
 merge_wall "a missing merge ruleset fails nothing (consumer CI keeps merging)" \
   '^-- 0 failed' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+merge_wall "a merge ruleset bypassed through a pull request, not exempt, is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \
+  "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"pull_request\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "a merge ruleset bypassed always is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \
   "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"always\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "a merge ruleset bypassed by the write role is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \
-  "printf '{\"bypass_actors\":[{\"actor_id\":4,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"pull_request\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
+  "printf '{\"bypass_actors\":[{\"actor_id\":4,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"exempt\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "a merge ruleset with no bypass actor is caught (nobody could merge)" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are \[\]" \
   "printf '{\"bypass_actors\":[]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "update beside other rules in one ruleset is caught" '^  FAIL  main: ruleset 2 carries \[.deletion., .update.\]' \
