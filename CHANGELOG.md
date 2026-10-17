@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.16.0 (#574, #571). The
+  output style keeps the person's language after a skill's or a command's
+  instructions load, and the `verify` skill ends with a line saying so: in
+  Korean sessions that ran `verify` before a commit, the progress lines after
+  it were English 1 time in 19 instead of 8 in 18. Still seen in those small
+  samples: a whole final report in English in 1 of 10 sessions, as on
+  v1.15.0. On GitLab the style reads the status of a job the project adds,
+  such as a backend's `docker-image`, with
+  `glab ci trace -p <pipeline-id> <job> | tail -n 1`, under the allow rule the
+  repository already has. A repository the door already made gets these only
+  after `/plinth:template-update` to v1.16.0; the template's `plinth_sha` did
+  not move, so the update leaves the plinth pin as it is.
+
 ## [1.21.1] - 2026-10-17
 
 A repository the door makes now has its agent read the run before it calls
