@@ -11,6 +11,24 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.15.0 (#563, #570). Before
+  its agent calls a check green, the output style has it read the run with a
+  named command and copy every `not yet confirmed` line, or say it found
+  none: on GitHub `gh run view <run-id>`, whose annotations carry each job's
+  first nine; on GitLab `glab ci trace` filtered to the `Verdict` line and the
+  `not yet confirmed:` lines, after `glab mr view` gives the pipeline's ID.
+  It keeps answering in the person's language for the whole session, also
+  when it quotes English tool output. On GitLab, `.claude/settings.json`
+  allows `glab ci trace` and that one filter, so the read asks for no
+  approval; `glab ci get` stays unallowed, because its `--with-variables`
+  prints the pipeline's variables. Still open: on GitLab those commands do
+  not show the status of a job the project adds, such as `docker-image`
+  (#571). A repository the door already made gets these only after
+  `/plinth:template-update` to v1.15.0; the template's `plinth_sha` did not
+  move, so the update leaves the plinth pin as it is.
+
 ## [1.21.0] - 2026-10-16
 
 A release now proves what it advertises reaches a repository, and the
