@@ -2293,6 +2293,29 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
             result("SKIP", f"{branch}: the merge ruleset not verified: the update rule comes from a ruleset "
                            "outside this repository, whose bypass actors are not read here")
             return set()
+        # Not in effect is not absent: a merge ruleset switched to evaluate or
+        # disabled, or scoped off the default branch, is missing from the
+        # branch's rules but still there, and then the merge is open while
+        # it looks reserved. This repository's other rulesets are read for
+        # one that carries `update`.
+        listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
+        if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
+            result("SKIP", f"{branch}: the merge ruleset not verified: no ruleset in effect carries update, "
+                           "and this repository's rulesets could not be listed")
+            return set()
+        in_effect = {r.get("ruleset_id") for r in rules}
+        idle = []
+        for item in listed if isinstance(listed, list) else []:
+            rid = item.get("id") if isinstance(item, dict) else None
+            if not rid or rid in in_effect or item.get("source_type", "Repository") != "Repository":
+                continue
+            rs = api(f"repos/{repo}/rulesets/{rid}", network)
+            if isinstance(rs, dict) and any(r.get("type") == "update" for r in rs.get("rules", [])):
+                idle.append(f"ruleset {rid} ({rs.get('enforcement')}, {rs.get('target')}, {rs.get('conditions')})")
+        if idle:
+            result("FAIL", f"{branch}: the merge ruleset is not in effect: {'; '.join(idle)}. Any account with write "
+                           f"access can merge; expected enforcement {merge['enforcement']} on {merge['conditions']}")
+            return set()
         # A WARN, not a FAIL: every repository made before #568 lacks it, and
         # `ci / floor-check` runs in each of them; while the agent works under
         # the person's own account it changes nothing.

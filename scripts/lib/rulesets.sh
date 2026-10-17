@@ -28,7 +28,7 @@ ruleset_reads_as() {
 # the admin).
 wall_ruleset_id() {
   local id ids found=()
-  ids="$(gh api "repos/$1/rulesets" --jq '.[] | select(.target == "branch") | .id')" || return 1
+  ids="$(gh api --paginate "repos/$1/rulesets?per_page=100" --jq '.[] | select(.target == "branch") | .id')" || return 1
   for id in $ids; do
     if gh api "repos/$1/rulesets/$id" --jq '[.rules[].type] | index("pull_request") != null' | grep -qx true; then
       found+=("$id")

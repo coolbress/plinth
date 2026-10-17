@@ -70,7 +70,7 @@ case "$*" in
   # The merge ruleset (#568): its id by name (MERGE_IDS, one per line; empty is
   # none), then the ruleset as GitHub returns it (MERGE_READBACK, or the file
   # with server fields and the update rule's parameter added).
-  "api repos/"*"/rulesets --jq "*)    printf '%s' "${MERGE_IDS-5}" ;;
+  "api --paginate repos/"*"/rulesets?per_page=100 --jq "*) printf '%s' "${MERGE_IDS-5}" ;;
   "api repos/"*"/rulesets/"*)         if [ -n "${MERGE_READBACK:-}" ]; then echo "$MERGE_READBACK"; else
                                         jq '. + {id: 5, rules: [{type: "update", parameters: {update_allows_fetch_and_merge: false}}]}' "$MERGE_FILE"; fi ;;
   "api repos/"*"/commits/main --jq "*) echo "${MAIN_TIP:-0123456789ab docs: first pull request through the wall (#1)}" ;;   # GitHub appends the number (measured)

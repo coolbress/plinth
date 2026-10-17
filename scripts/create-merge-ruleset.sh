@@ -39,7 +39,8 @@ want="$(jq -cS "$ruleset_shape" "$file")"
 fail=0
 for repo in "$@"; do
   # Never twice: two rulesets with one name and nobody knows which one holds.
-  if ! ids="$(gh api "repos/$repo/rulesets" --jq ".[] | select(.name == $(jq .name "$file")) | .id")"; then
+  # Every page: GitHub lists 30 rulesets a page unless asked for more.
+  if ! ids="$(gh api --paginate "repos/$repo/rulesets?per_page=100" --jq ".[] | select(.name == $(jq .name "$file")) | .id")"; then
     echo "-- $repo: could not list its rulesets; not applied" >&2; fail=1; continue
   fi
   # One already there is applied only if it reads as the file: a write that

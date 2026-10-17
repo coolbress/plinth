@@ -405,6 +405,21 @@ merge_wall "a missing merge ruleset names the upgrade command" \
   'scripts/with-admin-token.sh scripts/create-merge-ruleset.sh o/r' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
 merge_wall "a missing merge ruleset fails nothing (consumer CI keeps merging)" \
   '^-- 0 failed' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+# Not in effect is not absent: GitHub leaves a disabled, evaluate-mode or
+# mis-scoped ruleset out of the branch's rules, and the repository's list
+# still has it.
+not_in_effect() { # <jq edit of B> -> shell for merge_wall: B listed but out of the branch's rules
+  printf '%s' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '[{\"id\":1,\"source_type\":\"Repository\"},{\"id\":2,\"source_type\":\"Repository\"}]' > \"$mapi/repos/o/r/rulesets?per_page=100.json\"; jq -c '$1' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\""
+}
+merge_wall "a disabled merge ruleset is a FAIL, not the missing WARN" '^  FAIL  main: the merge ruleset is not in effect: ruleset 2 \(disabled' "$(not_in_effect '.enforcement = "disabled"')" "${M[@]}"
+merge_wall "a merge ruleset in evaluate mode is a FAIL" '^  FAIL  main: the merge ruleset is not in effect: ruleset 2 \(evaluate' "$(not_in_effect '.enforcement = "evaluate"')" "${M[@]}"
+merge_wall "a merge ruleset scoped off the default branch is a FAIL" '^  FAIL  main: the merge ruleset is not in effect: ruleset 2 \(active, branch' "$(not_in_effect '.conditions.ref_name.include = ["refs/heads/other"]')" "${M[@]}"
+rm -f "$mapi/repos/o/r/rulesets?per_page=100.json"
+merge_wall "a list with no update rule anywhere is still the missing WARN" '^  WARN  main: no ruleset reserves the merge' \
+  "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '[{\"id\":1,\"source_type\":\"Repository\"}]' > \"$mapi/repos/o/r/rulesets?per_page=100.json\"" "${M[@]}"
+merge_wall "a list that cannot be read is not verified, not the missing WARN" '^  SKIP  main: the merge ruleset not verified: no ruleset in effect carries update' \
+  "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '{}' > \"$mapi/repos/o/r/rulesets?per_page=100.json\"" "${M[@]}"
+rm -f "$mapi/repos/o/r/rulesets?per_page=100.json"
 merge_wall "a merge ruleset bypassed through a pull request, not exempt, is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \
   "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"pull_request\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "a merge ruleset bypassed always is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \

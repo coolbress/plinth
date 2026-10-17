@@ -57,7 +57,7 @@ case "$*" in
   *"/rulesets/9"*)    if [ -n "${READBACK:-}" ]; then echo "$READBACK"; else
                         jq '. + {id: 9, created_at: "x", rules: [{type: "update", parameters: {update_allows_fetch_and_merge: false}}],
                                  bypass_actors: [.bypass_actors[] | . + {extra: 1}]}' "$FILE"; fi ;;
-  *"/rulesets --jq"*) [ "${ALREADY:-0}" = 1 ] && echo 7; true ;;
+  *"/rulesets?per_page=100 --jq"*) [ "${ALREADY:-0}" = 1 ] && echo 7; true ;;
 esac
 exit 0
 MOCK
@@ -68,6 +68,9 @@ run() { : > "$CALLS"; "$root/scripts/create-merge-ruleset.sh" "$@" >"$work/out" 
 if run o/r && grep -q "applied (ruleset 9)" "$work/out" && grep -q -- "-X POST" "$CALLS"
 then ok "creates the ruleset and reads it back (server fields and parameters aside)"
 else bad "a clean create did not apply"; sed 's/^/        /' "$work/out"; fi
+if grep -q -- "--paginate repos/o/r/rulesets?per_page=100 --jq" "$CALLS"
+then ok "the same-name lookup reads every page of rulesets"
+else bad "the same-name lookup reads one page only"; fi
 if grep -q -- "--input $root/scripts/../ruleset-merge.json" "$CALLS"
 then ok "posts ruleset-merge.json itself, the door's file"
 else bad "posted something other than ruleset-merge.json"; sed 's/^/        /' "$CALLS"; fi

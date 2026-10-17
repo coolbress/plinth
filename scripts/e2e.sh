@@ -157,7 +157,7 @@ python3 "$here/floor-check.py" --root "$dir" --repo "$repo" --ruleset "$here/../
 merge_file="$here/../ruleset-merge.json"
 # shellcheck source=scripts/lib/rulesets.sh
 . "$here/lib/rulesets.sh"
-merge_id="$(gh api "repos/$repo/rulesets" --jq ".[] | select(.name == $(jq .name "$merge_file")) | .id")" \
+merge_id="$(gh api --paginate "repos/$repo/rulesets?per_page=100" --jq ".[] | select(.name == $(jq .name "$merge_file")) | .id")" \
   || fail "could not list the rulesets of $url"
 [ "$(grep -c . <<<"$merge_id")" = 1 ] \
   || fail "$url has $(grep -c . <<<"$merge_id") rulesets named $(jq .name "$merge_file"), expected 1 (the door's merge ruleset)"
