@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-10-17
+
+A repository the door makes now has its agent read the run before it calls
+a check green, copying every `not yet confirmed` line or saying it found
+none, and keep answering in the person's language for the whole session
+(#563); on GitLab the commands that read the run need no approval, while
+`glab ci get` stays behind one (#570).
+
+tested with plinth-template v1.15.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.15.0 (#563, #570). Before
@@ -2907,7 +2917,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.21.1...HEAD
+[1.21.1]: https://github.com/coolbress/plinth/releases/tag/v1.21.1
 [1.21.0]: https://github.com/coolbress/plinth/releases/tag/v1.21.0
 [1.20.0]: https://github.com/coolbress/plinth/releases/tag/v1.20.0
 [1.19.0]: https://github.com/coolbress/plinth/releases/tag/v1.19.0
