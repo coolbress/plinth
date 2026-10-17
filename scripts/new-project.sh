@@ -51,8 +51,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # an unpinned resolution would let any package published later run there.
 # Raising the tag with its commit, the version or the date is the only edit here.
 template_repo="coolbress/plinth-template"
-template_ref="v1.14.0"
-template_sha="0a0c183786b85839aba52c564765b05cb6ca4d11"
+template_ref="v1.15.0"
+template_sha="38aef1f1ea05bc507b35a82917170db83f77b1fd"
 template_ci=".github/workflows/ci.yml"
 copier_version="9.18.2"
 copier_newer="2026-09-09"
