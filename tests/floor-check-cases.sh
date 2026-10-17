@@ -389,6 +389,7 @@ merge_wall() { # <description> <expected regex> [shell that edits $mapi first] [
   local desc="$1" want="$2" edit="${3:-}" out; shift; shift; [ $# -gt 0 ] && shift
   jq -c ". + [$b_rule]" <<<"$good_rules" > "$mapi/repos/o/r/rules/branches/main.json"
   printf '%s' "$b_actors" > "$mapi/repos/o/r/rulesets/2.json"; printf '{"bypass_actors":[]}' > "$mapi/repos/o/r/rulesets/1.json"
+  jq -c '. + {permissions: {admin: true, push: true}}' <<<"$good_meta" > "$mapi/repos/o/r.json"
   [ -n "$edit" ] && eval "$edit"
   out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" \
          --expect-checks "ci / a, ci / b" "$@" 2>&1)"
@@ -449,6 +450,50 @@ merge_wall "with the Actions token they are left to /plinth:floor-check" \
   "printf '{}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}" --actions-token
 merge_wall "an update rule from an organization ruleset is not verified, not passed" '^  SKIP  main: the merge ruleset not verified: the update rule comes from a ruleset outside' \
   "jq -c '. + [{\"type\":\"update\",\"ruleset_source_type\":\"Organization\",\"ruleset_id\":9}]' <<<\"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+# Guidance or boundary (#569): the login's role on the repository decides,
+# since GitHub lets the admin role past the merge ruleset whatever the token.
+as_login() { # <admin true|false|absent> -> shell for merge_wall: the repository as that login reads it
+  case "$1" in
+    absent) printf '%s' "printf '%s' \"\$good_meta\" > \"$mapi/repos/o/r.json\"" ;;
+    *) printf '%s' "jq -c '. + {permissions: {admin: $1, push: true}}' <<<\"\$good_meta\" > \"$mapi/repos/o/r.json\"" ;;
+  esac
+}
+no_b="printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\""
+merge_wall "an admin login is guidance" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true)" "${M[@]}"
+merge_wall "an admin login is guidance with the merge ruleset missing too" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true); $no_b" "${M[@]}"
+merge_wall "a non-admin login with the merge ruleset standing is a boundary" '^  PASS  the merge: boundary\. This login is not the repository.s admin' "$(as_login false)" "${M[@]}"
+merge_wall "...and the boundary fails nothing" '^-- 0 failed, 1 not verified$' "$(as_login false)" "${M[@]}"
+merge_wall "a non-admin login with no merge ruleset is guidance, not a boundary" '^  INFO  the merge: guidance\. This login is not the repository.s admin, but no ruleset' "$(as_login false); $no_b" "${M[@]}"
+merge_wall "a non-admin login with an unreadable merge ruleset is not verified, never a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' \
+  "$(as_login false); printf '{}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
+# As a collaborator's token reads it (#569's run): scope, no actors, and GitHub's answer for this login.
+collab_b() { printf '%s' "jq -c 'del(.bypass_actors) + {current_user_can_bypass: \"$1\"}' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\""; }
+merge_wall "a collaborator that can never bypass the merge ruleset is a boundary, its actors unread" \
+  '^  PASS  the merge: boundary\. This login is not the repository.s admin, and GitHub says it can never bypass' "$(as_login false); $(collab_b never)" "${M[@]}"
+merge_wall "...while the unread actors stay not verified" "^  SKIP  ruleset 2: the merge ruleset's bypass actors not visible" "$(as_login false); $(collab_b never)" "${M[@]}"
+merge_wall "a collaborator GitHub says can bypass it is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' "$(as_login false); $(collab_b exempt)" "${M[@]}"
+merge_wall "no answer for this login is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' \
+  "$(as_login false); printf '%s' \"\$(jq -c 'del(.bypass_actors)' <<<\"\$b_actors\")\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
+merge_wall "a read-only login with no merge ruleset is a boundary, not guidance (it cannot merge at all)" \
+  '^  PASS  the merge: boundary\. This login cannot write to the repository' "$(as_login false); jq -c '.permissions.push = false' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
+merge_wall "a non-admin login whose write access cannot be read is not verified" \
+  '^  SKIP  the merge: not verified: whether this login can write' "$(as_login false); jq -c 'del(.permissions.push)' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
+merge_wall "a role that cannot be read is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent)" "${M[@]}"
+merge_wall "...and counted as not verified, not passed" '^-- 0 failed, 2 not verified$' "$(as_login absent)" "${M[@]}"
+merge_wall "with the Actions token it is not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false)" "${M[@]}" --actions-token
+merge_wall "...and it is left to /plinth:floor-check, not passed" '^-- 0 failed, [0-9]+ not verified, [0-9]+ left to /plinth:floor-check$' "$(as_login false)" "${M[@]}" --actions-token
+for who in true false absent; do
+  jq -c ". + [$b_rule]" <<<"$good_rules" > "$mapi/repos/o/r/rules/branches/main.json"
+  printf '%s' "$b_actors" > "$mapi/repos/o/r/rulesets/2.json"; eval "$(as_login "$who")"
+  out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" \
+         --expect-checks "ci / a, ci / b" "${M[@]}" --actions-token 2>&1)"
+  if grep -q '^  PASS  the merge' <<<"$out" || grep -q 'the merge: guidance\|the merge: boundary' <<<"$out"; then
+    bad "with the Actions token and admin=$who, no guidance or boundary is said"
+  else ok "with the Actions token and admin=$who, no guidance or boundary is said"; fi
+done
+merge_wall "without --merge-ruleset nothing is said about the merge" '^-- ' "$(as_login false)"
+if FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1 | grep -q 'the merge:'; then
+  bad "without --merge-ruleset no merge line is printed"; else ok "without --merge-ruleset no merge line is printed"; fi
 # Without --merge-ruleset nothing says what B should be: its bypass actor is
 # held to the first ruleset's rule (fail-closed), and the gap is named.
 merge_wall "without --merge-ruleset the shape is said not compared" '^  INFO  main: the ruleset that reserves the merge to an admin is not compared \(no --merge-ruleset\)$'
