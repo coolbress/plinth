@@ -39,6 +39,8 @@ case "$1 $2" in
       *"/issues/"[0-9]*)
         [[ "$*" =~ issues/([0-9]+) ]]; f="$fx/issue-${BASH_REMATCH[1]}.json"
         [ -f "$f" ] || exit 1; out "$f" ;;
+      "api repos/o/r/rules/branches/main --jq"*) [ -f "$fx/rules.json" ] || exit 1; out "$fx/rules.json" ;;
+      "api repos/o/r/rulesets/"*) [ -f "$fx/ruleset.json" ] || exit 1; out "$fx/ruleset.json" ;;
       "api repos/o/r --jq .permissions.admin") [ -f "$fx/repo.json" ] || exit 1; out "$fx/repo.json" ;;
       *) echo "fake gh: unexpected api $*" >&2; exit 1 ;;
     esac ;;
@@ -53,7 +55,7 @@ green='[{"name":"ci / install","state":"SUCCESS"},{"name":"third-party / review"
 # setup <case-dir>: a pull request that should merge; each case then breaks one thing.
 setup() {
   FX="$work/$1"; export FX; mkdir -p "$FX"
-  printf '{"state":"OPEN","headRefOid":"%s","headRefName":"b","body":"## What and why\\n\\nx"}' "$H" >"$FX/pr.json"
+  printf '{"state":"OPEN","headRefOid":"%s","headRefName":"b","baseRefName":"main","body":"## What and why\\n\\nx"}' "$H" >"$FX/pr.json"
   printf '{"state":"MERGED","mergeCommit":{"oid":"abc"}}' >"$FX/after.json"
   printf '%s' "$green" >"$FX/checks.json"
   printf '[]' >"$FX/comments.json"
@@ -133,9 +135,14 @@ fi
 echo "-- refused under the merge ruleset (#569): the person merges, no retry"
 # What gh printed when the base branch policy blocked a green pull request (#568's merge paths record).
 blocked='X Pull request o/r#7 is not mergeable: the base branch policy prohibits the merge.'
-refusal() { # <label> <admin: true|false|unread> <stderr> <say: yes|no>
+refusal() { # <label> <admin: true|false|unread> <stderr> <say: yes|no> [ruleset: never|exempt|none]
   setup "ref-$2-$RANDOM"; echo 1 >"$FX/merge_rc"; printf '%s\n' "$3" >"$FX/merge_err"
   [ "$2" = unread ] || printf '{"permissions":{"admin":%s}}' "$2" >"$FX/repo.json"
+  case "${5:-never}" in
+    none) printf '[{"type":"pull_request","ruleset_source_type":"Repository","ruleset_id":1}]' >"$FX/rules.json" ;;
+    *) printf '[{"type":"pull_request","ruleset_source_type":"Repository","ruleset_id":1},{"type":"update","ruleset_source_type":"Repository","ruleset_id":2}]' >"$FX/rules.json"
+       printf '{"id":2,"current_user_can_bypass":"%s"}' "${5:-never}" >"$FX/ruleset.json" ;;
+  esac
   PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
   if [ "$rc" != 0 ] && grep -qF "$3" "$FX/out" && { grep -q 'Do not retry. The person merges' "$FX/out"; [ "$?" = "$([ "$4" = yes ] && echo 0 || echo 1)" ]; }; then
     pass=$((pass+1)); echo "  PASS  stop  $1"
@@ -146,6 +153,8 @@ refusal "a non-admin login refused by the rule (the API's words): the person mer
 refusal "an admin login blocked: no person-merges line (something else blocks it)" true "$blocked" no
 refusal "a role that cannot be read: no person-merges line" unread "$blocked" no
 refusal "a non-admin login refused for another reason: no person-merges line" false "X Head branch was modified. Review and try the merge again." no
+refusal "a non-admin login blocked with no update rule on the base (another policy): no person-merges line" false "$blocked" no none
+refusal "a non-admin login GitHub says can bypass the update rule: no person-merges line" false "$blocked" no exempt
 
 echo "-- the review round (#485): the line third-party / review writes, never a stop"
 # Recorded from coolbress/plinth#484 at its last head, trimmed to the fields

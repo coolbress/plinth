@@ -169,14 +169,28 @@ open="$(awk -F'\t' '$2!=""{answered[$2]=1; next} {top[NR]=$0; id[NR]=$1} END{for
 # -- merge -------------------------------------------------------------------
 body="$(gh pr view "$pr" -R "$repo" --json body --jq .body)" || stop "cannot read the description"
 [ -n "$body" ] || stop "the description is empty; it becomes the squash commit"
+# An `update` rule on the pull request's base branch whose ruleset this login
+# can never bypass. Any read that fails says no.
+reserved_to_admin() {
+  local base id
+  base="$(gh pr view "$pr" -R "$repo" --json baseRefName --jq .baseRefName 2>/dev/null)" && [ -n "$base" ] || return 1
+  for id in $(gh api "repos/$repo/rules/branches/$base" --jq '.[] | select(.type == "update" and .ruleset_source_type == "Repository") | .ruleset_id' 2>/dev/null); do
+    [ "$(gh api "repos/$repo/rulesets/$id" --jq .current_user_can_bypass 2>/dev/null)" = never ] && return 0
+  done
+  return 1
+}
 if ! refused="$(gh pr merge "$pr" -R "$repo" --squash --match-head-commit "$head" --body "$body" 2>&1)"; then
   printf '%s\n' "$refused" >&2
   # Under the ruleset that reserves the merge to the admin (#568), a login
   # without the admin role is refused however often it retries: gh's own
   # check reads the pull request as blocked, the API answers with the rule
-  # violation (#569). Which login is the role read, not the message alone.
+  # violation (#569). gh says the same for any block (a missing approval, an
+  # unresolved thread), so the line needs the role read as not admin and an
+  # `update` rule on the base branch from a ruleset GitHub says this login
+  # can never bypass.
   if grep -qiE 'base branch policy prohibits the merge|repository rule violations|cannot update this protected ref' <<<"$refused" \
-     && [ "$(gh api "repos/$repo" --jq '.permissions.admin' 2>/dev/null)" = false ]; then
+     && [ "$(gh api "repos/$repo" --jq '.permissions.admin' 2>/dev/null)" = false ] \
+     && reserved_to_admin; then
     stop "GitHub refused the merge: this login is not the repository's admin, and the ruleset that reserves the merge to the admin stands." \
          "Do not retry. The person merges: the merge button on the pull request's page, or their own login outside this session."
   fi

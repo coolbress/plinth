@@ -2405,9 +2405,12 @@ def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_tok
                        f"on {branch}, so GitHub refuses its merge; you merge, with the button or your own login. "
                        "It holds while no admin login is left where the agent can reach it")
     elif reserved == "never":
+        # Only this login's answer: whether the admin is still exempt, so
+        # the person's merge goes through, is in the actors it cannot read.
         result("PASS", f"the merge: boundary. This login is not the repository's admin, and GitHub says it can never "
-                       f"bypass the merge ruleset on {branch}, so GitHub refuses its merge; you merge, with the button "
-                       "or your own login. It holds while no admin login is left where the agent can reach it")
+                       f"bypass the merge ruleset on {branch}, so GitHub refuses its merge. It holds while no admin "
+                       "login is left where the agent can reach it. Whether the admin is still exempt, so that your "
+                       "own merge goes through, is not read with this login: run /plinth:floor-check with yours")
     elif reserved == "missing":
         result("INFO", "the merge: guidance. This login is not the repository's admin, but no ruleset reserves the "
                        "merge to the admin, so it can merge; the WARN above adds that ruleset")
