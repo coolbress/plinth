@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.21.2] - 2026-10-17
+
+A repository the door makes now has its agent keep the person's language
+after a skill's instructions load, and on GitLab read the status of a job
+the project adds from the last line of its log (#574, #571). In Korean
+sessions that ran the `verify` skill before a commit, the progress lines
+after it were English 1 time in 19 instead of 8 in 18; a whole final report
+in English was still seen in 1 of 10 sessions, as before.
+
+tested with plinth-template v1.16.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.16.0 (#574, #571). The
@@ -2932,7 +2943,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.21.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.21.2...HEAD
+[1.21.2]: https://github.com/coolbress/plinth/releases/tag/v1.21.2
 [1.21.1]: https://github.com/coolbress/plinth/releases/tag/v1.21.1
 [1.21.0]: https://github.com/coolbress/plinth/releases/tag/v1.21.0
 [1.20.0]: https://github.com/coolbress/plinth/releases/tag/v1.20.0
