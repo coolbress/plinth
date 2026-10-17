@@ -11,6 +11,39 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:new-project` applies a second ruleset, `ruleset-merge.json`,
+  beside the first (#568). It restricts updates to the default branch and
+  exempts the repository's admin role from that (`exempt` mode), so the
+  admin's merges, `gh pr merge` and auto-merge included, go on as before.
+  While the agent works under the person's own account it changes nothing.
+  An agent with an account of its own (a collaborator with write access) can
+  no longer merge, nor can auto-merge it enabled. Measured on #568 and #517:
+  its merge was refused with a 405, and the owner's went through. The first
+  ruleset still has no bypass actor, and still refused the owner's merge
+  with a missing, failing or stale check. The admin's merges past the new
+  ruleset leave no bypass audit entry, as GitHub documents for `exempt`.
+- `scripts/create-merge-ruleset.sh <owner/name>` adds it to a repository the
+  door made before. It needs repository administration, so run it through
+  `scripts/with-admin-token.sh`. It never adds a second copy, and it reads
+  the ruleset back after the write.
+- `/plinth:floor-check` and `ci / floor-check` read it (`--merge-ruleset`). In
+  its shape it is a PASS. Any other shape is a FAIL, and so is `update`
+  beside other rules in one ruleset. With no ruleset carrying `update`, the
+  check is a WARN naming the command above, so the CI of repositories made
+  before it keeps merging. Bypass actors it cannot read are a SKIP (an INFO
+  left to the skill in CI), never a PASS. `scripts/check-ruleset.sh` without
+  arguments checks both files, and `--merge <file>` checks this one alone.
+  `scripts/e2e.sh` fails when the door-made repository lacks it or has it in
+  another shape.
+
+### Fixed
+
+- `scripts/upgrade-ruleset.sh` and `scripts/add-ruleset-rule.sh` pick the
+  first branch ruleset by name. Before, they took the first branch ruleset
+  GitHub listed, which could now be the merge ruleset.
+
 ## [1.21.2] - 2026-10-17
 
 A repository the door makes now has its agent keep the person's language

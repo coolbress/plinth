@@ -15,12 +15,19 @@ mkdir -p "$work/bin"
 cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -u
+# The tag ruleset (7) comes first, then the merge ruleset (2, a branch ruleset
+# too, carrying `update` alone), then the first ruleset (1). `.[0]` lands on 7,
+# the first branch ruleset on 2; a renamed merge ruleset must not matter.
+# TWO_WALLS=1: the merge ruleset carries pull_request as well, and nothing may
+# be picked.
 case "$*" in
-  *"/rulesets/1"*) echo '{"id":1,"created_at":"x","_links":{},"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"pull_request","parameters":{"required_approving_review_count":0}}]}' ;;
-  # Branch ruleset id 1, tag ruleset id 7 created first: `.[0].id` would land on 7.
-  *"/rulesets"*'select(.target == "branch")'*) echo 1 ;;
-  *"/rulesets"*)   echo 7 ;;
+  *"/rulesets/1"*) out='{"id":1,"created_at":"x","_links":{},"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"pull_request","parameters":{"required_approving_review_count":0}}]}' ;;
+  *"/rulesets/2"*) out='{"id":2,"name":"renamed by hand","target":"branch","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"update"}]}'
+                   [ "${TWO_WALLS:-0}" = 0 ] || out="$(jq -c '.rules += [{"type":"pull_request"}]' <<<"$out")" ;;
+  *"/rulesets"*)   out='[{"id":7,"name":"tags","target":"tag"},{"id":2,"name":"renamed by hand","target":"branch"},{"id":1,"name":"r","target":"branch"}]' ;;
+  *) exit 0 ;;
 esac
+case "$*" in *" --jq "*) jq -r "${@: -1}" <<<"$out" ;; *) echo "$out" ;; esac
 exit 0
 MOCK
 chmod +x "$work/bin/gh"; export PATH="$work/bin:$PATH"
@@ -36,6 +43,10 @@ if grep -q "required_linear_history" "$work/out"; then ok "the rule is added"; e
 if grep -q "deletion" "$work/out"; then ok "existing rules survive"; else bad "an existing rule disappeared"; fi
 if grep -q "pull_request" "$work/out"; then ok "existing rules survive (second)"; else bad "an existing rule disappeared"; fi
 if grep -q "bypass actors: 0, enforcement: active" "$work/out"; then ok "bypass actors and enforcement are untouched"; else bad "the wall got weaker"; fi
+if grep -q "^-- r/r (ruleset 1)$" "$work/out"; then ok "the first ruleset is edited, not the tag or the merge ruleset"; else bad "another ruleset was picked: $(head -1 "$work/out")"; fi
+rc=$(TWO_WALLS=1 run --dry-run r/r linear-history)
+if [ "$rc" != 0 ] && grep -q "no single branch ruleset" "$work/out"; then ok "two branch rulesets carrying pull_request: nothing is picked"
+else bad "picked one of two candidates (exit $rc)"; fi
 
 rc=$(run --dry-run r/r no-such-preset)
 if [ "$rc" != 0 ]; then ok "an unknown preset is refused"; else bad "an unknown preset passed"; fi

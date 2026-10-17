@@ -148,7 +148,22 @@ echo "pins: $(grep -hE '^[[:space:]]*uses:' "$dir"/.github/workflows/*.yml | sed
 # main, and here it is a failure: main is the one branch the door promised.
 default_branch="$(gh api "repos/$repo" --jq .default_branch)"
 [ "$default_branch" = main ] || fail "the default branch of $url is $default_branch, not main"
-python3 "$here/floor-check.py" --root "$dir" --repo "$repo" --ruleset "$here/../ruleset.json"
+python3 "$here/floor-check.py" --root "$dir" --repo "$repo" --ruleset "$here/../ruleset.json" \
+  --merge-ruleset "$here/../ruleset-merge.json"
+# The merge ruleset (#568), read back as the file the door posts. The checker
+# says only WARN when it is missing, which every repository made before it
+# is; here the door made this one, so missing or different is a failure. This
+# token administers the repository, so the bypass actor is read.
+merge_file="$here/../ruleset-merge.json"
+# shellcheck source=scripts/lib/rulesets.sh
+. "$here/lib/rulesets.sh"
+merge_id="$(gh api --paginate "repos/$repo/rulesets?per_page=100" --jq ".[] | select(.name == $(jq .name "$merge_file")) | .id")" \
+  || fail "could not list the rulesets of $url"
+[ "$(grep -c . <<<"$merge_id")" = 1 ] \
+  || fail "$url has $(grep -c . <<<"$merge_id") rulesets named $(jq .name "$merge_file"), expected 1 (the door's merge ruleset)"
+merge_got="$(ruleset_reads_as "$repo" "$merge_id" "$merge_file")" \
+  || fail "the merge ruleset of $url reads back as" "${merge_got:-nothing}" "not as ruleset-merge.json"
+echo "merge ruleset: $merge_id, as ruleset-merge.json (the merge below goes through it)"
 
 # ── through the wall ─────────────────────────────────────────────────────
 echo "waiting for $pr_url to turn green and mergeable (up to $wait_s s)"

@@ -2063,7 +2063,8 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
 
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
-               sources: dict[str, int | None] | None = None, actions_token: bool = False) -> None:
+               sources: dict[str, int | None] | None = None, actions_token: bool = False,
+               merge: dict | None = None) -> None:
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("SKIP", "wall not checked (offline)")
         return
@@ -2250,7 +2251,10 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             result("WARN", f"CodeQL default setup analyses {langs}, not the Python under src/")
             result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'")
 
-    ids = {r.get("ruleset_id") for r in rules if r.get("ruleset_source_type") == "Repository"}
+    # The merge ruleset is the one ruleset allowed a bypass actor, judged by
+    # its own shape; every other ruleset keeps none.
+    judged = check_merge_ruleset(repo, branch, rules, merge, network, actions_token)
+    ids = {r.get("ruleset_id") for r in rules if r.get("ruleset_source_type") == "Repository"} - judged
     for rid in sorted(i for i in ids if i):
         rs = api(f"repos/{repo}/rulesets/{rid}", network)
         actors = rs.get("bypass_actors") if isinstance(rs, dict) else None
@@ -2263,6 +2267,96 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             result("SKIP", f"ruleset {rid}: bypass actors not visible with this token (an admin-read token sees them)")
         else:
             ok(actors == [], f"ruleset {rid}: no bypass actors", f"ruleset {rid}: bypass actors present: {actors}")
+
+
+def bypass_key(actor: dict) -> tuple[str, str, str]:
+    return (str(actor.get("actor_id")), str(actor.get("actor_type")), str(actor.get("bypass_mode")))
+
+
+def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None, network: bool,
+                        actions_token: bool) -> set:
+    """The second ruleset the door applies (ruleset-merge.json, #568): the
+    `update` rule alone, with the repository's admin role exempt from it, so
+    an account with write access cannot merge and the admin still can, by
+    every path it had. Recognised by its `update` rule; returns the ids judged here, which
+    the no-bypass check then leaves alone. A ruleset that carries `update`
+    beside other rules is not one: its bypass would reach those rules, so it
+    stays under the no-bypass check as well."""
+    carriers = {r.get("ruleset_id") for r in rules if r.get("type") == "update"
+                and r.get("ruleset_source_type") == "Repository" and r.get("ruleset_id")}
+    if merge is None:
+        if carriers:
+            result("INFO", f"{branch}: the ruleset that reserves the merge to an admin is not compared (no --merge-ruleset)")
+        return set()
+    if not carriers:
+        if any(r.get("type") == "update" for r in rules):
+            result("SKIP", f"{branch}: the merge ruleset not verified: the update rule comes from a ruleset "
+                           "outside this repository, whose bypass actors are not read here")
+            return set()
+        # Not in effect is not absent: a merge ruleset switched to evaluate or
+        # disabled, or scoped off the default branch, is missing from the
+        # branch's rules but still there, and then the merge is open while
+        # it looks reserved. This repository's other rulesets are read for
+        # one that carries `update`.
+        listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
+        if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
+            result("SKIP", f"{branch}: the merge ruleset not verified: no ruleset in effect carries update, "
+                           "and this repository's rulesets could not be listed")
+            return set()
+        in_effect = {r.get("ruleset_id") for r in rules}
+        idle = []
+        for item in listed if isinstance(listed, list) else []:
+            rid = item.get("id") if isinstance(item, dict) else None
+            if not rid or rid in in_effect or item.get("source_type", "Repository") != "Repository":
+                continue
+            rs = api(f"repos/{repo}/rulesets/{rid}", network)
+            if isinstance(rs, dict) and any(r.get("type") == "update" for r in rs.get("rules", [])):
+                idle.append(f"ruleset {rid} ({rs.get('enforcement')}, {rs.get('target')}, {rs.get('conditions')})")
+        if idle:
+            result("FAIL", f"{branch}: the merge ruleset is not in effect: {'; '.join(idle)}. Any account with write "
+                           f"access can merge; expected enforcement {merge['enforcement']} on {merge['conditions']}")
+            return set()
+        # A WARN, not a FAIL: every repository made before #568 lacks it, and
+        # `ci / floor-check` runs in each of them; while the agent works under
+        # the person's own account it changes nothing.
+        result("WARN", f"{branch}: no ruleset reserves the merge to an admin: any account with write access, "
+                       "an agent's own account included, can merge a pull request")
+        result("INFO", f"  scripts/with-admin-token.sh scripts/create-merge-ruleset.sh {repo}   (from a plinth checkout)")
+        return set()
+    want_types = sorted(r["type"] for r in merge["rules"])
+    want_actors = sorted(bypass_key(a) for a in merge["bypass_actors"])
+    judged = set()
+    for rid in sorted(carriers):
+        types = sorted({r.get("type") for r in rules if r.get("ruleset_id") == rid})
+        if types != want_types:
+            result("FAIL", f"{branch}: ruleset {rid} carries {types}, not {want_types} alone: "
+                           "a bypass actor on it would reach every one of those rules")
+            continue
+        judged.add(rid)
+        rs = api(f"repos/{repo}/rulesets/{rid}", network)
+        # Its scope as well as its actor: widened to every branch, it still
+        # lists `update` on the default branch, and stops everyone but the
+        # admin from pushing a branch at all.
+        scope_keys = ("target", "enforcement", "conditions")
+        scope = {k: rs[k] for k in scope_keys} if isinstance(rs, dict) and all(k in rs for k in scope_keys) else None
+        want_scope = {k: merge[k] for k in scope_keys}
+        if scope is not None and scope != want_scope:
+            result("FAIL", f"ruleset {rid}: the merge ruleset applies to {scope}, expected {want_scope}")
+            continue
+        actors = rs.get("bypass_actors") if isinstance(rs, dict) else None
+        if actors is None and actions_token:
+            result("INFO", f"ruleset {rid}: the merge ruleset's bypass actors not visible with this token; "
+                           "/plinth:floor-check reads them with a login that administers the repository", deferred=True)
+        elif actors is None:
+            result("SKIP", f"ruleset {rid}: the merge ruleset's bypass actors not visible with this token "
+                           "(an admin-read token sees them)")
+        elif sorted(bypass_key(a) for a in actors) != want_actors:
+            result("FAIL", f"ruleset {rid}: the merge ruleset's bypass actors are {actors}, expected {merge['bypass_actors']}")
+        elif scope is None:
+            result("SKIP", f"ruleset {rid}: the merge ruleset's scope (target, enforcement, conditions) not read")
+        else:
+            result("PASS", f"ruleset {rid}: the merge is reserved to the repository admin (update, the admin role exempt)")
+    return judged
 
 
 # ── this machine ──────────────────────────────────────────────────────────
@@ -2538,6 +2632,8 @@ def main() -> int:
                     help="where the repository lives; default: `host:` in .copier-answers.yml, else github")
     ap.add_argument("--ruleset", help="ruleset.json the door applies; its contexts are the expected checks and its CodeQL thresholds the expected policy")
     ap.add_argument("--expect-checks", help="required check names, comma separated; overrides --ruleset")
+    ap.add_argument("--merge-ruleset", help="ruleset-merge.json the door applies beside --ruleset: the `update` rule "
+                    "bypassed by the repository admin only; compared with the live ruleset that carries `update`")
     ap.add_argument("--archetype", help="override the archetype in .copier-answers.yml")
     ap.add_argument("--no-network", action="store_true", help="skip everything that needs api.github.com")
     ap.add_argument("--caller-from-checkout", action="store_true",
@@ -2648,7 +2744,8 @@ def main() -> int:
         if a.ruleset:
             sources = {c: pinned.get(c, common) for c in expected}
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
-        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token)
+        merge = json.loads(read(Path(a.merge_ruleset))) if a.merge_ruleset else None
+        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge)
         check_labels(a.repo, network)
     else:
         result("SKIP", "no --repo: wall not checked")

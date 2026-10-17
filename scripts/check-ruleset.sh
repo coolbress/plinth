@@ -8,6 +8,41 @@
 # not "is it valid JSON" (jq empty does that) but "does it still enforce".
 set -euo pipefail
 
+# Ruleset B, ruleset-merge.json (#568): the merge reserved to the repository
+# admin. Its whole point is one bypass actor, so its shape is exact: the
+# `update` rule alone (a bypass reaches every rule of its ruleset, and on any
+# other rule it would open the wall), the admin role alone, in exempt mode
+# (the rule is not run for the admin, so the admin's pull requests read CLEAN
+# and `gh pr merge` and auto-merge work; `pull_request` mode left them BLOCKED,
+# #568; a direct push still meets the first ruleset, measured on #517). `--merge [file]` checks it alone; without arguments both files
+# are checked.
+merge_invariants() { # <file>
+  local f="$1" fail=0
+  jq empty "$f" 2>/dev/null || { echo "FAIL  $f is not valid JSON"; return 1; }
+  echo "merge ruleset invariants: $f"
+  mchk() {
+    local got; got="$(jq -c "$2" "$f")"
+    if [ "$got" = "$3" ]; then printf '  PASS  %s\n' "$1"
+    else printf '  FAIL  %s\n        expected: %s\n        actual:   %s\n' "$1" "$3" "$got"; fail=1; fi
+  }
+  mchk 'enforced, not advisory' '.enforcement' '"active"'
+  mchk 'targets the default branch only' '{target, conditions}' '{"target":"branch","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}}}'
+  mchk 'the update rule and nothing else (the bypass reaches every rule here)' '.rules' '[{"type":"update"}]'
+  mchk 'only the repository admin role, exempt from it' '.bypass_actors' \
+       '[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"exempt"}]'
+  [ "$fail" = 0 ] && { echo "RESULT PASS"; return 0; }
+  echo "RESULT FAIL"; return 1
+}
+if [ "${1:-}" = "--merge" ]; then
+  merge_invariants "${2:-ruleset-merge.json}"; exit
+fi
+if [ $# = 0 ]; then
+  rc=0
+  "$0" ruleset.json || rc=1
+  merge_invariants ruleset-merge.json || rc=1
+  exit "$rc"
+fi
+
 # --without-code-scanning: the variant the door posts to a private repository
 # that has no GitHub Code Security (#350). CodeQL cannot run there, so the rule
 # must be absent, not merely allowed to be: every other invariant, the check

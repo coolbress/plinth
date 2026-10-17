@@ -355,6 +355,12 @@ moving work somewhere else: another tool, another folder, another person.
   repository is behind the template; `/plinth:template-update` takes the
   update as a draft pull request; on a conflict it recommends a resolution
   for each file and applies it only on your word.
+- **Once, on a repository the door made before the merge ruleset:** `/plinth:floor-check`
+  warns that no ruleset reserves the merge to an admin. The door now adds a
+  second ruleset that lets only the repository's admin merge; while the agent
+  works under your own account it changes nothing. Add it in a separate
+  terminal, from a plinth checkout, with a token that has administration:
+  `scripts/with-admin-token.sh scripts/create-merge-ruleset.sh <owner>/<name>`.
 - **Every week or two, or after a burst of work:** `/ponytail-audit` lists
   what to delete or replace with the standard library, biggest cut first;
   `/improve-codebase-architecture` finds places to deepen. Each becomes a new

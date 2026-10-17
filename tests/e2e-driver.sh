@@ -19,7 +19,8 @@ export TMPDIR="$work/tmp"
 # The driver finds the door and the checker beside itself; copies of the stubs
 # sit there, the real ruleset.json one level up (it is only passed along).
 cp "$root/scripts/e2e.sh" "$work/scripts/"
-cp "$root/ruleset.json" "$work/"
+mkdir -p "$work/scripts/lib"; cp "$root/scripts/lib/rulesets.sh" "$work/scripts/lib/"
+cp "$root/ruleset.json" "$root/ruleset-merge.json" "$work/"
 cat > "$work/scripts/new-project.sh" <<'DOOR'
 #!/usr/bin/env bash
 template_repo="coolbress/plinth-template"
@@ -66,6 +67,12 @@ case "$*" in
                                       # A cancellation landing on the last deletion: the runner signals the tree, gh dies by it, so does the driver.
                                       [ "$n" = 2 ] && [ "${DELETE_KILL:-0}" != 0 ] && { kill -TERM "$PPID"; exit 143; }
                                       [ "${!rc:-0}" = 0 ] || { echo "HTTP 403: Must have admin rights" >&2; exit "${!rc}"; } ;;
+  # The merge ruleset (#568): its id by name (MERGE_IDS, one per line; empty is
+  # none), then the ruleset as GitHub returns it (MERGE_READBACK, or the file
+  # with server fields and the update rule's parameter added).
+  "api --paginate repos/"*"/rulesets?per_page=100 --jq "*) printf '%s' "${MERGE_IDS-5}" ;;
+  "api repos/"*"/rulesets/"*)         if [ -n "${MERGE_READBACK:-}" ]; then echo "$MERGE_READBACK"; else
+                                        jq '. + {id: 5, rules: [{type: "update", parameters: {update_allows_fetch_and_merge: false}}]}' "$MERGE_FILE"; fi ;;
   "api repos/"*"/commits/main --jq "*) echo "${MAIN_TIP:-0123456789ab docs: first pull request through the wall (#1)}" ;;   # GitHub appends the number (measured)
   "api repos/"*"/commits/"*)          echo "feedfacefeedfacefeedfacefeedfacefeedface" ;;
   "api repos/"*" --jq .default_branch") echo "${DEFAULT_BRANCH:-main}" ;;
@@ -95,7 +102,7 @@ esac
 exec "$real_git" "\$@"
 STUB
 chmod +x "$work/bin/git"
-export PATH="$work/bin:$PATH"
+export PATH="$work/bin:$PATH" MERGE_FILE="$work/ruleset-merge.json"
 
 pass=0; fail=0
 check() { # <name> <expected ok|no> <actual exit code>
@@ -124,7 +131,7 @@ run() { # <env assignments...> [-- <arguments to e2e.sh...>]
   while [ $# -gt 0 ]; do [ "$1" = -- ] && { shift; args=("$@"); break; }; envs+=("$1"); shift; done
   set -- ${envs[@]+"${envs[@]}"}
   runs=$((runs + 1)); export GH_LOG="$work/log.$runs"; : > "$GH_LOG"
-  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY
+  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY MERGE_IDS MERGE_READBACK
   env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" ${args[@]+"${args[@]}"} >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -185,6 +192,16 @@ is "the checker is called for the repository" said "stub floor check.*'--repo'"
 is "and without --actions-token" not said "stub floor check.*--actions-token"
 is "no merge on a failed floor check" not saw "^gh pr merge"
 is "deleted"               deletes 2
+is "the checker is given the merge ruleset" said "stub floor check.*'--merge-ruleset', '[^']*/ruleset-merge.json'"
+run MERGE_IDS=;            check "no merge ruleset on the door-made repository fails the journey" no $?
+is "no merge without the merge ruleset" not saw "^gh pr merge"
+is "deleted"               deletes 2
+run MERGE_IDS=$'5\n6';     check "two merge rulesets fail the journey" no $?
+is "deleted"               deletes 2
+run MERGE_READBACK='{"name":"main: merged by an admin","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"update"}],"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]}'
+check "a merge ruleset in another shape fails the journey" no $?
+is "the shape it read is named" said '"bypass_mode":"always"'
+is "deleted"               deletes 2
 
 echo "-- through the wall"
 run FAILED_CHECKS=$'  ci / test  https://github.com/o/r/actions/runs/1/job/2\n'
@@ -224,6 +241,7 @@ is "deleted"               deletes 2
 
 echo "-- the whole journey"
 run GITHUB_STEP_SUMMARY="$work/summary0"; check "green checks: merged and deleted" ok $?
+is "the merge ruleset is read back before the merge" said "^merge ruleset: 5, as ruleset-merge.json"
 # The instance is a backend, the archetype with the `image` check, and never
 # the door's cli default by omission or by another value (#164).
 is "the door renders a backend instance" [ "$(grep -c '^door tester/plinth-e2e-42 --dir=.* --archetype=backend$' "$GH_LOG")" = 1 ]

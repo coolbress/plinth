@@ -45,7 +45,7 @@
 | `ci / secrets` | gitleaks | Never | Never |
 | `ci / deps` | The dependency review's line, after the review action's own summary on a pull request: a job's summary is its steps' summaries in step order | A private repository without GitHub Code Security, where GitHub refuses the review (#395); Dependabot alerts report a vulnerable dependency after the merge. A head Dependabot pushed: CodeQL does not analyse it, and `main` is analysed after the merge (#179) | Not a pull request |
 | `ci / diff-size` | The count against `max-diff-lines` | Never | Not a pull request. `max-diff-lines: 0` passes as measured and not enforced, with the count |
-| `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report | Each SKIP line, annotated. Each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does, ending `; left to /plinth:floor-check` and not annotated: push protection, the ruleset's bypass actors, the CodeQL default setup languages, the squash commit settings, and a private repository's missing CodeQL rule | Never |
+| `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report | Each SKIP line, annotated. Each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does, ending `; left to /plinth:floor-check` and not annotated: push protection, the bypass actors of both rulesets, the CodeQL default setup languages, the squash commit settings, and a private repository's missing CodeQL rule | Never |
 
 ## Required for a service archetype
 

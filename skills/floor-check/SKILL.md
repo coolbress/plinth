@@ -20,7 +20,8 @@ the argument if the user gave one (`$ARGUMENTS`), otherwise the remote:
 ```bash
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"   # or the argument
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox --credentials \
-  --ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset.json" ${repo:+--repo} ${repo:+"$repo"}
+  --ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset.json" --merge-ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset-merge.json" \
+  ${repo:+--repo} ${repo:+"$repo"}
 ```
 
 Without a repository name the checker says `no --repo: wall not checked` and
@@ -55,6 +56,15 @@ Relay the WARN lines with the fix from
 "Give the agent a token that cannot change the checks" in
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`; never run a logout or
 delete a credential yourself.
+
+`--merge-ruleset` expects the second ruleset the door applies: the
+`update` rule alone, with the repository's admin role exempt from it, so
+an account with write access cannot merge and the admin merges as before. It is a
+PASS in that shape, a FAIL in any other, a WARN when no ruleset carries
+`update` (every repository made before it; the WARN names
+`scripts/create-merge-ruleset.sh`, which needs repository administration, so
+give it to the user to run), and a SKIP when its bypass actors cannot be
+read: never a PASS then.
 
 `--ruleset` expects the wall
 `/plinth:new-project` raises, the CodeQL alert thresholds of its
