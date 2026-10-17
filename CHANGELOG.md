@@ -40,9 +40,10 @@ pull requests and have no tag.
 
 ### Fixed
 
-- `scripts/upgrade-ruleset.sh` and `scripts/add-ruleset-rule.sh` pick the
-  first branch ruleset by name. Before, they took the first branch ruleset
-  GitHub listed, which could now be the merge ruleset.
+- `scripts/upgrade-ruleset.sh` and `scripts/add-ruleset-rule.sh` edit the one
+  branch ruleset that carries the `pull_request` rule, and stop without
+  editing when there is none or more than one. Before, they took the first
+  branch ruleset GitHub listed, which could now be the merge ruleset.
 
 ## [1.21.2] - 2026-10-17
 
