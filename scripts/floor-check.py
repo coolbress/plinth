@@ -43,6 +43,11 @@ the Actions token never gets them, and the skill, run by a person, does.
 The summary line counts such INFOs on their own, `K left to
 /plinth:floor-check`, printed only when K is above 0 (#436).
 
+With --merge-ruleset, one line says whether the merge is guidance or a
+boundary for the login the run reads with (#569): its admin role on the
+repository decides, with the merge ruleset. Under --actions-token it is not
+decided (an INFO left to the skill): the Actions token is not the agent's login.
+
 A private repository's wall is read against its licences (#351): the
 code_scanning rule is expected only where GitHub Code Security is enabled on
 it, push protection only where GitHub Secret Protection is. Off is an INFO
@@ -2253,7 +2258,9 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
 
     # The merge ruleset is the one ruleset allowed a bypass actor, judged by
     # its own shape; every other ruleset keeps none.
-    judged = check_merge_ruleset(repo, branch, rules, merge, network, actions_token)
+    judged, reserved = check_merge_ruleset(repo, branch, rules, merge, network, actions_token)
+    if merge is not None:
+        check_merge_setup(branch, meta, reserved, actions_token)
     ids = {r.get("ruleset_id") for r in rules if r.get("ruleset_source_type") == "Repository"} - judged
     for rid in sorted(i for i in ids if i):
         rs = api(f"repos/{repo}/rulesets/{rid}", network)
@@ -2274,12 +2281,13 @@ def bypass_key(actor: dict) -> tuple[str, str, str]:
 
 
 def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None, network: bool,
-                        actions_token: bool) -> set:
+                        actions_token: bool) -> tuple[set, str | None]:
     """The second ruleset the door applies (ruleset-merge.json, #568): the
     `update` rule alone, with the repository's admin role exempt from it, so
     an account with write access cannot merge and the admin still can, by
     every path it had. Recognised by its `update` rule; returns the ids judged here, which
-    the no-bypass check then leaves alone. A ruleset that carries `update`
+    the no-bypass check then leaves alone, and what was found: "stands" (a
+    PASS), "missing" (the WARN) or None (anything else). A ruleset that carries `update`
     beside other rules is not one: its bypass would reach those rules, so it
     stays under the no-bypass check as well."""
     carriers = {r.get("ruleset_id") for r in rules if r.get("type") == "update"
@@ -2287,12 +2295,12 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
     if merge is None:
         if carriers:
             result("INFO", f"{branch}: the ruleset that reserves the merge to an admin is not compared (no --merge-ruleset)")
-        return set()
+        return set(), None
     if not carriers:
         if any(r.get("type") == "update" for r in rules):
             result("SKIP", f"{branch}: the merge ruleset not verified: the update rule comes from a ruleset "
                            "outside this repository, whose bypass actors are not read here")
-            return set()
+            return set(), None
         # Not in effect is not absent: a merge ruleset switched to evaluate or
         # disabled, or scoped off the default branch, is missing from the
         # branch's rules but still there, and then the merge is open while
@@ -2302,7 +2310,7 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
         if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
             result("SKIP", f"{branch}: the merge ruleset not verified: no ruleset in effect carries update, "
                            "and this repository's rulesets could not be listed")
-            return set()
+            return set(), None
         in_effect = {r.get("ruleset_id") for r in rules}
         idle = []
         for item in listed if isinstance(listed, list) else []:
@@ -2315,17 +2323,18 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
         if idle:
             result("FAIL", f"{branch}: the merge ruleset is not in effect: {'; '.join(idle)}. Any account with write "
                            f"access can merge; expected enforcement {merge['enforcement']} on {merge['conditions']}")
-            return set()
+            return set(), None
         # A WARN, not a FAIL: every repository made before #568 lacks it, and
         # `ci / floor-check` runs in each of them; while the agent works under
         # the person's own account it changes nothing.
         result("WARN", f"{branch}: no ruleset reserves the merge to an admin: any account with write access, "
                        "an agent's own account included, can merge a pull request")
         result("INFO", f"  scripts/with-admin-token.sh scripts/create-merge-ruleset.sh {repo}   (from a plinth checkout)")
-        return set()
+        return set(), "missing"
     want_types = sorted(r["type"] for r in merge["rules"])
     want_actors = sorted(bypass_key(a) for a in merge["bypass_actors"])
     judged = set()
+    passed = []
     for rid in sorted(carriers):
         types = sorted({r.get("type") for r in rules if r.get("ruleset_id") == rid})
         if types != want_types:
@@ -2356,7 +2365,39 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
             result("SKIP", f"ruleset {rid}: the merge ruleset's scope (target, enforcement, conditions) not read")
         else:
             result("PASS", f"ruleset {rid}: the merge is reserved to the repository admin (update, the admin role exempt)")
-    return judged
+            passed.append(rid)
+    return judged, "stands" if passed and len(passed) == len(carriers) else None
+
+
+def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_token: bool) -> None:
+    """Whether "merge on your word" is guidance or a boundary for the login
+    this run reads with (#569): the login the agent inherits, when the skill
+    runs in its session. GitHub lets the admin role past the merge ruleset
+    whatever the token's own permissions (#517 measured the bypass following
+    the account's role), so `permissions.admin` on the repository, the
+    account's role, decides. The Actions token is not the agent's login, so
+    `ci / floor-check` does not decide it; an unread role is not verified."""
+    if actions_token:
+        result("INFO", "the merge: not verified here: the Actions token is not the agent's login; "
+                       "/plinth:floor-check decides guidance or boundary with the login the agent inherits", deferred=True)
+        return
+    perms = meta.get("permissions")
+    admin = perms.get("admin") if isinstance(perms, dict) else None
+    if not isinstance(admin, bool):
+        result("SKIP", "the merge: not verified: whether this login is the repository's admin could not be read")
+    elif admin:
+        result("INFO", "the merge: guidance. This login is the repository's admin, and GitHub lets the admin merge, "
+                       "so an agent working under it can merge too; it is asked to wait for your word, not stopped")
+    elif reserved == "stands":
+        result("PASS", f"the merge: boundary. This login is not the repository's admin and the merge ruleset stands "
+                       f"on {branch}, so GitHub refuses its merge; you merge, with the button or your own login. "
+                       "It holds while no admin login is left where the agent can reach it")
+    elif reserved == "missing":
+        result("INFO", "the merge: guidance. This login is not the repository's admin, but no ruleset reserves the "
+                       "merge to the admin, so it can merge; the WARN above adds that ruleset")
+    else:
+        result("SKIP", "the merge: not verified: this login is not the repository's admin, "
+                       "but the merge ruleset above was not found in its shape")
 
 
 # ── this machine ──────────────────────────────────────────────────────────

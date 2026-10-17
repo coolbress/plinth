@@ -66,6 +66,26 @@ PASS in that shape, a FAIL in any other, a WARN when no ruleset carries
 give it to the user to run), and a SKIP when its bypass actors cannot be
 read: never a PASS then.
 
+With `--merge-ruleset` one more line follows, starting `the merge:`. It
+says whether "merge on your word" is guidance or a boundary for the login
+this run reads with, which in this session is the login the agent inherits.
+GitHub lets the admin role past the merge ruleset whatever the token, so the
+account's role decides: `guidance` (an INFO) when the login is the
+repository's admin, or when it is not but no ruleset reserves the merge;
+`boundary` (a PASS) when it is not the admin and the merge ruleset stands.
+A role it cannot read, or a merge ruleset not found in its shape, is a SKIP:
+never a boundary then. Put the line in the summary in plain words: with
+guidance, the agent could merge and is only asked to wait; with a boundary,
+GitHub refuses the agent's merge and the person merges. Guidance is a setup,
+not a defect: leave it out of the FAIL and WARN list. The way to a boundary
+is "Give the agent its own account" in
+`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, for the user to do;
+the boundary holds only while no admin login is left where the agent can
+reach it, which the `--credentials` lines are about. `ci / floor-check`
+(`--actions-token`) does not decide it: the Actions token is not the agent's
+login, so the line there is an INFO saying `not verified here`, left to this
+skill.
+
 `--ruleset` expects the wall
 `/plinth:new-project` raises, the CodeQL alert thresholds of its
 `code_scanning` rule included; for a repository with a different wall (plinth

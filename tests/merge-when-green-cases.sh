@@ -25,7 +25,11 @@ case "$1 $2" in
       *) out "$fx/pr.json" ;;
     esac ;;
   "pr checks") case "$*" in *--watch*) exit 0 ;; *) out "$fx/checks.json" ;; esac ;;
-  "pr merge") printf '%s\n' "$*" >"$fx/merged"; exit "$(cat "$fx/merge_rc" 2>/dev/null || echo 0)" ;;
+  "pr merge")
+    rc="$(cat "$fx/merge_rc" 2>/dev/null || echo 0)"
+    [ "$rc" = 0 ] && printf '%s\n' "$*" >"$fx/merged"
+    [ ! -f "$fx/merge_err" ] || cat "$fx/merge_err" >&2
+    exit "$rc" ;;
   api*)
     case "$*" in
       *"/pulls/"*"/comments"*) out "$fx/comments.json" ;;
@@ -35,6 +39,7 @@ case "$1 $2" in
       *"/issues/"[0-9]*)
         [[ "$*" =~ issues/([0-9]+) ]]; f="$fx/issue-${BASH_REMATCH[1]}.json"
         [ -f "$f" ] || exit 1; out "$f" ;;
+      "api repos/o/r --jq .permissions.admin") [ -f "$fx/repo.json" ] || exit 1; out "$fx/repo.json" ;;
       *) echo "fake gh: unexpected api $*" >&2; exit 1 ;;
     esac ;;
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
@@ -124,6 +129,23 @@ if PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>
 else
   pass=$((pass+1)); echo "  PASS  stop  gh pr merge refusing (for example a newer head) exits non-zero"
 fi
+
+echo "-- refused under the merge ruleset (#569): the person merges, no retry"
+# What gh printed when the base branch policy blocked a green pull request (#568's merge paths record).
+blocked='X Pull request o/r#7 is not mergeable: the base branch policy prohibits the merge.'
+refusal() { # <label> <admin: true|false|unread> <stderr> <say: yes|no>
+  setup "ref-$2-$RANDOM"; echo 1 >"$FX/merge_rc"; printf '%s\n' "$3" >"$FX/merge_err"
+  [ "$2" = unread ] || printf '{"permissions":{"admin":%s}}' "$2" >"$FX/repo.json"
+  PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
+  if [ "$rc" != 0 ] && grep -qF "$3" "$FX/out" && { grep -q 'Do not retry. The person merges' "$FX/out"; [ "$?" = "$([ "$4" = yes ] && echo 0 || echo 1)" ]; }; then
+    pass=$((pass+1)); echo "  PASS  stop  $1"
+  else fail=$((fail+1)); echo "  FAIL  stop  $1 (exit $rc)"; sed 's/^/        /' "$FX/out"; fi
+}
+refusal "a non-admin login blocked by the base branch policy: the person merges" false "$blocked" yes
+refusal "a non-admin login refused by the rule (the API's words): the person merges" false "GraphQL: Repository rule violations found Cannot update this protected ref. (mergePullRequest)" yes
+refusal "an admin login blocked: no person-merges line (something else blocks it)" true "$blocked" no
+refusal "a role that cannot be read: no person-merges line" unread "$blocked" no
+refusal "a non-admin login refused for another reason: no person-merges line" false "X Head branch was modified. Review and try the merge again." no
 
 echo "-- the review round (#485): the line third-party / review writes, never a stop"
 # Recorded from coolbress/plinth#484 at its last head, trimmed to the fields

@@ -11,6 +11,29 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:floor-check` says whether "merge on your word" is guidance or a
+  boundary for the login it runs with (#569): `the merge: guidance` when that
+  login is the repository's admin, or when no ruleset reserves the merge;
+  `the merge: boundary` (a PASS) when it is not the admin and the merge
+  ruleset stands. A role or a ruleset it cannot read is not verified, never a
+  boundary. `ci / floor-check` does not decide it: the Actions token is not
+  the agent's login, so the line there is `not verified here`, left to the
+  skill.
+- run-a-project gains "Give the agent its own account": a second GitHub
+  account invited as a collaborator, a classic token with `repo` only (a
+  fine-grained one cannot be made for an invited repository, #568), your own
+  login taken off the machine, and floor-check's line to check it. Step 6
+  says which setup makes the merge guidance and which a boundary.
+
+### Changed
+
+- `scripts/merge-when-green.sh`: when GitHub refuses the merge of a login
+  that is not the repository's admin, under the ruleset that reserves the
+  merge, it says the person merges (the merge button, or their own login
+  outside the session) and not to retry (#569).
+
 ## [1.22.0] - 2026-10-18
 
 A repository the door makes on GitHub now gets a second ruleset that keeps

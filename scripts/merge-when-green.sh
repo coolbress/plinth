@@ -169,7 +169,20 @@ open="$(awk -F'\t' '$2!=""{answered[$2]=1; next} {top[NR]=$0; id[NR]=$1} END{for
 # -- merge -------------------------------------------------------------------
 body="$(gh pr view "$pr" -R "$repo" --json body --jq .body)" || stop "cannot read the description"
 [ -n "$body" ] || stop "the description is empty; it becomes the squash commit"
-gh pr merge "$pr" -R "$repo" --squash --match-head-commit "$head" --body "$body" || stop "gh pr merge refused"
+if ! refused="$(gh pr merge "$pr" -R "$repo" --squash --match-head-commit "$head" --body "$body" 2>&1)"; then
+  printf '%s\n' "$refused" >&2
+  # Under the ruleset that reserves the merge to the admin (#568), a login
+  # without the admin role is refused however often it retries: gh's own
+  # check reads the pull request as blocked, the API answers with the rule
+  # violation (#569). Which login is the role read, not the message alone.
+  if grep -qiE 'base branch policy prohibits the merge|repository rule violations|cannot update this protected ref' <<<"$refused" \
+     && [ "$(gh api "repos/$repo" --jq '.permissions.admin' 2>/dev/null)" = false ]; then
+    stop "GitHub refused the merge: this login is not the repository's admin, and the ruleset that reserves the merge to the admin stands." \
+         "Do not retry. The person merges: the merge button on the pull request's page, or their own login outside this session."
+  fi
+  stop "gh pr merge refused"
+fi
+[ -z "$refused" ] || printf '%s\n' "$refused"
 after="$(gh pr view "$pr" -R "$repo" --json state,mergeCommit --jq '"\(.state) \(.mergeCommit.oid)"')"
 after_rc=$?
 echo "$after"
