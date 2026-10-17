@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-10-18
+
+A repository the door makes on GitHub now gets a second ruleset that keeps
+the merge to its admin (#568). While the agent works under the person's own
+account nothing changes: the person's merges, `gh pr merge` and auto-merge
+go on as before. Once the agent works under an account of its own, as a
+collaborator with write access, it can open pull requests but no longer
+merge them, nor merge them through auto-merge it enabled. A repository made
+before gains it with `scripts/create-merge-ruleset.sh`, and floor-check
+reports whether it is there.
+
+tested with plinth-template v1.16.0
+
 ### Added
 
 - `/plinth:new-project` applies a second ruleset, `ruleset-merge.json`,
@@ -2977,7 +2990,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.21.2...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.22.0...HEAD
+[1.22.0]: https://github.com/coolbress/plinth/releases/tag/v1.22.0
 [1.21.2]: https://github.com/coolbress/plinth/releases/tag/v1.21.2
 [1.21.1]: https://github.com/coolbress/plinth/releases/tag/v1.21.1
 [1.21.0]: https://github.com/coolbress/plinth/releases/tag/v1.21.0
