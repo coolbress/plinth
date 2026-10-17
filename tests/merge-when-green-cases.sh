@@ -144,7 +144,8 @@ refusal() { # <label> <admin: true|false|unread> <stderr> <say: yes|no> [ruleset
        printf '{"id":2,"current_user_can_bypass":"%s"}' "${5:-never}" >"$FX/ruleset.json" ;;
   esac
   PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
-  if [ "$rc" != 0 ] && grep -qF "$3" "$FX/out" && { grep -q 'Do not retry. The person merges' "$FX/out"; [ "$?" = "$([ "$4" = yes ] && echo 0 || echo 1)" ]; }; then
+  if [ "$rc" != 0 ] && grep -qF "$3" "$FX/out" && { grep -q 'Do not retry. The person merges' "$FX/out"; [ "$?" = "$([ "$4" = yes ] && echo 0 || echo 1)" ]; } \
+     && { [ "$4" = no ] || grep -q "Whether the person's merge goes through was not read with this login" "$FX/out"; }; then
     pass=$((pass+1)); echo "  PASS  stop  $1"
   else fail=$((fail+1)); echo "  FAIL  stop  $1 (exit $rc)"; sed 's/^/        /' "$FX/out"; fi
 }

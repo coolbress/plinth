@@ -2395,8 +2395,14 @@ def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_tok
         return
     perms = meta.get("permissions")
     admin = perms.get("admin") if isinstance(perms, dict) else None
+    push = perms.get("push") if isinstance(perms, dict) else None
     if not isinstance(admin, bool):
         result("SKIP", "the merge: not verified: whether this login is the repository's admin could not be read")
+    elif not admin and push is False:
+        result("PASS", "the merge: boundary. This login cannot write to the repository, so it cannot merge; "
+                       "you merge. It holds while no login with write access is left where the agent can reach it")
+    elif not admin and push is not True:
+        result("SKIP", "the merge: not verified: whether this login can write to the repository could not be read")
     elif admin:
         result("INFO", "the merge: guidance. This login is the repository's admin, and GitHub lets the admin merge, "
                        "so an agent working under it can merge too; it is asked to wait for your word, not stopped")

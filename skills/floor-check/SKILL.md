@@ -72,7 +72,8 @@ this run reads with, which in this session is the login the agent inherits.
 GitHub lets the admin role past the merge ruleset whatever the token, so the
 account's role decides: `guidance` (an INFO) when the login is the
 repository's admin, or when it is not but no ruleset reserves the merge;
-`boundary` (a PASS) when it is not the admin and the merge ruleset stands.
+`boundary` (a PASS) when it is not the admin and the merge ruleset stands,
+or when it cannot write to the repository at all.
 A login that is not the admin cannot read that ruleset's bypass actors, so
 its actor line stays a SKIP; the boundary is then read from GitHub's own
 answer on the ruleset, that this login can never bypass it. That answer is

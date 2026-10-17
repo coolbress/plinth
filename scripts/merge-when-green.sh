@@ -191,8 +191,11 @@ if ! refused="$(gh pr merge "$pr" -R "$repo" --squash --match-head-commit "$head
   if grep -qiE 'base branch policy prohibits the merge|repository rule violations|cannot update this protected ref' <<<"$refused" \
      && [ "$(gh api "repos/$repo" --jq '.permissions.admin' 2>/dev/null)" = false ] \
      && reserved_to_admin; then
-    stop "GitHub refused the merge: this login is not the repository's admin, and the ruleset that reserves the merge to the admin stands." \
-         "Do not retry. The person merges: the merge button on the pull request's page, or their own login outside this session."
+    # Only this login's answer is read: whether the admin is still exempt is
+    # in bypass actors a non-admin cannot read, so that is said, not assumed.
+    stop "GitHub refused the merge: this login is not the repository's admin, and GitHub says it can never bypass the ruleset that restricts updates to the base branch." \
+         "Do not retry. The person merges: the merge button on the pull request's page, or their own login outside this session." \
+         "Whether the person's merge goes through was not read with this login; if it is refused too, /plinth:floor-check with the person's login reads that ruleset."
   fi
   stop "gh pr merge refused"
 fi

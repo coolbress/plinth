@@ -474,6 +474,10 @@ merge_wall "...while the unread actors stay not verified" "^  SKIP  ruleset 2: t
 merge_wall "a collaborator GitHub says can bypass it is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' "$(as_login false); $(collab_b exempt)" "${M[@]}"
 merge_wall "no answer for this login is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' \
   "$(as_login false); printf '%s' \"\$(jq -c 'del(.bypass_actors)' <<<\"\$b_actors\")\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
+merge_wall "a read-only login with no merge ruleset is a boundary, not guidance (it cannot merge at all)" \
+  '^  PASS  the merge: boundary\. This login cannot write to the repository' "$(as_login false); jq -c '.permissions.push = false' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
+merge_wall "a non-admin login whose write access cannot be read is not verified" \
+  '^  SKIP  the merge: not verified: whether this login can write' "$(as_login false); jq -c 'del(.permissions.push)' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
 merge_wall "a role that cannot be read is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent)" "${M[@]}"
 merge_wall "...and counted as not verified, not passed" '^-- 0 failed, 2 not verified$' "$(as_login absent)" "${M[@]}"
 merge_wall "with the Actions token it is not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false)" "${M[@]}" --actions-token
