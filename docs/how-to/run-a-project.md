@@ -257,7 +257,10 @@ rest of this page still works.
 
 When a pull request is ready, the agent asks you, and you merge it yourself,
 with the merge button on the pull request's page, signed in to GitHub as
-yourself. If the agent tries, GitHub refuses (a 405 in the measurement), and
+yourself. The button looks as it does on any repository: green, with no
+checkbox to bypass a rule and no warning about one, and the merge goes
+through as usual (one measurement, #569). If the agent tries,
+GitHub refuses (a 405 in the measurement), and
 `scripts/merge-when-green.sh` stops and says that you merge, not to retry. If
 the agent turns on auto-merge, the pull request stays open after its checks
 pass (#568 step 1).
