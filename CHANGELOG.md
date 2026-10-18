@@ -458,7 +458,7 @@ tested with plinth-template v1.12.1
 
 ## [1.16.0] - 2026-10-13
 
-`/plinth:template-update` kept a repository's plinth pin on purpose (#219), so an update could record a new template tag while the repository's CI still called an older plinth than that tag was tested with, and a feature shipped in the workflow did not arrive (#511, seen on plinth-reach). The update now shows the pin the target tag was tested with when it is newer, and a person chooses with `--plinth-pin tested`; the pin is never moved without that choice, and never backwards.
+`/plinth:template-update` kept a repository's plinth pin on purpose (#219), so an update could record a new template tag while the repository's CI still called an older plinth than that tag was tested with, and a feature shipped in the workflow did not arrive (#511, seen on a test repository). The update now shows the pin the target tag was tested with when it is newer, and a person chooses with `--plinth-pin tested`; the pin is never moved without that choice, and never backwards.
 
 tested with plinth-template v1.12.1
 
@@ -2786,18 +2786,18 @@ tested with plinth-template v1.4.1
   default setup once GitHub has detected the languages, with `actions` and
   `python` spelled out. The listed `dynamic/github-code-scanning/codeql`
   workflow was the signal before, and three repositories in a row
-  (`plinth-e2e-20260909052724` and `plinth-e2e-34324833382` in #62,
-  `dividend_calendar` in #120, all 2026-09-09) had a first pull request that
+  (two e2e test repositories in #62 (a local run and run 34324833382),
+  the U1 project in #120, all 2026-09-09) had a first pull request that
   was never analysed and merged only after a re-push; enabled twenty seconds
   after the first push, default setup analysed `actions` alone and the Python
   under `src/` was never scanned. Measured on three more (#117): a pull
   request pushed 2 s after the run completed was not analysed
-  (`plinth-e2e-34499093907`, 2026-09-10); pushed 230 s and 66 s after, it was
-  (`plinth-e2e-34502351744`, 2026-09-10; `plinth-e2e-34546889124`,
+  (e2e run 34499093907's test repository, 2026-09-10); pushed 230 s and 66 s after, it was
+  (e2e run 34502351744's test repository, 2026-09-10; e2e run 34546889124's test repository,
   2026-09-11, no re-push). If CodeQL still has not picked the pull request up
   after 90 s, the door pushes one empty commit itself, the recovery it used to
   print for the user to type (analysed every time it was tried, the door's own
-  included: `plinth-e2e-34548699421`, 2026-09-11, pushed 4 s after the run and
+  included: e2e run 34548699421's test repository, 2026-09-11, pushed 4 s after the run and
   missed, re-pushed at 90 s and analysed 8 s later); the printed line stays for
   the case after that. The door prints the times it saw, and
   warns with the fix when Python is not in the list. `PLINTH_FIRST_PR_WAIT`

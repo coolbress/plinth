@@ -182,7 +182,7 @@ run "Refactor the parser."
 expect "source edited only: no WARN" 0
 
 echo "-- a kept test file that lost lines (#434)"
-# coolbress/plinth-reach#8's shape: the assertion replaced by a stubbed
+# The shape of #403's test repository pull request 8: the assertion replaced by a stubbed
 # lookup, one line out and lines in, the file kept.
 eight() { new_repo; printf 'def test_a(monkeypatch):\n    monkeypatch.setattr("m.lookup", lambda: "1")\n    assert version() == "1"\n' > "$r/tests/test_a.py"; commit; }
 eight; run "Refactor the parser."

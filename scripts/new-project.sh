@@ -604,7 +604,7 @@ setup_call "the merge settings" "repos/$repo" -X PATCH -F allow_merge_commit=fal
 # analyses only the languages it was enabled for. Enabled twenty seconds after
 # the first push, it reported `languages: ["actions"]`: GitHub's language
 # detection had not run yet, so the Python under src/ was never scanned while
-# the wall said CodeQL enforced (coolbress/dividend_calendar, 2026-09-09, #120
+# the wall said CodeQL enforced (the U1 project, 2026-09-09, #120
 # finding I; the consumer fixed it by hand with the languages spelled out). So
 # the detection is waited for, and the list is spelled out: the box is Python
 # in every archetype, and its workflows are Actions. Detection that never lists
@@ -637,24 +637,24 @@ fi
 # CodeQL must pick the pull request up as well: without an analysis the
 # code_scanning rule never opens, and a pull request opened before default
 # setup has finished configuring is never analysed; its head stays blocked
-# until another is pushed. Measured three times: coolbress/plinth-e2e-20260909052724
+# until another is pushed. Measured three times: a local e2e test repository
 # (2026-09-09, #62; the door had seen the `dynamic/github-code-scanning/codeql`
 # workflow listed, the signal used until then, and the pull request opened at
-# 05:28:13Z got no analysis), coolbress/plinth-e2e-34324833382 (2026-09-09, on the
-# runner, the same), and coolbress/dividend_calendar (2026-09-09, #120: opened
+# 05:28:13Z got no analysis), e2e run 34324833382's test repository (2026-09-09, on the
+# runner, the same), and the U1 project (2026-09-09, #120: opened
 # 08:31:55Z, default setup `configured` at 08:32:21Z, blocked until an empty
 # commit pushed after that cleared the rule). The signal here is the one that
 # comes after all of those: default setup reports `configured` with its
 # `updated_at` set (that happens as its first run on main, the one enabling
 # it queues, completes), that run is listed completed, its analyses of main
 # are listed by the code-scanning API, and then a minute has passed. Measured
-# on three repositories (#117): coolbress/plinth-e2e-34499093907 (2026-09-10,
+# on three repositories (#117): e2e run 34499093907's test repository (2026-09-10,
 # run completed 16:02:54Z, pull request pushed 16:02:56Z: not analysed, merged
-# only after the driver's re-push); coolbress/plinth-e2e-34502351744
+# only after the driver's re-push); e2e run 34502351744's test repository
 # (2026-09-10, completed 16:32:28Z, pushed 16:36:18Z: analysed 11 s later);
-# coolbress/plinth-e2e-34546889124 (2026-09-11, analyses listed 00:33:15Z and
+# e2e run 34546889124's test repository (2026-09-11, analyses listed 00:33:15Z and
 # 00:33:27Z, run completed 00:33:48Z, updated_at 00:33:49Z, pushed 00:34:54Z:
-# analysed 9 s later, merged with no re-push); coolbress/plinth-e2e-34548699421
+# analysed 9 s later, merged with no re-push); e2e run 34548699421's test repository
 # (2026-09-11, the minute removed on purpose: completed 00:59:36Z, pushed
 # 00:59:40Z, not analysed; the door's own re-push below at 01:01:16Z was
 # analysed 8 s later). So the run completing is the event, and 2 s or 4 s
@@ -770,7 +770,7 @@ pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "doc
 # recovery that was printed for the user to type until now: an empty commit
 # pushed. A push made after default setup has settled is analysed every time
 # it was tried (four recovery pushes, then this one on
-# coolbress/plinth-e2e-34548699421, 2026-09-11: pushed 01:01:16Z, analysed 8 s
+# e2e run 34548699421's test repository, 2026-09-11: pushed 01:01:16Z, analysed 8 s
 # later, #62 #120 #117); the first push is the one it can miss, and the user
 # should not have to know that. Ninety seconds: CodeQL appeared on a head
 # within 11 s of its push when it did at all.
