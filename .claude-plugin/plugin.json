@@ -1,7 +1,7 @@
 {
   "name": "plinth",
   "displayName": "plinth",
-  "version": "1.22.0",
+  "version": "1.23.0",
   "description": "A base for projects run through an AI agent, for beginner engineers and non-engineers: required checks on GitHub and a passing pipeline on GitLab, a curated set of agent skills, and a generator for new repositories whose agent explains each change in plain words and recommends one option at each decision. Designed for that reader and not yet tried by anyone but its author.",
   "author": {
     "name": "coolbress"
