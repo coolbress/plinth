@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-10-18
+
+`/plinth:floor-check` now says in one line whether "merge on your word" is
+only an instruction to the agent or something GitHub enforces (#569, #583).
+With one account, the agent under yours, it is guidance: your login can
+merge, so the agent could. With the agent on an account of its own, the
+merge ruleset from v1.22.0 refuses that account's merge and only you can
+merge; floor-check then prints `the merge: boundary`. run-a-project gains a
+step-by-step section for setting up that account, measured once end to end,
+the person's web merge included.
+
+tested with plinth-template v1.16.0
+
 ### Added
 
 - `/plinth:floor-check` says whether "merge on your word" is guidance or a
@@ -3017,7 +3030,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.22.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/coolbress/plinth/releases/tag/v1.23.0
 [1.22.0]: https://github.com/coolbress/plinth/releases/tag/v1.22.0
 [1.21.2]: https://github.com/coolbress/plinth/releases/tag/v1.21.2
 [1.21.1]: https://github.com/coolbress/plinth/releases/tag/v1.21.1
