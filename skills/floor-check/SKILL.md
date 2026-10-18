@@ -80,6 +80,9 @@ answer on the ruleset, that this login can never bypass it. That answer is
 this login's only: the line then says that whether the admin is still exempt,
 so that the person's own merge goes through, was not read, and that the
 person's own run of this skill reads it.
+The line is printed when the branch has no rules or its rules cannot be read,
+too: no rules is `guidance` for any login that can write; unread rules leave
+it a SKIP for one that is not the admin.
 A role it cannot read, or a merge ruleset not found in its shape, is a SKIP:
 never a boundary then. Put the line in the summary in plain words: with
 guidance, the agent could merge and is only asked to wait; with a boundary,
