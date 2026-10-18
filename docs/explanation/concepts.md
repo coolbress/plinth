@@ -339,13 +339,40 @@ it lists), a deleted test file, one moved out of the test paths, a kept
 Python test file that lost at least one line, an added line in a Python file
 that carries a skip, `xfail`, `# noqa`, `# type: ignore` or
 `# pragma: no cover` marker, and a change to `pyproject.toml`'s `[tool.*]`
-tables. It is a WARN, never a red: it makes the change visible, and whether
-the change is justified is the reviewer's call. It cannot say whether a
-listed change lowers the standard: a rewritten test someone agreed to and
-one nobody agreed to look the same in a diff. It cannot see an assertion
-weakened with no line removed, a marker spelled another way, or a threshold passed as a workflow input by
-the caller. That one `ci / floor-check` and `/plinth:floor-check` read on
-every run: a `ci` job whose `with:` passes `max-diff-lines` of 0 or less, or above
+tables. A path the description does not name is a WARN, never a red: naming
+makes the change visible, and whether it is justified is the reviewer's call.
+
+Who decides such a change depends on the setup. Where the agent works under
+an account of its own, with Write, and the person keeps the admin role, every
+change of those kinds but a workflow's turns `ci / diff-size` red until an
+admin approves the pull request on its current head. The approval is the
+person's act on that commit: the agent's account cannot approve as an admin,
+a new push dismisses it, and the check reads who pushed the head from the
+branch's activity, not from the commit, whose author anyone can write. A
+fork's pull request needs the approval too. Where `ci.yml` lists the
+`pull_request_review` event, as the template's does, approving starts a run
+that re-runs the latest red run of the head, so the check turns green without a
+push; a fork's read-only token cannot, and the red line names the button a
+person presses instead. Where the person and the agent share one account,
+which is the default, nobody else could approve, so the check stays green
+and adds a `not yet confirmed` line saying the change is the person's
+decision: there it is guidance, not a boundary. A head Dependabot pushed is
+treated the same way, recognised by its account id. An approval is
+authorization, not a review: an admin who approves without reading passes
+the change.
+
+What a green does not cover. The detector says "changed", not "lowered":
+a rewritten test someone agreed to and one nobody agreed to look the same in
+a diff, so an ordinary pull request that rewrites a test asks for an approval
+too. It cannot see an assertion weakened with no line removed, an assertion
+dropped from a test the same pull request adds, a marker spelled another
+way, a ruleset changed through the API, or a threshold passed as a workflow
+input by the caller. On GitLab the change is listed and never red: Free
+requires no job by name and no approval, so a merge request could drop the
+job or merge without approving.
+
+A threshold input is read elsewhere: `ci / floor-check` and
+`/plinth:floor-check` read it on every run: a `ci` job whose `with:` passes `max-diff-lines` of 0 or less, or above
 400, or `deps-fail-on-severity: critical`, is a WARN naming the value and
 plinth's default, never a red; an expression is a SKIP. The other inputs
 are not read for direction. Nothing today compares a repository's configuration with what

@@ -45,6 +45,9 @@ jobs:
       - name: ci / diff-size names changes to the checks the description does not
         run: ./tests/weakened-checks-cases.sh
 
+      - name: ci / diff-size asks an admin to approve a change to the checks
+        run: ./tests/checks-approval-cases.sh
+
       - name: Every if-gated workflow input is passed by a caller
         run: ./tests/inputs-are-exercised.sh
 
