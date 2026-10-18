@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-19
+
+When the agent works under an account of its own, a pull request it pushes
+that makes the checks less strict (a test deleted, a check's setting
+loosened, a skip marker added) now stays red until you approve it on GitHub
+(#518, #586). Your approval re-runs the red check by itself, and the pull
+request can then be merged. With one account for both of you nothing goes
+red; the check adds a line saying the change is your decision. Checked
+before this release on a test repository with a second account, running
+this release's workflow: red, your approval, the automatic re-run, green,
+merged (#586, criterion 11).
+
+This is a major version because the check needs two more permissions from
+your `ci.yml`. Raise plinth's pin only through the template update
+(coolbress/plinth-template#83), which grants them in the same change; a pin
+raised on its own, Dependabot's included, gets no checks at all and cannot
+be merged.
+
+tested with plinth-template v1.16.0
+
 ### Changed
 
 - **Breaking: the next release is a major version.** `python-ci.yml`'s
@@ -3070,7 +3090,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v1.23.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/coolbress/plinth/releases/tag/v2.0.0
 [1.23.0]: https://github.com/coolbress/plinth/releases/tag/v1.23.0
 [1.22.0]: https://github.com/coolbress/plinth/releases/tag/v1.22.0
 [1.21.2]: https://github.com/coolbress/plinth/releases/tag/v1.21.2
