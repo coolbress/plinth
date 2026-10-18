@@ -21,7 +21,10 @@ pull requests and have no tag.
   own answer that the login can never bypass it. A role or a ruleset it
   cannot read is not verified, never a boundary. `ci / floor-check` does not decide it: the Actions token is not
   the agent's login, so the line there is `not verified here`, left to the
-  skill.
+  skill. The line is printed when the default branch has no rules, or its
+  rules cannot be read, as well (#583): with no rules any login that can
+  write gets guidance; with unread rules one that is not the admin is not
+  verified.
 - run-a-project gains "Give the agent its own account": a second GitHub
   account invited as a collaborator, a classic token with `repo` only (a
   fine-grained one cannot be made for an invited repository, #568), your own

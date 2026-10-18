@@ -190,7 +190,14 @@ def api(path: str, network: bool, paginate: bool = False):
     fixture_dir = os.environ.get("FLOOR_CHECK_API_DIR")
     if fixture_dir:
         f = Path(fixture_dir) / (path + ".json")
-        return json.loads(read(f)) if f.is_file() else ABSENT
+        if not f.is_file():
+            return ABSENT
+        # Unparseable is ERROR, as an answer gh cannot parse is below: how a
+        # fixture says the API failed.
+        try:
+            return json.loads(read(f))
+        except ValueError:
+            return ERROR
     if not network:
         return ERROR
     if shutil.which("gh"):
@@ -2120,11 +2127,17 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
            f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
     check_push_protection(repo, meta, actions_token)
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
+    # The merge line is printed on these two paths as well (#583): the skill's
+    # summary relays it, and the role alone decides much of it.
     if rules is ERROR:
         result("SKIP", f"could not read the rules of {branch} (API error)")
+        if merge is not None:
+            check_merge_setup(branch, meta, "unread", actions_token)
         return
     if rules is ABSENT or not rules:
         result("FAIL", f"no rules govern {branch}: the wall is down")
+        if merge is not None:
+            check_merge_setup(branch, meta, "no rules", actions_token)
         return
     by_type = {r["type"]: r for r in rules}
     for t in ("deletion", "non_fast_forward", "pull_request", "required_status_checks"):
@@ -2388,7 +2401,9 @@ def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_tok
     whatever the token's own permissions (#517 measured the bypass following
     the account's role), so `permissions.admin` on the repository, the
     account's role, decides. The Actions token is not the agent's login, so
-    `ci / floor-check` does not decide it; an unread role is not verified."""
+    `ci / floor-check` does not decide it; an unread role is not verified.
+    `reserved` is check_merge_ruleset's answer, or "no rules" and "unread"
+    when the branch's rules were empty or could not be read."""
     if actions_token:
         result("INFO", "the merge: not verified here: the Actions token is not the agent's login; "
                        "/plinth:floor-check decides guidance or boundary with the login the agent inherits", deferred=True)
@@ -2420,6 +2435,12 @@ def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_tok
     elif reserved == "missing":
         result("INFO", "the merge: guidance. This login is not the repository's admin, but no ruleset reserves the "
                        "merge to the admin, so it can merge; the WARN above adds that ruleset")
+    elif reserved == "no rules":
+        result("INFO", f"the merge: guidance. This login is not the repository's admin, but no rules govern {branch}, "
+                       "so nothing reserves the merge to the admin and it can merge; the FAIL above is the wall to restore")
+    elif reserved == "unread":
+        result("SKIP", f"the merge: not verified: this login is not the repository's admin, and the rules of {branch} "
+                       "could not be read, so whether a ruleset reserves the merge is not known")
     else:
         result("SKIP", "the merge: not verified: this login is not the repository's admin, "
                        "but the merge ruleset above was not found in its shape")

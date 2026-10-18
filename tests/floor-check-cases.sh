@@ -480,6 +480,23 @@ merge_wall "a non-admin login whose write access cannot be read is not verified"
   '^  SKIP  the merge: not verified: whether this login can write' "$(as_login false); jq -c 'del(.permissions.push)' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
 merge_wall "a role that cannot be read is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent)" "${M[@]}"
 merge_wall "...and counted as not verified, not passed" '^-- 0 failed, 2 not verified$' "$(as_login absent)" "${M[@]}"
+# Without the branch's rules (#583): the wall's own SKIP or FAIL stands, and
+# the line is still printed, from the role alone.
+no_rules="printf '[]' > \"$mapi/repos/o/r/rules/branches/main.json\""
+bad_rules="printf 'not json' > \"$mapi/repos/o/r/rules/branches/main.json\""
+push_false="jq -c '.permissions.push = false' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\""
+merge_wall "no rules: the wall's FAIL stands" '^  FAIL  no rules govern main: the wall is down' "$(as_login false); $no_rules" "${M[@]}"
+merge_wall "no rules: an admin login is guidance" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true); $no_rules" "${M[@]}"
+merge_wall "no rules: a login with write access is guidance" '^  INFO  the merge: guidance\. This login is not the repository.s admin, but no rules govern main' "$(as_login false); $no_rules" "${M[@]}"
+merge_wall "no rules: a login without write access is a boundary" '^  PASS  the merge: boundary\. This login cannot write to the repository' "$(as_login false); $push_false; $no_rules" "${M[@]}"
+merge_wall "no rules: an unread role is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent); $no_rules" "${M[@]}"
+merge_wall "unreadable rules: the wall's SKIP stands" '^  SKIP  could not read the rules of main \(API error\)' "$(as_login false); $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: a login with write access is not verified, never a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin, and the rules of main could not be read' "$(as_login false); $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: an admin login is guidance" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true); $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: a login without write access is a boundary" '^  PASS  the merge: boundary\. This login cannot write to the repository' "$(as_login false); $push_false; $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: an unread role is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent); $bad_rules" "${M[@]}"
+merge_wall "no rules, with the Actions token: not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false); $no_rules" "${M[@]}" --actions-token
+merge_wall "unreadable rules, with the Actions token: not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false); $bad_rules" "${M[@]}" --actions-token
 merge_wall "with the Actions token it is not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false)" "${M[@]}" --actions-token
 merge_wall "...and it is left to /plinth:floor-check, not passed" '^-- 0 failed, [0-9]+ not verified, [0-9]+ left to /plinth:floor-check$' "$(as_login false)" "${M[@]}" --actions-token
 for who in true false absent; do
