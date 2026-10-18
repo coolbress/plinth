@@ -1,10 +1,27 @@
 name: python-ci
 #
-# Reusable workflow. A consumer repository calls it in five lines:
+# Reusable workflow. A consumer repository calls it like this:
 #
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, reopened, edited]
+#     pull_request_review:
+#       types: [submitted, dismissed]
+#   concurrency:   # keyed on the event: a review's run must not cancel a push's
+#     group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+#     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 #   jobs:
 #     ci:
+#       permissions:
+#         contents: read
+#         issues: read          # floor-check's labels
+#         pull-requests: read   # diff-size reads the reviews
+#         actions: write        # diff-size's approval re-runs the red run
 #       uses: coolbress/plinth/.github/workflows/python-ci.yml@<commit-sha>
+#
+# Each permission is one a job here asks for: a `ci` job that does not grant
+# it fails at startup, every check with it (#586). The review event is what
+# lets an approval turn diff-size green without a push.
 #
 # Why separate jobs: the floor requires lint, typecheck, test and build as
 # separate required checks. Four steps in one job stop at the first failure,
@@ -688,7 +705,9 @@ jobs:
         run: |
           nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
           say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          if [ "$EVENT" != pull_request ]; then
+          if [ "$EVENT" = pull_request_review ]; then
+            say "pass: dependency review, does not apply (a review started this run: the pull_request run of this head compares its dependencies, and that run's result stands)"
+          elif [ "$EVENT" != pull_request ]; then
             say "pass: dependency review, does not apply (not a pull request: no base to compare dependencies against)"
           elif [ "$SERVED" = refused ]; then
             say "not yet confirmed: dependency review, GitHub refuses it on this private repository without GitHub Code Security (HTTP 403), so no dependency this pull request adds was compared with the advisory database; Dependabot alerts report one after the merge"
@@ -718,6 +737,14 @@ jobs:
   diff-size:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # The approval asked for below reads the reviews and the head's pusher
+    # and re-runs a red run. A called workflow's top-level permissions cap
+    # what its caller grants, so they are asked for here; a caller whose
+    # `ci` job does not grant them fails at startup, every job with it (#586).
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -841,8 +868,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BODY: ${{ github.event.pull_request.body }}
+          CHANGES_FILE: ${{ runner.temp }}/changes-to-the-checks.json
         run: |
-          import os, re, subprocess, sys
+          import json, os, re, subprocess, sys
 
           base, head = os.environ.get("BASE_SHA", ""), os.environ.get("HEAD_SHA", "")
           body = os.environ.get("BODY") or ""
@@ -972,7 +1000,8 @@ jobs:
                   i += 2
               whys = [w for w in [what(status, old, new)] if w] + shape(status, old, new)
               if whys:
-                  found.append((new if status != "D" else old, old, "; ".join(whys)))
+                  found.append((new if status != "D" else old, old, "; ".join(whys),
+                                [w for w in whys if w != "a workflow changed"]))
 
           # What may stand next to a name that is not part of it: whitespace
           # and Markdown punctuation, typographic quotes included. Any other
@@ -1010,8 +1039,14 @@ jobs:
           def cell(s):
               return "`" + s.replace("`", "'").replace("|", "\\|").replace("\n", " ") + "`"
 
+          # The six kinds besides a workflow, for the next step to ask an
+          # admin's approval of; the workflow kind stays a WARN.
+          if os.environ.get("CHANGES_FILE"):
+              with open(os.environ["CHANGES_FILE"], "w", encoding="utf-8") as f:
+                  json.dump([{"path": p, "why": "; ".join(k)} for p, _, _, k in found if k], f)
+
           rows, unnamed = [], 0
-          for path, old, why in found:
+          for path, old, why, _ in found:
               label = path if path == old else f"{old} -> {path}"
               if named(path, old):
                   print(f"named in the description: {label}: {why}")
@@ -1026,8 +1061,170 @@ jobs:
               emit("", "### Changes to the checks", "",
                    "| Path | Change | Description |", "|---|---|---|", *rows)
           if unnamed:
-              emit("", "A WARN, not a failure. Name each path in the description and say why;",
+              emit("", "Not naming a path is a WARN, not a failure. Name each path in the description and say why;",
                    "the description is read when the run starts, so push to re-check it.")
+
+      # The listed changes, a workflow aside, need the person's approval
+      # where the agent works under an account of its own (#518, #586). The
+      # mark is an admin's approving review on this head: Write can add a
+      # label, and a label stays across pushes. The account that pushed the
+      # head is read from the branch's activity, not the commit's author,
+      # which anyone writes. Pushed by an admin (one account for the person
+      # and the agent, who then cannot approve their own pull request): it
+      # stays green and says the change is the person's decision. Pushed by
+      # Dependabot, by its account id: the same. From a fork: no push is read
+      # (the activity is the fork's), so it needs the approval. Whatever this
+      # step cannot read fails, since it runs only where a change is listed.
+      # A run started by the approval re-runs the latest pull_request run of
+      # this head when that one failed, because the latest run of each event
+      # decides the merge (measured, not documented: #518). A fork's
+      # read-only token cannot, and the line says how a person does it.
+      - name: Ask an admin to approve a change to the checks
+        if: ${{ !cancelled() }}
+        shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          CHANGES_FILE: ${{ runner.temp }}/changes-to-the-checks.json
+        run: |
+          import json, os, subprocess, sys
+          from urllib.parse import quote
+
+          E = os.environ.get
+          repo, number, head, event = E("REPO", ""), E("NUMBER", ""), E("HEAD_SHA", ""), E("EVENT", "")
+          summary = E("GITHUB_STEP_SUMMARY") or os.devnull
+          DEPENDABOT = 49699333   # dependabot[bot]'s account id; a login can be spelled alike
+          WAY = ("If you agree with the change, approve the pull request on GitHub: Files changed, "
+                 "Review changes, Approve. The approval re-runs the latest red run; if this check "
+                 "does not turn green, use \"Re-run failed jobs\" on the latest red ci / diff-size.")
+
+          def emit(*lines):
+              with open(summary, "a", encoding="utf-8") as f:
+                  f.write("\n".join(lines) + "\n")
+
+          def say(line):
+              emit(f"- {line}")
+              kind = {"fail": "error", "not yet confirmed": "warning"}.get(line.split(":", 1)[0])
+              if kind:
+                  print(f"::{kind}::" + line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+              else:
+                  print(line)
+
+          class Unread(Exception):
+              pass
+
+          def api(path, *args):
+              r = subprocess.run(["gh", "api", *args, path], capture_output=True, text=True)
+              if r.returncode != 0:
+                  err = (r.stderr.strip().splitlines() or ["no answer"])[-1]
+                  raise Unread(f"{path.split('?', 1)[0]}: {err}")
+              return r.stdout
+
+          def permission(login):
+              try:
+                  return json.loads(api(f"repos/{repo}/collaborators/{quote(login)}/permission"))["permission"]
+              except Unread as e:
+                  if "HTTP 404" in str(e):   # an app's bot account is no collaborator
+                      return "none"
+                  raise
+
+          if not head or not number:
+              sys.exit(0)   # not a pull request: the step above said so
+          try:
+              with open(E("CHANGES_FILE", ""), encoding="utf-8") as f:
+                  listed = json.load(f)
+          except (OSError, ValueError):
+              say("fail: changes to the checks, the step that lists them did not finish, so whether "
+                  "this pull request needs an admin's approval is unknown; re-running the job may clear it")
+              sys.exit(1)
+          if not listed:
+              sys.exit(0)
+
+          sha = head[:12]
+          rows = "; ".join(f"{r['path']}: {r['why']}" for r in listed[:5]) + (
+              f"; and {len(listed) - 5} more in the table above" if len(listed) > 5 else "")
+          try:
+              if E("HEAD_REPO", "") != repo:
+                  why = "it comes from a fork"
+              else:
+                  ref = quote(f"refs/heads/{E('HEAD_REF', '')}", safe="/")
+                  pushes = json.loads(api(f"repos/{repo}/activity?ref={ref}&direction=desc&per_page=100"))
+                  actor = next((p.get("actor") for p in pushes if p.get("after") == head), None)
+                  if not actor or not actor.get("login"):
+                      raise Unread("no push of this head in the branch's activity")
+                  why = f"{actor['login']} pushed it and is not an admin"
+                  if actor.get("id") == DEPENDABOT:
+                      say(f"not yet confirmed: changes to the checks, Dependabot pushed this head ({sha}), "
+                          "so no approval is asked; the change in the table above lowers or changes the "
+                          "checks and is the person's decision; reading the table before merging confirms it")
+                      sys.exit(0)
+                  if permission(actor["login"]) == "admin":
+                      say(f"not yet confirmed: changes to the checks, {actor['login']}, an admin, pushed this "
+                          f"head ({sha}), so no approval is asked; the change in the table above lowers or "
+                          "changes the checks and is the person's decision; reading the table before "
+                          "merging confirms it")
+                      sys.exit(0)
+              reviews = [json.loads(l) for l in api(f"repos/{repo}/pulls/{number}/reviews",
+                                                     "--paginate", "--jq", ".[] | tojson").splitlines() if l.strip()]
+              latest = {}   # each reviewer's last decision; a comment decides nothing
+              for r in sorted(reviews, key=lambda r: r.get("id") or 0):
+                  if r.get("state") in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED") and r.get("user"):
+                      latest[r["user"]["login"]] = r
+              approver = next((login for login, r in sorted(latest.items())
+                               if r["state"] == "APPROVED" and r.get("commit_id") == head
+                               and permission(login) == "admin"), None)
+          except Unread as e:
+              say(f"fail: changes to the checks, this pull request changes how strict the checks are and "
+                  f"what decides whether it needs an admin's approval could not be read ({e}); "
+                  "re-running the job may clear it")
+              sys.exit(1)
+
+          if not approver:
+              say(f"fail: changes to the checks, this pull request changes how strict the checks are "
+                  f"({rows}) and {why}, so it needs an admin's approval on this head ({sha}); "
+                  f"it has none. {WAY}")
+              sys.exit(1)
+          say(f"pass: changes to the checks, approved by {approver}, an admin, on this head ({sha})")
+          if event != "pull_request_review":
+              sys.exit(0)
+
+          # The approval's own run: the latest pull_request run of this head
+          # still decides, so re-run it when it failed, and nothing else.
+          def way(reason):
+              print(f"::notice::The approval could not re-run the latest red run ({reason}). "
+                    "Use \"Re-run failed jobs\" on the latest red ci / diff-size.")
+              emit("", f"The approval could not re-run the latest red run ({reason}). "
+                   "Use \"Re-run failed jobs\" on the latest red ci / diff-size.")
+          try:
+              workflow = json.loads(api(f"repos/{repo}/actions/runs/{E('RUN_ID', '')}"))["workflow_id"]
+              runs = json.loads(api(f"repos/{repo}/actions/workflows/{workflow}/runs"
+                                    f"?head_sha={head}&event=pull_request&per_page=100"))["workflow_runs"]
+          except (Unread, KeyError, TypeError) as e:
+              way(f"the runs of this head could not be read: {e}")
+              sys.exit(0)
+          last = max(runs, key=lambda r: (r.get("created_at") or "", r.get("id") or 0), default=None)
+          if last is None:
+              print("No pull_request run of this head to re-run.")
+          elif last.get("status") != "completed":
+              # Its diff-size may already be red while other jobs run, and a
+              # run is re-run only once it has finished.
+              way(f"the latest pull_request run of this head ({last.get('id')}) was still running; "
+                  "once it finishes, if its ci / diff-size is red")
+          elif last.get("conclusion") in ("failure", "cancelled", "timed_out"):
+              try:
+                  api(f"repos/{repo}/actions/runs/{last['id']}/rerun-failed-jobs", "-X", "POST")
+                  print(f"Re-ran the failed jobs of the latest pull_request run of this head ({last['id']}).")
+                  emit("", f"The approval re-ran the failed jobs of the latest red run of this head ({last['id']}).")
+              except Unread as e:
+                  way(str(e))
+          else:
+              print(f"The latest pull_request run of this head ({last.get('id')}) is {last.get('conclusion')}; nothing to re-run.")
 
   build:
     runs-on: ubuntu-latest

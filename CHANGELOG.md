@@ -11,6 +11,46 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: the next release is a major version.** `python-ci.yml`'s
+  `diff-size` job now asks for two more permissions, `pull-requests: read`
+  and `actions: write` (#586). GitHub starts a reusable workflow only when
+  the calling `ci` job grants every permission a job inside it asks for;
+  otherwise the whole run fails before any job starts, and no `ci / *`
+  check reports (measured on a test repository). In plain words: if you
+  raise plinth's pin in `ci.yml` without updating the template, that pull
+  request, Dependabot's pin raise included, gets no checks at all and
+  cannot be merged. Nothing wrong is merged; it is simply stuck. The fix is
+  the template update (coolbress/plinth-template#83), which raises the pin
+  and grants both permissions in one change. Check names, jobs, inputs and
+  secrets are unchanged.
+- `ci / diff-size` can now be red on a pull request that changes how strict
+  the checks are (#518, #586): a `[tool.*]` table in `pyproject.toml`, a
+  check configuration file, a test file deleted or moved out of the test
+  paths, a kept Python test file that lost lines, or an added skip or
+  suppression marker. It is red when the head was pushed by an account that
+  is not an admin of the repository (the agent working under its own
+  account), or comes from a fork, until an admin approves the pull request
+  on its current head. A head an admin pushed (one account for the person
+  and the agent, the default) or Dependabot pushed stays green with a
+  `not yet confirmed` line saying the change is the person's decision. An
+  edited workflow stays a WARN. So in a two-account setup an ordinary pull
+  request that rewrites a test now waits for one approval: on plinth's own
+  history the six kinds touched 2 of 312 pull requests, on a test
+  repository's 3 of 19. A bot other than Dependabot, pre-commit.ci for
+  example, that changes a check configuration file now waits for one
+  approval in either setup. With the template's `ci.yml`, which adds the
+  `pull_request_review` event, the approval re-runs the latest red run by
+  itself; on a fork's pull request, or without that event, the red line
+  says to press "Re-run failed jobs". That event runs the whole workflow
+  again on every review, comments included, so CI minutes per pull
+  request grow. A head pusher, permission or review
+  list that cannot be read is red too, with "re-running the job may clear
+  it". On GitLab nothing changes: the change is listed, never red.
+- On a run a review started, `ci / deps` passes as does not apply, naming
+  the pull request's own run as the one that compares dependencies.
+
 ## [1.23.0] - 2026-10-18
 
 `/plinth:floor-check` now says in one line whether "merge on your word" is
