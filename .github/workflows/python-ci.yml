@@ -1212,7 +1212,10 @@ jobs:
           if last is None:
               print("No pull_request run of this head to re-run.")
           elif last.get("status") != "completed":
-              print(f"The latest pull_request run of this head ({last.get('id')}) is still running; it reads the approval itself.")
+              # Its diff-size may already be red while other jobs run, and a
+              # run is re-run only once it has finished.
+              way(f"the latest pull_request run of this head ({last.get('id')}) was still running; "
+                  "once it finishes, if its ci / diff-size is red")
           elif last.get("conclusion") in ("failure", "cancelled", "timed_out"):
               try:
                   api(f"repos/{repo}/actions/runs/{last['id']}/rerun-failed-jobs", "-X", "POST")

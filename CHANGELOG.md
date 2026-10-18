@@ -38,10 +38,14 @@ pull requests and have no tag.
   edited workflow stays a WARN. So in a two-account setup an ordinary pull
   request that rewrites a test now waits for one approval: on plinth's own
   history the six kinds touched 2 of 312 pull requests, on a test
-  repository's 3 of 19. With the template's `ci.yml`, which adds the
+  repository's 3 of 19. A bot other than Dependabot, pre-commit.ci for
+  example, that changes a check configuration file now waits for one
+  approval in either setup. With the template's `ci.yml`, which adds the
   `pull_request_review` event, the approval re-runs the latest red run by
   itself; on a fork's pull request, or without that event, the red line
-  says to press "Re-run failed jobs". A head pusher, permission or review
+  says to press "Re-run failed jobs". That event runs the whole workflow
+  again on every review, comments included, so CI minutes per pull
+  request grow. A head pusher, permission or review
   list that cannot be read is red too, with "re-running the job may clear
   it". On GitLab nothing changes: the change is listed, never red.
 - On a run a review started, `ci / deps` passes as does not apply, naming

@@ -347,7 +347,8 @@ an account of its own, with Write, and the person keeps the admin role, every
 change of those kinds but a workflow's turns `ci / diff-size` red until an
 admin approves the pull request on its current head. The approval is the
 person's act on that commit: the agent's account cannot approve as an admin,
-a new push dismisses it, and the check reads who pushed the head from the
+an approval counts only for the commit it was given on (and plinth's
+ruleset also dismisses it on a new push), and the check reads who pushed the head from the
 branch's activity, not from the commit, whose author anyone can write. A
 fork's pull request needs the approval too. Where `ci.yml` lists the
 `pull_request_review` event, as the template's does, approving starts a run
@@ -359,7 +360,12 @@ and adds a `not yet confirmed` line saying the change is the person's
 decision: there it is guidance, not a boundary. A head Dependabot pushed is
 treated the same way, recognised by its account id. An approval is
 authorization, not a review: an admin who approves without reading passes
-the change.
+the change. A push by an admin counts as the person's act as well, a
+browser click such as "Update branch" or a committed suggestion included,
+so it turns green what the agent pushed before it. And it holds only while
+the agent's token cannot change a workflow: a pull request that moved
+`ci.yml` to an older pin would run the older check, which the push
+refusal under condition 1 stops.
 
 What a green does not cover. The detector says "changed", not "lowered":
 a rewritten test someone agreed to and one nobody agreed to look the same in

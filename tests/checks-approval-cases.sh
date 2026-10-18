@@ -216,6 +216,8 @@ fresh; EVENT=pull_request_review; review 1 boss APPROVED $H
 runs "$(r_ 41 2026-10-18T10:00:00Z completed '"failure"'), $(r_ 45 2026-10-18T10:09:00Z in_progress null)"; run
 expect "the latest run still running: nothing re-run" 0 "^- pass: changes to the checks"
 notcalled "  no re-run" "rerun"
+grep -q 'was still running; once it finishes, if its ci / diff-size is red). Use "Re-run failed jobs"' <<<"$sum" \
+  && ok "  and the summary gives the person's way for when it finishes" || bad "  no way given while it runs" "$sum"
 fresh; EVENT=pull_request_review; run
 expect "a review run with no approval on the head: fail, nothing re-run" 1 "^- fail: changes to the checks"
 notcalled "  no re-run" "actions/"
