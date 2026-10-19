@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.17.0
+  (coolbress/plinth-template#83). A new repository's CI calls plinth v2.0.0
+  and gives it what #586's approval needs: CI also runs when a review is
+  submitted or dismissed, the `ci` job grants `pull-requests: read` and
+  `actions: write`, and runs of different events no longer cancel each
+  other. Its output style says a change to the checks that `diff-size` lists
+  is the person's decision, never merged on the agent's word. A repository
+  the door already made gets these through `/plinth:template-update` to
+  v1.17.0: that update keeps the plinth pin the workflows call unless the
+  tested one is chosen, so the permissions arrive before the pin is raised.
+  `copier update` from v1.16.0 completed without hands on four untouched cli
+  instances (three on GitHub, one on GitLab).
+
 ## [2.0.0] - 2026-10-19
 
 When the agent works under an account of its own, a pull request it pushes
