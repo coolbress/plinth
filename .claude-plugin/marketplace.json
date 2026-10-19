@@ -36,6 +36,32 @@
       ]
     },
     {
+      "name": "mattpocock-skills-extra",
+      "description": "The twelve Matt Pocock skills plinth lists but does not install, among them ask-matt, grill-with-docs, to-spec, to-tickets, wayfinder and handoff. Not installed by default (#520): on its trials no outcome separated a set with them from one without. No hooks; pinned to the same commit as mattpocock-skills.",
+      "category": "development",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/mattpocock/skills.git",
+        "path": "skills",
+        "sha": "c55ee46073ed923f86ce59a5eb3b6d895095d1b7"
+      },
+      "strict": false,
+      "skills": [
+        "./engineering/ask-matt",
+        "./engineering/grill-with-docs",
+        "./engineering/to-spec",
+        "./engineering/to-tickets",
+        "./engineering/wayfinder",
+        "./engineering/improve-codebase-architecture",
+        "./engineering/prototype",
+        "./engineering/research",
+        "./engineering/resolving-merge-conflicts",
+        "./engineering/wizard",
+        "./productivity/handoff",
+        "./productivity/wait-what"
+      ]
+    },
+    {
       "name": "taste-skill",
       "description": "One taste-skill skill, design-taste-frontend: frontend design that does not look templated, for landing pages, portfolios and redesigns. No hooks; pinned here to a commit.",
       "category": "design",
