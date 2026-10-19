@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-19
+
+plinth installs eight of Matt Pocock's skills instead of twenty (#593), so
+every session's skill list is shorter. The twelve that leave, `/ask-matt`,
+`/grill-with-docs` and `/wayfinder` among them, changed no result on the
+trial tasks (#520). They stay one command away:
+`claude plugin install mattpocock-skills-extra@plinth`, then a new session.
+After `claude plugin update plinth@plinth` you have the eight, with no
+error. A repository `/plinth:new-project` makes now renders
+plinth-template v1.18.0, whose guidance no longer points the agent at the
+twelve.
+
+tested with plinth-template v1.18.0
+
 ### Changed
 
 - plinth installs 8 of Matt Pocock's skills instead of 20 (#593). These
@@ -3152,7 +3166,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/coolbress/plinth/releases/tag/v2.1.0
 [2.0.1]: https://github.com/coolbress/plinth/releases/tag/v2.0.1
 [2.0.0]: https://github.com/coolbress/plinth/releases/tag/v2.0.0
 [1.23.0]: https://github.com/coolbress/plinth/releases/tag/v1.23.0
