@@ -203,4 +203,7 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   two commands nothing is lost: the official copy keeps all 25 of its skills,
   and plinth reports the missing dependency with the command to run. `prune`
   removes the official copy only where it arrived as plinth's dependency; one
-  you installed yourself stays beside plinth's (#477).
+  you installed yourself stays beside plinth's (#477). From v2.1.0 or earlier,
+  `claude plugin prune` after the update also removes `/ponytail-audit`,
+  which plinth now lists instead of installing; without it the skill keeps
+  working (#598).

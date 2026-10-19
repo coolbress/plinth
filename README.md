@@ -92,15 +92,16 @@ each check by name.
 
 ## Install, in detail
 
-The default set runs no hook. Its skills cost context: Claude Code lists 14
+The default set runs no hook. Its skills cost context: Claude Code lists 9
 of them for the model and caps the whole skill listing, its own built-in
 skills included, at 1% of the model's context window. As `/context` estimates
-it, with a 1M-context model all 14 keep their descriptions, about 1,300
-tokens. With Haiku 4.5, a 200k-context model, the listing is cut to about
-2,000 tokens and 9 of the 14 keep about their name: they still run when
-called by name, but Claude is less likely to pick them on its own. The
-`skillListingBudgetFraction` setting raises the cap (#255; measured again
-for #354 and, on Claude Code 2.1.296, for #469 and #477).
+it, with a 1M-context model all 9 keep their descriptions, about 820 tokens
+(#598). With Haiku 4.5, a 200k-context model, the listing is cut to about
+2,000 tokens; on the larger set measured for #469 and #477, 9 of 14 skills
+kept about their name: they still run when called by name, but Claude is
+less likely to pick them on its own. The `skillListingBudgetFraction`
+setting raises the cap (#255; measured again for #354 and, on Claude Code
+2.1.296, for #469 and #477).
 
 Third-party marketplaces do not auto-update. To move to a new version, run
 `claude plugin update plinth`, then `/reload-plugins`. Moving from v1.10.0 or
@@ -113,7 +114,10 @@ same name, and `update` does not install the moved copy. Without the two
 commands nothing is lost: the official copy keeps all 25 of its skills, and
 plinth reports the missing dependency with the command to run. `prune` removes
 the official copy only where it arrived as plinth's dependency; one you
-installed yourself stays beside plinth's (#477).
+installed yourself stays beside plinth's (#477). Moving from v2.1.0 or
+earlier, `claude plugin prune` after the update also removes
+`/ponytail-audit`, which plinth now lists instead of installing; without it
+the skill keeps working (#598).
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
@@ -131,20 +135,21 @@ Four skills, prefixed `/plinth:`:
 Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (eight skills,
-from `/implement` and `/grilling` to `code-review`),
+from `/implement` and `/grilling` to `code-review`) and
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
-`design-taste-frontend`: frontend design that does not look templated) and
-[ponytail-skills](https://github.com/DietrichGebert/ponytail) (one skill,
-`/ponytail-audit`: what to delete or replace with the standard library,
-repository-wide). Listed but not installed:
+`design-taste-frontend`: frontend design that does not look templated).
+Listed but not installed:
 `mattpocock-skills-extra`, twelve more Matt Pocock skills, such as
 `/ask-matt`, `/grill-with-docs`, `/to-spec` and `/wayfinder` (#520);
+`ponytail-skills`, one skill, `/ponytail-audit`: what to delete or replace
+with the standard library, repository-wide (#598);
 [last30days](https://github.com/mvanhorn/last30days-skill) (what people said
 about a topic in the last 30 days; about 90k tokens per call, and a
 `SessionStart` hook), `ponytail`, the full plugin with hooks, and
 [Impeccable](https://github.com/pbakaus/impeccable), whose installer writes
-hooks, agents and skills into the repository. The first three install from
+hooks, agents and skills into the repository. The first four install from
 plinth's marketplace: `claude plugin install mattpocock-skills-extra@plinth`,
+`claude plugin install ponytail-skills@plinth`,
 `claude plugin install last30days@plinth`,
 `claude plugin install ponytail@plinth`. Run `/plinth:arsenal` for the
 catalog; licenses are in [NOTICE](NOTICE).

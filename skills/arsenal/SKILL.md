@@ -35,17 +35,18 @@ line arrived as text, and this catalog being open shows plinth is installed.
 | --- | --- | --- | --- | --- |
 | `mattpocock-skills` | Eight skills: `/implement` (calls `tdd`, `code-review`), `/triage`, `grilling`, `domain-modeling`, `codebase-design`, `diagnosing-bugs` | Any change bigger than a typo: `/grilling` to shape it, `/implement #N` to build it | ~0.49k tokens always on (6 skills listed; `/implement` and `/triage` are user-only) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
 | `taste-skill` | One skill, `design-taste-frontend`: frontend design that does not look templated, for landing pages, portfolios and redesigns, with its own redesign mode and pre-flight check. Dashboards and dense product UI go to `/design` first | A page a person will look at, server-rendered HTML included: say so in the ticket or the prompt, or type `/design-taste-frontend`; on a repository rendered from the template the agent did not reach for it on its own (one run, #469). Dashboards and dense product UI: `/design` first | ~0.1k tokens always on (1 skill), ~34k when it fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
-| `ponytail-skills` | One skill, `/ponytail-audit`: a ranked list of what to delete or replace with the standard library, repository-wide, biggest cut first; applies nothing | Every week or two, or after a burst of work | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 
 "Always on" is each plugin's share of the skill listing, as `/context`
 reports it with a 1M-context model (#255, again for #354, #468, #469 on an
 installed default set, #477 with each plugin loaded as the catalog narrows
-it, and #593 on an installed default set after `claude plugin update`). With
-plinth's own two listed skills (~0.23k) the set comes to ~0.97k; it was
-~1.28k before #593 listed twelve `mattpocock-skills` skills. Claude Code caps the listing, built-in skills
+it, #593 on an installed default set after `claude plugin update`, and #598
+after `claude plugin update` and `claude plugin prune`). With
+plinth's own two listed skills (~0.23k) the set comes to ~0.82k; it was
+~0.97k before #598 listed `ponytail-skills` and ~1.28k before #593 listed
+twelve `mattpocock-skills` skills. Claude Code caps the listing, built-in skills
 included, at 1% of the context window. At 1M that leaves room for all of it.
 At 200k the cap is ~2k, and on Haiku 4.5, the 200k model measured for #469
-and #477, 9 of the default set's 14 descriptions were cut to under 20 tokens, about
+and #477, 9 of the 14 descriptions the default set had then were cut to under 20 tokens, about
 the skill's name, because the built-in skills share the same cap.
 
 `code-review` is the one installed skill that shares its name with a Claude
@@ -67,6 +68,7 @@ Carbon, Atlassian, Polaris).
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
 | `mattpocock-skills-extra` | The twelve other Matt Pocock skills plinth carries: `/ask-matt`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/wayfinder`, `/improve-codebase-architecture`, `/handoff`, `/wait-what` (these eight user-only), and `prototype`, `research`, `resolving-merge-conflicts`, `wizard` | When you want one of them; `/ask-matt` routes to the rest of the set, so it is listed with them (#593) | ~0.32k tokens always on (4 skills listed), no hooks; same pin as `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
+| `ponytail-skills` | One skill, `/ponytail-audit`: a ranked list of what to delete or replace with the standard library, repository-wide, biggest cut first; applies nothing | Every week or two, or after a burst of work, if you install it | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions, when you want that research. Not for deciding; verify with `/research` | ~90 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail` | The full ponytail plugin with its hooks: the least-code mode every turn, its review, and the audit too | Only if you want the mode enforced every turn | 3 hooks, ~1k tokens | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `impeccable` | A design with a point of view; writes a product record (`PRODUCT.md`) and a design record (`DESIGN.md`) | A page that should be remembered, when you will answer its questions: five of them and 43 minutes on the page where `taste-skill` asked none and took five (one measurement, 2026-09-12) | Hooks, agents and skills written into the repository (`.claude/`, `.github/`); no plinth pin | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) |
@@ -74,7 +76,9 @@ Carbon, Atlassian, Polaris).
 `mattpocock-skills-extra` installs with
 `claude plugin install mattpocock-skills-extra@plinth` and adds its twelve
 beside the default set's eight, none twice (measured for #593); start a new
-session after it. `last30days` installs with
+session after it. `ponytail-skills` installs with
+`claude plugin install ponytail-skills@plinth`; an install from before #598
+keeps it until `claude plugin prune`. `last30days` installs with
 `claude plugin install last30days@plinth` and `ponytail` with
 `claude plugin install ponytail@plinth`; nothing in the default set runs a
 hook, and these two do. Impeccable is
@@ -164,7 +168,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | --- | --- | --- | --- | --- | --- | --- |
 | 9 | Safety | Vulnerable or stale dependencies | Dependabot and the checks | automatic | Merge its pull requests on green | U2, RC1 |
 | 9 | Stewardship | Drift behind the template | `/plinth:floor-check`, `/plinth:template-update` | person | `floor-check` reports it; type `/plinth:template-update` to apply | 0; no project crossed a release |
-| 9 | Stewardship | Code that grew more than it needs | `/ponytail-audit` | person | Type it every week or two | 0 |
+| 9 | Stewardship | Code that grew more than it needs | `/ponytail-audit` (listed) | person | Type it every week or two | 0 |
 | 9 | Health | Shallow modules, hard-to-test seams | `/improve-codebase-architecture` (listed; uses `codebase-design`) | person | Type it after a burst of work | 0 |
 | Any | Flow | Which skill now | `/ask-matt` (listed: it routes to listed skills, #593) | person | Type it with where you are | 0 |
 | Any | Use | An answer that did not land | `/wait-what` (listed) | person | Type it after the answer | 0 |
@@ -230,4 +234,7 @@ Named exceptions:
 - **Listed, not installed** (criterion 4): `last30days` and `ponytail` run
   hooks; Impeccable is outside plinth's marketplace; `mattpocock-skills-extra`
   runs none, but on #520's trial tasks no outcome separated a set with its
-  skills from one without, and `/ask-matt` routes to them (#593).
+  skills from one without, and `/ask-matt` routes to them (#593);
+  `ponytail-skills` runs none, but `/ponytail-audit` had no call in any
+  recorded run (#520), and #594 measured that dropping the dependency while
+  the entry stays leaves an installed plinth working.
