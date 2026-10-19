@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-19
+
+plinth no longer installs `/ponytail-audit` (#598): no recorded run used it,
+and it cost every session about 0.15k tokens, so the default set's skill
+list drops to about 0.82k. After `claude plugin update plinth@plinth`, run
+`claude plugin prune` to remove it; if you skip that, it keeps working as
+before. To use it again, run `claude plugin install ponytail-skills@plinth`
+and start a new session.
+
+tested with plinth-template v1.18.0
+
 ### Changed
 
 - plinth no longer installs `/ponytail-audit` (the `ponytail-skills`
@@ -3179,7 +3190,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/coolbress/plinth/releases/tag/v2.2.0
 [2.1.0]: https://github.com/coolbress/plinth/releases/tag/v2.1.0
 [2.0.1]: https://github.com/coolbress/plinth/releases/tag/v2.0.1
 [2.0.0]: https://github.com/coolbress/plinth/releases/tag/v2.0.0
