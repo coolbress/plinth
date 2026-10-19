@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-19
+
+A repository `/plinth:new-project` makes now renders plinth-template v1.17.0
+(coolbress/plinth-template#83), whose CI calls plinth v2.0.0 and grants it
+what v2.0.0's approval needs. Before this, a new repository still called
+plinth v1.17.0. A repository made earlier gets the same through
+`/plinth:template-update`: the update brings the permissions first and keeps
+its plinth pin unless you choose the tested one, so raising the pin
+afterwards is safe.
+
+tested with plinth-template v1.17.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.17.0
@@ -3105,7 +3117,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/coolbress/plinth/releases/tag/v2.0.1
 [2.0.0]: https://github.com/coolbress/plinth/releases/tag/v2.0.0
 [1.23.0]: https://github.com/coolbress/plinth/releases/tag/v1.23.0
 [1.22.0]: https://github.com/coolbress/plinth/releases/tag/v1.22.0
