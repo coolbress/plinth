@@ -37,13 +37,14 @@ pull requests and have no tag.
 
 - `/plinth:new-project` renders plinth-template v1.18.0
   (coolbress/plinth-template#88). A new repository's `AGENTS.md` sends
-  "Starting something new" to `/plinth:arsenal` instead of `/ask-matt`, and
-  its `docs/agents/` pages say `/grill-with-docs` and `/wayfinder` are
-  listed and how to add them. A repository the door already made gets the
-  same wording through `/plinth:template-update` to v1.18.0; `copier update`
-  from v1.17.0 completed without hands on untouched cli instances on GitHub
-  and GitLab and an untouched backend instance on GitHub. Its CI pin does
-  not change.
+  "Starting something new" to `/plinth:arsenal` instead of `/ask-matt`,
+  `docs/agents/domain.md` no longer names `/grill-with-docs`, and
+  `docs/agents/issue-tracker.md` says `/wayfinder` is listed and how to add
+  it. A repository the door already made gets the same wording through
+  `/plinth:template-update` to v1.18.0; `copier update` from v1.17.0
+  completed without hands on untouched cli instances on GitHub and GitLab
+  and an untouched backend instance on GitHub. Its CI pin does not change.
+  `/plinth:floor-check` now reports a repository on v1.17.0 as behind.
 
 ## [2.0.1] - 2026-10-19
 
