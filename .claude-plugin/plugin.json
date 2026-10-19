@@ -17,7 +17,6 @@
   ],
   "dependencies": [
     "mattpocock-skills",
-    "taste-skill",
-    "ponytail-skills"
+    "taste-skill"
   ]
 }

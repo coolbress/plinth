@@ -129,7 +129,6 @@ expect() {  # expect <plugin> <needle>...
   echo "  PASS  $1: ${*:2}"
 }
 expect plinth@plinth "Skills (4)" "arsenal" "floor-check" "new-project" "template-update" "Hooks (0)"
-expect ponytail-skills@plinth "Skills (1)" "ponytail-audit"
 expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
 # 8 of the 25 skills upstream ships (#520, #593): 12 more are listed in
 # mattpocock-skills-extra, and five are in neither (#475, #477).
@@ -195,6 +194,8 @@ rm -rf "$up/mkt/.git"
 for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
   for c in "${upgrade_cmds[@]}"; do echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
+  # check_list holds no ponytail-skills here: the release installed it as a
+  # dependency, and `prune` removed it once plinth no longer names it (#598).
   check_list yes
   expect mattpocock-skills@plinth "Skills (8)" "Hooks (0)"
   not_expect mattpocock-skills@plinth "${leaving[@]}"
@@ -202,4 +203,7 @@ for p in json.load(sys.stdin):
   echo "+ claude plugin install mattpocock-skills-extra@plinth -y"; claude plugin install mattpocock-skills-extra@plinth -y
   expect mattpocock-skills-extra@plinth "Skills (12)" "ask-matt" "grill-with-docs" "wayfinder" "wizard" "Hooks (0)"
   expect mattpocock-skills@plinth "Skills (8)"
+  # /ponytail-audit comes back the same way, from the entry the marketplace keeps (#598).
+  echo "+ claude plugin install ponytail-skills@plinth -y"; claude plugin install ponytail-skills@plinth -y
+  expect ponytail-skills@plinth "Skills (1)" "ponytail-audit" "Hooks (0)"
 )

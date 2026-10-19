@@ -67,6 +67,14 @@ session:
 claude plugin install mattpocock-skills-extra@plinth
 ```
 
+`/ponytail-audit` (what to delete or replace with the standard library) is
+listed too: no recorded run called it, and it cost every session a little
+of its skill list (#598). To get it, run this once, then start a new session:
+
+```sh
+claude plugin install ponytail-skills@plinth
+```
+
 ## Pick the size of the job first
 
 | The change | Do this |
@@ -466,8 +474,9 @@ moving work somewhere else: another tool, another folder, another person.
   stops the agent's merge. Add it in a separate
   terminal, from a plinth checkout, with a token that has administration:
   `scripts/with-admin-token.sh scripts/create-merge-ruleset.sh <owner>/<name>`.
-- **Every week or two, or after a burst of work:** `/ponytail-audit` lists
-  what to delete or replace with the standard library, biggest cut first;
+- **Every week or two, or after a burst of work:** `/ponytail-audit`,
+  [listed](#skills-plinth-lists-but-does-not-install), lists what to delete
+  or replace with the standard library, biggest cut first;
   `/improve-codebase-architecture`, [listed](#skills-plinth-lists-but-does-not-install), finds places
   to deepen. Each becomes a new idea for step 2.
 

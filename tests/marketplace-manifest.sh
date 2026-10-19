@@ -30,14 +30,15 @@ check(market.get("version") == plugin["version"], f"marketplace.json version equ
 
 deps = plugin["dependencies"]
 names = [d["name"] if isinstance(d, dict) else d for d in deps]
-check(names == ["mattpocock-skills", "taste-skill", "ponytail-skills"],
-      f"dependencies are exactly the default three: {names}")
+check(names == ["mattpocock-skills", "taste-skill"],
+      f"dependencies are exactly the default two: {names}")
 check(all(isinstance(d, str) for d in deps), "every dependency resolves in plinth's marketplace, none cross-marketplace")
 # Listed, not installed: in the catalog (so `claude plugin install <name>@plinth`
 # resolves) and not a dependency. last30days and ponytail run hooks, and the
 # default set runs none (#354); tests/install-smoke.sh reads each dependency's
-# hook count once installed. mattpocock-skills-extra holds the skills #520 listed.
-listed = ["mattpocock-skills-extra", "last30days", "ponytail"]
+# hook count once installed. mattpocock-skills-extra holds the skills #520 listed;
+# ponytail-skills left the dependencies in #598.
+listed = ["mattpocock-skills-extra", "ponytail-skills", "last30days", "ponytail"]
 for n in listed:
     check(n in entries and n not in names, f"{n} is in the catalog and not a dependency")
     check("Not installed by default" in entries.get(n, {}).get("description", ""),
@@ -56,15 +57,20 @@ for n, sha in pinned.items():
 notice = (root / "NOTICE").read_text()
 check(all(sha in notice for sha in pinned.values()), "NOTICE records every pinned SHA")
 
-# One ponytail skill by default (#468): the mode, its review and the rest
+# One ponytail skill, listed (#468, #598): the mode, its review and the rest
 # stay in the full plugin, which carries the hooks. The entry keeps its name and
 # narrows its skills: `claude plugin update` does not install a renamed
 # dependency, and leaves the old name installed and failing (measured for #468).
-ponytail_skills = entries["ponytail-skills"]
+# The entry stays after it left the dependencies, in this release and every
+# later one: removed, it leaves an install that never ran `claude plugin prune`
+# failing ("not found in marketplace plinth"), and prune then refuses (#594).
+check("ponytail-skills" in entries,
+      "ponytail-skills stays in the catalog: removing it leaves an unpruned install failing (#594, #598)")
+ponytail_skills = entries.get("ponytail-skills", {"source": {}})
 check("ponytail-audit" not in entries, "no marketplace entry named ponytail-audit: the dependency is narrowed, not renamed")
 check(ponytail_skills.get("strict") is False and ponytail_skills.get("skills") == ["./ponytail-audit"], "ponytail-skills: strict false, the one skill ./ponytail-audit")
-check(ponytail_skills["source"]["source"] == "git-subdir" and ponytail_skills["source"]["path"] == "skills", "ponytail-skills mounts skills/ only; hooks stay outside")
-check(entries["ponytail"]["source"]["sha"] == ponytail_skills["source"]["sha"], "ponytail and ponytail-skills pin the same commit")
+check(ponytail_skills["source"].get("source") == "git-subdir" and ponytail_skills["source"].get("path") == "skills", "ponytail-skills mounts skills/ only; hooks stay outside")
+check(entries["ponytail"]["source"]["sha"] == ponytail_skills["source"].get("sha"), "ponytail and ponytail-skills pin the same commit")
 
 # One taste-skill skill by default (#469): design-taste-frontend is
 # self-contained; the other twelve need an image tool, serve another product, or

@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- plinth no longer installs `/ponytail-audit` (the `ponytail-skills`
+  plugin): no recorded run used it, and it cost every session about 0.15k
+  tokens of its skill list, so the default set's list drops to about 0.82k
+  (#598). It is now listed, not installed, and stays in plinth's
+  marketplace. On an installed plinth, run
+  `claude plugin update plinth@plinth`, then `claude plugin prune`: prune
+  removes it, with no error. If you skip `prune`, nothing changes:
+  `/ponytail-audit` keeps working as before. To use it again later, run
+  `claude plugin install ponytail-skills@plinth`, then start a new session
+  (measured for #594 and #598).
+
 ## [2.1.0] - 2026-10-19
 
 plinth installs eight of Matt Pocock's skills instead of twenty (#593), so
