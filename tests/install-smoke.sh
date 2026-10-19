@@ -131,9 +131,12 @@ expect() {  # expect <plugin> <needle>...
 expect plinth@plinth "Skills (4)" "arsenal" "floor-check" "new-project" "template-update" "Hooks (0)"
 expect ponytail-skills@plinth "Skills (1)" "ponytail-audit"
 expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
-# 20 of the 25 skills upstream ships (#475, #477); the other five never reach a session.
-leaving=(grill-me setup-matt-pocock-skills teach to-questionnaire writing-for-agents)
-expect mattpocock-skills@plinth "Skills (20)" "ask-matt" "implement" "tdd" "wizard" "Hooks (0)"
+# 8 of the 25 skills upstream ships (#520, #593): 12 more are listed in
+# mattpocock-skills-extra, and five are in neither (#475, #477).
+leaving=(grill-me setup-matt-pocock-skills teach to-questionnaire writing-for-agents
+  ask-matt grill-with-docs to-spec to-tickets wayfinder improve-codebase-architecture
+  prototype research resolving-merge-conflicts wizard handoff wait-what)
+expect mattpocock-skills@plinth "Skills (8)" "implement" "tdd" "code-review" "triage" "grilling" "Hooks (0)"
 not_expect() {  # not_expect <plugin> <skill>...: none on the details' Skills line
   local out p
   out="$(claude plugin details "$1" | grep -E '^ *Skills \(')"
@@ -193,5 +196,10 @@ for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
   for c in "${upgrade_cmds[@]}"; do echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
   check_list yes
-  expect mattpocock-skills@plinth "Skills (20)" "Hooks (0)"
+  expect mattpocock-skills@plinth "Skills (8)" "Hooks (0)"
+  not_expect mattpocock-skills@plinth "${leaving[@]}"
+  # The twelve #520 listed come back with one command, beside the eight (#593).
+  echo "+ claude plugin install mattpocock-skills-extra@plinth -y"; claude plugin install mattpocock-skills-extra@plinth -y
+  expect mattpocock-skills-extra@plinth "Skills (12)" "ask-matt" "grill-with-docs" "wayfinder" "wizard" "Hooks (0)"
+  expect mattpocock-skills@plinth "Skills (8)"
 )

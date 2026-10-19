@@ -130,18 +130,22 @@ Four skills, prefixed `/plinth:`:
 
 Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
-[mattpocock-skills](https://github.com/mattpocock/skills) (planning to review),
+[mattpocock-skills](https://github.com/mattpocock/skills) (eight skills,
+from `/implement` and `/grilling` to `code-review`),
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
 `design-taste-frontend`: frontend design that does not look templated) and
 [ponytail-skills](https://github.com/DietrichGebert/ponytail) (one skill,
 `/ponytail-audit`: what to delete or replace with the standard library,
 repository-wide). Listed but not installed:
+`mattpocock-skills-extra`, twelve more Matt Pocock skills, such as
+`/ask-matt`, `/grill-with-docs`, `/to-spec` and `/wayfinder` (#520);
 [last30days](https://github.com/mvanhorn/last30days-skill) (what people said
 about a topic in the last 30 days; about 90k tokens per call, and a
 `SessionStart` hook), `ponytail`, the full plugin with hooks, and
 [Impeccable](https://github.com/pbakaus/impeccable), whose installer writes
-hooks, agents and skills into the repository. The first two install from
-plinth's marketplace: `claude plugin install last30days@plinth`,
+hooks, agents and skills into the repository. The first three install from
+plinth's marketplace: `claude plugin install mattpocock-skills-extra@plinth`,
+`claude plugin install last30days@plinth`,
 `claude plugin install ponytail@plinth`. Run `/plinth:arsenal` for the
 catalog; licenses are in [NOTICE](NOTICE).
 

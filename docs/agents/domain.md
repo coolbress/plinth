@@ -9,7 +9,7 @@ Domain documents the engineering skills read **before** exploring the codebase.
 - **`docs/adr/`**: the ADRs for the area you touch.
 
 If either is missing, move on quietly. Do not report it and do not create it
-ahead of time; `/domain-modeling` (called from `/grill-with-docs`) creates them
+ahead of time; `/domain-modeling` creates them
 when a term or decision is actually settled.
 
 ## File structure

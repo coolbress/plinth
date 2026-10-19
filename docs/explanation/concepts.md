@@ -149,7 +149,7 @@ lowered `ci` input and `ci / diff-size` lists a test that lost lines or gained
 a skip), the template's `verify` skill (#409), the
 arsenal's concern index with its selection criteria (#478), the GitLab path
 ([about GitLab](#about-gitlab), #353), and
-[step 2 of run a project](../how-to/run-a-project.md#2-shape-the-idea-grill-with-docs)
+[step 2 of run a project](../how-to/run-a-project.md#2-shape-the-idea-grilling)
 asking for the things recorded runs left out: who else is affected, the
 limits and outside rules, and how long the project lasts and how it ends
 (#408).

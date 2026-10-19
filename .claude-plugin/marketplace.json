@@ -15,7 +15,29 @@
     },
     {
       "name": "mattpocock-skills",
-      "description": "Matt Pocock's engineering skills, 20 of the 25 upstream ships: grilling, spec and ticket flows, TDD, code review, domain modelling. No hooks; pinned here to a commit.",
+      "description": "Matt Pocock's engineering skills, 8 of the 25 upstream ships: implement, TDD, code review, triage, grilling, domain modelling, bug diagnosis. No hooks; pinned here to a commit.",
+      "category": "development",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/mattpocock/skills.git",
+        "path": "skills",
+        "sha": "c55ee46073ed923f86ce59a5eb3b6d895095d1b7"
+      },
+      "strict": false,
+      "skills": [
+        "./engineering/diagnosing-bugs",
+        "./engineering/triage",
+        "./engineering/tdd",
+        "./engineering/implement",
+        "./engineering/domain-modeling",
+        "./engineering/codebase-design",
+        "./engineering/code-review",
+        "./productivity/grilling"
+      ]
+    },
+    {
+      "name": "mattpocock-skills-extra",
+      "description": "The twelve Matt Pocock skills plinth lists but does not install, among them ask-matt, grill-with-docs, to-spec, to-tickets, wayfinder and handoff. Not installed by default (#520): on its trials no outcome separated a set with them from one without. No hooks; pinned to the same commit as mattpocock-skills.",
       "category": "development",
       "source": {
         "source": "git-subdir",
@@ -26,23 +48,15 @@
       "strict": false,
       "skills": [
         "./engineering/ask-matt",
-        "./engineering/diagnosing-bugs",
         "./engineering/grill-with-docs",
-        "./engineering/triage",
-        "./engineering/improve-codebase-architecture",
-        "./engineering/tdd",
         "./engineering/to-spec",
         "./engineering/to-tickets",
         "./engineering/wayfinder",
-        "./engineering/implement",
+        "./engineering/improve-codebase-architecture",
         "./engineering/prototype",
         "./engineering/research",
-        "./engineering/domain-modeling",
-        "./engineering/codebase-design",
-        "./engineering/code-review",
         "./engineering/resolving-merge-conflicts",
         "./engineering/wizard",
-        "./productivity/grilling",
         "./productivity/handoff",
         "./productivity/wait-what"
       ]

@@ -34,9 +34,10 @@ check(names == ["mattpocock-skills", "taste-skill", "ponytail-skills"],
       f"dependencies are exactly the default three: {names}")
 check(all(isinstance(d, str) for d in deps), "every dependency resolves in plinth's marketplace, none cross-marketplace")
 # Listed, not installed: in the catalog (so `claude plugin install <name>@plinth`
-# resolves) and not a dependency. Both run hooks, and the default set runs none
-# (#354); tests/install-smoke.sh reads each dependency's hook count once installed.
-listed = ["last30days", "ponytail"]
+# resolves) and not a dependency. last30days and ponytail run hooks, and the
+# default set runs none (#354); tests/install-smoke.sh reads each dependency's
+# hook count once installed. mattpocock-skills-extra holds the skills #520 listed.
+listed = ["mattpocock-skills-extra", "last30days", "ponytail"]
 for n in listed:
     check(n in entries and n not in names, f"{n} is in the catalog and not a dependency")
     check("Not installed by default" in entries.get(n, {}).get("description", ""),
@@ -73,19 +74,28 @@ check(taste.get("strict") is False and taste.get("skills") == ["./taste-skill"],
 check(taste["source"]["source"] == "git-subdir" and taste["source"]["path"] == "skills", "taste-skill mounts skills/ only, below the upstream plugin.json")
 check("design-taste-frontend" in taste["description"] and "Thirteen" not in taste["description"], "taste-skill description names the one skill, not thirteen")
 
-# 20 of mattpocock/skills' 25 by default (#475): the five below leave. Moved from
+# 8 of mattpocock/skills' 25 by default (#520); 12 more are listed in
+# mattpocock-skills-extra and five are in neither (#475). Moved from
 # claude-plugins-official under the same name and pinned here (#477): an
 # installed copy then needs `claude plugin install plinth@plinth` and
 # `claude plugin prune` once, which tests/install-smoke.sh runs on the upgrade path.
 matt = entries["mattpocock-skills"]
+extra = entries["mattpocock-skills-extra"]
 leaving = {"setup-matt-pocock-skills", "grill-me", "teach", "to-questionnaire", "writing-for-agents"}
+kept = {"implement", "tdd", "code-review", "codebase-design", "triage", "grilling", "domain-modeling", "diagnosing-bugs"}
 matt_skills = [s.rsplit("/", 1)[1] for s in matt.get("skills", [])]
-check(matt.get("strict") is False and len(matt_skills) == 20 and not leaving & set(matt_skills),
-      f"mattpocock-skills: strict false, 20 skills, none of the five that leave: {sorted(leaving & set(matt_skills))}")
+extra_skills = [s.rsplit("/", 1)[1] for s in extra.get("skills", [])]
+check(matt.get("strict") is False and set(matt_skills) == kept and len(matt_skills) == 8,
+      f"mattpocock-skills: strict false, exactly the eight #520 kept: {sorted(matt_skills)}")
+check(extra.get("strict") is False and len(extra_skills) == 12 and not (set(extra_skills) & (kept | leaving)),
+      f"mattpocock-skills-extra: strict false, 12 skills, none installed by default or left out: {sorted(extra_skills)}")
+# One pin for both entries: a pull request that raises one raises the other, so
+# the listed skills never come from a different upstream commit than the default ones.
+check(extra["source"] == matt["source"], "mattpocock-skills-extra has the same source as mattpocock-skills (git-subdir, url, path, sha)")
 check(matt["source"]["source"] == "git-subdir" and matt["source"]["path"] == "skills",
       "mattpocock-skills mounts skills/ only, below the upstream plugin.json")
-check(all(re.fullmatch(r"\./(engineering|productivity)/[a-z-]+", s) for s in matt.get("skills", [])),
-      "mattpocock-skills: every skill is under engineering/ or productivity/")
+check(all(re.fullmatch(r"\./(engineering|productivity)/[a-z-]+", s) for s in matt.get("skills", []) + extra.get("skills", [])),
+      "mattpocock-skills and -extra: every skill is under engineering/ or productivity/")
 
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
 check(skills == ["arsenal", "floor-check", "new-project", "template-update"],
