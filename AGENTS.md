@@ -118,7 +118,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 ## Next move
 
 - New repository: `/plinth:new-project <owner>/<name>`. Existing one:
-  `/plinth:floor-check`. Choosing a tool: `/plinth:arsenal`; planning to review: `/ask-matt`.
+  `/plinth:floor-check`. Choosing a tool, planning to review included: `/plinth:arsenal`.
 - Next ticket: `gh issue list --label ready-for-agent`, then `/implement #N`.
   `/implement` ends at a commit on the current branch: the pull-request rules
   above are not applied by it, and a skill carrying its own example format does

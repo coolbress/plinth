@@ -118,7 +118,9 @@ Create a GitHub issue. Acceptance criteria map to checks (see `AGENTS.md`).
 
 ## Wayfinding operations
 
-Used by `/wayfinder`. A **map** is one issue; tickets are its **child** issues.
+Used by `/wayfinder`, which plinth lists but does not install
+(`claude plugin install mattpocock-skills-extra@plinth`); records use these labels and
+this shape without it. A **map** is one issue; tickets are its **child** issues.
 
 - **Map**: one issue labelled `wayfinder:map`. `gh issue create --label wayfinder:map`
 - **Child ticket**: a sub-issue of the map (`gh api` sub-issues endpoint). If sub-issues are unavailable, add it to the map's task list and start the child body with `Part of #<map>`. Label: `wayfinder:<type>` (`research` / `prototype` / `grilling` / `task`). Assign yourself when you claim it.

@@ -11,6 +11,30 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- plinth installs 8 of Matt Pocock's skills instead of 20 (#593). These
+  twelve are now listed, not installed: `ask-matt`, `grill-with-docs`,
+  `to-spec`, `to-tickets`, `wayfinder`, `handoff`, `wait-what`,
+  `improve-codebase-architecture`, `prototype`, `research`,
+  `resolving-merge-conflicts` and `wizard`. Why (#520): on its trial tasks
+  no result changed with or without them, so plinth keeps only the skills
+  with a reason to stay, and every session's skill list gets shorter (about
+  0.97k tokens instead of 1.28k). `ask-matt` goes too because it sends you
+  to skills that are no longer installed. The eight that stay are
+  `implement`, `tdd`, `code-review`, `codebase-design`, `triage`,
+  `grilling`, `domain-modeling` and `diagnosing-bugs`. `/grilling` now
+  starts a new idea where `/grill-with-docs` did.
+
+  On an installed plinth, `claude plugin update plinth@plinth` is enough:
+  the next session has the eight and not the twelve, with no error, and
+  `mattpocock-skills` needs no update of its own (measured for #593 from
+  v2.0.1). To get the twelve back, run this once and start a new session:
+  `claude plugin install mattpocock-skills-extra@plinth`. It is a new
+  listed entry in plinth's marketplace, at the same commit as
+  `mattpocock-skills`, and adds the twelve beside the eight without
+  doubling any.
+
 ## [2.0.1] - 2026-10-19
 
 A repository `/plinth:new-project` makes now renders plinth-template v1.17.0

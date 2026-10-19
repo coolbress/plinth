@@ -16,7 +16,7 @@ plinth has two halves, and it helps to know which is which:
   unless its token lacks workflow permission
   ([the agent's own token](#give-the-agent-a-token-that-cannot-change-the-checks)).
 - **Inside the agent, made by others:** the skills you type or the agent
-  picks up, such as `/grill-with-docs` and `/implement` from
+  picks up, such as `/grilling` and `/implement` from
   [mattpocock/skills](https://github.com/mattpocock/skills). plinth does not
   write these. It chooses them, pins them to a commit, and this page shows
   how to walk them. Their authors own them and their licences
@@ -24,7 +24,7 @@ plinth has two halves, and it helps to know which is which:
 
 Three lines carry it: **you decide** (steps 2, 3 and 6), **the checks answer**
 (step 5), **the record remembers** (step 8). If you remember one command, make
-it `/ask-matt`: it reads your situation and names the next skill.
+it `/plinth:arsenal`: it lists the tools by step and says which one fits.
 
 ## What you type, and what runs by itself
 
@@ -34,16 +34,12 @@ can pick up from an ordinary request when the moment fits.
 
 | You type these | The agent can pick these up itself |
 | --- | --- |
-| `/ask-matt`: which skill now | `tdd`: test first, one small step at a time |
-| `/grill-with-docs`: shape an idea by interview | `diagnosing-bugs`: reproduce, then fix |
-| `/to-spec`, `/to-tickets`: plan a big job | `code-review`: review a change |
-| `/implement #N`: build one ticket | `research`: look things up at the source |
-| `/triage`: sort issues other people opened | `prototype`: a throwaway to settle a question |
-| `/wayfinder`: map a job too foggy to plan | `/plinth:floor-check`: read a repository's setup |
-| `/improve-codebase-architecture`: tidy up | `/plinth:arsenal`: the tool catalog |
-| `/handoff`: pass work to another place | |
-| `/wait-what`: "say that again, plainly" | |
-| `/plinth:new-project`, `/plinth:template-update` | |
+| `/implement #N`: build one ticket | `grilling`: shape an idea by interview |
+| `/triage`: sort issues other people opened | `tdd`: test first, one small step at a time |
+| `/plinth:new-project`, `/plinth:template-update` | `diagnosing-bugs`: reproduce, then fix |
+| | `code-review`: review a change |
+| | `/plinth:floor-check`: read a repository's setup |
+| | `/plinth:arsenal`: the tool catalog |
 
 For the left column, asking in your own words ("update the template") does
 not run the skill. The agent may do the work by hand, without the skill's
@@ -52,16 +48,33 @@ safeguards, or not do it at all. Those safeguards differ by skill:
 setting up, and names it when its token cannot;
 `/plinth:template-update` asks before each step and works in a separate
 folder; on a conflict it recommends a resolution for each file and applies
-one only on your word for that file. Type the skill.
+one only on your word for that file. Type the skill. You can type a skill
+from the right column too: `/grilling` starts step 2.
+
+### Skills plinth lists but does not install
+
+Twelve more of Matt Pocock's skills are listed, not installed: on #520's
+trial tasks no outcome separated a set with them from one without. You type
+`/ask-matt` (which skill now), `/grill-with-docs` (the interview, also
+writing `CONTEXT.md`), `/to-spec` and `/to-tickets` (plan a big job),
+`/wayfinder` (map a job too foggy to plan), `/improve-codebase-architecture`
+(tidy up), `/handoff` (pass work to another place) and `/wait-what` ("say
+that again, plainly"); the agent picks up `research`, `prototype`,
+`resolving-merge-conflicts` and `wizard` itself. To get all twelve, run this once in a terminal, then start a new
+session:
+
+```sh
+claude plugin install mattpocock-skills-extra@plinth
+```
 
 ## Pick the size of the job first
 
 | The change | Do this |
 | --- | --- |
 | A typo | Ask directly; it can go straight to a pull request |
-| Fits in one session | `/grill-with-docs`, then the agent opens an issue with what "done" means, then `/implement #N` |
-| Takes several sessions | `/grill-with-docs`, `/to-spec`, `/to-tickets`, then `/implement #N` for each ticket |
-| You cannot yet see how to get there | `/wayfinder` first; when the way is clear it hands over to `/to-spec` |
+| Fits in one session | `/grilling`, then the agent opens an issue with what "done" means, then `/implement #N` |
+| Takes several sessions | `/grilling`, then ask the agent to write the plan into one issue and cut it into tickets ([step 3](#3-plan-a-big-job-a-plan-then-tickets)), then `/implement #N` for each ticket |
+| You cannot yet see how to get there | `/wayfinder`, [listed](#skills-plinth-lists-but-does-not-install); when the way is clear it hands over to `/to-spec` |
 
 ## The one rule: say what proves it
 
@@ -315,7 +328,7 @@ not been measured.
    than the app's page; what you can read, anyone can. Protects against
    data left open to everyone.
 
-### 2. Shape the idea: `/grill-with-docs`
+### 2. Shape the idea: `/grilling`
 
 Say what you want in your own words. The agent interviews you in rounds. It
 looks up the facts itself and brings you only the decisions.
@@ -338,15 +351,18 @@ looks up the facts itself and brings you only the decisions.
   limit.
 
 It asks you to confirm that you both understand the same thing before it
-acts. The words you agreed on go into `CONTEXT.md`, so later sessions use the
-same names. A decision that is hard to reverse, surprising without its
-context, and a real trade-off is written up separately under `docs/adr/`.
+acts. Ask it to put the words you agreed on into `CONTEXT.md`, so later
+sessions use the same names, and to write up a decision that is hard to
+reverse, surprising without its context, and a real trade-off under
+`docs/adr/`; `domain-modeling` does both. `/grill-with-docs`, [listed](#skills-plinth-lists-but-does-not-install),
+runs the same interview and does both on its own.
 
-### 3. Plan a big job: `/to-spec`, then `/to-tickets`
+### 3. Plan a big job: a plan, then tickets
 
-For work that takes more than one session. `/to-spec` writes the plan into one
-issue. `/to-tickets` cuts it into small tickets and marks which ticket waits
-for which. Normally each ticket is something you could see working when it is
+For work that takes more than one session. Ask the agent to write the plan
+into one issue, then cut it into small tickets that say which ticket waits
+for which. `/to-spec` and `/to-tickets`, [listed](#skills-plinth-lists-but-does-not-install), do these two
+steps as skills. Normally each ticket is something you could see working when it is
 done; ask of every ticket, "what can I see when this one is finished?". A
 large change across the whole codebase is cut differently, in safe batches.
 
@@ -430,7 +446,7 @@ you, needs more information, or will not do.
 The plan, the decisions and what is left belong in issues and pull requests.
 The chat ends, and the agent's own memory stays on one machine. To come back,
 open a new session and ask "Where is this project, and what's next?". Read the
-answer, and ask about anything marked as not verified. `/handoff` is for
+answer, and ask about anything marked as not verified. `/handoff`, [listed](#skills-plinth-lists-but-does-not-install), is for
 moving work somewhere else: another tool, another folder, another person.
 
 ### 9. Keep it healthy
@@ -452,8 +468,8 @@ moving work somewhere else: another tool, another folder, another person.
   `scripts/with-admin-token.sh scripts/create-merge-ruleset.sh <owner>/<name>`.
 - **Every week or two, or after a burst of work:** `/ponytail-audit` lists
   what to delete or replace with the standard library, biggest cut first;
-  `/improve-codebase-architecture` finds places to deepen. Each becomes a new
-  idea for step 2.
+  `/improve-codebase-architecture`, [listed](#skills-plinth-lists-but-does-not-install), finds places
+  to deepen. Each becomes a new idea for step 2.
 
 ## What the agent tells you, and when
 
@@ -499,8 +515,8 @@ explanation is not approving a change.
 | Merging because everything is green | Ask the three questions in step 5 |
 | A fix with no failing test first | Ask for the test that reproduces the bug |
 | Decisions left only in the chat | Put them in the issue or pull request |
-| `/triage` on tickets `/to-tickets` made | Triage is for issues someone else opened |
-| `/wayfinder` for a job you can already describe | `/grill-with-docs` |
+| `/triage` on tickets your own plan made | Triage is for issues someone else opened |
+| `/wayfinder` for a job you can already describe | `/grilling` |
 
 ## Where plinth holds the line
 
