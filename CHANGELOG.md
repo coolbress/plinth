@@ -35,6 +35,16 @@ pull requests and have no tag.
   `mattpocock-skills`, and adds the twelve beside the eight without
   doubling any.
 
+- `/plinth:new-project` renders plinth-template v1.18.0
+  (coolbress/plinth-template#88). A new repository's `AGENTS.md` sends
+  "Starting something new" to `/plinth:arsenal` instead of `/ask-matt`, and
+  its `docs/agents/` pages say `/grill-with-docs` and `/wayfinder` are
+  listed and how to add them. A repository the door already made gets the
+  same wording through `/plinth:template-update` to v1.18.0; `copier update`
+  from v1.17.0 completed without hands on untouched cli instances on GitHub
+  and GitLab and an untouched backend instance on GitHub. Its CI pin does
+  not change.
+
 ## [2.0.1] - 2026-10-19
 
 A repository `/plinth:new-project` makes now renders plinth-template v1.17.0
