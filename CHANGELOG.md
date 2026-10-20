@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correction, 2026-10-20, to the [2.1.0] section, which stays as released:
+  it says the twelve skills `mattpocock-skills-extra` lists "changed no
+  result" and that "no result changed with or without them" (#520). No run
+  compared the two: #520's two pilots ran the full set only, and no run fell
+  into a trap, so the comparison never ran. The twelve were moved to
+  "listed" on #475's four criteria and their measured cost, where a skill
+  with no measured effect defaults to "listed" (#601, #602). The same
+  wording is corrected in `docs/how-to/run-a-project.md`, the arsenal and
+  the `mattpocock-skills-extra` description in plinth's marketplace.
+
 ## [2.2.0] - 2026-10-19
 
 plinth no longer installs `/ponytail-audit` (#598): no recorded run used it,

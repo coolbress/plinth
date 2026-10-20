@@ -233,8 +233,9 @@ Named exceptions:
   installer, which writes into the repository.
 - **Listed, not installed** (criterion 4): `last30days` and `ponytail` run
   hooks; Impeccable is outside plinth's marketplace; `mattpocock-skills-extra`
-  runs none, but on #520's trial tasks no outcome separated a set with its
-  skills from one without, and `/ask-matt` routes to them (#593);
+  runs none; #520 moved its skills here on these four criteria and their
+  measured cost, since no run compared a set with them and one without, and
+  `/ask-matt` routes to them (#593);
   `ponytail-skills` runs none, but `/ponytail-audit` had no call in any
   recorded run (#520), and #594 measured that dropping the dependency while
   the entry stays leaves an installed plinth working.

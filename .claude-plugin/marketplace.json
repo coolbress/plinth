@@ -37,7 +37,7 @@
     },
     {
       "name": "mattpocock-skills-extra",
-      "description": "The twelve Matt Pocock skills plinth lists but does not install, among them ask-matt, grill-with-docs, to-spec, to-tickets, wayfinder and handoff. Not installed by default (#520): on its trials no outcome separated a set with them from one without. No hooks; pinned to the same commit as mattpocock-skills.",
+      "description": "The twelve Matt Pocock skills plinth lists but does not install, among them ask-matt, grill-with-docs, to-spec, to-tickets, wayfinder and handoff. Not installed by default (#520): moved here on #475's four criteria and their measured cost; no run compared a set with them and one without. No hooks; pinned to the same commit as mattpocock-skills.",
       "category": "development",
       "source": {
         "source": "git-subdir",
