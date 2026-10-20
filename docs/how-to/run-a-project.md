@@ -53,9 +53,10 @@ from the right column too: `/grilling` starts step 2.
 
 ### Skills plinth lists but does not install
 
-Twelve more of Matt Pocock's skills are listed, not installed: on #520's
-trial tasks no outcome separated a set with them from one without. You type
-`/ask-matt` (which skill now), `/grill-with-docs` (the interview, also
+Twelve more of Matt Pocock's skills are listed, not installed. #520 moved
+them on #475's four criteria and their measured cost; no run compared a set
+with them and one without, so whether they change a result is not known.
+You type `/ask-matt` (which skill now), `/grill-with-docs` (the interview, also
 writing `CONTEXT.md`), `/to-spec` and `/to-tickets` (plan a big job),
 `/wayfinder` (map a job too foggy to plan), `/improve-codebase-architecture`
 (tidy up), `/handoff` (pass work to another place) and `/wait-what` ("say
