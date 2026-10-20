@@ -877,7 +877,26 @@ def check_inputs(inputs: dict[str, str | None], where: str) -> None:
             result("SKIP", f"the ci job {where} passes deps-fail-on-severity: {value}: not read as a severity")
 
 
-def check_caller(root: Path, repo: str | None, network: bool, from_checkout: bool = False) -> None:
+def check_web_input(inputs: dict[str, str | None], where: str, archetype: str | None) -> None:
+    """A web project's ci job passes `web: true` (#614). Without it
+    `ci / migrations` and `ci / deploy-check` pass as "does not apply" while
+    the ruleset still requires them, so deleting the line would lower the
+    standard with every check green. Only a literal true passes: missing,
+    false, an expression or a form this checker does not read is a FAIL."""
+    if archetype != "web":
+        return
+    value = inputs.get("web")
+    if value is not None and value.strip().strip("'\"") in {"true", "True", "TRUE"}:
+        result("PASS", f"the ci job {where} passes web: true, so ci / migrations and ci / deploy-check run")
+        return
+    seen = "no web: line" if "web" not in inputs else f"web: {value}" if value is not None else "a web: line this checker does not read"
+    result("FAIL", f"the ci job {where} has {seen}: on the web archetype ci / migrations and ci / deploy-check "
+                   "then pass as \"does not apply\" while the ruleset requires them")
+    result("INFO", "  add `web: true` under the ci job's with:, as plinth-template renders it")
+
+
+def check_caller(root: Path, repo: str | None, network: bool, from_checkout: bool = False,
+                 archetype: str | None = None) -> None:
     """The `ci` job in .github/workflows/ci.yml calls plinth's python-ci.yml at
     a full commit SHA (#325). With --repo and the network, read from the
     default branch through the API (no ref), so a stale or feature-branch
@@ -938,6 +957,7 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
     if repo and repo.lower() == PLINTH_REPO and value == PLINTH_OWN_CALLER:
         result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflow by local path)")
         check_inputs(inputs, where)
+        check_web_input(inputs, where, archetype)
         return
     m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@(.*)", value)
     if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
@@ -948,6 +968,7 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
             # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
             result("INFO", f"  gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})")
         check_inputs(inputs, where)
+        check_web_input(inputs, where, archetype)
     else:
         result("FAIL", f"the ci job {where} calls {value}, not {CALLER_WORKFLOW}")
         result("INFO", f"  {latest}")
@@ -2807,7 +2828,7 @@ def main() -> int:
             check_gitlab_include(root, network)
             result("SKIP", "no --repo: wall not checked" if not a.repo else "--no-network: the GitLab wall not checked")
     else:
-        check_caller(root, a.repo, network, a.caller_from_checkout)
+        check_caller(root, a.repo, network, a.caller_from_checkout, archetype)
         check_plinth_pins_agree(root)
 
     if host == "gitlab":

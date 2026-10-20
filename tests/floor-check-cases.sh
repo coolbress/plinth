@@ -1934,6 +1934,27 @@ out="$(python3 "$checker" --root "$copy" --archetype cli --no-network 2>&1)"; rc
 if [ "$rc" = "$base_rc" ] && [ "$(grep -cE '^  WARN  .*(max-diff-lines|deps-fail-on-severity)' <<<"$out")" = 2 ]; then
   ok "both loosened: two WARNs, the exit code unchanged ($rc)"
 else bad "both loosened: expected two WARNs and exit $base_rc, got exit $rc"; printf '%s\n' "$out" | grep -iE 'max-diff|severity' | sed 's/^/        /'; fi
+# The web archetype's caller passes `web: true` (#614). Without it the two
+# web-only checks pass as "does not apply" while the ruleset requires them,
+# so only a literal true passes and anything else is a FAIL.
+echo "-- the web archetype's ci job passes web: true (#614)"
+web_input() { # <description> <archetype> <with: lines or ""> <expected: PASS|FAIL|none> [<regex>]
+  local desc="$1" arch="$2" body="$3" want="$4" re="${5:-}"
+  local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
+  if [ -n "$body" ]; then with_ci "$body" > "$copy/.github/workflows/ci.yml"; else printf '%s' "$tmpl_ci" > "$copy/.github/workflows/ci.yml"; fi
+  local out rc; out="$(python3 "$checker" --root "$copy" --archetype "$arch" --no-network 2>&1)"; rc=$?
+  local lines; lines="$(grep -E '^  (PASS|FAIL) .*(web: |web:$|no web: line)' <<<"$out")"
+  if [ "$want" = none ] && [ -z "$lines" ]; then ok "$desc"
+  elif [ "$want" = FAIL ] && [ "$rc" = 1 ] && grep -qE "^  FAIL  .*${re}" <<<"$lines"; then ok "$desc"
+  elif [ "$want" = PASS ] && grep -qE "^  PASS  .*${re}" <<<"$lines" && ! grep -q '^  FAIL  .*web' <<<"$lines"; then ok "$desc"
+  else bad "$desc (expected $want${re:+ /$re/}, exit $rc)"; printf '%s\n' "$out" | grep -iE 'ci job|web' | sed 's/^/        /'; fi
+}
+web_input "web: true on the web archetype passes" web "      web: true" PASS "passes web: true"
+web_input "web: 'true' quoted passes" web "      web: 'true'" PASS "passes web: true"
+web_input "no web: line on the web archetype is a FAIL" web "      max-diff-lines: 400" FAIL "no web: line"
+web_input "web: false on the web archetype is a FAIL" web "      web: false" FAIL "web: false"
+web_input "web: an expression on the web archetype is a FAIL" web '      web: ${{ inputs.x }}' FAIL "web: "
+web_input "another archetype without web: says nothing about it" cli "      max-diff-lines: 400" none
 caller "two with: keys on the ci job are a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n      max-diff-lines: 0\n    with:\n      max-diff-lines: 200\n' "$sha40")" \
   "SKIP  .*ci job.*not verified.*more than one with"
