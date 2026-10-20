@@ -17,19 +17,21 @@ pull requests and have no tag.
   (coolbress/plinth-template#93 and coolbress/plinth-template#95). A new
   repository's agent reports through one contract, the output style
   "Beginner or non-engineer": its `AGENTS.md` no longer points at a report
-  in `/plinth:arsenal`, and the arsenal's "Reporting" section is removed
-  (#602). At a session's first task, at a resume and before a merge, the
-  agent reads its login and whether it administers the repository, and says
-  what that means for the merge. As an admin, a failing required check still
-  stops the merge, but merging a green pull request and approving a change
-  that weakens a check are guidance only; when the account cannot be read,
-  merge separation is not established. The rendered `.claude/settings.json`
-  allows those two reads as exact commands. A repository the door already
-  made gets the same through `/plinth:template-update` to v1.19.0;
-  `copier update` from v1.18.0 completed without hands on untouched cli
-  instances on GitHub and GitLab and an untouched backend instance on
-  GitHub. Its CI pin does not change. `/plinth:floor-check` now reports a
-  repository on v1.18.0 as behind.
+  in `/plinth:arsenal` (#602). The arsenal's "Reporting" section is gone; it
+  keeps that report only for a repository rendered before v1.19.0, whose
+  `AGENTS.md` still points there until `/plinth:template-update`. At a
+  session's first task, at a resume and before a merge, the agent reads its
+  login and whether it administers the repository, and says what that means
+  for the merge. As an admin, a failing required check still stops the
+  merge, but merging a green pull request and approving a change that
+  weakens a check are guidance only; when the account cannot be read, merge
+  separation is not established. The rendered `.claude/settings.json` allows
+  those two reads as exact commands. A repository the door already made gets
+  the same through `/plinth:template-update` to v1.19.0; `copier update`
+  from v1.18.0 completed without hands on untouched cli instances on GitHub
+  and GitLab and an untouched backend instance on GitHub. Its CI pin does
+  not change. `/plinth:floor-check` now reports a repository on v1.18.0 as
+  behind.
 
 ### Fixed
 

@@ -20,6 +20,15 @@ why each one is here.
 When and how to report to the person is the rendered repository's output
 style, "Beginner or non-engineer", not this catalog.
 
+A repository rendered before plinth-template v1.19.0 has an `AGENTS.md` line
+that sends the agent here for a five-item report. Until
+`/plinth:template-update` brings it to v1.19.0, that line still means this:
+at the start of a task, an important choice, a failure, and the end or a
+resume, report the goal now; the next action and why; what the person
+decides or confirms; the evidence of progress or completion; where to return
+when stuck and where the record lives. Not every turn. A request for an
+explanation is not approval of a change.
+
 `/plinth:new-project` and `/plinth:template-update` are user-only, typed by
 the user as `/` plus a pick from the list, invisible to the agent: when a pasted line drew "not installed", the
 line arrived as text, and this catalog being open shows plinth is installed.
