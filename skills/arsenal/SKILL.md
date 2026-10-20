@@ -17,13 +17,8 @@ step of that loop and the concern (a wrong problem, a false green, lost
 state), use "By step and concern" below; "How a tool gets on this list" says
 why each one is here.
 
-## Reporting
-
-At four moments only (the start of a task, an important choice, a failure, the
-end or a resume) report five items: the goal now; the next action and why;
-what the person decides or confirms; the evidence of progress or completion;
-where to return when stuck and where the record lives. Not every turn. A
-request for an explanation is not approval of a change.
+When and how to report to the person is the rendered repository's output
+style, "Beginner or non-engineer", not this catalog.
 
 `/plinth:new-project` and `/plinth:template-update` are user-only, typed by
 the user as `/` plus a pick from the list, invisible to the agent: when a pasted line drew "not installed", the
