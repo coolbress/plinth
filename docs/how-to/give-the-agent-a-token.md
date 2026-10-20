@@ -1,7 +1,10 @@
 # How to give the agent a token that cannot change the checks
 
-Do this once the first pull request of step 1 in
-[Run a project](run-a-project.md#1-start) is merged.
+Before this page: the first pull request of step 1 in
+[Run a project](run-a-project.md#1-start), merged. After it:
+[the agent's own account](give-the-agent-its-own-account.md), whose step 5
+repeats this page's step 5 for your own login, then
+[the four things by hand](set-four-things-by-hand.md).
 
 The browser login from Getting started holds `workflow`, and so does the one
 `gh auth login` asks for by default over HTTPS: an agent working with it can

@@ -23,7 +23,13 @@ pull requests and have no tag.
   `docs/how-to/give-the-agent-its-own-account.md` and
   `docs/how-to/set-four-things-by-hand.md`. Step 1 still names all three,
   what is missing until each is done, and its link; the old headings stay
-  in step 1, so a link to them still lands there. `/plinth:new-project`'s
+  in step 1, so a link to them still lands there. Step 1 gives their
+  order: the token first, ending with every other credential off the
+  machine; then the agent's own account, strongly recommended, whose
+  last step removes your own login the same way; then the four things.
+  Each page opens with what comes before and after it.
+- Step 6 says Claude Code may ask you to approve the agent's merge, and
+  gives the repository's squash command for merging from a terminal. `/plinth:new-project`'s
   closing guide line and `/plinth:floor-check`'s SSH line point at the
   token page.
 - `/plinth:arsenal` opens on where you are, the next action and its tool.

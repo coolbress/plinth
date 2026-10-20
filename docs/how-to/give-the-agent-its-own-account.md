@@ -1,8 +1,8 @@
 # How to give the agent its own account
 
-Do this after [the agent's token](give-the-agent-a-token.md), once the
-first pull request of step 1 in [Run a project](run-a-project.md#1-start)
-is merged.
+Before this page: [the agent's token](give-the-agent-a-token.md), its
+step 5 included. After it: [the four things by hand](set-four-things-by-hand.md),
+then step 2 of [Run a project](run-a-project.md).
 
 [The agent's token](give-the-agent-a-token.md) stops the agent from changing the checks, but not from
 merging. GitHub decides who may merge by the account, not by the token: your
@@ -14,9 +14,10 @@ something GitHub enforces.
 A repository `/plinth:new-project` made carries a second rule set on
 GitHub (a ruleset) that lets only the repository's admin merge. With the
 agent on an account of its own, which is not the admin, GitHub refuses that
-account's merge, and only you can merge. Without it the loop in
-[Run a project](run-a-project.md) still works, but the merge stays guidance:
-the agent is asked not to merge, and GitHub does not stop it.
+account's merge, and only you can merge. The token alone is the default
+path; this account is the strongly recommended step after it. Without it the
+loop in [Run a project](run-a-project.md) still works, but the merge stays
+guidance: the agent is asked not to merge, and GitHub does not stop it.
 
 1. **Create the agent's account.** Sign out of GitHub in your browser, or
    open a private window, and sign up for a new account with a different

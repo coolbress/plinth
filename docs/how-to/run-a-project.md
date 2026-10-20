@@ -51,9 +51,18 @@ September, and the next payment dates in order."*
 - **If you forget:** a boundary once it exists: the required checks and the
   ruleset are on GitHub, beyond an agent without administration.
 
-Then, before step 2, three setup steps, each on its own page. Until they are
-done, the agent works with your own login and the protections below are
-missing.
+Then, before step 2, three setup steps, each on its own page, in this order.
+Until they are done, the agent works with your own login and the protections
+below are missing.
+
+1. The agent's token, made on your account, ending with its step 5: every
+   other credential for github.com off this machine. This is the default
+   path.
+2. The agent's own account, strongly recommended. Its token replaces the one
+   from 1, and its step 5 repeats that list for your own login, the token
+   from 1 included. It comes second because that step works from the token
+   page's list. From then on you merge in the browser.
+3. The four things by hand.
 
 #### Give the agent a token that cannot change the checks
 
@@ -67,7 +76,8 @@ HTTPS.
 
 Until this is done, the agent works under your account, and your account can
 merge: "ask before you merge" is guidance only. With its own account, GitHub
-refuses the agent's merge and only you can merge: a boundary.
+refuses the agent's merge and only you can merge: a boundary. Strongly
+recommended; the token alone is the default.
 [Give the agent its own account](give-the-agent-its-own-account.md).
 
 #### Set four things by hand that no check covers
@@ -161,8 +171,20 @@ done nothing limits the agent there.
 
 - **Where you are:** green checks, and you have seen it work.
 - **Next:** say "merge"; a yes covers that one pull request, unless you gave
-  a standing instruction for the session. With the agent on its own account,
-  you press the merge button yourself.
+  a standing instruction for the session. Claude Code may then ask you to
+  approve the agent's `gh pr merge`: approving it is your merge. To merge
+  yourself from a terminal, use the repository's squash command (its
+  `CONTRIBUTING.md`, step 7), with the pull request's number and the head
+  commit you checked:
+
+  ```bash
+  body="$(gh pr view <n> --json body --jq .body)" &&
+    gh pr merge <n> --squash --match-head-commit <sha> --body "$body"
+  ```
+
+  With the agent on its own account, the agent cannot merge, and your login
+  is off the machine: press the merge button in the browser, signed in as
+  yourself.
 - **Look at:** the agent's decision report: who it works as, and the
   `not yet confirmed` lines ([below](#what-the-agent-tells-you-and-when)).
 - **Yours:** the merge. The ticket closes by itself; take the next one.

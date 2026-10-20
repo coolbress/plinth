@@ -1,8 +1,10 @@
 # How to set four things by hand that no check covers
 
-Once the first pull request of step 1 in
-[Run a project](run-a-project.md#1-start) is merged, settle four things outside the
-repository. They are guidance: plinth does not check them, and it cannot,
+Before this page: [the agent's token](give-the-agent-a-token.md) and
+[its own account](give-the-agent-its-own-account.md). After it: step 2 of
+[Run a project](run-a-project.md).
+
+Settle four things outside the repository. They are guidance: plinth does not check them, and it cannot,
 because every check the host requires reads a pull request or the
 repository's settings, and these live somewhere else
 ([what plinth does not do](../explanation/concepts.md#about-what-plinth-does-not-do)).
