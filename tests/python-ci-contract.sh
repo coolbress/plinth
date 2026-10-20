@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # The consumer contract of python-ci.yml: job names, inputs, secrets. Extracted
 # from the workflow and diffed against the committed snapshot, and the
-# ruleset's `ci / *` contexts must be exactly the jobs. Changing the snapshot
-# is a MAJOR release: every consumer ruleset requires the old names forever.
+# ruleset's `ci / *` contexts must be exactly the jobs every archetype runs.
+# A snapshot change is a release decision, read this way:
+#   MAJOR: a job, input or secret renamed or removed (every consumer ruleset
+#          requires the old names forever), or a job that needs a permission
+#          the template's caller job does not grant (every updated repository
+#          fails at startup, as v2.0.0 did, #586).
+#   MINOR: only a new job, or a new input with a default, inside that grant.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
