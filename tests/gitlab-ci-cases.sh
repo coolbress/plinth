@@ -41,7 +41,10 @@ cat > "$tmp/contract.py" <<'PY'
 import re, sys, textwrap
 gh, gl = (open(p, encoding="utf-8").read() for p in sys.argv[1:3])
 fails = []
-gh_jobs = sorted(re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", gh.split("\njobs:\n", 1)[1], re.M))
+# The web archetype is GitHub only (#604): its two jobs have no GitLab twin.
+WEB_ONLY = {"migrations", "deploy-check"}
+gh_jobs = sorted(j for j in re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", gh.split("\njobs:\n", 1)[1], re.M)
+                 if j not in WEB_ONLY)
 spec, body = gl.split("\n---\n", 1)
 gl_jobs = sorted(j for j in re.findall(r"^([a-z][a-z0-9-]*):\s*$", body, re.M)
                  if j not in ("workflow", "default", "variables", "stages", "include"))
@@ -50,8 +53,9 @@ if gh_jobs != gl_jobs:
 call = gh.split("workflow_call:", 1)[1].split("\n    secrets:", 1)[0].split("\npermissions:", 1)[0]
 gh_inputs = set(re.findall(r"^      ([a-z][a-z0-9-]*):\s*$", call, re.M))
 gl_inputs = set(re.findall(r"^    ([a-z][a-z0-9-]*):\s*$", spec, re.M))
-# GitLab Free has no required checks by name, so no list of them to pass.
-NOT_ON_GITLAB = {"floor-check-required-checks"}
+# GitLab Free has no required checks by name, so no list of them to pass;
+# `web` turns on the two web-only jobs above.
+NOT_ON_GITLAB = {"floor-check-required-checks", "web"}
 if gh_inputs - NOT_ON_GITLAB != gl_inputs:
     fails.append(f"inputs differ: python-ci.yml {sorted(gh_inputs - NOT_ON_GITLAB)}, gitlab {sorted(gl_inputs)}")
 for k in ("UV_VERSION", "UV_SHA256", "GITLEAKS_VERSION", "GITLEAKS_SHA256"):

@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # The consumer contract of python-ci.yml: job names, inputs, secrets. Extracted
 # from the workflow and diffed against the committed snapshot, and the
-# ruleset's `ci / *` contexts must be exactly the jobs. Changing the snapshot
-# is a MAJOR release: every consumer ruleset requires the old names forever.
+# ruleset's `ci / *` contexts must be exactly the jobs every archetype runs.
+# A snapshot change is a release decision, read this way:
+#   MAJOR: a job, input or secret renamed or removed (every consumer ruleset
+#          requires the old names forever), or a job that needs a permission
+#          the template's caller job does not grant (every updated repository
+#          fails at startup, as v2.0.0 did, #586).
+#   MINOR: only a new job, or a new input with a default, inside that grant.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -30,12 +35,26 @@ else:
 ruleset = json.loads((root / "ruleset.json").read_text(encoding="utf-8"))
 contexts = [c["context"] for r in ruleset["rules"] if r["type"] == "required_status_checks"
             for c in r["parameters"]["required_status_checks"]]
-want = [f"ci / {j}" for j in jobs]
+# The two web-only jobs are required for the web archetype alone, added by
+# floor-check.py's ruleset_for the way `image` is for a service (#614).
+WEB_ONLY = {"migrations", "deploy-check"}
+want = [f"ci / {j}" for j in jobs if j not in WEB_ONLY]
 if sorted(contexts) == sorted(want):
-    print(f"  PASS  ruleset.json requires exactly the {len(jobs)} jobs by name (CodeQL is a rule)")
+    print(f"  PASS  ruleset.json requires exactly the {len(want)} jobs every archetype runs, by name (CodeQL is a rule)")
 else:
     fails += 1
     print(f"  FAIL  ruleset.json contexts {sorted(contexts)} != jobs {sorted(want)}")
+import subprocess
+web = json.loads(subprocess.run([sys.executable, str(root / "scripts/floor-check.py"), "--print-ruleset",
+                                 "--ruleset", str(root / "ruleset.json"), "--archetype", "web"],
+                                capture_output=True, text=True, check=True).stdout)
+web_contexts = [c["context"] for r in web["rules"] if r["type"] == "required_status_checks"
+                for c in r["parameters"]["required_status_checks"]]
+if sorted(set(web_contexts) - set(contexts)) == sorted(f"ci / {j}" for j in WEB_ONLY):
+    print("  PASS  the web archetype's ruleset adds exactly ci / migrations and ci / deploy-check")
+else:
+    fails += 1
+    print(f"  FAIL  the web archetype's ruleset adds {sorted(set(web_contexts) - set(contexts))}")
 print(f"-- {fails} failed")
 sys.exit(1 if fails else 0)
 PY

@@ -67,6 +67,14 @@ if image and listed == [image.group(1)]:
 else:
     fail(f"the service table lists {listed}, floor-check.py adds {image.group(1) if image else '(unreadable)'!r}")
 
+web = re.search(r'^WEB_CHECKS = \(([^)]*)\)$', (root / "scripts/floor-check.py").read_text(encoding="utf-8"), re.M)
+want = re.findall(r'"([^"]+)"', web.group(1)) if web else None
+listed = names("Required for the web archetype")
+if listed == want:
+    print(f"  PASS  the web table lists {want}, the checks floor-check.py adds for the web archetype")
+else:
+    fail(f"the web table lists {listed}, floor-check.py adds {want}")
+
 if not fails:
     print("  PASS  the page is headings and tables only")
 print(f"-- {fails} failed")

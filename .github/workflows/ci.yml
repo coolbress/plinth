@@ -56,8 +56,9 @@ jobs:
 
   # The same call on the `web` archetype as plinth-template renders it, a
   # Django project (#614): the checks every archetype runs, on a project whose
-  # mypy loads Django's settings and whose pytest runs pytest-django. Its
-  # check names are `canary-web / …`, required by no ruleset.
+  # mypy loads Django's settings and whose pytest runs pytest-django, and with
+  # `web: true` the two web-only jobs and the tests' Postgres. Its check names
+  # are `canary-web / …`, required by no ruleset.
   canary-web:
     uses: ./.github/workflows/python-ci.yml
     permissions:
@@ -67,4 +68,5 @@ jobs:
       actions: write
     with:
       working-directory: canary-web
+      web: true
       floor-check-required-checks: "ci / install, ci / tools, ci / docs"

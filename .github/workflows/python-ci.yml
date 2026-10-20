@@ -115,6 +115,18 @@ on:
         type: string
         default: ""
 
+      web:
+        description: |
+          `true` for a project of plinth-template's `web` archetype (Django
+          and Postgres). It turns on `ci / migrations` and `ci / deploy-check`
+          and gives `ci / test` a disposable Postgres. Passed explicitly in
+          the rendered `ci.yml`, never read from which files exist: moving a
+          file must not turn a check into "does not apply" (#614). Renaming
+          it is a MAJOR change.
+        required: false
+        type: boolean
+        default: false
+
 # The default token is write-broad. Lower it to the minimum.
 permissions:
   contents: read
@@ -282,6 +294,19 @@ jobs:
           echo "$d" >> "$GITHUB_PATH"
       - id: sync
         run: uv sync --locked
+      # A web project's tests run against Postgres, not the SQLite its
+      # settings fall back to without DATABASE_URL (#614).
+      - name: Start Postgres
+        id: pg
+        if: inputs.web
+        working-directory: .
+        run: |
+          set -euo pipefail
+          docker run -d --name pg -e POSTGRES_PASSWORD=ci -p 5432:5432 \
+            postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+          for _ in $(seq 30); do docker exec pg pg_isready -U postgres -q && break; sleep 1; done
+          docker exec pg pg_isready -U postgres
+          echo "DATABASE_URL=postgres://postgres:ci@localhost:5432/postgres" >> "$GITHUB_ENV"
       # Coverage comes from the workflow, not the project (#406, #503): it
       # goes into the synced environment, so uv.lock is untouched, and
       # pytest-cov in the template's addopts would break the extra-versions
@@ -474,16 +499,244 @@ jobs:
           PYTEST: ${{ steps.pytest.outcome }}
           EXTRA: ${{ steps.extra.outcome }}
           VERSIONS: ${{ inputs.extra-python-versions }}
+          WEB: ${{ inputs.web }}
+          PG: ${{ steps.pg.outcome }}
         run: |
           nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
           say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
+          if [ "$WEB" = true ]; then v "$PG" "a disposable Postgres for the tests"; fi
           v "$PYTEST" "pytest on .python-version"
           if [ -n "$VERSIONS" ]; then v "$EXTRA" "pytest on $VERSIONS"
           else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
           if [ -s "$RUNNER_TEMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$RUNNER_TEMP/changed.verdict"
           else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
+
+  # The schema of a `web` project (#614): no model change without its
+  # migration, the migrations applied to an empty Postgres, and the base
+  # commit's representative rows carried through this head's migrations. With
+  # the `web` input false every step but the verdict is skipped and the job
+  # reports a pass that does not apply: the job itself always runs, so its
+  # check name always reports.
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: inputs.web
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+          # On a pull request the checkout is GitHub's merge commit, on a push
+          # the branch's new tip: either way HEAD^1 is the base.
+          fetch-depth: 2
+      - name: Install uv (official release, SHA256 verified)
+        if: inputs.web
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      # A disposable Postgres, pinned by digest: `empty` for the migrations
+      # from nothing, `rows` for the base's rows carried forward.
+      - name: Start Postgres
+        id: pg
+        if: inputs.web
+        working-directory: .
+        run: |
+          set -euo pipefail
+          docker run -d --name pg -e POSTGRES_PASSWORD=ci -p 5432:5432 \
+            postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+          for _ in $(seq 30); do docker exec pg pg_isready -U postgres -q && break; sleep 1; done
+          docker exec pg pg_isready -U postgres
+          docker exec pg createdb -U postgres empty
+          docker exec pg createdb -U postgres rows
+      - id: sync
+        if: inputs.web
+        run: uv sync --locked
+      - id: missing
+        if: inputs.web
+        env:
+          DATABASE_URL: postgres://postgres:ci@localhost:5432/empty
+        run: |
+          uv run python manage.py makemigrations --check --dry-run
+      - id: empty
+        if: inputs.web
+        env:
+          DATABASE_URL: postgres://postgres:ci@localhost:5432/empty
+        run: |
+          uv run python manage.py migrate --no-input
+      # The rows come from the base commit, never the head: a pull request
+      # that edited them could hide its own loss, and an edit to the file is a
+      # change to the checks a person approves (#614). Compared: the table of
+      # every model the file holds rows for, and their many-to-many tables (a
+      # user's groups). migrate rewrites three, so the file may not hold them.
+      - id: rows
+        if: inputs.web
+        env:
+          DATABASE_URL: postgres://postgres:ci@localhost:5432/rows
+          WD: ${{ inputs.working-directory }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/rows.verdict"; : > "$out"
+          std="the base commit's rows survive this head's migrations"
+          rel="$(git rev-parse --show-prefix)tests/migration_rows.json"
+          if ! git cat-file -e "HEAD^1:$rel" 2>/dev/null; then
+            echo "not yet confirmed: $std, the base commit has no tests/migration_rows.json; a base that has it confirms it" > "$out"
+            exit 0
+          fi
+          export ROWS="$RUNNER_TEMP/rows.json" COUNTS="$RUNNER_TEMP/counts.json"
+          git show "HEAD^1:$rel" > "$ROWS"
+          python3 - <<'PY' || { echo "fail: $std, tests/migration_rows.json holds a model migrate rewrites (its name is in this step's log)" > "$out"; exit 1; }
+          import json, os, sys
+          held = {r["model"].lower() for r in json.load(open(os.environ["ROWS"], encoding="utf-8"))}
+          bad = sorted(held & {"contenttypes.contenttype", "auth.permission", "sessions.session"})
+          if bad:
+              print(f"tests/migration_rows.json may not hold {', '.join(bad)}: migrate rewrites them")
+              sys.exit(1)
+          PY
+          base="$RUNNER_TEMP/base"
+          git worktree add --quiet --detach "$base" HEAD^1
+          count='
+          import json, os
+          from django.apps import apps
+          from django.db import connection
+          q = connection.ops.quote_name
+          base = os.environ.get("BASE_TABLES")
+          if base:
+              tables = json.load(open(base))
+          else:
+              held = [apps.get_model(r["model"]) for r in json.load(open(os.environ["ROWS"]))]
+              tables = sorted({m._meta.db_table for m in held}
+                              | {f.remote_field.through._meta.db_table
+                                 for m in held for f in m._meta.many_to_many})
+          found = {}
+          with connection.cursor() as c:
+              for t in tables:
+                  try:
+                      c.execute(f"SELECT count(*) FROM {q(t)}")
+                      found[t] = c.fetchone()[0]
+                  except Exception:
+                      found[t] = None
+          json.dump(found, open(os.environ["COUNTS"], "w"))
+          '
+          (cd "$base/$WD" && uv sync --locked --quiet \
+            && uv run python manage.py migrate --no-input \
+            && uv run python manage.py loaddata "$ROWS" \
+            && uv run python manage.py shell -c "$count")
+          cp "$COUNTS" "$RUNNER_TEMP/before.json"
+          python3 -c 'import json,os; json.dump(sorted(json.load(open(os.environ["COUNTS"]))), open(os.environ["RUNNER_TEMP"]+"/tables.json","w"))'
+          uv run python manage.py migrate --no-input
+          BASE_TABLES="$RUNNER_TEMP/tables.json" uv run python manage.py shell -c "$count"
+          python3 - "$RUNNER_TEMP/before.json" "$COUNTS" "$std" "$out" <<'PY'
+          import json, sys
+          before, after = (json.load(open(p)) for p in sys.argv[1:3])
+          std, out = sys.argv[3], sys.argv[4]
+          lost = [f"{t} {n} -> {'no table' if after.get(t) is None else after[t]}"
+                  for t, n in sorted(before.items()) if after.get(t) != n]
+          for l in lost:
+              print(f"changed: {l}")
+          with open(out, "w") as f:
+              if lost:
+                  f.write(f"fail: {std}: {'; '.join(lost[:9])}" + (", and more in this step's log" if len(lost) > 9 else "") + "\n")
+              else:
+                  f.write(f"pass: {std}, {len(before)} tables, every count the same\n")
+          sys.exit(1 if lost else 0)
+          PY
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          WEB: ${{ inputs.web }}
+          SYNC: ${{ steps.sync.outcome }}
+          PG: ${{ steps.pg.outcome }}
+          MISSING: ${{ steps.missing.outcome }}
+          EMPTY: ${{ steps.empty.outcome }}
+          ROWS: ${{ steps.rows.outcome }}
+        working-directory: .
+        run: |
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          if [ "$WEB" != true ]; then
+            say "pass: migrations, does not apply (the web input is false: not a web project)"
+            exit 0
+          fi
+          v "$PG" "a disposable Postgres"
+          v "$SYNC" "uv sync --locked"
+          v "$MISSING" "no model change without its migration (makemigrations --check)"
+          v "$EMPTY" "the migrations apply to an empty Postgres"
+          if [ -s "$RUNNER_TEMP/rows.verdict" ]; then say "$(cat "$RUNNER_TEMP/rows.verdict")"
+          else v "$ROWS" "the base commit's rows survive this head's migrations"; fi
+
+  # The production settings of a `web` project (#614): Django's deployment
+  # checks at the warning level, with settings shaped like production (debug
+  # off, a key made for this run, placeholder hosts and database). Another
+  # archetype reports a pass that does not apply.
+  deploy-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: inputs.web
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+      - name: Install uv (official release, SHA256 verified)
+        if: inputs.web
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - id: sync
+        if: inputs.web
+        run: uv sync --locked
+      # No literal key: one made for this run. Nothing here reaches a database.
+      - id: deploy
+        if: inputs.web
+        env:
+          DJANGO_ALLOWED_HOSTS: deploy-check.invalid
+          DATABASE_URL: postgres://deploy-check@localhost:5432/none
+        run: |
+          set -euo pipefail
+          unset DJANGO_DEBUG
+          DJANGO_SECRET_KEY="$(openssl rand -hex 32)" uv run python manage.py check --deploy --fail-level WARNING
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        env:
+          WEB: ${{ inputs.web }}
+          SYNC: ${{ steps.sync.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+        working-directory: .
+        run: |
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          if [ "$WEB" != true ]; then
+            say "pass: deploy-check, does not apply (the web input is false: not a web project)"
+            exit 0
+          fi
+          v "$SYNC" "uv sync --locked"
+          v "$DEPLOY" "manage.py check --deploy --fail-level WARNING with production-shaped settings (the warnings are in the deploy step's log)"
 
   # Secret detection. Not a duplicate of push protection: push protection
   # blocks provider-format tokens only and lets private-key PEMs and generic

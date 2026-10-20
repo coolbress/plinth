@@ -395,6 +395,29 @@ warned() { # <label> <n> -- each not yet confirmed line is a ::warning:: with th
 }
 mkdir -p "$tmp/rt"
 
+echo "-- verdict lines: ci / migrations and ci / deploy-check (#614)"
+for job in migrations deploy-check; do
+  dir="$tmp"; verdict "$job" Verdict WEB=false
+  first "$job: web false is a pass that does not apply" "^- pass: $job, does not apply \(the web input is false"
+  [ "$(wc -l <<<"$sum" | tr -d ' ')" = 1 ] && [ "$rc" = 0 ] && ok "$job: web false writes that one line and passes" \
+    || bad "$job: web false wrote more than one line or failed" "$sum"
+done
+: > "$tmp/rt/rows.verdict"
+verdict migrations Verdict WEB=true PG=success SYNC=success MISSING=failure EMPTY=skipped ROWS=skipped
+first "migrations: web true opens with the database" "^- pass: a disposable Postgres$"
+if grep -qx -- "- fail: no model change without its migration (makemigrations --check)" <<<"$sum" \
+  && grep -q "^- not yet confirmed: the migrations apply to an empty Postgres, it did not run" <<<"$sum"; then
+  ok "migrations: a missing migration is a fail, and the steps after it are not yet confirmed"
+else bad "migrations: a failed makemigrations --check did not read as fail, then not yet confirmed" "$sum"; fi
+printf 'fail: the base commit'"'"'s rows survive this head'"'"'s migrations: auth_user 2 -> 1\n' > "$tmp/rt/rows.verdict"
+verdict migrations Verdict WEB=true PG=success SYNC=success MISSING=success EMPTY=success ROWS=failure
+grep -qx -- "- fail: the base commit's rows survive this head's migrations: auth_user 2 -> 1" <<<"$sum" \
+  && ok "migrations: the rows step's own line, naming the table, is the verdict" || bad "migrations: the rows line was lost" "$sum"
+rm -f "$tmp/rt/rows.verdict"
+verdict deploy-check Verdict WEB=true SYNC=success DEPLOY=failure
+grep -q "^- fail: manage.py check --deploy --fail-level WARNING" <<<"$sum" \
+  && ok "deploy-check: a failed check --deploy is a fail" || bad "deploy-check: a failed check --deploy did not read as fail" "$sum"
+
 echo "-- verdict lines: ci / diff-size"
 new_repo; printf 'y = 2\n' >> "$r/src/m.py"; commit; dir="$r"
 verdict diff-size "Measure the reviewable diff" MAX_LINES=400 EXCLUDE="" WORKDIR=. BASE_SHA="" HEAD_SHA=""
@@ -747,10 +770,11 @@ else bad "twelve not yet confirmed: expected items 1-9 and '3 more'" "$out"; fi
 if [ "$(grep -c '^- not yet confirmed: item ' <<<"$sum")" = 12 ]; then ok "twelve not yet confirmed: the summary carries all twelve"
 else bad "twelve not yet confirmed: the summary does not carry all twelve" "$sum"; fi
 [ "$rc" = 0 ] && ok "twelve not yet confirmed: the step passes" || bad "the step exited $rc" "$out"
-# Every job's helper is the same text, so the cap and the marker hold in each.
+# Every job's helper is the same text, so the cap and the marker hold in each:
+# one per job, the two web-only jobs (#614) included.
 helpers="$(grep -E '^ +(nw=0;|say\(\) )' "$wf" | sed 's/^ *//' | sort | uniq -c)"
 if [ "$(wc -l <<<"$helpers" | tr -d ' ')" = 2 ] && [ "$(awk '{print $1}' <<<"$helpers" | sort -u | wc -l | tr -d ' ')" = 1 ] \
-  && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 9 ]; then
+  && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 11 ]; then
   ok "every step that writes verdicts defines the same capped say helper ($(awk 'NR==1{print $1}' <<<"$helpers") steps)"
 else bad "the say helpers differ between steps, or a step lacks the cap" "$helpers"; fi
 fake_verdicts "fail: a" "${twelve[@]}"; sed -i.bak 's/^print("  PASS  x")$/print("  FAIL  a"); sys.exit(1)/' "$tmp/rt/plinth/floor-check.py"
