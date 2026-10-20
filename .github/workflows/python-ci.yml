@@ -564,12 +564,19 @@ jobs:
       - id: sync
         if: inputs.web
         run: uv sync --locked
+      # Every app with models is named. Unnamed, an app whose migrations
+      # package was moved or deleted counts as "unmigrated" and the check says
+      # "No changes detected": the schema would leave version control quietly.
       - id: missing
         if: inputs.web
         env:
           DATABASE_URL: postgres://postgres:ci@localhost:5432/empty
         run: |
-          uv run python manage.py makemigrations --check --dry-run
+          set -euo pipefail
+          labels="$(uv run python manage.py shell -v 0 -c 'from django.apps import apps; print(" ".join(a.label for a in apps.get_app_configs() if a.models_module))')"
+          echo "apps with models: $labels"
+          # shellcheck disable=SC2086 # one argument per app label
+          uv run python manage.py makemigrations --check --dry-run $labels
       - id: empty
         if: inputs.web
         env:

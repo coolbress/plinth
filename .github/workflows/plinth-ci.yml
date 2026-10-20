@@ -60,6 +60,24 @@ jobs:
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
 
+      # uv for the web checks' fixture projects, the release python-ci.yml pins.
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+
+      - name: ci / migrations and ci / deploy-check fail and pass where they must, on Postgres
+        run: ./tests/web-checks-cases.sh
+
       # zsh is not assumed on the runner image; without it the next test fails, it does not skip.
       - name: Install zsh
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
