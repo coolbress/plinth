@@ -788,7 +788,7 @@ check "the merge ruleset posted is ruleset-merge.json, unchanged (backend)" \
 check "a backend ruleset is the wall plus image, from the same app (check-ruleset.sh passes with image)" \
   '"$root/scripts/check-ruleset.sh" "$work/home-backend/ruleset-posted.json" image >/dev/null'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.18.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.19.0 in " "$work/home-none/out"'
 check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
   'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
 check "copier renders the tag's pinned commit, not the tag: a tag moved after the check changes nothing (#519)" \
