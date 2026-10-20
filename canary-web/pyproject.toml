@@ -1,0 +1,65 @@
+[project]
+name = "canary_web"
+version = "0.1.0"
+description = "One line saying what this is"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    # The LTS series: security fixes to April 2028 (djangoproject.com/download).
+    "django>=5.2,<5.3",
+    "psycopg[binary]>=3.2",
+    "uvicorn>=0.30",
+    # Serves the collected static files (the admin's CSS and JavaScript) from the app.
+    "whitenoise>=6.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    # The stubs' series follows Django's; mypy's plugin loads the settings.
+    "django-stubs>=5.2,<5.3",
+    "mypy>=1.14",
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "ruff>=0.9",
+]
+
+# Linter and formatter. The configuration is committed; CI runs `ruff check`
+# and `ruff format --check` as `ci / lint`.
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "S", "A", "C4", "PT", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# assert is the normal form in tests
+"tests/**" = ["S101"]
+
+# Type checking, `ci / typecheck`.
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src", "tests"]
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "canary_web.settings"
+
+# Tests, `ci / test`.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+DJANGO_SETTINGS_MODULE = "canary_web.settings"
+# No silent failures: an unregistered `@pytest.mark.foo` is a no-op even when
+# it is a typo, and a misspelt key in this section is ignored. Both are made
+# errors.
+addopts = ["--strict-markers", "--strict-config"]
+# Warnings are errors. A third-party warning that blocks gets one narrow
+# ignore here, with its reason.
+filterwarnings = ["error"]
