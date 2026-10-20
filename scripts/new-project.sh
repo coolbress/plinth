@@ -900,7 +900,7 @@ fi
 # can grant "Edit repository rules" beside it); under admin, a classic token's `repo` scope carries the role, and a
 # fine-grained one is asked that read. A 200 there is read access at least,
 # and whether it can write, which editing the ruleset needs, cannot be read.
-guide="https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks"
+guide="https://github.com/coolbress/plinth/blob/main/docs/how-to/give-the-agent-a-token.md"
 if [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   who="gh's own login (not the token typed for this run)"
   as_agent() { env -u GH_TOKEN -u GITHUB_TOKEN gh "$@"; }

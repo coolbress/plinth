@@ -53,8 +53,7 @@ variable, when set, is a SKIP naming it: the configuration it hides is not
 read. SSH keys are a SKIP every time, the other one with no way to
 verify it here: GitHub's settings say which keys push, not this machine.
 Relay the WARN lines with the fix from
-"Give the agent a token that cannot change the checks" in
-`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`; never run a logout or
+`${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`; never run a logout or
 delete a credential yourself.
 
 `--merge-ruleset` expects the second ruleset the door applies: the
@@ -88,8 +87,8 @@ never a boundary then. Put the line in the summary in plain words: with
 guidance, the agent could merge and is only asked to wait; with a boundary,
 GitHub refuses the agent's merge and the person merges. Guidance is a setup,
 not a defect: leave it out of the FAIL and WARN list. The way to a boundary
-is "Give the agent its own account" in
-`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, for the user to do;
+is `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-its-own-account.md`,
+for the user to do;
 the boundary holds only while no admin login is left where the agent can
 reach it, which the `--credentials` lines are about. `ci / floor-check`
 (`--actions-token`) does not decide it: the Actions token is not the agent's

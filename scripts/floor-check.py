@@ -2703,7 +2703,7 @@ def check_credentials(root: Path, host: str = "github") -> None:
                "say which keys push")
     else:
         result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
-               "say which keys push; see docs/how-to/run-a-project.md")
+               "say which keys push; see docs/how-to/give-the-agent-a-token.md")
     result("INFO", "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file")
 
 
