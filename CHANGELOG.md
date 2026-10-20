@@ -18,8 +18,11 @@ pull requests and have no tag.
   result" and that "no result changed with or without them" (#520). No run
   compared the two: #520's two pilots ran the full set only, and no run fell
   into a trap, so the comparison never ran. The twelve were moved to
-  "listed" on #475's four criteria and their measured cost, where a skill
-  with no measured effect defaults to "listed" (#601, #602). The same
+  "listed" on #475's four criteria and their measured cost: each skill
+  stayed installed only for a reason on its row in #520, such as another
+  kept skill calling it or the rendered `AGENTS.md` naming it. Eleven had
+  none; `ask-matt` was kept on such a reason until #593 found it
+  recommending skills that were no longer installed (#601, #602). The same
   wording is corrected in `docs/how-to/run-a-project.md`, the arsenal and
   the `mattpocock-skills-extra` description in plinth's marketplace.
 
