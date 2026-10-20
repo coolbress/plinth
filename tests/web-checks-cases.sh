@@ -57,9 +57,10 @@ echo "-- a disposable Postgres"
 docker run -d --name "$pg" -e POSTGRES_PASSWORD=ci -p 127.0.0.1::5432 \
   postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 >/dev/null \
   || { echo "  FAIL  postgres did not start"; exit 1; }
-for _ in $(seq 30); do docker exec "$pg" pg_isready -U postgres -q && break; sleep 1; done
+# Over TCP, as python-ci.yml waits: the image's first-start server is socket only.
+for _ in $(seq 60); do docker exec "$pg" pg_isready -h 127.0.0.1 -U postgres -q && break; sleep 1; done
 port="$(docker port "$pg" 5432/tcp | head -1 | sed 's/.*://')"
-docker exec "$pg" pg_isready -U postgres -q || { echo "  FAIL  postgres is not ready"; exit 1; }
+docker exec "$pg" pg_isready -h 127.0.0.1 -U postgres -q || { echo "  FAIL  postgres is not ready"; exit 1; }
 n=0
 db() { n=$((n+1)); docker exec "$pg" createdb -U postgres "d$n"; echo "postgres://postgres:ci@127.0.0.1:$port/d$n"; }
 
