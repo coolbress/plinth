@@ -61,8 +61,13 @@ docker run -d --name "$pg" -e POSTGRES_PASSWORD=ci -p 127.0.0.1::5432 \
 for _ in $(seq 60); do docker exec "$pg" pg_isready -h 127.0.0.1 -U postgres -q && break; sleep 1; done
 port="$(docker port "$pg" 5432/tcp | head -1 | sed 's/.*://')"
 docker exec "$pg" pg_isready -h 127.0.0.1 -U postgres -q || { echo "  FAIL  postgres is not ready"; exit 1; }
-n=0
-db() { n=$((n+1)); docker exec "$pg" createdb -U postgres "d$n"; echo "postgres://postgres:ci@127.0.0.1:$port/d$n"; }
+# A new database per call. Called in $( ), so the name cannot come from a
+# counter (a subshell's increment is lost): every case once shared one database.
+db() {
+  local name; name="d$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+  docker exec "$pg" createdb -U postgres "$name" || return 1
+  echo "postgres://postgres:ci@127.0.0.1:$port/$name"
+}
 
 # The base commit: canary-web, the notes app with its migration, the rows.
 base_repo() { # [no-rows]
@@ -101,7 +106,8 @@ run() {
   verdict="$(cat "$rt/rows.verdict" 2>/dev/null)"
 }
 migrations() { # every step of the job, in order: sets $rc_missing $rc_empty $rc_rows
-  local empty rows; empty="$(db)"; rows="$(db)"
+  rc_missing=x rc_empty=x rc_rows=x verdict="" out_missing="" out_empty="" out_rows=""
+  local empty rows; empty="$(db)" && rows="$(db)" || { bad "a database could not be created"; return 1; }
   run migrations.missing "$empty"; rc_missing=$rc; out_missing="$out"
   run migrations.empty "$empty"; rc_empty=$rc; out_empty="$out"
   run migrations.rows "$rows"; rc_rows=$rc; out_rows="$out"
