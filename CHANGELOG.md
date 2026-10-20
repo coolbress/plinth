@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-20
+
+The guide to running a project is now nine short steps (#603). Each says
+where you are, what to do next, what to look at, what is yours to decide,
+and whether it holds if you forget it. Setting up the agent's token, its own
+account and the four things no check covers moved to their own pages, in
+the order to do them; step 1 still says what stays unprotected until they
+are done. Step 6 says how to merge, from the browser or a terminal.
+`/plinth:arsenal` now opens on where you are and the next action. Nothing
+the steps ask of you changed.
+
+tested with plinth-template v1.19.0
+
 ### Changed
 
 - `docs/how-to/run-a-project.md` is the nine steps, short: each says where
@@ -3270,7 +3283,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/coolbress/plinth/releases/tag/v2.4.0
 [2.3.0]: https://github.com/coolbress/plinth/releases/tag/v2.3.0
 [2.2.0]: https://github.com/coolbress/plinth/releases/tag/v2.2.0
 [2.1.0]: https://github.com/coolbress/plinth/releases/tag/v2.1.0
