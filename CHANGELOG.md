@@ -11,6 +11,25 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/how-to/run-a-project.md` is the nine steps, short: each says where
+  you are, the next action, what to look at, what is yours to decide, and
+  whether it holds if you forget it (a default, a boundary, or guidance
+  only, #515). What the steps ask of you is unchanged (#603).
+- The agent's token, the agent's own account and the four things by hand
+  moved, with their measured statements, to their own pages:
+  `docs/how-to/give-the-agent-a-token.md`,
+  `docs/how-to/give-the-agent-its-own-account.md` and
+  `docs/how-to/set-four-things-by-hand.md`. Step 1 still names all three,
+  what is missing until each is done, and its link; the old headings stay
+  in step 1, so a link to them still lands there. `/plinth:new-project`'s
+  closing guide line and `/plinth:floor-check`'s SSH line point at the
+  token page.
+- `/plinth:arsenal` opens on where you are, the next action and its tool.
+  The step-and-concern index and the four criteria follow as reference; the
+  eight concerns are named as the maintainers' coverage check.
+
 ## [2.3.0] - 2026-10-20
 
 In a new repository, the agent now reports in one place, the output style

@@ -46,7 +46,7 @@ The host blocks the merge; plinth set it up that way; neither blocks an
 agent's actions. A production database, a credential, a spend ceiling and a
 deployed app are outside every check
 ([what plinth does not do](docs/explanation/concepts.md#about-what-plinth-does-not-do));
-[four things to set by hand](docs/how-to/run-a-project.md#set-four-things-by-hand-that-no-check-covers)
+[four things to set by hand](docs/how-to/set-four-things-by-hand.md)
 cover them as guidance, not checks.
 No one but the author has used plinth yet. It covers GitHub.com and, with a
 lower wall, GitLab.com ([about GitLab](docs/explanation/concepts.md#about-gitlab)),

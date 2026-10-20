@@ -187,7 +187,7 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   merged change, what to type at each stage, and what to check before you
   merge.
 - Before the agent works on its own, give it a token without workflow
-  permission ([Run a project](../how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks)).
+  permission ([Give the agent a token](../how-to/give-the-agent-a-token.md)).
   The login above holds `workflow`, so an agent working with it can push a
   change to `.github/workflows/`, the checks included. Changes there then go
   through a credential that has it, pushed by you.

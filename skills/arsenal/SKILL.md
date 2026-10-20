@@ -6,16 +6,32 @@ description: Catalog of the tools plinth installs and the ones it lists but does
 # Arsenal
 
 plinth installs a default set of plugins and lists a few more you can install
-yourself. This catalog says what each one is for, when to reach for it, and what
-it costs. Nothing here is enforced; the required checks on GitHub are the only
-enforcement.
+yourself. Nothing here is enforced; the required checks on GitHub are the only
+enforcement. Start from where the person is; the steps are those of
+`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, which says for each one
+what to look at, what the person decides, and whether it holds if forgotten.
+Point them to it when they ask what to type next.
 
-For the planning-to-review flow (interview, plan, tickets, implement, review),
-the person's walk-through, stage by stage, is `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`:
-point them to it when they ask what to type next. To find a tool by the
-step of that loop and the concern (a wrong problem, a false green, lost
-state), use "By step and concern" below; "How a tool gets on this list" says
-why each one is here.
+## Where you are, and what to do next
+
+| Where you are | Next action | Tool |
+| --- | --- | --- |
+| No repository yet (step 1) | Create it with the wall; merge its first pull request on green | `/plinth:new-project <owner>/<name>`, typed |
+| A repository plinth did not make (step 1) | List what is missing; nothing is changed | `/plinth:floor-check` |
+| First pull request merged (step 1) | Before step 2: a token that cannot change the checks, the agent's own account, four things by hand | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`, `give-the-agent-its-own-account.md` and `set-four-things-by-hand.md` there; candidate `wizard` (listed, no evidence yet) |
+| An idea in your own words (step 2) | An interview, then an issue saying what "done" means | `/grilling`, with `domain-modeling` for `CONTEXT.md`; `/grill-with-docs` (listed) |
+| A job bigger than one session (step 3) | A plan in one issue, cut into tickets | Ask for it; `/to-spec`, `/to-tickets`, or `/wayfinder` when the way is unclear (listed) |
+| A ticket ready (step 4) | A fresh session, test first, one ticket | `/clear`, then `/implement #N`; a page: `/design-taste-frontend`; dense product UI: `/design` |
+| A pull request with checks running (step 5) | Wait for green, then the three questions, and see it run | The required checks; `/run`; the reviewer's comments |
+| Green, and seen working (step 6) | The person says "merge", for that pull request | The decision report; `/plinth:floor-check` says whether the merge is guidance or a boundary |
+| Something broke (step 7) | Reproduce, a failing test, then the fix | `diagnosing-bugs` ("diagnose this"); `/triage` for issues someone else opened |
+| Stopping, or coming back (step 8) | Put what is left in issues and pull requests; ask "where is this, what's next?" | The record; `/handoff` (listed) |
+| Between pieces of work (step 9) | Dependency updates on green; the template update after a plinth release | Dependabot; `/plinth:floor-check`, then `/plinth:template-update`, typed; `/ponytail-audit`, `/improve-codebase-architecture` (listed) |
+| Unsure which skill now (any step) | Say where you are | `/ask-matt` (listed), or this catalog |
+
+A tool marked listed is not installed; "Listed, not installed" below says
+how to add it. "By step and concern" is the reference behind this table, and
+"How a tool gets on this list" says why each tool is here.
 
 When and how to report to the person is the rendered repository's output
 style, "Beginner or non-engineer", not this catalog.
@@ -100,9 +116,11 @@ five in neither are `setup-matt-pocock-skills`, `grill-me`, `teach`,
 
 ## By step and concern
 
-The second way in: find the step of the loop in
-`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, then the concern (Value,
-Use, Health, Proof, Flow, Safety, Memory, Stewardship), then the problem. Who
+Reference. Find the step of the loop in
+`${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, then the concern, then
+the problem. The eight concerns (Value, Use, Health, Proof, Flow, Safety,
+Memory, Stewardship) are the maintainers' coverage check, a way to see which
+concern no tool covers yet at a step, not a question to put to the person. Who
 invokes it: **person** (the person types it or does it; a user-only skill is
 invisible to the agent), **agent** (picked from its description), **commit**
 (Claude Code's commit instruction asks the agent to run a project skill named
@@ -119,8 +137,8 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | --- | --- | --- | --- | --- | --- |
 | Safety | A repository without the wall | `/plinth:new-project` | person | Type `/` and pick it; give `<owner>/<name>` | typed 4 |
 | Health | An existing repository missing the floor | `/plinth:floor-check` | agent or person | Ask "is this repository set up?", or type it | 0 |
-| Safety | An agent token that can rewrite the checks or the ruleset | The token how-to; candidate `wizard` (listed) | person; `wizard` agent | run-a-project.md, "Give the agent a token"; ask the agent to walk you through it | #403 record 1, one loop on that token; `wizard` no evidence yet |
-| Safety | Production data, spend, restore, open data | The four things by hand; candidate `wizard` (listed) | person; `wizard` agent | run-a-project.md, "Set four things by hand" | 0; effect not measured (#402); `wizard` no evidence yet |
+| Safety | An agent token that can rewrite the checks or the ruleset | The token how-to; candidate `wizard` (listed) | person; `wizard` agent | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`; ask the agent to walk you through it | #403 record 1, one loop on that token; `wizard` no evidence yet |
+| Safety | Production data, spend, restore, open data | The four things by hand; candidate `wizard` (listed) | person; `wizard` agent | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/set-four-things-by-hand.md` | 0; effect not measured (#402); `wizard` no evidence yet |
 
 ### 2 Shape
 

@@ -127,7 +127,7 @@ deny the template sets (a force push, `rm -rf`, `gh auth token`, reads of
 `.env` and of gh's own configuration), which bounds what the agent runs and
 reads on the machine it works on. No check reads what a session can touch in
 production, what it may spend, or whether a backup was ever restored;
-[run a project](../how-to/run-a-project.md#set-four-things-by-hand-that-no-check-covers)
+[set four things by hand](../how-to/set-four-things-by-hand.md)
 lists four things to set by hand for those, as guidance, not checks.
 
 ## About what plinth does now, and where it is going
@@ -143,7 +143,7 @@ it shipped.
 
 Shipped from this list since it was written: the record of a project run on
 a token without workflow permission (#403, in
-[run a project](../how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks)),
+[give the agent a token](../how-to/give-the-agent-a-token.md)),
 a lowered standard made visible (#404: `/plinth:floor-check` warns on a
 lowered `ci` input and `ci / diff-size` lists a test that lost lines or gained
 a skip), the template's `verify` skill (#409), the
@@ -257,7 +257,7 @@ when the token lacks workflow permission: a fine-grained token without
 Workflows, a classic one without the `workflow` scope. Measured on both with a
 push adding one (#328); GitHub's refusal names creating and updating alike.
 An agent pushing with such a token cannot get a rewrite of the checks onto a
-branch at all ([the agent's own token](../how-to/run-a-project.md#give-the-agent-a-token-that-cannot-change-the-checks)).
+branch at all ([the agent's own token](../how-to/give-the-agent-a-token.md)).
 It does not cover three cases: a push over SSH (a deploy key with write access
 pushed a workflow change in the same measurement), a token that has the
 permission (the browser login plinth's setup uses, and what `gh auth login`
