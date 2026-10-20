@@ -30,12 +30,26 @@ else:
 ruleset = json.loads((root / "ruleset.json").read_text(encoding="utf-8"))
 contexts = [c["context"] for r in ruleset["rules"] if r["type"] == "required_status_checks"
             for c in r["parameters"]["required_status_checks"]]
-want = [f"ci / {j}" for j in jobs]
+# The two web-only jobs are required for the web archetype alone, added by
+# floor-check.py's ruleset_for the way `image` is for a service (#614).
+WEB_ONLY = {"migrations", "deploy-check"}
+want = [f"ci / {j}" for j in jobs if j not in WEB_ONLY]
 if sorted(contexts) == sorted(want):
-    print(f"  PASS  ruleset.json requires exactly the {len(jobs)} jobs by name (CodeQL is a rule)")
+    print(f"  PASS  ruleset.json requires exactly the {len(want)} jobs every archetype runs, by name (CodeQL is a rule)")
 else:
     fails += 1
     print(f"  FAIL  ruleset.json contexts {sorted(contexts)} != jobs {sorted(want)}")
+import subprocess
+web = json.loads(subprocess.run([sys.executable, str(root / "scripts/floor-check.py"), "--print-ruleset",
+                                 "--ruleset", str(root / "ruleset.json"), "--archetype", "web"],
+                                capture_output=True, text=True, check=True).stdout)
+web_contexts = [c["context"] for r in web["rules"] if r["type"] == "required_status_checks"
+                for c in r["parameters"]["required_status_checks"]]
+if sorted(set(web_contexts) - set(contexts)) == sorted(f"ci / {j}" for j in WEB_ONLY):
+    print("  PASS  the web archetype's ruleset adds exactly ci / migrations and ci / deploy-check")
+else:
+    fails += 1
+    print(f"  FAIL  the web archetype's ruleset adds {sorted(set(web_contexts) - set(contexts))}")
 print(f"-- {fails} failed")
 sys.exit(1 if fails else 0)
 PY

@@ -113,6 +113,9 @@ CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
 # the expectation below adds the same name, so the two cannot disagree. It comes
 # from the same app as the nine (their integration_id), not a second literal.
 IMAGE_CHECK = "image"
+# The checks python-ci.yml runs for the web archetype alone, with its `web`
+# input (#614); the door's ruleset adds them for that archetype.
+WEB_CHECKS = ("ci / migrations", "ci / deploy-check")
 # GitLab's name for the same job: `image` is a GitLab CI keyword (plinth-template v1.13.0).
 GITLAB_IMAGE_JOB = "docker-image"
 # The GitLab pipeline beside this script; its floor-check job holds the include rule (#543).
@@ -1870,7 +1873,8 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
 
 def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -> dict:
     """ruleset.json as the door applies it: with the image check for a service
-    archetype, and without the code_scanning rule for a private repository
+    archetype, the two web checks for the web archetype (#614), and without the
+    code_scanning rule for a private repository
     that has no GitHub Code Security (#350); every check name stays."""
     data = copy.deepcopy(data)
     if not code_scanning:
@@ -1880,6 +1884,11 @@ def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -
             if r["type"] == "required_status_checks":
                 checks = r["parameters"]["required_status_checks"]
                 checks.append({"context": IMAGE_CHECK, "integration_id": checks[0]["integration_id"]})
+    if archetype == "web":
+        for r in data["rules"]:
+            if r["type"] == "required_status_checks":
+                checks = r["parameters"]["required_status_checks"]
+                checks += [{"context": c, "integration_id": checks[0]["integration_id"]} for c in WEB_CHECKS]
     return data
 
 
