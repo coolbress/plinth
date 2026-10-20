@@ -28,8 +28,10 @@ pull requests and have no tag.
   machine; then the agent's own account, strongly recommended, whose
   last step removes your own login the same way; then the four things.
   Each page opens with what comes before and after it.
-- Step 6 says Claude Code may ask you to approve the agent's merge, and
-  gives the repository's squash command for merging from a terminal. `/plinth:new-project`'s
+- Step 6 says that on the default path Claude Code may ask you to approve
+  the agent's merge, that on the agent's own account the ruleset refuses
+  it and you merge in the browser, and gives the repository's squash
+  command for merging from a terminal. `/plinth:new-project`'s
   closing guide line and `/plinth:floor-check`'s SSH line point at the
   token page.
 - `/plinth:arsenal` opens on where you are, the next action and its tool.
