@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.21.0
+  (coolbress/plinth-template#102), whose rendered projects call plinth
+  v2.6.0. A new `web` repository's `ci / diff-size` now asks a person to
+  approve a change to its public route list, an existing migration, its
+  settings module, `render.yaml`, the `Dockerfile` or
+  `tests/migration_rows.json`, the rows v2.6.0 added (#615); a new
+  repository of every archetype gets the `archetype:` row. Nothing else in
+  a render changes. `/plinth:floor-check` now reports a repository on
+  v1.20.0 as behind; `/plinth:template-update` keeps the plinth pin its
+  workflows call, and its plan recommends the tested one (`--plinth-pin
+  tested`), which only the person's confirmation applies.
+
 ## [2.6.0] - 2026-10-21
 
 `/plinth:new-project` can now make a web app with a database (#615): a
