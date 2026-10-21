@@ -1305,7 +1305,31 @@ jobs:
           # lookup by string all reach it (the codex review of #624). Apart
           # from markers and shape, which gitlab/python-ci.yml shares word for
           # word: the web archetype is GitHub only.
-          PUBLIC = re.compile(r"\b(?:public|login_not_required)\b")
+          # A name the head already binds to either is read too, so a route
+          # opened through an alias the base carries is listed (round 2 of
+          # that review): an import's `as`, an assignment, a getattr by
+          # string, followed through further assignments. A function that
+          # wraps one is not followed.
+          def public_names():
+              names = {"public", "login_not_required"}
+              r = subprocess.run(["git", "grep", "-h", "-I", "-E", r"[[:space:]]as[[:space:]]|=", head, "--", "*.py"],
+                                 capture_output=True)
+              if r.returncode not in (0, 1):   # 1 is no match; anything else is not an answer
+                  print(f"::error::git grep failed at {head}: {r.stderr.decode('utf-8', 'replace').strip()}")
+                  sys.exit(1)
+              lines = r.stdout.decode("utf-8", "replace").split("\n")
+              while True:
+                  alt = "|".join(sorted(map(re.escape, names)))
+                  found = set()
+                  for line in lines:
+                      found |= set(re.findall(rf"\b(?:{alt})\s+as\s+(\w+)", line))
+                      found |= set(re.findall(rf"^\s*(\w+)\s*(?::[^=]*)?=\s*(?:[\w.]+\.)?(?:{alt})\s*(?:#.*)?$", line))
+                      found |= set(re.findall(rf"^\s*(\w+)\s*=\s*getattr\([^)]*['\"](?:{alt})['\"]", line))
+                  if found <= names:
+                      return names
+                  names |= found
+
+          PUBLIC = re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, public_names()))) + r")\b") if WEB else None
 
           def routes(status, old, new):
               """A route marked public on a line this pull request adds to a
@@ -1313,15 +1337,17 @@ jobs:
               if not WEB or status not in ("A", "M", "R") or not new.endswith(".py") \
                       or TEST.search(new) or ACCESS.search(new):
                   return []
-              hunk = False
+              hunk, seen = False, set()
               for line in git("diff", "-U0", "-M", "--no-color", "--no-ext-diff", "--no-textconv",
                               f"{base}...{head}", "--",
                               f":(literal){old}", f":(literal){new}").split("\n"):
                   hunk = hunk or line.startswith("@@")
-                  if hunk and line.startswith("+") and PUBLIC.search(line[1:]) \
-                          and not line[1:].lstrip().startswith("#"):
-                      return ["a line naming public or login_not_required added or changed (it can mark a route public)"]
-              return []
+                  if hunk and line.startswith("+") and not line[1:].lstrip().startswith("#"):
+                      seen |= {m.group(0) for m in PUBLIC.finditer(line[1:])}
+              if not seen:
+                  return []
+              return [f"a line naming {', '.join(sorted(seen))} added or changed "
+                      "(public, login_not_required or an alias of one: it can mark a route public)"]
 
           fields = git("diff", "--name-status", "-M", "-z", f"{base}...{head}").split("\0")
           found, i = [], 0

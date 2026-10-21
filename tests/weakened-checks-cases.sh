@@ -366,17 +366,17 @@ urls() { printf 'from .notes.access import members, public\n\nurlpatterns = [\n%
 keep='    path("", members(index)),\n    path("login/", public(login)),\n'
 
 web_repo; urls "$keep"'    path("about/", public(about)),\n'; commit; wrun true "Adds a page."
-listed "a route added through public(...): listed" "src/app/urls.py" "public or login_not_required"
+listed "a route added through public(...): listed" "src/app/urls.py" "it can mark a route public"
 web_repo; printf '\n@public\ndef about(request):\n    return None\n' >> "$r/src/app/urls.py"; commit; wrun true "Adds a page."
-listed "a view marked with the @public decorator: listed" "src/app/urls.py" "public or login_not_required"
+listed "a view marked with the @public decorator: listed" "src/app/urls.py" "it can mark a route public"
 web_repo; urls '    path("", public(index)),\n    path("login/", public(login)),\n'; commit; wrun true "Opens the index."
-listed "a members(...) route changed to public(...): listed" "src/app/urls.py" "public or login_not_required"
+listed "a members(...) route changed to public(...): listed" "src/app/urls.py" "it can mark a route public"
 web_repo; printf '# who may ask\n' >> "$r/src/app/notes/access.py"; commit; wrun true "Refactor."
 listed "any change to notes/access.py: listed" "src/app/notes/access.py" "notes/access.py"
 web_repo; urls "$keep"'    path("export/", login_not_required(export)),\n'; commit; wrun true "Adds a page."
-listed "a route opened with Django's login_not_required(...), which public wraps: listed" "src/app/urls.py" "public or login_not_required"
+listed "a route opened with Django's login_not_required(...), which public wraps: listed" "src/app/urls.py" "it can mark a route public"
 web_repo; printf '\n@login_not_required\ndef export(request):\n    return None\n' >> "$r/src/app/urls.py"; commit; wrun true "Adds a page."
-listed "a view marked @login_not_required: listed" "src/app/urls.py" "public or login_not_required"
+listed "a view marked @login_not_required: listed" "src/app/urls.py" "it can mark a route public"
 # Whatever name the wrapper is reached by: an alias, an assignment, a
 # lookup by string (the codex review of #624). Any added line naming either.
 web_repo; urls "$keep"'    path("x/", allow_anonymous(x)),\n'; printf 'from .notes.access import public as allow_anonymous\n' >> "$r/src/app/urls.py"; commit; wrun true "Adds a page."
@@ -385,6 +385,22 @@ web_repo; printf 'from django.contrib.auth.decorators import login_not_required 
 listed "login_not_required imported under another name: listed" "src/app/views.py" "login_not_required"
 web_repo; printf 'from .notes import access\nopen_door = getattr(access, "public")\n' > "$r/src/app/views.py"; commit; wrun true "Adds a view."
 listed "public looked up by its name: listed" "src/app/views.py" "public"
+# An alias the base already has (the codex review of #624, round 2): its
+# names are read at the head, followed through assignments, and their use is
+# listed like the names themselves.
+alias_base() { # <the alias line the base adds to urls.py>
+  web_repo; printf '%s\n' "$1" >> "$r/src/app/urls.py"; git -C "$r" add -A; git -C "$r" commit -qm alias; base="$(git -C "$r" rev-parse HEAD)"
+}
+alias_base 'from .notes.access import public as allow_anonymous'
+sed -i.bak 's/members(index)/allow_anonymous(index)/' "$r/src/app/urls.py"; rm "$r/src/app/urls.py.bak"; commit; wrun true "Opens the index."
+listed "a route opened through an alias the base already imported: listed" "src/app/urls.py" "allow_anonymous"
+alias_base 'anyone = public'
+printf 'from .urls import anyone\nopen_door = anyone\n' > "$r/src/app/views.py"; git -C "$r" add -A; git -C "$r" commit -qm alias2; base="$(git -C "$r" rev-parse HEAD)"
+sed -i.bak 's/members(index)/open_door(index)/' "$r/src/app/urls.py"; rm "$r/src/app/urls.py.bak"; commit; wrun true "Opens the index."
+listed "a route opened through an alias of an alias in the base: listed" "src/app/urls.py" "open_door"
+alias_base 'from .notes.access import public as allow_anonymous'
+urls "$keep"'    path("notes/", members(notes)),\n'; printf 'from .notes.access import public as allow_anonymous\n' >> "$r/src/app/urls.py"; commit; wrun true "Adds a page."
+unlisted "an alias in the base and a members(...) route added: not listed"
 web_repo; urls "$keep"'    path("notes/", members(notes)),\n'; commit; wrun true "Adds a page."
 unlisted "a route added through members(...): not listed"
 web_repo; urls '    path("", members(index)),\n'; commit; wrun true "Closes the login page."
