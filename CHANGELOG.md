@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-21
+
+plinth's checks can now hold a web project with a database (#614): a new
+`web` input turns on `ci / migrations`, which checks that every model change
+has its migration and that the base's rows survive the change on a
+throwaway Postgres, and `ci / deploy-check`, Django's production-settings
+check. This prepares the web archetype; nothing offers it yet. In your
+repository nothing changes but two more green checks that say "does not
+apply": your ruleset requires neither, and no new permission is needed.
+
+tested with plinth-template v1.19.0
+
 ### Added
 
 - Two checks for a web project, ahead of the web archetype (#614):
@@ -3311,7 +3323,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/coolbress/plinth/releases/tag/v2.5.0
 [2.4.0]: https://github.com/coolbress/plinth/releases/tag/v2.4.0
 [2.3.0]: https://github.com/coolbress/plinth/releases/tag/v2.3.0
 [2.2.0]: https://github.com/coolbress/plinth/releases/tag/v2.2.0
