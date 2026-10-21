@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-21
+
+`/plinth:new-project` can now make a web app with a database (#615): a
+Django project on Postgres, deployed to Render from GitHub, with its access
+rules tested and its production keys kept out of the agent's session. It
+costs about US $13 a month on Render, and the question that offers it says
+so. It is GitHub only. In an existing repository one thing changes:
+`ci / diff-size` now asks a person to approve a pull request that changes
+the `archetype:` line of `.copier-answers.yml`, or moves or deletes that
+file, because the floor check decides what to require from that line. No
+new permission is needed. A new web repository gets the web rows of
+`ci / diff-size` once the template's next release points at this version.
+
+tested with plinth-template v1.20.0
+
 ### Added
 
 - `/plinth:new-project` offers the `web` archetype, a Django app with a
@@ -3352,7 +3367,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/coolbress/plinth/releases/tag/v2.6.0
 [2.5.0]: https://github.com/coolbress/plinth/releases/tag/v2.5.0
 [2.4.0]: https://github.com/coolbress/plinth/releases/tag/v2.4.0
 [2.3.0]: https://github.com/coolbress/plinth/releases/tag/v2.3.0
