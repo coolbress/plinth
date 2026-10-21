@@ -7,12 +7,13 @@ then step 2 of [Run a project](run-a-project.md).
 [The agent's token](give-the-agent-a-token.md) stops the agent from changing the checks, but not from
 merging. GitHub decides who may merge by the account, not by the token: your
 account owns the repository, so any token of yours can merge, even one
-without Administration (#517 measured this). While the agent works under
+without Administration (plinth's issue [#517](https://github.com/coolbress/plinth/issues/517) measured this). While the agent works under
 your account, "ask before you merge" is something it is asked to do, not
 something GitHub enforces.
 
-A repository `/plinth:new-project` made carries a second rule set on
-GitHub (a ruleset) that lets only the repository's admin merge. With the
+On GitHub, a set of rules a repository keeps is called a ruleset. A
+repository `/plinth:new-project` made carries two: one requires the checks,
+the other lets only the repository's admin merge. With the
 agent on an account of its own, which is not the admin, GitHub refuses that
 account's merge, and only you can merge. The token alone is the default
 path; this account is the strongly recommended step after it. Without it the
@@ -35,9 +36,9 @@ guidance: the agent is asked not to merge, and GitHub does not stop it.
    short expiry, such as 30 days. It has to be a classic token: a
    fine-grained token cannot be made for a repository the account was only
    invited to, because the owner offered is the agent account itself
-   (#568 step 1). Leaving **`workflow`** unticked keeps the token from
+   ([#568](https://github.com/coolbress/plinth/issues/568) step 1). Leaving **`workflow`** unticked keeps the token from
    changing the checks, as with [the agent's token](give-the-agent-a-token.md): a push of a file under
-   `.github/workflows/` was refused (#568 step 1). `repo` reaches every
+   `.github/workflows/` was refused ([#568](https://github.com/coolbress/plinth/issues/568) step 1). `repo` reaches every
    repository the agent account was invited to, which is why step 2 invites
    it only where it works.
 4. **Sign the agent's session into it.** In a separate terminal window, not
@@ -46,7 +47,10 @@ guidance: the agent is asked not to merge, and GitHub does not stop it.
    the agent's token.
 5. **Take your own login off this machine.** The agent can use any login it
    finds here, and yours can merge. Go through step 5 of [the agent's token](give-the-agent-a-token.md)
-   and remove every credential for github.com that is not the agent's:
+   once more: the first time it removed every login that was not the token's;
+   this time the token's own login, your account, goes too, so that the only
+   login left is the agent account's. Remove every credential for github.com
+   that is not the agent's:
    another account in `gh` (`gh auth status` lists them; remove yours with
    `gh auth logout --hostname github.com --user <your login>`), another git
    credential helper, `~/.netrc`, `GH_TOKEN` and `GITHUB_TOKEN`, and SSH
@@ -62,11 +66,11 @@ When a pull request is ready, the agent asks you, and you merge it yourself,
 with the merge button on the pull request's page, signed in to GitHub as
 yourself. The button looks as it does on any repository: green, with no
 checkbox to bypass a rule and no warning about one, and the merge goes
-through as usual (one measurement, #569). If the agent tries,
+through as usual (one measurement, [#569](https://github.com/coolbress/plinth/issues/569)). If the agent tries,
 GitHub refuses (a 405 in the measurement), and
 `scripts/merge-when-green.sh` stops and says that you merge, not to retry. If
 the agent turns on auto-merge, the pull request stays open after its checks
-pass (#568 step 1).
+pass ([#568](https://github.com/coolbress/plinth/issues/568) step 1).
 
 What it costs: you merge every pull request yourself, in the browser. Issues,
 pull requests and commits show the agent account as their author. The token
@@ -77,14 +81,17 @@ terminal: `scripts/with-admin-token.sh` asks for it each time and passes it
 to that one command only, so it does not stay behind as a login.
 
 What it does not cover: a browser on this machine signed in to GitHub as you,
-if the agent can drive that browser; a credential for your account stored in
+if the agent can drive that browser (Claude Code can, when its browser
+extension or desktop control is turned on): merge in a browser window the
+agent does not drive, or in a private window you close after the merge, and
+keep the browser it drives signed out of your account; a credential for your account stored in
 a form `/plinth:floor-check` does not recognise; and anything outside
 GitHub's merge. The agent still pushes branches and opens pull requests, and
 the checks and your review in step 5 of [Run a project](run-a-project.md#5-check-what-the-checks-cannot) are what judge them. Measured on a
 public repository owned by a personal account on GitHub Free; a private
 repository, GitHub Pro and a repository an organization owns were not
 measured. On GitLab the same idea is a Developer login, not built yet
-(#553).
+([#553](https://github.com/coolbress/plinth/issues/553)).
 
 ## A repository made before the merge ruleset
 
