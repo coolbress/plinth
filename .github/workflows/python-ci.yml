@@ -1218,11 +1218,13 @@ jobs:
 
           def web_what(status, old, new):
               name = new.rsplit("/", 1)[-1]
-              if ANSWERS in (name, old.rsplit("/", 1)[-1]) and (
+              # ci / floor-check reads its archetype-conditional items from this
+              # line, in the file at this path: a deletion or a move is listed
+              # whatever the content.
+              if ANSWERS in (name, old.rsplit("/", 1)[-1]) and (status in ("D", "R") or (
                       archetype(mb, old) if old.rsplit("/", 1)[-1] == ANSWERS else None) != (
-                      archetype(head, new) if status != "D" and name == ANSWERS else None):
-                  # ci / floor-check reads its archetype-conditional items from this line.
-                  return f"the archetype: line of {ANSWERS} changed or the file is gone"
+                      archetype(head, new) if name == ANSWERS else None)):
+                  return f"the archetype: line of {ANSWERS} changed, or the file deleted or moved"
               if not WEB:
                   return None
               if ACCESS.search(old) or ACCESS.search(new):
@@ -1297,13 +1299,13 @@ jobs:
                   whys.append("a skip or a suppression added (" + ", ".join(found) + ")")
               return whys
 
-          # A route marked public, as notes/access.py spells it, or with
-          # Django's own login_not_required that it wraps: the decorator or
-          # the call. A comment line is not a mark. Apart from markers and
-          # shape, which gitlab/python-ci.yml shares word for word: the web
-          # archetype is GitHub only.
-          PUBLIC = re.compile(r"^\s*@\s*(?:[\w.]+\.)?(?:public|login_not_required)\b"
-                              r"|\b(?:public|login_not_required)\s*\(")
+          # What marks a route public: notes/access.py's `public`, or Django's
+          # own login_not_required that it wraps. Any added line naming either,
+          # a comment line aside, since a decorator, a call, an alias or a
+          # lookup by string all reach it (the codex review of #624). Apart
+          # from markers and shape, which gitlab/python-ci.yml shares word for
+          # word: the web archetype is GitHub only.
+          PUBLIC = re.compile(r"\b(?:public|login_not_required)\b")
 
           def routes(status, old, new):
               """A route marked public on a line this pull request adds to a
@@ -1318,7 +1320,7 @@ jobs:
                   hunk = hunk or line.startswith("@@")
                   if hunk and line.startswith("+") and PUBLIC.search(line[1:]) \
                           and not line[1:].lstrip().startswith("#"):
-                      return ["a route marked public (public or login_not_required) added or changed"]
+                      return ["a line naming public or login_not_required added or changed (it can mark a route public)"]
               return []
 
           fields = git("diff", "--name-status", "-M", "-z", f"{base}...{head}").split("\0")

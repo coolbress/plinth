@@ -21,8 +21,9 @@ pull requests and have no tag.
   archetype's deployment and checks are built for GitHub.
 - `ci / diff-size` puts more changes to a person (#615). In every
   repository: the `archetype:` line of `.copier-answers.yml` changed, or the
-  file gone, since `ci / floor-check` reads its conditional items from that
-  line. With the `web` input: a line that marks a route public, any change
+  file deleted or moved, since `ci / floor-check` reads its conditional items
+  from that line. With the `web` input: an added line naming `public` or
+  `login_not_required`, which mark a route public, any change
   to `notes/access.py`, an existing migration changed, deleted or renamed
   (an added one is not listed), `src/<package>/settings.py`, `render.yaml`,
   the `Dockerfile`, and `tests/migration_rows.json`, whose change is how an
