@@ -131,7 +131,7 @@ run() { # <env assignments...> [-- <arguments to e2e.sh...>]
   while [ $# -gt 0 ]; do [ "$1" = -- ] && { shift; args=("$@"); break; }; envs+=("$1"); shift; done
   set -- ${envs[@]+"${envs[@]}"}
   runs=$((runs + 1)); export GH_LOG="$work/log.$runs"; : > "$GH_LOG"
-  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY MERGE_IDS MERGE_READBACK
+  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY MERGE_IDS MERGE_READBACK PLINTH_E2E_ARCHETYPE
   env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" ${args[@]+"${args[@]}"} >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -248,6 +248,15 @@ is "the door renders a backend instance" [ "$(grep -c '^door tester/plinth-e2e-4
 is "the archetype is said"  said "^archetype: backend$"
 is "and in the job summary" grep -q "^archetype: backend " "$work/summary0"
 is "the checks the pull request waited for are listed by name" said "^checks: ci / test=pass image=pass $"
+# The web journey (#615): the same driver, the door asked for the web
+# archetype, under a name of its own so both journeys of one run never meet.
+run PLINTH_E2E_ARCHETYPE=web GITHUB_STEP_SUMMARY="$work/summary-web"; check "the web journey: merged and deleted" ok $?
+is "the door renders a web instance" [ "$(grep -c '^door tester/plinth-e2e-web-42 --dir=.* --archetype=web$' "$GH_LOG")" = 1 ]
+is "the archetype is said, in the job summary too" bash -c 'grep -q "^archetype: web$" "$1" && grep -q "^archetype: web " "$2"' _ "$work/out" "$work/summary-web"
+is "its own repository is deleted" said "deleted https://github.com/tester/plinth-e2e-web-42"
+run PLINTH_E2E_ARCHETYPE=cli; check "an archetype other than backend or web stops before anything" no $?
+is "it says which it takes" said "PLINTH_E2E_ARCHETYPE is backend or web (got: cli)"
+is "nothing created or deleted" not saw "^gh repo "
 run RECORD_RC=1;           check "a record read that keeps failing does not turn a finished journey red" ok $?
 is "read three times, required checks only" [ "$(grep -c '^gh pr checks .*--required --json name,bucket ' "$GH_LOG")" = 3 ]
 is "the line says it was not read, with gh's exit and words" said "^checks: unread (gh exited 1 after 3 attempts: HTTP 502: Bad Gateway)$"

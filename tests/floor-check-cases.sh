@@ -370,6 +370,7 @@ wall "a default branch the API does not report is not verified rather than passe
 wall "a repository whose default branch is main is unchanged: no warning, no new noise" "-- 0 failed"
 wall "a healthy repository still says which branch the wall was checked on" "the wall is checked on main, the repository's default branch"
 wall "dropped required check is caught" "required checks dropped: \['ci / b'\]" "sed -i.bak 's/,{\"context\":\"ci \/ b\",\"integration_id\":15368}//' \"$api/repos/o/r/rules/branches/main.json\""
+wall "a dropped required check comes with the one command that requires it again" "INFO  .*scripts/upgrade-ruleset.sh o/r 'ci / b:15368'" "sed -i.bak 's/,{\"context\":\"ci \/ b\",\"integration_id\":15368}//' \"$api/repos/o/r/rules/branches/main.json\""
 wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\[\"squash\"\]/[\"squash\",\"merge\"]/' \"$api/repos/o/r/rules/branches/main.json\""
 wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
 wall "no rules at all is caught" "the wall is down" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
@@ -1220,6 +1221,45 @@ out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$sub" --project app
 if grep -q "required checks dropped" <<<"$out" && grep -q "uv.lock committed" <<<"$out"; then ok "--project and --ruleset are honoured (ruleset's nine checks expected, project files found under app/)"
 else bad "--project/--ruleset path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 
+# The web archetype (#615), as plinth-template v1.20.0 renders it: a service
+# archetype, so the image, .env.example and JSON logs items apply, and its
+# render.yaml is an item of its own. Its ruleset adds ci / migrations and
+# ci / deploy-check, and a wall without one is a FAIL with the command that
+# puts it back.
+web="$work/web"; rm -rf "$web"; cp -R "$good" "$web"
+sed -i.bak 's/^archetype: backend$/archetype: web/' "$web/.copier-answers.yml"; rm "$web/.copier-answers.yml.bak"
+printf 'services: []\n' > "$web/render.yaml"
+printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n    with:\n      web: true\n  image:\n    steps:\n      - run: docker build -t t .\n      - run: docker run --rm t\n' 0 > "$web/.github/workflows/ci.yml"
+git -C "$web" add -A
+out="$(python3 "$checker" --root "$web" --no-network 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && grep -q '^  PASS  render.yaml present$' <<<"$out" && grep -q '^  PASS  ci.yml carries the image job' <<<"$out" \
+   && grep -q '^  PASS  .env.example present$' <<<"$out"; then ok "a complete web instance passes offline, render.yaml, the image job and .env.example read"
+else bad "a complete web instance should pass"; printf '%s\n' "$out" | grep -E 'FAIL|render|image' | sed 's/^/        /'; fi
+rm "$web/render.yaml"; git -C "$web" add -A
+out="$(python3 "$checker" --root "$web" --no-network 2>&1)"
+if grep -q '^  FAIL  render.yaml missing' <<<"$out" && grep -qF 'INFO    restore it from the default branch: git restore --source=origin/main -- render.yaml' <<<"$out" \
+   && grep -q -- '-- 1 failed' <<<"$out"; then ok "a web instance without render.yaml: one FAIL, with its fix"
+else bad "a web instance without render.yaml is not one FAIL with its fix"; printf '%s\n' "$out" | grep -E 'FAIL|INFO.*render' | sed 's/^/        /'; fi
+printf 'services: []\n' > "$web/render.yaml"; git -C "$web" add -A
+rm -rf "$web.empty"; cp -R "$web" "$web.empty"; sed -i.bak 's/^archetype: web$/archetype: cli/' "$web.empty/.copier-answers.yml"; rm "$web.empty/render.yaml"
+git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
+if grep -q '^  INFO  archetype cli: ' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "another archetype is not asked for render.yaml"
+else bad "a cli instance was asked for render.yaml"; fi
+web_rules="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web | jq -c '[.rules[] | . + {ruleset_source_type: "Repository", ruleset_id: 1}]')"
+for drop in "ci / migrations" "ci / deploy-check"; do
+  jq -c --arg d "$drop" 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != $d)) else . end)' <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$web" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
+  if grep -qF "FAIL  main: required checks dropped: ['$drop']" <<<"$out" \
+     && grep -qF "INFO    require them again (repository administration): scripts/with-admin-token.sh scripts/upgrade-ruleset.sh o/r '$drop:15368'" <<<"$out" \
+     && [ "$(grep -c '^  FAIL ' <<<"$out")" = 1 ]; then ok "a web wall without $drop: one FAIL, with the command that requires it again"
+  else bad "a web wall without $drop is not one FAIL with its fix"; printf '%s\n' "$out" | grep -E 'FAIL|INFO.*upgrade' | sed 's/^/        /'; fi
+done
+jq -c . <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$web" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
+if grep -qE "PASS  main: all 12 expected checks are required" <<<"$out" && ! grep -q '^  FAIL ' <<<"$out"; then ok "a web wall with the image and both web checks passes (12 checks)"
+else bad "the full web wall does not pass"; printf '%s\n' "$out" | grep -E 'FAIL|expected checks' | sed 's/^/        /'; fi
+printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+
 # #221: run at the root of a repository whose project is one directory down,
 # the checker reports two files missing that do exist. The answer is --project,
 # so the FAIL line names it when exactly one directory below --root holds a
@@ -1363,6 +1403,10 @@ for arch in backend data-ml; do
   then ok "--print-ruleset for $arch is the wall plus image, from one app (check-ruleset.sh passes with image)"
   else bad "--print-ruleset for $arch fails the wall's invariants:"; "$root/scripts/check-ruleset.sh" "$work/$arch-ruleset.json" image | grep FAIL -A2 | sed 's/^/        /'; fi
 done
+python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web > "$work/web-ruleset.json"
+if "$root/scripts/check-ruleset.sh" "$work/web-ruleset.json" "image,ci / migrations,ci / deploy-check" >/dev/null 2>&1
+then ok "--print-ruleset for web is the wall plus image and the two web checks, from one app (#615)"
+else bad "--print-ruleset for web fails the wall's invariants:"; "$root/scripts/check-ruleset.sh" "$work/web-ruleset.json" "image,ci / migrations,ci / deploy-check" | grep FAIL -A2 | sed 's/^/        /'; fi
 # A private repository without GitHub Code Security gets the wall without the
 # code_scanning rule and with nothing else changed (#350): the same check
 # names, per archetype. Each form of check-ruleset.sh refuses the other's file,

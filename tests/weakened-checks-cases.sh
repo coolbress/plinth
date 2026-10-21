@@ -327,6 +327,101 @@ out="$(cd "$r" && BASE_SHA="$base" HEAD_SHA="$(git rev-parse HEAD)" BODY="Adds b
 warns="$(printf '%s\n' "$out" | grep '^::warning' || true)"
 expect "no TOML parser (Python < 3.11): any pyproject.toml edit is a WARN, never a silent pass" 1 "pyproject.toml"
 
+echo "-- the web archetype's changes, with the web input (#615)"
+# A project as plinth-template v1.20.0 renders the web archetype, cut to the
+# files these rows read. wrun runs the step with WEB as the input passes it
+# and reads the changes it hands to the approval step.
+web_repo() {
+  new_repo
+  mkdir -p "$r/src/app/notes/migrations"
+  printf 'def public(view):\n    return view\n' > "$r/src/app/notes/access.py"
+  : > "$r/src/app/notes/migrations/__init__.py"
+  printf 'operations = []\n' > "$r/src/app/notes/migrations/0001_initial.py"
+  printf 'DEBUG = False\n' > "$r/src/app/settings.py"
+  printf 'from .notes.access import members, public\n\nurlpatterns = [\n    path("", members(index)),\n    path("login/", public(login)),\n]\n' > "$r/src/app/urls.py"
+  printf '[]\n' > "$r/tests/migration_rows.json"
+  printf 'services: []\n' > "$r/render.yaml"
+  printf 'FROM python:3.12-slim\n' > "$r/Dockerfile"
+  printf '_commit: v1.20.0\narchetype: web\nhost: github\n' > "$r/.copier-answers.yml"
+  git -C "$r" add -A; git -C "$r" commit -qm web; base="$(git -C "$r" rev-parse HEAD)"
+}
+wrun() { # <web input> <body>
+  rm -f "$tmp/changes.json"
+  out="$(cd "$r" && BASE_SHA="$base" HEAD_SHA="$(git rev-parse HEAD)" BODY="$2" WEB="$1" CHANGES_FILE="$tmp/changes.json" \
+    GITHUB_STEP_SUMMARY="$tmp/summary" python3 "$tmp/step.py" 2>&1)"; rc=$?
+  warns="$(printf '%s\n' "$out" | grep '^::warning' || true)"
+}
+# listed <label> <path> <why>: one WARN naming the path, and the path among
+# the changes put to a person. unlisted <label>: neither.
+listed() {
+  if [ "$rc" = 0 ] && [ "$(nwarn)" = 1 ] && printf '%s\n' "$warns" | grep -qF -- "$2" && printf '%s\n' "$warns" | grep -qF -- "$3" \
+     && python3 -c 'import json, sys; sys.exit(not any(c["path"] == sys.argv[2] for c in json.load(open(sys.argv[1]))))' "$tmp/changes.json" "$2"
+  then ok "$1"; else bad "$1 (expected $2 listed: $3)" "$out"$'\n'"changes: $(cat "$tmp/changes.json" 2>/dev/null)"; fi
+}
+unlisted() {
+  if [ "$rc" = 0 ] && [ "$(nwarn)" = 0 ] && [ "$(cat "$tmp/changes.json" 2>/dev/null)" = "[]" ]
+  then ok "$1"; else bad "$1 (expected nothing listed)" "$out"$'\n'"changes: $(cat "$tmp/changes.json" 2>/dev/null)"; fi
+}
+urls() { printf 'from .notes.access import members, public\n\nurlpatterns = [\n%b]\n' "$1" > "$r/src/app/urls.py"; }
+keep='    path("", members(index)),\n    path("login/", public(login)),\n'
+
+web_repo; urls "$keep"'    path("about/", public(about)),\n'; commit; wrun true "Adds a page."
+listed "a route added through public(...): listed" "src/app/urls.py" "a route marked public"
+web_repo; printf '\n@public\ndef about(request):\n    return None\n' >> "$r/src/app/urls.py"; commit; wrun true "Adds a page."
+listed "a view marked with the @public decorator: listed" "src/app/urls.py" "a route marked public"
+web_repo; urls '    path("", public(index)),\n    path("login/", public(login)),\n'; commit; wrun true "Opens the index."
+listed "a members(...) route changed to public(...): listed" "src/app/urls.py" "a route marked public"
+web_repo; printf '# who may ask\n' >> "$r/src/app/notes/access.py"; commit; wrun true "Refactor."
+listed "any change to notes/access.py: listed" "src/app/notes/access.py" "notes/access.py"
+web_repo; urls "$keep"'    path("export/", login_not_required(export)),\n'; commit; wrun true "Adds a page."
+listed "a route opened with Django's login_not_required(...), which public wraps: listed" "src/app/urls.py" "a route marked public"
+web_repo; printf '\n@login_not_required\ndef export(request):\n    return None\n' >> "$r/src/app/urls.py"; commit; wrun true "Adds a page."
+listed "a view marked @login_not_required: listed" "src/app/urls.py" "a route marked public"
+web_repo; urls "$keep"'    path("notes/", members(notes)),\n'; commit; wrun true "Adds a page."
+unlisted "a route added through members(...): not listed"
+web_repo; urls '    path("", members(index)),\n'; commit; wrun true "Closes the login page."
+unlisted "a public(...) route removed (the list narrows): not listed"
+web_repo; urls "$keep"'    # public(...) marks a route anyone may ask\n    path("x/", is_public(x)),\n'; commit; wrun true "Refactor."
+unlisted "a comment naming public(...), and is_public(...): not listed"
+web_repo; printf 'from app.notes.access import public\n\ndef test_p():\n    assert public(lambda r: r)\n' > "$r/tests/test_access.py"; commit; wrun true "Adds a test."
+unlisted "public(...) in a test file: not listed"
+
+web_repo; printf 'operations = [1]\n' > "$r/src/app/notes/migrations/0001_initial.py"; commit; wrun true "Refactor."
+listed "an existing migration edited: listed" "src/app/notes/migrations/0001_initial.py" "an existing migration"
+web_repo; git -C "$r" rm -q src/app/notes/migrations/0001_initial.py; commit; wrun true "Refactor."
+listed "an existing migration deleted: listed" "src/app/notes/migrations/0001_initial.py" "an existing migration"
+web_repo; git -C "$r" mv src/app/notes/migrations/0001_initial.py src/app/notes/migrations/0001_first.py; commit; wrun true "Refactor."
+listed "an existing migration renamed: listed" "src/app/notes/migrations/0001_first.py" "an existing migration"
+web_repo; printf 'operations = [2]\n' > "$r/src/app/notes/migrations/0002_more.py"; commit; wrun true "Adds a field."
+unlisted "a migration added: not listed"
+
+web_repo; printf 'DEBUG = True\n' > "$r/src/app/settings.py"; commit; wrun true "Refactor."
+listed "the production settings module changed: listed" "src/app/settings.py" "the production settings"
+web_repo; mkdir -p "$r/src/app/notes/sub"; printf 'X = 1\n' > "$r/src/app/notes/sub/settings.py"; commit; wrun true "Refactor."
+unlisted "a settings.py that is not src/<package>/settings.py: not listed"
+web_repo; printf 'services: [x]\n' > "$r/render.yaml"; commit; wrun true "Refactor."
+listed "render.yaml changed: listed" "render.yaml" "render.yaml"
+web_repo; printf 'FROM python:3.13-slim\n' > "$r/Dockerfile"; commit; wrun true "Refactor."
+listed "the Dockerfile changed: listed" "Dockerfile" "Dockerfile"
+web_repo; printf '[{}]\n' > "$r/tests/migration_rows.json"; commit; wrun true "Refactor."
+listed "tests/migration_rows.json changed: listed" "tests/migration_rows.json" "the rows ci / migrations keeps"
+
+for f in src/app/settings.py render.yaml Dockerfile src/app/notes/migrations/0001_initial.py tests/migration_rows.json; do
+  web_repo; printf '# x\n' >> "$r/$f"; commit; wrun false "Refactor."
+  unlisted "web input false: $f changed is not listed (the rows are the web archetype's)"
+done
+web_repo; urls "$keep"'    path("about/", public(about)),\n'; commit; wrun false "Adds a page."
+unlisted "web input false: a public route added is not listed"
+
+web_repo; sed -i.bak 's/^archetype: web$/archetype: cli/' "$r/.copier-answers.yml"; rm "$r/.copier-answers.yml.bak"; commit; wrun false "Refactor."
+listed "the archetype: line changed, whatever the web input: listed" ".copier-answers.yml" "archetype"
+web_repo; git -C "$r" rm -q .copier-answers.yml; commit; wrun false "Refactor."
+listed ".copier-answers.yml removed: listed" ".copier-answers.yml" "archetype"
+web_repo; git -C "$r" mv .copier-answers.yml answers.yml; commit; wrun false "Refactor."
+listed ".copier-answers.yml renamed away: listed" "answers.yml" ".copier-answers.yml -> answers.yml"
+web_repo; sed -i.bak 's/^_commit: v1.20.0$/_commit: v1.21.0/' "$r/.copier-answers.yml"; rm "$r/.copier-answers.yml.bak"; commit; wrun true "Updates the template."
+unlisted ".copier-answers.yml changed with the archetype: line kept: not listed"
+
 echo "-- the three-dot base: what main did after the branch point is not the PR's"
 new_repo; git -C "$r" checkout -q -b pr; printf 'x = 3\n' > "$r/src/m.py"; commit
 git -C "$r" checkout -q main; printf 'def test_c():\n    assert 1\n' > "$r/tests/test_c.py"; commit; base="$(git -C "$r" rev-parse HEAD)"

@@ -80,8 +80,11 @@ token the generator asks for. A backend, not the generator's cli default,
 because it is the archetype with the most machinery: only a service archetype
 shapes the ruleset with the `image` check and renders the template's `image`
 job, so only it puts them in the gate (#164; the cli path is covered offline
-by `tests/new-project-failpath.sh` and `tests/e2e-driver.sh`). One journey a
-night, no matrix; the job summary and the log's `archetype:` line say which. A classic token (`repo`, `workflow`, `delete_repo`) is the one
+by `tests/new-project-failpath.sh` and `tests/e2e-driver.sh`).
+`PLINTH_E2E_ARCHETYPE=web` runs the same journey on the web archetype, as
+`plinth-e2e-web-<run>`, whose ruleset also requires `ci / migrations` and
+`ci / deploy-check` (#615); the workflow runs the backend journey, then the
+web one. The job summary and the log's `archetype:` line say which. A classic token (`repo`, `workflow`, `delete_repo`) is the one
 measured to work; a fine-grained one without Administration: write is
 refused before anything exists. Its
 first act is to create and delete a sibling name, `<name>-probe`, so a

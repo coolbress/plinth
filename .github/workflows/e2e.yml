@@ -1,7 +1,9 @@
 name: e2e
 #
 # Tier 2: the door's journey on real GitHub (scripts/e2e.sh), on a backend
-# instance so the `image` check is in the gate (#164). Nightly, and on
+# instance so the `image` check is in the gate (#164), then on a web
+# instance, whose gate adds `ci / migrations` and `ci / deploy-check` and a
+# `ci / test` on a throwaway Postgres (#615). Nightly, and on
 # demand for a release candidate: scripts/make-release.sh run 2 accepts a
 # green run of this workflow on the very commit it tags, so the candidate is
 # `gh workflow run e2e.yml --ref main` once the release pull request has
@@ -10,7 +12,7 @@ name: e2e
 # not be able to trigger.
 #
 # Two jobs, and the run is green only when both are. `e2e` is the door's
-# journey: it creates. `upgrade` (scripts/e2e-upgrade.sh, #519) starts from a
+# journey, once per archetype: it creates. `upgrade` (scripts/e2e-upgrade.sh, #519) starts from a
 # repository an earlier release made and updates it with this commit's
 # template-update.sh and the tested plinth pin, then reads that the pin
 # landed: a release that changes what a repository calls is checked for the
@@ -40,6 +42,14 @@ concurrency:
 
 jobs:
   e2e:
+    # One journey after the other, as the concurrency group above keeps whole
+    # runs apart: two at once would race on the rate limit and on CodeQL. Not
+    # fail-fast, so a red backend journey still lets the web one report.
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        archetype: [backend, web]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -93,6 +103,7 @@ jobs:
       - name: "Create, wall, first pull request, checks green, merge, delete"
         env:
           PLINTH_E2E_TOKEN: ${{ secrets.PLINTH_E2E_TOKEN }}
+          PLINTH_E2E_ARCHETYPE: ${{ matrix.archetype }}
           GIT_CONFIG_COUNT: "1"
           GIT_CONFIG_KEY_0: credential.https://github.com.helper
           GIT_CONFIG_VALUE_0: "!gh auth git-credential"

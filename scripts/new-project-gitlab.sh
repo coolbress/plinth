@@ -58,6 +58,10 @@ for a in "$@"; do case "$a" in
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
 [ -n "$target" ] || { echo "$usage" >&2; exit 2; }
+# Before any tool or login is read, so nothing on GitLab is touched; the
+# template's own validator says the same, later (#615).
+[ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
+  "  fix: drop --host gitlab to make it on GitHub, or choose another archetype for GitLab"
 
 json() { # <python expression on d> < json: the value, or nothing when the input is not JSON
   python3 -c 'import json,sys

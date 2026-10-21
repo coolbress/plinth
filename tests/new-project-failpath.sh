@@ -99,7 +99,7 @@ case "$step" in
   # FAIL_AT=security-read is a read that fails.
   security-read) tr ',' ' ' <<<"${MOCK_SECURITY-disabled,disabled}" ;;
   license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *licenses/gpl-3.0*) echo GPL-3.0 ;; *) exit 1 ;; esac ;;
-  choices)       printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nplinth_sha:\n' | base64 ;;
+  choices)       printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' | base64 ;;
   # The owner's shared community-health files: present, absent (404) or
   # unreadable (any other failure). `gh` prints "Not Found" on a 404.
   shared-pr)     case "${MOCK_SHARED_PR:-absent}" in
@@ -464,7 +464,7 @@ run license-typo   err no no "unknown license: bogus"                           
 # copier refuses a license outside its choices only after the repository exists;
 # the door reads the template's own list and stops before creating anything.
 run license-unsupported err no no "the template does not carry the license GPL-3.0"          -- probe --license=gpl-3.0
-run archetype-typo err no no "the template accepts: cli library backend data-ml"            -- probe --archetype=service
+run archetype-typo err no no "the template accepts: cli library backend data-ml web"          -- probe --archetype=service
 # The template tag must still name the commit this plinth was tested with
 # (#519): moved, gone or unreadable, the door stops before creating anything.
 E="MOCK_TAG=moved" run tag-moved err no no "names commit $(printf '%040d' 1), not $TEMPLATE_SHA, the one this plinth was tested with" -- probe
@@ -538,6 +538,7 @@ E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
 run backend        ok yes no "(public, MIT, backend, as owner)"                                -- probe --archetype=backend
+run web            ok yes no "(public, MIT, web, as owner)"                                    -- probe --archetype=web
 # The spdx id is still looked up (`mit` -> `MIT`); the license *text* is not:
 # the template renders LICENSE from the choice, so a fetch would write over it.
 if grep -q 'license=Apache-2.0' "$work/home-apache/calls.log" && ! grep -q -- '--jq .body' "$work/home-apache/calls.log"
@@ -787,8 +788,11 @@ check "the merge ruleset posted is ruleset-merge.json, unchanged (backend)" \
   'cmp -s "$work/home-backend/ruleset-merge-posted.json" "$root/ruleset-merge.json"'
 check "a backend ruleset is the wall plus image, from the same app (check-ruleset.sh passes with image)" \
   '"$root/scripts/check-ruleset.sh" "$work/home-backend/ruleset-posted.json" image >/dev/null'
+check "a web ruleset is the wall plus image, ci / migrations and ci / deploy-check, from the same app (#615)" \
+  '[ "$(jq -c "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\") | .integration_id] | unique" "$work/home-web/ruleset-posted.json")" = "[15368]" ] && [ "$(jq "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\")] | length" "$work/home-web/ruleset-posted.json")" = 3 ]'
+check "a web render passes archetype=web to copier" 'grep -q "archetype=web" "$work/home-web/calls.log"'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.19.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.20.0 in " "$work/home-none/out"'
 check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
   'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
 check "copier renders the tag's pinned commit, not the tag: a tag moved after the check changes nothing (#519)" \
@@ -1192,7 +1196,7 @@ cat > "$work/glbin/curl" <<'MOCK'
 #!/usr/bin/env bash
 printf 'curl %s\n' "$*" >> "$GH_LOG"
 case "$*" in *"/copier.yml"*) [ "${MOCK_GL_CHOICES:-1}" = 1 ] || exit 22
-  printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\nplinth_sha:\n' ;;
+  printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' ;;
   *) exit 22 ;; esac
 MOCK
 chmod +x "$work/glbin/"*
@@ -1246,7 +1250,13 @@ if grep -qF "raw.githubusercontent.com/coolbress/plinth-template/$TEMPLATE_SHA/c
    && grep -qE "^uvx .*--vcs-ref $TEMPLATE_SHA gh:coolbress/plinth-template " "$work/home-gl-plan/calls.log"
 then ok gl-plan "the template's copier.yml is read, and the template rendered, at the tag's pinned commit (#519)"
 else bad gl-plan "the template's copier.yml is not read at the pinned commit"; fi
-gl_run gl-bad-arch err no no "unknown archetype: web" -- probe --host gitlab --archetype=web
+gl_run gl-bad-arch err no no "unknown archetype: service" -- probe --host gitlab --archetype=service
+# The web archetype is GitHub only (#615): refused before any tool or login
+# is read, so not one call reaches GitLab, and the message says why.
+gl_run gl-web err no no "the web archetype is GitHub only: its deployment and checks are built for GitHub" -- probe --host gitlab --archetype=web
+if ! grep -q '^glab ' "$work/home-gl-web/calls.log" && grep -qF "fix: drop --host gitlab" "$work/home-gl-web/out"
+then ok gl-web "nothing reached GitLab, and the fix names both ways on"
+else bad gl-web "a glab call ran before the refusal, or the fix line is missing"; grep '^glab ' "$work/home-gl-web/calls.log" | sed 's/^/        /'; fi
 gl_run gl-bad-host err no no "--host is github or gitlab" -- probe --host bitbucket
 gl_run gl-github-public err no no "unknown option: --public" -- probe --public
 gl_run gl-case ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- Tester/probe --host gitlab

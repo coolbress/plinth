@@ -50,8 +50,10 @@ web = json.loads(subprocess.run([sys.executable, str(root / "scripts/floor-check
                                 capture_output=True, text=True, check=True).stdout)
 web_contexts = [c["context"] for r in web["rules"] if r["type"] == "required_status_checks"
                 for c in r["parameters"]["required_status_checks"]]
-if sorted(set(web_contexts) - set(contexts)) == sorted(f"ci / {j}" for j in WEB_ONLY):
-    print("  PASS  the web archetype's ruleset adds exactly ci / migrations and ci / deploy-check")
+# And `image`: the web archetype is a service, whose ci.yml carries that job
+# from plinth-template v1.20.0 on (#615).
+if sorted(set(web_contexts) - set(contexts)) == sorted([f"ci / {j}" for j in WEB_ONLY] + ["image"]):
+    print("  PASS  the web archetype's ruleset adds exactly ci / migrations, ci / deploy-check and image")
 else:
     fails += 1
     print(f"  FAIL  the web archetype's ruleset adds {sorted(set(web_contexts) - set(contexts))}")

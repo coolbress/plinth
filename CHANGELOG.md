@@ -11,6 +11,33 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:new-project` offers the `web` archetype, a Django app with a
+  Postgres database, on GitHub (#615): the door now renders plinth-template
+  v1.20.0, and a `web` repository's ruleset also requires `image`,
+  `ci / migrations` and `ci / deploy-check`. With `--host gitlab` it refuses
+  `web` before anything is read or made on GitLab, and says why: the
+  archetype's deployment and checks are built for GitHub.
+- `ci / diff-size` puts more changes to a person (#615). In every
+  repository: the `archetype:` line of `.copier-answers.yml` changed, or the
+  file gone, since `ci / floor-check` reads its conditional items from that
+  line. With the `web` input: a line that marks a route public, any change
+  to `notes/access.py`, an existing migration changed, deleted or renamed
+  (an added one is not listed), `src/<package>/settings.py`, `render.yaml`,
+  the `Dockerfile`, and `tests/migration_rows.json`, whose change is how an
+  intended row-deleting migration passes `ci / migrations`.
+- `/plinth:floor-check` and `ci / floor-check` know the `web` archetype: its
+  container image, `.env.example` and JSON logs as for a backend, and its
+  `render.yaml`. A required check missing from the ruleset now comes with
+  the `upgrade-ruleset.sh` command that requires it again.
+- The e2e journey also runs on a `web` repository, after the backend one.
+- Not yet in a rendered `web` repository: plinth-template v1.20.0 pins
+  plinth v2.5.0's python-ci, which has `ci / migrations` and
+  `ci / deploy-check` but not the new `ci / diff-size` rows. They reach it
+  when a template release moves its plinth pin to the release that carries
+  them, or when the repository's Dependabot raises the pin.
+
 ## [2.5.0] - 2026-10-21
 
 plinth's checks can now hold a web project with a database (#614): a new

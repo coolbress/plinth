@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml] [--dir=<path>] [--private] [--host=github|gitlab]"
+argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml|web] [--dir=<path>] [--private] [--host=github|gitlab]"
 disable-model-invocation: true
 ---
 
@@ -34,6 +34,12 @@ part it left out. If a step it cannot go on without fails after
 creation, it deletes the repository when its token can and names it when it
 cannot; a label that fails is named and left. If the create's own answer is
 lost, it does neither.
+
+`--archetype=web` is a Django app with a Postgres database, made on GitHub
+only: its deployment and checks are built for GitHub, so with `--host gitlab`
+the script refuses before it reads anything on GitLab, and says why. Running
+it costs money (about US $13 a month on Render), which the template's own
+question states.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where
