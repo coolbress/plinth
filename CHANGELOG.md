@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-10-22
+
+A new repository made by `/plinth:new-project` now calls plinth v2.6.0's
+checks, so a new web repository's `ci / diff-size` asks a person before a
+change that opens a route to the public, rewrites an existing migration, or
+changes how production runs (#615). The door renders plinth-template
+v1.21.0; nothing else in a render changes. An existing repository keeps its
+own pin; `/plinth:floor-check` reports one on v1.20.0 as behind, and
+`/plinth:template-update` brings it up when you confirm.
+
+tested with plinth-template v1.21.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.21.0
@@ -3381,7 +3393,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.6.1...HEAD
+[2.6.1]: https://github.com/coolbress/plinth/releases/tag/v2.6.1
 [2.6.0]: https://github.com/coolbress/plinth/releases/tag/v2.6.0
 [2.5.0]: https://github.com/coolbress/plinth/releases/tag/v2.5.0
 [2.4.0]: https://github.com/coolbress/plinth/releases/tag/v2.4.0
