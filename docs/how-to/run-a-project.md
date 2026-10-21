@@ -5,7 +5,7 @@ can read it yet. This page is the loop, nine steps from an idea to a merged
 change, after [Getting started](../tutorials/getting-started.md).
 
 Each step says where you are, the next action, what to look at, what is
-yours to decide, and whether the step holds if you forget it (#515):
+yours to decide, and whether the step holds if you forget it (plinth's issue [#515](https://github.com/coolbress/plinth/issues/515)):
 
 - **default**: it happens unless someone changes it;
 - **boundary**: GitHub or Claude Code refuses to go past it;
@@ -45,7 +45,10 @@ September, and the next payment dates in order."*
 - **Next:** type `/plinth:new-project <owner>/<name>`. It creates the
   repository and a first pull request. For a repository you already have, ask
   for `/plinth:floor-check`: it lists what is missing and changes nothing.
-- **Look at:** the first pull request's checks; merge it once they are green.
+- **Look at:** the first pull request's checks; merge it once they are green
+  ([the tutorial](../tutorials/getting-started.md#merge-the-first-pull-request)
+  has the command), then `git switch main && git pull` in the repository's
+  folder: the generator left the checkout on the pull request's branch.
 - **Yours:** the name, and that first merge.
 - **If you forget:** a boundary once it exists: the required checks and the
   ruleset are on GitHub, beyond an agent without administration.
@@ -87,13 +90,15 @@ can see these: guidance only.
   (`domain-modeling`; `/grill-with-docs`,
   [listed](#skills-plinth-lists-but-does-not-install), does both).
 - **Yours:** the answers; "I don't know, recommend one" is valid. Push back
-  at least once, and say what is out of scope and what proves it done. In a
-  project's first interview, also settle who else is affected; the limits of
-  cost and risk, and the outside rules (law on data and accessibility, the
-  services' terms, licences); and how long it lasts, who takes it over, and
-  how it ends (data deleted or handed over, keys revoked, users told), written
-  in the README. Each was missing in two or three of the three recorded
-  project runs, all trial projects (#408).
+  at least once, and say what is out of scope and what proves it done. When
+  the idea is the project itself (what it is for and who uses it, usually the
+  first interview), also settle who else is affected; the limits of cost and
+  risk, and the outside rules (law on data and accessibility, the services'
+  terms, licences); and how long it lasts, who takes it over, and how it ends
+  (data deleted or handed over, keys revoked, users told), written in the
+  README. A small change inside the project does not need them. Each was
+  missing in two or three of the three recorded project runs, all trial
+  projects ([#408](https://github.com/coolbress/plinth/issues/408)).
 - **If you forget:** guidance only.
 
 ### 3. Plan a big job: a plan, then tickets
@@ -117,8 +122,11 @@ can see these: guidance only.
   reviewed and commits; then it opens the pull request. For a page a person
   will look at, name `taste-skill` in the ticket or type
   `/design-taste-frontend` (unnamed, the agent did not reach for it, one run,
-  #469); for dashboards and dense product UI, `/design` first.
-- **Look at:** the commit and the pull request's description.
+  [#469](https://github.com/coolbress/plinth/issues/469)); for dashboards and dense product UI, `/design` first.
+- **Look at:** the commit and the pull request's description: that the
+  description says what `/code-review` found, and that the commit ends with
+  the `Assisted-by` line the repository's `CONTRIBUTING.md` asks for. In one
+  run the agent skipped both, and said so when asked ([#617](https://github.com/coolbress/plinth/issues/617)).
 - **Yours:** when to stop. Corrected twice and still off: `/clear`, and say
   it again more precisely.
 - **If you forget:** partly a boundary: the repository refuses a `cat`
@@ -126,9 +134,9 @@ can see these: guidance only.
   Before a code commit, Claude Code tells the agent to run the repository's
   `verify` skill, a cleanup that keeps validation, safety and what the ticket
   asked for, then the checks: guidance only. In trials the refusal and one
-  skill together raised how often one model ran it (#496); a skipped skill
+  skill together raised how often one model ran it ([#496](https://github.com/coolbress/plinth/issues/496)); a skipped skill
   left out the package build, not the lint, type and test commands. Step 5's
-  checks decide (#474).
+  checks decide ([#474](https://github.com/coolbress/plinth/issues/474)).
 
 ### 5. Check what the checks cannot
 
@@ -139,7 +147,7 @@ can see these: guidance only.
   say?".
 - **Look at:** the description, for each thing "done" meant. Run the
   command, open the page, or check a number; `/run` launches the app
-  (`/verify` runs the checks, not the app, #476). If the optional third-party
+  (`/verify` runs the checks, not the app, [#476](https://github.com/coolbress/plinth/issues/476)). If the optional third-party
   reviewer is on, each of its comments should end fixed, answered, or moved to
   an issue.
 - **Yours:** whether what you saw is what "done" meant.
@@ -228,8 +236,8 @@ at all. Type the skill.
 
 Twelve more of Matt Pocock's skills, `/ask-matt`, `/to-spec`,
 `/to-tickets`, `/wayfinder` and `/handoff` among them, and `/ponytail-audit`
-are listed, not installed; `/plinth:arsenal` lists each. #520 moved the
-twelve on #475's four criteria and their measured cost; no run compared a set
+are listed, not installed; `/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved the
+twelve on [#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set
 with them and one without, so whether they change a result is not known. Run
 either line once, then start a new session:
 
@@ -255,7 +263,7 @@ To turn the style off
 for yourself, type `/output-style default`; it goes to
 `.claude/settings.local.json`, kept out of commits; removing it brings the
 style back. Set in your own `~/.claude/settings.json`, it did not turn the
-style off (#555). A repository made before plinth-template v1.14.0 gets the style through
+style off ([#555](https://github.com/coolbress/plinth/issues/555)). A repository made before plinth-template v1.14.0 gets the style through
 `/plinth:template-update`.
 
 ## Where plinth holds the line
