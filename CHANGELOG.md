@@ -11,6 +11,34 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- Two checks for a web project, ahead of the web archetype (#614):
+  `ci / migrations` and `ci / deploy-check`, turned on by a new input,
+  `web` (boolean, default `false`), that a caller passes explicitly.
+  `ci / migrations` runs against a throwaway Postgres: no model change
+  without its migration, every migration applies to an empty database, and
+  the rows in `tests/migration_rows.json`, read from the pull request's
+  base, survive this head's migrations table by table. `ci / deploy-check`
+  runs Django's `check --deploy --fail-level WARNING` with
+  production-shaped settings. With `web` true, `ci / test` also gets a
+  throwaway Postgres. With `web` false both new checks report a pass,
+  "does not apply", so an existing repository sees two more green checks
+  and nothing else; its ruleset requires neither, and no caller needs a
+  new permission.
+- On the `web` archetype, `ci / floor-check` and `/plinth:floor-check` fail
+  a `ci` job without a literal `web: true`: without it both checks would
+  pass as "does not apply" while the ruleset requires them.
+- `canary-web/`, a web render of the template that plinth's own CI runs
+  these checks on, and `tests/web-checks-cases.sh`, which runs them on a
+  real Postgres with cases that must fail (a model change without a
+  migration, moved or deleted migrations, a migration that loses the
+  base's rows, debug on) and must pass.
+
+Nothing offers the web archetype yet: plinth-template v1.19.0 has none,
+and `/plinth:new-project` refuses it until the template and door changes
+(#613, #615) ship.
+
 ## [2.4.0] - 2026-10-20
 
 The guide to running a project is now nine short steps (#603). Each says
