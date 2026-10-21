@@ -105,7 +105,7 @@ from typing import cast
 # Archetypes whose floor includes a container image and a `.env.example`.
 # Must agree with the `_exclude` conditions in the template's copier.yml;
 # tests/archetype-single-source.sh checks that.
-CONDITIONAL_ARCHETYPES = ("backend", "data-ml")
+CONDITIONAL_ARCHETYPES = ("backend", "data-ml", "web")
 # A service archetype's ci.yml carries one check python-ci.yml does not: `image`,
 # a plain job that builds and runs the container (#127). Not a line in
 # ruleset.json: applied by hand, that file is the wall every archetype reports
@@ -1546,10 +1546,21 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
     if archetype not in CONDITIONAL_ARCHETYPES:
         result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
         return
-    result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required")
+    result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
+                   + (", and render.yaml" if archetype == "web" else ""))
     check_dockerfile(project)
     check_env_example(project)
     check_json_logs(project)
+    if archetype == "web":
+        check_render_yaml(project)
+
+
+def check_render_yaml(project: Path) -> None:
+    """The web archetype's Render Blueprint (plinth-template v1.20.0): the
+    deploy that waits for the checks (#615)."""
+    if not ok((project / "render.yaml").is_file(), "render.yaml present",
+              "render.yaml missing: the web archetype deploys from it, after the checks pass"):
+        result("INFO", "  restore it from the default branch: git restore --source=origin/main -- render.yaml")
 
 
 def check_dockerfile(project: Path) -> None:
@@ -2197,8 +2208,12 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                 live.setdefault(c["context"], set()).add(c.get("integration_id"))
     have = set(live)
     missing = [c for c in expected if c not in live]
-    ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
-       f"{branch}: required checks dropped: {missing}")
+    if not ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
+              f"{branch}: required checks dropped: {missing}") and sources is not None \
+            and all(sources.get(c) is not None for c in missing):
+        # The script only adds checks, and asks for repository administration.
+        result("INFO", "  require them again (repository administration): scripts/with-admin-token.sh "
+                       f"scripts/upgrade-ruleset.sh {repo} " + " ".join(shlex.quote(f"{c}:{sources[c]}") for c in missing))
     # Which app may report each check is part of the wall. Without the pin, a
     # commit status of the same name, which anyone with write access can post,
     # satisfies the requirement.

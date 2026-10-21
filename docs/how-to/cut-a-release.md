@@ -52,7 +52,8 @@ to tracked files, and `gh` logged in with write access to the repository.
    the pull request; an agent does not write it (`AGENTS.md`).
 5. Update `main`: `git switch main && git pull --ff-only`.
 6. Start the `e2e` workflow on the merged commit, and wait for it to pass.
-   It runs two jobs: `e2e`, the door's journey, and `upgrade`, which updates
+   It runs two jobs: `e2e`, the door's journey on a backend and then on a
+   web repository, and `upgrade`, which updates
    a repository rendered at the template tag an earlier release pinned and
    checks that the tested plinth pin lands in it (#519). Both must pass:
 

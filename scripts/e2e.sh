@@ -18,6 +18,10 @@
 # job, #127 and #151, were verified by a hand-run repository). The cli path
 # is covered offline: tests/new-project-failpath.sh renders one against the
 # mocked gh, and tests/e2e-driver.sh drives this journey against a stub door.
+# PLINTH_E2E_ARCHETYPE=web runs the same journey on the web archetype, as
+# <owner>/plinth-e2e-web-<run> (#615), whose ruleset also requires `ci / migrations` and
+# `ci / deploy-check`, and whose `ci / test` runs on a throwaway Postgres;
+# the workflow runs it after the backend journey, not instead of it.
 #
 # Exit 0 means the whole journey happened, deletion included. Before the door
 # runs, the token creates and deletes <name>-probe: a token that can create
@@ -39,7 +43,13 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # template's CI plus CodeQL's first analysis. Tests shorten it.
 wait_s="${PLINTH_E2E_WAIT:-1500}"
 case "$wait_s" in ''|*[!0-9]*) echo "PLINTH_E2E_WAIT must be a whole number of seconds (got: $wait_s)" >&2; exit 2 ;; esac
-archetype=backend # one journey a night, the archetype with the most machinery (see the header)
+archetype="${PLINTH_E2E_ARCHETYPE:-backend}" # the archetype with the most machinery, or web (see the header)
+# One run makes both journeys, so the web one's name says which it is.
+case "$archetype" in
+  backend) prefix=plinth-e2e ;;
+  web)     prefix=plinth-e2e-web ;;
+  *)       echo "PLINTH_E2E_ARCHETYPE is backend or web (got: $archetype)" >&2; exit 2 ;;
+esac
 
 # A token GitHub refuses makes gh exit 1 with the error body on stdout, where
 # --jq is not applied: read through a process substitution, that lost the exit
@@ -55,7 +65,7 @@ if [ "$user_rc" != 0 ] || [[ ! "$id" =~ ^[0-9]+$ ]] || [ -z "$login" ]; then
   exit 2
 fi
 owner="${1:-$login}"
-name="plinth-e2e-${GITHUB_RUN_ID:-$(date -u +%Y%m%d%H%M%S)}"
+name="$prefix-${GITHUB_RUN_ID:-$(date -u +%Y%m%d%H%M%S)}"
 repo="$owner/$name"; url="https://github.com/$repo"
 loud() { # a repository that outlives this run is said twice: the log and the summary
   printf '!! %s\n' "$1" >&2
