@@ -76,7 +76,12 @@ what the example line's `(public, MIT, cli, ...)` says. To choose otherwise,
 add to the command:
 
 - `--private`: only on a plan that can hold the wall on a private repository
-  ([Before you start](#before-you-start)).
+  ([Before you start](#before-you-start)). On a personal account the
+  generator reads your plan first, which needs the `read:user` scope that
+  the login above does not ask for: log in with
+  `gh auth login -s repo,workflow,delete_repo,read:user`, or add it to the
+  login you have with `gh auth refresh -h github.com -s read:user`. Without
+  it the generator stops and prints that command.
 - `--license=apache-2.0`: the template's other licence. Take it when your
   company, or the project you build on, asks for Apache-2.0; MIT is shorter
   and the usual choice for a small project.

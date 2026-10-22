@@ -124,9 +124,11 @@ can see these: guidance only.
   `/design-taste-frontend` (unnamed, the agent did not reach for it, one run,
   [#469](https://github.com/coolbress/plinth/issues/469)); for dashboards and dense product UI, `/design` first.
 - **Look at:** the commit and the pull request's description: that the
-  description says what `/code-review` found, and that the commit ends with
-  the `Assisted-by` line the repository's `CONTRIBUTING.md` asks for. In one
-  run the agent skipped both, and said so when asked ([#617](https://github.com/coolbress/plinth/issues/617)).
+  description says what `/code-review` found, and that the `Assisted-by`
+  line the repository's `CONTRIBUTING.md` asks for ends both the commit and
+  the description, whose text becomes the squash commit's message at the
+  merge. In one run the agent skipped both, and said so when asked
+  ([#617](https://github.com/coolbress/plinth/issues/617)).
 - **Yours:** when to stop. Corrected twice and still off: `/clear`, and say
   it again more precisely.
 - **If you forget:** partly a boundary: the repository refuses a `cat`
