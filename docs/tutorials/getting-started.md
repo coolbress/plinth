@@ -12,7 +12,9 @@ and merge the pull request the generator opens for you.
   `index.lock: File exists`. `brew install git` fixes it.
 - Log in to GitHub with `gh auth login -s repo,workflow,delete_repo`
   (browser login). The default scopes lack `workflow`, which the generator
-  needs; `delete_repo` lets a failed run delete the repository it created.
+  needs. `delete_repo` is optional: with it, a run that fails deletes the
+  repository it created; without it the generator prints `rollback: off` and
+  goes on, as the last bullet under [Create the repository](#create-the-repository) says.
   The same login is administration on every repository you own, and an
   agent working with it can change a repository's rules or delete it
   ([who can change the wall](../explanation/concepts.md#about-who-can-change-the-wall)).
@@ -41,7 +43,8 @@ claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-Claude Code asks you to trust the marketplace the first time; answer yes.
+Neither command asks a question; each ends with a line that starts
+`✔ Successfully` (measured on Claude Code 2.1.307).
 
 Then start Claude Code and type `/plinth:arsenal` to see what was installed.
 
@@ -65,6 +68,28 @@ one line with what it is about to do, for example:
 ```text
 create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.19.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
+
+It takes a few minutes, most of them waiting for GitHub to run the first
+checks; the last lines are the result. Unless you say otherwise the repository
+is public, under the MIT licence and a command-line program (`cli`), which is
+what the example line's `(public, MIT, cli, ...)` says. To choose otherwise,
+add to the command:
+
+- `--private`: only on a plan that can hold the wall on a private repository
+  ([Before you start](#before-you-start)). On a personal account the
+  generator reads your plan first, which needs the `read:user` scope that
+  the login above does not ask for: log in with
+  `gh auth login -s repo,workflow,delete_repo,read:user`, or add it to the
+  login you have with `gh auth refresh -h github.com -s read:user`. Without
+  it the generator stops and prints that command.
+- `--license=apache-2.0`: the template's other licence. Take it when your
+  company, or the project you build on, asks for Apache-2.0; MIT is shorter
+  and the usual choice for a small project.
+- `--archetype=<kind>`: `library` for code other programs import; `backend`
+  for a service that answers over the network; `data-ml` for data or
+  machine-learning work; `web` for a web app with a database, which costs
+  money to run (about US $13 a month on Render). When unsure, keep `cli`, the
+  narrowest.
 
 If a check fails it stops there and prints the fix. Three you may meet:
 
@@ -124,8 +149,25 @@ merges past it, including your own merge.
 A red check: click **Details** and read the last lines of the log. Fix it in
 the branch and push; the checks run again.
 
-When everything is green, **Squash and merge**. That is the whole journey:
-install, create, merge.
+When everything is green, **Squash and merge**. From a terminal instead, the
+command is in the repository's `CONTRIBUTING.md` (step 7); for this pull
+request, with its number from the URL the generator printed (usually 2) and
+`<sha>` from `gh pr view <n> --json headRefOid --jq .headRefOid`:
+
+```bash
+body="$(gh pr view <n> --json body --jq .body)" &&
+  gh pr merge <n> --squash --match-head-commit <sha> --body "$body"
+```
+
+If you ask the agent to merge instead, Claude Code may first ask you to
+approve its `gh pr merge` command: approving it is your merge, as in
+[step 6 of Run a project](../how-to/run-a-project.md#6-merge-on-your-word).
+
+Then, in the repository's folder, `git switch main && git pull`: the
+generator left the checkout on the pull request's branch, and the next
+session starts from `main`.
+
+That is the whole journey: install, create, merge.
 
 ## How the agent explains its work
 
@@ -196,14 +238,14 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
 - To move plinth to a new version later: `claude plugin update plinth`, then
   `/reload-plugins`. From v1.10.0 or earlier, also run
   `claude plugin update taste-skill@plinth` once before `/reload-plugins`
-  (#469). From v1.11.0 or earlier, also run, once and in this order,
+  (plinth's issue [#469](https://github.com/coolbress/plinth/issues/469)). From v1.11.0 or earlier, also run, once and in this order,
   `claude plugin install plinth@plinth` and then `claude plugin prune` before
   `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace under
   the same name, and `update` does not install the moved copy. Without the
   two commands nothing is lost: the official copy keeps all 25 of its skills,
   and plinth reports the missing dependency with the command to run. `prune`
   removes the official copy only where it arrived as plinth's dependency; one
-  you installed yourself stays beside plinth's (#477). From v2.1.0 or earlier,
+  you installed yourself stays beside plinth's ([#477](https://github.com/coolbress/plinth/issues/477)). From v2.1.0 or earlier,
   `claude plugin prune` after the update also removes `/ponytail-audit`,
   which plinth now lists instead of installing; without it the skill keeps
-  working (#598).
+  working ([#598](https://github.com/coolbress/plinth/issues/598)).
