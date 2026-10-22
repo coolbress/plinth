@@ -82,9 +82,11 @@ to that one command only, so it does not stay behind as a login.
 
 What it does not cover: a browser on this machine signed in to GitHub as you,
 if the agent can drive that browser (Claude Code can, when its browser
-extension or desktop control is turned on): merge in a browser window the
-agent does not drive, or in a private window you close after the merge, and
-keep the browser it drives signed out of your account; a credential for your account stored in
+extension or desktop control is turned on): with desktop control on, no
+window on this screen is out of its reach, a private window included, so
+merge from a device or browser the agent cannot drive, this machine's
+browser after desktop control is turned off, or your phone, and keep the
+browser the extension drives signed out of your account; a credential for your account stored in
 a form `/plinth:floor-check` does not recognise; and anything outside
 GitHub's merge. The agent still pushes branches and opens pull requests, and
 the checks and your review in step 5 of [Run a project](run-a-project.md#5-check-what-the-checks-cannot) are what judge them. Measured on a
