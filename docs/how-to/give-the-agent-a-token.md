@@ -26,14 +26,20 @@ first pull request is merged, give the agent a token of its own without it:
    administration.
 2. In a separate terminal window, not with `!` in Claude Code, run
    `gh auth login`: GitHub.com, HTTPS, **Yes** to authenticating Git, then
-   **Paste an authentication token**. It replaces the browser login.
+   **Paste an authentication token**. The token is for your own account,
+   and `gh` keeps one login per account on a host, so it takes the browser
+   login's place: from here `gh`, and the `git push` it serves, use the
+   token, and there is no browser login left to log out. (A token for a
+   different account would be added beside yours instead; step 5.)
 3. Make sure nothing overrides it. `gh`, and the `git push` it serves, use
    `GH_TOKEN` or `GITHUB_TOKEN` before any stored login, and a running Claude
    Code keeps the environment it started with. If either is set in a shell
    startup file (`~/.zshrc`, `~/.bashrc`, `~/.zshenv`), remove it there, then
    restart Claude Code. In the new session, `gh auth status` should show a
-   `github_pat_` token, stored in the keyring or gh's config file; after your
-   account it should not say `(GH_TOKEN)` or `(GITHUB_TOKEN)`. Then
+   `github_pat_` token, stored in the keyring or gh's config file: its line
+   `Logged in to github.com account <you>` ends with where the login is
+   stored, `(keyring)` or the file's path. If that line ends with
+   `(GH_TOKEN)` or `(GITHUB_TOKEN)` instead, a variable is still set. Then
    `gh api repos/<owner>/<name>/actions/permissions` should answer
    `Resource not accessible by personal access token (HTTP 403)`: that read
    needs Administration, so the token has none. (`permissions.admin` on the
@@ -50,11 +56,14 @@ first pull request is merged, give the agent a token of its own without it:
    Deploy keys** none with write access. (`ssh -T git@github.com` answering
    `Permission denied (publickey)` tests only the keys SSH picks by itself.)
    The token protects only pushes that go over HTTPS.
-5. Leave no other credential for github.com on the machine. The first two
-   pushed a workflow change past the token in a measurement with gh 2.101.0
-   and git 2.55.0; the others are what gh and git document, not measured:
-   - **Another account stored in `gh`.** `gh auth login` adds an account
-     beside those already stored and makes it the active one; the agent can
+5. Leave no other credential for github.com on the machine. Two of these,
+   another account stored in `gh` and another git credential helper, pushed
+   a workflow change past the token in a measurement with gh 2.101.0 and
+   git 2.55.0; the others are what gh and git document, not measured:
+   - **Another account stored in `gh`.** `gh auth login` with a token for a
+     different account adds it beside those already stored and makes it the
+     active one (a token for the same account replaces that account's stored
+     login, as in step 2); the agent can
      run `gh auth switch`. See them with `gh auth status`; remove each one
      that is not the token's with
      `gh auth logout --hostname github.com --user <login>`.
@@ -108,7 +117,7 @@ so and prints the fix.
 One loop finished on this token without Claude Code asking for more
 permission: an issue, the change, a pull request with its checks green, a
 merge a person made, and a resume in a new session (one run, on a public
-command-line repository, #403 record 1). Not run on it: a change that needs a
+command-line repository, plinth's issue [#403](https://github.com/coolbress/plinth/issues/403) record 1). Not run on it: a change that needs a
 new dependency, a failing check, a review round, the agent attempting the
 merge. That Contents, Issues and Pull requests are enough for every step of
 [Run a project](run-a-project.md) is not verified.
