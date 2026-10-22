@@ -584,6 +584,17 @@ diff-size:
           except tomllib.TOMLDecodeError:
               return text
 
+      def archetype(rev, path):
+          """The archetype: line of .copier-answers.yml at rev; None when
+          the file is absent, "" when it has no such line."""
+          r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
+          if r.returncode != 0:
+              return None
+          m = re.search(r"^archetype:(.*)$", r.stdout.decode("utf-8", "replace"), re.MULTILINE)
+          return m.group(1).strip() if m else ""
+
+      ANSWERS = ".copier-answers.yml"
+
       def pipeline(p):
           return p.rsplit("/", 1)[-1] == ".gitlab-ci.yml" or p.startswith(".gitlab/ci/")
 
@@ -591,6 +602,13 @@ diff-size:
           name = new.rsplit("/", 1)[-1]
           if pipeline(new) or pipeline(old):
               return "the pipeline definition changed"
+          # /plinth:floor-check reads its archetype-conditional items (the
+          # docker-image job among them) from this line, in the file at this
+          # path: a deletion or a move is listed whatever the content (#625).
+          if ANSWERS in (name, old.rsplit("/", 1)[-1]) and (status in ("D", "R") or (
+                  archetype(mb, old) if old.rsplit("/", 1)[-1] == ANSWERS else None) != (
+                  archetype(head, new) if name == ANSWERS else None)):
+              return f"the archetype: line of {ANSWERS} changed, or the file deleted or moved"
           if name in CONFIG or old.rsplit("/", 1)[-1] in CONFIG:
               return "check configuration changed"
           if status == "D" and TEST.search(old):
