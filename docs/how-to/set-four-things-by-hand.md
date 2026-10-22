@@ -21,8 +21,11 @@ not been measured.
    spending, not an alert that only tells you, for example a monthly limit
    on each API key. Protects against a leaked or runaway key running up a
    bill.
-3. Restore once, on purpose, before it matters: roll back one merged change
-   with a pull request that reverts it, and if there is a database, restore
+3. Restore once, on purpose, before it matters: roll back one merged change.
+   On the merged pull request's page press **Revert**, or run
+   `gh pr revert <n>` (gh 2.83.0 or newer); either opens a new pull request
+   that undoes the change, which goes through the checks and the merge like
+   any other. If there is a database, restore
    it from a backup yourself, in a place the agent cannot reach, into a new,
    empty database, check your data is there, then delete that database.
    Protects against finding out the way back does not work on the day you
