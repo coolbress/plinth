@@ -19,6 +19,17 @@ pull requests and have no tag.
   `docker-image` job among them, from that line. On GitLab the row is a WARN in the log when
   the description does not name the file, never a failure.
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.22.0
+  (coolbress/plinth-template#103, #104). A new repository's agent no
+  longer waits for an approval before its first step: its
+  `.claude/settings.json` allows `git fetch origin`, `git worktree list`
+  and `git worktree add --no-track -b`, and a new `.claude/permissions.md`
+  says which commands still ask and why (pushing, opening and merging a
+  pull request, removing a worktree). An existing repository gets them
+  through `/plinth:template-update`.
+
 ## [2.6.1] - 2026-10-22
 
 A new repository made by `/plinth:new-project` now calls plinth v2.6.0's
