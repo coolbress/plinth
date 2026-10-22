@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-22
+
+A new repository's agent now starts its work without waiting for your
+approval on the first step: the door renders plinth-template v1.22.0, which
+allows the read and the worktree step `AGENTS.md` asks for and lists, with
+reasons, the commands that still ask you (pushing, opening and merging a
+pull request, removing a worktree). The getting-started tutorial and the
+token and account pages are clearer where a first walk through them stalled
+(#617): which login scopes you need, what the door chooses for you, how to
+merge from a terminal, and where to merge when the agent can control your
+screen. On GitLab, `diff-size` now names a change to the archetype line of
+`.copier-answers.yml` (#625). Nothing changes in an existing repository
+until you run `/plinth:template-update`.
+
+tested with plinth-template v1.22.0
+
 ### Added
 
 - GitLab's `diff-size` lists the `archetype:` line of `.copier-answers.yml`
@@ -3412,7 +3428,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.6.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/coolbress/plinth/releases/tag/v2.7.0
 [2.6.1]: https://github.com/coolbress/plinth/releases/tag/v2.6.1
 [2.6.0]: https://github.com/coolbress/plinth/releases/tag/v2.6.0
 [2.5.0]: https://github.com/coolbress/plinth/releases/tag/v2.5.0
