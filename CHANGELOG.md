@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- GitLab's `diff-size` lists the `archetype:` line of `.copier-answers.yml`
+  changed, or the file deleted or moved, with the rule GitHub's step applies
+  (#625): `/plinth:floor-check` reads its conditional items, the
+  `docker-image` job among them, from that line. On GitLab the row is a WARN in the log when
+  the description does not name the file, never a failure.
+
 ## [2.6.1] - 2026-10-22
 
 A new repository made by `/plinth:new-project` now calls plinth v2.6.0's

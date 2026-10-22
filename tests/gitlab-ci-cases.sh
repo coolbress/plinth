@@ -97,7 +97,7 @@ def func(text, name):
     while b < len(lines) and (not lines[b].strip() or len(lines[b]) - len(lines[b].lstrip()) > ind):
         b += 1
     return textwrap.dedent("\n".join(lines[a:b])).rstrip()
-for name in ("tool_table", "markers", "shape", "named"):
+for name in ("tool_table", "archetype", "markers", "shape", "named"):
     a, b = func(gh, name), func(gl, name)
     if not a or a != b:
         fails.append(f"the diff-size function {name} differs")
@@ -423,6 +423,32 @@ expect "over the limit fails" 1 "fail: diff size, 31 lines, over the limit of 20
 expect "a named pipeline change is listed as named" 1 "named in the description: .gitlab-ci.yml"
 ds 0 "x"
 expect "max-diff-lines 0 measures without blocking" 0 "pass: diff size, measured and not enforced (max-diff-lines is 0): 31 lines"
+
+# The archetype: line of .copier-answers.yml (#625): /plinth:floor-check reads
+# its conditional items from it, so a change to the line, or the file deleted or
+# moved, is listed; another answer changed with the line kept is not.
+arepo="$tmp/ds-archetype"; mkdir -p "$arepo"
+git -C "$arepo" init -q -b main; git -C "$arepo" config user.email t@example.com; git -C "$arepo" config user.name t
+git -C "$arepo" config commit.gpgsign false
+printf '_commit: v1.21.0\narchetype: backend\nhost: gitlab\n' > "$arepo/.copier-answers.yml"
+git -C "$arepo" add -A; git -C "$arepo" commit -qm base; abase="$(git -C "$arepo" rev-parse HEAD)"
+git -C "$arepo" checkout -q -b case
+dsa() { # <description>: commits the working tree's change on a branch off abase, judges it, then starts the next branch there
+  git -C "$arepo" add -A; git -C "$arepo" commit -qm head; ahead="$(git -C "$arepo" rev-parse HEAD)"
+  (cd "$arepo" && CI_MERGE_REQUEST_IID=1 CI_MERGE_REQUEST_DIFF_BASE_SHA="$abase" CI_COMMIT_SHA="$ahead" CI_MERGE_REQUEST_DESCRIPTION="$1" \
+     PLINTH_WORKDIR=. PLINTH_MAX_DIFF_LINES=400 PLINTH_DIFF_SIZE_EXCLUDE="" run_job diff-size \
+     && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
+  git -C "$arepo" checkout -q main; git -C "$arepo" branch -q -D case; git -C "$arepo" checkout -q -b case
+}
+sed -i.bak 's/^archetype: backend$/archetype: cli/' "$arepo/.copier-answers.yml"; rm "$arepo/.copier-answers.yml.bak"; dsa "Refactor."
+expect "archetype backend to cli: listed, a WARN when the description does not name it" 0 \
+  "WARN: .copier-answers.yml: the archetype: line of .copier-answers.yml changed, or the file deleted or moved, and the description does not name it."
+git -C "$arepo" rm -q .copier-answers.yml; dsa "Refactor."
+expect ".copier-answers.yml deleted: listed whatever its content" 0 \
+  "WARN: .copier-answers.yml: the archetype: line of .copier-answers.yml changed, or the file deleted or moved, and the description does not name it."
+sed -i.bak 's/^_commit: v1.21.0$/_commit: v1.22.0/' "$arepo/.copier-answers.yml"; rm "$arepo/.copier-answers.yml.bak"; dsa "Updates the template."
+expect ".copier-answers.yml changed with the archetype: line kept: not listed" 0 "0 change(s) to the checks, 0 not named in the description."
+refuse "and the archetype row is not in the log" "archetype: line"
 
 (cd "$repo" && CI_MERGE_REQUEST_IID='' CI_OPEN_MERGE_REQUESTS='g/p!3' PLINTH_WORKDIR=. PLINTH_MAX_DIFF_LINES=400 PLINTH_DIFF_SIZE_EXCLUDE="" run_job diff-size \
    && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
