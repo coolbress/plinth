@@ -95,7 +95,7 @@ esac; done
 public_cmd="/plinth:new-project"
 for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' "$a")"; done
 
-# stop, warn, below and choices_of, shared with the GitLab door.
+# stop, warn, below, choices_of, read_into and unread_why, shared with the GitLab door.
 # shellcheck source=scripts/lib/door.sh
 . "$here/lib/door.sh"
 
@@ -285,13 +285,22 @@ spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
 # this check changes nothing. copier records the tag all the same
 # (`_commit: vX.Y.Z`, measured with copier 9.18.2).
 template_pinned
-copier_yml="$(gh api "repos/$template_repo/contents/copier.yml?ref=$template_sha" --jq .content 2>/dev/null | base64 -d 2>/dev/null)" || copier_yml=""
+# Two steps, each read through read_into so the warning below can name the
+# one that failed and its error (#629): the contents API answers base64, and
+# an answer without a content string (a directory, a file over 1 MB) is a gh
+# api failure here, not a copier.yml with no choices.
+copier_yml=""; encoded=""
+if read_into encoded 'gh api' gh api "repos/$template_repo/contents/copier.yml?ref=$template_sha" \
+     --jq 'if (.content|type) == "string" and .content != "" then .content else error("the answer carries no content") end'; then
+  read_into copier_yml 'base64 -d' base64 -d <<<"$encoded" || :
+fi
 arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
 if [ -n "$arch_choices" ] && [ -n "$lic_choices" ]; then
   grep -qxF "$arch" <<<"$arch_choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$arch_choices")"
   grep -qxF "$spdx" <<<"$lic_choices" || stop "the template does not carry the license $spdx" "  it accepts: $(tr '\n' ' ' <<<"$lic_choices")"
 else
   warn "could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
+  printf '  %s\n' "$(unread_why)" >&2
 fi
 
 # The ruleset for this archetype. ruleset.json is the wall every archetype

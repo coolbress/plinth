@@ -99,7 +99,14 @@ case "$step" in
   # FAIL_AT=security-read is a read that fails.
   security-read) tr ',' ' ' <<<"${MOCK_SECURITY-disabled,disabled}" ;;
   license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *licenses/gpl-3.0*) echo GPL-3.0 ;; *) exit 1 ;; esac ;;
-  choices)       printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' | base64 ;;
+  # The template's copier.yml, base64 as the contents API answers it. MOCK_CHOICES=
+  # garbage is a body base64 cannot decode; nochoices decodes to a copier.yml
+  # with no archetype or license choices where the door looks (#629).
+  choices)       case "${MOCK_CHOICES:-ok}" in
+                   garbage)   printf '!!! not base64 !!!' ;;
+                   nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
+                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' | base64 ;;
+                 esac ;;
   # The owner's shared community-health files: present, absent (404) or
   # unreadable (any other failure). `gh` prints "Not Found" on a 404.
   shared-pr)     case "${MOCK_SHARED_PR:-absent}" in
@@ -498,6 +505,31 @@ E="CLAUDE_CONFIG_DIR=$work/nowhere" run no-toggle-key ok yes no "" -- probe
 if grep -qi "sandbox" "$work/home-no-toggle-key/out"; then bad no-toggle-key "the door still gives sandbox advice from a key /sandbox does not write"
 else ok no-toggle-key "the door says nothing about the sandbox"; fi
 E="MOCK_SCOPES=repo,workflow" run rollback-off ok yes no "rollback: off (no delete_repo scope" -- probe
+# The template's copier.yml unread: the warning keeps its text and the door
+# goes on, and one line under it names the step that failed and its error, or
+# that the text carried no choices (#629). Which step: `gh api` (FAIL_AT=choices),
+# `base64 -d` (a body it cannot decode), or neither (a copier.yml without them).
+unread="warning: could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
+run choices-read ok yes no "" -- probe
+E="FAIL_AT=choices" run choices-gh-fails ok yes no "$unread" -- probe
+grep -qxF "  gh api failed: mock gh: failing at choices on purpose" "$work/home-choices-gh-fails/out" \
+  && ok choices-gh-fails "the line names gh api and its error" || bad choices-gh-fails "the line does not name gh api and its error"
+E="MOCK_CHOICES=garbage" run choices-base64-fails ok yes no "$unread" -- probe
+grep -qE "^  base64 -d failed: base64: .+" "$work/home-choices-base64-fails/out" \
+  && ok choices-base64-fails "the line names base64 -d and its error" || bad choices-base64-fails "the line does not name base64 -d and its error"
+E="MOCK_CHOICES=nochoices" run choices-none ok yes no "$unread" -- probe
+grep -qxF "  the read succeeded, but copier.yml at $TEMPLATE_SHA lists no archetype or license choices where the door looks: its shape changed, not the network" "$work/home-choices-none/out" \
+  && ok choices-none "the line says the text carried no choices" || bad choices-none "the line does not say the text carried no choices"
+# A read that succeeds prints nothing new: the failed run's output is the
+# successful run's plus exactly the warning and its one line (clock times
+# and the case's own directory aside).
+if grep -q "could not read the template's\|failed: \|the read succeeded" "$work/home-choices-read/out"; then bad choices-read "a successful read printed the warning or its line"
+else ok choices-read "a successful read prints neither the warning nor its line"; fi
+same() { sed -E "s#$work/home-$1#HOME#g; s/[0-9]{2}:[0-9]{2}:[0-9]{2}Z/HH:MM:SSZ/g" "$work/home-$1/out"; }
+added="$(diff <(same choices-read) <(same choices-gh-fails) | grep '^[<>]')"
+if [ "$added" = "$(printf '> %s\n> %s' "$unread" "  gh api failed: mock gh: failing at choices on purpose")" ]
+then ok choices-read "the failed read adds the warning and one line to the successful read's output, and changes nothing else"
+else bad choices-read "the two outputs differ beyond the warning and its line"; sed 's/^/        /' <<<"$added"; fi
 E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: best effort" -- probe
 # Labels are a convenience, not a wall stone: a failed create names the label and
 # the run carries on. A rollback over a label would delete a repository whose wall is up.
@@ -1195,8 +1227,16 @@ MOCK
 cat > "$work/glbin/curl" <<'MOCK'
 #!/usr/bin/env bash
 printf 'curl %s\n' "$*" >> "$GH_LOG"
-case "$*" in *"/copier.yml"*) [ "${MOCK_GL_CHOICES:-1}" = 1 ] || exit 22
-  printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' ;;
+# MOCK_GL_CHOICES=0 fails the read as `curl -sS` reports a 404, down as it
+# reports a host it cannot resolve; nochoices answers a copier.yml with no
+# archetype or license choices where the door looks (#629).
+case "$*" in *"/copier.yml"*)
+  case "${MOCK_GL_CHOICES:-1}" in
+    down)      echo "curl: (6) Could not resolve host: raw.githubusercontent.com" >&2; exit 6 ;;
+    1)         printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' ;;
+    nochoices) printf 'plinth_sha:\n  type: str\n' ;;
+    *)         echo "curl: (22) The requested URL returned error: 404" >&2; exit 22 ;;
+  esac ;;
   *) exit 22 ;; esac
 MOCK
 chmod +x "$work/glbin/"*
@@ -1246,6 +1286,18 @@ E="MOCK_TAG=moved" gl_run gl-tag-moved err no no "names commit $(printf '%040d' 
 E="MOCK_TAG=error" gl_run gl-tag-unread err no no "could not read which commit coolbress/plinth-template@$TEMPLATE_REF names" -- probe --host gitlab
 if grep -qF "/copier.yml" "$work/home-gl-tag-moved/calls.log"; then bad gl-tag-moved "the template's copier.yml was read although its tag names another commit"
 else ok gl-tag-moved "nothing is read from the template before its tag is verified"; fi
+# The GitLab door stops on an unread copier.yml; its stop carries curl's error,
+# or that the text carried no choices, through the same helper (#629). The fix
+# says to run it again only for a network fault: a 404 is reported instead.
+E="MOCK_GL_CHOICES=down" gl_run gl-choices-unread err no no "could not read the template's archetype and license choices (coolbress/plinth-template@$TEMPLATE_REF copier.yml)" -- probe --host gitlab
+grep -qxF "  curl failed: curl: (6) Could not resolve host: raw.githubusercontent.com" "$work/home-gl-choices-unread/out" && grep -qF "fix: run it again; it needs raw.githubusercontent.com" "$work/home-gl-choices-unread/out" \
+  && ok gl-choices-unread "the stop names curl and its error, and says to run it again" || bad gl-choices-unread "the stop does not name curl and its error"
+E="MOCK_GL_CHOICES=0" gl_run gl-choices-404 err no no "  curl failed: curl: (22) The requested URL returned error: 404" -- probe --host gitlab
+grep -qF "fix: none here; report it at https://github.com/coolbress/plinth/issues" "$work/home-gl-choices-404/out" \
+  && ok gl-choices-404 "a 404 at the pinned commit is reported, not retried" || bad gl-choices-404 "the fix line says to run it again on a 404"
+E="MOCK_GL_CHOICES=nochoices" gl_run gl-choices-none err no no "lists no archetype or license choices where the door looks: its shape changed, not the network" -- probe --host gitlab
+grep -qF "fix: none here; report it at https://github.com/coolbress/plinth/issues" "$work/home-gl-choices-none/out" \
+  && ok gl-choices-none "a shape change is reported, not retried" || bad gl-choices-none "the fix line still says to run it again"
 if grep -qF "raw.githubusercontent.com/coolbress/plinth-template/$TEMPLATE_SHA/copier.yml" "$work/home-gl-plan/calls.log" \
    && grep -qE "^uvx .*--vcs-ref $TEMPLATE_SHA gh:coolbress/plinth-template " "$work/home-gl-plan/calls.log"
 then ok gl-plan "the template's copier.yml is read, and the template rendered, at the tag's pinned commit (#519)"

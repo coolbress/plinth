@@ -30,7 +30,7 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# stop, warn, below and choices_of, shared with the GitHub door.
+# stop, warn, below, choices_of, read_into and unread_why, shared with the GitHub door.
 # shellcheck source=scripts/lib/door.sh
 . "$here/lib/door.sh"
 
@@ -242,10 +242,18 @@ fi
 # its copier.yml at the pinned tag's commit (public, over GitHub's raw files):
 # copier refuses anything else, and that would come after the project exists.
 template_pinned
-copier_yml="$(curl -fsSL --retry 2 "https://raw.githubusercontent.com/$template_repo/$template_sha/copier.yml" 2>/dev/null)" || copier_yml=""
+# Read through read_into so the stop below carries curl's error, or says the
+# text held no choices (#629). Running again fixes a network fault; not a 404
+# (no copier.yml at the pinned commit) or a text without choices.
+read_into copier_yml curl curl -fsSL --retry 2 "https://raw.githubusercontent.com/$template_repo/$template_sha/copier.yml" || :
 arch_choices="$(choices_of archetype)"; lic_choices="$(choices_of license)"
-[ -n "$arch_choices" ] && [ -n "$lic_choices" ] \
-  || stop "could not read the template's archetype and license choices ($template_repo@$template_ref copier.yml)" "  fix: run it again; it needs raw.githubusercontent.com"
+if [ -z "$arch_choices" ] || [ -z "$lic_choices" ]; then
+  case "$read_fault" in
+    ''|*"returned error: 404"*) fix="none here; report it at https://github.com/coolbress/plinth/issues" ;;
+    *)                          fix="run it again; it needs raw.githubusercontent.com" ;;
+  esac
+  stop "could not read the template's archetype and license choices ($template_repo@$template_ref copier.yml)" "  $(unread_why)" "  fix: $fix"
+fi
 grep -qxF "$arch" <<<"$arch_choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$arch_choices")"
 spdx="$(grep -ixF "$lic" <<<"$lic_choices" | head -1)" || spdx=""
 [ -n "$spdx" ] || stop "the template does not carry the license $lic" "  it accepts: $(tr '\n' ' ' <<<"$lic_choices")"

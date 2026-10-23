@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- When `/plinth:new-project` cannot read the template's archetype and
+  license lists, the warning is followed by one line saying which step
+  failed and what it said: `gh api` (GitHub's answer, with the HTTP status),
+  `base64 -d`, or, when both succeeded, that `copier.yml` at the pinned
+  commit lists no choices where the door looks (#629). The GitLab door's
+  stop on the same read carries `curl`'s error the same way, and says to run
+  it again only for a network fault: a 404 at the pinned commit or a shape
+  change is something to report. The warning's text, and what the door does
+  after it, do not change.
+
 ## [2.7.0] - 2026-10-22
 
 A new repository's agent now starts its work without waiting for your
