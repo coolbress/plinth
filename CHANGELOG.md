@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-10-23
+
+When `/plinth:new-project` cannot read the template's archetype and license
+lists, it now says why on one line under the warning: which step failed and
+what it said, or that the file held no choices. On GitLab the stop says the
+same and tells you to run it again only when the network was the cause
+(#629). Nothing changes when the read succeeds, and nothing changes in an
+existing repository.
+
+tested with plinth-template v1.22.0
+
 ### Fixed
 
 - When `/plinth:new-project` cannot read the template's archetype and
@@ -3440,7 +3451,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.7.1...HEAD
+[2.7.1]: https://github.com/coolbress/plinth/releases/tag/v2.7.1
 [2.7.0]: https://github.com/coolbress/plinth/releases/tag/v2.7.0
 [2.6.1]: https://github.com/coolbress/plinth/releases/tag/v2.6.1
 [2.6.0]: https://github.com/coolbress/plinth/releases/tag/v2.6.0
