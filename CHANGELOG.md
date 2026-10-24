@@ -11,6 +11,25 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-25
+
+A new `cli`, `backend` or `data-ml` project now tests the program a
+person runs, not only one function: the door renders plinth-template
+v1.24.0, whose entry-point test runs `python -m <package>` and compares
+what it prints with a stored file, so a changed output fails with a diff
+and an intended change is approved by updating that file. A `library`
+project calls its public name from the wheel it builds, not the source
+tree. The `verify` skill runs that test and reports the command, the exit
+status, the first lines of output and the commit. An existing `cli`
+repository gains `src/<package>/__main__.py` through
+`/plinth:template-update`; an untouched project of each archetype updated
+from v1.23.0 without conflicts. The docs now say plinth is a harness
+template, guides and checks the host requires, and Claude Code the agent
+harness (#640), and four doc lines that disagreed with the source match
+it, held by a new test (#641).
+
+tested with plinth-template v1.24.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.24.0
@@ -3534,7 +3553,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.9.0...HEAD
+[2.9.0]: https://github.com/coolbress/plinth/releases/tag/v2.9.0
 [2.8.0]: https://github.com/coolbress/plinth/releases/tag/v2.8.0
 [2.7.1]: https://github.com/coolbress/plinth/releases/tag/v2.7.1
 [2.7.0]: https://github.com/coolbress/plinth/releases/tag/v2.7.0
