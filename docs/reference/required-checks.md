@@ -9,7 +9,7 @@
 | `pull_request` | Changes land through a pull request; squash is the only merge method; no approval is required; a new push dismisses an earlier approval |
 | `required_status_checks` | Every check below reports a pass on the pull request's head, and the branch is up to date with the base (`strict`) |
 | `code_scanning` | CodeQL has analysed the head and found no alert at `error` or at security severity `high` or above |
-| Bypass list | Empty: the rules apply to owners too, `gh pr merge --admin` included |
+| Bypass list | Empty on this ruleset: its rules apply to owners too, `gh pr merge --admin` included. The second ruleset, `ruleset-merge.json` (`scripts/create-merge-ruleset.sh`), has one rule, `update`, and exempts the repository's admin role from it: only an admin merges into the default branch, and still only past the checks above |
 
 ## Required by `ruleset.json`
 

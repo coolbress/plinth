@@ -9,8 +9,8 @@ Why plinth is shaped the way it is. For the checks themselves, see
 AI agents now write code well; checking what they wrote has not kept up.
 Research and practice in 2026 point the same way. An agent's own "done" is not
 evidence. Review bots raise many comments and still miss problems. Planning
-kits shape what the agent does, but hold it to nothing. The harness, the
-program that turns a model into an agent, is solved and keeps improving:
+kits shape what the agent does, but hold it to nothing. The agent harness,
+the program that turns a model into an agent, is solved and keeps improving:
 Claude Code is one. What most people building with an agent still lack sits
 outside it. They need rules the work must pass, kept somewhere the agent does
 not control, and a way of working that leaves evidence another person can
@@ -53,12 +53,21 @@ plinth helps someone building with a coding agent keep purpose, decisions and
 context, repeat small verifiable changes, and leave a repository another
 developer can take over.
 
-It is not a harness: Claude Code is. plinth adds two things around it. The
-first is a repository configured so that the host requires checks before a
-merge, where an agent without administration on the repository cannot switch
-them off. The second is skills the harness loads only when a task calls for
-them. Nothing in the plugin enforces anything; the plugin can be uninstalled
-and the checks still stand.
+"Harness" has two meanings in 2026. The agent harness is the program that
+turns a model into an agent: Claude Code is one, and plinth is not. The other
+harness is what a person builds around that agent for their own project:
+guides that steer the agent before it acts (rules files, `AGENTS.md`, skills)
+and sensors that check its work after (tests, linters, type checks, review).
+A harness template is a ready-made set of those for one kind of project
+([Böckeler, "Harness engineering for coding agent users", 2026-04-02](https://martinfowler.com/articles/harness-engineering.html)).
+plinth is a harness template for a repository.
+
+What sets it apart is who requires the sensors. The host does, through the
+repository's ruleset, not the agent's own tools, so an agent without
+administration on the repository cannot switch them off. The guides are
+skills Claude Code loads only when a task calls for them. Nothing in the
+plugin enforces anything; the plugin can be uninstalled and the checks still
+stand.
 
 ## About the promise
 
@@ -137,9 +146,14 @@ repository does today, except under this heading. What follows here is
 direction, not a feature: expect nothing from it until a release note says
 it shipped.
 
-- Candidate checks specified and measured before any is adopted: mutation
-  testing, changed-line coverage, and ruff's complexity, commented-out code
-  and unused-argument rules (#406).
+No item is listed here now.
+
+Decided from this list since it was written: of the candidate checks #406
+measured, changed-line coverage was added to `ci / test` as a report that
+does not fail it yet (#503); mutation testing, and ruff's complexity,
+commented-out code and unused-argument rules, were not added (mutation
+testing flagged mostly lines that needed no test and multiplies test time;
+the three ruff rules found nothing in the measured runs).
 
 Shipped from this list since it was written: the record of a project run on
 a token without workflow permission (#403, in
@@ -381,8 +395,11 @@ A threshold input is read elsewhere: `ci / floor-check` and
 `/plinth:floor-check` read it on every run: a `ci` job whose `with:` passes `max-diff-lines` of 0 or less, or above
 400, or `deps-fail-on-severity: critical`, is a WARN naming the value and
 plinth's default, never a red; an expression is a SKIP. The other inputs
-are not read for direction. Nothing today compares a repository's configuration with what
-was agreed: that is #404, under the direction heading above.
+are not read for direction. No check compares a repository's configuration
+with what was agreed: #404 decided that a person judges it,
+and shipped what puts each change in front of them, the lines `ci / diff-size`
+lists above and these WARNs on every run. The person decides by approving,
+where the agent has an account of its own, or by reading the description.
 
 ### 4. The checks actually ran on this commit (evidence)
 

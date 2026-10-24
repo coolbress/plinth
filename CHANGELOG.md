@@ -22,6 +22,31 @@ pull requests and have no tag.
   repository gains `src/<package>/__main__.py` through
   `/plinth:template-update`; a `web` project renders exactly as on
   v1.23.0.
+- "Harness" now carries both of its 2026 meanings (#640). `CONTEXT.md`
+  and the concepts page say that Claude Code is the agent harness, the
+  program that turns a model into an agent, and plinth is a harness
+  template: the guides that steer the agent and the checks that test its
+  work, set up in a repository, where the host requires the checks and the
+  agent cannot switch them off. The second meaning follows Birgitta
+  Böckeler's "Harness engineering for coding agent users" (2026-04-02).
+  The README's first screen uses the term once, after the plain
+  description. The line "plinth is not a harness" is gone; it held only for the
+  first meaning.
+
+### Fixed
+
+- Four doc lines that disagreed with the source now match it (#641). Run
+  a project's step 5 says the required checks are nine on GitHub, ten for
+  `backend` or `data-ml` and twelve for `web`; it said "ten for a service",
+  which left out `web`'s two. The required-checks page says the merge
+  ruleset exempts the admin role from its one rule, where it said the
+  bypass list was empty for both rulesets. The concepts page no longer
+  calls #404 future work while listing it as shipped, and says what #406
+  decided instead of listing its candidate checks as still open. A new
+  test, `tests/doc-pinned-facts.sh`, fails when the README or the tutorial
+  names a template tag other than the one the door pins, or when a doc
+  states a check count for an archetype that differs from the ruleset the
+  door applies.
 
 ## [2.8.0] - 2026-10-24
 
