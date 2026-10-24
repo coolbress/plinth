@@ -2779,16 +2779,19 @@ def pg_url_is_production(url: str) -> bool:
     """Could this PostgreSQL URL reach a production database? False only when
     every host it names is local (or a placeholder) or the database it names
     is a test one; True for anything else, a URL this cannot parse included.
-    libpq takes the hosts from the authority (`h1,h2:5433`) and from `host=`
-    in the query, which wins; `dbname=` in the query wins over the path."""
+    A destination is any host libpq could connect to: those of the
+    authority (`h1,h2:5433`), and the comma lists of `host=` and `hostaddr=`
+    in the query, which can replace them or set the network address on their
+    own. All of them are judged, whichever wins: one that is not local is
+    enough. `dbname=` in the query wins over the path."""
     try:
         split = urllib.parse.urlsplit(url)
     except ValueError:   # an unclosed `[` of an IPv6 host
         return True
     query = urllib.parse.parse_qs(split.query, keep_blank_values=True)
     authority = split.netloc.rpartition("@")[2]
-    hosts = query.get("host") or [h.rpartition("]")[0].lstrip("[") if h.startswith("[") else h.partition(":")[0]
-                                  for h in authority.split(",")]
+    hosts = [h.rpartition("]")[0].lstrip("[") if h.startswith("[") else h.partition(":")[0] for h in authority.split(",")]
+    hosts += [h.strip() for key in ("host", "hostaddr") for v in query.get(key, []) for h in v.split(",")]
     dbname = (query.get("dbname") or [urllib.parse.unquote(split.path.lstrip("/"))])[0]
     if dbname and TEST_DB.search(dbname):
         return False
