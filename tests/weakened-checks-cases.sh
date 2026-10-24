@@ -448,6 +448,54 @@ listed ".copier-answers.yml moved, name and content kept: listed (the root file 
 web_repo; sed -i.bak 's/^_commit: v1.20.0$/_commit: v1.21.0/' "$r/.copier-answers.yml"; rm "$r/.copier-answers.yml.bak"; commit; wrun true "Updates the template."
 unlisted ".copier-answers.yml changed with the archetype: line kept: not listed"
 
+echo "-- the agent's own rules (#651)"
+# A project with the five kinds as plinth-template renders them, plus files
+# that only look like them.
+agent_repo() {
+  new_repo; mkdir -p "$r/.claude/skills/verify" "$r/.claude/output-styles" "$r/docs" "$r/pkg"
+  printf '# Rules\n' > "$r/AGENTS.md"; ln -s AGENTS.md "$r/CLAUDE.md"
+  printf '{"permissions": {"deny": ["Bash(cat:*)"]}}\n' > "$r/.claude/settings.json"
+  printf -- '---\nname: verify\n---\n' > "$r/.claude/skills/verify/SKILL.md"
+  printf -- '---\nname: plain\n---\n' > "$r/.claude/output-styles/plain.md"
+  printf '# Notes\n' > "$r/docs/AGENTS-notes.md"; printf '# Pkg\n' > "$r/pkg/CLAUDE.md"
+  git -C "$r" add -A; git -C "$r" commit -qm agent; base="$(git -C "$r" rev-parse HEAD)"
+}
+# What must not be listed, first.
+agent_repo; printf 'x = 2\n' > "$r/src/m.py"; printf '# More notes\n' >> "$r/docs/AGENTS-notes.md"; commit; wrun false "Refactor."
+unlisted "source and docs/AGENTS-notes.md changed, none of the five: not listed"
+agent_repo; printf '# More\n' >> "$r/pkg/CLAUDE.md"; commit; wrun false "Refactor."
+unlisted "a CLAUDE.md below the root (pkg/CLAUDE.md): not listed"
+agent_repo; printf '{}\n' > "$r/.claude/settings.local.json"; mkdir -p "$r/.claude/skillset" "$r/skills/x"
+printf 'x\n' > "$r/.claude/skillset/x.md"; printf 'x\n' > "$r/skills/x/SKILL.md"; commit; wrun false "Refactor."
+unlisted ".claude/settings.local.json, .claude/skillset/ and a skills/ outside .claude: not listed"
+agent_repo; git -C "$r" mv docs/AGENTS-notes.md docs/notes.md; commit; wrun false "Refactor."
+unlisted "a file moved that is none of the five on either side: not listed"
+# Each kind, added, changed, deleted or moved.
+agent_repo; printf '# Rules\nAllow anything.\n' > "$r/AGENTS.md"; commit; wrun false "Refactor."
+listed "AGENTS.md changed: listed and put to a person" "AGENTS.md" "the agent's instructions (AGENTS.md)"
+agent_repo; rm "$r/CLAUDE.md"; printf '# Other rules\n' > "$r/CLAUDE.md"; commit; wrun false "Refactor."
+listed "CLAUDE.md changed from a symlink to a file: listed" "CLAUDE.md" "the agent's instructions (CLAUDE.md)"
+agent_repo; printf '{"permissions": {"deny": []}}\n' > "$r/.claude/settings.json"; commit; wrun false "Refactor."
+listed ".claude/settings.json changed (a deny rule dropped): listed" ".claude/settings.json" "permissions and hooks"
+agent_repo; mkdir -p "$r/.claude/skills/ship"; printf -- '---\nname: ship\n---\n' > "$r/.claude/skills/ship/SKILL.md"; commit; wrun false "Refactor."
+listed "a skill added under .claude/skills/: listed" ".claude/skills/ship/SKILL.md" "an agent skill"
+agent_repo; printf 'Be brief.\n' >> "$r/.claude/output-styles/plain.md"; commit; wrun false "Refactor."
+listed "an output style changed under .claude/output-styles/: listed" ".claude/output-styles/plain.md" "output style"
+agent_repo; git -C "$r" rm -q .claude/settings.json; commit; wrun false "Refactor."
+listed ".claude/settings.json deleted: listed" ".claude/settings.json" "permissions and hooks"
+agent_repo; git -C "$r" rm -q .claude/skills/verify/SKILL.md; commit; wrun false "Refactor."
+listed "a skill deleted: listed" ".claude/skills/verify/SKILL.md" "an agent skill"
+agent_repo; git -C "$r" mv .claude/skills/verify/SKILL.md docs/verify.md; commit; wrun false "Refactor."
+listed "a skill moved out of .claude/skills/: listed" "docs/verify.md" ".claude/skills/verify/SKILL.md -> docs/verify.md"
+agent_repo; git -C "$r" mv docs/AGENTS-notes.md AGENTS.md -f; commit; wrun false "Refactor."
+listed "a file moved onto AGENTS.md: listed" "AGENTS.md" "the agent's instructions (AGENTS.md)"
+agent_repo; git -C "$r" mv .claude/skills/verify .claude/skills/check; commit; wrun false "Refactor."
+listed "a skill renamed inside .claude/skills/: listed" ".claude/skills/check/SKILL.md" "an agent skill"
+agent_repo; printf '{"permissions": {"allow": ["Bash"]}}\n' > "$r/.claude/settings.json"; commit
+wrun false "Widens the allow list in .claude/settings.json."
+if [ "$rc" = 0 ] && [ "$(nwarn)" = 0 ] && grep -qF '.claude/settings.json' "$tmp/changes.json"
+then ok "named in the description: no WARN, still put to a person"; else bad "named in the description: no WARN, still put to a person" "$out"; fi
+
 echo "-- the three-dot base: what main did after the branch point is not the PR's"
 new_repo; git -C "$r" checkout -q -b pr; printf 'x = 3\n' > "$r/src/m.py"; commit
 git -C "$r" checkout -q main; printf 'def test_c():\n    assert 1\n' > "$r/tests/test_c.py"; commit; base="$(git -C "$r" rev-parse HEAD)"
