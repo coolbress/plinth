@@ -20,7 +20,8 @@ proves it done.
 A rule the agent is told holds only while the agent follows it. plinth
 configures the host (today GitHub) to require checks before a merge, most of
 them established tools and a few plinth's own, and the host refuses the merge
-while one is red.
+while one is red. In 2026's terms, plinth is a harness template: guides for
+the agent, and checks the host requires, not the agent.
 
 You decide. The checks answer. The record remembers.
 

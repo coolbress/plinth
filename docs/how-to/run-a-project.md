@@ -143,8 +143,9 @@ can see these: guidance only.
 ### 5. Check what the checks cannot
 
 - **Where you are:** a pull request with its checks running.
-- **Next:** wait for the required checks: nine on GitHub (ten for a
-  service), with the code-scan rule beside them. Then ask: "What shows it
+- **Next:** wait for the required checks: nine on GitHub (ten for
+  `backend` or `data-ml`, twelve for `web`), with the code-scan rule beside
+  them. Then ask: "What shows it
   works, and what did you not check?", "Can I see it?", "What did the reviewer
   say?".
 - **Look at:** the description, for each thing "done" meant. Run the

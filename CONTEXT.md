@@ -52,11 +52,21 @@ from stay in the lab.
   stop a merge: the ruleset is unchanged. "Unchanged", for both kinds, means
   a change is visible and was reviewed. All five:
   [docs/explanation/concepts.md](docs/explanation/concepts.md#about-what-green-means).
+- **harness**: two meanings, kept apart. The **agent harness** is the
+  program that turns a model into an agent, as the
+  [AI Coding Dictionary](https://github.com/mattpocock/dictionary-of-ai-coding)
+  uses the word: Claude Code is one, and plinth is not. A **harness
+  template** is a ready-made set of guides (rules files, `AGENTS.md`,
+  skills) that steer the agent before it acts and sensors (tests, linters,
+  type checks, review) that check its work after, for one kind of project
+  ([Böckeler, "Harness engineering for coding agent users", martinfowler.com, 2026-04-02](https://martinfowler.com/articles/harness-engineering.html)).
+  plinth is a harness template for a repository, and its sensors are
+  required by the host, not by the agent. "The harness" alone means the agent
+  harness.
 - **profile**: an opt-in plugin that adds hooks on top of the default install
   (`plinth-hooks`, not part of this version). plinth itself has no hooks, and
   neither does any plugin in the default set.
 
-Terms not defined here (agent, harness, session, context window, automated
-check, automated review, human review, skill) follow the
+Terms not defined here (agent, session, context window, automated check,
+automated review, human review, skill) follow the
 [AI Coding Dictionary](https://github.com/mattpocock/dictionary-of-ai-coding).
-plinth is not a harness; Claude Code is.

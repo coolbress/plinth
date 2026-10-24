@@ -295,3 +295,6 @@ jobs:
 
       - name: The required-checks page names exactly the checks the wall requires
         run: ./tests/required-checks-doc.sh
+
+      - name: The docs' template tag and check counts match the source
+        run: ./tests/doc-pinned-facts.sh
