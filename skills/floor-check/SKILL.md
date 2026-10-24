@@ -56,6 +56,24 @@ Relay the WARN lines with the fix from
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`; never run a logout or
 delete a credential yourself.
 
+`--credentials` also asks whether a production database URL is within the
+agent's reach (#648). It reads three places: this environment's variables,
+every `.env*` file under the repository, tracked or not (a directory named
+`.env*`, usually a virtualenv, is not entered), and the `env` block of
+`.claude/settings.json` and `.claude/settings.local.json`, the repository's
+and the user's. A `postgres://` or `postgresql://` URL there (any letter case,
+a `+driver` allowed) is a WARN naming the variable, or the file and line,
+never the value, with one fix line: keep the production URL only in the
+host's settings and use a local database for work, the template's SQLite
+default. Not a WARN: a URL whose every host is local (`localhost`, a
+loopback address, `0.0.0.0`, a Unix socket, a `.localhost` name), a reserved
+placeholder name (`example.com`, `.example`, `.test`, `.invalid`), a host
+written as a variable (`${PGHOST}`, `<host>`), a database whose name says it
+is for tests (`test`, `app_test`, `testing`), an empty value, a `#` comment.
+Nothing found is an INFO naming what is not read, never a PASS: shell profile
+files, any other file, and other schemes (`mysql://`, `mongodb://`). Relay a
+WARN with its fix line; never delete the line or the variable yourself.
+
 `--merge-ruleset` expects the second ruleset the door applies: the
 `update` rule alone, with the repository's admin role exempt from it, so
 an account with write access cannot merge and the admin merges as before. It is a
@@ -126,7 +144,8 @@ SKIP and the checkout's include is read instead. `--credentials` reads
 gitlab.com there: `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN` or `OAUTH_TOKEN` set,
 git helpers for gitlab.com other than glab's, an `Authorization` header and a
 gitlab.com login in `~/.netrc`; the login glab itself stores is a SKIP. Relay
-them as on GitHub. The template drift item's `copier update` line carries
+them as on GitHub. The production database URL item reads the same three
+places as on GitHub. The template drift item's `copier update` line carries
 the include's commit and its checksum together (`plinth_sha` and
 `plinth_gitlab_integrity`). In place of `gh`'s denies,
 the agent settings must deny `glab`'s token and config reads. The issue and

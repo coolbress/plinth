@@ -1161,6 +1161,113 @@ for v in "$cred/elsewhere" ''; do
 done
 grep -q "SKIP  GIT_CONFIG is set" <<<"$out" && ok "--credentials: GIT_CONFIG, set or empty, is named as hiding a configuration"
 
+# --credentials also names a production database URL within the agent's reach
+# (#648): this environment, .env* files under --root (tracked or not), and the
+# env of .claude/settings*.json, the repository's and the user's. Every value
+# below is fake; `FAKE648` (a password) and `acme648` (a host) must never be
+# printed. Each run gets an empty environment besides what the case sets, and
+# a PATH whose gh fails at once (the gh item is not this block's question).
+dbr="$work/dbroot"; dbu="$work/dbuser"
+dbreset() { rm -rf "$dbr" "$dbu"; cp -R "$good" "$dbr"; mkdir -p "$dbu"; }
+dbrun() {   # extra env assignments as arguments; prints the checker's output
+  env -i PATH="$cred/bin:$PATH" HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 CLAUDE_CONFIG_DIR="$dbu" FAKE_GH_SAW="$cred/saw" "$@" \
+    python3 "$checker" --root "$dbr" --no-network --credentials 2>&1
+}
+db_lines() { grep -i "database" <<<"$out"; }
+leaks() { grep -qE "FAKE648|acme648" <<<"$out"; }
+prod='postgres://app:FAKE648@db.acme648.net:5432/app'
+dbquiet() { # <description>: no database WARN or SKIP, the limit INFO, no PASS, no value
+  if ! grep -qE "(WARN|SKIP|PASS)  .*database" <<<"$out" && grep -q "INFO  no production database URL found in this environment" <<<"$out" \
+     && grep -q "best effort: shell profile files, other files and schemes other than postgres:// and postgresql:// are not read" <<<"$out" && ! leaks
+  then ok "$1"; else bad "$1"; db_lines | sed 's/^/        /'; fi
+}
+dbwarn() { # <description> <ERE for the WARN's place>: a WARN naming the place, its fix line, no limit INFO, no value
+  if grep -qE "WARN  a production database URL is within the agent's reach: $2" <<<"$out" \
+     && grep -q "the template's SQLite default" <<<"$out" && ! grep -q "INFO  no production database URL found" <<<"$out" && ! leaks
+  then ok "$1"; else bad "$1"; db_lines | sed 's/^/        /'; fi
+}
+
+# What must not warn, first.
+dbreset; out="$(dbrun)"
+dbquiet "--credentials, database: nothing found is an INFO naming what is not read, never a PASS"
+warned=0
+for url in 'postgres://app:FAKE648@localhost:5432/app' 'postgresql://app:FAKE648@127.0.0.1/app' 'postgresql://app:FAKE648@[::1]:5432/app' \
+           'postgresql:///app' 'postgresql://app@/app?host=/var/run/postgresql' 'postgres://app:FAKE648@db.localhost/app' \
+           'postgres://user:password@db.example.com/app' 'postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}/app' 'postgres://u:p@<host>/db' \
+           'postgresql://app:FAKE648@0.0.0.0/app' \
+           'postgres://app:FAKE648@db.acme648.net/app_test' 'postgres://app:FAKE648@db.acme648.net/test' \
+           'postgresql://app:FAKE648@db.acme648.net/app?dbname=testing' '' 'sqlite:///app.db'; do
+  dbreset
+  printf 'DATABASE_URL=%s\n' "$url" > "$dbr/.env"
+  printf '{"env":{"DATABASE_URL":"%s"}}\n' "$url" > "$dbr/.claude/settings.local.json"
+  printf '{"env":{"DATABASE_URL":"%s"}}\n' "$url" > "$dbu/settings.json"
+  out="$(dbrun DATABASE_URL="$url")"
+  if grep -qE "(WARN|SKIP)  .*database" <<<"$out" || leaks; then warned=1; bad "--credentials, database: '$url' warned or was printed"; db_lines | sed 's/^/        /'; fi
+done
+[ "$warned" = 0 ] && dbquiet "--credentials, database: local hosts, sockets, reserved placeholder names, variables, test databases, an empty value and sqlite do not warn"
+dbreset
+printf '# DATABASE_URL=%s\n  # %s\nDATABASE_URL=sqlite:///app.db # was %s\nOTHER=x\n' "$prod" "$prod" "$prod" > "$dbr/.env"
+out="$(dbrun)"
+dbquiet "--credentials, database: a commented line and a comment after an unquoted value do not warn"
+dbreset; mkdir -p "$dbr/.env"; printf 'DATABASE_URL=%s\n' "$prod" > "$dbr/.env/.env"; printf 'home = /x\n' > "$dbr/.env/pyvenv.cfg"
+out="$(dbrun)"
+dbquiet "--credentials, database: a directory named .env (a virtualenv) is not entered"
+
+# What warns: each place, named, the value never printed.
+dbreset; out="$(dbrun DATABASE_URL="$prod")"; rc=$?
+dbwarn "--credentials, database: DATABASE_URL in this environment is a WARN naming the variable" "DATABASE_URL in this environment$"
+[ "$rc" = 0 ] && grep -q "INFO    remove it where it is set (a shell startup file), then restart Claude Code" <<<"$out" \
+  && ok "--credentials, database: a WARN does not fail the run, and the fix says where to remove it" || bad "--credentials, database: exit $rc or the environment fix line"
+dbreset; out="$(dbrun REPORTING_DB='POSTGRESQL+psycopg://app:FAKE648@db.acme648.net/app')"
+dbwarn "--credentials, database: any variable holding a postgresql+driver URL, in any case, is a WARN" "REPORTING_DB in this environment$"
+dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@localhost,db.acme648.net:5433/app')"
+dbwarn "--credentials, database: a local host beside a remote one is a WARN" "DATABASE_URL in this environment$"
+dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@127.acme648.net/app')"
+dbwarn "--credentials, database: a host name that starts with 127. is not loopback" "DATABASE_URL in this environment$"
+dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@localhost/app?host=db.acme648.net')"
+dbwarn "--credentials, database: host= in the query wins over the authority, as libpq reads it" "DATABASE_URL in this environment$"
+dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@[db.acme648.net/app')"
+dbwarn "--credentials, database: a URL that cannot be parsed is a WARN, not passed over" "DATABASE_URL in this environment$"
+dbreset; printf 'APP_PORT=8000\nDATABASE_URL=%s\n' "$prod" > "$dbr/.env.production"; git -C "$dbr" add .env.production; out="$(dbrun)"
+dbwarn "--credentials, database: a tracked .env.production names its file, line and variable" "\.env\.production line 2 \(DATABASE_URL\)$"
+grep -q "INFO    delete the line; keep the production URL only in the host's settings" <<<"$out" \
+  && ok "--credentials, database: the file's fix line" || bad "--credentials, database: the file's fix line"
+dbreset; printf '.env\n' >> "$dbr/.gitignore"; printf 'export DATABASE_URL="%s"\n' "$prod" > "$dbr/.env"; out="$(dbrun)"
+dbwarn "--credentials, database: an ignored, untracked .env with export and quotes is a WARN" "\.env line 1 \(DATABASE_URL\)$"
+dbreset; mkdir -p "$dbr/apps/web"; printf "DB='%s'\n" "$prod" > "$dbr/apps/web/.env.local"; out="$(dbrun)"
+dbwarn "--credentials, database: a .env.local in a subdirectory is a WARN" "apps/web/\.env\.local line 1 \(DB\)$"
+dbreset; printf '%s/db=x\n' "$prod" > "$dbr/.env"; out="$(dbrun)"
+dbwarn "--credentials, database: a line with no variable name prints only its file and line" "\.env line 1$"
+dbreset; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbr/.claude/settings.local.json"; out="$(dbrun)"
+dbwarn "--credentials, database: the env of the repository's .claude/settings.local.json is a WARN" "DATABASE_URL in the env of \.claude/settings\.local\.json$"
+dbreset; python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["env"]={"DATABASE_URL":sys.argv[2]}; json.dump(d,open(p,"w"))' "$dbr/.claude/settings.json" "$prod"; out="$(dbrun)"
+dbwarn "--credentials, database: the env of the repository's .claude/settings.json is a WARN" "DATABASE_URL in the env of \.claude/settings\.json$"
+dbreset; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun)"
+dbwarn "--credentials, database: the env of the user's settings.json is a WARN" "DATABASE_URL in the env of .*/dbuser/settings\.json$"
+dbreset; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbu/settings.local.json"; out="$(dbrun)"
+dbwarn "--credentials, database: the env of the user's settings.local.json is a WARN" "DATABASE_URL in the env of .*/dbuser/settings\.local\.json$"
+dbreset; printf '{"env":{"postgres://x:FAKE648@acme648.net/a":"%s"}}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun)"
+dbwarn "--credentials, database: an env key that is not a name is not printed" "an entry in the env of .*/dbuser/settings\.json$"
+dbreset; printf 'DATABASE_URL=%s\n' "$prod" > "$dbr/.env"; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun DATABASE_URL="$prod")"
+[ "$(grep -c "WARN  a production database URL is within the agent's reach" <<<"$out")" = 3 ] && ! leaks \
+  && ok "--credentials, database: three places hold it, three WARNs" || { bad "--credentials, database: three places"; db_lines | sed 's/^/        /'; }
+
+# What cannot be read is a SKIP naming it.
+dbreset; printf '{"env":' > "$dbu/settings.json"; out="$(dbrun)"
+grep -qE "SKIP  .*/dbuser/settings\.json not verified: it could not be read as JSON" <<<"$out" \
+  && ok "--credentials, database: unreadable settings JSON is a SKIP" || { bad "--credentials, database: bad JSON"; db_lines | sed 's/^/        /'; }
+dbreset; printf '{"env":["%s"]}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun)"
+grep -qE "SKIP  .*/dbuser/settings\.json not verified: its env is not an object" <<<"$out" && ! leaks \
+  && ok "--credentials, database: an env that is not an object is a SKIP" || { bad "--credentials, database: env list"; db_lines | sed 's/^/        /'; }
+if [ "$(id -u)" != 0 ]; then
+  dbreset; printf 'DATABASE_URL=%s\n' "$prod" > "$dbr/.env"; chmod 000 "$dbr/.env"; out="$(dbrun)"; chmod 600 "$dbr/.env"
+  grep -q "SKIP  .env not verified: it could not be read" <<<"$out" && ! leaks \
+    && ok "--credentials, database: an unreadable .env is a SKIP" || { bad "--credentials, database: unreadable .env"; db_lines | sed 's/^/        /'; }
+fi
+# ci / floor-check never passes --credentials: its own service URLs are not this item's question.
+dbreset; out="$(env -i PATH="$PATH" HOME="$cred/home" CLAUDE_CONFIG_DIR="$dbu" DATABASE_URL="$prod" python3 "$checker" --root "$dbr" --no-network 2>&1)"
+! grep -qi "database" <<<"$out" && ! leaks && ok "--credentials, database: without --credentials the item does not run" || bad "--credentials, database: ran without --credentials"
+
 # The source of each required check is part of the wall: a required
 # `ci / test` with no integration_id is satisfied by a commit status anyone
 # with write access can post. The shipped ruleset pins GitHub Actions (15368);
