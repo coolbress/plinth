@@ -11,6 +11,28 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-24
+
+A new `web` project's first deploy to Render now goes through on its own:
+the door renders plinth-template v1.23.0, whose pre-deploy step waits up
+to two minutes for the database the Blueprint is still creating, whose
+app answers on the address Render gives it, and whose README says how to
+make the first account and how to restore the database. All four come
+from a live run of the `web` archetype on Render (#607): deployed after
+the checks, updated with `/plinth:template-update`, restored into a new
+database at a chosen time with every row back, and removed. What it cost
+there: a Hobby workspace has no plan fee; the web service is about $7 and
+the Postgres about $6 a month (Render estimated $13.30 with 1 GB of
+disk), charged by the second, so the run of about 50 minutes with three
+paid resources came to $0.02. Restore works within the past 3 days on
+Hobby and 7 days on Pro or higher, never to the last ten minutes, into a
+new database; it took about five minutes from the restore's start to the
+app answering. The agent's own account page now names the `read:org`
+scope its token needs and sets its commit name and email (#637). An
+existing repository changes only through `/plinth:template-update`.
+
+tested with plinth-template v1.23.0
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.23.0
@@ -3475,7 +3497,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.7.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/coolbress/plinth/releases/tag/v2.8.0
 [2.7.1]: https://github.com/coolbress/plinth/releases/tag/v2.7.1
 [2.7.0]: https://github.com/coolbress/plinth/releases/tag/v2.7.0
 [2.6.1]: https://github.com/coolbress/plinth/releases/tag/v2.6.1
