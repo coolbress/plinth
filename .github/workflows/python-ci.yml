@@ -1239,9 +1239,29 @@ jobs:
                   return "the rows ci / migrations keeps changed (tests/migration_rows.json)"
               return None
 
+          # The agent's own rules (#651): what it reads as instructions, what
+          # it may run, and the skills and output style it is given. By the
+          # path at the repository root, on either side of a move.
+          AGENT = (("AGENTS.md", "the agent's instructions (AGENTS.md)"),
+                   ("CLAUDE.md", "the agent's instructions (CLAUDE.md)"),
+                   (".claude/settings.json", "the agent's permissions and hooks (.claude/settings.json)"),
+                   (".claude/skills/", "an agent skill (.claude/skills/)"),
+                   (".claude/output-styles/", "the agent's output style (.claude/output-styles/)"))
+
+          def agent_what(old, new):
+              for p, why in AGENT:
+                  if any(x == p or (p.endswith("/") and x.startswith(p)) for x in (old, new)):
+                      return f"{why} added, changed, deleted or moved"
+              return None
+
           def what(status, old, new):
               """Why this path touches the checks, or None."""
               name = new.rsplit("/", 1)[-1]
+              # Before the workflow kind, which asks nobody: a move between
+              # .github/workflows/ and the agent's rules is still put to a person.
+              agent = agent_what(old, new)
+              if agent:
+                  return agent
               if new.startswith(".github/workflows/") or old.startswith(".github/workflows/"):
                   return "a workflow changed"
               web = web_what(status, old, new)

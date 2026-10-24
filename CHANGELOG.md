@@ -11,6 +11,27 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `ci / diff-size` now lists a change to the agent's own rules under
+  "Changes to the checks": `AGENTS.md`, `CLAUDE.md` and
+  `.claude/settings.json` at the repository root, and any file under
+  `.claude/skills/` or `.claude/output-styles/`, added, changed, deleted
+  or moved (#651). Before, a pull request could widen what the agent may
+  run, or drop a deny rule, and pass without being named. What changes in
+  an existing repository once its `ci.yml` calls this version: a pull
+  request that changes one of these files and was pushed by an account
+  that is not an admin, such as the agent's own account, now needs an
+  admin's approval on its latest commit before `ci / diff-size` turns
+  green, as a changed test or check configuration already did. Pushed by
+  an admin, it needs none, and the job summary says the change is the
+  person's decision. This often includes a `/plinth:template-update` pull
+  request: of four updates measured, one template release at a time from
+  v1.20.0 to v1.24.0, two changed one of these files (`AGENTS.md` and
+  `.claude/settings.json` in v1.22.0, the `verify` skill in v1.24.0). The
+  pull request that first moves a repository's `ci.yml` to this version
+  is judged by the new rule already. No job or check name changes.
+
 ## [2.9.0] - 2026-10-25
 
 A new `cli`, `backend` or `data-ml` project now tests the program a
