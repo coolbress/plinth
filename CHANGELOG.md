@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The agent's own account page names the two scopes its classic token
+  needs, `repo` and `read:org` (#637): `gh auth login` refuses a classic
+  token without `read:org`, so a person who ticked only `repo` stalled at
+  the sign-in. `read:org` only reads organization membership, and
+  `workflow` stays unticked. A new step 5 sets git's name and email to the
+  agent account's name and no-reply address, so the agent's commits link to
+  that account instead of carrying an address made from the computer's user
+  and host name. The steps after it move down by one.
+
 ## [2.7.1] - 2026-10-23
 
 When `/plinth:new-project` cannot read the template's archetype and license

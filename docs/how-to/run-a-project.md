@@ -57,7 +57,7 @@ Then, before step 2, in this order; until each is done, its protection is
 missing:
 
 1. [The agent's token](give-the-agent-a-token.md) (the default), ending with every other credential off the machine.
-2. Then [its own account](give-the-agent-its-own-account.md) (strongly recommended), whose last step removes your own login, the token from 1 included.
+2. Then [its own account](give-the-agent-its-own-account.md) (strongly recommended), whose step 6 removes your own login, the token from 1 included.
 3. [The four things by hand](set-four-things-by-hand.md).
 
 #### Give the agent a token that cannot change the checks

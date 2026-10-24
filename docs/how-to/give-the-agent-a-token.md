@@ -2,7 +2,7 @@
 
 Before this page: the first pull request of step 1 in
 [Run a project](run-a-project.md#1-start), merged. After it:
-[the agent's own account](give-the-agent-its-own-account.md), whose step 5
+[the agent's own account](give-the-agent-its-own-account.md), whose step 6
 repeats this page's step 5 for your own login, then
 [the four things by hand](set-four-things-by-hand.md).
 
