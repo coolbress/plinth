@@ -79,6 +79,13 @@ pipeline's own floor-check job, run from gitlab/python-ci.yml beside this
 script so the two cannot drift. That rule needs PyYAML: without it here, the
 job's own pin is installed by hash into a temporary venv (pypi.org), and with
 --no-network the item is a SKIP. GitHub-only items (Dependabot, the workflows) are not read there.
+
+--credentials also names a production database URL within the agent's reach
+(#648): a PostgreSQL URL to a host that is not local, in this environment,
+the repository's .env* files or the env of .claude/settings*.json. A WARN
+names the place, never the value; nothing found is an INFO with its limit.
+`ci / floor-check` does not pass --credentials, so its own service URLs are
+never read.
 """
 
 from __future__ import annotations
@@ -86,6 +93,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import ipaddress
 import json
 import math
 import os
@@ -2752,6 +2760,145 @@ def check_credentials(root: Path, host: str = "github") -> None:
     result("INFO", "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file")
 
 
+# A PostgreSQL URL, the scheme in any case and with an optional SQLAlchemy
+# driver (`postgresql+psycopg://`). The match runs to the next space or quote.
+PG_URL = re.compile(r"postgres(?:ql)?(?:\+\w+)?://[^\s'\"`]*", re.IGNORECASE)
+# Database names that say they are for tests: `test`, `app_test`, `test-app`, `tests`, `testing`.
+TEST_DB = re.compile(r"(?:^|[_-])test(?:s|ing)?(?:[_-]|$)", re.IGNORECASE)
+# Hosts that cannot be a production server: loopback, a Unix socket (empty or a
+# path), and RFC 2606/6761's reserved names, which placeholders use. A host
+# that is a variable or a placeholder (`${PGHOST}`, `<host>`) is not judged.
+LOCAL_SUFFIXES = (".localhost", ".example", ".test", ".invalid", ".example.com", ".example.org", ".example.net")
+LOCAL_HOSTS = {"", "localhost", "example.com", "example.org", "example.net"}
+# A name printed beside a hit: an identifier, or nothing. A line such as
+# `postgres://user:pw@host/db=x` has text before its `=` that is not a name.
+PRINTABLE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]{0,63}")
+
+
+def pg_url_is_production(url: str) -> bool:
+    """Could this PostgreSQL URL reach a production database? False only when
+    every host it names is local (or a placeholder) or the database it names
+    is a test one; True for anything else, a URL this cannot parse included.
+    libpq takes the hosts from the authority (`h1,h2:5433`) and from `host=`
+    in the query, which wins; `dbname=` in the query wins over the path."""
+    try:
+        split = urllib.parse.urlsplit(url)
+    except ValueError:   # an unclosed `[` of an IPv6 host
+        return True
+    query = urllib.parse.parse_qs(split.query, keep_blank_values=True)
+    authority = split.netloc.rpartition("@")[2]
+    hosts = query.get("host") or [h.rpartition("]")[0].lstrip("[") if h.startswith("[") else h.partition(":")[0]
+                                  for h in authority.split(",")]
+    dbname = (query.get("dbname") or [urllib.parse.unquote(split.path.lstrip("/"))])[0]
+    if dbname and TEST_DB.search(dbname):
+        return False
+
+    def local(host: str) -> bool:
+        host = urllib.parse.unquote(host).lower()
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        return (host in LOCAL_HOSTS or host.startswith("/") or host.endswith(LOCAL_SUFFIXES)
+                or (ip is not None and (ip.is_loopback or ip.is_unspecified)) or any(c in host for c in "${}<>"))
+    return not all(local(h) for h in hosts)
+
+
+def dotenv_values(text: str):
+    """Yield (line number, name, value) for each assignment in dotenv text:
+    blank lines and `#` comments skipped, `export ` dropped, a quoted value
+    read inside its quotes, an unquoted one up to a ` #` comment. A line with
+    no `=`, or with no variable name before it, is yielded whole, name None:
+    it is read, not guessed at."""
+    for n, line in enumerate(text.splitlines(), 1):
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        s = re.sub(r"^export\s+", "", s)
+        name, eq, value = s.partition("=")
+        # Text before the `=` that is not a name (`postgres://u:pw@h/db=x`) is part of the value.
+        if not eq or not PRINTABLE_NAME.fullmatch(name.strip()):
+            yield n, None, s
+            continue
+        value = value.strip()
+        if value[:1] in {"'", '"'} and value[0] in value[1:]:
+            value = value[1:value.index(value[0], 1)]
+        else:
+            value = re.split(r"\s#", value, maxsplit=1)[0]
+        yield n, name.strip(), value
+
+
+def production_url_in(value: object) -> bool:
+    return isinstance(value, str) and any(pg_url_is_production(m.group(0)) for m in PG_URL.finditer(value))
+
+
+DB_FIX = ("keep the production URL only in the host's settings (its dashboard's environment variables) and use a "
+          "local database for work, the template's SQLite default")
+
+
+def check_database_urls(root: Path) -> None:
+    """Is a production database URL within the agent's reach (#648)? A
+    PostgreSQL URL whose host is not local and whose database is not a test
+    one, in three places: this process's environment, `.env*` files under
+    --root (tracked or not; a directory named `.env*` is not entered, it is
+    usually a virtualenv), and the `env` block of .claude/settings.json and
+    settings.local.json, the repository's and the user's. A WARN names the
+    place (the variable, or the file and line), never the value. Shell
+    profile files are not read, nor other database schemes: nothing found is
+    an INFO naming those limits, never a PASS."""
+    found = 0
+
+    def warn(where: str, fix: str) -> None:
+        nonlocal found
+        found += 1
+        result("WARN", f"a production database URL is within the agent's reach: {where}")
+        result("INFO", f"  {fix}; {DB_FIX}")
+
+    def named(name: str | None, what: str) -> str:
+        return name if name is not None and PRINTABLE_NAME.fullmatch(name) else what
+
+    for var in sorted(os.environ):
+        if production_url_in(os.environ[var]):
+            warn(f"{named(var, 'a variable')} in this environment", "remove it where it is set (a shell startup file), then restart Claude Code")
+
+    files = []
+    for d, dirs, names in os.walk(root):
+        dirs[:] = sorted(x for x in dirs if x not in SKIP_DIRS and not x.startswith(".env"))
+        files += [Path(d) / f for f in sorted(names) if f.startswith(".env")]
+    for p in files:
+        rel = p.relative_to(root).as_posix()
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            result("SKIP", f"{rel} not verified: it could not be read")
+            continue
+        for n, name, value in dotenv_values(text):
+            if production_url_in(value):
+                warn(f"{rel} line {n}" + (f" ({name})" if name else ""), "delete the line")
+
+    conf = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    for p, shown in [(root / ".claude" / n, f".claude/{n}") for n in ("settings.json", "settings.local.json")] + \
+                    [(conf / n, str(conf / n)) for n in ("settings.json", "settings.local.json")]:
+        if not p.is_file():
+            continue
+        try:
+            env = json.loads(read(p)).get("env", {})
+        except (OSError, ValueError, AttributeError):
+            result("SKIP", f"{shown} not verified: it could not be read as JSON")
+            continue
+        if not isinstance(env, dict):
+            result("SKIP", f"{shown} not verified: its env is not an object")
+            continue
+        for var in sorted(env):
+            if production_url_in(env[var]):
+                warn(f"{named(var, 'an entry')} in the env of {shown}", "delete the entry")
+
+    if not found:
+        result("INFO", "no production database URL found in this environment, the repository's .env* files or the env of "
+               ".claude/settings*.json (the repository's and the user's); best effort: shell profile files, other files "
+               "and schemes other than postgres:// and postgresql:// are not read")
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 
 
@@ -2783,7 +2930,8 @@ def main() -> int:
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--credentials", action="store_true",
                     help="also report what else on this machine can push to github.com (gitlab.com with --host gitlab): "
-                         "gh accounts, git helpers, ~/.netrc")
+                         "gh accounts, git helpers, ~/.netrc; and a production database URL in the environment, "
+                         ".env* files or the env of .claude/settings*.json")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
@@ -2886,6 +3034,7 @@ def main() -> int:
         check_sandbox()
     if a.credentials:
         check_credentials(root, host)
+        check_database_urls(root)
 
     print(f"-- {fails} failed, {skips} not verified" + (f", {left} left to /plinth:floor-check" if left else ""))
     if a.verdicts:

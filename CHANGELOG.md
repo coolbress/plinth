@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:floor-check` warns when a production database URL is within
+  the agent's reach (#648): a `postgres://` or `postgresql://` URL to a
+  host that is not local, in this environment's variables, in a `.env*`
+  file in the repository (tracked or not), or in the `env` block of
+  `.claude/settings.json` or `settings.local.json` (the repository's and
+  the user's). The WARN names the variable, or the file and line, never
+  the value, and its fix is to keep the URL only in the host's settings
+  and use a local database for work. Local hosts, test databases, empty
+  values and comments do not warn. Finding nothing is an INFO that names
+  what is not read: shell profile files, other files and other schemes.
+
 ## [2.9.0] - 2026-10-25
 
 A new `cli`, `backend` or `data-ml` project now tests the program a
