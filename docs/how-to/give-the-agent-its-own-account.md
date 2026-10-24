@@ -32,8 +32,11 @@ guidance: the agent is asked not to merge, and GitHub does not stop it.
    an admin. Invite it only to the repositories it works on.
 3. **Make its token.** Signed in as the agent account: **Settings →
    Developer settings → Personal access tokens → Tokens (classic) → Generate
-   new token (classic)**. Tick only **`repo`**, nothing else, and choose a
-   short expiry, such as 30 days. It has to be a classic token: a
+   new token (classic)**. Tick two scopes, **`repo`** and **`read:org`**,
+   nothing else, and choose a short expiry, such as 30 days. `read:org` is
+   there because `gh auth login` in step 4 refuses a classic token without
+   it; it only reads which organizations the account belongs to
+   ([#605](https://github.com/coolbress/plinth/issues/605) Run 1). It has to be a classic token: a
    fine-grained token cannot be made for a repository the account was only
    invited to, because the owner offered is the agent account itself
    ([#568](https://github.com/coolbress/plinth/issues/568) step 1). Leaving **`workflow`** unticked keeps the token from
@@ -45,7 +48,20 @@ guidance: the agent is asked not to merge, and GitHub does not stop it.
    with `!` in Claude Code, run `gh auth login`: GitHub.com, HTTPS, **Yes**
    to authenticating Git, then **Paste an authentication token**, and paste
    the agent's token.
-5. **Take your own login off this machine.** The agent can use any login it
+5. **Set the agent's commit name and email.** In the same terminal, set git's
+   name and email to the agent account's:
+   `git config --global user.name "<login>"` and
+   `git config --global user.email "<id>+<login>@users.noreply.github.com"`.
+   The address is the agent account's no-reply address: signed in as the
+   agent account, **Settings → Emails** shows it, with the account's number
+   in place of `<id>`. Without this, git makes an address from the
+   computer's user and host name, such as `<user>@<host>.local`: GitHub
+   links commits carrying it to no account, and a host name can carry a person's
+   real name into a public repository's history
+   ([#605](https://github.com/coolbress/plinth/issues/605) Run 1). To check it, open the agent's next commit on
+   GitHub: its author shows the agent account's name and picture, linked to
+   its profile.
+6. **Take your own login off this machine.** The agent can use any login it
    finds here, and yours can merge. Go through step 5 of [the agent's token](give-the-agent-a-token.md)
    once more: the first time it removed every login that was not the token's;
    this time the token's own login, your account, goes too, so that the only
@@ -55,7 +71,7 @@ guidance: the agent is asked not to merge, and GitHub does not stop it.
    `gh auth logout --hostname github.com --user <your login>`), another git
    credential helper, `~/.netrc`, `GH_TOKEN` and `GITHUB_TOKEN`, and SSH
    keys (its step 4). Then restart Claude Code.
-6. **Check it.** In the new session, `gh api user --jq .login` prints the
+7. **Check it.** In the new session, `gh api user --jq .login` prints the
    agent account's name, and `/plinth:floor-check` prints a line starting
    `the merge: boundary`. If it says `the merge: guidance`, the login the
    agent has is still the repository's admin, or the repository has no
