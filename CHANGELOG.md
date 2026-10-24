@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.24.0
+  (coolbress/plinth-template#112, #113). A new `cli`, `backend` or
+  `data-ml` project tests the program a person runs: its entry point
+  runs in a test and what it prints is compared with a stored file. A
+  `library` project calls its public name from the wheel it builds. The
+  `verify` skill runs that test and reports what it saw. An existing `cli`
+  repository gains `src/<package>/__main__.py` through
+  `/plinth:template-update`; a `web` project renders exactly as on
+  v1.23.0.
+
 ## [2.8.0] - 2026-10-24
 
 A new `web` project's first deploy to Render now goes through on its own:
