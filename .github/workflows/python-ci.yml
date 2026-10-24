@@ -1257,11 +1257,13 @@ jobs:
           def what(status, old, new):
               """Why this path touches the checks, or None."""
               name = new.rsplit("/", 1)[-1]
-              if new.startswith(".github/workflows/") or old.startswith(".github/workflows/"):
-                  return "a workflow changed"
+              # Before the workflow kind, which asks nobody: a move between
+              # .github/workflows/ and the agent's rules is still put to a person.
               agent = agent_what(old, new)
               if agent:
                   return agent
+              if new.startswith(".github/workflows/") or old.startswith(".github/workflows/"):
+                  return "a workflow changed"
               web = web_what(status, old, new)
               if web:
                   return web

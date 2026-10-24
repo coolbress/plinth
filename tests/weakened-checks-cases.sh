@@ -491,6 +491,13 @@ agent_repo; git -C "$r" mv docs/AGENTS-notes.md AGENTS.md -f; commit; wrun false
 listed "a file moved onto AGENTS.md: listed" "AGENTS.md" "the agent's instructions (AGENTS.md)"
 agent_repo; git -C "$r" mv .claude/skills/verify .claude/skills/check; commit; wrun false "Refactor."
 listed "a skill renamed inside .claude/skills/: listed" ".claude/skills/check/SKILL.md" "an agent skill"
+# A workflow is a WARN that asks nobody: a move between the workflow
+# directory and the agent's rules is put to a person all the same.
+agent_repo; git -C "$r" mv .claude/skills/verify/SKILL.md .github/workflows/verify.md; commit; wrun false "Refactor."
+listed "a skill moved into .github/workflows/: listed and put to a person" ".github/workflows/verify.md" "an agent skill"
+agent_repo; mkdir -p "$r/.claude/skills/ci"; git -C "$r" mv .github/workflows/ci.yml .claude/skills/ci/SKILL.md; commit; wrun false "Refactor."
+listed "a workflow moved out of .github/workflows/ into .claude/skills/: listed and put to a person" \
+  ".claude/skills/ci/SKILL.md" ".github/workflows/ci.yml -> .claude/skills/ci/SKILL.md: an agent skill"
 agent_repo; printf '{"permissions": {"allow": ["Bash"]}}\n' > "$r/.claude/settings.json"; commit
 wrun false "Widens the allow list in .claude/settings.json."
 if [ "$rc" = 0 ] && [ "$(nwarn)" = 0 ] && grep -qF '.claude/settings.json' "$tmp/changes.json"
