@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.23.0
+  (coolbress/plinth-template#106, #108). A new `web` project's first
+  deploy to Render no longer fails while the database is still starting:
+  the pre-deploy step waits up to two minutes for it, then migrates once.
+  The app answers on the host Render gives it without anyone typing it,
+  and the README says how to make the first account and how to restore
+  the database. All four come from the first live Render run (#607). An
+  existing `web` repository gets them through `/plinth:template-update`;
+  with the Blueprint's Auto Sync off, press Manual Sync once after that
+  update is merged. A cli project renders exactly as on v1.22.0.
+
 ### Fixed
 
 - The agent's own account page names the two scopes its classic token
