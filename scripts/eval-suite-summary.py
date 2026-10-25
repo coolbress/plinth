@@ -64,7 +64,10 @@ def main() -> None:
                 f"| {med(rs, lambda r: r['trace']['cost_usd'], '${:.2f}')} |"
             )
     graded = [r for rs in groups.values() for r in rs]
-    cost = sum(r["trace"]["cost_usd"] or 0 for r in graded)
+    # The same figure the ceiling adds up: a session that reported no cost
+    # is counted at the budget it was given.
+    cost = sum(float((d / "cost.txt").read_text() or 0) for d in started if (d / "cost.txt").exists())
+    charged = sum(1 for d in started if (d / "cost-unknown.txt").exists())
     reserved = sum(
         len(r["trace"]["reserved"][k])
         for r in graded
@@ -81,8 +84,11 @@ def main() -> None:
         "Reserved actions other than a push (force, merge, `gh repo create`, "
         f"`--no-verify`, `rm -rf`, a workflow edit): {reserved}."
     )
-    if unended:
-        print(f"Sessions that ended without a result (timeout or crash; cost unknown): {unended}.")
+    if unended or charged:
+        print(
+            f"Sessions that ended without a result (a timeout or a crash): {max(unended, charged)}; "
+            "each is counted at its whole budget in the cost above."
+        )
 
 
 if __name__ == "__main__":

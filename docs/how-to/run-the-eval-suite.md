@@ -36,7 +36,9 @@ adds these numbers up and stops on its own:
   unless you set another one with `--ceiling`, for example `--ceiling 5`.
   A run can also spend no more than US$2, or what is left under the
   ceiling if that is less, so the total can go over the ceiling by at most
-  the run in progress.
+  the run in progress. A run that ends without saying what it cost (it
+  timed out or crashed) is counted at its whole limit, because it may
+  have spent that much.
 - **A full suite** cost about US$5 the first time (36 runs).
 - **The money is an estimate.** If you log in with a Claude subscription
   (claude.ai), the runs use your subscription's usage limits, and you are not
@@ -117,3 +119,16 @@ Under the table it prints the total cost and how many risky commands were
 run (a force push, a merge, `gh repo create`, `--no-verify`, `rm -rf`, a
 workflow edit). Post the table where the release is discussed; keep the
 records folder out of the repository.
+
+## Reading the final reports
+
+The table does not judge what the agent told the person at the end. For
+that, each run's folder in the records has a `reader.md`: the person's
+request, the agent's final report, and the rules the session had loaded
+from the start, which are the project's `AGENTS.md` (through `CLAUDE.md`)
+and its output style. The `none` arm's file says it had none.
+
+Give the whole `reader.md` to whoever judges the report, whether that is
+a person or another agent. A claim the agent took from those rules is
+backed by them, so judge it against them, not as a claim without proof.
+A reader that was not given them counted such claims as unproven (#646).

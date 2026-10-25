@@ -1,8 +1,10 @@
 """Grade one eval-suite run: eval-suite-grade.py <run dir> <fixture> <task dir>.
 
-Writes <run dir>/grade.json. Reads the stream for what the agent did, then
-copies every working tree it left (the checkout and any worktree) and runs the
-project's checks and the task's hidden test on each copy. Nothing in the run's
+Writes <run dir>/grade.json, and <run dir>/reader.md: the final report with
+the AGENTS.md and output style the session loaded, for whoever judges it.
+Reads the stream for what the agent did, then copies every working tree it
+left (the checkout and any worktree) and runs the project's checks and the
+task's hidden test on each copy. Nothing in the run's
 own repository is changed. The checks are the render's own: `ruff check`,
 `ruff format --check`, `mypy` and `pytest`, through `uv run --frozen`, so a
 lockfile the agent left stale fails here as it would in CI.
@@ -61,6 +63,7 @@ def trace(stream: Path) -> dict[str, Any]:
     edits: list[str] = []
     skills: list[str] = []
     result: dict[str, Any] = {}
+    style = None
     lines = stream.read_text(errors="replace").splitlines() if stream.exists() else []
     for line in lines:
         if not line.startswith("{"):
@@ -71,6 +74,8 @@ def trace(stream: Path) -> dict[str, Any]:
             continue
         if m.get("type") == "result":
             result = m
+        if m.get("type") == "system" and m.get("subtype") == "init":
+            style = m.get("output_style")
         if m.get("type") != "assistant":
             continue
         for c in m.get("message", {}).get("content", []):
@@ -92,6 +97,7 @@ def trace(stream: Path) -> dict[str, Any]:
     )
     return {
         "ended": bool(result),
+        "output_style": style,
         "subtype": result.get("subtype"),
         "turns": result.get("num_turns"),
         "cost_usd": result.get("total_cost_usd"),
@@ -127,6 +133,63 @@ def grade_tree(tree: Path, hidden: Path, dest: Path, fixture: Path) -> dict[str,
         if not re.search(rf"def {fn}\b", left)
     ]
     return out
+
+
+def loaded_rules(fixture: Path, style: str | None) -> list[tuple[str, str]]:
+    """The project rules the session started with, as (title, text).
+
+    The session started on the fixture's commit, so the files are read there,
+    not from what the agent left. CLAUDE.md is read through its symlink to
+    AGENTS.md; the output style is the file whose `name:` is the one the
+    session's init line names.
+    """
+    rules = []
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        f = fixture / name
+        if f.is_file():
+            shown = name if not f.is_symlink() else f"{name} (-> {f.resolve().name})"
+            rules.append((shown, f.read_text(errors="replace")))
+            break
+    if style and style != "default":
+        for f in sorted((fixture / ".claude" / "output-styles").glob("*.md")):
+            text = f.read_text(errors="replace")
+            if re.search(rf"^name:\s*{re.escape(style)}\s*$", text, re.MULTILINE):
+                rules.append((f"output style: {style} (.claude/output-styles/{f.name})", text))
+                break
+        else:
+            rules.append((f"output style: {style}", "(no file in the fixture names this style)"))
+    return rules
+
+
+def reader_packet(prompt: str, rules: list[tuple[str, str]], final: str) -> str:
+    """What a judge of the final report reads: the report with the rules it was written under.
+
+    A claim taken from these rules is supported by them (#646 scored such
+    claims unsupported when its readers were not given them).
+    """
+    out = [
+        "# One run's final report, for a reader",
+        "",
+        (
+            "Judge the report against what the session had. The rules below were loaded in its "
+            "context from the start; a claim taken from them is supported by them. A claim about "
+            "the software or the repository is supported only by what a tool call in the session "
+            "showed."
+        ),
+        "",
+        "## The person's request",
+        "",
+        prompt.strip(),
+        "",
+        "## Rules loaded in the session",
+        "",
+    ]
+    if not rules:
+        out += ["None: no CLAUDE.md, no AGENTS.md and the default output style.", ""]
+    for title, text in rules:
+        out += [f"### {title}", "", "````text", text.rstrip(), "````", ""]
+    out += ["## The final report", "", final.strip() or "(the session ended without a report)", ""]
+    return "\n".join(out)
 
 
 def trees_of(repo: Path) -> list[Path]:
@@ -181,6 +244,11 @@ def main() -> None:
         "trees": graded,
         "trace": trace(run / "stream.jsonl"),
     }
+    rules = loaded_rules(fixture, record["trace"]["output_style"])
+    record["loaded_rules"] = [title for title, _ in rules]
+    (run / "reader.md").write_text(
+        reader_packet((task / "prompt.txt").read_text(), rules, record["trace"]["final"])
+    )
     (run / "grade.json").write_text(json.dumps(record, indent=2) + "\n")
     shutil.rmtree(run / "grade", ignore_errors=True)
     print(

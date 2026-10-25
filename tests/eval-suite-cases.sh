@@ -11,7 +11,7 @@
 # is logged in only with a token variable or a hosts.yml. The grader itself
 # runs for real: `uv sync --frozen` installs canary's locked ruff, mypy and
 # pytest (network the first time).
-# shellcheck disable=SC2034  # sha, repo, bare_ok and gone are used inside the check() command strings
+# shellcheck disable=SC2034  # sha, repo, bare_ok, gone and rd are used inside the check() command strings
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 command -v uv >/dev/null || { echo "  FAIL  uv is not installed"; exit 1; }
@@ -49,7 +49,8 @@ mkdir -p "$dest"; cp -R "$EVAL_STUB_ROOT/canary/." "$dest"
 mv "$dest/src/canary" "$dest/src/probe"; mv "$dest/tests/test_canary.py" "$dest/tests/test_probe.py"
 perl -pi -e 's/\bcanary\b/probe/g' "$dest/pyproject.toml" "$dest/uv.lock" "$dest/src/probe/__init__.py" "$dest/tests/test_probe.py"
 echo "# rules" > "$dest/AGENTS.md"; ln -s AGENTS.md "$dest/CLAUDE.md"
-mkdir -p "$dest/.claude" "$dest/.git"; echo '{}' > "$dest/.claude/settings.json"
+mkdir -p "$dest/.claude/output-styles" "$dest/.git"; echo '{"outputStyle": "Stub style"}' > "$dest/.claude/settings.json"
+printf -- '---\nname: Stub style\n---\n\nSay what you ran.\n' > "$dest/.claude/output-styles/stub-style.md"
 EOF
 
 cat > "$tmp/bin/claude" <<'EOF'
@@ -84,6 +85,7 @@ fix() { perl -pi -e 's/i\.due < today/i.due <= today/' "$1/src/probe/ledger.py";
 bashcmd=""
 case "$action" in
   nothing) ;;
+  crash) echo "killed before its result" >&2; exit 142 ;;
   fix-ruff) fix .; printf 'import os\n' > src/probe/extra.py ;;
   worktree-branch)
     git worktree add -q -b fix .claude/worktrees/fix
@@ -94,6 +96,8 @@ case "$action" in
     fix .; git commit -qam "fix: count invoices due today" -m "Co-Authored-By: Stub <stub@example.invalid>"
     git push -q origin main; bashcmd="git push origin main" ;;
 esac
+style=default; [ -f .claude/settings.json ] && style="Stub style"
+printf '{"type":"system","subtype":"init","output_style":"%s"}\n' "$style"
 [ -z "$bashcmd" ] || printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"%s"}}]}}\n' "$bashcmd"
 printf '{"type":"result","subtype":"success","num_turns":3,"total_cost_usd":%s,"usage":{"input_tokens":1000,"output_tokens":500},"result":"done"}\n' "${EVAL_STUB_COST:-0.25}"
 EOF
@@ -172,6 +176,9 @@ check "the runner itself calls gh never: the only calls are the sessions' own" \
   '[ "$(grep -c "^gh " "$log")" = 4 ] && ! grep -q "^gh in_session=no" "$log"' "$(grep '^gh' "$log")"
 check "every session uses the given configuration directory; the plinth arm is not overridden" \
   '[ "$(grep "^session " "$log" | grep -c " cfg=$tmp/cfg .* agents_md=yes settings=none$")" = 4 ]' "$(grep '^session' "$log")"
+rd="$tmp/b/runs/ledger-plinth-1/reader.md"
+check "the plinth arm's reader packet carries the loaded AGENTS.md and output style with the report" \
+  'grep -qF "### CLAUDE.md (-> AGENTS.md)" "$rd" && grep -qx "# rules" "$rd" && grep -qF "### output style: Stub style (.claude/output-styles/stub-style.md)" "$rd" && grep -qx "Say what you ran." "$rd" && grep -qF "a claim taken from them is supported by them" "$rd" && grep -qx "done" "$rd"' "$(cat "$rd" 2>&1)"
 check "each workspace is marked trusted in that directory" \
   'python3 -I -c "import json,sys; d=json.load(open(sys.argv[1]))[\"projects\"]; sys.exit(0 if all(d[sys.argv[2]+f\"/ledger-plinth-{n}/repo\"][\"hasTrustDialogAccepted\"] for n in (1,2,3,4)) else 1)" "$tmp/cfg/.claude.json" "$tmp/b/runs"'
 
@@ -185,6 +192,13 @@ check "the second session's budget is what is left under the ceiling" \
 check "the table is still printed for the runs that ran" 'grep -qF "| ledger · none | 0/2 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 check "the none arm has no AGENTS.md and every plinth plugin off" \
   '[ "$(grep "^session " "$log" | grep -c "agents_md=no settings={\"enabledPlugins\": {\"plinth@plinth\": false")" = 2 ]' "$(grep '^session' "$log")"
+rd="$tmp/c/runs/ledger-none-1/reader.md"
+check "the none arm's reader packet says no rules were loaded and carries none" \
+  'grep -qF "None: no CLAUDE.md, no AGENTS.md and the default output style." "$rd" && ! grep -q "Say what you ran\|^# rules" "$rd" && grep -qx "done" "$rd"' "$(cat "$rd" 2>&1)"
+: > "$log"
+EVAL_STUB_ACTIONS=crash,crash,crash suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 3 --ceiling 3 --out "$tmp/g"
+check "a session that reports no cost is charged its budget: US\$2, then US\$1, then no third run" \
+  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 2 ] && grep -q "^session run=ledger-none-2 .* budget=1.0000 " "$log" && [ -e "$tmp/g/runs/ledger-none-1/cost-unknown.txt" ] && grep -q "Model cost: \$3.00" "$tmp/out.txt" && grep -q "without a result (a timeout or a crash): 2;" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; grep '^session' "$log")"
 : > "$log"
 suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 1 --ceiling 0 --out "$tmp/d"
 check "a ceiling of 0 starts no run (exit 3)" '[ "$(rc)" = 3 ] && [ "$(sessions)" = 0 ]' "$(cat "$tmp/out.txt")"

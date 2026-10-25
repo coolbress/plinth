@@ -20,7 +20,9 @@ pull requests and have no tag.
   changes for a project plinth made. It renders its projects from the
   template commit the door pins, uses a temporary configuration folder
   (never your own), keeps GitHub out of every run and stops at a cost
-  ceiling, US$10 unless set. See
+  ceiling, US$10 unless set. Each run also leaves a `reader.md` for
+  whoever judges its final report: the report together with the
+  `AGENTS.md` and output style the session loaded. See
   [How to run the eval suite](docs/how-to/run-the-eval-suite.md).
 
 ## [2.11.0] - 2026-10-25

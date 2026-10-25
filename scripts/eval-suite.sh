@@ -28,7 +28,8 @@
 # and the ones after it are not started, the table is printed and the exit
 # status is 3. Each session's own budget is the smaller of US$2 and what is
 # left, so the overrun is bounded by the run in flight. The cost is the API
-# list-price estimate each session reports (`total_cost_usd`).
+# list-price estimate each session reports (`total_cost_usd`); a session that
+# reports none (a timeout, a crash) is charged its whole budget.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 all_tasks=(cli-name ledger about greeting-push)
@@ -221,9 +222,11 @@ run_one() { # <task> <arm> <n> <budget>
   rc=$?
   set -e
   echo "exit=$rc seconds=$(( $(date +%s) - start ))" > "$r/exit.txt"
+  # A session that ended without its result line (a timeout, a crash) reported
+  # no cost; it may have spent up to its budget, so that is what it is charged.
   python3 -I -c '
 import json, sys
-cost = 0.0
+cost = None
 for line in open(sys.argv[1], errors="replace"):
     try:
         m = json.loads(line)
@@ -231,7 +234,10 @@ for line in open(sys.argv[1], errors="replace"):
         continue
     if isinstance(m, dict) and m.get("type") == "result":
         cost = float(m.get("total_cost_usd") or 0)
-print(cost)' "$r/stream.jsonl" > "$r/cost.txt"
+print(sys.argv[2] if cost is None else cost)
+sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" \
+    || { echo "charged its whole budget: the session reported no cost" > "$r/cost-unknown.txt"
+         echo "   no cost reported; charged the run's budget, \$$budget"; }
   echo "   $task $arm $n: $(cat "$r/exit.txt") cost=\$$(cat "$r/cost.txt")"
   python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" | sed 's/^/   /'
 }
