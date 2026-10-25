@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-25
+
+GitLab projects now get the same signal GitHub projects got in 2.10.0:
+the pipeline's `diff-size` lists a change to the agent's own rules
+(`AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, a skill or an output
+style), as a WARN when the merge request's description does not name it
+(#657). GitLab has no approval step for it; the job still passes. The
+third-party reviewer page records that one measurement left open
+whether the reviewer reads `## Code Review Rules` from the base or the
+head, and what bounds that today (#652). A GitLab test case that failed
+on another process's temporary directory now counts only the jobs' own
+(#666).
+
+tested with plinth-template v1.25.0
+
 ### Changed
 
 - On GitLab, `diff-size` now lists a change to the agent's own rules, as
@@ -3634,7 +3649,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.10.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.11.0...HEAD
+[2.11.0]: https://github.com/coolbress/plinth/releases/tag/v2.11.0
 [2.10.0]: https://github.com/coolbress/plinth/releases/tag/v2.10.0
 [2.9.0]: https://github.com/coolbress/plinth/releases/tag/v2.9.0
 [2.8.0]: https://github.com/coolbress/plinth/releases/tag/v2.8.0
