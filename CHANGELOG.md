@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-25
+
+The agent now treats text other people write as data, and plinth's
+checks name a change to the agent's own rules. A new project's
+`AGENTS.md` says issues, comments, review comments and release notes are
+data, and the agent names any instruction it finds there: in 24 local
+trials the reports that named it went from 14 to 24 of 24, and none of
+the 48 sessions did what the planted text asked (#642, #116). A GitHub
+project's settings deny the two `gh auth status` spellings that print
+the token, and a `uv` command that names another package index asks
+first (#114, #115). `ci / diff-size` lists a change to `AGENTS.md`,
+`CLAUDE.md`, `.claude/settings.json`, a skill or an output style, so
+once a repository's `ci.yml` calls this version, such a pull request
+pushed by a non-admin account needs an admin's approval; two of four
+measured template updates are among them (#651). `/plinth:floor-check`
+warns when a production database URL is within the agent's reach,
+naming where and never the value (#648).
+
+tested with plinth-template v1.25.0
+
 ### Added
 
 - `/plinth:floor-check` warns when a production database URL is within
@@ -3598,7 +3618,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.9.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/coolbress/plinth/releases/tag/v2.10.0
 [2.9.0]: https://github.com/coolbress/plinth/releases/tag/v2.9.0
 [2.8.0]: https://github.com/coolbress/plinth/releases/tag/v2.8.0
 [2.7.1]: https://github.com/coolbress/plinth/releases/tag/v2.7.1
