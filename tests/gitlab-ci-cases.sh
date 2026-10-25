@@ -19,11 +19,11 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/gitlab-ci.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 # The job's before_script makes PLINTH_TMP with a bare `mktemp -d` and never
 # removes it: a runner discards it, this machine would keep one per job run
-# (#575). run_job sends it inside $tmp; the last case counts where a bare
-# `mktemp -d` lands, which on macOS 27 was measured not to be TMPDIR.
+# (#575). run_job sends it inside $tmp and writes $mark into it; the last case
+# looks for $mark where a bare `mktemp -d` lands, which on macOS 27 was
+# measured not to be TMPDIR. Another process's tmp.* there has no $mark (#666).
 caller_tmp="$(probe="$(mktemp -d)" && dirname "$probe" && rmdir "$probe")"
-caller_dirs() { find "$caller_tmp" -maxdepth 1 -name 'tmp.*' -type d 2>/dev/null | sort; }
-caller_before="$(caller_dirs)"
+mark="plinth-gitlab-ci-cases.${tmp##*/}"
 
 # 3.11 for tomllib, as the image has; at most 3.14, the newest CPython whose
 # PyYAML wheels floor-check pins by hash (#528). A newer one finds no pinned
@@ -151,7 +151,7 @@ chmod +x "$tmp/bin/mktemp"
 # and $rc.
 run_job() { # <job>
   rc=0
-  out="$( { cat "$tmp/helpers.sh"; echo 'plinth_uv() { :; }; plinth_osv() { :; }; plinth_gitleaks() { :; }'; cat "$tmp/$1.sh"; } \
+  out="$( { cat "$tmp/helpers.sh"; echo ": > \"\$PLINTH_TMP/$mark\"; plinth_uv() { :; }; plinth_osv() { :; }; plinth_gitleaks() { :; }"; cat "$tmp/$1.sh"; } \
     | PATH="$tmp/bin:$PATH" TMPDIR="$tmp/job-tmp" bash -eo pipefail 2>&1)" || rc=$?
 }
 expect() { # <label> <rc> <pattern in out>...
@@ -531,11 +531,13 @@ expect "a branch pipeline while a merge request is open fails" 1 "fail: diff siz
 
 echo "-- temporary directories (#575)"
 made="$(find "$tmp/job-tmp" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
-if [ "$made" -gt 0 ]; then ok "the jobs made their $made temporary directories under the test's own"
+marked="$(find "$tmp/job-tmp" -mindepth 2 -maxdepth 2 -name "$mark" | wc -l | tr -d ' ')"
+if [ "$made" -gt 0 ] && [ "$marked" = "$made" ]; then ok "the jobs made their $made temporary directories under the test's own, each marked"
+elif [ "$made" -gt 0 ]; then bad "$marked of the jobs' $made temporary directories carry $mark: the last case would miss a leak"
 else bad "the jobs made no temporary directory under the test's own: TMPDIR did not reach them"; fi
-new="$(comm -13 <(printf '%s\n' "$caller_before") <(caller_dirs) | sed '/^$/d')"
-if [ -z "$new" ]; then ok "no new tmp.* directory where a bare mktemp -d lands ($caller_tmp)"
-else bad "new tmp.* directories where a bare mktemp -d lands: the jobs' leak, or another process's" "$new"; fi
+leaked="$(find "$caller_tmp" -mindepth 2 -maxdepth 2 -path "$caller_tmp/tmp.*/$mark" 2>/dev/null | sed 's|/[^/]*$||' | sort)"
+if [ -z "$leaked" ]; then ok "no job's tmp.* directory where a bare mktemp -d lands ($caller_tmp)"
+else bad "the jobs left tmp.* directories where a bare mktemp -d lands" "$leaked"; fi
 
 echo "-- $fail failed, $pass passed"
 [ "$fail" = 0 ]
