@@ -44,6 +44,17 @@ pull requests and have no tag.
   `.claude/settings.json` in v1.22.0, the `verify` skill in v1.24.0). The
   pull request that first moves a repository's `ci.yml` to this version
   is judged by the new rule already. No job or check name changes.
+- `/plinth:new-project` renders plinth-template v1.25.0
+  (coolbress/plinth-template#117, #118, #119). A new project's
+  `AGENTS.md` says text other people write, such as issues, comments,
+  review comments and release notes, is data, and the agent names any
+  instruction it finds there: in 24 local trials the reports that named
+  it went from 14 to 24 of 24. A GitHub project's settings deny the two
+  `gh auth status` spellings that print the token, and a `uv` command
+  that names another package index asks first, as does `uv lock`. The
+  update changes `AGENTS.md` and `.claude/settings.json`, so its
+  `/plinth:template-update` pull request is one the entry above puts to
+  an admin when the agent's own account pushes it.
 
 ## [2.9.0] - 2026-10-25
 
