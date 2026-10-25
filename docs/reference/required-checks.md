@@ -82,6 +82,7 @@
 | Required by name | No: "Pipelines must succeed" takes the pipeline as a whole, so a merge request that drops a job still merges when what is left passes ([about GitLab](../explanation/concepts.md#about-gitlab)) |
 | After the merge | `/plinth:floor-check` reads whether the default branch still includes the pipeline at a full commit SHA |
 | Not on GitLab Free | A ruleset, the `code_scanning` rule, push protection, a required approval. `diff-size` lists a change to the checks and never asks for an approval: a merge request could drop the job, and Free approvals do not block a merge |
+| A change to the agent's own rules | `AGENTS.md`, `CLAUDE.md` or `.claude/settings.json` at the root, or a file under `.claude/skills/` or `.claude/output-styles/`, added, changed, deleted or moved, is listed by `diff-size` on both hosts, with the same reasons. On GitHub, `ci / diff-size` asks for an admin's approving review on the head when an account that is not an admin pushed it, or the head comes from a fork. On GitLab it is a WARN in the log when the merge request's description does not name the path, and the job still passes: nothing asks for an approval |
 
 ## Optional
 
