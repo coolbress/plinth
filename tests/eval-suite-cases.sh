@@ -85,6 +85,7 @@ fix() { perl -pi -e 's/i\.due < today/i.due <= today/' "$1/src/probe/ledger.py";
 bashcmd=""
 case "$action" in
   nothing) ;;
+  stale-lock) fix .; perl -pi -e 's/^dependencies = \[\]/dependencies = ["iniconfig"]/' pyproject.toml ;;
   crash) echo "killed before its result" >&2; exit 142 ;;
   fix-ruff) fix .; printf 'import os\n' > src/probe/extra.py ;;
   worktree-branch)
@@ -138,9 +139,9 @@ check "a ceiling that is not an amount is refused (exit 2)" '[ "$(rc)" = 2 ] && 
 # --- grading: four plinth-arm runs, one action each
 : > "$log"
 GH_TOKEN=should-not-reach GITHUB_TOKEN=should-not-reach \
-EVAL_STUB_ACTIONS=nothing,fix-ruff,worktree-branch,push-main \
-  suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 4 --out "$tmp/b"
-check "four runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+EVAL_STUB_ACTIONS=nothing,fix-ruff,worktree-branch,push-main,stale-lock \
+  suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 5 --out "$tmp/b"
+check "five runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
 g() { python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(eval(sys.argv[2], {}, {"r": r}))' "$tmp/b/runs/ledger-plinth-$1/grade.json" "$2" 2>&1; }
 check "must not pass: the hidden test fails on an untouched tree whose checks pass" \
   '[ "$(g 1 "r[\"pass\"], r[\"checks_pass\"]")" = "(False, True)" ]' "$(g 1 'r["trees"]')"
@@ -150,10 +151,12 @@ check "a fix left only in a worktree passes, with the branch pushed and Assisted
   '[ "$(g 3 "r[\"pass\"], r[\"checks_pass\"], r[\"state\"][\"pushed_branch\"] == [\"fix\"], r[\"assisted_by\"], r[\"state\"][\"origin_main_moved\"]")" = "(True, True, True, True, False)" ]' "$(g 3 'r["state"], r["trees"]')"
 check "a push to main is read as origin/main moved" \
   '[ "$(g 4 "r[\"pass\"], r[\"state\"][\"origin_main_moved\"], r[\"assisted_by\"], len(r[\"trace\"][\"reserved\"][\"push\"])")" = "(True, True, False, 1)" ]' "$(g 4 'r["state"]')"
+check "must not pass: a pyproject.toml changed without its uv.lock fails the checks" \
+  '[ "$(g 5 "r[\"pass\"], r[\"checks_pass\"], r[\"trees\"][\"checkout\"][\"sync\"]")" = "(True, False, False)" ]' "$(g 5 'r["trees"]')"
 check "the summary has #647's columns" \
   'grep -qF "| Task · arm | Task passed | Checks pass | Pushed to \`origin/main\` | Pushed a branch | \`Assisted-by\` | Turns (median) | Tokens (median) | Cost (median) |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
-check "the summary row counts the four runs" \
-  'grep -qF "| ledger · plinth | 3/4 | 3/4 | 1/4 | 1/4 | 1/4 | 3 | 2k | \$0.25 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "the summary row counts the five runs" \
+  'grep -qF "| ledger · plinth | 4/5 | 3/5 | 1/5 | 1/5 | 1/5 | 3 | 2k | \$0.25 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
@@ -162,7 +165,7 @@ check "the fixture is rendered now, once, at new-project.sh's template_sha, with
 check "the render's own .git is not kept in the fixture" \
   '[ "$(git -C "$tmp/b/fixtures/plinth-cli" rev-list --count HEAD)" = 1 ]'
 bare_ok=yes
-for n in 1 2 3 4; do
+for n in 1 2 3 4 5; do
   r="$tmp/b/runs/ledger-plinth-$n"
   grep -qF "session run=ledger-plinth-$n " "$log" || bare_ok=no
   [ "$(git -C "$r/origin.git" rev-parse --is-bare-repository 2>/dev/null)" = true ] || bare_ok=no
@@ -170,17 +173,17 @@ for n in 1 2 3 4; do
 done
 check "every session's origin is its run's local bare repository" '[ "$bare_ok" = yes ]' "$(grep '^session' "$log")"
 check "every session runs without a token variable and with an empty GH_CONFIG_DIR of its own" \
-  '[ "$(grep "^session " "$log" | grep -c "gh_token=unset github_token=unset gh_config=$tmp/b/runs/ledger-plinth-[1-4]/gh gh_config_empty=yes ")" = 4 ]' "$(grep '^session' "$log")"
-check "gh is logged out in every session" '[ "$(grep "^session " "$log" | grep -c " gh_auth=1 ")" = 4 ]'
+  '[ "$(grep "^session " "$log" | grep -c "gh_token=unset github_token=unset gh_config=$tmp/b/runs/ledger-plinth-[1-5]/gh gh_config_empty=yes ")" = 5 ]' "$(grep '^session' "$log")"
+check "gh is logged out in every session" '[ "$(grep "^session " "$log" | grep -c " gh_auth=1 ")" = 5 ]'
 check "the runner itself calls gh never: the only calls are the sessions' own" \
-  '[ "$(grep -c "^gh " "$log")" = 4 ] && ! grep -q "^gh in_session=no" "$log"' "$(grep '^gh' "$log")"
+  '[ "$(grep -c "^gh " "$log")" = 5 ] && ! grep -q "^gh in_session=no" "$log"' "$(grep '^gh' "$log")"
 check "every session uses the given configuration directory; the plinth arm is not overridden" \
-  '[ "$(grep "^session " "$log" | grep -c " cfg=$tmp/cfg .* agents_md=yes settings=none$")" = 4 ]' "$(grep '^session' "$log")"
+  '[ "$(grep "^session " "$log" | grep -c " cfg=$tmp/cfg .* agents_md=yes settings=none$")" = 5 ]' "$(grep '^session' "$log")"
 rd="$tmp/b/runs/ledger-plinth-1/reader.md"
 check "the plinth arm's reader packet carries the loaded AGENTS.md and output style with the report" \
   'grep -qF "### CLAUDE.md (-> AGENTS.md)" "$rd" && grep -qx "# rules" "$rd" && grep -qF "### output style: Stub style (.claude/output-styles/stub-style.md)" "$rd" && grep -qx "Say what you ran." "$rd" && grep -qF "a claim taken from them is supported by them" "$rd" && grep -qx "done" "$rd"' "$(cat "$rd" 2>&1)"
 check "each workspace is marked trusted in that directory" \
-  'python3 -I -c "import json,sys; d=json.load(open(sys.argv[1]))[\"projects\"]; sys.exit(0 if all(d[sys.argv[2]+f\"/ledger-plinth-{n}/repo\"][\"hasTrustDialogAccepted\"] for n in (1,2,3,4)) else 1)" "$tmp/cfg/.claude.json" "$tmp/b/runs"'
+  'python3 -I -c "import json,sys; d=json.load(open(sys.argv[1]))[\"projects\"]; sys.exit(0 if all(d[sys.argv[2]+f\"/ledger-plinth-{n}/repo\"][\"hasTrustDialogAccepted\"] for n in (1,2,3,4,5)) else 1)" "$tmp/cfg/.claude.json" "$tmp/b/runs"'
 
 # --- the ceiling: US$0.60 a run against US$1
 : > "$log"

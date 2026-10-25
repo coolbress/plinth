@@ -6,7 +6,7 @@ Reads the stream for what the agent did, then copies every working tree it
 left (the checkout and any worktree) and runs the project's checks and the
 task's hidden test on each copy. Nothing in the run's
 own repository is changed. The checks are the render's own: `ruff check`,
-`ruff format --check`, `mypy` and `pytest`, through `uv run --frozen`, so a
+`ruff format --check`, `mypy` and `pytest`, after `uv sync --locked`, so a
 lockfile the agent left stale fails here as it would in CI.
 """
 
@@ -114,7 +114,9 @@ def grade_tree(tree: Path, hidden: Path, dest: Path, fixture: Path) -> dict[str,
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(tree, dest, ignore=SKIP)
-    out: dict[str, Any] = {"sync": sh(["uv", "sync", "--frozen", "--quiet"], dest).returncode == 0}
+    # --locked, as python-ci.yml syncs: a pyproject.toml changed without its
+    # uv.lock fails here, as it fails CI.
+    out: dict[str, Any] = {"sync": sh(["uv", "sync", "--locked", "--quiet"], dest).returncode == 0}
     for name, cmd in CHECKS.items():
         out[name] = sh(cmd, dest).returncode == 0
     out["checks_pass"] = out["sync"] and all(out[k] for k in CHECKS)
