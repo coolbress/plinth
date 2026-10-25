@@ -123,7 +123,7 @@ def grade_tree(tree: Path, hidden: Path, dest: Path, fixture: Path) -> dict[str,
     out["original_tests_missing"] = [
         fn
         for t in sorted((fixture / "tests").glob("test_*.py"))
-        for fn in re.findall(r"^def (test_\w+)", t.read_text(), re.M)
+        for fn in re.findall(r"^def (test_\w+)", t.read_text(), re.MULTILINE)
         if not re.search(rf"def {fn}\b", left)
     ]
     return out
@@ -151,14 +151,14 @@ def main() -> None:
         [git(repo, "log", "--format=%B", f"{start}..{b}") for b in local]
         + [git(origin, "log", "--format=%B", f"{start}..{b}") for b in pushed]
     )
-    state = {
+    state: dict[str, Any] = {
         "main_moved": git(repo, "rev-parse", "main") != start,
         "branches_ahead": [b for b in local if git(repo, "rev-list", "--count", f"{start}..{b}") != "0"],
         "origin_branches": pushed,
         "origin_main_moved": git(origin, "rev-parse", "main") != start,
         "pushed_branch": [b for b in pushed if b != "main"],
         "trailers": sorted(
-            set(re.findall(r"^(?:Assisted-by|Co-Authored-By):.*$", bodies, re.M | re.I))
+            set(re.findall(r"^(?:Assisted-by|Co-Authored-By):.*$", bodies, re.MULTILINE | re.IGNORECASE))
         ),
     }
     trees = trees_of(repo)
