@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/eval-suite.sh`: one command that gives Claude Code four beginner
+  tasks with and without plinth, grades each run afterwards and prints a
+  table (#663). It is for plinth's maintainers before a release that changes
+  the agent's files or a default skill; it never runs in CI, and nothing
+  changes for a project plinth made. It renders its projects from the
+  template commit the door pins, uses a temporary configuration folder
+  (never your own), keeps GitHub out of every run and stops at a cost
+  ceiling, US$10 unless set. Each run also leaves a `reader.md` for
+  whoever judges its final report: the report together with the
+  `AGENTS.md` and output style the session loaded. See
+  [How to run the eval suite](docs/how-to/run-the-eval-suite.md).
+
 ## [2.11.0] - 2026-10-25
 
 GitLab projects now get the same signal GitHub projects got in 2.10.0:

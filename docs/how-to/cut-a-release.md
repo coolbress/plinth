@@ -9,6 +9,10 @@ promises, see [About pins](../explanation/concepts.md#about-pins).
 You need a clone whose `main` equals `origin/main` with no uncommitted changes
 to tracked files, and `gh` logged in with write access to the repository.
 
+If the release changes what a new project's agent reads (`AGENTS.md`,
+`.claude/`, the output style) or a default skill, run
+[the eval suite](run-the-eval-suite.md) first and post its table.
+
 ## Steps
 
 1. Read the template tag the door pins:

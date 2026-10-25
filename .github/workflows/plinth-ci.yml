@@ -78,6 +78,10 @@ jobs:
       - name: ci / migrations and ci / deploy-check fail and pass where they must, on Postgres
         run: ./tests/web-checks-cases.sh
 
+      # A stubbed `claude`: no model is called and no login is needed.
+      - name: The eval suite refuses your own config, keeps GitHub out, stops at its ceiling, and its grader fails what it must
+        run: ./tests/eval-suite-cases.sh
+
       # zsh is not assumed on the runner image; without it the next test fails, it does not skip.
       - name: Install zsh
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh

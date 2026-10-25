@@ -1,0 +1,1 @@
+Add an About page to the site at /about/ that says in one sentence what the app is for.
