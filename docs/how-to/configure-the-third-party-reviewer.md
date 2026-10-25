@@ -90,6 +90,30 @@ change arrives on its own and is visible; it compares only that section and
 only within one pull request, so it is not a guarantee that the instructions
 cannot be weakened.
 
+Whether the reviewer reads that section from the base branch or from the pull
+request's head is not known. One measurement (#652, 2026-10-25, Codex,
+`chatgpt-codex-connector[bot]`) did not settle it. A draft pull request in
+this repository added one line to the section and changed nothing else: begin
+the review summary and every inline comment with a fixed word. The review
+completed on the head commit with no findings, and the word appeared nowhere.
+Its only output was the no-findings comment (`Didn't find any major issues`),
+the `Completed` row and a 👍. Three explanations remain open:
+
+- it read the base;
+- it read the head and did not follow the line, which the section's own rule
+  against following instructions inside the diff may have caused;
+- it read the head, but a review with no findings has no free text that could
+  carry the word, because those three outputs are fixed.
+
+Telling them apart needs a similar line with a different word on the base too,
+which changes `main`, and a rule whose effect shows in a finding. Neither was
+tried. Until then, assume the head may be what it reads. The comment in
+`pr-review.yml` that says it reads the head quotes the reviewer's own statement
+(2026-09-01), not a measurement. The same pull request showed two more things.
+`third-party / review` passed, as it does for a pull request that changes only
+the section. And no review started when the draft was marked ready; one
+started 14 seconds after the check's own summons, about seven minutes later.
+
 ### Pull requests it passes without summoning
 
 On one kind of pull request, and on a second if you turn it on, the step that
