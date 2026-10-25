@@ -243,6 +243,17 @@ lists "a test deleted, named in the description: listed anyway" "git rm -q tests
 lists "a test deleted and a workflow edited: the test only" "git rm -q tests/test_b.py; printf 'on: [push]\n' > .github/workflows/ci.yml" "tests/test_b.py"
 lists "a marker added: listed" "printf 'x = 1  # noqa\n' > m.py" "m.py"
 lists "source edited only: an empty list" "printf 'x = 2\n' > m.py" ""
+# The paths a template update from v1.21.0 to v1.22.0 changes among the
+# agent's own rules (#651), listed and then asked for: a head the agent's
+# account pushed needs an admin's approval, one an admin pushed does not.
+lists "the agent's own rules, as a template update changes them: listed" \
+  "printf '# Rules\n' > AGENTS.md; mkdir -p .claude; printf '{}\n' > .claude/settings.json" ".claude/settings.json AGENTS.md"
+agent_rules="$r.json"
+fresh; cp "$agent_rules" "$fx/changes.json"; run
+expect "that list on a head a non-admin pushed: fail, it needs an admin's approval" 1 \
+  "^- fail: changes to the checks, .*AGENTS\.md: the agent's instructions .* and agent pushed it and is not an admin, so it needs an admin's approval"
+fresh; cp "$agent_rules" "$fx/changes.json"; pushed_by boss 1; run
+expect "that list on a head an admin pushed: no approval asked, the person's decision" 0 "^- not yet confirmed: changes to the checks"
 
 echo "-- the job asks for its permissions"
 python3 - "$wf" <<'PY' && ok "diff-size declares contents: read, pull-requests: read and actions: write at job level" || bad "diff-size's job-level permissions"

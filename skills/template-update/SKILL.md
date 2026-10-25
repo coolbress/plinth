@@ -64,6 +64,13 @@ the plan; then show the plan again and ask again.
 - **Exit 0**: it made one commit in the worktree, pushed that branch, and
   opened a draft pull request. Show the URL. Its checks start now and nothing
   waited for them. Do not wait for them, mark it ready or merge it.
+  An update often changes the agent's own rules (`AGENTS.md`, `CLAUDE.md`,
+  `.claude/settings.json`, a file under `.claude/skills/` or
+  `.claude/output-styles/`), which `ci / diff-size` lists. Tell the user:
+  when the account that pushed is not an admin of the repository,
+  `ci / diff-size` stays red until an admin approves the pull request on
+  GitHub (Files changed, Review changes, Approve); when it is an admin, it
+  stays green and the merge is the person's decision.
 - **Exit 3, a conflict**: copier left files that need a resolution. The
   script names them and the worktree, and nothing is pushed yet. Show the list
   and the path, then recommend, and resolve only on the user's word:
