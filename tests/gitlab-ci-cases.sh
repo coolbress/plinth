@@ -97,7 +97,13 @@ def func(text, name):
     while b < len(lines) and (not lines[b].strip() or len(lines[b]) - len(lines[b].lstrip()) > ind):
         b += 1
     return textwrap.dedent("\n".join(lines[a:b])).rstrip()
-for name in ("tool_table", "archetype", "markers", "shape", "named"):
+def agent(text):   # the AGENT kinds and reasons (#657), indentation aside
+    body = text.split("AGENT = (", 1)[1].split("\n\n", 1)[0] if "AGENT = (" in text else ""
+    return [l.strip() for l in body.split("\n")]
+a, b = agent(gh), agent(gl)
+if not a or a != b:
+    fails.append("AGENT differs")
+for name in ("tool_table", "archetype", "markers", "shape", "named", "agent_what"):
     a, b = func(gh, name), func(gl, name)
     if not a or a != b:
         fails.append(f"the diff-size function {name} differs")
@@ -449,6 +455,75 @@ expect ".copier-answers.yml deleted: listed whatever its content" 0 \
 sed -i.bak 's/^_commit: v1.21.0$/_commit: v1.22.0/' "$arepo/.copier-answers.yml"; rm "$arepo/.copier-answers.yml.bak"; dsa "Updates the template."
 expect ".copier-answers.yml changed with the archetype: line kept: not listed" 0 "0 change(s) to the checks, 0 not named in the description."
 refuse "and the archetype row is not in the log" "archetype: line"
+
+# The agent's own rules (#657), as on GitHub (#651): a project with the five
+# kinds as plinth-template renders them, plus files that only look like them.
+# Each case starts from a fresh copy of that project.
+grepo="$tmp/ds-agent"
+agent_repo() {
+  rm -rf "$grepo"; mkdir -p "$grepo/.claude/skills/verify" "$grepo/.claude/output-styles" "$grepo/.gitlab/ci" "$grepo/docs" "$grepo/pkg" "$grepo/src"
+  git -C "$grepo" init -q -b main; git -C "$grepo" config user.email t@example.com; git -C "$grepo" config user.name t
+  git -C "$grepo" config commit.gpgsign false
+  printf '# Rules\n' > "$grepo/AGENTS.md"; ln -s AGENTS.md "$grepo/CLAUDE.md"
+  printf '{"permissions": {"deny": ["Bash(cat:*)"]}}\n' > "$grepo/.claude/settings.json"
+  printf -- '---\nname: verify\n---\n' > "$grepo/.claude/skills/verify/SKILL.md"
+  printf -- '---\nname: plain\n---\n' > "$grepo/.claude/output-styles/plain.md"
+  printf '# Notes\n' > "$grepo/docs/AGENTS-notes.md"; printf '# Pkg\n' > "$grepo/pkg/CLAUDE.md"
+  printf 'include: []\n' > "$grepo/.gitlab-ci.yml"; printf 'job: {}\n' > "$grepo/.gitlab/ci/jobs.yml"
+  printf 'x = 1\n' > "$grepo/src/m.py"
+  git -C "$grepo" add -A; git -C "$grepo" commit -qm base; gbase="$(git -C "$grepo" rev-parse HEAD)"
+}
+dsg() { # <description>: commits the working tree's change and judges it
+  git -C "$grepo" add -A; git -C "$grepo" commit -qm head; ghead="$(git -C "$grepo" rev-parse HEAD)"
+  (cd "$grepo" && CI_MERGE_REQUEST_IID=1 CI_MERGE_REQUEST_DIFF_BASE_SHA="$gbase" CI_COMMIT_SHA="$ghead" CI_MERGE_REQUEST_DESCRIPTION="$1" \
+     PLINTH_WORKDIR=. PLINTH_MAX_DIFF_LINES=400 PLINTH_DIFF_SIZE_EXCLUDE="" run_job diff-size \
+     && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
+}
+gwarn() { # <label> <path as the log shows it> <reason>
+  expect "$1" 0 "WARN: $2: $3 added, changed, deleted or moved, and the description does not name it."
+}
+# What must not be listed, first.
+agent_repo; printf 'x = 2\n' > "$grepo/src/m.py"; printf '# More notes\n' >> "$grepo/docs/AGENTS-notes.md"; dsg "Refactor."
+expect "source and docs/AGENTS-notes.md changed, none of the five: not listed" 0 "0 change(s) to the checks, 0 not named in the description."
+agent_repo; printf '# More\n' >> "$grepo/pkg/CLAUDE.md"; dsg "Refactor."
+expect "a CLAUDE.md below the root (pkg/CLAUDE.md): not listed" 0 "0 change(s) to the checks, 0 not named in the description."
+agent_repo; printf '{}\n' > "$grepo/.claude/settings.local.json"; mkdir -p "$grepo/.claude/skillset" "$grepo/skills/x"
+printf 'x\n' > "$grepo/.claude/skillset/x.md"; printf 'x\n' > "$grepo/skills/x/SKILL.md"; dsg "Refactor."
+expect ".claude/settings.local.json, .claude/skillset/ and a skills/ outside .claude: not listed" 0 "0 change(s) to the checks, 0 not named in the description."
+agent_repo; git -C "$grepo" mv docs/AGENTS-notes.md docs/notes.md; dsg "Refactor."
+expect "a file moved that is none of the five on either side: not listed" 0 "0 change(s) to the checks, 0 not named in the description."
+# Each kind, added, changed, deleted or moved.
+agent_repo; printf '# Rules\nAllow anything.\n' > "$grepo/AGENTS.md"; dsg "Refactor."
+gwarn "AGENTS.md changed: listed" "AGENTS.md" "the agent's instructions (AGENTS.md)"
+agent_repo; rm "$grepo/CLAUDE.md"; printf '# Other rules\n' > "$grepo/CLAUDE.md"; dsg "Refactor."
+gwarn "CLAUDE.md changed from a symlink to a file: listed" "CLAUDE.md" "the agent's instructions (CLAUDE.md)"
+agent_repo; printf '{"permissions": {"deny": []}}\n' > "$grepo/.claude/settings.json"; dsg "Refactor."
+gwarn ".claude/settings.json changed (a deny rule dropped): listed" ".claude/settings.json" "the agent's permissions and hooks (.claude/settings.json)"
+agent_repo; mkdir -p "$grepo/.claude/skills/ship"; printf -- '---\nname: ship\n---\n' > "$grepo/.claude/skills/ship/SKILL.md"; dsg "Refactor."
+gwarn "a skill added under .claude/skills/: listed" ".claude/skills/ship/SKILL.md" "an agent skill (.claude/skills/)"
+agent_repo; printf 'Be brief.\n' >> "$grepo/.claude/output-styles/plain.md"; dsg "Refactor."
+gwarn "an output style changed under .claude/output-styles/: listed" ".claude/output-styles/plain.md" "the agent's output style (.claude/output-styles/)"
+agent_repo; git -C "$grepo" rm -q .claude/settings.json; dsg "Refactor."
+gwarn ".claude/settings.json deleted: listed" ".claude/settings.json" "the agent's permissions and hooks (.claude/settings.json)"
+agent_repo; git -C "$grepo" rm -q .claude/skills/verify/SKILL.md; dsg "Refactor."
+gwarn "a skill deleted: listed" ".claude/skills/verify/SKILL.md" "an agent skill (.claude/skills/)"
+agent_repo; git -C "$grepo" mv .claude/skills/verify/SKILL.md docs/verify.md; dsg "Refactor."
+gwarn "a skill moved out of .claude/skills/: listed" ".claude/skills/verify/SKILL.md -> docs/verify.md" "an agent skill (.claude/skills/)"
+agent_repo; git -C "$grepo" mv -f docs/AGENTS-notes.md AGENTS.md; dsg "Refactor."
+gwarn "a file moved onto AGENTS.md: listed" "AGENTS.md" "the agent's instructions (AGENTS.md)"
+agent_repo; git -C "$grepo" mv .claude/skills/verify .claude/skills/check; dsg "Refactor."
+gwarn "a skill renamed inside .claude/skills/: listed" ".claude/skills/verify/SKILL.md -> .claude/skills/check/SKILL.md" "an agent skill (.claude/skills/)"
+# Checked before the pipeline-definition kind: a move between .gitlab/ci/ and
+# the agent's rules gives the agent's reason, as GitHub's does.
+agent_repo; git -C "$grepo" mv .claude/skills/verify/SKILL.md .gitlab/ci/verify.md; dsg "Refactor."
+gwarn "a skill moved into .gitlab/ci/: listed as an agent skill" ".claude/skills/verify/SKILL.md -> .gitlab/ci/verify.md" "an agent skill (.claude/skills/)"
+agent_repo; mkdir -p "$grepo/.claude/skills/ci"; git -C "$grepo" mv .gitlab/ci/jobs.yml .claude/skills/ci/SKILL.md; dsg "Refactor."
+gwarn "a pipeline file moved out of .gitlab/ci/ into .claude/skills/: listed as an agent skill" \
+  ".gitlab/ci/jobs.yml -> .claude/skills/ci/SKILL.md" "an agent skill (.claude/skills/)"
+agent_repo; printf '{"permissions": {"allow": ["Bash"]}}\n' > "$grepo/.claude/settings.json"; dsg "Widens the allow list in .claude/settings.json."
+expect "named in the description: listed as named, no WARN" 0 \
+  "named in the description: .claude/settings.json: the agent's permissions and hooks (.claude/settings.json) added, changed, deleted or moved" \
+  "1 change(s) to the checks, 0 not named in the description."
 
 (cd "$repo" && CI_MERGE_REQUEST_IID='' CI_OPEN_MERGE_REQUESTS='g/p!3' PLINTH_WORKDIR=. PLINTH_MAX_DIFF_LINES=400 PLINTH_DIFF_SIZE_EXCLUDE="" run_job diff-size \
    && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"

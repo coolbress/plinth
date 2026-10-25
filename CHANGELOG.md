@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On GitLab, `diff-size` now lists a change to the agent's own rules, as
+  GitHub's `ci / diff-size` has since 2.10.0: `AGENTS.md`, `CLAUDE.md`
+  and `.claude/settings.json` at the project root, and any file under
+  `.claude/skills/` or `.claude/output-styles/`, added, changed, deleted
+  or moved, with the same reasons (#657). What changes in an existing
+  GitLab project once its `.gitlab-ci.yml` includes this version: a merge
+  request that changes one of these files gets a WARN line in the
+  `diff-size` log unless its description names the file. The job still
+  passes, and nothing asks for an approval, because GitLab Free
+  approvals do not block a merge. A file moved between `.gitlab/ci/` and
+  one of these places was already listed, as a pipeline change; it is now
+  listed as the agent's rule instead. No job, input or check name
+  changes.
+
 ## [2.10.0] - 2026-10-25
 
 The agent now treats text other people write as data, and plinth's

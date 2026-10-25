@@ -598,8 +598,29 @@ diff-size:
       def pipeline(p):
           return p.rsplit("/", 1)[-1] == ".gitlab-ci.yml" or p.startswith(".gitlab/ci/")
 
+      # The agent's own rules (#651): what it reads as instructions, what
+      # it may run, and the skills and output style it is given. By the
+      # path at the repository root, on either side of a move.
+      AGENT = (("AGENTS.md", "the agent's instructions (AGENTS.md)"),
+               ("CLAUDE.md", "the agent's instructions (CLAUDE.md)"),
+               (".claude/settings.json", "the agent's permissions and hooks (.claude/settings.json)"),
+               (".claude/skills/", "an agent skill (.claude/skills/)"),
+               (".claude/output-styles/", "the agent's output style (.claude/output-styles/)"))
+
+      def agent_what(old, new):
+          for p, why in AGENT:
+              if any(x == p or (p.endswith("/") and x.startswith(p)) for x in (old, new)):
+                  return f"{why} added, changed, deleted or moved"
+          return None
+
       def what(status, old, new):
           name = new.rsplit("/", 1)[-1]
+          # Before the pipeline definition, as python-ci.yml checks it before
+          # the workflow kind (#657): a move between .gitlab/ci/ and the
+          # agent's rules gives the agent's reason.
+          agent = agent_what(old, new)
+          if agent:
+              return agent
           if pipeline(new) or pipeline(old):
               return "the pipeline definition changed"
           # /plinth:floor-check reads its archetype-conditional items (the
