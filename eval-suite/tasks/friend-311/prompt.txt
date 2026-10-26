@@ -1,0 +1,1 @@
+My friend wants to run this program, but they only have Python 3.11. Will it work for them? Please sort it out.
