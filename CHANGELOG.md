@@ -13,6 +13,12 @@ pull requests and have no tag.
 
 ### Added
 
+- [How to turn a correction you keep making into a rule](docs/how-to/turn-a-correction-into-a-rule.md)
+  (#649): the second time, a line in `AGENTS.md`; the third, a rule for
+  the reviewer; when it matters, a test or a lint rule seen failing on the
+  old mistake first. It says what each holds and costs, and that the first
+  two change `AGENTS.md`, which `ci / diff-size` puts to a person.
+  `/plinth:arsenal` and `run-a-project.md` link to it.
 - `scripts/eval-suite.sh`: one command that gives Claude Code beginner
   tasks with and without plinth, grades each run afterwards and prints a
   table (#663). It is for plinth's maintainers before a release that changes
