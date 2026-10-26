@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-10-27
+
+A new project's agent no longer reports that there is no issue or pull
+request when it simply could not read them: the door renders
+plinth-template v1.26.0, whose output style reports a failed read as not
+read, with the error. In three tasks re-run with `gh` signed out, the
+reports that said there were none went from 5 of 9 to 1 of 9 (#120). A
+new how-to shows how to turn a correction you keep making into a line,
+a reviewer rule, then a test, with what each holds (#649). For
+maintainers, `scripts/eval-suite.sh` compares beginner tasks with and
+without plinth in one command (#663), now with tasks that separate the
+arms on result: on a floor check of a repository with planted gaps, only
+the arm with plinth named all three, 3 of 3 runs (#664).
+
+tested with plinth-template v1.26.0
+
 ### Added
 
 - [How to turn a correction you keep making into a rule](docs/how-to/turn-a-correction-into-a-rule.md)
@@ -3686,7 +3702,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.11.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.12.0...HEAD
+[2.12.0]: https://github.com/coolbress/plinth/releases/tag/v2.12.0
 [2.11.0]: https://github.com/coolbress/plinth/releases/tag/v2.11.0
 [2.10.0]: https://github.com/coolbress/plinth/releases/tag/v2.10.0
 [2.9.0]: https://github.com/coolbress/plinth/releases/tag/v2.9.0
