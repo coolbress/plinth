@@ -273,7 +273,9 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
     || { echo "charged its whole budget: the session reported no cost" > "$r/cost-unknown.txt"
          echo "   no cost reported; charged the run's budget, \$$budget"; }
   echo "   $task $arm $n: $(cat "$r/exit.txt") cost=\$$(cat "$r/cost.txt")"
-  python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" | sed 's/^/   /'
+  # A grade that fails leaves the run ungraded, counted under the table; the next run still starts.
+  python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" 2> "$r/grade-error.txt" \
+    | sed 's/^/   /' || echo "   not graded: $(tail -1 "$r/grade-error.txt")"
 }
 
 stopped=""

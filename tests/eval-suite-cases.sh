@@ -118,11 +118,14 @@ case "$action" in
   shown-hidden) fix .
     extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
   own-path) fix .; bashcmd="ls $ws" ;;
+  break-grade) rm "$(dirname "$ws")/start-sha.txt" ;;
   ask) extra="$(tool AskUserQuestion '{"questions":[]}')"
     final="Which fee do you want? A flat fee, or a share of the amount (see https://example.invalid/?a=1)?" ;;
 esac
 style=default; [ -f .claude/settings.json ] && style="Stub style"
 printf '{"type":"system","subtype":"init","output_style":"%s"}\n' "$style"
+# Claude Code 2.1.310 writes a denial as a system line whose `message` is text.
+printf '{"type":"system","subtype":"permission_denied","tool_name":"Bash","message":"Permission to use Bash was denied"}\n'
 [ -z "$bashcmd" ] || tool Bash "{\"command\":\"$bashcmd\"}"
 [ -z "$extra" ] || printf '%s\n' "$extra"
 printf '{"type":"result","subtype":"success","num_turns":3,"total_cost_usd":%s,"usage":{"input_tokens":1000,"output_tokens":500},"result":"%s"}\n' "${EVAL_STUB_COST:-0.25}" "$final"
@@ -256,9 +259,11 @@ check "the kind table names each gap and the skill calls" \
 
 # --- a question task has no pass; it records the questions
 : > "$log"
-EVAL_STUB_ACTIONS=ask suite --config-dir "$tmp/cfg" --task late-fee --arm plinth --runs 1 --out "$tmp/q"
+EVAL_STUB_ACTIONS=break-grade,ask suite --config-dir "$tmp/cfg" --task late-fee --arm plinth --runs 2 --out "$tmp/q"
+check "a run whose grade fails is left ungraded, and the next run still starts" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 2 ] && grep -q "not graded: " "$tmp/out.txt" && grep -qF "Runs graded: 1 of 2 started." "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 check "must not pass: a question task's pass is none, shown as – in the table" \
-  '[ "$(kg q late-fee 1 "r[\"pass\"], r[\"task_record\"][\"questions\"], r[\"task_record\"][\"asks\"], r[\"task_record\"][\"changed_files\"]")" = "(None, 2, 1, [])" ] && grep -qF "| late-fee · plinth | – |" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; kg q late-fee 1 'r["task_record"]')"
+  '[ "$(kg q late-fee 2 "r[\"pass\"], r[\"task_record\"][\"questions\"], r[\"task_record\"][\"asks\"], r[\"task_record\"][\"changed_files\"]")" = "(None, 2, 1, [])" ] && grep -qF "| late-fee · plinth | – |" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; kg q late-fee 2 'r["task_record"]')"
 
 # --- a run whose stream shows a path under eval-suite/ is marked and not counted
 : > "$log"

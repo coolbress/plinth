@@ -113,7 +113,9 @@ def trace(stream: Path, run: Path) -> dict[str, Any]:
             result = m
         if m.get("type") == "system" and m.get("subtype") == "init":
             style = m.get("output_style")
-        content = (m.get("message") or {}).get("content") or []
+        # A system line's `message` is text (a permission denial says why).
+        msg = m.get("message")
+        content = (msg.get("content") or []) if isinstance(msg, dict) else []
         if m.get("type") == "user" and isinstance(content, list):
             for c in content:
                 if isinstance(c, dict) and c.get("type") == "tool_result":
