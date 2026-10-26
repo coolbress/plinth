@@ -1,0 +1,1 @@
+Add a page at /stats/ where a logged-in person sees how many notes they have written.

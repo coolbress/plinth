@@ -11,7 +11,9 @@
 #
 # Arms: none (the render without AGENTS.md, CLAUDE.md and .claude/, plugins
 # off), repo-only (the render, plugins off), plinth (the render, plinth on).
-# Tasks: the directories under eval-suite/tasks/, run in the order below.
+# Tasks: the directories under eval-suite/tasks/, run in the order below. A
+# task's `kind` file names how it is graded (eval-suite-grade.py); a task with
+# a gaps.json gets a fixture of its own, with those paths removed.
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -32,7 +34,7 @@
 # reports none (a timeout, a crash) is charged its whole budget.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all_tasks=(cli-name ledger about greeting-push)
+all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
 session_timeout=900
@@ -58,7 +60,11 @@ done
 [[ "$runs" =~ ^[1-9][0-9]*$ ]] || die "--runs is a whole number from 1 (got: $runs)"
 [ "${#tasks[@]}" -gt 0 ] || tasks=("${all_tasks[@]}")
 [ "${#arms[@]}" -gt 0 ] || arms=("${all_arms[@]}")
-for t in "${tasks[@]}"; do [ -f "$root/eval-suite/tasks/$t/prompt.txt" ] || die "no task $t (tasks: ${all_tasks[*]})"; done
+for t in "${tasks[@]}"; do
+  [ -f "$root/eval-suite/tasks/$t/prompt.txt" ] || die "no task $t (tasks: ${all_tasks[*]})"
+  k="test"; [ ! -f "$root/eval-suite/tasks/$t/kind" ] || k="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/kind")"
+  case "$k" in test|checked|merge|floor-check|question) ;; *) die "task $t: unknown kind $k" ;; esac
+done
 for a in "${arms[@]}"; do case " ${all_arms[*]} " in *" $a "*) ;; *) die "no arm $a (arms: ${all_arms[*]})" ;; esac; done
 
 # The person's own configuration, as it is before anything here changes it.
@@ -151,6 +157,19 @@ commit_fixture() { # <dir>
   git -C "$1" add -A
   git -C "$1" -c user.name=trial -c user.email=trial@example.invalid -c commit.gpgsign=false commit -qm initial
 }
+# The paths a task's gaps.json removes from its fixture, one per line.
+gaps() { # <task>
+  local g="$root/eval-suite/tasks/$1/gaps.json"
+  [ -f "$g" ] || return 0
+  python3 -I -c 'import json, sys; print("\n".join(g["path"] for g in json.load(open(sys.argv[1]))))' "$g"
+}
+# The fixture a task runs on: its archetype's, or its own when it plants gaps.
+fixture_of() { # <task> <arm>
+  local a
+  a="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$1/archetype")"
+  printf '%s/fixtures/%s-%s%s' "$out" "$([ "$2" = none ] && echo none || echo plinth)" "$a" \
+    "$([ -f "$root/eval-suite/tasks/$1/gaps.json" ] && echo "-$1")"
+}
 for a in "${needed[@]}"; do
   echo "== render $template_repo@$template_ref ($template_sha) as $a"
   r="$out/fixtures/render-$a"
@@ -164,8 +183,23 @@ for a in "${needed[@]}"; do
     mkdir -p "$f"; cp -R "$r/." "$f"
     [ ! -d "$root/eval-suite/plant/$a" ] || cp -R "$root/eval-suite/plant/$a/." "$f"
     [ "$kind" = plinth ] || rm -rf "$f/AGENTS.md" "$f/CLAUDE.md" "$f/.claude"
+  done
+done
+for t in "${tasks[@]}"; do
+  a="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/archetype")"
+  [ -f "$root/eval-suite/tasks/$t/gaps.json" ] || continue
+  for kind in plinth none; do
+    f="$out/fixtures/$kind-$a-$t"
+    mkdir -p "$f"; cp -R "$out/fixtures/$kind-$a/." "$f"
+    while IFS= read -r p; do
+      [ -e "$f/$p" ] || die "task $t: gaps.json names $p, which the $a render does not have"
+      rm -f "$f/$p"
+    done < <(gaps "$t")
     commit_fixture "$f"
   done
+done
+for a in "${needed[@]}"; do
+  for kind in plinth none; do commit_fixture "$out/fixtures/$kind-$a"; done
 done
 
 spent() {
@@ -191,9 +225,8 @@ PY
 }
 
 run_one() { # <task> <arm> <n> <budget>
-  local task="$1" arm="$2" n="$3" budget="$4" a fx r rc start
-  a="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$task/archetype")"
-  fx="$out/fixtures/$([ "$arm" = none ] && echo none || echo plinth)-$a"
+  local task="$1" arm="$2" n="$3" budget="$4" fx r rc start
+  fx="$(fixture_of "$task" "$arm")"
   r="$out/runs/$task-$arm-$n"
   mkdir -p "$r/gh"
   git init -q --bare "$r/origin.git"
@@ -202,7 +235,8 @@ run_one() { # <task> <arm> <n> <budget>
   git -C "$r/repo" push -q origin main
   git -C "$r/repo" config user.name trial
   git -C "$r/repo" config user.email trial@example.invalid
-  (cd "$r/repo" && env -u VIRTUAL_ENV uv sync --quiet --frozen)
+  # A fixture whose lockfile is a planted gap starts unsynced, as a fresh clone of it would.
+  [ ! -f "$r/repo/uv.lock" ] || (cd "$r/repo" && env -u VIRTUAL_ENV uv sync --quiet --frozen)
   git -C "$r/repo" rev-parse HEAD > "$r/start-sha.txt"
   trust "$r/repo"
   local settings=()
@@ -239,7 +273,9 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
     || { echo "charged its whole budget: the session reported no cost" > "$r/cost-unknown.txt"
          echo "   no cost reported; charged the run's budget, \$$budget"; }
   echo "   $task $arm $n: $(cat "$r/exit.txt") cost=\$$(cat "$r/cost.txt")"
-  python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" | sed 's/^/   /'
+  # A grade that fails leaves the run ungraded, counted under the table; the next run still starts.
+  python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" 2> "$r/grade-error.txt" \
+    | sed 's/^/   /' || echo "   not graded: $(tail -1 "$r/grade-error.txt")"
 }
 
 stopped=""

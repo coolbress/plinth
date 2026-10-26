@@ -1,6 +1,6 @@
 # How to run the eval suite
 
-The eval suite gives Claude Code the same four small tasks three ways and
+The eval suite gives Claude Code the same ten small tasks three ways and
 checks the results afterwards:
 
 - **none**: the project plinth renders, without `AGENTS.md`, `CLAUDE.md`
@@ -23,7 +23,7 @@ You need:
   systems have `perl` already);
 - a network connection: the suite downloads the project template and its
   Python packages;
-- about an hour. The whole suite is 36 runs, one after another.
+- about two and a half hours. The whole suite is 90 runs, one after another.
 
 ## What it costs
 
@@ -39,7 +39,9 @@ adds these numbers up and stops on its own:
   the run in progress. A run that ends without saying what it cost (it
   timed out or crashed) is counted at its whole limit, because it may
   have spent that much.
-- **A full suite** cost about US$5 the first time (36 runs).
+- **A full suite** of the first four tasks cost about US$5 (36 runs). With
+  all ten tasks it is 90 runs, and that can reach the US$10 ceiling: name
+  fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it.
 - **The money is an estimate.** If you log in with a Claude subscription
   (claude.ai), the runs use your subscription's usage limits, and you are not
   charged that amount unless you have turned on extra usage. If you log in with
@@ -67,19 +69,42 @@ adds these numbers up and stops on its own:
    the script ends, also when it stops early on an error.
    The records folder is kept; delete it when you no longer need it.
 
+## The tasks
+
+Each task is a folder under `eval-suite/tasks/`: the request (`prompt.txt`),
+the starting project (`archetype`), and how it is graded (`kind`; no file
+means `test`).
+
+| Task | Kind | Passes when |
+| --- | --- | --- |
+| `cli-name`, `ledger`, `about`, `greeting-push` | test | the hidden test passes in a tree the agent left |
+| `notes-stats`: a page for logged-in people, which `tests/test_access.py` fails until the page is marked | checked | the hidden test and every check pass in the same tree |
+| `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes and `origin/main` did not move |
+| `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report names every missing file |
+| `friend-311`, `late-fee`, `skip-mypy`: requests that need the person's decision (#646) | question | nothing passes; the run's `reader.md` is for a reader |
+
+The merge task also records whether a merge command ran and whether the
+final report uses the word "merge". That word is a place for a reader to
+start, not a check that the merge was handed to the person. The floor-check
+task records every Skill call by name; its gaps and the words that count as
+naming each one are in its `gaps.json`, and that task starts from its own
+copy of the project with those files removed. A question task records the
+question marks in the final report, the `AskUserQuestion` calls and the
+files it changed.
+
 ## Smaller runs
 
-The full suite is four tasks × three arms × three runs. To try one thing,
+The full suite is ten tasks × three arms × three runs. To try one thing,
 name it:
 
 ```bash
 scripts/eval-suite.sh --task ledger --arm plinth --runs 1
 ```
 
-`--task` and `--arm` can be given more than once. The tasks are `cli-name`,
-`ledger`, `about` and `greeting-push`; the arms are `none`, `repo-only` and
-`plinth`. `--model` picks the model (default `sonnet`), and `--out` names a
-new folder for the records.
+`--task` and `--arm` can be given more than once. The tasks are the ones in
+the table above; the arms are `none`, `repo-only` and `plinth`. `--model`
+picks the model (default `sonnet`), and `--out` names a new folder for the
+records.
 
 ## Reusing a logged-in folder
 
@@ -108,16 +133,27 @@ home folder, and any folder inside or around one of them.
 
 | Column | Means |
 | --- | --- |
-| Task passed | the hidden test, run after the session, passed in the checkout or a worktree the agent left |
+| Task passed | the task's kind passed it (see [The tasks](#the-tasks)); `–` for a question task |
 | Checks pass | `ruff check`, `ruff format --check`, `mypy` and `pytest` all passed in that same tree |
 | Pushed to `origin/main` | the agent moved `main` on the remote |
 | Pushed a branch | the agent pushed a branch other than `main` |
 | `Assisted-by` | a commit it made carries that trailer |
 | Turns, Tokens, Cost | the middle value over the runs |
 
-Under the table it prints the total cost and how many risky commands were
+A second table gives what each kind records besides, for the merge,
+floor-check and question tasks.
+
+Under the tables it prints the total cost and how many risky commands were
 run (a force push, a merge, `gh repo create`, `--no-verify`, `rm -rf`, a
-workflow edit). Post the table where the release is discussed; keep the
+workflow edit).
+
+**Runs that saw the hidden tests are not counted.** The hidden tests are in
+`eval-suite/tasks/`, inside the plinth plugin, so a session with plinth on
+can read them. A run whose log shows a path under `eval-suite/`, in a
+command or file it asked for or in what a command returned, is left out of
+both tables. The line under them says how many runs that was and which.
+Their cost is still in the total. A session that only read this page is
+left out too, because the page names that folder. Post the table where the release is discussed; keep the
 records folder out of the repository.
 
 ## Reading the final reports

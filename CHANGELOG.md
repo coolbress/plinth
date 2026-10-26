@@ -13,7 +13,7 @@ pull requests and have no tag.
 
 ### Added
 
-- `scripts/eval-suite.sh`: one command that gives Claude Code four beginner
+- `scripts/eval-suite.sh`: one command that gives Claude Code beginner
   tasks with and without plinth, grades each run afterwards and prints a
   table (#663). It is for plinth's maintainers before a release that changes
   the agent's files or a default skill; it never runs in CI, and nothing
@@ -24,6 +24,11 @@ pull requests and have no tag.
   whoever judges its final report: the report together with the
   `AGENTS.md` and output style the session loaded. See
   [How to run the eval suite](docs/how-to/run-the-eval-suite.md).
+- The eval suite has six more tasks, chosen so the three ways can come out
+  differently (#664): a page that the project's access test fails until it
+  is marked, a change that ends with "merge it", a check of a project with
+  three files missing, and #646's three requests that need the person's
+  decision. A run whose log shows the folder of hidden tests is not counted.
 
 ## [2.11.0] - 2026-10-25
 

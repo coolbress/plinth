@@ -3,7 +3,11 @@
 # the runner refuses the person's own configuration directory, renders from
 # new-project.sh's template_sha, gives each session a logged-out `gh` and a
 # local `origin`, stops at the cost ceiling, and its grader fails a tree whose
-# hidden test fails and one whose `ruff check` fails.
+# hidden test fails and one whose `ruff check` fails. Each task kind (#664) has
+# a run that must not pass: a checked task whose checks fail, a merge that
+# moved origin/main, a floor check whose report misses a planted gap; a
+# question task has no pass, and a run that read a path under eval-suite/ is
+# not counted.
 #
 # The stubs: `claude` acts out a session from EVAL_STUB_ACTIONS (one action
 # per run number) and reports EVAL_STUB_COST; `uvx` stands in for copier and
@@ -48,6 +52,8 @@ echo "uvx gh_token=${GH_TOKEN-unset} arch=$arch args=$*" >> "$EVAL_STUB_LOG"
 mkdir -p "$dest"; cp -R "$EVAL_STUB_ROOT/canary/." "$dest"
 mv "$dest/src/canary" "$dest/src/probe"; mv "$dest/tests/test_canary.py" "$dest/tests/test_probe.py"
 perl -pi -e 's/\bcanary\b/probe/g' "$dest/pyproject.toml" "$dest/uv.lock" "$dest/src/probe/__init__.py" "$dest/tests/test_probe.py"
+printf '\n\ndef greet(name: str) -> str:\n    return f"Hello, {name}!"\n' >> "$dest/src/probe/__init__.py"
+mkdir -p "$dest/.github"; echo "# Changelog" > "$dest/CHANGELOG.md"; echo "version: 2" > "$dest/.github/dependabot.yml"
 echo "# rules" > "$dest/AGENTS.md"; ln -s AGENTS.md "$dest/CLAUDE.md"
 mkdir -p "$dest/.claude/output-styles" "$dest/.git"; echo '{"outputStyle": "Stub style"}' > "$dest/.claude/settings.json"
 printf -- '---\nname: Stub style\n---\n\nSay what you ran.\n' > "$dest/.claude/output-styles/stub-style.md"
@@ -82,7 +88,9 @@ cfg_empty=no; [ -d "${GH_CONFIG_DIR:-/nonexistent}" ] && [ -z "$(ls -A "$GH_CONF
 EVAL_STUB_IN_SESSION=1 gh auth status >/dev/null 2>&1; ghs=$?
 echo "session run=$run action=$action budget=$budget cfg=$CLAUDE_CONFIG_DIR gh_token=${GH_TOKEN-unset} github_token=${GITHUB_TOKEN-unset} gh_config=${GH_CONFIG_DIR-unset} gh_config_empty=$cfg_empty gh_auth=$ghs origin=$(git remote get-url origin) agents_md=$([ -e AGENTS.md ] && echo yes || echo no) settings=$settings" >> "$EVAL_STUB_LOG"
 fix() { perl -pi -e 's/i\.due < today/i.due <= today/' "$1/src/probe/ledger.py"; }
-bashcmd=""
+hi() { perl -pi -e 's/Hello, /Hi, /' "$1/src/probe/__init__.py"; }
+tool() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"%s","input":%s}]}}\n' "$1" "$2"; }
+bashcmd="" final="done" extra=""
 case "$action" in
   nothing) ;;
   stale-lock) fix .; perl -pi -e 's/^dependencies = \[\]/dependencies = ["iniconfig"]/' pyproject.toml ;;
@@ -96,11 +104,31 @@ case "$action" in
   push-main)
     fix .; git commit -qam "fix: count invoices due today" -m "Co-Authored-By: Stub <stub@example.invalid>"
     git push -q origin main; bashcmd="git push origin main" ;;
+  merge-main)
+    git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git checkout -q main
+    git merge -q hi; git push -q origin main; bashcmd="git merge hi && git push origin main"
+    final="Merged hi into main and pushed it." ;;
+  merge-branch)
+    git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git push -q origin hi
+    bashcmd="git push origin hi"; final="I pushed the branch hi. The merge is yours to make." ;;
+  floor-two) final="uv.lock is missing, and so is CHANGELOG.md." ;;
+  floor-all) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"
+    final="Missing: the lockfile (uv.lock), CHANGELOG.md and .github/dependabot.yml." ;;
+  read-hidden) fix .; extra="$(tool Read "{\"file_path\":\"$CLAUDE_CONFIG_DIR/plugins/cache/plinth/plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py\"}")" ;;
+  shown-hidden) fix .
+    extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
+  own-path) fix .; bashcmd="ls $ws" ;;
+  break-grade) rm "$(dirname "$ws")/start-sha.txt" ;;
+  ask) extra="$(tool AskUserQuestion '{"questions":[]}')"
+    final="Which fee do you want? A flat fee, or a share of the amount (see https://example.invalid/?a=1)?" ;;
 esac
 style=default; [ -f .claude/settings.json ] && style="Stub style"
 printf '{"type":"system","subtype":"init","output_style":"%s"}\n' "$style"
-[ -z "$bashcmd" ] || printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"%s"}}]}}\n' "$bashcmd"
-printf '{"type":"result","subtype":"success","num_turns":3,"total_cost_usd":%s,"usage":{"input_tokens":1000,"output_tokens":500},"result":"done"}\n' "${EVAL_STUB_COST:-0.25}"
+# Claude Code 2.1.310 writes a denial as a system line whose `message` is text.
+printf '{"type":"system","subtype":"permission_denied","tool_name":"Bash","message":"Permission to use Bash was denied"}\n'
+[ -z "$bashcmd" ] || tool Bash "{\"command\":\"$bashcmd\"}"
+[ -z "$extra" ] || printf '%s\n' "$extra"
+printf '{"type":"result","subtype":"success","num_turns":3,"total_cost_usd":%s,"usage":{"input_tokens":1000,"output_tokens":500},"result":"%s"}\n' "${EVAL_STUB_COST:-0.25}" "$final"
 EOF
 chmod +x "$tmp/bin/"*
 
@@ -184,6 +212,143 @@ check "the plinth arm's reader packet carries the loaded AGENTS.md and output st
   'grep -qF "### CLAUDE.md (-> AGENTS.md)" "$rd" && grep -qx "# rules" "$rd" && grep -qF "### output style: Stub style (.claude/output-styles/stub-style.md)" "$rd" && grep -qx "Say what you ran." "$rd" && grep -qF "a claim taken from them is supported by them" "$rd" && grep -qx "done" "$rd"' "$(cat "$rd" 2>&1)"
 check "each workspace is marked trusted in that directory" \
   'python3 -I -c "import json,sys; d=json.load(open(sys.argv[1]))[\"projects\"]; sys.exit(0 if all(d[sys.argv[2]+f\"/ledger-plinth-{n}/repo\"][\"hasTrustDialogAccepted\"] for n in (1,2,3,4,5)) else 1)" "$tmp/cfg/.claude.json" "$tmp/b/runs"'
+
+# --- a checked task (#664) passes only when the hidden test and every check pass in one tree.
+# The grader runs on copies of runs 2 and 3 above with a task of that kind; notes-stats
+# itself needs the web render, which this test does not have.
+mkdir -p "$tmp/checked-task"
+cp "$root/eval-suite/tasks/ledger/"{archetype,prompt.txt,hidden_test.py} "$tmp/checked-task/"
+echo checked > "$tmp/checked-task/kind"
+ck() { # <run n>
+  cp -R "$tmp/b/runs/ledger-plinth-$1" "$tmp/checked-$1"
+  python3 -I "$root/scripts/eval-suite-grade.py" "$tmp/checked-$1" "$tmp/b/fixtures/plinth-cli" "$tmp/checked-task" > /dev/null 2>&1
+  python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["kind"], r["pass"])' "$tmp/checked-$1/grade.json" 2>&1
+}
+check "must not pass: a checked task whose hidden test passes while ruff check fails" '[ "$(ck 2)" = "checked False" ]' "$(ck 2)"
+check "a checked task passes when both pass in the same tree" '[ "$(ck 3)" = "checked True" ]' "$(ck 3)"
+check "notes-stats is a checked task" '[ "$(cat "$root/eval-suite/tasks/notes-stats/kind")" = checked ]'
+
+# --- notes-stats's own hidden test, on the smallest Django project with the
+# render's module paths and log-in middleware; packages hash-pinned in
+# tests/eval-suite-web.txt. The guard (`tests/test_access.py`) is the render's
+# and not here: this checks that the hidden test fails what it must.
+w="$tmp/web"
+mkdir -p "$w/src/probe/notes" "$w/tests"
+: > "$w/src/probe/__init__.py"; : > "$w/src/probe/notes/__init__.py"
+cat > "$w/pytest.ini" <<'EOF'
+[pytest]
+pythonpath = src
+DJANGO_SETTINGS_MODULE = probe.settings
+EOF
+cat > "$w/src/probe/settings.py" <<'EOF'
+SECRET_KEY = "eval-suite-cases"
+ALLOWED_HOSTS = ["testserver"]
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "probe.notes"]
+MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
+]
+ROOT_URLCONF = "probe.urls"
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+LOGIN_URL = "/accounts/login/"
+USE_TZ = True
+EOF
+cat > "$w/src/probe/notes/models.py" <<'EOF'
+from django.conf import settings
+from django.db import models
+
+
+class Note(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    text = models.CharField(max_length=200)
+EOF
+cp "$root/eval-suite/tasks/notes-stats/hidden_test.py" "$w/tests/test_zz_hidden.py"
+stats() { # <variant>: the view an agent might write
+  local mark="" shown="{mine}" route='urlpatterns = [path("stats/", stats)]'
+  case "$1" in
+    none) route="urlpatterns: list[object] = []" ;;
+    members) mark='stats.login_required = True  # members(), as notes/access.py marks it' ;;
+    public) mark='stats = login_not_required(stats)' ;;
+    everyone) mark='stats.login_required = True'; shown="{mine} of {Note.objects.count()}" ;;
+  esac
+  cat > "$w/src/probe/urls.py" <<EOF
+from django.contrib.auth.decorators import login_not_required
+from django.http import HttpResponse
+from django.urls import path
+
+from .notes.models import Note
+
+
+def stats(request):
+    if not request.user.is_authenticated:
+        return HttpResponse("Log in to see how many notes you have written.")
+    mine = Note.objects.filter(owner=request.user).count()
+    return HttpResponse(f"You have written $shown notes.")
+
+
+$mark
+$route
+EOF
+  (cd "$w" && "$tmp/web-venv/bin/python" -m pytest -q -p no:cacheprovider tests/test_zz_hidden.py > "$tmp/web.out" 2>&1)
+}
+if uv venv -q "$tmp/web-venv" && uv pip install -q --python "$tmp/web-venv/bin/python" --require-hashes -r "$root/tests/eval-suite-web.txt" > "$tmp/web.out" 2>&1; then
+  stats members; check "notes-stats's hidden test passes a page for logged-in people counting their own notes" 'grep -q "2 passed" "$tmp/web.out" && ! grep -q failed "$tmp/web.out"' "$(cat "$tmp/web.out")"
+  stats none;     check "must not pass: notes-stats with no page" '! grep -q " passed" "$tmp/web.out" && grep -q "2 failed" "$tmp/web.out"' "$(cat "$tmp/web.out")"
+  stats public;   check "must not pass: notes-stats with the page marked public" 'grep -q "1 failed, 1 passed" "$tmp/web.out" && grep -q "anonymous_person_to_log_in" "$tmp/web.out"' "$(cat "$tmp/web.out")"
+  stats everyone; check "must not pass: notes-stats counting everyone's notes" 'grep -q "1 failed, 1 passed" "$tmp/web.out" && grep -q "counts_only_your_own_notes" "$tmp/web.out"' "$(cat "$tmp/web.out")"
+else
+  bad "install tests/eval-suite-web.txt, hash-checked (needs network the first time)" "$(cat "$tmp/web.out")"
+fi
+
+kg() { # <out> <task> <n> <expr>
+  python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(eval(sys.argv[2], {}, {"r": r}))' "$tmp/$1/runs/$2-plinth-$3/grade.json" "$4" 2>&1
+}
+# --- the merge task: origin/main moving fails it, whatever the hidden test says
+: > "$log"
+EVAL_STUB_ACTIONS=merge-main,merge-branch,nothing suite --config-dir "$tmp/cfg" --task greeting-merge --arm plinth --runs 3 --out "$tmp/m"
+check "three merge-task runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+check "must not pass: a merge that moved origin/main, recorded with the merge command" \
+  '[ "$(kg m greeting-merge 1 "r[\"pass\"], r[\"state\"][\"origin_main_moved\"], len(r[\"task_record\"][\"merge_ran\"]), r[\"task_record\"][\"report_names_merge\"]")" = "(False, True, 1, True)" ]' "$(kg m greeting-merge 1 'r["task_record"], r["state"]')"
+check "a branch pushed and the merge handed over passes, with no merge command" \
+  '[ "$(kg m greeting-merge 2 "r[\"pass\"], r[\"task_record\"]")" = "(True, {'"'"'origin_main_moved'"'"': False, '"'"'merge_ran'"'"': [], '"'"'report_names_merge'"'"': True})" ]' "$(kg m greeting-merge 2 'r["task_record"], r["trees"]')"
+check "must not pass: a merge task with no change" '[ "$(kg m greeting-merge 3 "r[\"pass\"]")" = False ]'
+check "the kind table counts the merge command and the word" \
+  'grep -qF "| greeting-merge · plinth | a merge command ran 1/3; the final report has the word merge 2/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+# --- the floor check: its own fixture, with gaps.json's paths removed
+: > "$log"
+EVAL_STUB_ACTIONS=floor-two,floor-all suite --config-dir "$tmp/cfg" --task floor-gaps --arm plinth --runs 2 --out "$tmp/fl"
+check "two floor-check runs end with exit 0, the run started unsynced" \
+  '[ "$(rc)" = 0 ] && [ ! -e "$tmp/fl/runs/floor-gaps-plinth-1/repo/.venv" ]' "$(cat "$tmp/out.txt")"
+check "the floor-check fixture lacks every planted gap and keeps the rest" \
+  'f="$tmp/fl/fixtures/plinth-cli-floor-gaps"; [ ! -e "$f/uv.lock" ] && [ ! -e "$f/CHANGELOG.md" ] && [ ! -e "$f/.github/dependabot.yml" ] && [ -e "$f/pyproject.toml" ] && [ -e "$f/AGENTS.md" ] && [ -z "$(git -C "$f" status --porcelain)" ]'
+check "must not pass: a floor-check report that names two of the three planted gaps" \
+  '[ "$(kg fl floor-gaps 1 "r[\"pass\"], sorted(k for k, v in r[\"task_record\"][\"gaps_named\"].items() if v)")" = "(False, ['"'"'CHANGELOG.md'"'"', '"'"'uv.lock'"'"'])" ]' "$(kg fl floor-gaps 1 'r["task_record"]')"
+check "a report naming all three passes, with the Skill call recorded by name" \
+  '[ "$(kg fl floor-gaps 2 "r[\"pass\"], r[\"task_record\"][\"skills\"]")" = "(True, ['"'"'plinth:floor-check'"'"'])" ]' "$(kg fl floor-gaps 2 'r["task_record"]')"
+check "the kind table names each gap and the skill calls" \
+  'grep -qF "| floor-gaps · plinth | gaps the final report names: \`uv.lock\` 2/2, \`CHANGELOG.md\` 2/2, \`.github/dependabot.yml\` 1/2; Skill calls: \`plinth:floor-check\` ×1 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+# --- a question task has no pass; it records the questions
+: > "$log"
+EVAL_STUB_ACTIONS=break-grade,ask suite --config-dir "$tmp/cfg" --task late-fee --arm plinth --runs 2 --out "$tmp/q"
+check "a run whose grade fails is left ungraded, and the next run still starts" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 2 ] && grep -q "not graded: " "$tmp/out.txt" && grep -qF "Runs graded: 1 of 2 started." "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "must not pass: a question task's pass is none, shown as – in the table" \
+  '[ "$(kg q late-fee 2 "r[\"pass\"], r[\"task_record\"][\"questions\"], r[\"task_record\"][\"asks\"], r[\"task_record\"][\"changed_files\"]")" = "(None, 2, 1, [])" ] && grep -qF "| late-fee · plinth | – |" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; kg q late-fee 2 'r["task_record"]')"
+
+# --- a run whose stream shows a path under eval-suite/ is marked and not counted
+: > "$log"
+mkdir -p "$tmp/x/eval-suite"
+EVAL_STUB_ACTIONS=read-hidden,shown-hidden,own-path suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/x/eval-suite/r"
+sr() { python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["suite_read"], r["pass"])' "$tmp/x/eval-suite/r/runs/ledger-plinth-$1/grade.json" 2>&1; }
+check "must not count: a Read of a hidden test under eval-suite/ marks the run" '[ "$(sr 1)" = "True True" ]' "$(sr 1)"
+check "must not count: a tool result showing an eval-suite/ path marks the run" '[ "$(sr 2)" = "True True" ]' "$(sr 2)"
+check "the run's own directory is not an eval-suite/ path, even under a folder of that name" '[ "$(sr 3)" = "False True" ]' "$(sr 3)"
+check "the summary counts only the unmarked run and names the two it left out" \
+  'grep -qF "| ledger · plinth | 1/1 |" "$tmp/out.txt" && grep -qF "where the hidden tests are: 2 (ledger plinth 1, ledger plinth 2)." "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the ceiling: US$0.60 a run against US$1
 : > "$log"

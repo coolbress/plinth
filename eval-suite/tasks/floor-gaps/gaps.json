@@ -1,0 +1,5 @@
+[
+  {"path": "uv.lock", "named": "uv\\.lock|lock ?file"},
+  {"path": "CHANGELOG.md", "named": "changelog"},
+  {"path": ".github/dependabot.yml", "named": "dependabot"}
+]
