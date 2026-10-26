@@ -62,7 +62,7 @@ done
 [ "${#arms[@]}" -gt 0 ] || arms=("${all_arms[@]}")
 for t in "${tasks[@]}"; do
   [ -f "$root/eval-suite/tasks/$t/prompt.txt" ] || die "no task $t (tasks: ${all_tasks[*]})"
-  k=test; [ ! -f "$root/eval-suite/tasks/$t/kind" ] || k="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/kind")"
+  k="test"; [ ! -f "$root/eval-suite/tasks/$t/kind" ] || k="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/kind")"
   case "$k" in test|checked|merge|floor-check|question) ;; *) die "task $t: unknown kind $k" ;; esac
 done
 for a in "${arms[@]}"; do case " ${all_arms[*]} " in *" $a "*) ;; *) die "no arm $a (arms: ${all_arms[*]})" ;; esac; done
