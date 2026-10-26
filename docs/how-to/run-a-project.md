@@ -130,7 +130,9 @@ can see these: guidance only.
   merge. In one run the agent skipped both, and said so when asked
   ([#617](https://github.com/coolbress/plinth/issues/617)).
 - **Yours:** when to stop. Corrected twice and still off: `/clear`, and say
-  it again more precisely.
+  it again more precisely. The same correction again in a later session:
+  [turn it into a rule](turn-a-correction-into-a-rule.md), a line, then a
+  reviewer rule, then a test.
 - **If you forget:** partly a boundary: the repository refuses a `cat`
   heredoc, `tee` and `sed -i`, so the agent writes code with its edit tools.
   Before a code commit, Claude Code tells the agent to run the repository's

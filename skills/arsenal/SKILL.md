@@ -27,6 +27,7 @@ Point them to it when they ask what to type next.
 | Something broke (step 7) | Reproduce, a failing test, then the fix | `diagnosing-bugs` ("diagnose this"); `/triage` for issues someone else opened |
 | Stopping, or coming back (step 8) | Put what is left in issues and pull requests; ask "where is this, what's next?" | The record; `/handoff` (listed) |
 | Between pieces of work (step 9) | Dependency updates on green; the template update after a plinth release | Dependabot; `/plinth:floor-check`, then `/plinth:template-update`, typed; `/ponytail-audit`, `/improve-codebase-architecture` (listed) |
+| Correcting the agent the same way again (any step) | A line in `AGENTS.md`, then a reviewer rule, then a test that fails on the old mistake | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/turn-a-correction-into-a-rule.md` |
 | Unsure which skill now (any step) | Say where you are | `/ask-matt` (listed), or this catalog |
 
 A tool marked listed is not installed; "Listed, not installed" below says
