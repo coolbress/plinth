@@ -228,6 +228,80 @@ check "must not pass: a checked task whose hidden test passes while ruff check f
 check "a checked task passes when both pass in the same tree" '[ "$(ck 3)" = "checked True" ]' "$(ck 3)"
 check "notes-stats is a checked task" '[ "$(cat "$root/eval-suite/tasks/notes-stats/kind")" = checked ]'
 
+# --- notes-stats's own hidden test, on the smallest Django project with the
+# render's module paths and log-in middleware; packages hash-pinned in
+# tests/eval-suite-web.txt. The guard (`tests/test_access.py`) is the render's
+# and not here: this checks that the hidden test fails what it must.
+w="$tmp/web"
+mkdir -p "$w/src/probe/notes" "$w/tests"
+: > "$w/src/probe/__init__.py"; : > "$w/src/probe/notes/__init__.py"
+cat > "$w/pytest.ini" <<'EOF'
+[pytest]
+pythonpath = src
+DJANGO_SETTINGS_MODULE = probe.settings
+EOF
+cat > "$w/src/probe/settings.py" <<'EOF'
+SECRET_KEY = "eval-suite-cases"
+ALLOWED_HOSTS = ["testserver"]
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "probe.notes"]
+MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
+]
+ROOT_URLCONF = "probe.urls"
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+LOGIN_URL = "/accounts/login/"
+USE_TZ = True
+EOF
+cat > "$w/src/probe/notes/models.py" <<'EOF'
+from django.conf import settings
+from django.db import models
+
+
+class Note(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    text = models.CharField(max_length=200)
+EOF
+cp "$root/eval-suite/tasks/notes-stats/hidden_test.py" "$w/tests/test_zz_hidden.py"
+stats() { # <variant>: the view an agent might write
+  local mark="" shown="{mine}" route='urlpatterns = [path("stats/", stats)]'
+  case "$1" in
+    none) route="urlpatterns: list[object] = []" ;;
+    members) mark='stats.login_required = True  # members(), as notes/access.py marks it' ;;
+    public) mark='stats = login_not_required(stats)' ;;
+    everyone) mark='stats.login_required = True'; shown="{mine} of {Note.objects.count()}" ;;
+  esac
+  cat > "$w/src/probe/urls.py" <<EOF
+from django.contrib.auth.decorators import login_not_required
+from django.http import HttpResponse
+from django.urls import path
+
+from .notes.models import Note
+
+
+def stats(request):
+    if not request.user.is_authenticated:
+        return HttpResponse("Log in to see how many notes you have written.")
+    mine = Note.objects.filter(owner=request.user).count()
+    return HttpResponse(f"You have written $shown notes.")
+
+
+$mark
+$route
+EOF
+  (cd "$w" && "$tmp/web-venv/bin/python" -m pytest -q -p no:cacheprovider tests/test_zz_hidden.py > "$tmp/web.out" 2>&1)
+}
+if uv venv -q "$tmp/web-venv" && uv pip install -q --python "$tmp/web-venv/bin/python" --require-hashes -r "$root/tests/eval-suite-web.txt" > "$tmp/web.out" 2>&1; then
+  stats members; check "notes-stats's hidden test passes a page for logged-in people counting their own notes" 'grep -q "2 passed" "$tmp/web.out" && ! grep -q failed "$tmp/web.out"' "$(cat "$tmp/web.out")"
+  stats none;     check "must not pass: notes-stats with no page" '! grep -q " passed" "$tmp/web.out" && grep -q "2 failed" "$tmp/web.out"' "$(cat "$tmp/web.out")"
+  stats public;   check "must not pass: notes-stats with the page marked public" 'grep -q "1 failed, 1 passed" "$tmp/web.out" && grep -q "anonymous_person_to_log_in" "$tmp/web.out"' "$(cat "$tmp/web.out")"
+  stats everyone; check "must not pass: notes-stats counting everyone's notes" 'grep -q "1 failed, 1 passed" "$tmp/web.out" && grep -q "counts_only_your_own_notes" "$tmp/web.out"' "$(cat "$tmp/web.out")"
+else
+  bad "install tests/eval-suite-web.txt, hash-checked (needs network the first time)" "$(cat "$tmp/web.out")"
+fi
+
 kg() { # <out> <task> <n> <expr>
   python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(eval(sys.argv[2], {}, {"r": r}))' "$tmp/$1/runs/$2-plinth-$3/grade.json" "$4" 2>&1
 }

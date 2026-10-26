@@ -33,6 +33,7 @@ def test_hidden_stats_counts_only_your_own_notes() -> None:
     assert not re.search(r"(?<!\d)(4|11)(?!\d)", text), f"another person's notes are counted: {text!r}"
 
 
+@pytest.mark.django_db
 def test_hidden_stats_asks_an_anonymous_person_to_log_in() -> None:
     for url in ("/stats/", "/stats"):
         response = Client().get(url, secure=True)
