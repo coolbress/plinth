@@ -36,6 +36,18 @@ pull requests and have no tag.
   three files missing, and #646's three requests that need the person's
   decision. A run whose log shows the folder of hidden tests is not counted.
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.26.0
+  (coolbress/plinth-template#121, #127). A new project's agent no longer
+  reports that there is no issue or pull request when it simply could not
+  read them: a failed read is reported as not read, with the error. In
+  #646's three tasks re-run with `gh` signed out, the reports that said
+  there were none went from 5 of 9 to 1 of 9. An existing repository
+  gets it through `/plinth:template-update`; the update changes only the
+  output style, so under 2.10.0's rule its pull request needs an admin's
+  approval when the agent's own account pushes it.
+
 ## [2.11.0] - 2026-10-25
 
 GitLab projects now get the same signal GitHub projects got in 2.10.0:
