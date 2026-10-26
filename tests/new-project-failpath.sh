@@ -824,7 +824,7 @@ check "a web ruleset is the wall plus image, ci / migrations and ci / deploy-che
   '[ "$(jq -c "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\") | .integration_id] | unique" "$work/home-web/ruleset-posted.json")" = "[15368]" ] && [ "$(jq "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\")] | length" "$work/home-web/ruleset-posted.json")" = 3 ]'
 check "a web render passes archetype=web to copier" 'grep -q "archetype=web" "$work/home-web/calls.log"'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.25.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.26.0 in " "$work/home-none/out"'
 check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
   'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
 check "copier renders the tag's pinned commit, not the tag: a tag moved after the check changes nothing (#519)" \
