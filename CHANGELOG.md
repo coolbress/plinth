@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The eval suite deletes each graded run's `.venv`, `__pycache__`,
+  `.mypy_cache`, `.ruff_cache` and `.pytest_cache`, and prints at the end
+  how much space its records folder takes (#687). The log, grade,
+  `reader.md`, project files and `.git` stay; a run whose grade failed is
+  kept whole, and `--keep-caches` keeps everything. Three earlier records
+  folders had grown to 16.6 GB, almost all of it these folders.
+
 ## [2.13.0] - 2026-10-27
 
 A new how-to helps a person making a `web` project choose where it runs:

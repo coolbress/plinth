@@ -1,5 +1,8 @@
 """Grade one eval-suite run: eval-suite-grade.py <run dir> <fixture> <task dir>.
 
+`eval-suite-grade.py --drop-caches <run dir>` instead removes CACHES from
+every working tree of a graded run; a re-grade rebuilds them.
+
 Writes <run dir>/grade.json, and <run dir>/reader.md: the final report with
 the AGENTS.md and output style the session loaded, for whoever judges it.
 Reads the stream for what the agent did, then copies every working tree it
@@ -63,9 +66,9 @@ SUITE = "eval-suite/"
 MERGE_WORD = re.compile(r"\bmerg(?:e|es|ed|ing)\b", re.IGNORECASE)
 # A question mark that ends a sentence, not one inside a URL's query.
 QUESTION = re.compile(r"\?(?=[\s*_)\]\"']|$)")
-SKIP = shutil.ignore_patterns(
-    ".git", ".venv", ".claude", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"
-)
+# Rebuildable: never copied for grading, and removed from a run once it is graded (#687).
+CACHES = (".venv", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache")
+SKIP = shutil.ignore_patterns(".git", ".claude", *CACHES)
 # Without this, `uv run` inside the copy could pick up the caller's activated venv.
 ENV = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT")}
 
@@ -264,6 +267,24 @@ def trees_of(repo: Path) -> list[Path]:
     return trees
 
 
+def drop_caches(run: Path) -> int:
+    """Remove CACHES from the run's checkout and worktrees; return how many."""
+    dropped = 0
+    for tree in trees_of(run / "repo"):
+        for top, dirs, _ in os.walk(tree):
+            for d in [d for d in dirs if d in CACHES or d == ".git"]:
+                dirs.remove(d)
+                if d == ".git":
+                    continue
+                p = Path(top) / d
+                if p.is_symlink():
+                    p.unlink()
+                else:
+                    shutil.rmtree(p)
+                dropped += 1
+    return dropped
+
+
 def changed_files(repo: Path, start: str, trees: list[Path], branches: list[str]) -> list[str]:
     """Every path that differs from the start, in any tree or local branch."""
     files: set[str] = set()
@@ -307,6 +328,9 @@ def task_record(
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--drop-caches"]:
+        print(f"dropped {drop_caches(Path(sys.argv[2]))} cache folders")
+        return
     run, fixture, task = (Path(a) for a in sys.argv[1:4])
     repo = run / "repo"
     origin = run / "origin.git"

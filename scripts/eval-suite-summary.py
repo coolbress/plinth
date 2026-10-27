@@ -127,6 +127,12 @@ def main() -> None:
     unended = sum(1 for r in graded if not r["trace"]["ended"])
     print()
     print(f"Runs graded: {len(graded)} of {len(started)} started.")
+    ungraded = [d.name for d in started if not (d / "grade.json").exists()]
+    if ungraded:
+        print(
+            "Not graded, so kept whole with their caches for a person to look at "
+            f"(`grade-error.txt` says why): {', '.join(ungraded)}."
+        )
     names = ", ".join(f"{r['task']} {r['arm']} {r['n']}" for r in marked)
     print(
         "Not counted in the tables, because the session read or was shown a path under "

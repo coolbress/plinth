@@ -8,6 +8,7 @@
 #
 #   scripts/eval-suite.sh [--config-dir DIR] [--ceiling USD] [--runs N]
 #                         [--task NAME]... [--arm NAME]... [--model NAME] [--out DIR]
+#                         [--keep-caches]
 #
 # Arms: none (the render without AGENTS.md, CLAUDE.md and .claude/, plugins
 # off), repo-only (the render, plugins off), plinth (the render, plinth on).
@@ -32,6 +33,11 @@
 # left, so the overrun is bounded by the run in flight. The cost is the API
 # list-price estimate each session reports (`total_cost_usd`); a session that
 # reports none (a timeout, a crash) is charged its whole budget.
+#
+# Once a run is graded, its checkout and worktrees lose the folders a re-grade
+# rebuilds (the grader's CACHES: .venv and the tool caches), so the records
+# stay small (#687); --keep-caches keeps them. A run whose grade failed is left
+# whole for a person to look at. At the end the records' size is printed.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps friend-311 late-fee skip-mypy)
@@ -40,9 +46,9 @@ per_run_cap=2
 session_timeout=900
 
 die() { echo "eval-suite: $*" >&2; exit 2; }
-usage() { sed -n '9,10p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '9,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
-cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=()
+cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=() keep_caches=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --config-dir) [ $# -ge 2 ] || usage; cfg="$2"; shift 2 ;;
@@ -52,6 +58,7 @@ while [ $# -gt 0 ]; do
     --arm)        [ $# -ge 2 ] || usage; arms+=("$2"); shift 2 ;;
     --model)      [ $# -ge 2 ] || usage; model="$2"; shift 2 ;;
     --out)        [ $# -ge 2 ] || usage; out="$2"; shift 2 ;;
+    --keep-caches) keep_caches=1; shift ;;
     -h|--help)    usage ;;
     *)            die "unknown argument: $1" ;;
   esac
@@ -274,8 +281,13 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
          echo "   no cost reported; charged the run's budget, \$$budget"; }
   echo "   $task $arm $n: $(cat "$r/exit.txt") cost=\$$(cat "$r/cost.txt")"
   # A grade that fails leaves the run ungraded, counted under the table; the next run still starts.
-  python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" 2> "$r/grade-error.txt" \
-    | sed 's/^/   /' || echo "   not graded: $(tail -1 "$r/grade-error.txt")"
+  if python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" 2> "$r/grade-error.txt" \
+    | sed 's/^/   /'; then
+    [ -n "$keep_caches" ] || python3 -I "$root/scripts/eval-suite-grade.py" --drop-caches "$r" 2>> "$r/grade-error.txt" \
+      | sed 's/^/   /' || echo "   caches not dropped: $(tail -1 "$r/grade-error.txt")"
+  else
+    echo "   not graded: $(tail -1 "$r/grade-error.txt"); its folder is kept whole"
+  fi
 }
 
 stopped=""
@@ -305,5 +317,5 @@ table="$(python3 -I "$root/scripts/eval-suite-summary.py" "$out/runs" "$(IFS=,; 
   [ -z "$stopped" ] || { echo; echo "Stopped: $stopped."; }
 } | tee "$out/summary.md"
 echo
-echo "Records (streams, final reports, grades): $out"
+echo "Records (streams, final reports, grades): $out ($(du -sh "$out" | awk '{print $1}') on disk)"
 [ -z "$stopped" ] || exit 3
