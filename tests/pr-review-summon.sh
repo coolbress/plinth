@@ -8,7 +8,9 @@
 # decision is scripts/pr-review/summon.sh, which the workflow fetches and
 # runs; it is run here against the login the token would return. Both directions:
 # nothing posted without a token, posted only as the owner with one, and a
-# token that cannot be used fails at once rather than after the wait.
+# token that cannot be used fails at once rather than after the wait. A post
+# that fails is tried once more, and only GitHub's 403 or 404 names the token
+# (#674).
 #
 # When it asks (#206): nothing at the start; a third of the way into the wait
 # if no accepted reviewer has been active since the push, and at two thirds if
@@ -181,9 +183,19 @@ import json, os, sys, pathlib
 m = pathlib.Path(os.environ["MOCK"]); a = sys.argv[1:]
 ic = json.loads((m / "icomments.json").read_text())
 if a[:2] == ["pr", "comment"]:   # a post: an issue comment by the owner, stamped with the clock
+    with open(m / "posts-tried", "a") as f: f.write("x")
+    # $MOCK/fail: one line per try, "ok", or what gh prints on stderr when it fails;
+    # "landed: <text>" posts, then fails as if the answer were lost. No line: it posts.
+    fail = (m / "fail").read_text().splitlines() if (m / "fail").exists() else []
+    now, rest = (fail[0], fail[1:]) if fail else ("ok", [])
+    (m / "fail").write_text("".join(ln + "\n" for ln in rest)) if fail else None
+    if now != "ok" and not now.startswith("landed: "):
+        sys.stderr.write(now + "\n"); sys.exit(1)
     body = pathlib.Path(a[a.index("--body-file") + 1]).read_text()
     ic.append({"user": {"login": "coolbress"}, "body": body, "at": int((m / "clock").read_text())})
     (m / "icomments.json").write_text(json.dumps(ic))
+    if now.startswith("landed: "):
+        sys.stderr.write(now[8:] + "\n"); sys.exit(1)
 else:                            # --jq '.[].body'
     print("\n".join(c["body"] for c in ic))
 PY
@@ -263,6 +275,77 @@ if ! grep -qF "$REPLACED ($B): not asking" "$tmp/out" \
    || ! grep -qF "nothing from an accepted reviewer since the push (2026-09-18T10:20:15Z): asking (1/2)" "$tmp/out"; then
   echo "  FAIL  the log does not say replaced at 1/3 and asking at 2/3" >&2; fails=$((fails + 1))
 fi
+
+# A post that fails (#674): gh's own words are in the log, one more try comes
+# after a pause, and the error names the token only when GitHub refused it.
+# W=60: asks at 20 s and 40 s, and the pause after a failed try is 10 s.
+NET='Post "https://api.github.com/graphql": stream error: stream ID 7; CANCEL; received from peer'
+DENIED='GraphQL: Resource not accessible by personal access token (addComment)'
+post_step() {  # name, $MOCK/fail lines (one per try), expected exit, expected posts, expected tries
+  rm -rf "$tmp/m"; mkdir -p "$tmp/m"
+  echo "$T0" > "$tmp/m/clock"; printf '%s %s\n' "$T0" "$(push "$HEAD" "$(stamp "$T0")")" > "$tmp/m/pushes"
+  printf '[]' > "$tmp/m/icomments.json"; printf '%s' "$2" > "$tmp/m/fail"
+  PATH="$tmp/bin:$PATH" MOCK="$tmp/m" RUNNER_TEMP="$tmp/rt" REPO=o/r NUMBER=7 HEAD_SHA="$HEAD" HEAD_REF=b \
+    AUTHOR_LOGIN=coolbress TITLE=t LOGINS="$BOT" ASK="please review" SUMMONS_TOKEN=tok OWNER=coolbress \
+    WAIT=60 POLL=10 bash "$tmp/step.sh" >"$tmp/out" 2>&1
+  got=$?
+  at="$(python3 -c 'import json,sys; print(" ".join(str(p["at"] - int(sys.argv[2])) for p in json.load(open(sys.argv[1])) if "at" in p))' "$tmp/m/icomments.json" "$T0")"
+  tries="$(wc -c < "$tmp/m/posts-tried" 2>/dev/null | tr -d ' ')"
+  if [ "$got" -ne "$3" ] || [ "$at" != "$4" ] || [ "${tries:-0}" != "$5" ]; then
+    echo "  FAIL  $1: expected exit $3, posts at '$4' s, $5 tries; got exit $got, posts at '$at' s, ${tries:-0} tries" >&2
+    sed 's/^/        /' "$tmp/out" | grep -v '^        \(   \.\.\.\|not yet\)' >&2
+    fails=$((fails + 1)); return 1
+  fi
+  echo "  PASS  $1"
+}
+has() {  # what, text: the step's log must carry it
+  grep -qF -- "$2" "$tmp/out" || { echo "  FAIL  $1: the log lacks '$2'" >&2; fails=$((fails + 1)); }
+}
+lacks() {  # what, text: the step's log must not carry it
+  ! grep -qF -- "$2" "$tmp/out" || { echo "  FAIL  $1: the log has '$2'" >&2; fails=$((fails + 1)); }
+}
+TOKEN_LINE="the token needs Pull requests: Read and write on this repository"
+RERUN_LINE="Re-run this job before changing summons-token"
+echo "-- a post that fails is tried once more, and the error says what is known (#674)"
+# The first ask's two tries: 20 s, then 30 s after the pause; the second ask at 40 s.
+post_step "a dropped connection, then a post: posted once, the wait goes on" "$NET
+ok" 1 "30 40" 3 && {
+  has "the first failure" "the summons was not posted (try 1/2); gh said: $NET"
+  has "the post after it" "asking (1/2) as coolbress"
+  has "the wait to its end" "no third-party review is attached to this commit"
+  lacks "no error for the post" "::error::summons-token could not post"
+}
+post_step "a post that landed but answered with an error: not posted again" "landed: $NET" 1 "20 40" 2 && {
+  has "the first try found" "the first try was posted after all: not posting again"
+}
+post_step "a 403 twice: names the token, with gh's words" "HTTP 403: $DENIED
+HTTP 403: $DENIED" 1 "" 2 && {
+  has "the token's permission" "$TOKEN_LINE"
+  has "gh's words" "gh said: HTTP 403: $DENIED"
+  lacks "no re-run advice" "$RERUN_LINE"
+  lacks "not after the wait" "no third-party review is attached to this commit"
+}
+post_step "GraphQL's refusal twice (as measured on #207): names the token" "$DENIED
+$DENIED" 1 "" 2 && {
+  has "the token's permission" "$TOKEN_LINE"
+  has "gh's words" "gh said: $DENIED"
+}
+post_step "a 404 twice: names the token" "HTTP 404: Not Found (https://api.github.com/graphql)
+HTTP 404: Not Found (https://api.github.com/graphql)" 1 "" 2 && {
+  has "the token's access" "$TOKEN_LINE"
+}
+post_step "a dropped connection twice: says re-run first, with gh's words" "$NET
+$NET" 1 "" 2 && {
+  has "could not be posted" "::error::the summons could not be posted, on two tries"
+  has "gh's words" "gh said: $NET"
+  has "re-run first" "$RERUN_LINE"
+  lacks "not the token" "$TOKEN_LINE"
+  lacks "not after the wait" "no third-party review is attached to this commit"
+}
+post_step "a network error, then a 403: the last answer decides" "$NET
+HTTP 403: $DENIED" 1 "" 2 && {
+  has "the token's permission" "$TOKEN_LINE"
+}
 
 # A release title, through the whole step (#384): the step reads the changed
 # files and hands them to the gate. The real v1.7.0 release diff passes at

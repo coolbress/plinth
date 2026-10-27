@@ -17,6 +17,15 @@ pull requests and have no tag.
   command, even a local `git merge` that was never pushed: the task passes
   by handing the merge to the person (#671).
 
+### Fixed
+
+- `third-party / review`: a summons post that fails is tried once more after
+  ten seconds, and each failure prints `gh`'s own error. Only a refusal from
+  GitHub (a 403 or 404) still names the token's access and permission; any
+  other failure says the summons could not be posted and to re-run the job
+  before changing `summons-token`. On #673 a dropped connection had been
+  reported as a token without permission (#674).
+
 ## [2.12.0] - 2026-10-27
 
 A new project's agent no longer reports that there is no issue or pull
