@@ -161,6 +161,43 @@ a SKIP unless PyYAML is already there.
 A FAIL in the wall carries its fix as a `glab api` line or a settings URL;
 it needs the Maintainer role, so give it to the user to run, not yourself.
 
+## A JavaScript or TypeScript repository
+
+A GitHub repository with `package.json` and no `pyproject.toml` where the
+project is read (the root, or `--project`) is read as a JavaScript or
+TypeScript project (#681), the shape v0, Lovable and Bolt export. Run the same
+command. The first line under the header is an INFO saying so in plain words:
+plinth has no checks for that language (no lint, typecheck, test or build
+check), and the checks that do not depend on the language still apply. Those
+keep their verdicts: the document set, `.claude/settings.json`,
+`.gitattributes`, `.github/dependabot.yml`, tracked dotenv files, action pins,
+and, with a repository name, the ruleset's rules, push protection, CodeQL and
+the labels.
+
+Each item that depends on Python is an `N/A` line saying `does not apply` and
+why, in one sentence: `pyproject.toml`, `uv.lock`, the archetype's items
+(container image, `.env.example`, JSON logs), the `ci` job's call to
+`python-ci.yml` (not read, from the checkout or the default branch), and the
+ruleset's required checks named `ci / <job>`, which only that call reports.
+With none left to require, the `required_status_checks` rule and its
+strictness are not asked for either; a name `--expect-checks` gives that is
+not `ci / <job>` is still judged. `N/A` lines are neither failures nor
+not-verified items: the summary line counts them on their own, `K do not
+apply`, printed only when K is above 0.
+
+When `bun.lock` or `bun.lockb` is the only lockfile (no `package-lock.json`,
+`npm-shrinkwrap.json`, `yarn.lock` or `pnpm-lock.yaml`), one INFO line says
+that GitHub's dependency review does not read it, so a vulnerable dependency
+is not reported before a merge.
+
+What it leaves out: the project's own lockfile, scripts and source are not
+read, and no JavaScript or TypeScript check exists to stand in for the Python
+ones. Template drift is a SKIP as for any repository the door did not make.
+A repository that also holds a `pyproject.toml`, one whose Python project is
+one directory down (the `--project` line stands), and a GitLab checkout are
+read as before. `ci / floor-check` is not involved: it runs only from
+`python-ci.yml`, which such a repository does not call.
+
 ## Report
 
 Lead with a summary in plain words, for a person who may not know the
@@ -212,6 +249,10 @@ After the FAIL and WARN list, name what was not verified in one line, and
 what would verify it (a network, a login, an admin-read token). An exit code
 of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
 not-verified count says what was not.
+`N/A` lines (a JavaScript or TypeScript repository, above) are not defects
+either: leave them out of the FAIL and WARN list, write no fix under them, and
+in the summary say that plinth has no checks for that language rather than
+that those items pass.
 A third count, `K left to /plinth:floor-check`, appears only in a run with
 `--actions-token` (`ci / floor-check`) and only when K is above 0: INFO
 lines for reads that token cannot make and this skill, run with a login that

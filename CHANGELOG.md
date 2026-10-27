@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:floor-check` reads a repository with `package.json` and no
+  `pyproject.toml` as a JavaScript or TypeScript project (#681). One line
+  near the top says so in plain words; `pyproject.toml`, `uv.lock`, the
+  archetype's items, the `ci` job's call to `python-ci.yml` and the
+  ruleset's `ci / <job>` required checks say `does not apply` with the
+  reason, not FAIL, and the summary line counts them on their own. Every
+  other item keeps its verdict. A `bun.lock` alone gets a line saying
+  GitHub's dependency review does not read it. A Python repository, with or
+  without `package.json`, reads exactly as before.
+
 ## [2.12.0] - 2026-10-27
 
 A new project's agent no longer reports that there is no issue or pull
