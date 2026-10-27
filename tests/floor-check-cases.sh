@@ -1366,6 +1366,53 @@ rm -rf "$web.empty"; cp -R "$web" "$web.empty"; sed -i.bak 's/^archetype: web$/a
 git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
 if grep -q '^  INFO  archetype cli: ' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "another archetype is not asked for render.yaml"
 else bad "a cli instance was asked for render.yaml"; fi
+# The hosting answer (#678, plinth-template#128): `render`, the default, or
+# `elsewhere` with a hosting_elsewhere place. A web instance rendered before
+# the question has no hosting key and is a Render one; `hosting: render` and
+# no key read the same, with or without render.yaml, and so does a cli
+# instance carrying answers the template never records for it.
+web_hosted="$work/web.hosted"
+hosted_out() { # <dir> <archetype> <answer lines> <render.yaml: keep|drop>
+  rm -rf "$web_hosted"; cp -R "$1" "$web_hosted"
+  sed -i.bak "s/^archetype: .*/archetype: $2/" "$web_hosted/.copier-answers.yml"; rm "$web_hosted/.copier-answers.yml.bak"
+  [ -z "$3" ] || printf '%b' "$3" >> "$web_hosted/.copier-answers.yml"
+  [ "$4" = keep ] || rm -f "$web_hosted/render.yaml"
+  git -C "$web_hosted" add -A; python3 "$checker" --root "$web_hosted" --no-network 2>&1
+}
+for keep in keep drop; do
+  if [ "$(hosted_out "$web" web 'hosting: render\n' "$keep")" = "$(hosted_out "$web" web '' "$keep")" ]; then
+    ok "web with hosting: render reads as one with no hosting key (render.yaml: $keep)"
+  else bad "web with hosting: render differs from no hosting key (render.yaml: $keep)"
+    diff <(hosted_out "$web" web 'hosting: render\n' "$keep") <(hosted_out "$web" web '' "$keep") | sed 's/^/        /'; fi
+done
+if [ "$(hosted_out "$web" cli 'hosting: elsewhere\nhosting_elsewhere: home\n' drop)" = "$(hosted_out "$web" cli '' drop)" ]; then
+  ok "a cli instance's output does not move with a hosting answer"
+else bad "a cli instance's output moved with a hosting answer"; fi
+# `elsewhere`: no render.yaml item, one INFO naming the place. vps and home
+# leave HTTPS, backups and closed ports to a person, which no item here reads:
+# an INFO that says so, never a PASS.
+for place in railway digitalocean fly vps home; do
+  out="$(hosted_out "$web" web "hosting: elsewhere\nhosting_elsewhere: $place\n" drop)"; rc=$?
+  if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q '^  FAIL  render.yaml' <<<"$out" \
+     && ! grep -q '^  PASS .*render.yaml' <<<"$out" \
+     && grep -qF "INFO  render.yaml not required: hosting is elsewhere ($place), and only Render reads that file" <<<"$out"; then
+    ok "web with hosting: elsewhere ($place) and no render.yaml: no FAIL, one INFO naming $place"
+  else bad "web with hosting: elsewhere ($place) and no render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render|elsewhere' | sed 's/^/        /'; fi
+  case "$place" in
+    vps|home)
+      if grep -qF "INFO  not checked by plinth: on $place, HTTPS, backups and keeping the app's and the database's ports closed are a person's to set up" <<<"$out" \
+         && ! grep -qE '^  PASS .*(HTTPS|backup|port)' <<<"$out"; then ok "hosting_elsewhere: $place says what plinth does not check, as an INFO"
+      else bad "hosting_elsewhere: $place does not say what plinth does not check"; printf '%s\n' "$out" | grep -E 'HTTPS|not checked' | sed 's/^/        /'; fi ;;
+    *)
+      if ! grep -q 'not checked by plinth' <<<"$out"; then ok "hosting_elsewhere: $place carries no line meant for vps and home"
+      else bad "hosting_elsewhere: $place carries the vps/home line"; fi ;;
+  esac
+done
+out="$(hosted_out "$web" web 'hosting: elsewhere\n' drop)"
+if grep -q -- '-- 0 failed' <<<"$out" && grep -qF 'INFO  render.yaml not required: hosting is elsewhere (no hosting_elsewhere answer), and only Render reads that file' <<<"$out"; then
+  ok "hosting: elsewhere with no hosting_elsewhere answer says that none is recorded"
+else bad "hosting: elsewhere with no hosting_elsewhere answer"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+rm -rf "$web_hosted"
 web_rules="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web | jq -c '[.rules[] | . + {ruleset_source_type: "Repository", ruleset_id: 1}]')"
 for drop in "ci / migrations" "ci / deploy-check"; do
   jq -c --arg d "$drop" 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != $d)) else . end)' <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"

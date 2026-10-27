@@ -19,6 +19,13 @@ pull requests and have no tag.
   `reader.md`, project files and `.git` stay; a run whose grade failed is
   kept whole, and `--keep-caches` keeps everything. Three earlier records
   folders had grown to 16.6 GB, almost all of it these folders.
+- `/plinth:floor-check` asks a `web` project for `render.yaml` only when
+  its `.copier-answers.yml` says `hosting: render` or has no `hosting`
+  answer, which is what a project made before plinth-template asked the
+  question has (#678). With `hosting: elsewhere` it prints an INFO naming
+  the place chosen; for `vps` and `home` a second INFO says plinth does
+  not check HTTPS, backups or closed ports there. Every other project's
+  output is unchanged.
 
 ## [2.13.0] - 2026-10-27
 

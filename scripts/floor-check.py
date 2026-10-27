@@ -1598,21 +1598,42 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
     if archetype not in CONDITIONAL_ARCHETYPES:
         result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
         return
+    answers = copier_answers(project) or {}
+    on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
     result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
-                   + (", and render.yaml" if archetype == "web" else ""))
+                   + (", and render.yaml" if on_render else ""))
     check_dockerfile(project)
     check_env_example(project)
     check_json_logs(project)
-    if archetype == "web":
+    if on_render:
         check_render_yaml(project)
+    elif archetype == "web":
+        check_hosted_elsewhere(answers.get("hosting_elsewhere"))
 
 
 def check_render_yaml(project: Path) -> None:
     """The web archetype's Render Blueprint (plinth-template v1.20.0): the
-    deploy that waits for the checks (#615)."""
+    deploy that waits for the checks (#615). Asked of a `hosting: render`
+    instance and of one with no hosting answer, rendered before the question
+    existed (plinth-template#128)."""
     if not ok((project / "render.yaml").is_file(), "render.yaml present",
               "render.yaml missing: the web archetype deploys from it, after the checks pass"):
         result("INFO", "  restore it from the default branch: git restore --source=origin/main -- render.yaml")
+
+
+# The places whose README section tells a person to set up HTTPS, backups and
+# closed ports themselves (plinth-template#128); no item here reads them.
+SELF_RUN_PLACES = ("vps", "home")
+
+
+def check_hosted_elsewhere(place: str | None) -> None:
+    """`hosting: elsewhere` (#678): the template renders no render.yaml, and
+    no item reads the chosen place's own setup."""
+    result("INFO", f"render.yaml not required: hosting is elsewhere ({place or 'no hosting_elsewhere answer'}), "
+                   "and only Render reads that file")
+    if place in SELF_RUN_PLACES:
+        result("INFO", f"not checked by plinth: on {place}, HTTPS, backups and keeping the app's and the "
+                       "database's ports closed are a person's to set up")
 
 
 def check_dockerfile(project: Path) -> None:
