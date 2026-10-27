@@ -420,15 +420,33 @@ jobs:
               return 0
             fi
             printf '%s\n\n%s\n' "$ASK" "$marker" > "$RUNNER_TEMP/ask.md"
-            if GH_TOKEN="$SUMMONS_TOKEN" gh pr comment "$NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/ask.md"; then
-              echo "$why: asking ($(( ${n:-0} + 1 ))/2) as $OWNER: $ASK"
-            else
-              # A token that reads its login but cannot comment here (no access
-              # to this repository, or read-only on pull requests) is found out
-              # only now; fail here, not after the wait.
-              echo "::error::summons-token could not post the summons (the token reads as $OWNER but cannot comment on this pull request); the token needs Pull requests: Read and write on this repository (#205). Fix the secret and re-run."
-              exit 1
+            comment() { GH_TOKEN="$SUMMONS_TOKEN" gh pr comment "$NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/ask.md" 2> "$RUNNER_TEMP/post.err"; }
+            said() { tr '\n' ' ' < "$RUNNER_TEMP/post.err" | cut -c1-300; }
+            # One dropped connection must not fail the check (#673): after a
+            # pause the post is tried once more, unless the first one landed
+            # after all (this commit's request count went up).
+            if ! comment; then
+              echo "the summons was not posted (try 1/2); gh said: $(said)"
+              sleep 10
+              if [ "$(asked)" -gt "${n:-0}" ]; then
+                echo "the first try was posted after all: not posting again"
+              elif ! comment; then
+                # A token that reads its login but cannot comment here (no
+                # access to this repository, or read-only on pull requests) is
+                # found out only now; fail here, not after the wait. Only a
+                # refusal names the token: GitHub's 403 or 404, which reach
+                # this command as GraphQL's "Resource not accessible" (measured
+                # on #207) or "Could not resolve to a" (not measured).
+                case "$(said)" in
+                  *"HTTP 403"*|*"HTTP 404"*|*"Resource not accessible"*|*"Could not resolve to a"*)
+                    echo "::error::summons-token could not post the summons (the token reads as $OWNER but cannot comment on this pull request); the token needs Pull requests: Read and write on this repository (#205). Fix the secret and re-run. gh said: $(said)" ;;
+                  *)
+                    echo "::error::the summons could not be posted, on two tries; GitHub did not refuse the token (no 403 or 404). gh said: $(said). Re-run this job before changing summons-token: a dropped connection fails this way too (#674)." ;;
+                esac
+                exit 1
+              fi
             fi
+            echo "$why: asking ($(( ${n:-0} + 1 ))/2) as $OWNER: $ASK"
           }
           start=$(date +%s)
           deadline=$(( start + WAIT ))
