@@ -64,10 +64,37 @@ adds these numbers up and stops on its own:
    pins, then runs the tasks. Each run prints one line with its cost.
    You can leave it alone.
 5. At the end it prints the table, and the folder that keeps every run's
-   record, including each session's full log and final report.
+   record, including each session's full log and final report, with how
+   much disk space that folder takes.
 6. The temporary configuration folder, with its login, is deleted when
    the script ends, also when it stops early on an error.
    The records folder is kept; delete it when you no longer need it.
+
+## What a run's folder keeps
+
+Once a run is graded, the suite deletes the folders in its project copy
+(and in any worktree the session made) that can be rebuilt: `.venv`,
+`__pycache__`, `.mypy_cache`, `.ruff_cache` and `.pytest_cache`. These
+are the same folders the grader leaves out when it copies a tree to grade
+it. Without this, the records folder grows by gigabytes over a few full
+suites, while the records themselves take a few megabytes.
+
+What stays: the session's log (`stream.jsonl`), the grade (`grade.json`),
+`reader.md`, the project's own files with whatever the agent changed, and
+its Git history (`.git`).
+
+- **To keep everything**, for a run you want to look into, add
+  `--keep-caches`.
+- **A run whose grade failed** is left whole, caches included, so a person
+  can see what went wrong. The summary names those runs, and each one's
+  `grade-error.txt` says why.
+- **To grade a run again**, run the grader on its folder:
+  `python3 -I scripts/eval-suite-grade.py <run folder> <fixture folder> eval-suite/tasks/<task>`,
+  where the fixture folder is the one under the records' `fixtures/` that the
+  run started from.
+  It grades a copy and builds that copy's environment with
+  `uv sync --locked`, as it did the first time, so a deleted `.venv` does
+  not change the grade.
 
 ## The tasks
 

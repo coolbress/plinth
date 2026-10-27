@@ -7,7 +7,8 @@
 # a run that must not pass: a checked task whose checks fail, a merge that
 # moved origin/main, a floor check whose report misses a planted gap; a
 # question task has no pass, and a run that read a path under eval-suite/ is
-# not counted.
+# not counted. A graded run loses its rebuildable caches (#687) and grades the
+# same again; --keep-caches and a failed grade keep them.
 #
 # The stubs: `claude` acts out a session from EVAL_STUB_ACTIONS (one action
 # per run number) and reports EVAL_STUB_COST; `uvx` stands in for copier and
@@ -53,6 +54,8 @@ mkdir -p "$dest"; cp -R "$EVAL_STUB_ROOT/canary/." "$dest"
 mv "$dest/src/canary" "$dest/src/probe"; mv "$dest/tests/test_canary.py" "$dest/tests/test_probe.py"
 perl -pi -e 's/\bcanary\b/probe/g' "$dest/pyproject.toml" "$dest/uv.lock" "$dest/src/probe/__init__.py" "$dest/tests/test_probe.py"
 printf '\n\ndef greet(name: str) -> str:\n    return f"Hello, {name}!"\n' >> "$dest/src/probe/__init__.py"
+# The template's own ignores, which keep the caches out of a run's changed files.
+printf '__pycache__/\n.venv/\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\n.claude/worktrees/\n' > "$dest/.gitignore"
 mkdir -p "$dest/.github"; echo "# Changelog" > "$dest/CHANGELOG.md"; echo "version: 2" > "$dest/.github/dependabot.yml"
 echo "# rules" > "$dest/AGENTS.md"; ln -s AGENTS.md "$dest/CLAUDE.md"
 mkdir -p "$dest/.claude/output-styles" "$dest/.git"; echo '{"outputStyle": "Stub style"}' > "$dest/.claude/settings.json"
@@ -125,6 +128,12 @@ case "$action" in
     extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
   own-path) fix .; bashcmd="ls $ws" ;;
   break-grade) rm "$(dirname "$ws")/start-sha.txt" ;;
+  caches)
+    git worktree add -q -b fix .claude/worktrees/fix; fix .claude/worktrees/fix
+    for t in . .claude/worktrees/fix; do
+      mkdir -p "$t/.venv/lib" "$t/src/probe/__pycache__" "$t/.mypy_cache" "$t/.ruff_cache" "$t/.pytest_cache"
+      : > "$t/src/probe/__pycache__/x.pyc"
+    done ;;
   ask) extra="$(tool AskUserQuestion '{"questions":[]}')"
     final="Which fee do you want? A flat fee, or a share of the amount (see https://example.invalid/?a=1)?" ;;
 esac
@@ -346,8 +355,31 @@ check "the kind table names each gap and the skill calls" \
 EVAL_STUB_ACTIONS=break-grade,ask suite --config-dir "$tmp/cfg" --task late-fee --arm plinth --runs 2 --out "$tmp/q"
 check "a run whose grade fails is left ungraded, and the next run still starts" \
   '[ "$(rc)" = 0 ] && [ "$(sessions)" = 2 ] && grep -q "not graded: " "$tmp/out.txt" && grep -qF "Runs graded: 1 of 2 started." "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "the ungraded run keeps its .venv and the summary names it; the graded one loses it" \
+  '[ -d "$tmp/q/runs/late-fee-plinth-1/repo/.venv" ] && [ ! -e "$tmp/q/runs/late-fee-plinth-2/repo/.venv" ] && grep -qF "Not graded, so kept whole with their caches for a person to look at (\`grade-error.txt\` says why): late-fee-plinth-1." "$tmp/q/summary.md"' "$(cat "$tmp/out.txt"; ls -a "$tmp/q/runs/"*/repo)"
 check "must not pass: a question task's pass is none, shown as – in the table" \
   '[ "$(kg q late-fee 2 "r[\"pass\"], r[\"task_record\"][\"questions\"], r[\"task_record\"][\"asks\"], r[\"task_record\"][\"changed_files\"]")" = "(None, 2, 1, [])" ] && grep -qF "| late-fee · plinth | – |" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; kg q late-fee 2 'r["task_record"]')"
+
+# --- a graded run loses the folders a re-grade rebuilds (#687)
+cache_dirs() { # <run dir>: the cache folders left in its checkout and worktree
+  find "$1/repo" \( -name .git -prune \) -o -type d \( -name .venv -o -name __pycache__ -o -name .mypy_cache -o -name .ruff_cache -o -name .pytest_cache \) -print -prune 2>/dev/null | sort
+}
+: > "$log"
+EVAL_STUB_ACTIONS=caches suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/k"
+kr="$tmp/k/runs/ledger-plinth-1"
+check "a graded run has none of the five cache folders left, in its checkout or its worktree" \
+  '[ "$(rc)" = 0 ] && [ -e "$kr/grade.json" ] && [ -z "$(cache_dirs "$kr")" ]' "$(cat "$tmp/out.txt"; cache_dirs "$kr")"
+check "and keeps its stream, grade, reader.md, source files and .git" \
+  '[ -s "$kr/stream.jsonl" ] && [ -s "$kr/grade.json" ] && [ -s "$kr/reader.md" ] && [ -f "$kr/repo/src/probe/ledger.py" ] && grep -qF "i.due <= today" "$kr/repo/.claude/worktrees/fix/src/probe/ledger.py" && [ -z "$(git -C "$kr/repo" status --porcelain --ignored -- src)" ] && [ "$(git -C "$kr/repo" worktree list | wc -l | tr -d " ")" = 2 ]' "$(ls -la "$kr" "$kr/repo")"
+check "the records' size is printed at the end" 'grep -qE "^Records .*: $tmp/k \([0-9.,]+[BKMGT]i? on disk\)$" "$tmp/out.txt"' "$(tail -3 "$tmp/out.txt")"
+cp "$kr/grade.json" "$tmp/k-first.json"
+python3 -I "$root/scripts/eval-suite-grade.py" "$kr" "$tmp/k/fixtures/plinth-cli" "$root/eval-suite/tasks/ledger" > "$tmp/k-regrade.txt" 2>&1
+check "re-grading the cleaned run with the grader alone gives the same grade" \
+  'cmp -s "$tmp/k-first.json" "$kr/grade.json" && [ "$(kg k ledger 1 "r[\"pass\"], r[\"checks_pass\"]")" = "(True, True)" ]' "$(cat "$tmp/k-regrade.txt"; diff "$tmp/k-first.json" "$kr/grade.json")"
+: > "$log"
+EVAL_STUB_ACTIONS=caches suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/kk" --keep-caches
+check "with --keep-caches, all five are still there in both trees" \
+  '[ "$(rc)" = 0 ] && [ -e "$tmp/kk/runs/ledger-plinth-1/grade.json" ] && [ "$(cache_dirs "$tmp/kk/runs/ledger-plinth-1" | wc -l | tr -d " ")" = 10 ]' "$(cat "$tmp/out.txt"; cache_dirs "$tmp/kk/runs/ledger-plinth-1")"
 
 # --- a run whose stream shows a path under eval-suite/ is marked and not counted
 : > "$log"
