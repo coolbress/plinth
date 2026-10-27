@@ -374,8 +374,12 @@ check "and keeps its stream, grade, reader.md, source files and .git" \
 check "the records' size is printed at the end" 'grep -qE "^Records .*: $tmp/k \([0-9.,]+[BKMGT]i? on disk\)$" "$tmp/out.txt"' "$(tail -3 "$tmp/out.txt")"
 cp "$kr/grade.json" "$tmp/k-first.json"
 python3 -I "$root/scripts/eval-suite-grade.py" "$kr" "$tmp/k/fixtures/plinth-cli" "$root/eval-suite/tasks/ledger" > "$tmp/k-regrade.txt" 2>&1
+# pytest's own duration (" in 0.02s") changes from run to run; every other
+# byte of the grade is compared (#694).
+nodur() { sed -E 's/ in [0-9]+\.[0-9]+s/ in Ns/g' "$1" > "$2"; }
+nodur "$tmp/k-first.json" "$tmp/k-first.nodur"; nodur "$kr/grade.json" "$tmp/k-again.nodur"
 check "re-grading the cleaned run with the grader alone gives the same grade" \
-  'cmp -s "$tmp/k-first.json" "$kr/grade.json" && [ "$(kg k ledger 1 "r[\"pass\"], r[\"checks_pass\"]")" = "(True, True)" ]' "$(cat "$tmp/k-regrade.txt"; diff "$tmp/k-first.json" "$kr/grade.json")"
+  'cmp -s "$tmp/k-first.nodur" "$tmp/k-again.nodur" && [ "$(kg k ledger 1 "r[\"pass\"], r[\"checks_pass\"]")" = "(True, True)" ]' "$(cat "$tmp/k-regrade.txt"; diff "$tmp/k-first.nodur" "$tmp/k-again.nodur")"
 : > "$log"
 EVAL_STUB_ACTIONS=caches suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/kk" --keep-caches
 check "with --keep-caches, all five are still there in both trees" \
