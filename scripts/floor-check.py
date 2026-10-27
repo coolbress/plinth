@@ -86,6 +86,16 @@ the repository's .env* files or the env of .claude/settings*.json. A WARN
 names the place, never the value; nothing found is an INFO with its limit.
 `ci / floor-check` does not pass --credentials, so its own service URLs are
 never read.
+
+A repository with package.json and no pyproject.toml where the project is
+read (#681), on GitHub, is read as a JavaScript or TypeScript one: an INFO
+line under the header says so, and each item that depends on Python
+(pyproject.toml, uv.lock, the archetype's items, the ci job's call to
+python-ci.yml, the required checks only that workflow runs) is an N/A line
+saying why, counted on the summary line as `K do not apply`. Every other item
+keeps its verdict. With a Python project one level down, the --project hint
+stands instead. Bun's lockfile alone is an INFO: GitHub's dependency review
+does not read it.
 """
 
 from __future__ import annotations
@@ -146,6 +156,8 @@ CONFIG_NAMES = {"config.yml", "config.yaml"}
 fails = 0
 skips = 0
 left = 0
+# Items that depend on Python, on a JavaScript or TypeScript repository (#681).
+na = 0
 # One line per FAIL, SKIP and deferred INFO, in the three forms of
 # docs/reference/required-checks.md, for --verdicts (#437).
 verdicts: list[str] = []
@@ -156,9 +168,11 @@ def result(kind: str, msg: str, *, deferred: bool = False) -> None:
     """`deferred` marks an INFO for a read this run cannot make and a run with
     a login that administers the repository does (#436): outside the
     not-verified count (#303), counted on the summary line on its own."""
-    global fails, skips, left
+    global fails, skips, left, na
     print(f"  {kind:5} {msg}")
-    if kind == "FAIL":
+    if kind == "N/A":
+        na += 1
+    elif kind == "FAIL":
         fails += 1
         verdicts.append(f"fail: {msg}")
     elif kind == "SKIP":
@@ -1507,6 +1521,36 @@ def projects_below(root: Path) -> list[str]:
             and not d.is_symlink() and d.is_dir() and (d / "pyproject.toml").is_file()]
 
 
+# The lockfiles GitHub's dependency graph reads for npm packages; Bun's is not
+# one of them, so dependency review sees nothing in a repository locked by Bun
+# alone (#611 Findings).
+NODE_LOCKFILES = ("package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml")
+BUN_LOCKFILES = ("bun.lock", "bun.lockb")
+
+
+def javascript_project(project: Path, root: Path) -> bool:
+    """package.json and no pyproject.toml where the project is read (#681).
+    A Python project one level down keeps today's --project hint (#221): that
+    repository is a Python one checked from the wrong directory."""
+    if not (project / "package.json").is_file() or (project / "pyproject.toml").is_file():
+        return False
+    return project != root or not projects_below(root)
+
+
+def check_javascript_project(project: Path) -> None:
+    """In place of check_project on a JavaScript or TypeScript repository:
+    each Python item does not apply, said with its reason (#681)."""
+    result("N/A", "pyproject.toml does not apply: it describes a Python project, and this one is described by package.json")
+    result("N/A", "uv.lock does not apply: it is the lockfile of uv, Python's package manager; "
+                  "this project's own lockfile is not checked")
+    result("N/A", "the container image, .env.example and JSON logs items: does not apply: they belong to "
+                  "plinth's Python archetypes, which check a Python image and Python source")
+    bun = [n for n in BUN_LOCKFILES if (project / n).is_file()]
+    if bun and not any((project / n).is_file() for n in NODE_LOCKFILES):
+        result("INFO", f"{bun[0]} is the only lockfile here: GitHub's dependency review does not read it, "
+                       "so a vulnerable dependency is not reported before a merge")
+
+
 def check_project(project: Path, root: Path, archetype: str | None) -> None:
     # Run at the root of a repository whose project is one directory down (a
     # monorepo, a backend/ folder, plinth's own canary/), this reported two
@@ -2125,7 +2169,11 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
                sources: dict[str, int | None] | None = None, actions_token: bool = False,
-               merge: dict | None = None) -> None:
+               merge: dict | None = None, not_applying: list[str] | None = None) -> None:
+    """not_applying: on a JavaScript or TypeScript repository (#681), the
+    expected checks only python-ci.yml runs, already left out of `expected`.
+    When nothing is left, the required-checks rule is not asked for either,
+    and CodeQL's default setup is asked to analyse that language, not Python."""
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("SKIP", "wall not checked (offline)")
         return
@@ -2189,7 +2237,8 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             check_merge_setup(branch, meta, "no rules", actions_token)
         return
     by_type = {r["type"]: r for r in rules}
-    for t in ("deletion", "non_fast_forward", "pull_request", "required_status_checks"):
+    checks = not not_applying or bool(expected)
+    for t in ("deletion", "non_fast_forward", "pull_request") + (("required_status_checks",) if checks else ()):
         ok(t in by_type, f"{branch}: {t} rule active", f"{branch}: {t} rule missing")
 
     pr = by_type.get("pull_request", {}).get("parameters", {})
@@ -2202,9 +2251,13 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # each rule, so one strict rule already requires a current branch.
     strict = any(r.get("parameters", {}).get("strict_required_status_checks_policy") is True
                  for r in rules if r.get("type") == "required_status_checks")
-    ok(strict,
-       f"{branch}: required checks are strict (branch must be current)",
-       f"{branch}: required checks are not strict")
+    if not_applying:
+        result("N/A", f"{branch}: requiring {', '.join(not_applying)} does not apply: python-ci.yml runs those "
+                      "checks, and a JavaScript or TypeScript repository does not call it")
+    if checks:
+        ok(strict,
+           f"{branch}: required checks are strict (branch must be current)",
+           f"{branch}: required checks are not strict")
     # Every active required-checks rule counts: GitHub enforces each of them,
     # so a check is required when any rule requires it, and pinned when any
     # rule pins it. Keeping only the last rule of the type gave a false
@@ -2216,7 +2269,9 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                 live.setdefault(c["context"], set()).add(c.get("integration_id"))
     have = set(live)
     missing = [c for c in expected if c not in live]
-    if not ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
+    if not checks:
+        pass
+    elif not ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
               f"{branch}: required checks dropped: {missing}") and sources is not None \
             and all(sources.get(c) is not None for c in missing):
         # The script only adds checks, and asks for repository administration.
@@ -2227,7 +2282,9 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # satisfies the requirement.
     # Each check is compared with its own expected app, so a ruleset that pins
     # checks to different apps is still compared check by check.
-    if sources is None:
+    if not checks:
+        pass
+    elif sources is None:
         result("INFO", f"{branch}: the source of each required check is not compared (no --ruleset)")
     else:
         bad = unknown = 0
@@ -2316,11 +2373,19 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                            "code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
         elif not isinstance(langs, list):
             result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
-        elif "python" in langs:
-            result("PASS", f"CodeQL default setup analyses {langs}")
         else:
-            result("WARN", f"CodeQL default setup analyses {langs}, not the Python under src/")
-            result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'")
+            # CodeQL's name for the language; `javascript` and `typescript`
+            # are the older spellings GitHub still accepts (#681 review).
+            if not_applying is None:
+                lang, accepted, code = "python", {"python"}, "the Python under src/"
+            else:
+                lang, code = "javascript-typescript", "the JavaScript or TypeScript code"
+                accepted = {lang, "javascript", "typescript"}
+            if any(a in langs for a in accepted):
+                result("PASS", f"CodeQL default setup analyses {langs}")
+            else:
+                result("WARN", f"CodeQL default setup analyses {langs}, not {code}")
+                result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]={lang}'")
 
     # The merge ruleset is the one ruleset allowed a bypass actor, judged by
     # its own shape; every other ruleset keeps none.
@@ -2984,9 +3049,20 @@ def main() -> int:
         host = "github"
     print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
           + (" host=gitlab" if host == "gitlab" else ""))
+    javascript = host == "github" and javascript_project(project, root)
+    if javascript:
+        result("INFO", "read as a JavaScript or TypeScript project (package.json here, no pyproject.toml): plinth has "
+                       "no checks for its language, so no lint, typecheck, test or build check; the checks that do not "
+                       "depend on the language still apply: the documents, .claude/settings.json, .gitattributes, "
+                       "Dependabot, tracked .env files, action pins and, with a repository name, the ruleset, push "
+                       "protection and CodeQL")
     check_files(root, owner, network, host)
     archetype = archetype_of(project, a.archetype)
-    check_project(project, root, archetype)
+    if javascript:
+        check_javascript_project(project)
+        archetype = None
+    else:
+        check_project(project, root, archetype)
     if archetype in CONDITIONAL_ARCHETYPES:
         (check_gitlab_image_job if host == "gitlab" else check_image_job)(root)
 
@@ -2997,7 +3073,11 @@ def main() -> int:
             check_gitlab_include(root, network)
             result("SKIP", "no --repo: wall not checked" if not a.repo else "--no-network: the GitLab wall not checked")
     else:
-        check_caller(root, a.repo, network, a.caller_from_checkout, archetype)
+        if javascript:
+            result("N/A", f"the ci job's call to {CALLER_WORKFLOW} does not apply: that workflow runs Python's lint, "
+                          "typecheck, test and build, which have nothing to run on here")
+        else:
+            check_caller(root, a.repo, network, a.caller_from_checkout, archetype)
         check_plinth_pins_agree(root)
 
     if host == "gitlab":
@@ -3027,11 +3107,16 @@ def main() -> int:
                              for m in r["parameters"].get("allowed_merge_methods", [])} or merge_methods
         if a.expect_checks:
             expected = [c.strip() for c in a.expect_checks.split(",") if c.strip()]
+        # A `ci / <job>` name is reported by the ci job's call to python-ci.yml,
+        # which a JavaScript or TypeScript repository does not make (#681).
+        not_applying = [c for c in expected if c.startswith("ci / ")] if javascript else None
+        if not_applying:
+            expected = [c for c in expected if c not in not_applying]
         if a.ruleset:
             sources = {c: pinned.get(c, common) for c in expected}
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
         merge = json.loads(read(Path(a.merge_ruleset))) if a.merge_ruleset else None
-        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge)
+        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying)
         check_labels(a.repo, network)
     else:
         result("SKIP", "no --repo: wall not checked")
@@ -3042,7 +3127,8 @@ def main() -> int:
         check_credentials(root, host)
         check_database_urls(root)
 
-    print(f"-- {fails} failed, {skips} not verified" + (f", {left} left to /plinth:floor-check" if left else ""))
+    print(f"-- {fails} failed, {skips} not verified" + (f", {left} left to /plinth:floor-check" if left else "")
+          + (f", {na} do not apply" if na else ""))
     if a.verdicts:
         lines = verdicts if fails else ["pass: the floor, no FAIL in what this run read", *verdicts]
         Path(a.verdicts).write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
