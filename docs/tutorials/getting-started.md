@@ -66,7 +66,7 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.26.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.27.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
 It takes a few minutes, most of them waiting for GitHub to run the first

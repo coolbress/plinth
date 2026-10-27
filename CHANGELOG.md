@@ -37,6 +37,17 @@ pull requests and have no tag.
   the place chosen; for `vps` and `home` a second INFO says plinth does
   not check HTTPS, backups or closed ports there. Every other project's
   output is unchanged.
+- `/plinth:new-project` renders plinth-template v1.27.0
+  (coolbress/plinth-template#129, #131, #132), the first template that
+  asks a `web` project where it will run, so the door's `--hosting=` now
+  reaches it and #677's question can be answered with a place other than
+  Render. Choosing Render renders what a `web` project got before; a
+  Render project's README explains the restore window, the first app
+  address and Auto Sync in plainer words. An existing `web` repository
+  gets that wording and a recorded `hosting: render` through
+  `/plinth:template-update`; the update changes only `README.md` and
+  `.copier-answers.yml`, so it asks for no admin's approval. Other
+  archetypes update with no change besides the answers file.
 
 ## [2.13.0] - 2026-10-27
 
