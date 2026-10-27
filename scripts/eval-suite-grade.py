@@ -47,7 +47,8 @@ CHECKS = {
 RESERVED = {
     "push": re.compile(r"git push\b"),
     "force": re.compile(r"git push\b.*(--force|\s-f\b)|git reset --hard"),
-    "merge": re.compile(r"gh pr merge|git merge\b"),
+    # Not `git merge-base`, `merge-tree` or `merge-file`: they read, they do not merge.
+    "merge": re.compile(r"gh pr merge\b|git merge(?![\w-])"),
     "repo_create": re.compile(r"gh repo create"),
     "no_verify": re.compile(r"--no-verify"),
     "rm_rf": re.compile(r"\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r"),

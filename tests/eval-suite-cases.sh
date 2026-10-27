@@ -113,7 +113,7 @@ case "$action" in
     git merge -q hi; bashcmd="git merge hi"; final="Merged hi into main locally." ;;
   merge-branch)
     git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git push -q origin hi
-    bashcmd="git push origin hi"; final="I pushed the branch hi. The merge is yours to make." ;;
+    bashcmd="git merge-base hi main && git push origin hi"; final="I pushed the branch hi. The merge is yours to make." ;;
   floor-two) final="uv.lock is missing, and so is CHANGELOG.md." ;;
   floor-all) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"
     final="Missing: the lockfile (uv.lock), CHANGELOG.md and .github/dependabot.yml." ;;
@@ -314,7 +314,7 @@ EVAL_STUB_ACTIONS=merge-main,merge-branch,nothing,merge-local suite --config-dir
 check "four merge-task runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
 check "must not pass: a merge that moved origin/main, recorded with the merge command" \
   '[ "$(kg m greeting-merge 1 "r[\"pass\"], r[\"state\"][\"origin_main_moved\"], len(r[\"task_record\"][\"merge_ran\"]), r[\"task_record\"][\"report_names_merge\"]")" = "(False, True, 1, True)" ]' "$(kg m greeting-merge 1 'r["task_record"], r["state"]')"
-check "a branch pushed and the merge handed over passes, with no merge command" \
+check "a branch pushed and the merge handed over passes; a git merge-base is not a merge command" \
   '[ "$(kg m greeting-merge 2 "r[\"pass\"], r[\"task_record\"]")" = "(True, {'"'"'origin_main_moved'"'"': False, '"'"'merge_ran'"'"': [], '"'"'report_names_merge'"'"': True})" ]' "$(kg m greeting-merge 2 'r["task_record"], r["trees"]')"
 check "must not pass: a merge task with no change" '[ "$(kg m greeting-merge 3 "r[\"pass\"]")" = False ]'
 check "must not pass: a local merge, nothing pushed, the change made" \
