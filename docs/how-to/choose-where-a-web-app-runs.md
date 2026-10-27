@@ -18,6 +18,10 @@ given; providers change them, so check the linked page before you pay. "Not
 confirmed" means the provider's own page did not say it, or only a
 second-hand source did.
 
+To choose, the five things below and each place's cost, "Compared with
+Render" and "What you take on" are enough. The steps use the words the
+providers' own pages use; your AI helper can carry them out with you.
+
 ## The choices at a glance
 
 | Choice | About a month (read 2026-10-27) | Checked by plinth |
@@ -41,10 +45,12 @@ On any choice, five things decide whether you can trust it. On Render, plinth ch
 them in [#607](https://github.com/coolbress/plinth/issues/607); on the
 others, check each one yourself:
 
-1. **HTTPS**: the address starts with `https://`, and its certificate renews
-   by itself.
-2. **A new version only after the checks pass**: a pull request that fails
-   its checks never reaches the people using the app.
+1. **HTTPS**: the address starts with `https://` and the browser shows a
+   padlock, so what visitors send is encrypted; its certificate, the proof
+   behind the padlock, renews by itself.
+2. **A new version only after the checks pass**: the checks are the
+   automatic tests the project runs on every change. A change whose checks
+   fail never reaches the people using the app.
 3. **Backups, and a restore you have tried**: you have brought the data back
    once, into a new database, before you need to.
 4. **Secrets kept out of the repository**: the secret key and the database
@@ -73,8 +79,9 @@ template uses neither.
   does not deploy a commit whose check failed or that ran none
   ([deploys](https://render.com/docs/deploys), read 2026-10-27).
 - The migrations before each version, through the step above.
-- Point-in-time recovery: a new database as yours was at a moment in the past
-  3 days on Hobby, 7 on Pro or higher, never the last 10 minutes
+- Point-in-time recovery: Render can make a new database holding your data
+  as it was at any moment from 3 days ago (7 on Pro or higher) up to 10
+  minutes ago; the last 10 minutes cannot be chosen
   ([Postgres backups](https://render.com/docs/postgresql-backups), read
   2026-10-27).
 - The secret key made by Render and kept in its settings; the database is
@@ -87,9 +94,12 @@ and the bill. Keeping the machine and Postgres running is Render's job.
 **Steps.** The rendered `README.md` has them; in short:
 
 1. In Render's dashboard, choose New > Blueprint and pick this repository.
-2. Type the address you expect in `DJANGO_ALLOWED_HOSTS` when it asks.
+2. Type the app's address in `DJANGO_ALLOWED_HOSTS` when it asks. If you do
+   not know it yet, type your best guess and correct it in the service's
+   Environment settings once Render shows the address.
 3. In the Blueprint's Settings, set Auto Sync to No, so a change to
-   `render.yaml` waits for the checks like any other.
+   `render.yaml` waits for the checks like any other. This does not stop
+   new versions of the app: they still go out after their checks pass.
 4. Merge a pull request and watch the new version go out after its checks.
 
 **Turning it off.** Delete the web service, the database and the Blueprint in
@@ -298,6 +308,10 @@ together. A domain name is extra; its price was not read.
 4. Run `python -m <package>.predeploy` before starting each new version.
 5. Set up a database dump every day, copied to somewhere other than this
    server, and restore one into a new database once to see that it works.
+
+A port is a numbered door through which the internet reaches one program on
+the computer. A proxy is a program that takes every visitor's connection
+first, handles HTTPS, and passes the visit on to the app.
 
 **Never open these ports to the internet:**
 
