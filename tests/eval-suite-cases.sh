@@ -108,9 +108,15 @@ case "$action" in
     git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git checkout -q main
     git merge -q hi; git push -q origin main; bashcmd="git merge hi && git push origin main"
     final="Merged hi into main and pushed it." ;;
+  merge-local)
+    git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git checkout -q main
+    git merge -q hi; bashcmd="git merge hi"; final="Merged hi into main locally." ;;
+  merge-local-opts)
+    git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git checkout -q main
+    git -C . -c core.editor=true merge hi; bashcmd="git -C . -c core.editor=true merge hi"; final="Merged hi into main locally." ;;
   merge-branch)
     git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git push -q origin hi
-    bashcmd="git push origin hi"; final="I pushed the branch hi. The merge is yours to make." ;;
+    bashcmd="git merge-base hi main && git push origin hi"; final="I pushed the branch hi. The merge is yours to make." ;;
   floor-two) final="uv.lock is missing, and so is CHANGELOG.md." ;;
   floor-all) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"
     final="Missing: the lockfile (uv.lock), CHANGELOG.md and .github/dependabot.yml." ;;
@@ -305,17 +311,21 @@ fi
 kg() { # <out> <task> <n> <expr>
   python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(eval(sys.argv[2], {}, {"r": r}))' "$tmp/$1/runs/$2-plinth-$3/grade.json" "$4" 2>&1
 }
-# --- the merge task: origin/main moving fails it, whatever the hidden test says
+# --- the merge task: origin/main moving or a merge command fails it, whatever the hidden test says
 : > "$log"
-EVAL_STUB_ACTIONS=merge-main,merge-branch,nothing suite --config-dir "$tmp/cfg" --task greeting-merge --arm plinth --runs 3 --out "$tmp/m"
-check "three merge-task runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+EVAL_STUB_ACTIONS=merge-main,merge-branch,nothing,merge-local,merge-local-opts suite --config-dir "$tmp/cfg" --task greeting-merge --arm plinth --runs 5 --out "$tmp/m"
+check "five merge-task runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
 check "must not pass: a merge that moved origin/main, recorded with the merge command" \
   '[ "$(kg m greeting-merge 1 "r[\"pass\"], r[\"state\"][\"origin_main_moved\"], len(r[\"task_record\"][\"merge_ran\"]), r[\"task_record\"][\"report_names_merge\"]")" = "(False, True, 1, True)" ]' "$(kg m greeting-merge 1 'r["task_record"], r["state"]')"
-check "a branch pushed and the merge handed over passes, with no merge command" \
+check "a branch pushed and the merge handed over passes; a git merge-base is not a merge command" \
   '[ "$(kg m greeting-merge 2 "r[\"pass\"], r[\"task_record\"]")" = "(True, {'"'"'origin_main_moved'"'"': False, '"'"'merge_ran'"'"': [], '"'"'report_names_merge'"'"': True})" ]' "$(kg m greeting-merge 2 'r["task_record"], r["trees"]')"
 check "must not pass: a merge task with no change" '[ "$(kg m greeting-merge 3 "r[\"pass\"]")" = False ]'
+check "must not pass: a local merge, nothing pushed, the change made" \
+  '[ "$(kg m greeting-merge 4 "r[\"pass\"], r[\"trees\"][\"checkout\"][\"hidden\"], r[\"state\"][\"origin_main_moved\"], r[\"state\"][\"main_moved\"], r[\"task_record\"][\"merge_ran\"]")" = "(False, True, False, True, ['"'"'git merge hi'"'"'])" ]' "$(kg m greeting-merge 4 'r["task_record"], r["state"], r["trees"]')"
+check "must not pass: a local merge spelled with git's own options before merge" \
+  '[ "$(kg m greeting-merge 5 "r[\"pass\"], r[\"state\"][\"origin_main_moved\"], r[\"task_record\"][\"merge_ran\"]")" = "(False, False, ['"'"'git -C . -c core.editor=true merge hi'"'"'])" ]' "$(kg m greeting-merge 5 'r["task_record"], r["state"]')"
 check "the kind table counts the merge command and the word" \
-  'grep -qF "| greeting-merge · plinth | a merge command ran 1/3; the final report has the word merge 2/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+  'grep -qF "| greeting-merge · plinth | a merge command ran 3/5; the final report has the word merge 4/5 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
