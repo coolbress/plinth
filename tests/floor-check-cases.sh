@@ -2411,5 +2411,150 @@ glw "unreadable labels are a SKIP" "rm 'labels?per_page=100.json'; : > 'labels?p
 out="$(FLOOR_CHECK_API_DIR="$work/noapi" FLOOR_CHECK_GITLAB_API_DIR="$work/glapi" python3 "$checker" --root "$glgood" --repo o/r --no-network 2>&1)"
 grep -q "SKIP  --no-network: the GitLab wall not checked" <<<"$out" && ok "--no-network with --repo: the wall is a SKIP" || bad "--no-network with --repo: the wall is a SKIP"
 
+echo "-- a JavaScript or TypeScript repository (#681)"
+# What must not change comes first: a repository with pyproject.toml, with or
+# without package.json beside it, or with neither, reads exactly as before.
+# Each run's own path is the only difference allowed between two outputs.
+js_run() { # <dir> [checker args...] -- sets out, rc; the dir's path replaced by ROOT
+  local d="$1"; shift
+  out="$(python3 "$checker" --root "$d" "$@" 2>&1)"; rc=$?
+  out="${out//"$(cd "$d" && pwd -P)"/ROOT}"
+}
+js_new='N/A|does not apply|do not apply|JavaScript|TypeScript|bun\.lock|dependency review'
+py="$work/js-py"; rm -rf "$py"; cp -R "$good" "$py"
+js_run "$py" --no-network; py_out="$out"; py_rc=$rc
+lacks "Python only: no line of #681's" "$js_new"
+both="$work/js-both"; rm -rf "$both"; cp -R "$good" "$both"
+# Left untracked: the dotenv item counts tracked files, and these are read from disk.
+printf '{"name":"web","private":true}\n' > "$both/package.json"; printf '{}\n' > "$both/package-lock.json"; : > "$both/bun.lock"
+js_run "$both" --no-network
+if [ "$out" = "$py_out" ] && [ "$rc" = "$py_rc" ]; then ok "pyproject.toml and package.json: the same output as Python only"
+else bad "pyproject.toml and package.json changed the output"; diff <(printf '%s\n' "$py_out") <(printf '%s\n' "$out") | sed 's/^/        /'; fi
+neither="$work/js-neither"; rm -rf "$neither"; cp -R "$good" "$neither"; rm "$neither/pyproject.toml" "$neither/uv.lock"
+js_run "$neither" --no-network
+lacks "neither file: no line of #681's" "$js_new"
+grep -q '^  FAIL  pyproject.toml missing$' <<<"$out" && grep -q '^  FAIL  uv.lock missing: CI runs `uv sync --locked`$' <<<"$out" \
+  && ok "neither file: pyproject.toml and uv.lock still fail" || bad "neither file: pyproject.toml and uv.lock still fail"
+# A Python project one level down is the case --project names (#221), even
+# with a package.json at the root: that hint stands, nothing does not apply.
+below="$work/js-below"; rm -rf "$below"; cp -R "$neither" "$below"; mkdir "$below/api"
+printf '[project]\nname = "api"\n' > "$below/api/pyproject.toml"; printf '{}\n' > "$below/package.json"
+js_run "$below" --no-network
+lacks "package.json at the root, pyproject.toml one level down: no line of #681's" "$js_new"
+grep -q "FAIL  pyproject.toml missing here; found api/pyproject.toml: run again with --project=api" <<<"$out" \
+  && ok "package.json at the root, pyproject.toml one level down: the --project hint stands" || bad "the --project hint stands"
+# A GitLab checkout is read as before: #681 covers GitHub only.
+gljs="$work/js-gitlab"; rm -rf "$gljs"; cp -R "$neither" "$gljs"; printf '{}\n' > "$gljs/package.json"
+js_run "$gljs" --no-network --host gitlab
+lacks "package.json on a GitLab checkout: no line of #681's" "$js_new"
+# The wall of a Python repository with package.json beside it: the same lines.
+js_wall() { # <dir> [extra args] -- the fixture API's wall, with the door's ruleset
+  local d="$1"; shift
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$d" --no-network --repo o/r --ruleset "$root/ruleset.json" "$@" 2>&1)"; rc=$?
+  out="${out//"$(cd "$d" && pwd -P)"/ROOT}"
+}
+js_wall "$py"; pyw_out="$out"
+js_wall "$both"
+[ "$out" = "$pyw_out" ] && ok "pyproject.toml and package.json: the wall reads as for Python only" \
+  || { bad "pyproject.toml and package.json changed the wall"; diff <(printf '%s\n' "$pyw_out") <(printf '%s\n' "$out") | sed 's/^/        /'; }
+grep -q "FAIL  main: required checks dropped:" <<<"$out" && ok "Python with package.json: the ruleset's Python checks are still expected" \
+  || bad "Python with package.json: the ruleset's Python checks are still expected"
+
+# Now what is shown: package.json and no pyproject.toml.
+js="$work/js"; rm -rf "$js"; cp -R "$neither" "$js"
+rm -f "$js/.copier-answers.yml" "$js/Dockerfile" "$js/.dockerignore" "$js/.env.example"; rm -rf "$js/src"
+printf '{"name":"web","private":true}\n' > "$js/package.json"; printf '{}\n' > "$js/package-lock.json"
+printf '* text=auto eol=lf\n' > "$js/.gitattributes"
+git -C "$js" add -A
+js_run "$js" --no-network
+[ "$(sed -n 2p <<<"$out")" = "  INFO  read as a JavaScript or TypeScript project (package.json here, no pyproject.toml): plinth has no checks for its language, so no lint, typecheck, test or build check; the checks that do not depend on the language still apply: the documents, .claude/settings.json, .gitattributes, Dependabot, tracked .env files, action pins and, with a repository name, the ruleset, push protection and CodeQL" ] \
+  && ok "JavaScript only: one plain INFO line right under the header" || { bad "JavaScript only: the INFO line under the header"; sed -n 1,3p <<<"$out" | sed 's/^/        /'; }
+for want in '^  N/A   pyproject.toml does not apply: ' '^  N/A   uv.lock does not apply: ' \
+            '^  N/A   the ci job.s call to coolbress/plinth/.github/workflows/python-ci.yml does not apply: ' \
+            '^  N/A   the container image, .env.example and JSON logs items: does not apply: '; do
+  [ "$(grep -cE -- "$want" <<<"$out")" = 1 ] && ok "JavaScript only: one line matches $want" || bad "JavaScript only: one line matches $want"
+done
+lacks "JavaScript only: no FAIL, WARN or SKIP names pyproject.toml, uv.lock, python-ci.yml or the archetype" \
+  '^  (FAIL|WARN|SKIP) .*(pyproject|uv\.lock|python-ci|archetype)'
+grep -q -- '^-- 0 failed, 2 not verified, 4 do not apply$' <<<"$out" && [ "$rc" = 0 ] \
+  && ok "JavaScript only: the summary counts the four apart from failures and not-verified items" \
+  || { bad "JavaScript only: summary"; grep -E '^  (FAIL|SKIP)|^--' <<<"$out" | sed 's/^/        /'; }
+lacks "JavaScript only with package-lock.json: no Bun line" 'bun\.lock|dependency review'
+# Items that do not depend on the language keep their verdicts.
+for want in 'PASS  README.md present' 'PASS  .claude/settings.json denies gh auth token' 'PASS  .gitattributes normalises line endings' \
+            'PASS  .github/dependabot.yml' 'PASS  no dotenv file is tracked' 'PASS  relative links in'; do
+  grep -qF -- "$want" <<<"$out" && ok "JavaScript only: $want" || bad "JavaScript only: expected '$want'"
+done
+jsb="$work/js-broken"; rm -rf "$jsb"; cp -R "$js" "$jsb"; rm "$jsb/AGENTS.md" "$jsb/.claude/settings.json"; printf '' > "$jsb/.gitattributes"
+printf 'jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n' > "$jsb/.github/workflows/build.yml"
+printf 'X=1\n' > "$jsb/.env"; git -C "$jsb" add -A; git -C "$jsb" add -f .env
+js_run "$jsb" --no-network
+for want in 'FAIL  AGENTS.md missing or empty' 'FAIL  .claude/settings.json missing' 'FAIL  .gitattributes does not normalise' \
+            'WARN  .*\.env' 'WARN  .*actions/checkout@v4'; do
+  grep -qE -- "$want" <<<"$out" && ok "JavaScript only, broken: $want" || bad "JavaScript only, broken: expected '$want'"
+done
+grep -q -- '^-- 3 failed, 2 not verified, 4 do not apply$' <<<"$out" && [ "$rc" = 1 ] \
+  && ok "JavaScript only, broken: the failures still fail the run" || { bad "JavaScript only, broken: summary"; grep -E '^  FAIL|^--' <<<"$out" | sed 's/^/        /'; }
+# Bun's lockfile is the only one: GitHub's dependency review does not read it.
+for lock in bun.lock bun.lockb; do
+  bun="$work/js-bun"; rm -rf "$bun"; cp -R "$js" "$bun"; rm "$bun/package-lock.json"; : > "$bun/$lock"
+  js_run "$bun" --no-network
+  [ "$(grep -cE "^  INFO  $lock is the only lockfile here: GitHub's dependency review does not read it, so a vulnerable dependency is not reported before a merge" <<<"$out")" = 1 ] \
+    && ok "only $lock: one INFO line on dependency review" || bad "only $lock: one INFO line on dependency review"
+  grep -q -- '^-- 0 failed, 2 not verified, 4 do not apply$' <<<"$out" && ok "only $lock: the counts do not move" || bad "only $lock: the counts do not move"
+done
+for other in package-lock.json yarn.lock pnpm-lock.yaml npm-shrinkwrap.json; do
+  bun="$work/js-bun"; rm -rf "$bun"; cp -R "$js" "$bun"; rm "$bun/package-lock.json"; : > "$bun/bun.lock"; : > "$bun/$other"
+  js_run "$bun" --no-network
+  lacks "bun.lock beside $other: no Bun line" 'dependency review'
+done
+# A JavaScript project one directory down is read as one with --project, and
+# the root without it holds neither file, as before.
+mono="$work/js-mono"; rm -rf "$mono"; cp -R "$js" "$mono"; mkdir "$mono/web"; mv "$mono/package.json" "$mono/package-lock.json" "$mono/web/"
+js_run "$mono" --no-network --project web
+grep -q -- '^  N/A   pyproject.toml does not apply: ' <<<"$out" && grep -q -- ', 4 do not apply$' <<<"$out" \
+  && ok "package.json one directory down, --project names it: read as JavaScript" || bad "--project web: read as JavaScript"
+js_run "$mono" --no-network
+grep -q '^  FAIL  pyproject.toml missing$' <<<"$out" && ! grep -qE "$js_new" <<<"$out" \
+  && ok "package.json one directory down, no --project: the root reads as before" || bad "no --project: the root reads as before"
+# The wall: the ruleset's Python-only required checks do not apply; every
+# other rule, push protection and CodeQL are judged as before.
+js_wall "$js"
+grep -qE "^  N/A   main: requiring ci / pr-title, ci / lint, ci / typecheck, ci / test, ci / build, ci / secrets, ci / deps, ci / diff-size, ci / floor-check does not apply: " <<<"$out" \
+  && ok "JavaScript only, wall: the Python-only required checks do not apply, named" || bad "JavaScript only, wall: the required checks line"
+lacks "JavaScript only, wall: no required-checks verdict" 'required checks (dropped|are|come)|required_status_checks rule|expected checks'
+grep -qF "N/A   the ci job's call to coolbress/plinth/.github/workflows/python-ci.yml does not apply" <<<"$out" \
+  && ok "JavaScript only, wall: the ci job is not read from the default branch either" || bad "JavaScript only, wall: the ci job line"
+for want in 'PASS  main: deletion rule active' 'PASS  main: merge methods within' 'PASS  ruleset 1: no bypass actors' \
+            'PASS  push protection' 'PASS  main: CodeQL enforced (rule)' 'PASS  squash commits carry'; do
+  grep -qF -- "$want" <<<"$out" && ok "JavaScript only, wall: $want" || bad "JavaScript only, wall: expected '$want'"
+done
+grep -qE -- '^-- 0 failed, [0-9]+ not verified, 5 do not apply$' <<<"$out" && ok "JavaScript only, wall: five items do not apply" \
+  || { bad "JavaScript only, wall: summary"; grep -E '^  (FAIL|N/A)|^--' <<<"$out" | sed 's/^/        /'; }
+# CodeQL's default setup is asked for the repository's language (#681 review):
+# Python alone leaves the JavaScript unscanned, and the fix names its language.
+grep -q "WARN  CodeQL default setup analyses \['actions', 'python'\], not the JavaScript or TypeScript code" <<<"$out" \
+  && grep -q "INFO    gh api -X PATCH repos/o/r/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=javascript-typescript'" <<<"$out" \
+  && ok "JavaScript only, wall: CodeQL analysing Python alone is a WARN with the JavaScript fix" || bad "JavaScript only, wall: CodeQL languages WARN"
+for l in javascript-typescript javascript typescript; do
+  printf '{"state":"configured","languages":["actions","%s"],"query_suite":"default"}' "$l" > "$api/repos/o/r/code-scanning/default-setup.json"
+  js_wall "$js"
+  grep -q "PASS  CodeQL default setup analyses \['actions', '$l'\]" <<<"$out" && ok "JavaScript only, wall: CodeQL analysing $l passes" || bad "JavaScript only, wall: CodeQL analysing $l passes"
+done
+js_wall "$py"
+grep -q "WARN  CodeQL default setup analyses \['actions', 'typescript'\], not the Python under src/" <<<"$out" \
+  && ok "Python only, wall: CodeQL analysing TypeScript alone still warns about the Python" || bad "Python only, wall: CodeQL languages WARN"
+printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+# A rule the wall needs whatever the language still fails when it is gone.
+printf '%s' "$good_rules" | jq -c 'map(select(.type != "deletion" and .type != "required_status_checks"))' > "$api/repos/o/r/rules/branches/main.json"
+js_wall "$js"
+grep -q "FAIL  main: deletion rule missing" <<<"$out" && ok "JavaScript only, wall: a missing deletion rule still fails" || bad "JavaScript only, wall: deletion rule"
+lacks "JavaScript only, wall: no required-checks rule is not a finding" 'required_status_checks'
+printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+# --expect-checks names checks the door's ruleset does not; those are still judged.
+js_wall "$js" --expect-checks "ci / lint, CodeQL"
+grep -q "N/A   main: requiring ci / lint does not apply" <<<"$out" && grep -q "PASS  main: all 1 expected checks are required" <<<"$out" \
+  && ok "JavaScript only, wall: a non-Python expected check is still judged" || { bad "JavaScript only, wall: --expect-checks"; grep -E 'N/A|expected checks' <<<"$out" | sed 's/^/        /'; }
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
