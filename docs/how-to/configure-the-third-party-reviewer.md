@@ -403,6 +403,15 @@ verdict is `review-rerun.yml`, which plinth runs on its own repository only.
 Without them, or when they do not help:
 
 1. Read the check's log: it says whether the summons was posted and why not.
+   A post that fails is tried once more after ten seconds, and each failure
+   prints `gh`'s own error. When both tries fail, the error says what is known.
+   A refusal from GitHub names the token's access and its "Pull requests:
+   Read and write" permission: fix the secret, then re-run. A refusal is a 403
+   or 404, which `gh pr comment` prints as `Resource not accessible` (measured
+   on #207) or `Could not resolve to a` (not measured). Any other failure says
+   the summons could not be posted: re-run the job before changing the secret.
+   On #673 a dropped connection failed this way, and a re-run with the same
+   secret posted it (#674).
 2. Comment the summons yourself, from the account connected to the reviewer
    (on a repository a person owns, usually the owner's). When
    the verdict arrives only as a comment, re-run the check from its page.
