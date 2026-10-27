@@ -39,7 +39,9 @@ lost, it does neither.
 only: its deployment and checks are built for GitHub, so with `--host gitlab`
 the script refuses before it reads anything on GitLab, and says why. Running
 it costs money (about US $13 a month on Render), which the template's own
-question states.
+question states. Render is the one place plinth builds and checks; where else
+the app can run, and what each place leaves to the person, is in
+`${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where
