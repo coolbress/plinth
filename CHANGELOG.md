@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-27
+
+`/plinth:new-project` now asks a `web` project where the app will run:
+Render first and recommended, or Railway, DigitalOcean, Fly.io, a rented
+server or a computer at home. Choosing another place leaves out
+`render.yaml`, puts that place's steps in the README, and says before
+anything is created and again at the end that plinth does not deploy
+there and has not checked it (#677). New projects come from
+plinth-template v1.27.0, the first template that asks the question.
+`/plinth:floor-check` asks such a project for `render.yaml` only when it
+runs on Render (#678). The how-to on choosing where a web app runs uses
+the plain words a cold read asked for (#679), and the eval suite deletes
+each graded run's rebuildable caches (#687).
+
+tested with plinth-template v1.27.0
+
 ### Added
 
 - `/plinth:new-project` asks a `web` project where the app will run, Render
@@ -3782,7 +3798,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.13.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.14.0...HEAD
+[2.14.0]: https://github.com/coolbress/plinth/releases/tag/v2.14.0
 [2.13.0]: https://github.com/coolbress/plinth/releases/tag/v2.13.0
 [2.12.0]: https://github.com/coolbress/plinth/releases/tag/v2.12.0
 [2.11.0]: https://github.com/coolbress/plinth/releases/tag/v2.11.0
