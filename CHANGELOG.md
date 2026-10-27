@@ -11,6 +11,23 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-10-27
+
+A new how-to helps a person making a `web` project choose where it runs:
+Render, which plinth builds and checks, then other hosts, a rented
+server and a computer at home, each with what it costs, what the person
+takes on and how to turn it off, read from the providers' own pages; the
+rented-server and home sections say never to open the app's or the
+database's port without a proxy in front (#676). `/plinth:floor-check`
+now recognises a JavaScript or TypeScript repository and marks the
+Python-only items "does not apply" instead of failing them (#681). The
+third-party review check retries a failed review request once and, when
+it still fails, says whether the token was refused or the connection
+dropped (#674). The eval suite fails a "merge it" run that merged
+locally (#671).
+
+tested with plinth-template v1.26.0
+
 ### Changed
 
 - `/plinth:floor-check` reads a repository with `package.json` and no
@@ -3733,7 +3750,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.12.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.13.0...HEAD
+[2.13.0]: https://github.com/coolbress/plinth/releases/tag/v2.13.0
 [2.12.0]: https://github.com/coolbress/plinth/releases/tag/v2.12.0
 [2.11.0]: https://github.com/coolbress/plinth/releases/tag/v2.11.0
 [2.10.0]: https://github.com/coolbress/plinth/releases/tag/v2.10.0
