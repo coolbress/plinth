@@ -181,7 +181,9 @@ why, in one sentence: `pyproject.toml`, `uv.lock`, the archetype's items
 ruleset's required checks named `ci / <job>`, which only that call reports.
 With none left to require, the `required_status_checks` rule and its
 strictness are not asked for either; a name `--expect-checks` gives that is
-not `ci / <job>` is still judged. `N/A` lines are neither failures nor
+not `ci / <job>` is still judged. CodeQL's default setup is asked to analyse
+`javascript-typescript` (or the older `javascript` or `typescript`) in place of
+`python`, and its fix line names that language. `N/A` lines are neither failures nor
 not-verified items: the summary line counts them on their own, `K do not
 apply`, printed only when K is above 0.
 

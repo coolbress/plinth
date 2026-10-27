@@ -2531,6 +2531,20 @@ for want in 'PASS  main: deletion rule active' 'PASS  main: merge methods within
 done
 grep -qE -- '^-- 0 failed, [0-9]+ not verified, 5 do not apply$' <<<"$out" && ok "JavaScript only, wall: five items do not apply" \
   || { bad "JavaScript only, wall: summary"; grep -E '^  (FAIL|N/A)|^--' <<<"$out" | sed 's/^/        /'; }
+# CodeQL's default setup is asked for the repository's language (#681 review):
+# Python alone leaves the JavaScript unscanned, and the fix names its language.
+grep -q "WARN  CodeQL default setup analyses \['actions', 'python'\], not the JavaScript or TypeScript code" <<<"$out" \
+  && grep -q "INFO    gh api -X PATCH repos/o/r/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=javascript-typescript'" <<<"$out" \
+  && ok "JavaScript only, wall: CodeQL analysing Python alone is a WARN with the JavaScript fix" || bad "JavaScript only, wall: CodeQL languages WARN"
+for l in javascript-typescript javascript typescript; do
+  printf '{"state":"configured","languages":["actions","%s"],"query_suite":"default"}' "$l" > "$api/repos/o/r/code-scanning/default-setup.json"
+  js_wall "$js"
+  grep -q "PASS  CodeQL default setup analyses \['actions', '$l'\]" <<<"$out" && ok "JavaScript only, wall: CodeQL analysing $l passes" || bad "JavaScript only, wall: CodeQL analysing $l passes"
+done
+js_wall "$py"
+grep -q "WARN  CodeQL default setup analyses \['actions', 'typescript'\], not the Python under src/" <<<"$out" \
+  && ok "Python only, wall: CodeQL analysing TypeScript alone still warns about the Python" || bad "Python only, wall: CodeQL languages WARN"
+printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 # A rule the wall needs whatever the language still fails when it is gone.
 printf '%s' "$good_rules" | jq -c 'map(select(.type != "deletion" and .type != "required_status_checks"))' > "$api/repos/o/r/rules/branches/main.json"
 js_wall "$js"

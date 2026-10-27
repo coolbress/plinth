@@ -2172,7 +2172,8 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                merge: dict | None = None, not_applying: list[str] | None = None) -> None:
     """not_applying: on a JavaScript or TypeScript repository (#681), the
     expected checks only python-ci.yml runs, already left out of `expected`.
-    When nothing is left, the required-checks rule is not asked for either."""
+    When nothing is left, the required-checks rule is not asked for either,
+    and CodeQL's default setup is asked to analyse that language, not Python."""
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         result("SKIP", "wall not checked (offline)")
         return
@@ -2372,11 +2373,19 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                            "code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
         elif not isinstance(langs, list):
             result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
-        elif "python" in langs:
-            result("PASS", f"CodeQL default setup analyses {langs}")
         else:
-            result("WARN", f"CodeQL default setup analyses {langs}, not the Python under src/")
-            result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]=python'")
+            # CodeQL's name for the language; `javascript` and `typescript`
+            # are the older spellings GitHub still accepts (#681 review).
+            if not_applying is None:
+                lang, accepted, code = "python", {"python"}, "the Python under src/"
+            else:
+                lang, code = "javascript-typescript", "the JavaScript or TypeScript code"
+                accepted = {lang, "javascript", "typescript"}
+            if any(a in langs for a in accepted):
+                result("PASS", f"CodeQL default setup analyses {langs}")
+            else:
+                result("WARN", f"CodeQL default setup analyses {langs}, not {code}")
+                result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]={lang}'")
 
     # The merge ruleset is the one ruleset allowed a bypass actor, judged by
     # its own shape; every other ruleset keeps none.
