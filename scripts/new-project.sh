@@ -3,6 +3,7 @@
 #
 #   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
 #                  [--private] [--force-defaults] [--host=github|gitlab]
+#                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web only)
 #
 # --host gitlab hands the run to scripts/new-project-gitlab.sh (#353).
 #
@@ -79,14 +80,15 @@ case "$host" in
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private] [--force-defaults] [--host=github|gitlab]"
-target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private] [--force-defaults] [--host=github|gitlab] [--hosting=<place>]"
+target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""
 for a in "$@"; do case "$a" in
   --private)     private=1 ;;
   --force-defaults) force_defaults=1 ;;
   --license=*)   lic="${a#*=}" ;;
   --archetype=*) arch="${a#*=}" ;;
   --dir=*)       dir="${a#*=}" ;;
+  --hosting=*)   place="${a#*=}" ;;
   -*)            echo "unknown option: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
@@ -302,6 +304,36 @@ else
   warn "could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
   printf '  %s\n' "$(unread_why)" >&2
 fi
+# Where a web app runs (#677): `render`, or a place plinth lists and does not
+# deploy to or check, passed as copier's `hosting` and `hosting_elsewhere`.
+# A template without those questions renders for Render whatever it is given:
+# v1.26.0 took `--data hosting=elsewhere --data hosting_elsewhere=home`, exited
+# 0, rendered render.yaml and the Render README byte for byte, and recorded
+# neither (measured with copier 9.18.2). So the answers go only to a template
+# whose copier.yml asks them, and another place on any other template stops
+# here, before anything exists, instead of rendering Render under its name.
+hosting_data=(); place_name=Render
+if [ "$arch" = web ]; then
+  place="${place:-render}"
+  if [ "$place" = render ]; then
+    [ -z "$(choices_of hosting)" ] || hosting_data=(--data hosting=render)
+  else
+    places="$(choices_of hosting_elsewhere)"
+    if [ -z "$places" ]; then
+      [ -n "$arch_choices" ] || stop "could not read whether the template asks where a web app runs, so --hosting=$place cannot be passed safely; nothing was created" \
+        "  $(unread_why)" "  fix: run it again, or drop --hosting to use Render"
+      stop "the template this plinth renders ($template_repo@$template_ref) does not ask where a web app runs, so it would set the app up for Render anyway; nothing was created" \
+        "  fix: drop --hosting to use Render, or wait for a plinth release whose template asks it"
+    fi
+    grep -qxF "$place" <<<"$places" || stop "unknown place for --hosting: $place" "  the template accepts: render $(tr '\n' ' ' <<<"$places")"
+    hosting_data=(--data hosting=elsewhere --data "hosting_elsewhere=$place")
+    # The choice's own label in copier.yml, the name its README section uses.
+    place_name="$(sed -n "/^hosting_elsewhere:/,/^[a-z_]/p" <<<"$copier_yml" | sed -n "s/^    \(.*\): $place\$/\1/p")"
+    place_name="${place_name:-$place}"
+  fi
+elif [ -n "$place" ]; then
+  stop "--hosting is for --archetype=web only (got --archetype=$arch); nothing was created" "  fix: drop --hosting"
+fi
 
 # The ruleset for this archetype. ruleset.json is the wall every archetype
 # reports to; a service archetype's ci.yml also carries the `image` check, and
@@ -390,7 +422,10 @@ own_note=""
 
 wall_words="ruleset + CodeQL"
 [ "$private" = 0 ] || wall_words="ruleset, with CodeQL and push protection only where the repository has GitHub Code Security and Secret Protection enabled (plan: ${plan:-not verified})"
-echo "create $repo ($visibility, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
+arch_words="$arch"
+[ "$arch" != web ] || arch_words="web on $place_name"
+[ "${place:-render}" = render ] || arch_words="$arch_words, which plinth does not deploy to or check"
+echo "create $repo ($visibility, $spdx, $arch_words, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
 created=0
@@ -425,6 +460,7 @@ env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --e
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
+  ${hosting_data[@]+"${hosting_data[@]}"} \
   --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
 rm -rf "$dir/.git"
 # init -b main: an empty clone would follow init.defaultBranch, and a `master`
@@ -940,12 +976,16 @@ case "$reach" in
 esac
 # A private repository: said once, then each part of the public wall it does
 # not carry, with the reason and what stands in its place.
+# A place plinth lists and does not build: said in the closing lines (#677).
+place_line=""
+[ "${place:-render}" = render ] || place_line="  where it runs: $place_name. plinth did not deploy the app there and has not checked that place; the steps, and what they leave to you, are in README.md under \"Where it runs\""
 private_lines=""
 [ "$private" = 0 ] || private_lines="  private: $private_note"$'\n'
 [ -z "$gaps" ] || private_lines="$private_lines$(printf '%s' "$gaps" | sed -e 's/^Not raised/  not raised/' -e 's/^Not verified/  not verified/')"$'\n'
 cat <<EOF
 done: $url ($visibility, $spdx, $arch, $template_repo@$template_ref)
-${private_lines}  local: $dir
+${private_lines}${place_line:+$place_line
+}  local: $dir
   first pull request: $pr_url
     wait for every check to turn green, then merge (squash). A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
 ${repush:+$repush

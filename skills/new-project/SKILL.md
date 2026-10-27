@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml|web] [--dir=<path>] [--private] [--host=github|gitlab]"
+argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--dir=<path>] [--private] [--host=github|gitlab]"
 disable-model-invocation: true
 ---
 
@@ -37,11 +37,66 @@ lost, it does neither.
 
 `--archetype=web` is a Django app with a Postgres database, made on GitHub
 only: its deployment and checks are built for GitHub, so with `--host gitlab`
-the script refuses before it reads anything on GitLab, and says why. Running
-it costs money (about US $13 a month on Render), which the template's own
-question states. Render is the one place plinth builds and checks; where else
-the app can run, and what each place leaves to the person, is in
+the script refuses before it reads anything on GitLab, and says why. Render is
+the one place plinth builds and checks; where else the app can run, and what
+each place leaves to the person, is in
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`.
+
+## Where a web app runs
+
+Only for `--archetype=web` on GitHub, and only when the arguments carry no
+`--hosting=`: before running the script, ask the person this, in these words,
+and wait for the answer. For any other archetype, or with `--host gitlab`,
+do not ask it and do not pass `--hosting`.
+
+> **Where will your app run?** Before you choose, you can read what each
+> place costs and what it leaves to you:
+> <https://github.com/coolbress/plinth/blob/main/docs/how-to/choose-where-a-web-app-runs.md>
+>
+> 1. **Render — recommended.** About $13 a month. It puts your app online at
+>    a secure `https://` address (the padlock in the browser), puts out a new
+>    version only after the project's automatic tests pass, and can bring your
+>    data back as it was at any moment from 3 days ago up to 10 minutes ago.
+>    plinth has tried every step of this.
+> 2. **Another hosting service** (Railway, DigitalOcean, Fly.io). From about
+>    $10 to $42 a month. Similar, but plinth has not tried them: some put out
+>    a new version even when its tests fail, and on some, backups stay off
+>    until you switch them on.
+> 3. **A server you rent.** From about €6 a month for more power, but keeping
+>    it updated, secure and backed up is your job every month.
+> 4. **A computer at home.** Free to try on your own network. Putting it on
+>    the internet is the riskiest choice: anyone can reach it, a flaw can lead
+>    into your home network, and your data is only as safe as the backups you
+>    make yourself.
+>
+> plinth sets up and checks only Render. Choices 2, 3 and 4 are places plinth
+> does not deploy to for you and has not checked: the project's README will
+> have the steps, and doing them is up to you.
+
+If they pick 2, ask which one:
+
+> 1. **Railway.** About $10 a month, an estimate. Backups are off until you
+>    switch them on.
+> 2. **DigitalOcean App Platform.** About $20 a month. Daily copies of your
+>    data are kept for 7 days.
+> 3. **Fly.io.** About $42 a month, most of it for the database.
+
+Then add one argument: `--hosting=render` (1), `--hosting=railway`,
+`--hosting=digitalocean` or `--hosting=fly` (2), `--hosting=vps` (3) or
+`--hosting=home` (4). If the person does not answer, says they do not know, or
+asks you to choose, use `--hosting=render`. Never pick another place for them.
+
+For 3 or 4, before running the script, say this once more:
+
+> One rule matters most on your own server or home computer. A port is a
+> numbered door through which the internet reaches one program on the
+> computer; a proxy is a program that takes every visitor's connection first,
+> handles HTTPS, and passes the visit on to the app. Never open the app's own
+> port (8000) to the internet without a proxy in front of it, and never open
+> the database's port (5432) at all. The README's steps show how.
+
+A template that does not ask this question yet makes the script stop for 2,
+3 or 4 before anything is created; show that message as it is.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where
@@ -85,8 +140,8 @@ What to do with the output:
 - **The GitLab run rolled back** (exit 1): show the message. If it says
   `ROLLBACK FAILED` or `ROLLBACK PARTLY DONE`, repeat the URL and that the
   project exists with part of its wall or none.
-- **It finished** (exit 0): show the final lines, the `administration:` line
-  and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
+- **It finished** (exit 0): show the final lines, the `administration:` line,
+  the `where it runs:` line and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
   and `not verified:` line as printed. The next step for the user is to open
   the pull request URL, wait for the checks, and merge with squash.
 
