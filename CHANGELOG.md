@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:new-project` asks a `web` project where the app will run, Render
+  first and recommended, and passes the answer to the template as `hosting`
+  and `hosting_elsewhere` through the door's new `--hosting=` (#677). With no
+  answer it is Render. Another place is said before anything is created and
+  again at the end: plinth does not deploy there and has not checked it, and
+  the README has the steps. A template that does not ask the question yet
+  makes the door stop for another place before creating anything, since it
+  would set the app up for Render anyway.
+
 ### Changed
 
 - The eval suite deletes each graded run's `.venv`, `__pycache__`,

@@ -101,10 +101,13 @@ case "$step" in
   license-check) case "$all" in *licenses/mit*) echo MIT ;; *licenses/apache-2.0*) echo Apache-2.0 ;; *licenses/gpl-3.0*) echo GPL-3.0 ;; *) exit 1 ;; esac ;;
   # The template's copier.yml, base64 as the contents API answers it. MOCK_CHOICES=
   # garbage is a body base64 cannot decode; nochoices decodes to a copier.yml
-  # with no archetype or license choices where the door looks (#629).
+  # with no archetype or license choices where the door looks (#629). The
+  # default has no hosting questions, as v1.26.0; hosting adds them in the
+  # shape coolbress/plinth-template#128 gave them (#677).
   choices)       case "${MOCK_CHOICES:-ok}" in
                    garbage)   printf '!!! not base64 !!!' ;;
                    nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
+                   hosting) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nhosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' | base64 ;;
                    *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' | base64 ;;
                  esac ;;
   # The owner's shared community-health files: present, absent (404) or
@@ -570,7 +573,33 @@ E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
 run backend        ok yes no "(public, MIT, backend, as owner)"                                -- probe --archetype=backend
-run web            ok yes no "(public, MIT, web, as owner)"                                    -- probe --archetype=web
+run web            ok yes no "(public, MIT, web on Render, as owner)"                          -- probe --archetype=web
+
+echo "where a web app runs (#677)"
+# A template without the questions (v1.26.0) renders for Render whatever it
+# is given, so Render passes nothing to it and another place stops first.
+if ! grep -q '^uvx .*--data hosting' "$work/home-web/calls.log"; then ok web "a template without the hosting questions is passed no hosting answer"
+else bad web "a hosting answer reached a template that does not ask it"; grep hosting "$work/home-web/calls.log" | sed 's/^/        /'; fi
+E="MOCK_CHOICES=hosting" run web-render ok yes no "(public, MIT, web on Render, as owner)" -- probe --archetype=web
+if grep -q '^uvx .* --data hosting=render --vcs-ref' "$work/home-web-render/calls.log" && ! grep -q -- '--data hosting_elsewhere' "$work/home-web-render/calls.log" \
+   && ! grep -q 'where it runs:' "$work/home-web-render/out"
+then ok web-render "no answer is Render: copier gets hosting=render and nothing else, and no closing line for it"
+else bad web-render "an unanswered web run did not pass hosting=render alone"; grep hosting "$work/home-web-render/calls.log" | sed 's/^/        /'; fi
+E="MOCK_CHOICES=hosting" run web-home ok yes no "(public, MIT, web on A computer at home, which plinth does not deploy to or check, as owner)" -- probe --archetype=web --hosting=home
+if grep -q '^uvx .* --data hosting=elsewhere --data hosting_elsewhere=home --vcs-ref' "$work/home-web-home/calls.log" \
+   && grep -qF 'where it runs: A computer at home. plinth did not deploy the app there and has not checked that place; the steps, and what they leave to you, are in README.md under "Where it runs"' "$work/home-web-home/out"
+then ok web-home "copier gets hosting=elsewhere and hosting_elsewhere=home, and the closing lines name the place, that plinth did not deploy or check it, and the README"
+else bad web-home "the elsewhere answer or its closing line is not what #677 says"; grep hosting "$work/home-web-home/calls.log" | sed 's/^/        /'; fi
+E="MOCK_CHOICES=hosting" run web-render-said ok yes no "web on Render" -- probe --archetype=web --hosting=render
+if grep -q '^uvx .* --data hosting=render --vcs-ref' "$work/home-web-render-said/calls.log"; then ok web-render-said "--hosting=render passes hosting=render"
+else bad web-render-said "--hosting=render did not pass hosting=render"; fi
+run web-old-template   err no no "does not ask where a web app runs, so it would set the app up for Render anyway" -- probe --archetype=web --hosting=railway
+E="MOCK_CHOICES=garbage" run web-unread err no no "could not read whether the template asks where a web app runs" -- probe --archetype=web --hosting=vps
+E="MOCK_CHOICES=hosting" run web-typo err no no "the template accepts: render railway digitalocean fly vps home" -- probe --archetype=web --hosting=heroku
+E="MOCK_CHOICES=hosting" run hosting-not-web err no no "--hosting is for --archetype=web only" -- probe --archetype=backend --hosting=home
+E="MOCK_CHOICES=hosting" run cli-asked ok yes no "(public, MIT, cli, as owner)" -- probe
+if ! grep -q '^uvx .*--data hosting' "$work/home-cli-asked/calls.log"; then ok cli-asked "a non-web archetype is passed no hosting answer, even by a template that asks it"
+else bad cli-asked "a hosting answer reached copier for cli"; grep -n hosting "$work/home-cli-asked/calls.log" | cut -c1-200 | sed 's/^/        /'; fi
 # The spdx id is still looked up (`mit` -> `MIT`); the license *text* is not:
 # the template renders LICENSE from the choice, so a fetch would write over it.
 if grep -q 'license=Apache-2.0' "$work/home-apache/calls.log" && ! grep -q -- '--jq .body' "$work/home-apache/calls.log"
