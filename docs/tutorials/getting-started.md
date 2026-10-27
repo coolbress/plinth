@@ -88,8 +88,9 @@ add to the command:
 - `--archetype=<kind>`: `library` for code other programs import; `backend`
   for a service that answers over the network; `data-ml` for data or
   machine-learning work; `web` for a web app with a database, which costs
-  money to run (about US $13 a month on Render). When unsure, keep `cli`, the
-  narrowest.
+  money to run (about US $13 a month on Render;
+  [where else it can run](../how-to/choose-where-a-web-app-runs.md)). When
+  unsure, keep `cli`, the narrowest.
 
 If a check fails it stops there and prints the fix. Three you may meet:
 

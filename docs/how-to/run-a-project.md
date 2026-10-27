@@ -60,6 +60,10 @@ missing:
 2. Then [its own account](give-the-agent-its-own-account.md) (strongly recommended), whose step 6 removes your own login, the token from 1 included.
 3. [The four things by hand](set-four-things-by-hand.md).
 
+A `web` project also needs a place to run:
+[choose where a web app runs](choose-where-a-web-app-runs.md). Render is the
+one plinth builds and checks.
+
 #### Give the agent a token that cannot change the checks
 
 Without it, the agent's login can push a change under `.github/workflows/`
