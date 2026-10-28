@@ -4,8 +4,13 @@
 # <issue-comments> [<activity>]. Exit 0 with the signal found, 1 with what
 # was seen. With `--round` first it only writes the review round line and
 # exits 0 (the step's red path); with `--cause` it only writes the known
-# cause of the red, exit 0, or nothing, exit 1 (#449).
-# tests/pr-review-attest.sh runs this file against fixtures.
+# cause of the red, exit 0, or nothing, exit 1 (#449). With `--requests` it
+# prints the ids of the requests for this head, one per line; with
+# `--stalled`, given two more arguments, <reactions> and <now>, it writes the
+# red of a reviewer that acknowledged and has not finished, exit 0, or
+# nothing, exit 1 (#719).
+# tests/pr-review-attest.sh runs this file against fixtures, and
+# tests/pr-review-stalled.sh its `--requests` and `--stalled`.
 r"""Did an accepted reviewer account leave a signal on THIS commit?
 Participation evidence, no verdict.
 
@@ -84,8 +89,9 @@ import os
 import pathlib
 import re
 import sys
+from datetime import datetime
 
-mode = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ("--round", "--cause") else ""
+mode = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ("--round", "--cause", "--requests", "--stalled") else ""
 if mode:
     del sys.argv[1]
 head, logins_csv = sys.argv[1:3]
@@ -264,6 +270,126 @@ def limit_notices():
             found.append(((it.get("user") or {}).get("login"), when, body.strip().splitlines()[0][:200]))
     return sorted(found, key=lambda n: n[1])
 
+#: The summon marker the step posts with each summons (pr-review.yml).
+ASKED = f"<!-- third-party-review: {head} -->"
+#: The reviewer's state comment inside its summary: the full commit and
+#: the code review's status (`running`, then `completed`). Vendor text.
+STATE = re.compile(r"<!--\s*codex-review-state:v1\s*(\{.*?\})\s*-->", re.DOTALL)
+#: What the log and the how-to both say for that state (#719); a test
+#: holds the how-to to these words.
+ACK_NOT_DONE = "acknowledged, not finished"
+NEXT_STEPS = (
+    ("Wait a few minutes, then re-run this job once. Where review-rerun.yml runs"
+     " (plinth's own repository), a verdict that lands later re-runs it by itself."),
+    ("Still not finished: open the reviewer's own task page, https://chatgpt.com/codex,"
+     " and check what is left of its usage limit in Codex's settings."),
+    ("If this commit already had two summonses, comment the summons on the pull"
+     " request yourself, then re-run this job."),
+)
+
+def requests():
+    """The requests for this head, oldest first, as (id, created_at): an
+    issue comment by anyone but an accepted reviewer that carries the
+    step's marker for this head, or that begins with the caller's
+    `ask-comment` (env ASK) and was created after the newest push of
+    this head; where the push cannot be read, only the marker counts."""
+    ask = (os.environ.get("ASK") or "").strip()
+    found = []
+    for it in load(icomments_p):
+        if not isinstance(it, dict) or ours(it):
+            continue
+        body = it.get("body") or ""
+        when = str(it.get("created_at") or "")
+        when = when[:19] if STAMP.match(when) else ""
+        if not when:
+            continue
+        if ASKED in body or (ask and pushed and when > pushed and body.lstrip().startswith(ask)):
+            found.append((it.get("id"), when))
+    return sorted(found, key=lambda r: r[1])
+
+def acknowledgements(reactions_p):
+    """How the reviewer acknowledged this head, oldest first, as (time,
+    what): its eyes reaction on a request for this head, or on the pull
+    request after the newest push of this head; and its summary's state
+    naming this head, all forty characters, with a status other than
+    `completed`, timed by the row's `since` (or the comment's update)."""
+    asked = {r[0]: r[1] for r in requests()}
+    acks = []
+    for it in load(reactions_p):
+        if not isinstance(it, dict) or not ours(it) or it.get("content") != "eyes":
+            continue
+        when = str(it.get("created_at") or "")
+        when = when[:19] if STAMP.match(when) else ""
+        on = it.get("comment_id")
+        if not when:
+            continue
+        if on is not None and on in asked and when >= asked[on]:
+            acks.append((when, "eyes reaction on the request"))
+        elif on is None and pushed and when > pushed:
+            acks.append((when, "eyes reaction on the pull request"))
+    for it in load(icomments_p):
+        if not isinstance(it, dict):
+            continue
+        body = it.get("body") or ""
+        if not ours(it) or not body.lstrip().startswith(SUMMARY):
+            continue
+        for raw in STATE.findall(body):
+            try:
+                review = (json.loads(raw).get("code_review") or {})
+            except (json.JSONDecodeError, AttributeError):
+                continue
+            status = str(review.get("status") or "")
+            if review.get("commit_sha") != head or not status or status == "completed":
+                continue
+            since = [WHEN.search(cell) for _, cell, sha in ROW.findall(body) if head.startswith(sha)]
+            since = [m.group(1) for m in since if m]
+            when = since[0] if since else str(it.get("updated_at") or "")[:19]
+            if STAMP.match(when + "Z"):
+                acks.append((when, f"summary says {status} for this commit"))
+    return sorted(acks)
+
+def stalled(reactions_p, now):
+    """The red of #719's middle case: acknowledged, not finished. Exit 0
+    with the error and the next steps, 1 with nothing when the reviewer
+    did not acknowledge (today's red stands) or reported its usage limit
+    (the known cause, `--cause`, stands)."""
+    acks = acknowledgements(reactions_p)
+    if not acks or limit_notices():
+        return 1
+    # The newest request the reviewer answered, and its first answer: a
+    # re-run after a second summons reports that one, not the first.
+    asked = [w for _, w in requests() if w <= acks[-1][0]]
+    if asked:
+        acks = [a for a in acks if a[0] >= asked[-1]]
+    first, how = acks[0]
+    if asked:
+        req = f"{asked[-1]}Z (the summons)"
+    elif pushed:
+        req = f"{pushed}Z (the push, the reviewer's own trigger)"
+    else:
+        req = "not read"
+    now = now[:19] if STAMP.match(now) else ""
+    if now:
+        secs = int((datetime.fromisoformat(now) - datetime.fromisoformat(first)).total_seconds())
+        ago = f"{secs // 60} min {secs % 60} s ago, read at {now}Z"
+    else:
+        ago = "how long ago not read"
+    print(f"::error::{ACK_NOT_DONE}: the reviewer took the request for this commit ({head})"
+          " and attached no review within the wait.")
+    print(f"  requested {req}; acknowledged {first}Z ({how}); {ago}.")
+    for when, what in acks[1:3]:
+        print(f"  also: {what} at {when}Z.")
+    print("  Next, in this order:")
+    for i, text in enumerate(NEXT_STEPS, 1):
+        print(f"  {i}. {text}")
+    return 0
+
+if mode == "--requests":
+    for rid, _ in requests():
+        print(rid)
+    sys.exit(0)
+if mode == "--stalled":
+    sys.exit(stalled(sys.argv[7] if len(sys.argv) > 7 else "", sys.argv[8] if len(sys.argv) > 8 else ""))
 if mode == "--round":
     say_round()
     sys.exit(0)
