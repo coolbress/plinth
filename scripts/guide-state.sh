@@ -31,7 +31,7 @@ row() {
 # command is typed as printed; $before (typed first) and $note go with it.
 before=""; note=""
 say() {
-  local cells then
+  local cells after
   cells="$(row "$1")" || exit 1
   echo "where: $(sed -n 1p <<<"$cells")"
   echo "next: $(sed -n 2p <<<"$cells")"
@@ -40,8 +40,8 @@ say() {
   echo "command: $2"
   [ -z "$note" ] || echo "note: $note"
   if [ -n "${3:-}" ]; then
-    then="$(row "$3")" || exit 1
-    echo "then: $(sed -n 1p <<<"$then") -> $(sed -n 3p <<<"$then")"
+    after="$(row "$3")" || exit 1
+    echo "then: $(sed -n 1p <<<"$after") -> $(sed -n 3p <<<"$after")"
   fi
 }
 
