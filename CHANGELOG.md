@@ -19,6 +19,17 @@ pull requests and have no tag.
   blockers #647 found, held, gone or unclear, with the Claude Code version.
   Run on Claude Code 2.1.312, all three still hold, so the suite stays on
   `claude -p`.
+- `/plinth:floor-check` and `ci / floor-check` read a `cli` or `library`
+  project's `.github/workflows/release.yml`, the workflow plinth-template
+  1.29.0 adds to publish the package to PyPI on a version tag (#703). Three
+  items: the file is there, only a pushed tag starts it, and it reads no
+  stored secret (Trusted Publishing needs none). Each finding is a WARN,
+  never a FAIL, so a project rendered before the file existed still has
+  0 failed; the missing-file WARN names the update and the project's
+  `docs/how-to/publish-a-release.md`. A GitLab project gets an INFO: the
+  template renders no release workflow there. New projects get the file
+  once `/plinth:new-project` renders plinth-template 1.29.0, a separate
+  change.
 
 ## [2.15.0] - 2026-10-28
 

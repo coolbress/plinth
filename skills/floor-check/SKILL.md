@@ -265,10 +265,10 @@ a private repository's missing CodeQL rule). In that job's summary their
 annotated; the other `not yet confirmed` lines are. This skill's own run
 never prints the count; without the flag those reads are SKIPs.
 
-## What four of the checks read, and what they do not
+## What five of the checks read, and what they do not
 
-Four checks are static reads with a stated scope (#95, the predicates #42
-left open; the plinth pins, #447). A finding from any of them is a WARN, never a FAIL, so a
+Five checks are static reads with a stated scope (#95, the predicates #42
+left open; the plinth pins, #447; the release workflow, #703). A finding from any of them is a WARN, never a FAIL, so a
 repository that passed before they existed still passes; a PASS from them
 covers only what is listed here.
 
@@ -277,6 +277,7 @@ covers only what is listed here.
 | Tracked dotenv | `git ls-files` under `--root`: a tracked file named `.env` or `.env.<anything>`, except `.env.example`, `.env.sample`, `.env.template` | File contents, git history, an untracked local `.env` (not the defect), `.envrc`, other names such as `prod.env`. It is not a secret scanner; `ci / secrets` is. Outside a git work tree it is a SKIP |
 | Action pins | Every `uses:` line in `.github/workflows/*.yml` and `*.yaml`: `owner/repo@<40-hex SHA>`, `docker://…@sha256:<digest>` or a local `./` path. Comments and block scalars (`run: \|`) are skipped | Composite actions under `.github/actions`, whether the SHA exists upstream, what the pinned action itself calls. A `uses` written in a form the line pattern cannot read (flow style, a quoted, anchored or explicit `?` key: any `uses` in key position that is not a plain `uses: value`) is a SKIP naming the line |
 | Plinth pins agree | The same `uses:` lines as Action pins, those of `coolbress/plinth/...` at a full commit SHA: two or more SHAs across the files (`ci.yml` and `label.yml` are rendered at one commit; a hand edit moves one) are a WARN naming each file with its SHA, and the INFO under it is the `sed` line that moves each lagging file's plinth references, and nothing else in it, to the SHA the `ci` job calls. The owner, repository and SHA compare in any letter case, as GitHub reads them. One SHA, or none outside the `ci` job, prints nothing, whatever the template state | A plinth `uses:` on a tag or branch (the Action pins WARN, not repeated). A `uses` it cannot read is a SKIP naming the file and line, unless the readable ones already disagree. Not a FAIL: `label / label` is not a required check |
+| Release workflow | For a `cli` or `library` on GitHub, `.github/workflows/release.yml` as text, comments dropped: present (plinth-template 1.29.0 renders it); its `on:` block is `push:` with `tags:` and nothing else; no `secrets.<name>` other than `GITHUB_TOKEN`, and no `password:` | Whether PyPI has a publisher registered, whether the `pypi` environment exists or what protects it, whether the tag-against-version step is still there, what the jobs do. Missing on an instance rendered before 1.29.0 is a WARN whose INFO names the update. On GitLab, an INFO: the template renders no release workflow there. Other archetypes are not asked |
 | JSON logs | For a service archetype (`backend`, `data-ml`, `web`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
 
 ## The ci job
