@@ -1872,11 +1872,11 @@ jobs:
           if not names:
               say(f"pass: {STD}, does not apply (no Python file under {clean(src)})")
               sys.exit(0)
-          if not items:
-              say(f"pass: {STD} ({limits}), {len(names)} Python files measured")
-              sys.exit(0)
           def count(n, what):
               return f"{n} {what}" + ("" if n == 1 else "s")
+          if not items:
+              say(f"pass: {STD} ({limits}), {count(len(names), 'Python file')} measured")
+              sys.exit(0)
           worst = "; ".join(f"{p}:{l} {w}" for _, p, l, w in items[:3])
           say(f"not yet confirmed: {STD}, {count(len(items) - nfiles, 'function')} and "
               f"{count(nfiles, 'file')} are above them, "
@@ -1920,7 +1920,7 @@ jobs:
             # Above the conventions: the verdict line in the summary, and the
             # largest three as the warnings, each naming its next step.
             while IFS= read -r l; do [ -z "$l" ] || echo "- $l" >> "$GITHUB_STEP_SUMMARY"; done < "$t.verdict"
-            head -n 3 "$t.warnings"
+            cat "$t.warnings"
           else
             while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$t.verdict"
           fi

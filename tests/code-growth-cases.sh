@@ -152,6 +152,13 @@ new_repo; complex tangled > "$p/src/pkg/a.py"; printf '[tool.ruff\n' > "$p/pypro
 expect "ruff that cannot read the project's configuration is not yet confirmed, not a pass" 1 \
   '^- not yet confirmed: code size within the conventions, ruff did not finish' 'ruff did not finish'
 
+# A ruff that prints a well-formed empty list and exits 2: its exit code is
+# what says it did not finish, never the list.
+mkdir -p "$tmp/broken"; printf '#!/bin/sh\necho "[]"; exit 2\n' > "$tmp/broken/ruff"; chmod +x "$tmp/broken/ruff"
+new_repo; complex tangled > "$p/src/pkg/a.py"; ln -sf "$tmp/broken/ruff" "$tmp/bin/ruff"; run; ln -sf "$bin/ruff" "$tmp/bin/ruff"
+expect "ruff that exits with an error is not yet confirmed, even when it printed a list" 1 \
+  '^- not yet confirmed: code size within the conventions, ruff did not finish' 'ruff did not finish'
+
 new_repo; rm -rf "$tmp/rt"; mkdir -p "$tmp/rt"; : > "$tmp/rt/summary"
 out="$(cd "$p" && RUNNER_TEMP="$tmp/rt" GITHUB_STEP_SUMMARY="$tmp/rt/summary" bash -e "$tmp/verdict.sh" 2>&1; echo "verdict exit $?")"
 out="measure exit 0"$'\n'"$out"; sum="$(cat "$tmp/rt/summary")"; warns="$(printf '%s\n' "$out" | grep '^::warning' || true)"
