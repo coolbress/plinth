@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.28.0
+  (coolbress/plinth-template#133, #135, #136). A new project's change
+  forms ask what should happen ("When I …, then I see …" lines a person
+  can try) and what is not decided yet; its agent reads both first, asks
+  about anything not decided before writing code, and says in the pull
+  request which line each test covers. A `web` project's `AGENTS.md` is
+  back within 60 lines. An existing repository gets both through
+  `/plinth:template-update`; the update changes the two forms (or GitLab
+  templates), `AGENTS.md` and `.copier-answers.yml`; where the
+  repository's CI calls plinth 2.10.0 or later, the `AGENTS.md` change
+  needs an admin's approval when the agent's own account pushes it.
+
 ## [2.14.0] - 2026-10-27
 
 `/plinth:new-project` now asks a `web` project where the app will run:
