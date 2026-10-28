@@ -1555,7 +1555,7 @@ def check_javascript_project(project: Path) -> None:
                        "so a vulnerable dependency is not reported before a merge")
 
 
-def check_project(project: Path, root: Path, archetype: str | None) -> None:
+def check_project(project: Path, root: Path, archetype: str | None, host: str = "github") -> None:
     # Run at the root of a repository whose project is one directory down (a
     # monorepo, a backend/ folder, plinth's own canary/), this reported two
     # files missing that do exist, and nothing said that --project is the
@@ -1604,8 +1604,9 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
         result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
         if archetype in PACKAGE_ARCHETYPES:
             # A repository-level file: GitHub reads workflows at the root, not
-            # under --project (#720 review).
-            check_release_workflow(root, answers.get("host"))
+            # under --project, and the host is the one the run resolved,
+            # --host before the answers (#720 review).
+            check_release_workflow(root, host)
         return
     on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
     result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
@@ -1619,7 +1620,7 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
         check_hosted_elsewhere(answers.get("hosting_elsewhere"))
 
 
-def check_release_workflow(root: Path, host: str | None) -> None:
+def check_release_workflow(root: Path, host: str) -> None:
     """A `cli` or `library` publishes to PyPI on a version tag through the
     template's release.yml (plinth-template 1.29.0, #703). Read as text,
     standard library only: present, started by a tag and nothing else, and
@@ -3136,7 +3137,7 @@ def main() -> int:
         check_javascript_project(project)
         archetype = None
     else:
-        check_project(project, root, archetype)
+        check_project(project, root, archetype, host)
     if archetype in CONDITIONAL_ARCHETYPES:
         (check_gitlab_image_job if host == "gitlab" else check_image_job)(root)
 

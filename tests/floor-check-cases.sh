@@ -1457,10 +1457,19 @@ if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pus
   ok "--project app: release.yml read at the repository root"
 else bad "--project app: release.yml not read at the root"; printf '%s\n' "$out" | grep -E 'release|FAIL' | sed 's/^/        /'; fi
 rm -rf "$sub_pkg"
+# --host wins over the answers, as for every other host-dependent item (#720 review).
+out="$(git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network --host gitlab 2>&1)"
+if grep -qF "INFO  $rel not required: on GitLab" <<<"$out" && ! grep -q "PASS  $rel" <<<"$out"; then ok "--host gitlab over a GitHub answer: release.yml not asked"
+else bad "--host gitlab did not reach the release item"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm "$pkg/$rel"; printf 'host: gitlab\n' >> "$pkg/.copier-answers.yml"
 out="$(release_out)"
 if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab library is not asked for release.yml"
 else bad "a GitLab library was asked for release.yml"; fi
+cp "$pkg/release.good" "$pkg/$rel"
+out="$(git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network --host github 2>&1)"
+if grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && ! grep -q "not required: on GitLab" <<<"$out"; then ok "--host github over a GitLab answer: release.yml read"
+else bad "--host github did not reach the release item"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+rm "$pkg/$rel"
 out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
 if ! grep -q "release.yml" <<<"$out"; then ok "a backend instance is not asked for release.yml"
 else bad "a backend instance was asked for release.yml"; fi
