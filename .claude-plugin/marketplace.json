@@ -88,7 +88,7 @@
     },
     {
       "name": "ponytail-skills",
-      "description": "One ponytail skill, /ponytail-audit: a ranked, repository-wide list of what to delete or replace with the standard library. Applies nothing; no hooks. Not installed by default (#598). The full ponytail plugin is below.",
+      "description": "One ponytail skill, /ponytail-audit, held on purpose at its pre-v5 version (pin 2ed6c52): a ranked, repository-wide list of over-engineering to delete, simplify or replace with the standard library or the platform; bugs, security and performance are out of its scope. ponytail v5 rewrote it into a full quality audit, which repeats the review step, so the pin is not raised (#715). Applies nothing; no hooks. Not installed by default (#598). The full ponytail plugin is below.",
       "category": "workflow",
       "source": {
         "source": "git-subdir",

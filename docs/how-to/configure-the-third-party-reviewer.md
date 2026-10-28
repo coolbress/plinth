@@ -429,6 +429,25 @@ Without them, or when they do not help:
    take `third-party / review` out of the ruleset in Settings and add it back
    afterwards with `scripts/upgrade-ruleset.sh`; say so on the pull request.
    Never merge with `--admin`: it bypasses every other rule as well.
+4. If the error says `acknowledged, not finished`, the reviewer took the
+   request and did not finish within the wait: its eyes reaction is on the
+   summons or on the pull request, or its summary comment says it is running
+   on this commit. On #712, #717 and plinth-template#136 the eyes came within
+   seconds and no review followed in the full wait (#719). The log gives the
+   time of the request, the time of the acknowledgement and how long ago that
+   was. The check still fails; next, in this order:
+   1. Wait a few minutes, then re-run this job once. Where `review-rerun.yml`
+      runs (plinth's own repository), a verdict that lands later re-runs it by
+      itself.
+   2. Still not finished: open the reviewer's own task page,
+      `https://chatgpt.com/codex`, and check what is left of its usage limit in
+      Codex's settings.
+   3. If this commit already had two summonses, comment the summons on the pull
+      request yourself, then re-run this job.
+
+   When nothing acknowledged the request, the error stays
+   `no third-party review is attached to this commit`, and steps 1 to 3 of
+   this section apply.
 
 ## When to stop
 
