@@ -135,13 +135,13 @@ Four skills, prefixed `/plinth:`:
 
 Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
-[mattpocock-skills](https://github.com/mattpocock/skills) (eight skills,
-from `/implement` and `/grilling` to `code-review`) and
+[mattpocock-skills](https://github.com/mattpocock/skills) (thirteen skills,
+from `/implement` and `/grilling` to `code-review`, `/to-spec` and `/handoff`) and
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
 `design-taste-frontend`: frontend design that does not look templated).
 Listed but not installed:
-`mattpocock-skills-extra`, twelve more Matt Pocock skills, such as
-`/ask-matt`, `/grill-with-docs`, `/to-spec` and `/wayfinder` (#520);
+`mattpocock-skills-extra`, seven more Matt Pocock skills, such as
+`/ask-matt`, `/grill-with-docs` and `wizard` (#520, #704);
 `ponytail-skills`, one skill, `/ponytail-audit`: what to delete or replace
 with the standard library, repository-wide (#598);
 [last30days](https://github.com/mvanhorn/last30days-skill) (what people said

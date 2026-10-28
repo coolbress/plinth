@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The default set now installs five more Matt Pocock skills: `/to-spec`,
+  `/to-tickets` and `/wayfinder` for planning a job bigger than one session,
+  `/improve-codebase-architecture` for clean-up, and `/handoff` (#704, from
+  #702's Decision). `mattpocock-skills` widens to 13 skills and
+  `mattpocock-skills-extra` narrows to the other 7, at the same pin; no
+  skill is under both names. All five are user-only, so they add nothing to
+  the skill listing (measured with `/context` at 1M and 200k, before and
+  after). The arsenal and `run-a-project.md` call them default, and say that
+  `/improve-codebase-architecture` is the hardest for a beginner and that
+  `/handoff` writes a temporary file, so the issue and pull request stay the
+  first record. An existing install gets them with
+  `claude plugin update plinth@plinth`, then a new session; no `prune` is
+  needed, measured from v2.15.0 with and without `mattpocock-skills-extra`
+  installed. On a 200k model the 1% listing budget already cut two
+  descriptions before this change; plinth-template raises it to 1.5% in a
+  project's settings (coolbress/plinth-template#138), which reaches new
+  projects once plinth renders that release.
+
 ### Added
 
 - `scripts/eval-suite-probe.sh` checks whether `claude plugin eval` can run
