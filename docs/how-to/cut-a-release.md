@@ -9,9 +9,10 @@ promises, see [About pins](../explanation/concepts.md#about-pins).
 You need a clone whose `main` equals `origin/main` with no uncommitted changes
 to tracked files, and `gh` logged in with write access to the repository.
 
-If the release changes what a new project's agent reads (`AGENTS.md`,
-`.claude/`, the output style) or a default skill, run
-[the eval suite](run-the-eval-suite.md) first and post its table.
+If the template pin moved since the release before, step 3 checks whether
+the move changes what a new project's agent reads, and then asks for
+[the eval suite](run-the-eval-suite.md)'s table or the reason it was not run
+(step 2).
 
 ## Steps
 
@@ -31,6 +32,25 @@ If the release changes what a new project's agent reads (`AGENTS.md`,
    `${TMPDIR:-/tmp}/why.md`: a short paragraph on why this release exists, and one
    line `tested with plinth-template <tag>` with the tag from step 1. Use no
    heading lines.
+
+   If that tag is not the one the release before was tested with (the
+   `tested with` line of the previous version's `CHANGELOG.md` section), the
+   script reads the template's changes between the two tags. When they touch
+   `template/AGENTS.md.jinja`, `template/CLAUDE.md.jinja` or anything under
+   `template/.claude/` (the settings, the output style, the default skills),
+   the why needs one more line, either of:
+
+   ```text
+   eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-<id>>
+   eval suite not run: <the reason>
+   ```
+
+   For the first, run [the eval suite](run-the-eval-suite.md) and post its
+   table on #647; the link is that comment's, in angle brackets (a bare link
+   fails `ci / docs`). The line stays in the release's section and its
+   GitHub Release, so whoever reads the release sees the table or the reason.
+   A release whose pin did not move, or whose move touches none of those
+   files, needs neither.
 3. Run the script once, from the up-to-date `main`:
 
    ```bash
@@ -98,6 +118,11 @@ If the release changes what a new project's agent reads (`AGENTS.md`,
 | The why must say what this release was tested with | Add the exact line it prints; if you tested another template tag, raise the pin first ([How to upgrade the template pin](upgrade-the-template-pin.md)) |
 | The why says nothing but the tested line | Add a sentence on why the release exists |
 | The why has a heading line | Remove every line that starts with `#` |
+| The template pin moved and changes what a new project's agent reads | Run the eval suite and add `eval suite: <link>`, or add `eval suite not run: <the reason>` (step 2) |
+| The `eval suite:` line must be the link to the comment | Give the comment's link alone, in angle brackets |
+| More than one `eval suite` line | Keep one |
+| Cannot read what the template changed | Check that `gh` is logged in and can reach GitHub, then run step 3 again |
+| The previous section has no `tested with` line | Restore that line in the previous version's section of `CHANGELOG.md` in a pull request |
 | The version is not above the current one | Pick the next version |
 | The tag or the release already exists | Pick the next version |
 | `release/vX.Y.Z` already exists on origin | Finish that release, or delete the leftover branch |

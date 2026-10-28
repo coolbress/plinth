@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/eval-suite-probe.sh` checks whether `claude plugin eval` can run
+  the eval suite yet (#665). It runs one probe case per arm on plinth as
+  committed, with its real `plugin.json`, and prints, for each of the three
+  blockers #647 found, held, gone or unclear, with the Claude Code version.
+  Run on Claude Code 2.1.312, all three still hold, so the suite stays on
+  `claude -p`.
+
 ### Changed
 
 - The default set now installs five more Matt Pocock skills: `/to-spec`,
@@ -31,14 +40,15 @@ pull requests and have no tag.
   project's settings (coolbress/plinth-template#138), which reaches new
   projects once plinth renders that release.
 
-### Added
-
-- `scripts/eval-suite-probe.sh` checks whether `claude plugin eval` can run
-  the eval suite yet (#665). It runs one probe case per arm on plinth as
-  committed, with its real `plugin.json`, and prints, for each of the three
-  blockers #647 found, held, gone or unclear, with the Claude Code version.
-  Run on Claude Code 2.1.312, all three still hold, so the suite stays on
-  `claude -p`.
+- `scripts/make-release.sh` run 1 asks for the eval suite when it matters
+  (#700). If the template pin moved since the release before and the
+  template's changes between the two tags touch `template/AGENTS.md.jinja`,
+  `template/CLAUDE.md.jinja` or anything under `template/.claude/`, the why
+  needs an `eval suite: <link>` line naming the posted table or an
+  `eval suite not run: <reason>` line, and that line stays in the release's
+  section. Other releases are not asked. The step was a sentence in
+  `docs/how-to/cut-a-release.md`, and v2.13.0 to v2.15.0 shipped such
+  changes without a suite run.
 
 ## [2.15.0] - 2026-10-28
 

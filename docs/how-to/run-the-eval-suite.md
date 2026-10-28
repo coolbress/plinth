@@ -11,8 +11,11 @@ checks the results afterwards:
 It prints one table, so you can see whether a change still helps or got
 worse. Run it before a release that changes the files the agent reads in a
 new project (`AGENTS.md`, `.claude/`, the output style) or one of plinth's
-default skills. You do not need it for other releases. It never runs in CI,
-because it uses your Claude usage and needs a login.
+default skills. When such a release moves the template pin,
+`scripts/make-release.sh` asks for the posted table's link, or the reason it
+was not run ([How to cut a release](cut-a-release.md), step 2). You do not
+need it for other releases. It never runs in CI, because it uses your Claude
+usage and needs a login.
 
 ## Before you start
 
