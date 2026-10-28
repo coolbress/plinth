@@ -43,8 +43,11 @@ gh, gl = (open(p, encoding="utf-8").read() for p in sys.argv[1:3])
 fails = []
 # The web archetype is GitHub only (#604): its two jobs have no GitLab twin.
 WEB_ONLY = {"migrations", "deploy-check"}
+# The code-growth sensor is report-only and on GitHub alone in its first
+# release (#705); a GitLab twin waits for its warnings to be seen there.
+GITHUB_ONLY = {"code-growth"}
 gh_jobs = sorted(j for j in re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", gh.split("\njobs:\n", 1)[1], re.M)
-                 if j not in WEB_ONLY)
+                 if j not in WEB_ONLY | GITHUB_ONLY)
 spec, body = gl.split("\n---\n", 1)
 gl_jobs = sorted(j for j in re.findall(r"^([a-z][a-z0-9-]*):\s*$", body, re.M)
                  if j not in ("workflow", "default", "variables", "stages", "include"))

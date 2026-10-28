@@ -1737,3 +1737,213 @@ jobs:
           while IFS= read -r l || [ -n "$l" ]; do say "$l"; done < "$t.verdicts"
           { echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
+
+  # How large the code has grown (#705): functions above a complexity or a
+  # statement count and Python files above a line count, measured with the
+  # project's own locked ruff (C901, PLR0915) and a count of git's files under
+  # `src/`, or the whole project without one. Reported, never failing (#702's
+  # Decisions, 2026-10-28): every step that measures continues on error, and
+  # whether the job ever turns red is decided after projects have shown its
+  # warnings. Not a required check. The limits are conventions, each the
+  # default of the tool it comes from, not numbers shown to predict anything;
+  # the project's own ruff settings for them are overridden so every project
+  # is measured the same way, and so are its suppressions: ruff runs with
+  # `--isolated --ignore-noqa`, so a `# noqa`, a per-file ignore or an exclude
+  # in the project's configuration hides nothing, as the line count, which
+  # reads every file git tracks, hides nothing. The summary opens with one
+  # verdict line; when something is above a limit, that line is not annotated
+  # and up to three warnings name the largest instead, each with the next step.
+  code-growth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          UV_VERSION: "0.12.9"
+          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      - id: sync
+        continue-on-error: true
+        run: uv sync --locked
+
+      - name: Measure the code's size
+        id: measure
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SYNC: ${{ steps.sync.outcome }}
+        run: |
+          std="code size within the conventions"
+          out="$RUNNER_TEMP/growth.verdict"; ann="$RUNNER_TEMP/growth.warnings"; det="$RUNNER_TEMP/growth.md"
+          rm -f "$out" "$ann" "$det"
+          if [ "$SYNC" != success ]; then
+            echo "not yet confirmed: $std, it did not run because an earlier step failed; a run that gets past that step confirms it" > "$out"; exit 0
+          fi
+          # The conventions: McCabe's suggested complexity, pylint's defaults
+          # for statements in a function and lines in a module.
+          max_complexity=10; max_statements=50; max_lines=1000
+          src=.; [ -d src ] && src=src
+          json="$RUNNER_TEMP/growth.json"; files="$RUNNER_TEMP/growth.files"; rm -f "$json" "$files"
+          rc=0
+          uv run --no-sync ruff check "$src" --isolated --ignore-noqa --select C901,PLR0915 \
+            --config "lint.mccabe.max-complexity=$max_complexity" --config "lint.pylint.max-statements=$max_statements" \
+            --exit-zero --no-cache --output-format json > "$json" || rc=$?
+          if [ "$rc" != 0 ]; then echo "ruff exited $rc"; rm -f "$json"; fi
+          git ls-files -z -- "$src" > "$files" || rm -f "$files"
+          top="$(git rev-parse --show-toplevel || pwd)"
+          python3 - "$json" "$files" "$out" "$ann" "$det" "$top" "$src" "$max_complexity" "$max_statements" "$max_lines" <<'PY'
+          import json, os, re, sys
+          report, listing, out, ann, det, top, src = sys.argv[1:8]
+          MAX_C, MAX_S, MAX_L = (int(a) for a in sys.argv[8:11])
+          STD = "code size within the conventions"
+          def say(*lines):
+              with open(out, "w", encoding="utf-8") as f:
+                  f.writelines(s + "\n" for s in lines)
+          def clean(p):
+              return re.sub(r"[\x00-\x1f\x7f]", "?", p)
+          def where(p):   # from the repository root, as an annotation names a file
+              return clean(os.path.relpath(os.path.abspath(p), top))
+          try:
+              with open(report, encoding="utf-8") as f:
+                  found = json.load(f)
+              if not isinstance(found, list):
+                  raise ValueError
+          except (OSError, ValueError):
+              say(f"not yet confirmed: {STD}, ruff did not finish (its error is in this step's log); "
+                  "a run where it does confirms it")
+              sys.exit(0)
+          try:
+              with open(listing, "rb") as f:
+                  names = [n for n in f.read().decode("utf-8", "replace").split("\0")
+                           if n.endswith(".py") and os.path.isfile(n)]
+          except OSError:
+              say(f"not yet confirmed: {STD}, git did not list the files (its error is in this step's log); "
+                  "a run where it does confirms it")
+              sys.exit(0)
+          # A file ruff cannot parse gets only `invalid-syntax` diagnostics
+          # (code null) and no measure of its functions: named, never passed.
+          unparsed = sorted({where(d.get("filename", "?")) for d in found if isinstance(d, dict)
+                             and (d.get("code") is None or d.get("name") == "invalid-syntax")})
+          for u in unparsed:
+              print(f"ruff could not parse: {u}")
+          funcs = {}
+          for d in found:
+              m = re.search(r"\((\d+) > \d+\)", str(d.get("message", ""))) if isinstance(d, dict) else None
+              if not m or d.get("code") not in ("C901", "PLR0915"):
+                  continue
+              row = int((d.get("location") or {}).get("row") or 1)
+              item = funcs.setdefault((d.get("filename", "?"), row), {"line": row})
+              if d["code"] == "C901":
+                  item["complexity"] = int(m.group(1))
+                  n = re.match(r"`([^`]+)`", d["message"])
+                  if n:
+                      item["name"] = clean(n.group(1))
+              else:
+                  item["statements"] = int(m.group(1))
+          items = []   # (how far above its convention, path, line, what)
+          for (path, row), it in funcs.items():
+              name = it.get("name")
+              if not name:   # PLR0915 alone does not name the function
+                  try:
+                      with open(path, encoding="utf-8", errors="replace") as f:
+                          n = re.search(r"def\s+(\w+)", f.read().splitlines()[row - 1])
+                      name = n.group(1) if n else None
+                  except (OSError, IndexError):
+                      pass
+              said = [f"complexity {it['complexity']} (convention {MAX_C})"] if "complexity" in it else []
+              said += [f"{it['statements']} statements (convention {MAX_S})"] if "statements" in it else []
+              score = max(it.get("complexity", 0) / MAX_C, it.get("statements", 0) / MAX_S)
+              items.append((score, where(path), row, f"function `{name or '?'}` has " + " and ".join(said)))
+          nfiles = 0
+          for n in names:
+              with open(n, "rb") as f:
+                  data = f.read()
+              lines = data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
+              if lines > MAX_L:
+                  nfiles += 1
+                  items.append((lines / MAX_L, where(n), 1, f"file has {lines} lines (convention {MAX_L})"))
+          items.sort(key=lambda i: (-i[0], i[1], i[2]))
+          limits = f"no function above complexity {MAX_C} or {MAX_S} statements, no Python file above {MAX_L} lines"
+          if not names:
+              say(f"pass: {STD}, does not apply (no Python file under {clean(src)})")
+              sys.exit(0)
+          def count(n, what):
+              return f"{n} {what}" + ("" if n == 1 else "s")
+          if not items and not unparsed:
+              say(f"pass: {STD} ({limits}), {count(len(names), 'Python file')} measured")
+              sys.exit(0)
+          verdicts, warns = [], []
+          if unparsed:
+              listed = ", ".join(unparsed[:9]) + (f", and {len(unparsed) - 9} more in this step's log"
+                                                  if len(unparsed) > 9 else "")
+              verdicts.append(f"not yet confirmed: {STD}, ruff could not parse "
+                              f"{count(len(unparsed), 'Python file')}, so the functions in them were not "
+                              f"measured: {listed}; a run where they parse confirms it")
+              warns.append("::warning::" + verdicts[-1].replace("%", "%25"))
+          if items:
+              worst = "; ".join(f"{p}:{l} {w}" for _, p, l, w in items[:3])
+              verdicts.append(f"not yet confirmed: {STD}, {count(len(items) - nfiles, 'function')} and "
+                              f"{count(nfiles, 'file')} are above them, "
+                              f"largest first: {worst}; a clean-up that brings them under confirms it")
+          say(*verdicts)
+          def nxt(p):
+              return (f"Next: ask Claude to run /improve-codebase-architecture on {p} to split it into "
+                      "smaller parts, or /ponytail-audit to find what the whole project can delete; "
+                      "/plinth:arsenal says how to install either if it is missing.")
+          def prop(s):
+              return s.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")
+          for _, p, l, w in items[:3 - len(warns)]:
+              msg = f"{p}:{l} {w}. {nxt(p)}".replace("%", "%25")
+              warns.append(f"::warning file={prop(p)},line={l},title=Code growth::{msg}")
+          with open(ann, "w", encoding="utf-8") as f:
+              f.writelines(w + "\n" for w in warns)
+          if not items:
+              sys.exit(0)
+          with open(det, "w", encoding="utf-8") as f:
+              f.write("\n### The largest code, against the conventions\n\n"
+                      "| Where | What |\n| --- | --- |\n")
+              for _, p, l, w in items[:20]:
+                  f.write(f"| `{p}:{l}` | {w.replace('|', '/')} |\n")
+              if len(items) > 20:
+                  f.write(f"\n{len(items) - 20} more are in this step's log.\n")
+              f.write(f"\n{nxt(items[0][1])}\n\n"
+                      "Complexity counts the paths through a function: each `if`, loop, `and` or `or` "
+                      "adds one. The three limits are conventions, not validated numbers: complexity "
+                      f"{MAX_C} is McCabe's suggestion and ruff's default, {MAX_S} statements and {MAX_L} "
+                      "lines are pylint's defaults. Nobody has shown that code under them has fewer "
+                      "bugs. This job reports and never fails.\n")
+          for _, p, l, w in items:
+              print(f"above the conventions: {p}:{l} {w}")
+          PY
+
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        run: |
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          t="$RUNNER_TEMP/growth"
+          if [ ! -s "$t.verdict" ]; then
+            say "not yet confirmed: code size within the conventions, the measuring step did not finish (its error is in its log); a run where it does confirms it"
+          elif [ -s "$t.warnings" ]; then
+            # Above the conventions: the verdict line in the summary, and the
+            # largest three as the warnings, each naming its next step.
+            while IFS= read -r l; do [ -z "$l" ] || echo "- $l" >> "$GITHUB_STEP_SUMMARY"; done < "$t.verdict"
+            cat "$t.warnings"
+          else
+            while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$t.verdict"
+          fi
+          if [ -s "$t.md" ]; then cat "$t.md" >> "$GITHUB_STEP_SUMMARY"; fi
