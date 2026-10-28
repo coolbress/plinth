@@ -109,9 +109,9 @@ can see these: guidance only.
 
 - **Where you are:** a shaped idea that takes more than one session.
 - **Next:** ask the agent to write the plan into one issue, then cut it into
-  small tickets that say which waits for which. `/to-spec` and `/to-tickets`,
-  [listed](#skills-plinth-lists-but-does-not-install), do these as skills;
-  `/wayfinder`, listed, is for a job you cannot yet see how to get through.
+  small tickets that say which waits for which. `/to-spec` and `/to-tickets`
+  do these as skills; `/wayfinder` is for a job you cannot yet see how to get
+  through.
 - **Look at:** each ticket: "what can I see when this one is finished?". Not
   cut by layer; a change across the whole codebase goes in safe batches.
 - **Yours:** the cut. Keep the interview, the plan and the tickets in one
@@ -207,8 +207,10 @@ can see these: guidance only.
 - **Where you are:** stopping, or returning.
 - **Next:** before you stop, have the plan, the decisions and what is left
   put in issues and pull requests; the chat ends. To come back, open a new
-  session and ask "Where is this project, and what's next?". `/handoff`,
-  listed, moves work to another tool, folder or person.
+  session and ask "Where is this project, and what's next?". `/handoff`
+  moves work to another tool, folder or person. It writes a temporary file
+  whose path the next session needs, so the issues and pull requests stay
+  the first record.
 - **Look at:** the answer, who it works as, and anything not verified.
 - **Yours:** what to pick up next.
 - **If you forget:** guidance only: what is not in an issue or pull request
@@ -223,9 +225,11 @@ can see these: guidance only.
   repository is behind, and `/plinth:template-update` takes the update as a
   draft pull request; a repository made before the merge ruleset gets
   [the command that adds it](give-the-agent-its-own-account.md#a-repository-made-before-the-merge-ruleset).
-  Every week or two, `/ponytail-audit` and `/improve-codebase-architecture`,
-  [listed](#skills-plinth-lists-but-does-not-install), find what to cut or
-  deepen, for step 2.
+  Every week or two, `/improve-codebase-architecture` finds what to deepen,
+  and `/ponytail-audit`, [listed](#skills-plinth-lists-but-does-not-install),
+  what to cut, for step 2. `/improve-codebase-architecture` is the hardest of
+  the default skills for a beginner: it uses engineer vocabulary, runs a
+  design interview and writes an HTML report.
 - **Look at:** `/plinth:floor-check`'s report.
 - **Yours:** each merge, and on a template conflict, which side: it
   recommends one per file and applies it only on your word.
@@ -243,12 +247,14 @@ at all. Type the skill.
 
 ### Skills plinth lists but does not install
 
-Twelve more of Matt Pocock's skills, `/ask-matt`, `/to-spec`,
-`/to-tickets`, `/wayfinder` and `/handoff` among them, and `/ponytail-audit`
-are listed, not installed; `/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved the
-twelve on [#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set
-with them and one without, so whether they change a result is not known. Run
-either line once, then start a new session:
+Seven more of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
+`/wait-what` among them, and `/ponytail-audit` are listed, not installed;
+`/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved them on
+[#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set
+with them and one without, so whether they change a result is not known.
+`/to-spec`, `/to-tickets`, `/wayfinder`, `/improve-codebase-architecture`
+and `/handoff` are installed by default since
+[#704](https://github.com/coolbress/plinth/issues/704). Run either line once, then start a new session:
 
 ```sh
 claude plugin install mattpocock-skills-extra@plinth
