@@ -416,3 +416,8 @@ that) — CI downloads the checker from the plinth commit its own workflow is
 pinned to, so an older pin keeps running the older checker until then.
 
 Do not fix anything in this session, and do not run anything that writes.
+
+End the report with one line in the person's language: try typing
+`/plinth:guide`; it explains the whole way in plain words, where this
+repository is on it, and the one command to type next. On a repository plinth
+did not make, it points back here.

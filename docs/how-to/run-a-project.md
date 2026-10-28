@@ -12,8 +12,10 @@ yours to decide, and whether the step holds if you forget it (plinth's issue [#5
 - **guidance only**: the agent is asked to follow it, and nothing stops a
   step that is skipped.
 
-If you remember one command, make it `/plinth:arsenal`: where you are, the
-next action, its tool.
+If you remember one command, make it `/plinth:guide`, typed: it reads the
+repository and says, in your language, the whole way in plain words, where
+the project is now, and the one command to type next. `/plinth:arsenal` is
+the catalog behind it: where you are, the next action, its tool.
 
 ## The one rule: say what proves it
 
@@ -207,7 +209,8 @@ can see these: guidance only.
 - **Where you are:** stopping, or returning.
 - **Next:** before you stop, have the plan, the decisions and what is left
   put in issues and pull requests; the chat ends. To come back, open a new
-  session and ask "Where is this project, and what's next?". `/handoff`
+  session and ask "Where is this project, and what's next?", or type
+  `/plinth:guide`. `/handoff`
   moves work to another tool, folder or person. It writes a temporary file
   whose path the next session needs, so the issues and pull requests stay
   the first record.
@@ -238,8 +241,9 @@ can see these: guidance only.
 
 ## What you type, and what runs by itself
 
-Four skills run only when you type them: `/implement #N`, `/triage`,
-`/plinth:new-project` and `/plinth:template-update`. Asking in your own words
+These skills, among others, run only when you type them: `/implement #N`,
+`/triage`, `/plinth:new-project`, `/plinth:template-update` and
+`/plinth:guide`. Asking in your own words
 ("update the template") does not run them: the agent may do the work by hand,
 without their safeguards (`/plinth:new-project` tries to delete a repository
 it could not finish; `/plinth:template-update` asks before each step), or not

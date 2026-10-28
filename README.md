@@ -124,7 +124,7 @@ Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
 ## What you get
 
-Four skills, prefixed `/plinth:`:
+Five skills, prefixed `/plinth:`:
 
 | Skill | Does | Who can call it |
 | --- | --- | --- |
@@ -132,6 +132,7 @@ Four skills, prefixed `/plinth:`:
 | `floor-check [owner/name]` | Reads an existing repository against the same floor the CI job checks, the live ruleset, whether it is behind the template plinth is tested with today, and what this machine's Claude Code settings say about the sandbox; lists each miss with one fix; changes nothing | You or the agent |
 | `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; on a conflict it recommends a resolution for each file and applies it only on your word, before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
+| `guide` | Explains the whole workflow in plain words, in your language: the nine steps and four moments with their tools from the arsenal's table, where your repository is now, and the one command to type next; changes nothing | You only: type `/` and pick it |
 
 Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
