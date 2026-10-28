@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/eval-suite-probe.sh` checks whether `claude plugin eval` can run
+  the eval suite yet (#665). It runs one probe case per arm on plinth as
+  committed, with its real `plugin.json`, and prints, for each of the three
+  blockers #647 found, held, gone or unclear, with the Claude Code version.
+  Run on Claude Code 2.1.312, all three still hold, so the suite stays on
+  `claude -p`.
+
 ### Changed
 
 - The default set now installs five more Matt Pocock skills: `/to-spec`,
@@ -30,17 +39,6 @@ pull requests and have no tag.
   descriptions before this change; plinth-template raises it to 1.5% in a
   project's settings (coolbress/plinth-template#138), which reaches new
   projects once plinth renders that release.
-
-### Added
-
-- `scripts/eval-suite-probe.sh` checks whether `claude plugin eval` can run
-  the eval suite yet (#665). It runs one probe case per arm on plinth as
-  committed, with its real `plugin.json`, and prints, for each of the three
-  blockers #647 found, held, gone or unclear, with the Claude Code version.
-  Run on Claude Code 2.1.312, all three still hold, so the suite stays on
-  `claude -p`.
-
-### Changed
 
 - `scripts/make-release.sh` run 1 asks for the eval suite when it matters
   (#700). If the template pin moved since the release before and the
