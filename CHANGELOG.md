@@ -33,6 +33,15 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.29.0
+  (coolbress/plinth-template#138, #139, #140). A new `cli` or `library`
+  project on GitHub publishes to PyPI when a version tag is pushed, through
+  Trusted Publishing with no stored secret, and its
+  `docs/how-to/publish-a-release.md` gives the person's one-time PyPI and
+  GitHub steps. Every new project's `.claude/settings.json` gives the skill
+  listing 1.5% of the context, so descriptions are not cut on a 200k
+  model. An existing repository gets both through
+  `/plinth:template-update`.
 - The default set now installs five more Matt Pocock skills: `/to-spec`,
   `/to-tickets` and `/wayfinder` for planning a job bigger than one session,
   `/improve-codebase-architecture` for clean-up, and `/handoff` (#704, from
