@@ -197,3 +197,40 @@ Give the whole `reader.md` to whoever judges the report, whether that is
 a person or another agent. A claim the agent took from those rules is
 backed by them, so judge it against them, not as a claim without proof.
 A reader that was not given them counted such claims as unproven (#646).
+
+## Why it does not use `claude plugin eval`
+
+`claude plugin eval` runs a case with and without a plugin and reports the
+difference, which is what this suite does. #647 found three things that
+stop it from running this suite, and they still held on Claude Code 2.1.312
+(#665):
+
+- **(a)** With `dependencies` in `plugin.json`, as plinth has, the "with"
+  run loads no plinth and still scores, with no warning. Without
+  `dependencies`, the same copy loads plinth's skills.
+- **(b)** The project's `AGENTS.md`, `CLAUDE.md` and `.claude/` are not
+  loaded in either run. This is on purpose: the "Test plugins with evals"
+  page of the Claude Code docs, under "How runs are isolated", says no
+  `.claude/` directory or `CLAUDE.md` loads from inside the workspace, even
+  one the case's setup script wrote. Most of what this suite measures comes
+  from those files (#647).
+- **(c)** On macOS, the run's sandbox stops `git` (exit 72, from the Xcode
+  shim) and `uv run` (the project's Python is outside what it may read), so
+  the checks cannot run.
+
+To check again on a newer Claude Code, log in to a temporary configuration
+folder and run the probe. It costs about US$0.10 and stops at US$1
+(`--ceiling`):
+
+```bash
+CLAUDE_CONFIG_DIR=/path/to/temp/folder claude auth login
+scripts/eval-suite-probe.sh --config-dir /path/to/temp/folder
+```
+
+It prints the Claude Code version, then one line per blocker: `held`,
+`gone` or `unclear`, with why. The rules are at the top of
+`scripts/eval-suite-probe.py`. It runs plinth as committed, so commit first.
+It never publishes the report (`--no-publish`). Its records go to the
+folder it names, or to `--out`. It deletes the folders `claude plugin eval`
+keeps. When all three say `gone`, the suite can move. Because (b) is by
+design, expect it to keep saying `held`.

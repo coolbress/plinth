@@ -82,6 +82,9 @@ jobs:
       - name: The eval suite refuses your own config, keeps GitHub out, stops at its ceiling, and its grader fails what it must
         run: ./tests/eval-suite-cases.sh
 
+      - name: The plugin eval probe tells held from gone from unclear, and deletes what plugin eval keeps
+        run: ./tests/eval-suite-probe-cases.sh
+
       # zsh is not assumed on the runner image; without it the next test fails, it does not skip.
       - name: Install zsh
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh

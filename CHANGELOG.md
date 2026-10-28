@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/eval-suite-probe.sh` checks whether `claude plugin eval` can run
+  the eval suite yet (#665). It runs one probe case per arm on plinth as
+  committed, with its real `plugin.json`, and prints, for each of the three
+  blockers #647 found, held, gone or unclear, with the Claude Code version.
+  Run on Claude Code 2.1.312, all three still hold, so the suite stays on
+  `claude -p`.
+
 ## [2.15.0] - 2026-10-28
 
 New projects come from plinth-template v1.28.0. Their issue forms for a
