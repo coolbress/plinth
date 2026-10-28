@@ -19,6 +19,13 @@ pull requests and have no tag.
   blockers #647 found, held, gone or unclear, with the Claude Code version.
   Run on Claude Code 2.1.312, all three still hold, so the suite stays on
   `claude -p`.
+- `ci / code-growth`, a new job in `python-ci.yml` that says when code has
+  grown enough to clean up (#705). It warns, at most three times, about the
+  largest functions (complexity above 10 or more than 50 statements, by the
+  project's own ruff) and Python files above 1000 lines, and names the next
+  step: `/improve-codebase-architecture` on that file, or `/ponytail-audit`.
+  The limits are conventions, not validated numbers. It never fails and no
+  ruleset requires it; it is not on GitLab yet.
 
 ## [2.15.0] - 2026-10-28
 

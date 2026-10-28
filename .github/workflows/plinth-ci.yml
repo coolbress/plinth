@@ -219,6 +219,9 @@ jobs:
       - name: plinth's own Python, linted and type-checked (ruff, mypy)
         run: ./tests/python-lint.sh
 
+      - name: ci / code-growth warns above the conventions, passes below them, and never fails
+        run: ./tests/code-growth-cases.sh
+
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
   # the README install block is the one the tutorial shows, and the pull
   # request's own description closes no issue outside its closing line.
