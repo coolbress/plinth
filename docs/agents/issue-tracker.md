@@ -118,8 +118,7 @@ Create a GitHub issue. Acceptance criteria map to checks (see `AGENTS.md`).
 
 ## Wayfinding operations
 
-Used by `/wayfinder`, which plinth lists but does not install
-(`claude plugin install mattpocock-skills-extra@plinth`); records use these labels and
+Used by `/wayfinder`, which plinth installs by default (#704); records use these labels and
 this shape without it. A **map** is one issue; tickets are its **child** issues.
 
 - **Map**: one issue labelled `wayfinder:map`. `gh issue create --label wayfinder:map`
