@@ -60,6 +60,17 @@ pull requests and have no tag.
   section. Other releases are not asked. The step was a sentence in
   `docs/how-to/cut-a-release.md`, and v2.13.0 to v2.15.0 shipped such
   changes without a suite run.
+- `third-party / review` now says when the reviewer took the request and did
+  not finish (#719). When the wait ends with no review and the reviewer's
+  eyes reaction is on the request or the pull request, or its summary comment
+  says it is running on this commit, the error reads
+  `acknowledged, not finished`. It gives the time of the request, the time of
+  the acknowledgement and how long ago that was, then three next steps in
+  order: re-run once after a wait, look at the reviewer's task page and usage,
+  and comment the summons yourself after two. The how-to's "When the reviewer
+  does not come" has the same steps in the same words. When nothing
+  acknowledged the request, the error is the same as before. The check still
+  fails in both cases. #712, #717 and plinth-template#136 ended this way.
 - `ponytail-skills` stays at its pin, `2ed6c52`, on purpose, and its catalog
   description and arsenal row now say so (#715, from #711's Decision). At
   that pin `/ponytail-audit` is the over-engineering audit: what to delete,
