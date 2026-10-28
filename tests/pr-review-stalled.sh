@@ -192,6 +192,16 @@ stalled "eyes on a comment that is no request"      "[]" "[$(eyes "$BOT" 99 2026
 stalled "the summary running on another commit"     "[$REQ,$(summary "$O" running)]" "[]" 1 ""
 stalled "the summary completed on this commit"      "[$REQ,$(summary "$H" completed)]" "[]" 1 ""
 stalled "nothing read at all"                       "null" "null" 1 ""
+# A newer head pushed at 10:25 (#722's review): an unmarked summons and the
+# pull request's eyes after it are that head's, not this one's.
+cp "$tmp/act.json" "$tmp/act-one.json"
+printf '[{"after":"%s","before":"%s","timestamp":"2026-09-18T10:25:00Z"},{"after":"%s","before":"%s","timestamp":"2026-09-18T10:20:00Z"}]' "$O" "$H" "$H" "$O" > "$tmp/act.json"
+UNMARKED="{\"id\":13,\"user\":{\"login\":\"coolbress\"},\"created_at\":\"2026-09-18T10:26:00Z\",\"body\":\"@codex review\"}"
+stalled "an unmarked summons after a newer push is not this head's" "[$UNMARKED]" "[$(eyes "$BOT" 13 2026-09-18T10:26:15Z)]" 1 ""
+stalled "eyes on the pull request after a newer push are not this head's" "[]" "[$(eyes "$BOT" null 2026-09-18T10:26:15Z)]" 1 ""
+stalled "  but eyes before the newer push still are"  "[]" "[$(eyes "$BOT" null 2026-09-18T10:21:00Z)]" 0 "eyes reaction on the pull request"
+cp "$tmp/act-one.json" "$tmp/act.json"
+stalled "an unmarked summons while this head is the tip is a request" "[$UNMARKED]" "[$(eyes "$BOT" 13 2026-09-18T10:26:15Z)]" 0 "eyes reaction on the request"
 LIMIT="{\"user\":{\"login\":\"$BOT\"},\"created_at\":\"2026-09-18T10:27:30Z\",\"body\":\"You have reached your Codex usage limits for code reviews.\"}"
 stalled "eyes, then a usage-limit notice: the known cause stands" "[$REQ,$LIMIT]" "[$(eyes "$BOT" 11 2026-09-18T10:27:03Z)]" 1 ""
 

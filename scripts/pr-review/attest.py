@@ -249,6 +249,16 @@ stamps = [str(p.get("timestamp") or "") for p in pushes if p.get("after") == hea
 pushed = max(stamps)[:19] if stamps and all(STAMP.match(t) for t in stamps) else ""
 tips = {str(p.get(k) or "") for p in pushes for k in ("before", "after")}
 
+def tip_at(when):
+    """This head was the branch's tip at `when`: its newest push came
+    before it, and no other commit was pushed from that push up to it,
+    every other push's time read. A run outlives a newer push, so a
+    signal that names no head is this head's only while it was the tip
+    (#722's review; limit_notices() reads notices the same way)."""
+    others = [str(p.get("timestamp") or "") for p in pushes if p.get("after") != head]
+    return bool(pushed) and when > pushed and not any(
+        not STAMP.match(t) or pushed <= t[:19] <= when for t in others)
+
 def limit_notices():
     """Usage-limit notices by an accepted reviewer posted after the newest
     push of this head, oldest first, as (login, created_at, first line). An
@@ -291,8 +301,8 @@ def requests():
     """The requests for this head, oldest first, as (id, created_at): an
     issue comment by anyone but an accepted reviewer that carries the
     step's marker for this head, or that begins with the caller's
-    `ask-comment` (env ASK) and was created after the newest push of
-    this head; where the push cannot be read, only the marker counts."""
+    `ask-comment` (env ASK) and was created while this head was the
+    branch's tip (tip_at); where the push cannot be read, only the marker counts."""
     ask = (os.environ.get("ASK") or "").strip()
     found = []
     for it in load(icomments_p):
@@ -303,14 +313,14 @@ def requests():
         when = when[:19] if STAMP.match(when) else ""
         if not when:
             continue
-        if ASKED in body or (ask and pushed and when > pushed and body.lstrip().startswith(ask)):
+        if ASKED in body or (ask and tip_at(when) and body.lstrip().startswith(ask)):
             found.append((it.get("id"), when))
     return sorted(found, key=lambda r: r[1])
 
 def acknowledgements(reactions_p):
     """How the reviewer acknowledged this head, oldest first, as (time,
     what): its eyes reaction on a request for this head, or on the pull
-    request after the newest push of this head; and its summary's state
+    request while this head was the branch's tip; and its summary's state
     naming this head, all forty characters, with a status other than
     `completed`, timed by the row's `since` (or the comment's update)."""
     asked = {r[0]: r[1] for r in requests()}
@@ -325,7 +335,7 @@ def acknowledgements(reactions_p):
             continue
         if on is not None and on in asked and when >= asked[on]:
             acks.append((when, "eyes reaction on the request"))
-        elif on is None and pushed and when > pushed:
+        elif on is None and tip_at(when):
             acks.append((when, "eyes reaction on the pull request"))
     for it in load(icomments_p):
         if not isinstance(it, dict):
