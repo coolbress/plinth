@@ -64,8 +64,15 @@ top="$(git -C "$dir" rev-parse --show-toplevel)"
 answers="$top/.copier-answers.yml"
 answer() { sed -nE "s/^$1: *['\"]?([^'\"]*)['\"]? *\$/\\1/p" "$answers" 2>/dev/null | head -1; }
 
-if [ ! -f "$answers" ]; then
-  echo "made by plinth: no (no .copier-answers.yml)"
+# Made by plinth means rendered from its template in the form the door
+# writes, as floor-check's template item reads it; another Copier template
+# leaves an answers file too.
+template_repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$plugin/scripts/new-project.sh" 2>/dev/null)"
+[ -n "$template_repo" ] || { echo "guide-state: no template_repo in $plugin/scripts/new-project.sh" >&2; exit 1; }
+src="$(answer _src_path)"
+if [ ! -f "$answers" ] || [ "$src" != "gh:$template_repo" ]; then
+  if [ -f "$answers" ]; then echo "made by plinth: no (.copier-answers.yml names ${src:-no} template, not gh:$template_repo)"
+  else echo "made by plinth: no (no .copier-answers.yml)"; fi
   echo
   say "A repository plinth did not make" "/plinth:floor-check"
   finish
@@ -98,14 +105,21 @@ rollup='def checks: [.statusCheckRollup[]? | (.conclusion // .state // "") as $c
 bot='(.author.is_bot // false) or (.author.login // "" | startswith("app/"))'
 clean='gsub("[\t\n]"; " ")'
 
+# Each read on its own, so the line names the one that failed and its error.
+prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --json number,title,isDraft,author,headRefOid,statusCheckRollup \
-      --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"')] | @tsv' 2>&1)" ||
-   ! merged="$(cd "$top" && gh pr list --state merged --limit 100 --json number,title,mergedAt,author \
-      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)" ||
-   ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels \
+      --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"')] | @tsv' 2>&1)"; then
+  failed="open pull requests: $(tail -1 <<<"$prs")"
+elif ! merged="$(cd "$top" && gh pr list --state merged --limit 100 --json number,title,mergedAt,author \
+      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
+  failed="merged pull requests: $(tail -1 <<<"$merged")"
+elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels \
       --jq 'sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"')] | @tsv' 2>&1)"; then
-  echo "issues and pull requests: not read ($(tail -1 <<<"$prs$merged$issues"))"
+  failed="open issues: $(tail -1 <<<"$issues")"
+fi
+if [ -n "$failed" ]; then
+  echo "issues and pull requests: not read ($failed)"
   echo
   echo "where: not read"
   finish

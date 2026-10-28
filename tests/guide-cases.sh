@@ -25,6 +25,7 @@ set -u
 [ -n "${MOCK_GH_FAIL:-}" ] && { echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 4; }
 jqf="."; prev=""
 for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; prev="$a"; done
+[ -n "${MOCK_FAIL_ON:-}" ] && [ "$1 $2 ${4:-}" = "$MOCK_FAIL_ON" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
 case "$1 $2 ${4:-}" in
   "repo view"*)        echo o/r; exit 0 ;;
   "pr list open")      f=open.json ;;
@@ -40,7 +41,7 @@ export PATH="$work/bin:$PATH"
 # repo <name> [answers]: a git checkout, with .copier-answers.yml unless "none".
 repo() {
   local d="$work/$1"; mkdir -p "$d"; git -C "$d" init -q
-  [ "${2:-}" = none ] || printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\n%s\n' "${2:-archetype: cli}" > "$d/.copier-answers.yml"
+  [ "${2:-}" = none ] || printf '_commit: v1.28.0\n_src_path: %s\n%s\n' "${SRC:-gh:coolbress/plinth-template}" "${2:-archetype: cli}" > "$d/.copier-answers.yml"
   printf '[]' > "$d/open.json"; printf '[]' > "$d/merged.json"; printf '[]' > "$d/issues.json"
   echo "$d"
 }
@@ -72,6 +73,11 @@ expect "no git checkout: create one" "$d" "No repository yet (step 1)" "/plinth:
 
 d="$(repo other none)"
 expect "a checkout plinth did not make: floor-check" "$d" "A repository plinth did not make" "/plinth:floor-check"
+
+d="$(SRC=gh:someone/other-template repo foreign)"
+expect "another Copier template's answers file: not made by plinth" "$d" "A repository plinth did not make" "/plinth:floor-check" "not gh:coolbress/plinth-template"
+d="$(SRC=/home/x/coolbress/plinth-template repo local-src)"
+expect "a local copy of the template is not the door's form either" "$d" "A repository plinth did not make" "/plinth:floor-check"
 
 d="$(repo created)"
 put "$d/open.json" "$(pr 1 'chore(deps): bump actions/checkout' true SUCCESS)" "$(pr 2 'docs: first pull request through the wall' false run)"
@@ -129,6 +135,13 @@ if grep -qx 'where: not read' <<<"$out" && grep -q 'gh auth login' <<<"$out" && 
   ok "gh not logged in: not read, with gh's own line, and no step"
 else bad "gh not logged in"; sed 's/^/        /' <<<"$out"; fi
 
+# One read failing after the repository answered: its own error, named.
+d="$(repo one-read-fails)"
+out="$(MOCK_FAIL_ON="pr list merged" MOCK_DIR="$d" "$script" "$d" 2>&1)"
+if grep -qx 'where: not read' <<<"$out" && grep -qF 'not read (merged pull requests: HTTP 502: Bad Gateway)' <<<"$out" &&
+   ! grep -q 'unbound' <<<"$out"; then ok "one read failing: that read and gh's error, no step"
+else bad "one read failing"; sed 's/^/        /' <<<"$out"; fi
+
 d="$(repo gitlab "archetype: cli
 host: gitlab")"
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
@@ -137,7 +150,7 @@ grep -qx 'where: not read' <<<"$out" && ! grep -q '^command:' <<<"$out" &&
 
 # A table that lost a row the guide looks for stops with exit 1, never guesses.
 mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/scripts"
-cp "$script" "$work/plugin/scripts/"
+cp "$script" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
 grep -v '^| An idea in your own words' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
 d="$work/idle"
 out="$(MOCK_DIR="$d" "$work/plugin/scripts/guide-state.sh" "$d" 2>&1)"; rc=$?
