@@ -25,6 +25,7 @@ pull requests and have no tag.
   project's own ruff) and Python files above 1000 lines, and names the next
   step: `/improve-codebase-architecture` on that file, or `/ponytail-audit`.
   A `# noqa` or the project's ruff configuration hides nothing from it.
+  A file ruff cannot parse is named as not measured, never passed.
   The limits are conventions, not validated numbers. It never fails and no
   ruleset requires it; it is not on GitLab yet.
 

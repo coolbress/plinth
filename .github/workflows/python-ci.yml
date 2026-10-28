@@ -1834,6 +1834,12 @@ jobs:
               say(f"not yet confirmed: {STD}, git did not list the files (its error is in this step's log); "
                   "a run where it does confirms it")
               sys.exit(0)
+          # A file ruff cannot parse gets only `invalid-syntax` diagnostics
+          # (code null) and no measure of its functions: named, never passed.
+          unparsed = sorted({where(d.get("filename", "?")) for d in found if isinstance(d, dict)
+                             and (d.get("code") is None or d.get("name") == "invalid-syntax")})
+          for u in unparsed:
+              print(f"ruff could not parse: {u}")
           funcs = {}
           for d in found:
               m = re.search(r"\((\d+) > \d+\)", str(d.get("message", ""))) if isinstance(d, dict) else None
@@ -1877,23 +1883,36 @@ jobs:
               sys.exit(0)
           def count(n, what):
               return f"{n} {what}" + ("" if n == 1 else "s")
-          if not items:
+          if not items and not unparsed:
               say(f"pass: {STD} ({limits}), {count(len(names), 'Python file')} measured")
               sys.exit(0)
-          worst = "; ".join(f"{p}:{l} {w}" for _, p, l, w in items[:3])
-          say(f"not yet confirmed: {STD}, {count(len(items) - nfiles, 'function')} and "
-              f"{count(nfiles, 'file')} are above them, "
-              f"largest first: {worst}; a clean-up that brings them under confirms it")
+          verdicts, warns = [], []
+          if unparsed:
+              listed = ", ".join(unparsed[:9]) + (f", and {len(unparsed) - 9} more in this step's log"
+                                                  if len(unparsed) > 9 else "")
+              verdicts.append(f"not yet confirmed: {STD}, ruff could not parse "
+                              f"{count(len(unparsed), 'Python file')}, so the functions in them were not "
+                              f"measured: {listed}; a run where they parse confirms it")
+              warns.append("::warning::" + verdicts[-1].replace("%", "%25"))
+          if items:
+              worst = "; ".join(f"{p}:{l} {w}" for _, p, l, w in items[:3])
+              verdicts.append(f"not yet confirmed: {STD}, {count(len(items) - nfiles, 'function')} and "
+                              f"{count(nfiles, 'file')} are above them, "
+                              f"largest first: {worst}; a clean-up that brings them under confirms it")
+          say(*verdicts)
           def nxt(p):
               return (f"Next: ask Claude to run /improve-codebase-architecture on {p} to split it into "
                       "smaller parts, or /ponytail-audit to find what the whole project can delete; "
                       "/plinth:arsenal says how to install either if it is missing.")
           def prop(s):
               return s.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")
+          for _, p, l, w in items[:3 - len(warns)]:
+              msg = f"{p}:{l} {w}. {nxt(p)}".replace("%", "%25")
+              warns.append(f"::warning file={prop(p)},line={l},title=Code growth::{msg}")
           with open(ann, "w", encoding="utf-8") as f:
-              for _, p, l, w in items[:3]:
-                  msg = f"{p}:{l} {w}. {nxt(p)}".replace("%", "%25")
-                  f.write(f"::warning file={prop(p)},line={l},title=Code growth::{msg}\n")
+              f.writelines(w + "\n" for w in warns)
+          if not items:
+              sys.exit(0)
           with open(det, "w", encoding="utf-8") as f:
               f.write("\n### The largest code, against the conventions\n\n"
                       "| Where | What |\n| --- | --- |\n")

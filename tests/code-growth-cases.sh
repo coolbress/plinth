@@ -151,6 +151,18 @@ expect "in a working directory below the root, the warning names the file from t
   "file=proj/src/pkg/a.py,line=1"
 
 echo "ci / code-growth: when it could not measure"
+new_repo; complex tangled > "$p/src/pkg/a.py"; printf 'def broken(:\n    pass\n' >> "$p/src/pkg/a.py"; run
+expect "a file ruff cannot parse is not yet confirmed and named, never a pass, even with nothing measured above" 1 \
+  '^- not yet confirmed: code size within the conventions, ruff could not parse 1 Python file, so the functions in them were not measured: src/pkg/a.py; ' \
+  'ruff could not parse 1 Python file'
+new_repo; for f in one two three; do complex "$f"; done > "$p/src/pkg/a.py"; printf 'def broken(:\n' > "$p/src/pkg/b.py"; run
+if expect "an unparsed file and three functions above: still three warnings, the unparsed file first" 3 \
+  '^- not yet confirmed: code size within the conventions, ruff could not parse 1 Python file'; then
+  printf '%s\n' "$sum" | grep -qE '^- not yet confirmed: code size within the conventions, 3 functions and 0 files are above them' \
+    && ok "the summary carries both verdict lines" || bad "the summary lacks the line for the functions above" "$sum"
+  printf '%s\n' "$warns" | head -1 | grep -qF '::warning::not yet confirmed: code size within the conventions, ruff could not parse' \
+    && ok "the first warning is the unparsed file's" || bad "the first warning is not the unparsed file's" "$warns"
+fi
 new_repo; complex tangled > "$p/src/pkg/a.py"; run failure
 expect "a failed uv sync is one not yet confirmed warning, never a pass" 1 \
   '^- not yet confirmed: code size within the conventions, it did not run because an earlier step failed' 'not yet confirmed'
