@@ -1413,6 +1413,67 @@ if grep -q -- '-- 0 failed' <<<"$out" && grep -qF 'INFO  render.yaml not require
   ok "hosting: elsewhere with no hosting_elsewhere answer says that none is recorded"
 else bad "hosting: elsewhere with no hosting_elsewhere answer"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
 rm -rf "$web_hosted"
+# A cli or library publishes on a version tag through release.yml
+# (plinth-template 1.29.0, #703). Each finding is a WARN: an instance rendered
+# before the file existed still has 0 failed. GitLab renders none.
+pkg="$work/pkg"; rm -rf "$pkg"; cp -R "$web.empty" "$pkg"
+release_out() { git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network 2>&1; }
+rel=.github/workflows/release.yml
+out="$(release_out)"
+if grep -qF "WARN  $rel missing: a version tag does not publish this package to PyPI" <<<"$out" \
+   && grep -qF 'INFO    plinth-template 1.29.0 adds it, with its steps in docs/how-to/publish-a-release.md' <<<"$out" \
+   && grep -q -- '-- 0 failed' <<<"$out"; then ok "a cli instance without release.yml: a WARN with its fix, 0 failed"
+else bad "a cli instance without release.yml"; printf '%s\n' "$out" | grep -E 'FAIL|release' | sed 's/^/        /'; fi
+printf '# on: pull_request in a comment is not a trigger\nname: Release\non:\n  push:\n    tags: ["v*"]  # a version tag\npermissions: {}\njobs:\n  publish:\n    environment: pypi\n    permissions:\n      id-token: write\n    steps:\n      - uses: pypa/gh-action-pypi-publish@%040d\n      - run: gh release create "$GITHUB_REF_NAME"\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n' 0 > "$pkg/$rel"
+for a in cli library; do
+  sed -i.bak "s/^archetype: .*/archetype: $a/" "$pkg/.copier-answers.yml"; rm "$pkg/.copier-answers.yml.bak"
+  out="$(release_out)"
+  if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" \
+     && grep -qF "PASS  $rel reads no stored secret" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "$a: the template's shape of release.yml passes its three items"
+  else bad "$a: the template's shape of release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+done
+cp "$pkg/$rel" "$pkg/release.good"
+for case in "pull_request|  pull_request:" "branches|    branches: [main]" "workflow_dispatch|  workflow_dispatch:" \
+            "a quoted branches|    \"branches\": [main]" "a quoted workflow_dispatch|  \"workflow_dispatch\":"; do
+  what="${case%%|*}"; line="${case#*|}"
+  awk -v add="$line" '{print} /^    tags:/ {print add}' "$pkg/release.good" > "$pkg/$rel"
+  out="$(release_out)"
+  if grep -qF "WARN  $rel is not read as tag-only (first line not read: ${line#"${line%%[! ]*}"})" <<<"$out" \
+     && ! grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "release.yml started by $what as well as a tag: a WARN naming the line"
+  else bad "release.yml started by $what was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+done
+sed 's/^      - run: gh release create.*/      - uses: pypa\/gh-action-pypi-publish@0000000000000000000000000000000000000000\n        with:\n          password: ${{ secrets.PYPI_API_TOKEN }}/' "$pkg/release.good" > "$pkg/$rel"
+out="$(release_out)"
+if grep -qF "WARN  $rel reads a stored secret (password:, secrets.PYPI_API_TOKEN)" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "release.yml with a stored PyPI token: a WARN naming it"
+else bad "release.yml with a stored PyPI token was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+# --project: the project one directory down, the workflow at the root,
+# where GitHub reads it (#720 review).
+cp "$pkg/release.good" "$pkg/$rel"
+sub_pkg="$work/pkg-sub"; rm -rf "$sub_pkg"; mkdir -p "$sub_pkg/app"; cp -R "$pkg/.github" "$sub_pkg/"
+for f in pyproject.toml uv.lock .copier-answers.yml src; do cp -R "$pkg/$f" "$sub_pkg/app/"; done
+git -C "$sub_pkg" init -q; git -C "$sub_pkg" add -A
+out="$(python3 "$checker" --root "$sub_pkg" --project app --no-network 2>&1)"
+if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then
+  ok "--project app: release.yml read at the repository root"
+else bad "--project app: release.yml not read at the root"; printf '%s\n' "$out" | grep -E 'release|FAIL' | sed 's/^/        /'; fi
+rm -rf "$sub_pkg"
+# --host wins over the answers, as for every other host-dependent item (#720 review).
+out="$(git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network --host gitlab 2>&1)"
+if grep -qF "INFO  $rel not required: on GitLab" <<<"$out" && ! grep -q "PASS  $rel" <<<"$out"; then ok "--host gitlab over a GitHub answer: release.yml not asked"
+else bad "--host gitlab did not reach the release item"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+rm "$pkg/$rel"; printf 'host: gitlab\n' >> "$pkg/.copier-answers.yml"
+out="$(release_out)"
+if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab library is not asked for release.yml"
+else bad "a GitLab library was asked for release.yml"; fi
+cp "$pkg/release.good" "$pkg/$rel"
+out="$(git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network --host github 2>&1)"
+if grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && ! grep -q "not required: on GitLab" <<<"$out"; then ok "--host github over a GitLab answer: release.yml read"
+else bad "--host github did not reach the release item"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+rm "$pkg/$rel"
+out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
+if ! grep -q "release.yml" <<<"$out"; then ok "a backend instance is not asked for release.yml"
+else bad "a backend instance was asked for release.yml"; fi
+rm -rf "$pkg"
 web_rules="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web | jq -c '[.rules[] | . + {ruleset_source_type: "Repository", ruleset_id: 1}]')"
 for drop in "ci / migrations" "ci / deploy-check"; do
   jq -c --arg d "$drop" 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != $d)) else . end)' <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"
