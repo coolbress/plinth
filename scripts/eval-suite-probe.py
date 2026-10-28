@@ -144,7 +144,7 @@ def check_lines(evs: list[dict[str, Any]]) -> dict[str, tuple[int, str]]:
     for b in blocks(evs, "user"):
         if b.get("type") != "tool_result":
             continue
-        for m in re.finditer(r"^PROBE (\S+) exit=(\d+) last=(.*)$", text_of(b), re.M):
+        for m in re.finditer(r"^PROBE (\S+) exit=(\d+) last=(.*)$", text_of(b), re.MULTILINE):
             found.setdefault(m.group(1), (int(m.group(2)), m.group(3).strip()))
     return found
 
