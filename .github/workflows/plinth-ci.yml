@@ -168,6 +168,9 @@ jobs:
       - name: pr-review posts the summons only as the owner, with a token, and only when no accepted reviewer has been active
         run: ./tests/pr-review-summon.sh
 
+      - name: pr-review tells a reviewer that acknowledged and never finished from one that never came, and fails both
+        run: ./tests/pr-review-stalled.sh
+
       - name: The reviewer's instructions cannot be softened inside a reviewed pull request
         run: ./tests/pr-review-policy-pin.sh
 

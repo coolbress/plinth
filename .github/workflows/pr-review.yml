@@ -478,6 +478,26 @@ jobs:
           # The review round, as on a pass (#456); it never changes this red.
           python3 "$PR_REVIEW/attest.py" --round "$HEAD_SHA" "$LOGINS" \
             "$RUNNER_TEMP/reviews.json" "$RUNNER_TEMP/rcomments.json" "$RUNNER_TEMP/icomments.json" "$RUNNER_TEMP/activity.json" || true
+          # Acknowledged, not finished (#719): the reviewer put its eyes on the
+          # request, or its summary says it is running on this commit, and no
+          # review came. Measured on #712, #717 and plinth-template#136: eyes
+          # within seconds, then nothing for the whole wait. Its reactions are
+          # read once, here: on the pull request and on each request for this
+          # head. A call that fails leaves what was read; the summary alone
+          # can still tell. Either way the check stays red.
+          { gh api "repos/$REPO/issues/$NUMBER/reactions" --paginate --jq '.[]' 2>/dev/null || true
+            python3 "$PR_REVIEW/attest.py" --requests "$HEAD_SHA" "$LOGINS" \
+              "$RUNNER_TEMP/reviews.json" "$RUNNER_TEMP/rcomments.json" "$RUNNER_TEMP/icomments.json" "$RUNNER_TEMP/activity.json" \
+              | while read -r id; do
+                  case "$id" in ''|*[!0-9]*) continue ;; esac
+                  gh api "repos/$REPO/issues/comments/$id/reactions" --paginate --jq ".[] + {comment_id: $id}" 2>/dev/null || true
+                done
+          } | jq -s . > "$RUNNER_TEMP/reactions.json" 2>/dev/null || echo 'null' > "$RUNNER_TEMP/reactions.json"
+          if python3 "$PR_REVIEW/attest.py" --stalled "$HEAD_SHA" "$LOGINS" \
+               "$RUNNER_TEMP/reviews.json" "$RUNNER_TEMP/rcomments.json" "$RUNNER_TEMP/icomments.json" "$RUNNER_TEMP/activity.json" \
+               "$RUNNER_TEMP/reactions.json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; then
+            exit 1
+          fi
           echo "::error::no third-party review is attached to this commit ($HEAD_SHA)."
           echo "  - is the reviewer's automatic review on for this repository? https://chatgpt.com/codex/settings/code-review"
           # A usage-limit notice the reviewer posted after this push is the
