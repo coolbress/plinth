@@ -1433,17 +1433,30 @@ for a in cli library; do
   else bad "$a: the template's shape of release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 done
 cp "$pkg/$rel" "$pkg/release.good"
-for case in "pull_request|  pull_request:" "branches|    branches: [main]" "workflow_dispatch|  workflow_dispatch:"; do
+for case in "pull_request|  pull_request:" "branches|    branches: [main]" "workflow_dispatch|  workflow_dispatch:" \
+            "a quoted branches|    \"branches\": [main]" "a quoted workflow_dispatch|  \"workflow_dispatch\":"; do
   what="${case%%|*}"; line="${case#*|}"
   awk -v add="$line" '{print} /^    tags:/ {print add}' "$pkg/release.good" > "$pkg/$rel"
   out="$(release_out)"
-  if grep -qF "WARN  $rel runs on more than a pushed tag" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "release.yml started by $what as well as a tag: a WARN"
+  if grep -qF "WARN  $rel is not read as tag-only (first line not read: ${line#"${line%%[! ]*}"})" <<<"$out" \
+     && ! grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "release.yml started by $what as well as a tag: a WARN naming the line"
   else bad "release.yml started by $what was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 done
 sed 's/^      - run: gh release create.*/      - uses: pypa\/gh-action-pypi-publish@0000000000000000000000000000000000000000\n        with:\n          password: ${{ secrets.PYPI_API_TOKEN }}/' "$pkg/release.good" > "$pkg/$rel"
 out="$(release_out)"
 if grep -qF "WARN  $rel reads a stored secret (password:, secrets.PYPI_API_TOKEN)" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "release.yml with a stored PyPI token: a WARN naming it"
 else bad "release.yml with a stored PyPI token was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+# --project: the project one directory down, the workflow at the root,
+# where GitHub reads it (#720 review).
+cp "$pkg/release.good" "$pkg/$rel"
+sub_pkg="$work/pkg-sub"; rm -rf "$sub_pkg"; mkdir -p "$sub_pkg/app"; cp -R "$pkg/.github" "$sub_pkg/"
+for f in pyproject.toml uv.lock .copier-answers.yml src; do cp -R "$pkg/$f" "$sub_pkg/app/"; done
+git -C "$sub_pkg" init -q; git -C "$sub_pkg" add -A
+out="$(python3 "$checker" --root "$sub_pkg" --project app --no-network 2>&1)"
+if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then
+  ok "--project app: release.yml read at the repository root"
+else bad "--project app: release.yml not read at the root"; printf '%s\n' "$out" | grep -E 'release|FAIL' | sed 's/^/        /'; fi
+rm -rf "$sub_pkg"
 rm "$pkg/$rel"; printf 'host: gitlab\n' >> "$pkg/.copier-answers.yml"
 out="$(release_out)"
 if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab library is not asked for release.yml"

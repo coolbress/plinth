@@ -1603,7 +1603,9 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
     if archetype not in CONDITIONAL_ARCHETYPES:
         result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
         if archetype in PACKAGE_ARCHETYPES:
-            check_release_workflow(project, answers.get("host"))
+            # A repository-level file: GitHub reads workflows at the root, not
+            # under --project (#720 review).
+            check_release_workflow(root, answers.get("host"))
         return
     on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
     result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
@@ -1617,7 +1619,7 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
         check_hosted_elsewhere(answers.get("hosting_elsewhere"))
 
 
-def check_release_workflow(project: Path, host: str | None) -> None:
+def check_release_workflow(root: Path, host: str | None) -> None:
     """A `cli` or `library` publishes to PyPI on a version tag through the
     template's release.yml (plinth-template 1.29.0, #703). Read as text,
     standard library only: present, started by a tag and nothing else, and
@@ -1627,7 +1629,7 @@ def check_release_workflow(project: Path, host: str | None) -> None:
     if host == "gitlab":
         result("INFO", f"{RELEASE_WORKFLOW} not required: on GitLab the template renders no release workflow")
         return
-    p = project / RELEASE_WORKFLOW
+    p = root / RELEASE_WORKFLOW
     if not p.is_file():
         result("WARN", f"{RELEASE_WORKFLOW} missing: a version tag does not publish this package to PyPI")
         result("INFO", "  plinth-template 1.29.0 adds it, with its steps in docs/how-to/publish-a-release.md: "
@@ -1639,13 +1641,19 @@ def check_release_workflow(project: Path, host: str | None) -> None:
     text = "\n".join(line.split(" #", 1)[0] for line in read(p).splitlines() if not line.lstrip().startswith("#"))
     m = re.search(r"^on:[ \t]*\n(.*?)(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
     on = m.group(1) if m else ""
-    events = re.findall(r"^  ([A-Za-z_]+):", on, re.MULTILINE)
-    filters = re.findall(r"^    ([A-Za-z_-]+):", on, re.MULTILINE)
-    if events == ["push"] and filters == ["tags"]:
+    # Every line of the block is read, or none is counted: `push:`, its
+    # `tags:` and the tag patterns, nothing else. A quoted key, another event
+    # or a filter beside `tags:` is not certified as tag-only (#720 review).
+    lines = [line.rstrip() for line in on.splitlines() if line.strip()]
+    tag_only = (len(lines) >= 2 and lines[0] == "  push:" and lines[1].startswith("    tags:")
+                and all(line.startswith("      - ") for line in lines[2:]))
+    if tag_only:
         result("PASS", f"{RELEASE_WORKFLOW} runs on a pushed tag only")
     else:
-        seen = ", ".join(events) if events else "an on: block this checker does not read"
-        result("WARN", f"{RELEASE_WORKFLOW} runs on more than a pushed tag ({seen}): "
+        unread = next((line.strip() for line in lines if not re.fullmatch(r"  push:|    tags:.*|      - .*", line)),
+                      None) if lines else "no on: block this checker reads"
+        seen = unread or "push: without tags:"
+        result("WARN", f"{RELEASE_WORKFLOW} is not read as tag-only (first line not read: {seen}): "
                        "a branch push or a pull request could publish")
     # secrets.GITHUB_TOKEN is the run's own token, made for the run and not stored.
     stored = [x for x in re.findall(r"secrets\.\w+|^\s*password:", text, re.MULTILINE) if x != "secrets.GITHUB_TOKEN"]
