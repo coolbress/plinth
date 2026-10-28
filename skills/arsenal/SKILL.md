@@ -20,20 +20,24 @@ Point them to it when they ask what to type next.
 | A repository plinth did not make (step 1) | List what is missing; nothing is changed | `/plinth:floor-check` |
 | First pull request merged (step 1) | Before step 2: a token that cannot change the checks, the agent's own account, four things by hand | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`, `give-the-agent-its-own-account.md` and `set-four-things-by-hand.md` there; candidate `wizard` (listed, no evidence yet) |
 | An idea in your own words (step 2) | An interview, then an issue saying what "done" means | `/grilling`, with `domain-modeling` for `CONTEXT.md`; `/grill-with-docs` (listed) |
-| A job bigger than one session (step 3) | A plan in one issue, cut into tickets | Ask for it; `/to-spec`, `/to-tickets`, or `/wayfinder` when the way is unclear (listed) |
+| A job bigger than one session (step 3) | A plan in one issue, cut into tickets | Ask for it; `/to-spec`, `/to-tickets`, or `/wayfinder` when the way is unclear |
 | A ticket ready (step 4) | A fresh session, test first, one ticket | `/clear`, then `/implement #N`; a page: `/design-taste-frontend`; dense product UI: `/design` |
 | A pull request with checks running (step 5) | Wait for green, then the three questions, and see it run | The required checks; `/run`; the reviewer's comments |
 | Green, and seen working (step 6) | The person says "merge", for that pull request | The decision report; `/plinth:floor-check` says whether the merge is guidance or a boundary |
 | Something broke (step 7) | Reproduce, a failing test, then the fix | `diagnosing-bugs` ("diagnose this"); `/triage` for issues someone else opened |
-| Stopping, or coming back (step 8) | Put what is left in issues and pull requests; ask "where is this, what's next?" | The record; `/handoff` (listed) |
-| Between pieces of work (step 9) | Dependency updates on green; the template update after a plinth release | Dependabot; `/plinth:floor-check`, then `/plinth:template-update`, typed; `/ponytail-audit`, `/improve-codebase-architecture` (listed) |
+| Stopping, or coming back (step 8) | Put what is left in issues and pull requests; ask "where is this, what's next?" | The record; `/handoff` to move work to another tool or person |
+| Between pieces of work (step 9) | Dependency updates on green; the template update after a plinth release | Dependabot; `/plinth:floor-check`, then `/plinth:template-update`, typed; `/improve-codebase-architecture`; `/ponytail-audit` (listed) |
 | A `web` project to put online (after step 1) | Choose where it runs: Render, built and checked by plinth, or a listed place whose steps and risks become the person's | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md` |
 | Correcting the agent the same way again (any step) | A line in `AGENTS.md`, then a reviewer rule, then a test that fails on the old mistake | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/turn-a-correction-into-a-rule.md` |
 | Unsure which skill now (any step) | Say where you are | `/ask-matt` (listed), or this catalog |
 
 A tool marked listed is not installed; "Listed, not installed" below says
-how to add it. "By step and concern" is the reference behind this table, and
-"How a tool gets on this list" says why each tool is here.
+how to add it. Of the default set, `/improve-codebase-architecture` is the
+hardest for a beginner: it uses engineer vocabulary, runs a design interview
+and writes an HTML report. `/handoff` writes a temporary file whose path the
+next session needs, so the issue and the pull request stay the first record.
+"By step and concern" is the reference behind this table, and "How a tool
+gets on this list" says why each tool is here.
 
 When and how to report to the person is the rendered repository's output
 style, "Beginner or non-engineer", not this catalog.
@@ -55,21 +59,28 @@ line arrived as text, and this catalog being open shows plinth is installed.
 
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
-| `mattpocock-skills` | Eight skills: `/implement` (calls `tdd`, `code-review`), `/triage`, `grilling`, `domain-modeling`, `codebase-design`, `diagnosing-bugs` | Any change bigger than a typo: `/grilling` to shape it, `/implement #N` to build it | ~0.49k tokens always on (6 skills listed; `/implement` and `/triage` are user-only) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
+| `mattpocock-skills` | Thirteen skills: `/implement` (calls `tdd`, `code-review`), `/triage`, `grilling`, `domain-modeling`, `codebase-design`, `diagnosing-bugs`; for planning `/to-spec`, `/to-tickets`, `/wayfinder`; for clean-up `/improve-codebase-architecture`; and `/handoff` | Any change bigger than a typo: `/grilling` to shape it, `/implement #N` to build it; a job bigger than one session: `/to-spec`, then `/to-tickets` | ~0.49k tokens always on (6 skills listed; `/implement`, `/triage` and the five added by #704 are user-only) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
 | `taste-skill` | One skill, `design-taste-frontend`: frontend design that does not look templated, for landing pages, portfolios and redesigns, with its own redesign mode and pre-flight check. Dashboards and dense product UI go to `/design` first | A page a person will look at, server-rendered HTML included: say so in the ticket or the prompt, or type `/design-taste-frontend`; on a repository rendered from the template the agent did not reach for it on its own (one run, #469). Dashboards and dense product UI: `/design` first | ~0.1k tokens always on (1 skill), ~34k when it fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
 
 "Always on" is each plugin's share of the skill listing, as `/context`
 reports it with a 1M-context model (#255, again for #354, #468, #469 on an
 installed default set, #477 with each plugin loaded as the catalog narrows
-it, #593 on an installed default set after `claude plugin update`, and #598
-after `claude plugin update` and `claude plugin prune`). With
+it, #593 on an installed default set after `claude plugin update`, #598
+after `claude plugin update` and `claude plugin prune`, and #704 before and
+after the five user-only skills joined, which left it unchanged). With
 plinth's own two listed skills (~0.23k) the set comes to ~0.82k; it was
 ~0.97k before #598 listed `ponytail-skills` and ~1.28k before #593 listed
 twelve `mattpocock-skills` skills. Claude Code caps the listing, built-in skills
 included, at 1% of the context window. At 1M that leaves room for all of it.
 At 200k the cap is ~2k, and on Haiku 4.5, the 200k model measured for #469
 and #477, 9 of the 14 descriptions the default set had then were cut to under 20 tokens, about
-the skill's name, because the built-in skills share the same cap.
+the skill's name, because the built-in skills share the same cap. For #704
+two were still cut (`code-review`, `design-taste-frontend`), six with
+`mattpocock-skills-extra` installed. Setting `skillListingBudgetFraction` to
+0.015 in a repository's `.claude/settings.json` left none cut, for ~0.2k more
+tokens always on at 200k (~0.4k with the extra plugin) and none at 1M;
+plinth-template sets it from the release after v1.28.0
+(coolbress/plinth-template#138).
 
 `code-review` is the one installed skill that shares its name with a Claude
 Code built-in: `/code-review` there reviews the diff for bugs at a chosen
@@ -89,17 +100,17 @@ Carbon, Atlassian, Polaris).
 
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
-| `mattpocock-skills-extra` | The twelve other Matt Pocock skills plinth carries: `/ask-matt`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/wayfinder`, `/improve-codebase-architecture`, `/handoff`, `/wait-what` (these eight user-only), and `prototype`, `research`, `resolving-merge-conflicts`, `wizard` | When you want one of them; `/ask-matt` routes to the rest of the set, so it is listed with them (#593) | ~0.32k tokens always on (4 skills listed), no hooks; same pin as `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
-| `ponytail-skills` | One skill, `/ponytail-audit`: a ranked list of what to delete or replace with the standard library, repository-wide, biggest cut first; applies nothing | Every week or two, or after a burst of work, if you install it | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
+| `mattpocock-skills-extra` | The seven other Matt Pocock skills plinth carries: `/ask-matt`, `/grill-with-docs`, `/wait-what` (these three user-only), and `prototype`, `research`, `resolving-merge-conflicts`, `wizard` | When you want one of them; `/ask-matt` routes to the rest of the set, so it is listed with them (#593) | ~0.32k tokens always on (4 skills listed), no hooks; same pin as `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
+| `ponytail-skills` | One skill, `/ponytail-audit`, pre-v5 (pin `2ed6c52`): a ranked list of over-engineering to delete, simplify or replace with the standard library or the platform, repository-wide, biggest cut first; bugs, security and performance are out of its scope; applies nothing. Held on purpose: ponytail v5 rewrote it into a full quality audit (bugs, security, scale, missing tests, lean), which repeats the review step (#711, #715) | Every week or two, or after a burst of work, if you install it | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions, when you want that research. Not for deciding; verify with `/research` | ~90 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail` | The full ponytail plugin with its hooks: the least-code mode every turn, its review, and the audit too | Only if you want the mode enforced every turn | 3 hooks, ~1k tokens | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `impeccable` | A design with a point of view; writes a product record (`PRODUCT.md`) and a design record (`DESIGN.md`) | A page that should be remembered, when you will answer its questions: five of them and 43 minutes on the page where `taste-skill` asked none and took five (one measurement, 2026-09-12) | Hooks, agents and skills written into the repository (`.claude/`, `.github/`); no plinth pin | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) |
 
 `mattpocock-skills-extra` installs with
-`claude plugin install mattpocock-skills-extra@plinth` and adds its twelve
-beside the default set's eight, none twice (measured for #593); start a new
-session after it. `ponytail-skills` installs with
-`claude plugin install ponytail-skills@plinth`; an install from before #598
+`claude plugin install mattpocock-skills-extra@plinth` and adds its seven
+beside the default set's thirteen, none twice (measured for #593, and again
+for #704 after the five moved); start a new session after it.
+`ponytail-skills` installs with `claude plugin install ponytail-skills@plinth`; an install from before #598
 keeps it until `claude plugin prune`. `last30days` installs with
 `claude plugin install last30days@plinth` and `ponytail` with
 `claude plugin install ponytail@plinth`; nothing in the default set runs a
@@ -111,8 +122,8 @@ on Claude Code 2.1.269.
 
 Every third-party entry is pinned to a commit in this repository's
 `.claude-plugin/marketplace.json`; the licenses are listed in `NOTICE`.
-`mattpocock-skills` installs 8 of the 25 skills upstream ships and
-`mattpocock-skills-extra` lists 12 more at the same commit (#520, #593). The
+`mattpocock-skills` installs 13 of the 25 skills upstream ships and
+`mattpocock-skills-extra` lists 7 more at the same commit (#520, #593, #704). The
 five in neither are `setup-matt-pocock-skills`, `grill-me`, `teach`,
 `to-questionnaire` and `writing-for-agents` (#475, #477).
 
@@ -154,7 +165,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 
 | Concern | Problem | Tool | Who | How to use it | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Flow | A job too big for one session | `/to-spec`, `/to-tickets`; `/wayfinder` when the way is unclear (all listed) | person | Ask for a plan issue cut into tickets, or type `/to-spec`, then `/to-tickets` on the spec | 0; no run needed it |
+| Flow | A job too big for one session | `/to-spec`, `/to-tickets`; `/wayfinder` when the way is unclear | person | Ask for a plan issue cut into tickets, or type `/to-spec`, then `/to-tickets` on the spec | 0; no run needed it |
 
 ### 4 Build
 
@@ -184,7 +195,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | 7 | Proof | A fix with no reproduction, or one that weakens a check | `diagnosing-bugs` | agent | Say "diagnose this" with the report | 0; reproduce-first via text (U1, U2, RC1) |
 | 7 | Flow | Issues other people open | `/triage` | person | Type it on the new issues | 0; no outside issue arrived |
 | 8 | Memory | State lost with the chat or the machine | The record; ask "where is this, what's next" | text | Ask it in a new session | met 4 of 4 (U1, U2, RC1, #403) |
-| 8 | Memory | Work moving to another tool or person | `/handoff` (listed) | person | Type it before you stop | 0; none moved |
+| 8 | Memory | Work moving to another tool or person | `/handoff`; it writes a temporary file whose path the next session needs, so the issue and pull request stay the first record | person | Type it before you stop | 0; none moved |
 
 ### 9 Healthy, and any step
 
@@ -193,7 +204,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | 9 | Safety | Vulnerable or stale dependencies | Dependabot and the checks | automatic | Merge its pull requests on green | U2, RC1 |
 | 9 | Stewardship | Drift behind the template | `/plinth:floor-check`, `/plinth:template-update` | person | `floor-check` reports it; type `/plinth:template-update` to apply | 0; no project crossed a release |
 | 9 | Stewardship | Code that grew more than it needs | `/ponytail-audit` (listed) | person | Type it every week or two | 0 |
-| 9 | Health | Shallow modules, hard-to-test seams | `/improve-codebase-architecture` (listed; uses `codebase-design`) | person | Type it after a burst of work | 0 |
+| 9 | Health | Shallow modules, hard-to-test seams | `/improve-codebase-architecture` (uses `codebase-design`); the hardest for a beginner: engineer vocabulary, a design interview, an HTML report | person | Type it after a burst of work | 0 |
 | Any | Flow | Which skill now | `/ask-matt` (listed: it routes to listed skills, #593) | person | Type it with where you are | 0 |
 | Any | Use | An answer that did not land | `/wait-what` (listed) | person | Type it after the answer | 0 |
 | Any | Use | Which tool for a concern | `/plinth:arsenal` | agent or person | Ask, or type it | 3 agent, 2 typed |
@@ -259,7 +270,9 @@ Named exceptions:
   hooks; Impeccable is outside plinth's marketplace; `mattpocock-skills-extra`
   runs none; #520 moved its skills here on these four criteria and their
   measured cost, since no run compared a set with them and one without, and
-  `/ask-matt` routes to them (#593);
+  `/ask-matt` routes to them (#593); #702 moved five of them back into the
+  default set (#704), user-only skills for planning, clean-up and handoff
+  that cost nothing in the listing;
   `ponytail-skills` runs none, but `/ponytail-audit` had no call in any
   recorded run (#520), and #594 measured that dropping the dependency while
   the entry stays leaves an installed plinth working.
