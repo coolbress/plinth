@@ -130,12 +130,12 @@ expect() {  # expect <plugin> <needle>...
 }
 expect plinth@plinth "Skills (4)" "arsenal" "floor-check" "new-project" "template-update" "Hooks (0)"
 expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
-# 8 of the 25 skills upstream ships (#520, #593): 12 more are listed in
+# 13 of the 25 skills upstream ships (#520, #593, #704): 7 more are listed in
 # mattpocock-skills-extra, and five are in neither (#475, #477).
+five=(to-spec to-tickets wayfinder improve-codebase-architecture handoff)
 leaving=(grill-me setup-matt-pocock-skills teach to-questionnaire writing-for-agents
-  ask-matt grill-with-docs to-spec to-tickets wayfinder improve-codebase-architecture
-  prototype research resolving-merge-conflicts wizard handoff wait-what)
-expect mattpocock-skills@plinth "Skills (8)" "implement" "tdd" "code-review" "triage" "grilling" "Hooks (0)"
+  ask-matt grill-with-docs prototype research resolving-merge-conflicts wizard wait-what)
+expect mattpocock-skills@plinth "Skills (13)" "implement" "tdd" "code-review" "triage" "grilling" "${five[@]}" "Hooks (0)"
 not_expect() {  # not_expect <plugin> <skill>...: none on the details' Skills line
   local out p
   out="$(claude plugin details "$1" | grep -E '^ *Skills \(')"
@@ -150,6 +150,14 @@ not_expect mattpocock-skills@plinth "${leaving[@]}"
 # installed plugin, so a hook that inventory does not list is not seen here.
 for dep in "${deps[@]}"; do expect "$dep" "Hooks (0)"; done
 
+[ "${fresh:-no}" = yes ] || { echo "  INFO  extra plugin and upgrade path not checked: a kept configuration"; exit 0; }
+# On the clean install too, the seven still listed arrive beside the thirteen,
+# and the five #704 moved are not under both names.
+echo "+ claude plugin install mattpocock-skills-extra@plinth -y"; claude plugin install mattpocock-skills-extra@plinth -y
+expect mattpocock-skills-extra@plinth "Skills (7)" "ask-matt" "grill-with-docs" "prototype" "research" "resolving-merge-conflicts" "wizard" "wait-what" "Hooks (0)"
+not_expect mattpocock-skills-extra@plinth "${five[@]}"
+expect mattpocock-skills@plinth "Skills (13)" "${five[@]}"
+
 # The upgrade path, from the latest release to this checkout, in a second
 # configuration this run creates (so a kept CLAUDE_CONFIG_DIR skips it): install
 # the release, move the marketplace to this checkout, `claude plugin update
@@ -159,7 +167,6 @@ for dep in "${deps[@]}"; do expect "$dep" "Hooks (0)"; done
 # The marketplace is a directory, read in place: the release is a shallow clone
 # of its tag, then replaced by this checkout's files, its version raised so that
 # `update` sees a newer one (a pull request carries the released version).
-[ "${fresh:-no}" = yes ] || { echo "  INFO  upgrade path not checked: a kept configuration"; exit 0; }
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
 # The docs name them in this order; the other order leaves no mattpocock-skills
 # skill until `install` runs.
@@ -183,6 +190,9 @@ rm -rf "$up/mkt/.git"
   fi
   claude plugin marketplace add "$up/mkt" >/dev/null
   claude plugin install plinth@plinth -y >/dev/null
+  # With the release's mattpocock-skills-extra installed too: the case where a
+  # skill moved between the two entries (#704) could end up under both names.
+  claude plugin install mattpocock-skills-extra@plinth -y >/dev/null
   rm -rf "$up/mkt" && mkdir "$up/mkt"
   (cd "$root" && git ls-files -z -co --exclude-standard | tar --null -T - -cf -) | tar -xf - -C "$up/mkt"
   for m in plugin.json marketplace.json; do
@@ -196,13 +206,15 @@ for p in json.load(sys.stdin):
   for c in "${upgrade_cmds[@]}"; do echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
   # check_list holds no ponytail-skills here: the release installed it as a
   # dependency, and `prune` removed it once plinth no longer names it (#598).
+  # mattpocock-skills-extra was installed by hand, so `prune` keeps it.
+  deps+=(mattpocock-skills-extra@plinth)
   check_list yes
-  expect mattpocock-skills@plinth "Skills (8)" "Hooks (0)"
+  expect mattpocock-skills@plinth "Skills (13)" "${five[@]}" "Hooks (0)"
   not_expect mattpocock-skills@plinth "${leaving[@]}"
-  # The twelve #520 listed come back with one command, beside the eight (#593).
-  echo "+ claude plugin install mattpocock-skills-extra@plinth -y"; claude plugin install mattpocock-skills-extra@plinth -y
-  expect mattpocock-skills-extra@plinth "Skills (12)" "ask-matt" "grill-with-docs" "wayfinder" "wizard" "Hooks (0)"
-  expect mattpocock-skills@plinth "Skills (8)"
+  # The seven still listed stay beside the thirteen (#593), and the five #704
+  # moved are not under both names.
+  expect mattpocock-skills-extra@plinth "Skills (7)" "ask-matt" "grill-with-docs" "prototype" "research" "resolving-merge-conflicts" "wizard" "wait-what" "Hooks (0)"
+  not_expect mattpocock-skills-extra@plinth "${five[@]}"
   # /ponytail-audit comes back the same way, from the entry the marketplace keeps (#598).
   echo "+ claude plugin install ponytail-skills@plinth -y"; claude plugin install ponytail-skills@plinth -y
   expect ponytail-skills@plinth "Skills (1)" "ponytail-audit" "Hooks (0)"

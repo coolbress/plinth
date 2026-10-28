@@ -80,7 +80,7 @@ check(taste.get("strict") is False and taste.get("skills") == ["./taste-skill"],
 check(taste["source"]["source"] == "git-subdir" and taste["source"]["path"] == "skills", "taste-skill mounts skills/ only, below the upstream plugin.json")
 check("design-taste-frontend" in taste["description"] and "Thirteen" not in taste["description"], "taste-skill description names the one skill, not thirteen")
 
-# 8 of mattpocock/skills' 25 by default (#520); 12 more are listed in
+# 13 of mattpocock/skills' 25 by default (#520, #704); 7 more are listed in
 # mattpocock-skills-extra and five are in neither (#475). Moved from
 # claude-plugins-official under the same name and pinned here (#477): an
 # installed copy then needs `claude plugin install plinth@plinth` and
@@ -88,13 +88,14 @@ check("design-taste-frontend" in taste["description"] and "Thirteen" not in tast
 matt = entries["mattpocock-skills"]
 extra = entries["mattpocock-skills-extra"]
 leaving = {"setup-matt-pocock-skills", "grill-me", "teach", "to-questionnaire", "writing-for-agents"}
-kept = {"implement", "tdd", "code-review", "codebase-design", "triage", "grilling", "domain-modeling", "diagnosing-bugs"}
+kept = {"implement", "tdd", "code-review", "codebase-design", "triage", "grilling", "domain-modeling", "diagnosing-bugs",
+        "to-spec", "to-tickets", "wayfinder", "improve-codebase-architecture", "handoff"}
 matt_skills = [s.rsplit("/", 1)[1] for s in matt.get("skills", [])]
 extra_skills = [s.rsplit("/", 1)[1] for s in extra.get("skills", [])]
-check(matt.get("strict") is False and set(matt_skills) == kept and len(matt_skills) == 8,
-      f"mattpocock-skills: strict false, exactly the eight #520 kept: {sorted(matt_skills)}")
-check(extra.get("strict") is False and len(extra_skills) == 12 and not (set(extra_skills) & (kept | leaving)),
-      f"mattpocock-skills-extra: strict false, 12 skills, none installed by default or left out: {sorted(extra_skills)}")
+check(matt.get("strict") is False and set(matt_skills) == kept and len(matt_skills) == 13,
+      f"mattpocock-skills: strict false, exactly the eight #520 kept and the five #704 added: {sorted(matt_skills)}")
+check(extra.get("strict") is False and len(extra_skills) == 7 and not (set(extra_skills) & (kept | leaving)),
+      f"mattpocock-skills-extra: strict false, 7 skills, none installed by default or left out: {sorted(extra_skills)}")
 # One pin for both entries: a pull request that raises one raises the other, so
 # the listed skills never come from a different upstream commit than the default ones.
 check(extra["source"] == matt["source"], "mattpocock-skills-extra has the same source as mattpocock-skills (git-subdir, url, path, sha)")

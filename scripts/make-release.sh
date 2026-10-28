@@ -29,6 +29,17 @@
 # left out, as the Release's text with the generated index under it;
 # .github/release.yml groups the index. Run 2 accepts the second argument and
 # does not read it.
+#
+# Run 1 also asks for the eval suite (#700) when the template tag the door pins
+# moved since the release before (that section's tested line) and the
+# template's diff between the two tags touches a file a new project's agent
+# reads: template/AGENTS.md.jinja, template/CLAUDE.md.jinja, anything under
+# template/.claude/ (settings, the output style, the default skills). The why
+# then carries one of two lines, which stay in the section and the Release:
+#   eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>
+#   eval suite not run: <the reason>
+# A release whose pin did not move, or whose move touches none of those
+# files, is not asked.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -173,6 +184,50 @@ fi
 grep -q '^## \[Unreleased\]$' "$changelog" || stop "CHANGELOG.md has no '## [Unreleased]' section to release from"
 grep -qE '^\[Unreleased\]: [^[:space:]]+/compare/[^[:space:]]+\.\.\.HEAD$' "$changelog" \
   || stop "CHANGELOG.md has no '[Unreleased]: <repository>/compare/<tag>...HEAD' link reference to move"
+# The eval suite (#647, #700): when the pinned template moved since the release
+# before and the move changes a file a new project's agent reads, the why must
+# carry the suite's posted table or the reason it was not run. Asked from the
+# template's own diff, through gh; a diff that cannot be read asks, too.
+suite_line="$(grep -E '^eval suite( not run)?:' "$why_file" || true)"
+[ "$(grep -c . <<<"$suite_line")" -le 1 ] || stop "the why-file has more than one 'eval suite' line:" "$suite_line"
+prev_ref="$(python3 - "$changelog" "$current" "${template_repo##*/}" <<'PY'
+import re, sys
+text, ver, name = open(sys.argv[1]).read(), sys.argv[2], sys.argv[3]
+m = re.search(r"^## \[" + re.escape(ver) + r"\][^\n]*\n(.*?)(?=^## \[|^\[Unreleased\]: |\Z)", text, re.M | re.S)
+t = m and re.search(r"^tested with " + re.escape(name) + r" (\S+)$", m[1], re.M)
+print(t[1] if t else "")
+PY
+)"
+[ -n "$prev_ref" ] || stop "CHANGELOG.md's [$current] section has no 'tested with ${template_repo##*/} <tag>' line;" \
+  "  it names the template the release before was tested with, which run 1 compares the pin with"
+if [ "$prev_ref" != "$template_ref" ]; then
+  # Over 300 files the list is cut short (GitHub's limit); a cut list asks.
+  changed="$(gh api "repos/$template_repo/compare/$prev_ref...$template_ref" \
+               --jq '(.files | length), (.files[] | .filename, (.previous_filename // empty))' 2>&1)" \
+    || stop "cannot read what $template_repo changed from $prev_ref to $template_ref: $changed"
+  reads="$(tail -n +2 <<<"$changed" | grep -E '^template/(AGENTS\.md\.jinja|CLAUDE\.md\.jinja|\.claude/)' | sort -u || true)"
+  [ "$(head -1 <<<"$changed")" -lt 300 ] || reads="(over 300 files changed; GitHub lists no more)"
+  if [ -n "$reads" ]; then
+    case "$suite_line" in
+      "eval suite:"*)
+        # In angle brackets: a bare URL in the section fails markdownlint (MD034), and `ci / docs` with it.
+        [[ "$suite_line" =~ ^eval\ suite:\ \<https://github\.com/[^/[:space:]]+/[^/[:space:]]+/(issues|pull)/[0-9]+#issuecomment-[0-9]+\>$ ]] \
+          || stop "the why's 'eval suite:' line must be the link to the comment with the suite's table, alone, in angle brackets:" \
+                  "  eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>" "it says: $suite_line" ;;
+      "eval suite not run:"*)
+        [ -n "$(tr -cd '[:alpha:]' <<<"${suite_line#eval suite not run:}")" ] \
+          || stop "the why's 'eval suite not run:' line must give the reason" ;;
+      *)
+        stop "the template pin moved from $prev_ref to $template_ref, which changes what a new project's agent reads:" \
+             "$(sed 's/^/  /' <<<"$reads")" \
+             "run the eval suite (docs/how-to/run-the-eval-suite.md), post its table, and add to the why-file one line:" \
+             "  eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>" \
+             "or, if it is not run, the reason, which the release section then carries:" \
+             "  eval suite not run: <why>" ;;
+    esac
+    echo "template $prev_ref -> $template_ref changes what the agent reads; the why says: $suite_line"
+  fi
+fi
 # The branch first: a leftover release/vX.Y.Z from an abandoned attempt stops
 # here, before any file changes. On origin too: a local `switch -c` would
 # succeed and the push would fail non-fast-forward after the files changed.

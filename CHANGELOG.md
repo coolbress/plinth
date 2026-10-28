@@ -28,6 +28,36 @@ pull requests and have no tag.
   The limits are conventions, not validated numbers. It never fails and no
   ruleset requires it; it is not on GitLab yet.
 
+### Changed
+
+- The default set now installs five more Matt Pocock skills: `/to-spec`,
+  `/to-tickets` and `/wayfinder` for planning a job bigger than one session,
+  `/improve-codebase-architecture` for clean-up, and `/handoff` (#704, from
+  #702's Decision). `mattpocock-skills` widens to 13 skills and
+  `mattpocock-skills-extra` narrows to the other 7, at the same pin; no
+  skill is under both names. All five are user-only, so they add nothing to
+  the skill listing (measured with `/context` at 1M and 200k, before and
+  after). The arsenal and `run-a-project.md` call them default, and say that
+  `/improve-codebase-architecture` is the hardest for a beginner and that
+  `/handoff` writes a temporary file, so the issue and pull request stay the
+  first record. An existing install gets them with
+  `claude plugin update plinth@plinth`, then a new session; no `prune` is
+  needed, measured from v2.15.0 with and without `mattpocock-skills-extra`
+  installed. On a 200k model the 1% listing budget already cut two
+  descriptions before this change; plinth-template raises it to 1.5% in a
+  project's settings (coolbress/plinth-template#138), which reaches new
+  projects once plinth renders that release.
+
+- `scripts/make-release.sh` run 1 asks for the eval suite when it matters
+  (#700). If the template pin moved since the release before and the
+  template's changes between the two tags touch `template/AGENTS.md.jinja`,
+  `template/CLAUDE.md.jinja` or anything under `template/.claude/`, the why
+  needs an `eval suite: <link>` line naming the posted table or an
+  `eval suite not run: <reason>` line, and that line stays in the release's
+  section. Other releases are not asked. The step was a sentence in
+  `docs/how-to/cut-a-release.md`, and v2.13.0 to v2.15.0 shipped such
+  changes without a suite run.
+
 ## [2.15.0] - 2026-10-28
 
 New projects come from plinth-template v1.28.0. Their issue forms for a
