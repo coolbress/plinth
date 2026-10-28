@@ -8,7 +8,9 @@
 # writes the why into the version's CHANGELOG.md section; run 2 publishes that
 # section of the merged main and reads nothing else.
 # Everything else (tag format, both manifests moving together, main only, no
-# duplicate) is a wall around that property.
+# duplicate) is a wall around that property. One more input of run 1's why
+# (#700): when the template pin moved and the move touches what a new
+# project's agent reads, the eval suite's table or the reason it was not run.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,6 +28,12 @@ case "$*" in
   # The Release text arrives on stdin (`--notes-file -`); keep it to compare.
   "release create"*) case " $* " in *" --notes-file - "*) cat > "$GH_LOG.body" ;; esac
                      exit 0 ;;
+  # The template's diff between two tags, as the script's --jq prints it: the
+  # file count, then one name per line.
+  "api repos/"*"/compare/"*)
+    [ "${COMPARE_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$COMPARE_RC"; }
+    printf '%s\n' "${COMPARE_OUT:-0}"
+    exit 0 ;;
   # The e2e runs on one commit. GitHub filters on head_sha server-side; the
   # mock does the same, so a green run on another commit is simply not listed.
   "api -X GET repos/"*"/actions/workflows/e2e.yml/runs "*)
@@ -165,6 +173,60 @@ run "v$next" "$work/why.md";       check "a main ahead of origin/main is refused
 g reset -q --hard origin/main
 is "nothing changed" untouched
 
+echo "-- the eval suite, when the pinned template changed what the agent reads"
+# The pin moves to a tag the release before was not tested with; the mock
+# answers for the template's diff between the two.
+prev_ref="${template##* }"; moved_ref="v0.0.0-moved"; before_move="$(g rev-parse HEAD)"
+sed -i.bak -E "s/^template_ref=\"[^\"]+\"$/template_ref=\"$moved_ref\"/" "$repo/scripts/new-project.sh"; rm "$repo/scripts/new-project.sh.bak"
+g commit -q -am "chore: move the template pin"; g push -q origin main
+moved="${template% *} $moved_ref"
+suite_link="https://github.com/o/r/issues/647#issuecomment-123"
+printf 'A reason.\n\ntested with %s\n' "$moved" > "$work/moved.md"
+printf 'A reason.\n\ntested with %s\n\neval suite: <%s>\n' "$moved" "$suite_link" > "$work/moved-link.md"
+printf 'A reason.\n\ntested with %s\n\neval suite not run: only the README line changed in AGENTS.md.\n' "$moved" > "$work/moved-reason.md"
+printf 'A reason.\n\ntested with %s\n\neval suite: %s\n' "$moved" "$suite_link" > "$work/moved-bare-link.md"
+printf 'A reason.\n\ntested with %s\n\neval suite: <https://example.com/table>\n' "$moved" > "$work/moved-other-link.md"
+printf 'A reason.\n\ntested with %s\n\neval suite not run:  \n' "$moved" > "$work/moved-no-reason.md"
+printf 'A reason.\n\ntested with %s\n\neval suite: <%s>\neval suite not run: both.\n' "$moved" "$suite_link" > "$work/moved-two.md"
+undo_bump() { g switch -q main; g branch -q -D "release/v$next"; }
+export COMPARE_OUT=$'3\nREADME.md\ntemplate/AGENTS.md.jinja\ntemplate/.claude/output-styles/new-name.md.jinja\ntemplate/.claude/output-styles/beginner-or-non-engineer.md.jinja'
+run "v$next" "$work/moved.md";     check "a moved pin that changes what the agent reads, without a suite line, is refused" no $?
+is "  and the refusal names the files" says "template/AGENTS.md.jinja"
+is "  and the old name of a renamed one" says "beginner-or-non-engineer.md.jinja"
+is "  and the two lines it takes" bash -c 'grep -qF "eval suite: <https://" "$1" && grep -qF "eval suite not run: <why>" "$1"' _ "$work/out"
+is "  after asking the template's diff between the two tags" grep -qF "compare/$prev_ref...$moved_ref" "$GH_LOG"
+is "  and nothing changed" untouched
+run "v$next" "$work/moved-bare-link.md";  check "a bare link (markdownlint's MD034 in the section) is refused" no $?
+run "v$next" "$work/moved-other-link.md"; check "a link that is not a GitHub comment is refused" no $?
+run "v$next" "$work/moved-no-reason.md";  check "'eval suite not run:' with no reason is refused" no $?
+run "v$next" "$work/moved-two.md";        check "two suite lines are refused" no $?
+is "nothing changed" untouched
+export COMPARE_RC=4
+run "v$next" "$work/moved.md";     check "a template diff that cannot be read is refused, not read as 'no change'" no $?
+is "  and nothing changed" untouched
+run "v$next" "$work/moved-link.md"; check "  even with a suite line: the query ran first" no $?
+unset COMPARE_RC
+export COMPARE_OUT=300
+run "v$next" "$work/moved.md";     check "a diff cut at 300 files asks, whatever it lists" no $?
+export COMPARE_OUT=$'3\nREADME.md\ntemplate/AGENTS.md.jinja\ntemplate/.claude/skills/verify/SKILL.md.jinja'
+run "v$next" "$work/moved-link.md"; check "with the table's link it bumps" ok $?
+is "  and the section carries the link" grep -qxF "eval suite: <$suite_link>" <(section_of "$next")
+undo_bump
+run "v$next" "$work/moved-reason.md"; check "with a stated reason it bumps" ok $?
+is "  and the section carries the reason" grep -qxF "eval suite not run: only the README line changed in AGENTS.md." <(section_of "$next")
+undo_bump
+export COMPARE_OUT=$'2\nREADME.md\ntemplate/README.md.jinja'
+run "v$next" "$work/moved.md";     check "a moved pin that touches no file the agent reads is not asked" ok $?
+is "  and says nothing of the suite" not says "eval suite"
+undo_bump
+unset COMPARE_OUT
+grep -vxF "tested with $template" "$repo/CHANGELOG.md" > "$work/changelog"; cp "$work/changelog" "$repo/CHANGELOG.md"
+g commit -q -am "docs: lose the release before's tested line"; g push -q origin main
+run "v$next" "$work/moved-link.md"; check "with no tested line in the release before's section, nothing to compare with, it is refused" no $?
+is "  and the refusal names that section" says "[$current] section"
+g reset -q --hard "$before_move"; g push -q -f origin main
+is "the pin is back where the release before tested it" grep -qxF "template_ref=\"$prev_ref\"" "$repo/scripts/new-project.sh"
+
 echo "-- bump"
 run "v${current%%.*}.0.0" "$work/why.md"; check "a version not above the current one is refused" no $?
 is "nothing changed" untouched
@@ -179,6 +241,7 @@ is "the tree is clean after the commit" [ -z "$(g status --porcelain --untracked
 is "the commit title is chore(release): v$next" [ "$(g log -1 --format=%s)" = "chore(release): v$next" ]
 is "no tag yet"                    [ -z "$(g tag -l)" ]
 is "no release yet"                not grep -q "release create" "$GH_LOG"
+is "the pin did not move, so the template's diff was not asked" not grep -q "compare/" "$GH_LOG"
 is "the section is the why, then what was under Unreleased" [ "$(section_of "$next")" = "$expected" ]
 is "Unreleased is empty"           [ -z "$(section_of Unreleased)" ]
 is "[Unreleased] compares from the new tag" grep -qxF "[Unreleased]: $base/compare/v$next...HEAD" "$repo/CHANGELOG.md"
