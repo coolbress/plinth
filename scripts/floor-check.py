@@ -134,6 +134,10 @@ IMAGE_CHECK = "image"
 # The checks python-ci.yml runs for the web archetype alone, with its `web`
 # input (#614); the door's ruleset adds them for that archetype.
 WEB_CHECKS = ("ci / migrations", "ci / deploy-check")
+# The archetypes whose floor includes publishing a package on a version tag:
+# plinth-template's .github/workflows/release.yml, on GitHub (#703).
+PACKAGE_ARCHETYPES = ("cli", "library")
+RELEASE_WORKFLOW = ".github/workflows/release.yml"
 # GitLab's name for the same job: `image` is a GitLab CI keyword (plinth-template v1.13.0).
 GITLAB_IMAGE_JOB = "docker-image"
 # The GitLab pipeline beside this script; its floor-check job holds the include rule (#543).
@@ -1551,7 +1555,7 @@ def check_javascript_project(project: Path) -> None:
                        "so a vulnerable dependency is not reported before a merge")
 
 
-def check_project(project: Path, root: Path, archetype: str | None) -> None:
+def check_project(project: Path, root: Path, archetype: str | None, host: str = "github") -> None:
     # Run at the root of a repository whose project is one directory down (a
     # monorepo, a backend/ folder, plinth's own canary/), this reported two
     # files missing that do exist, and nothing said that --project is the
@@ -1595,10 +1599,15 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
     if archetype is None:
         result("SKIP", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")
         return
+    answers = copier_answers(project) or {}
     if archetype not in CONDITIONAL_ARCHETYPES:
         result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
+        if archetype in PACKAGE_ARCHETYPES:
+            # A repository-level file: GitHub reads workflows at the root, not
+            # under --project, and the host is the one the run resolved,
+            # --host before the answers (#720 review).
+            check_release_workflow(root, host)
         return
-    answers = copier_answers(project) or {}
     on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
     result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
                    + (", and render.yaml" if on_render else ""))
@@ -1609,6 +1618,51 @@ def check_project(project: Path, root: Path, archetype: str | None) -> None:
         check_render_yaml(project)
     elif archetype == "web":
         check_hosted_elsewhere(answers.get("hosting_elsewhere"))
+
+
+def check_release_workflow(root: Path, host: str) -> None:
+    """A `cli` or `library` publishes to PyPI on a version tag through the
+    template's release.yml (plinth-template 1.29.0, #703). Read as text,
+    standard library only: present, started by a tag and nothing else, and
+    reading no stored secret. Each finding is a WARN, never a FAIL:
+    publishing is the person's choice, and an instance rendered before the
+    file existed passes as it did."""
+    if host == "gitlab":
+        result("INFO", f"{RELEASE_WORKFLOW} not required: on GitLab the template renders no release workflow")
+        return
+    p = root / RELEASE_WORKFLOW
+    if not p.is_file():
+        result("WARN", f"{RELEASE_WORKFLOW} missing: a version tag does not publish this package to PyPI")
+        result("INFO", "  plinth-template 1.29.0 adds it, with its steps in docs/how-to/publish-a-release.md: "
+                       "copier update, then follow that page")
+        return
+    result("PASS", f"{RELEASE_WORKFLOW} present")
+    # Comments dropped first: the file explains itself at length, and a
+    # word in a comment is not a trigger or a secret.
+    text = "\n".join(line.split(" #", 1)[0] for line in read(p).splitlines() if not line.lstrip().startswith("#"))
+    m = re.search(r"^on:[ \t]*\n(.*?)(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
+    on = m.group(1) if m else ""
+    # Every line of the block is read, or none is counted: `push:`, its
+    # `tags:` and the tag patterns, nothing else. A quoted key, another event
+    # or a filter beside `tags:` is not certified as tag-only (#720 review).
+    lines = [line.rstrip() for line in on.splitlines() if line.strip()]
+    tag_only = (len(lines) >= 2 and lines[0] == "  push:" and lines[1].startswith("    tags:")
+                and all(line.startswith("      - ") for line in lines[2:]))
+    if tag_only:
+        result("PASS", f"{RELEASE_WORKFLOW} runs on a pushed tag only")
+    else:
+        unread = next((line.strip() for line in lines if not re.fullmatch(r"  push:|    tags:.*|      - .*", line)),
+                      None) if lines else "no on: block this checker reads"
+        seen = unread or "push: without tags:"
+        result("WARN", f"{RELEASE_WORKFLOW} is not read as tag-only (first line not read: {seen}): "
+                       "a branch push or a pull request could publish")
+    # secrets.GITHUB_TOKEN is the run's own token, made for the run and not stored.
+    stored = [x for x in re.findall(r"secrets\.\w+|^\s*password:", text, re.MULTILINE) if x != "secrets.GITHUB_TOKEN"]
+    if stored:
+        result("WARN", f"{RELEASE_WORKFLOW} reads a stored secret ({', '.join(sorted({s.strip() for s in stored}))}): "
+                       "Trusted Publishing needs none, and a stored PyPI token can be copied and used from anywhere")
+    else:
+        result("PASS", f"{RELEASE_WORKFLOW} reads no stored secret")
 
 
 def check_render_yaml(project: Path) -> None:
@@ -3083,7 +3137,7 @@ def main() -> int:
         check_javascript_project(project)
         archetype = None
     else:
-        check_project(project, root, archetype)
+        check_project(project, root, archetype, host)
     if archetype in CONDITIONAL_ARCHETYPES:
         (check_gitlab_image_job if host == "gitlab" else check_image_job)(root)
 

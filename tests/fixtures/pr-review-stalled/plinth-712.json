@@ -1,0 +1,191 @@
+{
+ "source": "coolbress/plinth#712, read 2026-10-28 through the REST API; the summary comment's versions are its edit history (GraphQL userContentEdits), cut before the vendor's about-box",
+ "pushes": [
+  {
+   "after": "0000000000000000000000000000000000000000",
+   "before": "1e41ec15f8f96e152f2b01ce7075576547d3b230",
+   "timestamp": "2026-10-28T10:41:47Z",
+   "activity_type": "branch_deletion",
+   "actor": {
+    "login": "coolbress"
+   }
+  },
+  {
+   "after": "1e41ec15f8f96e152f2b01ce7075576547d3b230",
+   "before": "2302eabb02a7b8e679560f1c26f944d271b4f956",
+   "timestamp": "2026-10-28T10:19:24Z",
+   "activity_type": "push",
+   "actor": {
+    "login": "coolbress"
+   }
+  },
+  {
+   "after": "2302eabb02a7b8e679560f1c26f944d271b4f956",
+   "before": "02183290ca748c35d3d5eacc1900e39479f6e726",
+   "timestamp": "2026-10-28T10:11:04Z",
+   "activity_type": "push",
+   "actor": {
+    "login": "coolbress"
+   }
+  },
+  {
+   "after": "02183290ca748c35d3d5eacc1900e39479f6e726",
+   "before": "0000000000000000000000000000000000000000",
+   "timestamp": "2026-10-28T08:24:35Z",
+   "activity_type": "branch_creation",
+   "actor": {
+    "login": "coolbress"
+   }
+  }
+ ],
+ "comments": [
+  {
+   "id": 6464909411,
+   "user": {
+    "login": "coolbress"
+   },
+   "created_at": "2026-10-28T09:02:48Z",
+   "versions": [
+    {
+     "at": "2026-10-28T09:02:48Z",
+     "body": "@codex review\n\n<!-- third-party-review: 02183290ca748c35d3d5eacc1900e39479f6e726 -->\n"
+    }
+   ]
+  },
+  {
+   "id": 6464916147,
+   "user": {
+    "login": "chatgpt-codex-connector[bot]"
+   },
+   "created_at": "2026-10-28T09:03:11Z",
+   "versions": [
+    {
+     "at": "2026-10-28T09:03:11Z",
+     "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"02183290ca748c35d3d5eacc1900e39479f6e726\",\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":\"running\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | 🔄 **Running** since <relative-time datetime=\"2026-10-28T09:03:06.799412Z\">2026-10-28T09:03:06.799412Z</relative-time> | `0218329` | Manual request |\n"
+    },
+    {
+     "at": "2026-10-28T10:04:44Z",
+     "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"02183290ca748c35d3d5eacc1900e39479f6e726\",\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":\"running\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | 🔄 **Running** since <relative-time datetime=\"2026-10-28T10:04:43.215733Z\">2026-10-28T10:04:43.215733Z</relative-time> | `0218329` | Manual request |\n"
+    },
+    {
+     "at": "2026-10-28T10:08:53Z",
+     "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"02183290ca748c35d3d5eacc1900e39479f6e726\",\"has_any_findings\":false,\"has_unresolved_findings\":false,\"status\":\"completed\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime=\"2026-10-28T10:08:52.566441Z\">2026-10-28T10:08:52.566441Z</relative-time> | `0218329` | Manual request |\n"
+    },
+    {
+     "at": "2026-10-28T10:18:17Z",
+     "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"2302eabb02a7b8e679560f1c26f944d271b4f956\",\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":\"running\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | 🔄 **Running** since <relative-time datetime=\"2026-10-28T10:18:16.086106Z\">2026-10-28T10:18:16.086106Z</relative-time> | `2302eab` | Manual request |\n"
+    },
+    {
+     "at": "2026-10-28T10:22:15Z",
+     "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"2302eabb02a7b8e679560f1c26f944d271b4f956\",\"has_any_findings\":false,\"has_unresolved_findings\":false,\"status\":\"completed\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime=\"2026-10-28T10:22:14.325043Z\">2026-10-28T10:22:14.325043Z</relative-time> | `2302eab` | Manual request |\n"
+    },
+    {
+     "at": "2026-10-28T10:36:15Z",
+     "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"1e41ec15f8f96e152f2b01ce7075576547d3b230\",\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":\"running\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | 🔄 **Running** since <relative-time datetime=\"2026-10-28T10:36:13.766203Z\">2026-10-28T10:36:13.766203Z</relative-time> | `1e41ec1` | Manual request |\n"
+    },
+    {
+     "at": "2026-10-28T10:40:42Z",
+     "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"1e41ec15f8f96e152f2b01ce7075576547d3b230\",\"has_any_findings\":false,\"has_unresolved_findings\":false,\"status\":\"completed\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime=\"2026-10-28T10:40:41.437685Z\">2026-10-28T10:40:41.437685Z</relative-time> | `1e41ec1` | Manual request |\n"
+    }
+   ]
+  },
+  {
+   "id": 6466100965,
+   "user": {
+    "login": "coolbress"
+   },
+   "created_at": "2026-10-28T10:04:29Z",
+   "versions": [
+    {
+     "at": "2026-10-28T10:04:29Z",
+     "body": "@codex review\n\n<!-- third-party-review: 02183290ca748c35d3d5eacc1900e39479f6e726 -->\n"
+    }
+   ]
+  },
+  {
+   "id": 6466197689,
+   "user": {
+    "login": "chatgpt-codex-connector[bot]"
+   },
+   "created_at": "2026-10-28T10:08:51Z",
+   "versions": [
+    {
+     "at": "2026-10-28T10:08:51Z",
+     "body": "<!-- codex-review-receipt:v1 -->\n\nCodex Review: Didn't find any major issues. :rocket:\n\n**Reviewed commit:** `02183290ca`\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\n[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you\n- Open a pull request for review\n- Mark a draft as ready\n- Comment \"@codex review\".\n\nIf Codex has suggestions, it will comment; otherwise it will react with 👍.\n\n\n\n\nCodex can also answer questions or update the PR. Try commenting \"@codex address that feedback\".\n            \n</details>"
+    }
+   ]
+  },
+  {
+   "id": 6466383541,
+   "user": {
+    "login": "coolbress"
+   },
+   "created_at": "2026-10-28T10:18:02Z",
+   "versions": [
+    {
+     "at": "2026-10-28T10:18:02Z",
+     "body": "@codex review\n\n<!-- third-party-review: 2302eabb02a7b8e679560f1c26f944d271b4f956 -->\n"
+    }
+   ]
+  },
+  {
+   "id": 6466472929,
+   "user": {
+    "login": "chatgpt-codex-connector[bot]"
+   },
+   "created_at": "2026-10-28T10:22:12Z",
+   "versions": [
+    {
+     "at": "2026-10-28T10:22:12Z",
+     "body": "<!-- codex-review-receipt:v1 -->\n\nCodex Review: Didn't find any major issues. :tada:\n\n**Reviewed commit:** `2302eabb02`\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\n[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you\n- Open a pull request for review\n- Mark a draft as ready\n- Comment \"@codex review\".\n\nIf Codex has suggestions, it will comment; otherwise it will react with 👍.\n\n\n\n\nCodex can also answer questions or update the PR. Try commenting \"@codex address that feedback\".\n            \n</details>"
+    }
+   ]
+  },
+  {
+   "id": 6466758651,
+   "user": {
+    "login": "coolbress"
+   },
+   "created_at": "2026-10-28T10:35:59Z",
+   "versions": [
+    {
+     "at": "2026-10-28T10:35:59Z",
+     "body": "@codex review\n\n<!-- third-party-review: 1e41ec15f8f96e152f2b01ce7075576547d3b230 -->\n"
+    }
+   ]
+  },
+  {
+   "id": 6466852248,
+   "user": {
+    "login": "chatgpt-codex-connector[bot]"
+   },
+   "created_at": "2026-10-28T10:40:40Z",
+   "versions": [
+    {
+     "at": "2026-10-28T10:40:40Z",
+     "body": "<!-- codex-review-receipt:v1 -->\n\nCodex Review: Didn't find any major issues. Another round soon, please!\n\n**Reviewed commit:** `1e41ec15f8`\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\n[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you\n- Open a pull request for review\n- Mark a draft as ready\n- Comment \"@codex review\".\n\nIf Codex has suggestions, it will comment; otherwise it will react with 👍.\n\n\n\n\nCodex can also answer questions or update the PR. Try commenting \"@codex address that feedback\".\n            \n</details>"
+    }
+   ]
+  }
+ ],
+ "reactions": [
+  {
+   "on": "pr",
+   "user": {
+    "login": "chatgpt-codex-connector[bot]"
+   },
+   "content": "+1",
+   "created_at": "2026-10-28T10:40:44Z"
+  },
+  {
+   "content": "eyes",
+   "created_at": "2026-10-28T09:03:03Z",
+   "on": 6464909411,
+   "user": {
+    "login": "chatgpt-codex-connector[bot]"
+   }
+  }
+ ],
+ "reviews": [],
+ "rcomments": []
+}

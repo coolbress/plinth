@@ -28,9 +28,45 @@ pull requests and have no tag.
   A file ruff cannot parse is named as not measured, never passed.
   The limits are conventions, not validated numbers. It never fails and no
   ruleset requires it; it is not on GitLab yet.
+- `/plinth:floor-check` and `ci / floor-check` read a `cli` or `library`
+  project's `.github/workflows/release.yml`, the workflow plinth-template
+  1.29.0 adds to publish the package to PyPI on a version tag (#703). Three
+  items: the file is there, only a pushed tag starts it, and it reads no
+  stored secret (Trusted Publishing needs none). Each finding is a WARN,
+  never a FAIL, so a project rendered before the file existed still has
+  0 failed; the missing-file WARN names the update and the project's
+  `docs/how-to/publish-a-release.md`. A GitLab project gets an INFO: the
+  template renders no release workflow there. New projects get the file
+  once `/plinth:new-project` renders plinth-template 1.29.0, a separate
+  change.
+
+- `/plinth:guide`, a user-only skill for a beginner starting or picking up
+  a project (#710, from #702's Decision). It reads the repository (whether
+  plinth made it, the archetype and where a `web` app runs, open issues and
+  pull requests, the last merge, whether the first pull request is merged)
+  and says, in the person's language and plain words, the nine steps and
+  four moments with their tools, where the project is now, and the one
+  command to type next. Its steps and tools are the rows of the arsenal's
+  "Where you are, and what to do next" table, printed by
+  `scripts/guide-state.sh`; the table gains a row for a first pull request
+  still open and four rows for release and deploy, operate, retrospective
+  and the end of a project, saying where no tool is built yet.
+  `tests/guide-cases.sh` checks the row each state lands on, and fails when
+  the skill names a slash command the table does not have, or a tool #711
+  left out. `/plinth:new-project`'s closing lines and `/plinth:floor-check`'s
+  report end by pointing to it.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.29.0
+  (coolbress/plinth-template#138, #139, #140). A new `cli` or `library`
+  project on GitHub publishes to PyPI when a version tag is pushed, through
+  Trusted Publishing with no stored secret, and its
+  `docs/how-to/publish-a-release.md` gives the person's one-time PyPI and
+  GitHub steps. Every new project's `.claude/settings.json` gives the skill
+  listing 1.5% of the context, so descriptions are not cut on a 200k
+  model. An existing repository gets both through
+  `/plinth:template-update`.
 - The default set now installs five more Matt Pocock skills: `/to-spec`,
   `/to-tickets` and `/wayfinder` for planning a job bigger than one session,
   `/improve-codebase-architecture` for clean-up, and `/handoff` (#704, from
@@ -58,6 +94,25 @@ pull requests and have no tag.
   section. Other releases are not asked. The step was a sentence in
   `docs/how-to/cut-a-release.md`, and v2.13.0 to v2.15.0 shipped such
   changes without a suite run.
+- `third-party / review` now says when the reviewer took the request and did
+  not finish (#719). When the wait ends with no review and the reviewer's
+  eyes reaction is on the request or the pull request, or its summary comment
+  says it is running on this commit, the error reads
+  `acknowledged, not finished`. It gives the time of the request, the time of
+  the acknowledgement and how long ago that was, then three next steps in
+  order: re-run once after a wait, look at the reviewer's task page and usage,
+  and comment the summons yourself after two. The how-to's "When the reviewer
+  does not come" has the same steps in the same words. When nothing
+  acknowledged the request, the error is the same as before. The check still
+  fails in both cases. #712, #717 and plinth-template#136 ended this way.
+- `ponytail-skills` stays at its pin, `2ed6c52`, on purpose, and its catalog
+  description and arsenal row now say so (#715, from #711's Decision). At
+  that pin `/ponytail-audit` is the over-engineering audit: what to delete,
+  simplify or replace with the standard library or the platform, with bugs,
+  security and performance out of its scope. ponytail v5 rewrote it into a
+  full quality audit (bugs, security, scale, missing tests, lean), which
+  repeats the review step. `tests/marketplace-manifest.sh` fails when the pin
+  moves and the description and arsenal row still name the old one.
 
 ## [2.15.0] - 2026-10-28
 

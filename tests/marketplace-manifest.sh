@@ -71,6 +71,16 @@ check("ponytail-audit" not in entries, "no marketplace entry named ponytail-audi
 check(ponytail_skills.get("strict") is False and ponytail_skills.get("skills") == ["./ponytail-audit"], "ponytail-skills: strict false, the one skill ./ponytail-audit")
 check(ponytail_skills["source"].get("source") == "git-subdir" and ponytail_skills["source"].get("path") == "skills", "ponytail-skills mounts skills/ only; hooks stay outside")
 check(entries["ponytail"]["source"]["sha"] == ponytail_skills["source"].get("sha"), "ponytail and ponytail-skills pin the same commit")
+# Held before v5 on purpose (#711, #715): v5 rewrote /ponytail-audit from an
+# over-engineering audit into a full quality audit that repeats the review step.
+# The description and the arsenal row name the pin they describe, so a pull
+# request that raises it without rewriting both fails here.
+held = (ponytail_skills["source"].get("sha") or "")[:7]
+arsenal_row = re.search(r"^\| `ponytail-skills` \|.*$", (root / "skills/arsenal/SKILL.md").read_text(), re.M)
+for where, text in (("catalog description", ponytail_skills.get("description", "")),
+                    ("arsenal row", arsenal_row.group(0) if arsenal_row else "")):
+    check(len(held) == 7 and held in text and "pre-v5" in text and "over-engineering" in text,
+          f"ponytail-skills {where} names the pin it describes ({held}), the pre-v5 hold and the over-engineering audit")
 
 # One taste-skill skill by default (#469): design-taste-frontend is
 # self-contained; the other twelve need an image tool, serve another product, or
@@ -105,8 +115,8 @@ check(all(re.fullmatch(r"\./(engineering|productivity)/[a-z-]+", s) for s in mat
       "mattpocock-skills and -extra: every skill is under engineering/ or productivity/")
 
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
-check(skills == ["arsenal", "floor-check", "new-project", "template-update"],
-      f"plinth skills are arsenal, floor-check, new-project, template-update: {skills}")
+check(skills == ["arsenal", "floor-check", "guide", "new-project", "template-update"],
+      f"plinth skills are arsenal, floor-check, guide, new-project, template-update: {skills}")
 
 def frontmatter(name):
     text = (root / "skills" / name / "SKILL.md").read_text()
@@ -116,6 +126,8 @@ fm = frontmatter("new-project")
 check("disable-model-invocation: true" in fm, "new-project: user-invoked only (it creates and deletes repositories)")
 fm = frontmatter("template-update")
 check("disable-model-invocation: true" in fm, "template-update: user-invoked only (it pushes a branch and opens a pull request)")
+fm = frontmatter("guide")
+check("disable-model-invocation: true" in fm, "guide: user-invoked only (it adds nothing to the skill listing, #710)")
 fm = frontmatter("floor-check")
 line = re.search(r"^disallowed-tools:(.*)$", fm, re.M)
 check(line is not None and all(t in line.group(1) for t in ("Edit", "Write", "NotebookEdit")),

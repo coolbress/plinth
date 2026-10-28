@@ -61,6 +61,11 @@ p = pathlib.Path(sys.argv[1])
 p.write_text(re.sub(r"(?ms)^## \[Unreleased\]\n.*?^(?=## \[)",
                     "## [Unreleased]\n\n### Fixed\n\n- An entry waiting for the release.\n\n", p.read_text(), count=1))
 PY
+# The pin the release before was tested with, whatever the real pin is today:
+# a pull request that raises the pin would otherwise read as a moved pin here.
+tested_ref="$(sed -nE 's/^tested with plinth-template (v[^ ]+)$/\1/p' "$repo/CHANGELOG.md" | head -1)"
+[ -n "$tested_ref" ] || { echo "no 'tested with plinth-template <tag>' line in CHANGELOG.md" >&2; exit 1; }
+sed -i.bak -E "s/^template_ref=\"[^\"]+\"$/template_ref=\"$tested_ref\"/" "$repo/scripts/new-project.sh"; rm "$repo/scripts/new-project.sh.bak"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 g() { git -C "$repo" "$@"; }
 g init -q -b main; g add -A; g commit -q -m "fixture"

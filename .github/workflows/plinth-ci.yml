@@ -60,6 +60,9 @@ jobs:
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
 
+      - name: The guide's next step per state, and only the arsenal's tools
+        run: ./tests/guide-cases.sh
+
       # uv for the web checks' fixture projects, the release python-ci.yml pins.
       - name: Install uv (official release, SHA256 verified)
         env:
@@ -167,6 +170,9 @@ jobs:
 
       - name: pr-review posts the summons only as the owner, with a token, and only when no accepted reviewer has been active
         run: ./tests/pr-review-summon.sh
+
+      - name: pr-review tells a reviewer that acknowledged and never finished from one that never came, and fails both
+        run: ./tests/pr-review-stalled.sh
 
       - name: The reviewer's instructions cannot be softened inside a reviewed pull request
         run: ./tests/pr-review-policy-pin.sh

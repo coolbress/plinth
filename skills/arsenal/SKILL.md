@@ -17,6 +17,7 @@ Point them to it when they ask what to type next.
 | Where you are | Next action | Tool |
 | --- | --- | --- |
 | No repository yet (step 1) | Create it with the wall; merge its first pull request on green | `/plinth:new-project <owner>/<name>`, typed |
+| Repository made, its first pull request open (step 1) | Wait for green, squash and merge it, then `git switch main && git pull` in its folder | The pull request's page, or the merge command in `${CLAUDE_PLUGIN_ROOT}/docs/tutorials/getting-started.md` |
 | A repository plinth did not make (step 1) | List what is missing; nothing is changed | `/plinth:floor-check` |
 | First pull request merged (step 1) | Before step 2: a token that cannot change the checks, the agent's own account, four things by hand | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`, `give-the-agent-its-own-account.md` and `set-four-things-by-hand.md` there; candidate `wizard` (listed, no evidence yet) |
 | An idea in your own words (step 2) | An interview, then an issue saying what "done" means | `/grilling`, with `domain-modeling` for `CONTEXT.md`; `/grill-with-docs` (listed) |
@@ -27,9 +28,13 @@ Point them to it when they ask what to type next.
 | Something broke (step 7) | Reproduce, a failing test, then the fix | `diagnosing-bugs` ("diagnose this"); `/triage` for issues someone else opened |
 | Stopping, or coming back (step 8) | Put what is left in issues and pull requests; ask "where is this, what's next?" | The record; `/handoff` to move work to another tool or person |
 | Between pieces of work (step 9) | Dependency updates on green; the template update after a plinth release | Dependabot; `/plinth:floor-check`, then `/plinth:template-update`, typed; `/improve-codebase-architecture`; `/ponytail-audit` (listed) |
+| A merged change to put out (release and deploy, after step 6) | A `web` app on Render goes out by itself once `main` is green; the other archetypes publish nothing yet | Render, from `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`; a release on a tag is planned for `library` and `cli` (#703) and `backend` (#706), not built yet |
+| The project in use (operate) | Read the host's logs when something looks wrong; keep the spend ceiling and the restore you tried | The host's dashboard; `${CLAUDE_PLUGIN_ROOT}/docs/how-to/set-four-things-by-hand.md`. Error tracking and uptime monitors are paid services, not installed: the person adds one if they want it |
+| Looking back on a piece of work (retrospective) | What went well, what did not, what to change, written into an issue | The record; no retrospective tool is installed yet (#714) |
+| Ending the project, or handing it over (end) | Do what the README says from step 2: data deleted or handed over, keys revoked, users told; what is left goes in issues | The README; the record; `/handoff` when another person or tool takes it over |
 | A `web` project to put online (after step 1) | Choose where it runs: Render, built and checked by plinth, or a listed place whose steps and risks become the person's | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md` |
 | Correcting the agent the same way again (any step) | A line in `AGENTS.md`, then a reviewer rule, then a test that fails on the old mistake | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/turn-a-correction-into-a-rule.md` |
-| Unsure which skill now (any step) | Say where you are | `/ask-matt` (listed), or this catalog |
+| Unsure which skill now (any step) | Say where you are | `/plinth:guide`, typed; `/ask-matt` (listed), or this catalog, `/plinth:arsenal` |
 
 A tool marked listed is not installed; "Listed, not installed" below says
 how to add it. Of the default set, `/improve-codebase-architecture` is the
@@ -51,7 +56,11 @@ decides or confirms; the evidence of progress or completion; where to return
 when stuck and where the record lives. Not every turn. A request for an
 explanation is not approval of a change.
 
-`/plinth:new-project` and `/plinth:template-update` are user-only, typed by
+`/plinth:guide` reads this table and the repository's state and tells the
+person, in their language, where the project is and the one command to type
+next; a step or tool belongs in this table before the guide can name it.
+
+`/plinth:new-project`, `/plinth:template-update` and `/plinth:guide` are user-only, typed by
 the user as `/` plus a pick from the list, invisible to the agent: when a pasted line drew "not installed", the
 line arrived as text, and this catalog being open shows plinth is installed.
 
@@ -101,7 +110,7 @@ Carbon, Atlassian, Polaris).
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
 | `mattpocock-skills-extra` | The seven other Matt Pocock skills plinth carries: `/ask-matt`, `/grill-with-docs`, `/wait-what` (these three user-only), and `prototype`, `research`, `resolving-merge-conflicts`, `wizard` | When you want one of them; `/ask-matt` routes to the rest of the set, so it is listed with them (#593) | ~0.32k tokens always on (4 skills listed), no hooks; same pin as `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
-| `ponytail-skills` | One skill, `/ponytail-audit`: a ranked list of what to delete or replace with the standard library, repository-wide, biggest cut first; applies nothing | Every week or two, or after a burst of work, if you install it | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
+| `ponytail-skills` | One skill, `/ponytail-audit`, pre-v5 (pin `2ed6c52`): a ranked list of over-engineering to delete, simplify or replace with the standard library or the platform, repository-wide, biggest cut first; bugs, security and performance are out of its scope; applies nothing. Held on purpose: ponytail v5 rewrote it into a full quality audit (bugs, security, scale, missing tests, lean), which repeats the review step (#711, #715) | Every week or two, or after a burst of work, if you install it | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions, when you want that research. Not for deciding; verify with `/research` | ~90 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail` | The full ponytail plugin with its hooks: the least-code mode every turn, its review, and the audit too | Only if you want the mode enforced every turn | 3 hooks, ~1k tokens | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `impeccable` | A design with a point of view; writes a product record (`PRODUCT.md`) and a design record (`DESIGN.md`) | A page that should be remembered, when you will answer its questions: five of them and 43 minutes on the page where `taste-skill` asked none and took five (one measurement, 2026-09-12) | Hooks, agents and skills written into the repository (`.claude/`, `.github/`); no plinth pin | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) |

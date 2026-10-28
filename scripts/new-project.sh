@@ -52,8 +52,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # an unpinned resolution would let any package published later run there.
 # Raising the tag with its commit, the version or the date is the only edit here.
 template_repo="coolbress/plinth-template"
-template_ref="v1.28.0"
-template_sha="e8b5157179cb94ca28d76d6b012211540c15f623"
+template_ref="v1.29.0"
+template_sha="47228b8e1cc84007e877be2572984141dbfa596f"
 template_ci=".github/workflows/ci.yml"
 copier_version="9.18.2"
 copier_newer="2026-09-09"
@@ -992,7 +992,7 @@ ${repush:+$repush
 }${baseline_line:+  first commit on main: $baseline_line
 }  $day_names and what to do with Dependabot's pull requests are in the pull request's body and in README.md under "First day"
 $admin_line
-  next: cd $dir && claude
+  next: cd $dir && claude, then type /plinth:guide for the whole way and the command after this merge
 EOF
 [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ] || \
   echo "  if your everyday gh token is fine-grained with selected repositories, add $name to it: https://github.com/settings/personal-access-tokens"
