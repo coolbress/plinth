@@ -60,6 +60,14 @@ pull requests and have no tag.
   does not come" has the same steps in the same words. When nothing
   acknowledged the request, the error is the same as before. The check still
   fails in both cases. #712, #717 and plinth-template#136 ended this way.
+- `ponytail-skills` stays at its pin, `2ed6c52`, on purpose, and its catalog
+  description and arsenal row now say so (#715, from #711's Decision). At
+  that pin `/ponytail-audit` is the over-engineering audit: what to delete,
+  simplify or replace with the standard library or the platform, with bugs,
+  security and performance out of its scope. ponytail v5 rewrote it into a
+  full quality audit (bugs, security, scale, missing tests, lean), which
+  repeats the review step. `tests/marketplace-manifest.sh` fails when the pin
+  moves and the description and arsenal row still name the old one.
 
 ## [2.15.0] - 2026-10-28
 
