@@ -17,7 +17,9 @@ The rules, fixed before the first run:
   session called no tool but the one probe command, so it cannot have read the
   file; .claude/ counts as loaded when the init's output style is the one the
   workspace's settings name. gone: both loaded in both arms. held: either one
-  shown not loaded in either arm (the marker absent, another output style).
+  shown not loaded in either arm: the reply says MARKER: NONE, or the init
+  names another output style. A reply with neither the marker nor MARKER: NONE
+  (a session cut short) shows nothing about AGENTS.md.
 - (c) the sandbox runs git and uv. gone: probe-checks.sh's four lines (two git,
   two `uv run`) all exit 0 in both arms, read from the command's own output in
   the trace, not the agent's retelling. held: any of them exits non-zero.
@@ -126,7 +128,10 @@ def judge_b(arm: dict[str, list[dict[str, Any]] | None], probe: dict[str, Any]) 
             continue
         said = "\n".join(text_of(b) for b in blocks(evs, "assistant") if b.get("type") == "text")
         if marker not in said:
-            shown_not.append(f"{name}-arm: AGENTS.md's marker is not in the reply")
+            if "MARKER: NONE" in said:
+                shown_not.append(f"{name}-arm: AGENTS.md's marker is not in the reply")
+            else:
+                unclear.append(f"{name}-arm: the reply has neither the marker nor MARKER: NONE")
         elif not only_probe_command(evs):
             unclear.append(f"{name}-arm: the marker is in the reply, but the session ran other tools, so it may have read AGENTS.md")
         got = init.get("output_style")

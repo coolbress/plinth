@@ -20,7 +20,8 @@ check() { if eval "$2"; then ok "$1"; else bad "$1" "${3:-}"; fi; }
 # One arm's trace, in the shape plugin eval writes (stream-json). Options as
 # key=value: plinth=1 (init lists plinth), style=, marker=1 (the reply quotes
 # it), extra= (a second Bash command), checks= (name:exit,...; a name left out
-# never prints), said= (text the agent adds); _ in a value is a space.
+# never prints), said= (text the agent adds; x: the session stopped before
+# any answer); _ in a value is a space.
 cat > "$tmp/trace.py" <<'PY'
 import json, sys
 out, *opts = sys.argv[1:]
@@ -33,7 +34,8 @@ if o.get("plinth") == "1":
     skills += ["plinth:arsenal", "plinth:floor-check"]
 ev = [{"type": "system", "subtype": "init", "plugins": plugins, "skills": skills,
        "output_style": o.get("style", "Beginner or non-engineer"), "claude_code_version": "9.9.9"}]
-ev.append({"type": "assistant", "message": {"content": [{"type": "text", "text": marker if o.get("marker") == "1" else "MARKER: NONE"}]}})
+if o.get("said") != "x":
+    ev.append({"type": "assistant", "message": {"content": [{"type": "text", "text": marker if o.get("marker") == "1" else "MARKER: NONE"}]}})
 cmds = ["bash probe-checks.sh"] + ([o["extra"]] if o.get("extra") else [])
 for c in cmds:
     ev.append({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": c}}]}})
@@ -77,6 +79,7 @@ case_ "(a) holds when the with-arm's init lists no plinth skill" "marker=1" "$ba
 case_ "(a) is unclear when the without-arm lists plinth too" "$all" "plinth=1 marker=1" 2 '^\(a\) unclear: .*without-arm lists plinth'
 case_ "(a) and (b) are unclear when the with-arm left no trace" none "$base" 2 '^\(a\) unclear: .*no init' '^\(b\) unclear' '^\(c\) unclear: .*with-arm: no trace'
 case_ "(b) holds when the marker is not in one arm's reply" "$all" "" 1 '^\(b\) held: .*without-arm: AGENTS\.md' '^\(a\) gone'
+case_ "(b) is unclear when an arm stopped before answering, and the init shows the right style" "$all" "said=x checks=" 2 '^\(b\) unclear: .*without-arm: the reply has neither'
 case_ "(b) holds when an arm has the default output style, marker or not" "$all" "marker=1 style=default" 1 "^\(b\) held: .*without-arm: output style is 'default'"
 case_ "(b) is unclear when the marker is quoted but the session also ran cat AGENTS.md" "$all plinth=1" "$base extra=cat_AGENTS.md" 2 '^\(b\) unclear: .*without-arm: .*may have read'
 case_ "(c) holds when uv run pytest exits 2, whatever the reply says" "$all" "$base checks=git-status:0,git-log:0,uv-pytest:2,uv-ruff:0 said=PROBE_uv-pytest_exit=0_last=ok" 1 '^\(c\) held: .*without-arm: uv-pytest exit 2'
