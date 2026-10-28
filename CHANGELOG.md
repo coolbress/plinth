@@ -31,6 +31,22 @@ pull requests and have no tag.
   once `/plinth:new-project` renders plinth-template 1.29.0, a separate
   change.
 
+- `/plinth:guide`, a user-only skill for a beginner starting or picking up
+  a project (#710, from #702's Decision). It reads the repository (whether
+  plinth made it, the archetype and where a `web` app runs, open issues and
+  pull requests, the last merge, whether the first pull request is merged)
+  and says, in the person's language and plain words, the nine steps and
+  four moments with their tools, where the project is now, and the one
+  command to type next. Its steps and tools are the rows of the arsenal's
+  "Where you are, and what to do next" table, printed by
+  `scripts/guide-state.sh`; the table gains a row for a first pull request
+  still open and four rows for release and deploy, operate, retrospective
+  and the end of a project, saying where no tool is built yet.
+  `tests/guide-cases.sh` checks the row each state lands on, and fails when
+  the skill names a slash command the table does not have, or a tool #711
+  left out. `/plinth:new-project`'s closing lines and `/plinth:floor-check`'s
+  report end by pointing to it.
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.29.0

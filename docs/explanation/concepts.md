@@ -182,7 +182,7 @@ limits and outside rules, and how long the project lasts and how it ends
  └──────────────────────────────────────────────────────────────────┘
           ▲ made from plinth's template; template-update brings fixes
  ┌─ Claude Code ────────────────────────────────────────────────────┐
- │ plinth's four skills and a default set of others                 │
+ │ plinth's five skills and a default set of others                 │
  └──────────────────────────────────────────────────────────────────┘
 ```
 
