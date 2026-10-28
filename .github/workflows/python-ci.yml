@@ -1749,8 +1749,11 @@ jobs:
   # the project's own ruff settings for them are overridden so every project
   # is measured the same way, and so are its suppressions: ruff runs with
   # `--isolated --ignore-noqa`, so a `# noqa`, a per-file ignore or an exclude
-  # in the project's configuration hides nothing, as the line count, which
-  # reads every file git tracks, hides nothing. The summary opens with one
+  # in the project's configuration hides nothing. Both measures read one list,
+  # git's tracked `.py` files (#723): ruff gets it as explicit paths, in
+  # batches, never a directory to walk, so `.gitignore` drops nothing; a listed
+  # file ruff skipped, could not read or could not parse is named as not
+  # measured, never passed. The summary opens with one
   # verdict line; when something is above a limit, that line is not annotated
   # and up to three warnings name the largest instead, each with the next step.
   code-growth:
@@ -1797,49 +1800,74 @@ jobs:
           # for statements in a function and lines in a module.
           max_complexity=10; max_statements=50; max_lines=1000
           src=.; [ -d src ] && src=src
-          json="$RUNNER_TEMP/growth.json"; files="$RUNNER_TEMP/growth.files"; rm -f "$json" "$files"
-          rc=0
-          uv run --no-sync ruff check "$src" --isolated --ignore-noqa --select C901,PLR0915 \
-            --config "lint.mccabe.max-complexity=$max_complexity" --config "lint.pylint.max-statements=$max_statements" \
-            --exit-zero --no-cache --output-format json > "$json" || rc=$?
-          if [ "$rc" != 0 ]; then echo "ruff exited $rc"; rm -f "$json"; fi
+          files="$RUNNER_TEMP/growth.files"; rm -f "$files"
           git ls-files -z -- "$src" > "$files" || rm -f "$files"
           top="$(git rev-parse --show-toplevel || pwd)"
-          python3 - "$json" "$files" "$out" "$ann" "$det" "$top" "$src" "$max_complexity" "$max_statements" "$max_lines" <<'PY'
-          import json, os, re, sys
-          report, listing, out, ann, det, top, src = sys.argv[1:8]
-          MAX_C, MAX_S, MAX_L = (int(a) for a in sys.argv[8:11])
+          python3 - "$files" "$out" "$ann" "$det" "$top" "$src" "$max_complexity" "$max_statements" "$max_lines" <<'PY'
+          import json, os, re, subprocess, sys
+          listing, out, ann, det, top, src = sys.argv[1:7]
+          MAX_C, MAX_S, MAX_L = (int(a) for a in sys.argv[7:10])
           STD = "code size within the conventions"
           def say(*lines):
               with open(out, "w", encoding="utf-8") as f:
                   f.writelines(s + "\n" for s in lines)
-          def clean(p):
-              return re.sub(r"[\x00-\x1f\x7f]", "?", p)
+          def clean(p):   # a name git gave as bytes that are not UTF-8 is printed with `?`
+              return re.sub(r"[\x00-\x1f\x7f]", "?", p).encode("utf-8", "replace").decode("utf-8")
           def where(p):   # from the repository root, as an annotation names a file
               return clean(os.path.relpath(os.path.abspath(p), top))
           try:
-              with open(report, encoding="utf-8") as f:
-                  found = json.load(f)
-              if not isinstance(found, list):
-                  raise ValueError
-          except (OSError, ValueError):
-              say(f"not yet confirmed: {STD}, ruff did not finish (its error is in this step's log); "
-                  "a run where it does confirms it")
-              sys.exit(0)
-          try:
               with open(listing, "rb") as f:
-                  names = [n for n in f.read().decode("utf-8", "replace").split("\0")
+                  names = [n for n in f.read().decode("utf-8", "surrogateescape").split("\0")
                            if n.endswith(".py") and os.path.isfile(n)]
           except OSError:
               say(f"not yet confirmed: {STD}, git did not list the files (its error is in this step's log); "
                   "a run where it does confirms it")
               sys.exit(0)
-          # A file ruff cannot parse gets only `invalid-syntax` diagnostics
-          # (code null) and no measure of its functions: named, never passed.
-          unparsed = sorted({where(d.get("filename", "?")) for d in found if isinstance(d, dict)
-                             and (d.get("code") is None or d.get("name") == "invalid-syntax")})
+          # The one list both measures read: ruff gets these names as explicit
+          # paths, never a directory to walk, so nothing ruff's walk would skip
+          # (`.gitignore`, its default excludes) drops a file. Batches keep each
+          # command line short. E902 turns a file ruff cannot read into a
+          # diagnostic; `--show-files` says which files ruff took at all.
+          ruff = ["uv", "run", "--no-sync", "ruff", "check", "--isolated", "--no-cache"]
+          found, shown = [], set()
+          batches, cur, size = [], [], 0
+          for n in names:
+              if cur and size + len(n) > 65536:
+                  batches.append(cur); cur, size = [], 0
+              cur.append(n); size += len(n) + 1
+          batches += [cur] if cur else []
+          try:
+              for b in batches:
+                  r = subprocess.run(ruff + ["--ignore-noqa", "--select", "C901,PLR0915,E902",
+                                             "--config", f"lint.mccabe.max-complexity={MAX_C}",
+                                             "--config", f"lint.pylint.max-statements={MAX_S}",
+                                             "--exit-zero", "--output-format", "json", "--"] + b,
+                                     stdout=subprocess.PIPE, check=False)
+                  part = json.loads(r.stdout) if r.returncode == 0 else None
+                  if not isinstance(part, list):
+                      raise ValueError(f"ruff check exited {r.returncode}")
+                  found += part
+                  r = subprocess.run(ruff + ["--show-files", "--"] + b,
+                                     stdout=subprocess.PIPE, check=False)
+                  if r.returncode != 0:
+                      raise ValueError(f"ruff --show-files exited {r.returncode}")
+                  shown |= {os.path.abspath(s) for s in os.fsdecode(r.stdout).splitlines() if s}
+          except (OSError, ValueError) as e:
+              print(e)
+              say(f"not yet confirmed: {STD}, ruff did not finish (its error is in this step's log); "
+                  "a run where it does confirms it")
+              sys.exit(0)
+          # A listed file ruff did not measure is named, never passed: one it
+          # skipped, one it could not read (E902), one it could not parse
+          # (only `invalid-syntax` diagnostics, code null, and no measure).
+          unmeasured = {where(n): "skipped" for n in names if os.path.abspath(n) not in shown}
+          for d in found:
+              if isinstance(d, dict) and d.get("code") not in ("C901", "PLR0915"):
+                  unmeasured.setdefault(where(d.get("filename", "?")),
+                                        "could not read" if d.get("code") == "E902" else "could not parse")
+          unparsed = sorted(f"{p} ({why})" for p, why in unmeasured.items())
           for u in unparsed:
-              print(f"ruff could not parse: {u}")
+              print(f"ruff did not measure: {u}")
           funcs = {}
           for d in found:
               m = re.search(r"\((\d+) > \d+\)", str(d.get("message", ""))) if isinstance(d, dict) else None
@@ -1890,9 +1918,9 @@ jobs:
           if unparsed:
               listed = ", ".join(unparsed[:9]) + (f", and {len(unparsed) - 9} more in this step's log"
                                                   if len(unparsed) > 9 else "")
-              verdicts.append(f"not yet confirmed: {STD}, ruff could not parse "
-                              f"{count(len(unparsed), 'Python file')}, so the functions in them were not "
-                              f"measured: {listed}; a run where they parse confirms it")
+              verdicts.append(f"not yet confirmed: {STD}, ruff did not measure the functions in "
+                              f"{count(len(unparsed), 'Python file')}: {listed}; "
+                              "a run where ruff measures them confirms it")
               warns.append("::warning::" + verdicts[-1].replace("%", "%25"))
           if items:
               worst = "; ".join(f"{p}:{l} {w}" for _, p, l, w in items[:3])
