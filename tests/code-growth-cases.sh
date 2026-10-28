@@ -136,6 +136,13 @@ printf '\n[tool.ruff.lint.mccabe]\nmax-complexity = 50\n\n[tool.ruff.lint.pylint
 expect "a project's own looser ruff limits do not change the conventions" 1 \
   '^- not yet confirmed: code size within the conventions, 1 function and 0 files' "$NEXT src/pkg/a.py"
 
+new_repo; complex tangled | sed '1s/$/  # noqa: C901/' > "$p/src/pkg/a.py"
+complex hidden > "$p/src/pkg/b.py"; mkdir -p "$p/src/pkg/gen"; complex generated > "$p/src/pkg/gen/c.py"
+printf '\n[tool.ruff]\nextend-exclude = ["src/pkg/gen"]\n\n[tool.ruff.lint.per-file-ignores]\n"src/pkg/b.py" = ["C901"]\n' >> "$p/pyproject.toml"; run
+expect "a # noqa, a per-file ignore and an excluded directory hide nothing from the measure" 3 \
+  '^- not yet confirmed: code size within the conventions, 3 functions and 0 files' "$NEXT" \
+  && { printf '%s\n' "$warns" | grep -qF 'file=src/pkg/gen/c.py' && ok "the excluded directory's function is named" || bad "no warning names src/pkg/gen/c.py" "$warns"; }
+
 new_repo; rm -rf "$p/src"; complex tangled > "$p/app.py"; run
 expect "without src/ the whole project is measured" 1 '^- not yet confirmed: ' "file=app.py,line=1"
 
@@ -149,8 +156,8 @@ expect "a failed uv sync is one not yet confirmed warning, never a pass" 1 \
   '^- not yet confirmed: code size within the conventions, it did not run because an earlier step failed' 'not yet confirmed'
 
 new_repo; complex tangled > "$p/src/pkg/a.py"; printf '[tool.ruff\n' > "$p/pyproject.toml"; run
-expect "ruff that cannot read the project's configuration is not yet confirmed, not a pass" 1 \
-  '^- not yet confirmed: code size within the conventions, ruff did not finish' 'ruff did not finish'
+expect "a project configuration ruff cannot read does not stop the measure: it is not read" 1 \
+  '^- not yet confirmed: code size within the conventions, 1 function and 0 files' "$NEXT"
 
 # A ruff that prints a well-formed empty list and exits 2: its exit code is
 # what says it did not finish, never the list.
