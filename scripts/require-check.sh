@@ -66,9 +66,14 @@ id="$(wall_ruleset_id "$repo")" \
 cur="$(gh api "repos/$repo/rulesets/$id")" || stop "could not read ruleset $id on $repo."
 printf '%s' "$cur" | jq -e '.rules[] | select(.type == "required_status_checks")' >/dev/null \
   || stop "ruleset $id on $repo has no required_status_checks rule to add the name to."
-if printf '%s' "$cur" | jq -e --arg n "$name" \
-     '.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | select(.context == $n)' >/dev/null; then
-  echo "'$name' is already required on $repo; nothing was changed."
+# Names the ruleset requires from GitHub Actions. A required entry is a name
+# and an app: the same name from another app, or from any app, does not
+# hold an Actions job to passing, so it counts as not required here.
+from_actions='.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]
+              | select(.integration_id == 15368) | .context'
+required="$(printf '%s' "$cur" | jq -r "$from_actions")"
+if printf '%s\n' "$required" | grep -qxF -- "$name"; then
+  echo "'$name' is already required from GitHub Actions on $repo; nothing was changed."
   exit 0
 fi
 
@@ -106,14 +111,13 @@ chain="$(python3 "$here/require-check-job.py" "$repo" "$branch" "$path" "$name")
 # pass: every job it needs must be required already.
 deps="$(printf '%s\n' "$chain" | sed -n 's/^needs: //p')"
 chain="$(printf '%s\n' "$chain" | grep -v '^needs: ')"
-required="$(printf '%s' "$cur" | jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context')"
 missing=""
 while IFS= read -r d; do
   [ -n "$d" ] || continue
   printf '%s\n' "$required" | grep -qxF -- "$d" || missing="$missing     $d"$'\n'
 done <<<"$deps"
 if [ -n "$missing" ]; then
-  echo "'$name' needs these jobs, which are not required:" >&2
+  echo "'$name' needs these jobs, which are not required from GitHub Actions:" >&2
   printf '%s' "$missing" >&2
   echo "  if one of them fails, '$name' is skipped, and a skipped check counts as a pass." >&2
   echo "  require them first, one name at a time with this script, then '$name'." >&2
@@ -142,9 +146,9 @@ if ! err="$(printf '%s' "$new" | gh api "repos/$repo/rulesets/$id" -X PUT --inpu
   this login cannot change rulesets on $repo; run it with an admin token."
 fi
 # The list as GitHub now holds it, read back, not as sent.
-now="$(gh api "repos/$repo/rulesets/$id" \
-  --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context' 2>/dev/null)" \
+back="$(gh api "repos/$repo/rulesets/$id" 2>/dev/null)" \
   || { echo "   sent, but the ruleset could not be read back; look at Settings > Rules > Rulesets." >&2; exit 1; }
-printf '%s\n' "$now" | sed 's/^/   requires: /'
-printf '%s\n' "$now" | grep -qxF -- "$name" \
-  || { echo "   sent, but '$name' is not in the list GitHub returns." >&2; exit 1; }
+printf '%s' "$back" | jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[]
+                             | "   requires: \(.context)  (app \(.integration_id // "any"))"'
+printf '%s' "$back" | jq -r "$from_actions" | grep -qxF -- "$name" \
+  || { echo "   sent, but '$name' from GitHub Actions is not in the list GitHub returns." >&2; exit 1; }

@@ -155,6 +155,7 @@ case "$args" in
       {name: "Analyze (python)", app: {id: 15368}, check_suite: {id: 20}},
       {name: "x check", app: {id: 15368}, check_suite: {id: 40}},
       {name: "audit", app: {id: 15368}, check_suite: {id: 10}},
+      {name: "prep", app: {id: 15368}, check_suite: {id: 10}},
       {name: "built", app: {id: 15368}, check_suite: {id: 10}},
       {name: "chained", app: {id: 15368}, check_suite: {id: 10}},
       {name: "pushonly", app: {id: 15368}, check_suite: {id: 51}},
@@ -214,6 +215,19 @@ run 1 "a job that needs a job nobody requires is refused" --repo r/r 'chained'
 said "the refusal names the needed job that is not required" "     built"
 unwritten "needs unrequired"
 run 0 "a job whose needed jobs are all required is added" --repo r/r 'built'
+# The same name required from another app, or from any app, does not hold the Actions job.
+jq '.rules[2].parameters.required_status_checks[1].integration_id = 8329' "$work/ruleset.orig" > "$work/ruleset.other"
+mv "$work/ruleset.orig" "$work/ruleset.keep"; cp "$work/ruleset.other" "$work/ruleset.orig"
+run 1 "a needed job required only from another app is refused" --repo r/r 'built'
+said "the refusal names it" "     prep"
+unwritten "needed from another app"
+run 0 "a name required only from another app is still added from Actions" --repo r/r 'prep'
+if [ -e "$work/put.json" ] && jq -e '[.rules[2].parameters.required_status_checks[] | select(.context == "prep") | .integration_id] == [8329, 15368]' "$work/put.json" >/dev/null
+then ok "the other app's entry stays and the Actions one is added beside it"
+else bad "the write does not hold both prep entries"; fi
+jq 'del(.rules[2].parameters.required_status_checks[1].integration_id)' "$work/ruleset.keep" > "$work/ruleset.orig"
+run 1 "a needed job required from any app is refused" --repo r/r 'built'
+mv "$work/ruleset.keep" "$work/ruleset.orig"
 
 run 1 "a workflow that runs on push only is refused" --repo r/r 'pushonly'
 said "the refusal says there is no pull_request event" "has no pull_request event"

@@ -23,7 +23,9 @@ pull requests and have no tag.
   `pull_request` event, a path filter, another branch, `types:` without
   `synchronize`), and a job with `if:`, called from a job with `if:` or
   needing one, since a skipped job passes without running and a skipped call
-  reports no name. A job that needs a job not yet required is refused too. It says first that it needs a login
+  reports no name. A job that needs a job not yet required from GitHub
+  Actions is refused too; the same name required from another app does not
+  count. It says first that it needs a login
   that administers the repository, stops with a plain message and changes
   nothing without one, and prints the required list as GitHub returns it
   after the change. `scripts/upgrade-ruleset.sh` stays for checks from other
