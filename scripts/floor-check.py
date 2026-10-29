@@ -1699,7 +1699,14 @@ def check_release_workflow(root: Path, host: str, archetype: str) -> None:
         if not m:
             result("SKIP", f"{RELEASE_WORKFLOW}: no ASSETS line this checker reads; uploaded files not verified")
             return
-        pickles = [f for f in m.group(1).strip("'\" ").split() if f.lower().endswith(PICKLE_SUFFIXES)]
+        names = m.group(1).strip("'\" ").split()
+        # Only a one-line list of plain file names is read; `>-`, `|`, an
+        # expression or a comment would hide the names from this check.
+        if not names or not all(re.fullmatch(r"[\w./-]+", f) for f in names):
+            result("SKIP", f"{RELEASE_WORKFLOW}: ASSETS is not a one-line list of file names this checker reads "
+                           f"(ASSETS: {m.group(1).strip()}); uploaded files not verified")
+            return
+        pickles = [f for f in names if f.lower().endswith(PICKLE_SUFFIXES)]
         if pickles:
             result("WARN", f"{RELEASE_WORKFLOW} uploads a pickle ({', '.join(pickles)}): loading one runs "
                            "whatever code it holds; save the model with skops, safetensors or ONNX")

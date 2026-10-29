@@ -1531,6 +1531,12 @@ sed 's/ASSETS: model.skops metrics.json/ASSETS: "model.skops weights.PT/' "$ml/r
 out="$(ml_out)"
 if grep -qF "WARN  $rel uploads a pickle (weights.PT)" <<<"$out"; then ok "a quoted ASSETS line with an upper-case .PT: still a pickle"
 else bad "a quoted ASSETS line with an upper-case .PT was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+for value in '>-\n    model.pkl' '${{ vars.ASSETS }}'; do
+  sed "s/ASSETS: .*/ASSETS: $value/" "$ml/release.good" > "$ml/$rel"
+  out="$(ml_out)"
+  if grep -qF "SKIP  $rel: ASSETS is not a one-line list of file names this checker reads" <<<"$out" && ! grep -q "PASS  $rel uploads no pickle" <<<"$out"; then ok "ASSETS: $value: not verified, not passed"
+  else bad "ASSETS: $value was passed or not reported"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+done
 grep -v 'ASSETS:' "$ml/release.good" > "$ml/$rel"
 out="$(ml_out)"
 if grep -qF "SKIP  $rel: no ASSETS line this checker reads; uploaded files not verified" <<<"$out"; then ok "data-ml release.yml without an ASSETS line: not verified, not passed"
