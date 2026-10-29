@@ -19,7 +19,7 @@ expression or a matrix) is a refusal, never a pass. Exit 0 with the chain of
 jobs on stdout, then one `needs: <check name>` line per job it needs; exit 1
 with the reason on stderr. The workflow's `on:` is read too: a workflow that
 does not run on every new commit of a pull request to the default branch (no
-pull_request event, a path filter, another branch, types without
+pull_request event, a path filter, another branch, a `!` branch pattern, types without
 `synchronize`) leaves the name pending there, and is a refusal.
 """
 
@@ -62,6 +62,10 @@ def scalar(value: str) -> str:
         end = value.find(q, 1)
         if end < 0:
             raise Unreadable(f"a quoted value that does not close on its line: {value}")
+        rest = value[end + 1:].strip()
+        # An escape (`"\x21main"`, `'it''s'`) changes the value; these lines do not undo it.
+        if (q == '"' and "\\" in value[1:end]) or (rest and not rest.startswith("#")):
+            raise Unreadable(f"a quoted value with an escape or more text after it: {value}")
         return value[1:end]
     return re.split(r"\s+#", value, maxsplit=1)[0].strip()
 
@@ -141,15 +145,20 @@ def parse_jobs(text: str) -> list[Job]:
     return jobs
 
 
-def flow_list(value: str) -> list[str]:
-    """`a`, or `[a, b]` on one line."""
+def flow_raw(value: str) -> list[str]:
+    """The items of `a`, or of `[a, b]` on one line, as written."""
     value = value.strip()
     if value.startswith("["):
         end = value.find("]")
         if end < 0:
             raise Unreadable(f"a list that does not close on its line: {value}")
-        return [scalar(v) for v in value[1:end].split(",") if v.strip()]
-    return [scalar(value)]
+        return [v.strip() for v in value[1:end].split(",") if v.strip()]
+    return [value]
+
+
+def flow_list(value: str) -> list[str]:
+    """`a`, or `[a, b]` on one line."""
+    return [scalar(v) for v in flow_raw(value)]
 
 
 def top_key(rows: list[tuple[int, int, str]], names: set[str]) -> int | None:
@@ -170,23 +179,28 @@ def children(rows: list[tuple[int, int, str]], i: int) -> list[tuple[int, int, s
     return out
 
 
-def items(value: str, under: list[tuple[int, int, str]]) -> list[str]:
-    """A list written on the key's line or as `- item` lines under it."""
+def raw_items(value: str, n: int, under: list[tuple[int, int, str]]) -> list[tuple[int, str]]:
+    """(line number, item as written) of a list on line n or as `- item` lines under it."""
     if value and not value.startswith("#"):
-        return flow_list(value)
+        return [(n, v) for v in flow_raw(value)]
     out = []
-    for n, _, ln in under:
+    for ln_no, _, ln in under:
         m = re.match(r"\s*-\s+(.+)$", ln)
         if not m:
-            raise Unreadable(f"line {n} does not read as a list item")
-        out.append(scalar(m.group(1)))
+            raise Unreadable(f"line {ln_no} does not read as a list item")
+        out.append((ln_no, m.group(1).strip()))
     return out
+
+
+def items(value: str, under: list[tuple[int, int, str]]) -> list[str]:
+    """A list written on the key's line or as `- item` lines under it."""
+    return [scalar(v) for _, v in raw_items(value, 0, under)]
 
 
 PR_EVENTS = {"pull_request", "pull_request_target"}
 
 
-def pull_request_trigger(text: str, branch: str) -> str | None:
+def pull_request_trigger(text: str, branch: str, path: str = "the workflow") -> str | None:
     """None when the workflow runs on every new commit of a pull request to
     `branch`; otherwise why not. A form not read here is a reason too."""
     rows = list(lines(text))
@@ -232,8 +246,27 @@ def pull_request_trigger(text: str, branch: str) -> str | None:
             elif fkey == "branches-ignore":
                 why = f"its `{m.group(3)}:` has `branches-ignore:` (line {fn}), which this script does not read"
             elif fkey == "branches":
-                names = items(fval, fsub)
-                if branch not in names and not {"*", "**"} & set(names):
+                try:
+                    written = raw_items(fval, fn, fsub)
+                except Unreadable as e:
+                    raise Unreadable(f"line {fn} of {path}, `{m.group(3)}:` branches: {e}") from None
+                names = []
+                for ln_no, v in written:
+                    try:
+                        names.append(scalar(v))
+                    except Unreadable as e:
+                        raise Unreadable(f"line {ln_no} of {path}, `{m.group(3)}:` branches: {e}") from None
+                # GitHub reads the list in order and a `!` pattern drops a branch an earlier one matched;
+                # an anchor or alias may carry one in. Neither is read here.
+                odd = next(((ln_no, v, p) for (ln_no, v), p in zip(written, names)
+                            if p.startswith("!") or (v.startswith(("&", "*")) and v not in {"*", "**"})), None)
+                if odd:
+                    ln_no, v, p = odd
+                    why = (f"its `{m.group(3)}:` branches list has `{v}` (line {ln_no}): "
+                           + ("a pattern starting with `!` leaves branches out, maybe "
+                              f"{branch}, and this script does not read those. List the branches to run on instead"
+                              if p.startswith("!") else "an anchor or alias, which this script does not read"))
+                elif branch not in names and not {"*", "**"} & set(names):
                     why = (f"its `{m.group(3)}:` runs only for pull requests to {', '.join(names) or 'no branch'}"
                            f" (line {fn}), not to {branch}")
             elif fkey == "types":
@@ -325,7 +358,7 @@ def main(argv: list[str]) -> int:
         return 2
     repo, ref, path, name = argv[1:]
     try:
-        why = pull_request_trigger(fetch(repo, ref, path), ref)
+        why = pull_request_trigger(fetch(repo, ref, path), ref, path)
         if why:
             print(f"{path} does not run '{name}' on every pull request to {ref}: {why}.", file=sys.stderr)
             print("  a required name that does not report on a pull request holds it. Fix the workflow's `on:`,"
