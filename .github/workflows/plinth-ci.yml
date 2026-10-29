@@ -155,6 +155,9 @@ jobs:
       - name: Adding a rule kind only adds
         run: ./tests/add-ruleset-rule.sh
 
+      - name: Requiring one check refuses an unseen name, a job with a condition and a login without administration
+        run: ./tests/require-check-cases.sh
+
       - name: Tag ruleset blocks deletion and moving, never creation
         run: ./tests/tag-ruleset.sh
 
