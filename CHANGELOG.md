@@ -13,6 +13,17 @@ pull requests and have no tag.
 
 ### Added
 
+- `/plinth:floor-check` and `ci / floor-check` read a `data-ml` project's
+  `.github/workflows/release.yml`, the workflow the next plinth-template
+  release adds to publish the project's model, metrics and model card to a
+  GitHub Release on a version tag (#716). The same three items as for the
+  other archetypes, and one more: no file its `ASSETS:` line uploads is a
+  pickle (`.pkl`, `.pickle`, `.joblib`, `.pt`). A second item asks for
+  `MODEL_CARD.md`, on GitHub and GitLab. Each finding is a WARN, never a
+  FAIL, so a `data-ml` rendered before these files existed still has 0
+  failed; both missing-file WARNs name plinth-template 1.31.0. New projects
+  get the files once `/plinth:new-project` renders that template release, a
+  separate change.
 - `/plinth:floor-check` and `ci / floor-check` read a `backend` project's
   `.github/workflows/release.yml` too, the workflow the next plinth-template
   release adds to publish the project's image to GHCR on a version tag
@@ -22,7 +33,7 @@ pull requests and have no tag.
   so a `backend` rendered before the file existed still has 0 failed; the
   missing-file WARN names plinth-template 1.30.0 and the project's
   `docs/how-to/publish-a-release.md`. A GitLab `backend` gets an INFO, and
-  `data-ml` and `web` are not asked. New projects get the file once
+  `web` is not asked (`data-ml`: the entry above). New projects get the file once
   `/plinth:new-project` renders that template release, a separate change.
 
 ### Changed

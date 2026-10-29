@@ -136,7 +136,8 @@ IMAGE_CHECK = "image"
 WEB_CHECKS = ("ci / migrations", "ci / deploy-check")
 # The archetypes whose floor includes publishing on a version tag through
 # plinth-template's .github/workflows/release.yml, on GitHub: a package to
-# PyPI (#703), a backend's image to GHCR (#706). What each publishes, where,
+# PyPI (#703), a backend's image to GHCR (#706), a data-ml project's model,
+# metrics and card to a GitHub Release (#716). What each publishes, where,
 # the template release that adds the file, and what the run pushes with in
 # place of a stored secret.
 PACKAGE_ARCHETYPES = ("cli", "library")
@@ -145,7 +146,10 @@ RELEASES = {
     "cli": ("this package to PyPI", "1.29.0", "Trusted Publishing needs none"),
     "library": ("this package to PyPI", "1.29.0", "Trusted Publishing needs none"),
     "backend": ("this image to GHCR", "1.30.0", "the run's own token pushes the image"),
+    "data-ml": ("this model to a GitHub Release", "1.31.0", "the run's own token makes the release"),
 }
+# What a data-ml release must never upload: formats that run code when loaded.
+PICKLE_SUFFIXES = (".pkl", ".pickle", ".joblib", ".pt")
 # GitLab's name for the same job: `image` is a GitLab CI keyword (plinth-template v1.13.0).
 GITLAB_IMAGE_JOB = "docker-image"
 # The GitLab pipeline beside this script; its floor-check job holds the include rule (#543).
@@ -1628,13 +1632,28 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
         check_hosted_elsewhere(answers.get("hosting_elsewhere"))
     if archetype in RELEASES:
         check_release_workflow(root, host, archetype)
+    if archetype == "data-ml":
+        check_model_card(project)
+
+
+def check_model_card(project: Path) -> None:
+    """The card a data-ml release publishes beside the model, with its
+    personal-data question (plinth-template 1.31.0, #716). A WARN, never a
+    FAIL: an instance rendered before the card existed passes as it did."""
+    if (project / "MODEL_CARD.md").is_file():
+        result("PASS", "MODEL_CARD.md present")
+    else:
+        result("WARN", "MODEL_CARD.md missing: a release publishes the model without saying what it was trained on")
+        result("INFO", f"  plinth-template {RELEASES['data-ml'][1]} adds it with the training run: copier update")
 
 
 def check_release_workflow(root: Path, host: str, archetype: str) -> None:
     """A `cli` or `library` publishes to PyPI on a version tag through the
-    template's release.yml (plinth-template 1.29.0, #703), and a `backend`
-    its image to GHCR (#706). Read as text, standard library only: present,
-    started by a tag and nothing else, and reading no stored secret. Each
+    template's release.yml (plinth-template 1.29.0, #703), a `backend`
+    its image to GHCR (#706), and a `data-ml` its model to a GitHub Release
+    (#716). Read as text, standard library only: present, started by a tag
+    and nothing else, and reading no stored secret; for `data-ml`, also no
+    pickle among the files its `ASSETS` line uploads. Each
     finding is a WARN, never a FAIL: publishing is the person's choice, and
     an instance rendered before the file existed passes as it did."""
     what, since, instead = RELEASES[archetype]
@@ -1674,6 +1693,18 @@ def check_release_workflow(root: Path, host: str, archetype: str) -> None:
                        f"{instead}, and a stored token can be copied and used from anywhere")
     else:
         result("PASS", f"{RELEASE_WORKFLOW} reads no stored secret")
+    if archetype == "data-ml":
+        # The template names what a release uploads once, in `env: ASSETS:`.
+        m = re.search(r"^\s*ASSETS:[ \t]*(.*)$", text, re.MULTILINE)
+        if not m:
+            result("SKIP", f"{RELEASE_WORKFLOW}: no ASSETS line this checker reads; uploaded files not verified")
+            return
+        pickles = [f for f in m.group(1).strip("'\" ").split() if f.lower().endswith(PICKLE_SUFFIXES)]
+        if pickles:
+            result("WARN", f"{RELEASE_WORKFLOW} uploads a pickle ({', '.join(pickles)}): loading one runs "
+                           "whatever code it holds; save the model with skops, safetensors or ONNX")
+        else:
+            result("PASS", f"{RELEASE_WORKFLOW} uploads no pickle (ASSETS: {m.group(1).strip()})")
 
 
 def check_render_yaml(project: Path) -> None:
