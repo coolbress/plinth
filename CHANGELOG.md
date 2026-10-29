@@ -25,6 +25,18 @@ pull requests and have no tag.
   `data-ml` and `web` are not asked. New projects get the file once
   `/plinth:new-project` renders that template release, a separate change.
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.30.0
+  (coolbress/plinth-template#141, #142, #143). A new `backend` project on
+  GitHub publishes its container image to GHCR when a version tag is
+  pushed, with no stored secret, and its
+  `docs/how-to/publish-a-release.md` gives the steps and the storage a
+  private image counts against. Every new project gets an issue form for
+  ending a project or handing it over. An existing repository gets the
+  release workflow through `/plinth:template-update`; on GitHub the form
+  comes only with a new project until #726.
+
 ## [2.16.0] - 2026-10-29
 
 New `cli` and `library` projects come from plinth-template v1.29.0 and
