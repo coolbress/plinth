@@ -1695,23 +1695,29 @@ def check_release_workflow(root: Path, host: str, archetype: str) -> None:
         result("PASS", f"{RELEASE_WORKFLOW} reads no stored secret")
     if archetype == "data-ml":
         # The template names what a release uploads once, in `env: ASSETS:`.
-        m = re.search(r"^\s*ASSETS:[ \t]*(.*)$", text, re.MULTILINE)
-        if not m:
+        found = list(re.finditer(r"^([ \t]*)ASSETS:[ \t]*(.*)$", text, re.MULTILINE))
+        if not found:
             result("SKIP", f"{RELEASE_WORKFLOW}: no ASSETS line this checker reads; uploaded files not verified")
             return
-        names = m.group(1).strip("'\" ").split()
-        # Only a one-line list of plain file names is read; `>-`, `|`, an
-        # expression or a comment would hide the names from this check.
-        if not names or not all(re.fullmatch(r"[\w./-]+", f) for f in names):
+        m = found[0]
+        names = m.group(2).strip("'\" ").split()
+        # Only one ASSETS line holding a list of plain file names is read. A
+        # second ASSETS (one can override the other), a line indented deeper
+        # under it (YAML continues the value there), `>-`, `|`, an expression
+        # or a comment would hide names from this check.
+        following = next((line for line in text[m.end():].splitlines() if line.strip()), "")
+        continued = len(following) - len(following.lstrip()) > len(m.group(1))
+        if (len(found) > 1 or continued or not names
+                or not all(re.fullmatch(r"[\w./-]+", f) for f in names)):
             result("SKIP", f"{RELEASE_WORKFLOW}: ASSETS is not a one-line list of file names this checker reads "
-                           f"(ASSETS: {m.group(1).strip()}); uploaded files not verified")
+                           f"(ASSETS: {m.group(2).strip()}); uploaded files not verified")
             return
         pickles = [f for f in names if f.lower().endswith(PICKLE_SUFFIXES)]
         if pickles:
             result("WARN", f"{RELEASE_WORKFLOW} uploads a pickle ({', '.join(pickles)}): loading one runs "
                            "whatever code it holds; save the model with skops, safetensors or ONNX")
         else:
-            result("PASS", f"{RELEASE_WORKFLOW} uploads no pickle (ASSETS: {m.group(1).strip()})")
+            result("PASS", f"{RELEASE_WORKFLOW} uploads no pickle (ASSETS: {m.group(2).strip()})")
 
 
 def check_render_yaml(project: Path) -> None:

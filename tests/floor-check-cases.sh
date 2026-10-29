@@ -1531,8 +1531,11 @@ sed 's/ASSETS: model.skops metrics.json/ASSETS: "model.skops weights.PT/' "$ml/r
 out="$(ml_out)"
 if grep -qF "WARN  $rel uploads a pickle (weights.PT)" <<<"$out"; then ok "a quoted ASSETS line with an upper-case .PT: still a pickle"
 else bad "a quoted ASSETS line with an upper-case .PT was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
-for value in '>-\n    model.pkl' '${{ vars.ASSETS }}'; do
-  sed "s/ASSETS: .*/ASSETS: $value/" "$ml/release.good" > "$ml/$rel"
+for value in '>-\n    model.pkl' 'model.skops\n    model.pkl' '${{ vars.ASSETS }}' 'model.skops (and a second ASSETS: model.pkl)'; do
+  case "$value" in
+    *second*) sed 's/^  publish:$/  publish:\n    env:\n      ASSETS: model.pkl/' "$ml/release.good" > "$ml/$rel" ;;
+    *) sed "s/ASSETS: .*/ASSETS: $value/" "$ml/release.good" > "$ml/$rel" ;;
+  esac
   out="$(ml_out)"
   if grep -qF "SKIP  $rel: ASSETS is not a one-line list of file names this checker reads" <<<"$out" && ! grep -q "PASS  $rel uploads no pickle" <<<"$out"; then ok "ASSETS: $value: not verified, not passed"
   else bad "ASSETS: $value was passed or not reported"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
