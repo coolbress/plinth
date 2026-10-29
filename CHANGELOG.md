@@ -18,9 +18,12 @@ pull requests and have no tag.
   [make your own check required](docs/how-to/make-your-own-check-required.md)
   explains it in plain words (#707). It refuses a name that has not reported
   on the last ten commits of the default branch, a check that does not come
-  from a GitHub Actions job in a workflow file, and a job with `if:`, or one
-  called from a job with `if:`, since a skipped job passes without running
-  and a skipped call reports no name. It says first that it needs a login
+  from a GitHub Actions job in a workflow file, a workflow that does not run
+  on every new commit of a pull request to the default branch (no
+  `pull_request` event, a path filter, another branch, `types:` without
+  `synchronize`), and a job with `if:`, called from a job with `if:` or
+  needing one, since a skipped job passes without running and a skipped call
+  reports no name. A job that needs a job not yet required is refused too. It says first that it needs a login
   that administers the repository, stops with a plain message and changes
   nothing without one, and prints the required list as GitHub returns it
   after the change. `scripts/upgrade-ruleset.sh` stays for checks from other

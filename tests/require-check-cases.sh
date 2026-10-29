@@ -39,7 +39,44 @@ jobs:
     uses: ./.github/workflows/inner.yml
   remote:
     uses: other/lib/.github/workflows/lib.yml@0123456789abcdef0123456789abcdef01234567
+  setup:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  audit:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  prep:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  built:
+    needs: [prep]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  chained:
+    needs:
+      - built
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
 YML
+# Triggers: one workflow per way a pull request can go without the check.
+trig() { # <file> <job> <on: block>
+  printf '%s\njobs:\n  %s:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n' "$3" "$2" \
+    > "$work/files/r/r/.github/workflows/$1"
+}
+trig push-only.yml pushonly $'on:\n  push:\n    branches: [main]'
+trig paths.yml pathy $'on:\n  pull_request:\n    paths:\n      - src/**'
+trig other-branch.yml rel $'on:\n  pull_request:\n    branches: [release]'
+trig types.yml typed $'on:\n  pull_request:\n    types: [opened]'
+trig block.yml blocky $'on:\n  push:\n    branches: [main]\n  pull_request:\n    branches:\n      - main\n    types: [opened, synchronize, reopened]'
+trig list.yml listy $'on:\n  - push\n  - pull_request'
+
 cat > "$work/files/r/r/.github/workflows/inner.yml" <<'YML'
 on:
   workflow_call:
@@ -64,7 +101,7 @@ jobs:
       - run: echo ok
 YML
 cat > "$work/files/r/r/.github/workflows/dyn.yml" <<'YML'
-on: push
+on: [push, pull_request]
 jobs:
   dyn:
     name: ${{ matrix.x }} check
@@ -74,7 +111,7 @@ jobs:
 YML
 
 # The ruleset as GitHub holds it; a PUT replaces it, so a read-back sees the write.
-echo '{"id":1,"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"pull_request"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"base","integration_id":15368}]}}],"_links":{}}' > "$work/ruleset.orig"
+echo '{"id":1,"name":"r","target":"branch","enforcement":"active","bypass_actors":[],"conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[{"type":"deletion"},{"type":"pull_request"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"base","integration_id":15368},{"context":"prep","integration_id":15368}]}}],"_links":{}}' > "$work/ruleset.orig"
 
 cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
@@ -93,7 +130,10 @@ case "$args" in
     suite="${args##*check_suite_id=}"; suite="${suite%% *}"
     case "$suite" in
       10) p=.github/workflows/ci.yml ;; 20) p=dynamic/github-code-scanning/codeql ;;
-      40) p=.github/workflows/dyn.yml ;; *) p="" ;;
+      40) p=.github/workflows/dyn.yml ;; 51) p=.github/workflows/push-only.yml ;;
+      52) p=.github/workflows/paths.yml ;; 53) p=.github/workflows/other-branch.yml ;;
+      54) p=.github/workflows/types.yml ;; 55) p=.github/workflows/block.yml ;;
+      56) p=.github/workflows/list.yml ;; *) p="" ;;
     esac
     jq -n --arg p "$p" '{workflow_runs: [{path: $p}]}' | out "$@" ;;
   *"/contents/"*)
@@ -114,6 +154,15 @@ case "$args" in
       {name: "remote / lib", app: {id: 15368}, check_suite: {id: 10}},
       {name: "Analyze (python)", app: {id: 15368}, check_suite: {id: 20}},
       {name: "x check", app: {id: 15368}, check_suite: {id: 40}},
+      {name: "audit", app: {id: 15368}, check_suite: {id: 10}},
+      {name: "built", app: {id: 15368}, check_suite: {id: 10}},
+      {name: "chained", app: {id: 15368}, check_suite: {id: 10}},
+      {name: "pushonly", app: {id: 15368}, check_suite: {id: 51}},
+      {name: "pathy", app: {id: 15368}, check_suite: {id: 52}},
+      {name: "rel", app: {id: 15368}, check_suite: {id: 53}},
+      {name: "typed", app: {id: 15368}, check_suite: {id: 54}},
+      {name: "blocky", app: {id: 15368}, check_suite: {id: 55}},
+      {name: "listy", app: {id: 15368}, check_suite: {id: 56}},
       {name: "Vercel", app: {id: 8329}, check_suite: {id: 30}}]}' | out "$@" ;;
   "api repos/r/r --jq"*)
     jq -n --argjson a "${ADMIN:-true}" '{permissions: {admin: $a}, default_branch: "main"}' | out "$@" ;;
@@ -158,6 +207,29 @@ run 1 "a called job with if: is refused" --repo r/r 'wrap / innerif'
 said "the refusal names the called job" 'job `innerif` in .github/workflows/inner.yml'
 unwritten "called if:"
 
+run 1 "a job that needs a job with if: is refused" --repo r/r 'audit'
+said "the refusal names the needed job" 'job `setup` in .github/workflows/ci.yml has `if:`'
+unwritten "needs if:"
+run 1 "a job that needs a job nobody requires is refused" --repo r/r 'chained'
+said "the refusal names the needed job that is not required" "     built"
+unwritten "needs unrequired"
+run 0 "a job whose needed jobs are all required is added" --repo r/r 'built'
+
+run 1 "a workflow that runs on push only is refused" --repo r/r 'pushonly'
+said "the refusal says there is no pull_request event" "has no pull_request event"
+unwritten "push only"
+run 1 "a pull_request path filter is refused" --repo r/r 'pathy'
+said "the refusal names the filter" 'has `paths:`'
+unwritten "paths"
+run 1 "a pull_request for another branch only is refused" --repo r/r 'rel'
+said "the refusal names the branch" "runs only for pull requests to release"
+unwritten "other branch"
+run 1 "pull_request types without synchronize are refused" --repo r/r 'typed'
+said "the refusal names the missing type" "leave out synchronize"
+unwritten "types"
+run 0 "a block on: with the default branch and the three types is accepted" --repo r/r 'blocky'
+run 0 "an on: written as a list is accepted" --repo r/r 'listy'
+
 run 1 "a check GitHub runs itself (CodeQL default setup) is refused" --repo r/r 'Analyze (python)'
 said "the refusal says GitHub runs it itself" "which GitHub runs itself"
 unwritten "dynamic"
@@ -178,7 +250,7 @@ said "it says GitHub refused and nothing changed" "GitHub refused the change"
 run 0 "a job with no if: is added" --repo r/r 'slow check'
 if [ -e "$work/put.json" ] && jq -e '
      (.rules | map(.type)) == ["deletion","pull_request","required_status_checks"]
-     and (.rules[2].parameters.required_status_checks == [{"context":"base","integration_id":15368},{"context":"slow check","integration_id":15368}])
+     and (.rules[2].parameters.required_status_checks == [{"context":"base","integration_id":15368},{"context":"prep","integration_id":15368},{"context":"slow check","integration_id":15368}])
      and .rules[2].parameters.strict_required_status_checks_policy == true
      and (has("id") | not) and (has("_links") | not)' "$work/put.json" >/dev/null
 then ok "the write adds the name and keeps every other rule, entry and the strict policy"

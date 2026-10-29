@@ -102,6 +102,24 @@ case "$path" in
 esac
 chain="$(python3 "$here/require-check-job.py" "$repo" "$branch" "$path" "$name")" || stop "  refused."
 
+# A job whose needed job fails is skipped, and a skipped check counts as a
+# pass: every job it needs must be required already.
+deps="$(printf '%s\n' "$chain" | sed -n 's/^needs: //p')"
+chain="$(printf '%s\n' "$chain" | grep -v '^needs: ')"
+required="$(printf '%s' "$cur" | jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context')"
+missing=""
+while IFS= read -r d; do
+  [ -n "$d" ] || continue
+  printf '%s\n' "$required" | grep -qxF -- "$d" || missing="$missing     $d"$'\n'
+done <<<"$deps"
+if [ -n "$missing" ]; then
+  echo "'$name' needs these jobs, which are not required:" >&2
+  printf '%s' "$missing" >&2
+  echo "  if one of them fails, '$name' is skipped, and a skipped check counts as a pass." >&2
+  echo "  require them first, one name at a time with this script, then '$name'." >&2
+  stop "  refused."
+fi
+
 new="$(printf '%s' "$cur" | jq --arg n "$name" '
   # Only the fields PUT accepts. Server-side fields (id, created_at, _links) are rejected if sent back.
   {name, target, enforcement, bypass_actors, conditions, rules}

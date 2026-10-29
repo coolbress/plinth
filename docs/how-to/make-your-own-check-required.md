@@ -18,11 +18,17 @@ administration removes it.
   commits there. A workflow that runs only on pull requests never reports
   there: add `push` to its `on:` for the default branch, as plinth's own
   `ci.yml` does, and merge that.
+- **It runs on every pull request.** Its workflow's `on:` has
+  `pull_request` for the default branch, with no `paths:` filter, and, if it
+  lists `types:`, at least `opened` and `synchronize`. Otherwise a pull
+  request it does not run on waits for it forever.
 - **The job has no `if:`.** A job with `if:` is skipped when the condition
   is false. A skipped job counts as a pass without running, and a skipped
   call to a reusable workflow reports no name at all, so nothing merges. Put
   the condition on the job's steps instead, so the job always runs and
-  reports.
+  reports. The same goes for every job it `needs:`: when one of them is
+  skipped or fails, your job is skipped too. So those jobs must have no
+  `if:` and must be required already; require them first.
 - **You run it, not the agent.** Changing the ruleset needs a login that
   administers the repository. The agent's token has no Administration
   ([the agent's token](give-the-agent-a-token.md)), so it cannot run this,
@@ -64,7 +70,9 @@ Each refusal says what to fix, and changes nothing.
 | --- | --- | --- |
 | this login does not administer the repository | Your login, or the token you pasted, cannot change rulesets | Run it again through `with-admin-token.sh` with a token that has administration: classic with `repo`, or fine-grained with Administration: write |
 | has never reported on the last ten commits | The name is misspelled, or the check has not run on the default branch | Copy the name from the list it prints, or make the workflow run on the default branch and merge that first |
-| has `if:` | The job, or the job calling its workflow, can be skipped | Move the condition into the job's steps, merge that, try again |
+| does not run ... on every pull request | The workflow has no `pull_request` event, a path filter, another branch, or `types:` without `synchronize` | Fix the workflow's `on:`, merge that, try again |
+| has `if:` | The job, a job calling its workflow, or a job it needs can be skipped | Move the condition into the job's steps, merge that, try again |
+| needs these jobs, which are not required | If a job it needs fails, it is skipped, which counts as a pass | Require those jobs first, one at a time with the same command |
 | comes from app ..., not GitHub Actions | The check is posted by another service | `scripts/upgrade-ruleset.sh <owner/name> '<name>:<app id>'`, which takes any app |
 | which GitHub runs itself | A check like CodeQL's default setup, which has no workflow file in the repository | CodeQL is required through its own rule already ([Required checks](../reference/required-checks.md#code-scanning-rule)) |
 | cannot tell which job reports it | The job's name is set by an expression or a matrix, or the workflow uses a form the script does not read | Give the job a plain `name:`, or use `scripts/upgrade-ruleset.sh` and check the name yourself |
