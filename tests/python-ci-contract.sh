@@ -39,8 +39,8 @@ contexts = [c["context"] for r in ruleset["rules"] if r["type"] == "required_sta
 # floor-check.py's ruleset_for the way `image` is for a service (#614).
 WEB_ONLY = {"migrations", "deploy-check"}
 # Reported, never failing, and required by no ruleset until projects have shown
-# its warnings (#705).
-REPORT_ONLY = {"code-growth"}
+# its warnings (#705), or until a budget that turns it red is decided (#709).
+REPORT_ONLY = {"code-growth", "web-audit"}
 want = [f"ci / {j}" for j in jobs if j not in WEB_ONLY | REPORT_ONLY]
 if sorted(contexts) == sorted(want):
     print(f"  PASS  ruleset.json requires exactly the {len(want)} jobs every archetype runs, by name (CodeQL is a rule)")

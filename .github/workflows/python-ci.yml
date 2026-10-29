@@ -1975,3 +1975,367 @@ jobs:
             while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$t.verdict"
           fi
           if [ -s "$t.md" ]; then cat "$t.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+  # Lighthouse CI and axe-core on a `web` project's pages (#709): the app image
+  # built and started as the template's `image` job starts it, with a
+  # disposable Postgres behind it, then `/` as a logged-in person and the
+  # log-in page as a visitor. No account anywhere: the person is made for this
+  # run in the throwaway database, and the reports stay in this run (nothing
+  # is uploaded). Reported, never failing (#702's Decisions): every step
+  # continues on error, and whether a score or a violation ever turns it red
+  # is decided later. Not a required check. Another archetype reports a pass
+  # that does not apply. Node, Chrome for Testing and the tools are pinned:
+  # the two downloads by SHA256, the npm packages by the lockfile in
+  # scripts/web-audit/, fetched from the same plinth commit as this workflow.
+  web-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
+        if: inputs.web
+        continue-on-error: true
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+
+      # Production-shaped settings, as `image` runs it: a key made for this
+      # run, `localhost` as the allowed host. Debug is off, so the app answers
+      # over HTTPS only; `X-Forwarded-Proto: https` on every request stands in
+      # for the host's TLS proxy, as it does in production. The person is made
+      # and logged in from inside the container, with Django's own session
+      # store, so no log-in form, password or CSRF exchange is involved.
+      - name: Build and start the app image
+        id: app
+        if: inputs.web && steps.checkout.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          r="$RUNNER_TEMP/web-audit"; mkdir -p "$r"
+          why() { echo "$1" > "$r/app.why"; exit 1; }
+          [ -f Dockerfile ] || why "there is no Dockerfile in the project"
+          settings="$(python3 -c 'import re; m = re.search(r"DJANGO_SETTINGS_MODULE[\x22\x27]\s*,\s*[\x22\x27]([\w.]+)", open("manage.py", encoding="utf-8").read()); print(m.group(1) if m else "")' 2>/dev/null || true)"
+          [ -n "$settings" ] || why "manage.py names no DJANGO_SETTINGS_MODULE"
+          docker build -t web-audit-app . || why "the image did not build (the build is in this step's log)"
+          docker network create web-audit >/dev/null
+          docker run -d --name web-audit-pg --network web-audit -e POSTGRES_PASSWORD=ci \
+            postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24 >/dev/null
+          for _ in $(seq 60); do docker exec web-audit-pg pg_isready -h 127.0.0.1 -U postgres -q && break; sleep 1; done
+          docker exec web-audit-pg pg_isready -h 127.0.0.1 -U postgres -q || why "the disposable Postgres did not start"
+          docker run -d --name web-audit-app --network web-audit -p 8000:8000 \
+            -e PORT=8000 \
+            -e DJANGO_SECRET_KEY="$(openssl rand -hex 32)" \
+            -e DJANGO_ALLOWED_HOSTS=localhost \
+            -e DATABASE_URL=postgres://postgres:ci@web-audit-pg:5432/postgres \
+            web-audit-app >/dev/null
+          code=000
+          for _ in $(seq 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' http://localhost:8000/ || true)"
+            [ "$code" = 000 ] || break; sleep 1
+          done
+          if [ "$code" = 000 ]; then docker logs web-audit-app || true; why "the app did not answer on port 8000 within 60 seconds (its log is in this step's log)"; fi
+          echo "the app answered / with HTTP $code"
+          docker exec -e DJANGO_SETTINGS_MODULE="$settings" web-audit-app python -m django migrate --no-input \
+            || why "the migrations did not apply to the disposable Postgres (this step's log has the error)"
+          docker exec -i -e DJANGO_SETTINGS_MODULE="$settings" web-audit-app python - > "$r/django.json" <<'PY'
+          import json, secrets
+          from importlib import import_module
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.shortcuts import resolve_url
+          out = {"login": resolve_url(settings.LOGIN_URL)}
+          try:
+              from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY, get_user_model
+              User = get_user_model()
+              user = User.objects.create_user(**{User.USERNAME_FIELD: "web-audit"}, password=secrets.token_urlsafe(24))
+              store = import_module(settings.SESSION_ENGINE).SessionStore()
+              store[SESSION_KEY] = user._meta.pk.value_to_string(user)
+              store[BACKEND_SESSION_KEY] = settings.AUTHENTICATION_BACKENDS[0]
+              store[HASH_SESSION_KEY] = user.get_session_auth_hash()
+              store.create()
+              out["cookie"] = f"{settings.SESSION_COOKIE_NAME}={store.session_key}"
+          except Exception as e:  # a custom user model this cannot fill, a session engine it cannot use
+              out["no_login"] = f"{type(e).__name__}: {e}"[:300]
+          print(json.dumps(out))
+          PY
+          python3 - "$r" <<'PY'
+          import json, sys
+          from urllib.parse import urljoin
+          r = sys.argv[1]
+          d = json.load(open(f"{r}/django.json", encoding="utf-8"))
+          base, proxy = "http://localhost:8000/", {"X-Forwarded-Proto": "https"}
+          home = {"page": "/", "url": base, "headers": dict(proxy), "login": d["login"]}
+          if d.get("cookie"):
+              home.update(who="logged in", headers={**proxy, "Cookie": d["cookie"]})
+          else:
+              home.update(who="not logged in", no_login=d.get("no_login", "no session was made"))
+          login = {"page": d["login"], "who": "not logged in", "url": urljoin(base, d["login"]), "headers": dict(proxy)}
+          json.dump([home, login], open(f"{r}/pages.json", "w", encoding="utf-8"), indent=1)
+          print(f"pages: / ({home['who']}), {d['login']} (not logged in)")
+          PY
+
+      - name: Install Node (official release, SHA256 verified)
+        id: node
+        if: inputs.web
+        continue-on-error: true
+        env:
+          NODE_VERSION: "24.22.0"
+          NODE_SHA256: "cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/node"; mkdir -p "$d"
+          f="node-v${NODE_VERSION}-linux-x64.tar.xz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$f" "https://nodejs.org/dist/v${NODE_VERSION}/$f"
+          echo "${NODE_SHA256}  $RUNNER_TEMP/$f" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$f" -C "$d" --strip-components=1
+          echo "$d/bin" >> "$GITHUB_PATH"
+
+      # The version puppeteer-core 25.14.0 is released against, not the
+      # runner's own Chrome, which moves with the runner image.
+      - name: Install Chrome for Testing (SHA256 verified)
+        id: chrome
+        if: inputs.web
+        continue-on-error: true
+        env:
+          CHROME_VERSION: "155.0.8059.79"
+          CHROME_SHA256: "bcd9a79130d7e44d70f93be87042e9bcee7fe0f0b3898e06b8c9bed5fb619dcd"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/chrome"; mkdir -p "$d"
+          curl -fsSL --retry 3 -o "$d/chrome.zip" \
+            "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip"
+          echo "${CHROME_SHA256}  $d/chrome.zip" | sha256sum -c -
+          unzip -q "$d/chrome.zip" -d "$d"
+          "$d/chrome-linux64/chrome" --version
+          echo "WEB_AUDIT_CHROME=$d/chrome-linux64/chrome" >> "$GITHUB_ENV"
+
+      # `job.workflow_sha`: see floor-check. `npm ci` installs exactly the
+      # lockfile, every package checked against its integrity hash, and runs
+      # no install script.
+      - name: Install Lighthouse CI and axe-core from plinth's lockfile
+        id: tools
+        if: inputs.web && steps.node.outcome == 'success'
+        continue-on-error: true
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}
+        working-directory: .
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/web-audit-tools"; mkdir -p "$d"
+          for f in package.json package-lock.json; do
+            curl -fsSL --retry 3 -o "$d/$f" \
+              "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/scripts/web-audit/$f"
+          done
+          echo "plinth ${PLINTH_SHA}"
+          cd "$d" && npm ci --ignore-scripts --no-audit --no-fund
+
+      # Each page twice: Lighthouse CI (`lhci collect`, one run, Lighthouse's
+      # default mobile settings) and axe-core in the same pinned Chrome.
+      # Chrome runs without its sandbox: the runner's Ubuntu does not let an
+      # unprivileged process make the namespaces it needs, and every page
+      # here is the project's own, served from this machine.
+      - name: Audit the pages
+        id: audit
+        if: inputs.web && steps.app.outcome == 'success' && steps.chrome.outcome == 'success' && steps.tools.outcome == 'success'
+        continue-on-error: true
+        working-directory: .
+        env:
+          TOOLS: ${{ runner.temp }}/web-audit-tools
+          OUT: ${{ runner.temp }}/web-audit
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'JS'
+          import { createRequire } from "node:module";
+          import { spawnSync } from "node:child_process";
+          import fs from "node:fs";
+          import path from "node:path";
+          const { TOOLS: tools, OUT: out, WEB_AUDIT_CHROME: chrome } = process.env;
+          const require = createRequire(path.join(tools, "package.json"));
+          const puppeteer = require("puppeteer-core");
+          const axe = require("axe-core");
+          const pages = JSON.parse(fs.readFileSync(path.join(out, "pages.json"), "utf8"));
+          const write = (name, data) => fs.writeFileSync(path.join(out, name), JSON.stringify(data));
+          for (const [i, p] of pages.entries()) {
+            console.log(`-- ${p.page} (${p.who})`);
+            const dir = path.join(out, `lhci-${i}`);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, "lighthouserc.json"), JSON.stringify({ ci: { collect: {
+              url: [p.url], numberOfRuns: 1, chromePath: chrome,
+              settings: { extraHeaders: p.headers, chromeFlags: "--no-sandbox" } } } }));
+            const run = spawnSync(path.join(tools, "node_modules/.bin/lhci"), ["collect", "--config=lighthouserc.json"],
+                                  { cwd: dir, stdio: "inherit" });
+            const saved = path.join(dir, ".lighthouseci");
+            const lhr = fs.existsSync(saved) ? fs.readdirSync(saved).filter((f) => /^lhr-.*\.json$/.test(f)) : [];
+            if (run.status === 0 && lhr.length) fs.copyFileSync(path.join(saved, lhr[0]), path.join(out, `${i}.lhr.json`));
+            else write(`${i}.lhr.error.json`, { error: `lhci collect exited ${run.status ?? run.signal}` });
+            let browser;
+            try {
+              browser = await puppeteer.launch({ executablePath: chrome, args: ["--no-sandbox", "--headless=new"] });
+              const page = await browser.newPage();
+              await page.setBypassCSP(true);
+              await page.setExtraHTTPHeaders(p.headers);
+              const res = await page.goto(p.url, { waitUntil: "networkidle0", timeout: 60000 });
+              await page.evaluate(axe.source);
+              const result = await page.evaluate(() => window.axe.run(document));
+              write(`${i}.axe.json`, { status: res ? res.status() : null, url: page.url(), version: result.testEngine.version,
+                violations: result.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, helpUrl: v.helpUrl,
+                  nodes: v.nodes.length, target: v.nodes.slice(0, 3).map((n) => n.target.join(" ")) })),
+                incomplete: result.incomplete.map((v) => ({ id: v.id, help: v.help, nodes: v.nodes.length })),
+                rules: result.passes.length + result.violations.length + result.incomplete.length });
+              for (const v of result.violations) console.log(`axe-core: ${v.id} (${v.impact}) on ${v.nodes.length} element(s): ${v.help}`);
+              for (const v of result.incomplete) console.log(`axe-core could not decide: ${v.id} on ${v.nodes.length} element(s): ${v.help}`);
+            } catch (e) {
+              console.log(`axe-core: ${e}`);
+              write(`${i}.axe.error.json`, { error: String(e).slice(0, 300) });
+            } finally {
+              if (browser) await browser.close();
+            }
+          }
+          JS
+
+      - name: Verdict
+        if: ${{ !cancelled() }}
+        working-directory: .
+        env:
+          WEB: ${{ inputs.web }}
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          APP: ${{ steps.app.outcome }}
+          NODE: ${{ steps.node.outcome }}
+          CHROME: ${{ steps.chrome.outcome }}
+          TOOLS: ${{ steps.tools.outcome }}
+          AUDIT: ${{ steps.audit.outcome }}
+        run: |
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          if [ "$WEB" != true ]; then
+            say "pass: web-audit, does not apply (the web input is false: not a web project)"
+            exit 0
+          fi
+          r="$RUNNER_TEMP/web-audit"; mkdir -p "$r"; rm -f "$r/verdict" "$r/summary.md"
+          python3 - "$r" <<'PY' || echo "not yet confirmed: the pages' audit, its report could not be written (the error is in this step's log); a run where it is confirms it" > "$r/verdict"
+          import json, os, re, sys
+          from urllib.parse import urlsplit
+          r = sys.argv[1]
+          env = os.environ
+          lines, md = [], []
+          def load(name):
+              try:
+                  with open(os.path.join(r, name), encoding="utf-8") as f:
+                      return json.load(f)
+              except (OSError, ValueError):
+                  return None
+          def ran(what, outcome):
+              return (f"{what} " + ("did not finish (its log says why)" if outcome == "failure"
+                                    else "did not run because an earlier step failed"))
+          STD = "the pages' audit"
+          why = (open(os.path.join(r, "app.why"), encoding="utf-8").read().strip()
+                 if os.path.exists(os.path.join(r, "app.why")) else "")
+          stop = None
+          if env["CHECKOUT"] != "success":
+              stop = ran("the checkout", env["CHECKOUT"])
+          elif env["APP"] != "success":
+              stop = "the app image did not start: " + (why or ran("the start", env["APP"]))
+          else:
+              broke = [n for n, k in (("Node", "NODE"), ("Chrome for Testing", "CHROME"),
+                                      ("Lighthouse CI and axe-core", "TOOLS")) if env[k] != "success"]
+              if broke:
+                  stop = " and ".join(broke) + " did not install (the step's log says why)"
+              elif env["AUDIT"] != "success":
+                  stop = ran("the audit", env["AUDIT"])
+          pages = load("pages.json") if not stop else None
+          if not stop and not isinstance(pages, list):
+              stop = "the app's step wrote no list of pages"
+          if stop:
+              lines.append(f"not yet confirmed: {STD}, {stop}; a run that gets past it confirms it")
+              pages = []
+          CATS = (("accessibility", "Accessibility"), ("best-practices", "Best practices"),
+                  ("seo", "SEO"), ("performance", "Performance"))
+          def tag(s):   # `<html>` in a rule's help is text, not markup for the summary
+              return re.sub(r"<(/?[\w-]+)>", r"`<\1>`", str(s))
+          rows, found = [], []
+          for i, p in enumerate(pages):
+              label = f"{p['page']} ({p['who']})"
+              # A session that did not hold sends the logged-in page to the log-in
+              # page: that is an audit of the log-in page, said as such.
+              out_at = set()
+              if p.get("no_login"):
+                  lines.append(f"not yet confirmed: / as a logged-in person, the audit could not log a person in "
+                               f"({p['no_login']}), so / was audited as a visitor who is not logged in; "
+                               "a run that logs in confirms it")
+              lhr = load(f"{i}.lhr.json")
+              scores = {}
+              if isinstance(lhr, dict) and not lhr.get("runtimeError"):
+                  scores = {k: (lhr.get("categories", {}).get(k) or {}).get("score") for k, _ in CATS}
+                  landed = lhr.get("finalDisplayedUrl") or lhr.get("finalUrl") or p["url"]
+                  said = ", ".join(f"{n.lower()} {'?' if scores[k] is None else round(scores[k] * 100)}"
+                                   for k, n in CATS)
+                  moved = "" if landed.rstrip("/") == p["url"].rstrip("/") else f", after a redirect to {landed}"
+                  out_at.add(urlsplit(landed).path)
+                  lines.append(f"pass: Lighthouse scored {label}{moved}: {said}, out of 100; no score is judged yet")
+              else:
+                  err = (lhr or {}).get("runtimeError") or load(f"{i}.lhr.error.json") or {}
+                  msg = err.get("message") or err.get("error") or "it wrote no report"
+                  lines.append(f"not yet confirmed: Lighthouse's scores for {label}, {str(msg)[:200]}; "
+                               "a run where Lighthouse loads the page confirms it")
+              ax = load(f"{i}.axe.json")
+              if isinstance(ax, dict):
+                  v = ax.get("violations") or []
+                  if v:
+                      listed = "; ".join(f"{x['id']} on {x['nodes']} element{'s' if x['nodes'] != 1 else ''} "
+                                         f"({x['impact']}: {tag(x['help'])})" for x in v[:5])
+                      more = f"; and {len(v) - 5} more in the table below" if len(v) > 5 else ""
+                      lines.append(f"not yet confirmed: no accessibility violation axe-core's automated rules find on "
+                                   f"{label}, it found {len(v)}: {listed}{more}; fixing them confirms it")
+                      found.append((label, v))
+                  else:
+                      lines.append(f"pass: axe-core's automated rules found no accessibility violation on {label} "
+                                   f"({ax.get('rules', '?')} rules applied); they catch only part of accessibility")
+                  if ax.get("status") and ax["status"] >= 400:
+                      lines.append(f"not yet confirmed: {label} answered HTTP {ax['status']}, so the audit read an error "
+                                   "page; a run where the page answers confirms it")
+                  axe_cell = str(len(v))
+                  out_at.add(urlsplit(ax.get("url") or p["url"]).path)
+              else:
+                  err = (load(f"{i}.axe.error.json") or {}).get("error", "it wrote no report")
+                  lines.append(f"not yet confirmed: axe-core on {label}, {err}; a run where axe-core finishes confirms it")
+                  axe_cell = "?"
+              gate = urlsplit(p.get("login") or "").path
+              if p["who"] == "logged in" and gate and gate != urlsplit(p["url"]).path and gate in out_at:
+                  lines.append(f"not yet confirmed: {p['page']} as a logged-in person, the audit's session did not "
+                               f"hold and the page sent it to {p['login']}, so the results above for {label} are "
+                               "the log-in page's; a run where the session holds confirms it")
+              rows.append(f"| `{p['page']}` ({p['who']}) | " + " | ".join(
+                  "?" if scores.get(k) is None else str(round(scores[k] * 100)) for k, _ in CATS) + f" | {axe_cell} |")
+          if rows:
+              md += ["", "### Lighthouse and axe-core on the app's pages", "",
+                     "| Page | " + " | ".join(n for _, n in CATS) + " | axe-core violations |",
+                     "| --- | " + " | ".join("---:" for _ in CATS) + " | ---: |", *rows, "",
+                     "Scores run from 0 to 100; higher is better. Performance is measured on a shared CI machine "
+                     "with Lighthouse's default mobile settings, so it moves from run to run: read it as a trend, "
+                     "not a grade."]
+          for label, v in found:
+              md += ["", f"#### What axe-core found on {label}", "",
+                     "| Rule | Impact | Elements | What to fix | First element |", "| --- | --- | ---: | --- | --- |"]
+              for x in v:
+                  first = (x.get("target") or ["?"])[0].replace("|", "\\|").replace("`", "'")
+                  md.append(f"| [{x['id']}]({x['helpUrl']}) | {x['impact']} | {x['nodes']} | "
+                            f"{tag(x['help']).replace('|', '/')} | `{first}` |")
+          if pages:
+              md += ["", "Automated checks catch only part of accessibility. axe-core and Lighthouse find what a "
+                     "machine can see in a page's code, such as a field without a label or text without enough "
+                     "contrast. They cannot tell whether a label makes sense, whether every action works with "
+                     "the keyboard alone, or whether a screen reader reads the page in a sensible order. Before "
+                     "calling a page accessible, use it with the keyboard only (Tab, Enter, Esc) and with a "
+                     "screen reader (VoiceOver on a Mac, NVDA on Windows).", "",
+                     "This job reports and never fails; whether a score or a violation ever turns it red is "
+                     "decided later (plinth #709)."]
+          with open(os.path.join(r, "verdict"), "w", encoding="utf-8") as f:
+              f.writelines(l + "\n" for l in lines)
+          with open(os.path.join(r, "summary.md"), "w", encoding="utf-8") as f:
+              f.writelines(l + "\n" for l in md)
+          PY
+          while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$r/verdict"
+          if [ -s "$r/summary.md" ]; then cat "$r/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi

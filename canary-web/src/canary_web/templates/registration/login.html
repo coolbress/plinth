@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Log in to plinth's canary for the web archetype"><title>Log in</title></head>
+<body><main><h1>Log in</h1>
+<form method="post">{% csrf_token %}{{ form.as_div }}<input type="hidden" name="next" value="{{ next }}"><button>Log in</button></form>
+</main></body>
+</html>
