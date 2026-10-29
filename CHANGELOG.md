@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:floor-check` and `ci / floor-check` read a `backend` project's
+  `.github/workflows/release.yml` too, the workflow the next plinth-template
+  release adds to publish the project's image to GHCR on a version tag
+  (#706). The same three items as for a `cli` or `library`: the file is
+  there, only a pushed tag starts it, and it reads no stored secret (the
+  run's own token pushes the image). Each finding is a WARN, never a FAIL,
+  so a `backend` rendered before the file existed still has 0 failed; the
+  missing-file WARN names plinth-template 1.30.0 and the project's
+  `docs/how-to/publish-a-release.md`. A GitLab `backend` gets an INFO, and
+  `data-ml` and `web` are not asked. New projects get the file once
+  `/plinth:new-project` renders that template release, a separate change.
+
 ## [2.16.0] - 2026-10-29
 
 New `cli` and `library` projects come from plinth-template v1.29.0 and

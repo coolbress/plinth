@@ -54,6 +54,8 @@ printf 'FROM python:3.12-slim@sha256:%064d\nRUN uv sync --locked\nUSER app\nCMD 
 printf '.git\n.env\n.venv\n' > "$good/.dockerignore"
 mkdir -p "$good/.github/workflows"
 printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n  image:\n    steps:\n      - run: docker build -t t .\n      - run: docker run --rm t\n' 0 > "$good/.github/workflows/ci.yml"
+# A backend publishes its image on a version tag (plinth-template 1.30.0, #706).
+printf 'name: Release\non:\n  push:\n    tags: ["v*"]\npermissions: {}\njobs:\n  image:\n    steps:\n      - run: docker push "ghcr.io/$GITHUB_REPOSITORY:${GITHUB_REF_NAME#v}"\n' > "$good/.github/workflows/release.yml"
 # Tracked-file evidence needs an index, so the fixture is a git work tree (#95).
 git -C "$good" init -q 2>/dev/null && git -C "$good" add -A
 
@@ -223,7 +225,7 @@ quiet "a tracked directory named .env is not a dotenv file" "mkdir .env && print
 says  "outside a git work tree the dotenv check is not verified, not passed" "rm -rf .git" "SKIP  tracked dotenv files not verified"
 
 # Actions: every `uses:` in .github/workflows, read as workflow syntax.
-says  "the good fixture's SHA-pinned reusable workflow passes" ":" "PASS  every action in 1 workflow file is pinned to a commit \(1 uses\)"
+says  "the good fixture's SHA-pinned reusable workflow passes" ":" "PASS  every action in 2 workflow files is pinned to a commit \(1 uses\)"
 warns "an action pinned to a tag is named with its file and line" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "\.github/workflows/t\.yml: not pinned to a full commit SHA: line 5 actions/checkout@v4$"
 says  "a tag-pinned action carries the command that finds its SHA" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "INFO    gh api repos/actions/checkout/commits/v4 --jq \.sha"
 says  "a ref with shell syntax in it is quoted in the repair" "wf '- uses: a/b@\$(id)' > .github/workflows/t.yml" "INFO    gh api 'repos/a/b/commits/\\\$\(id\)' --jq"
@@ -1416,7 +1418,7 @@ rm -rf "$web_hosted"
 # A cli or library publishes on a version tag through release.yml
 # (plinth-template 1.29.0, #703). Each finding is a WARN: an instance rendered
 # before the file existed still has 0 failed. GitLab renders none.
-pkg="$work/pkg"; rm -rf "$pkg"; cp -R "$web.empty" "$pkg"
+pkg="$work/pkg"; rm -rf "$pkg"; cp -R "$web.empty" "$pkg"; rm -f "$pkg/.github/workflows/release.yml"
 release_out() { git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network 2>&1; }
 rel=.github/workflows/release.yml
 out="$(release_out)"
@@ -1470,10 +1472,45 @@ out="$(git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network --hos
 if grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && ! grep -q "not required: on GitLab" <<<"$out"; then ok "--host github over a GitLab answer: release.yml read"
 else bad "--host github did not reach the release item"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm "$pkg/$rel"
-out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
-if ! grep -q "release.yml" <<<"$out"; then ok "a backend instance is not asked for release.yml"
-else bad "a backend instance was asked for release.yml"; fi
 rm -rf "$pkg"
+# A backend publishes its image to GHCR on a version tag through the same
+# file (plinth-template 1.30.0, #706): the same three items, each a WARN.
+img="$work/img"; rm -rf "$img"; cp -R "$good" "$img"; rm "$img/$rel"
+img_out() { git -C "$img" add -A; python3 "$checker" --root "$img" --no-network 2>&1; }
+out="$(img_out)"
+if grep -qF "WARN  $rel missing: a version tag does not publish this image to GHCR" <<<"$out" \
+   && grep -qF 'INFO    plinth-template 1.30.0 adds it, with its steps in docs/how-to/publish-a-release.md' <<<"$out" \
+   && grep -q -- '-- 0 failed' <<<"$out"; then ok "a backend instance without release.yml: a WARN with its fix, 0 failed"
+else bad "a backend instance without release.yml"; printf '%s\n' "$out" | grep -E 'FAIL|release' | sed 's/^/        /'; fi
+printf 'name: Release\non:\n  push:\n    tags: ["v*"]\npermissions: {}\njobs:\n  image:\n    permissions:\n      packages: write\n    steps:\n      - name: Log in to GHCR with this run'"'"'s token\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: printf '"'"'%%s\\n'"'"' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin\n      - uses: docker/build-push-action@%040d\n        with:\n          push: true\n' 0 > "$img/$rel"
+out="$(img_out)"
+if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" \
+   && grep -qF "PASS  $rel reads no stored secret" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "backend: the template's shape of release.yml passes its three items"
+else bad "backend: the template's shape of release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+cp "$img/$rel" "$img/release.good"
+awk '{print} /^    tags:/ {print "  pull_request:"}' "$img/release.good" > "$img/$rel"
+out="$(img_out)"
+if grep -qF "WARN  $rel is not read as tag-only (first line not read: pull_request:)" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "backend release.yml started by a pull request as well: a WARN naming the line"
+else bad "backend release.yml started by a pull request was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+sed 's/\${{ github.token }}/${{ secrets.GHCR_TOKEN }}/' "$img/release.good" > "$img/$rel"
+out="$(img_out)"
+if grep -qF "WARN  $rel reads a stored secret (secrets.GHCR_TOKEN): the run's own token pushes the image" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "backend release.yml with a stored registry token: a WARN naming it"
+else bad "backend release.yml with a stored registry token was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+rm "$img/$rel"; printf 'host: gitlab\n' >> "$img/.copier-answers.yml"
+out="$(img_out)"
+if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab backend is not asked for release.yml"
+else bad "a GitLab backend was asked for release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+rm -rf "$img"
+# data-ml and web publish nothing on a tag: not asked.
+for a in data-ml web; do
+  other="$work/other-$a"; rm -rf "$other"; cp -R "$good" "$other"
+  sed -i.bak "s/^archetype: .*/archetype: $a/" "$other/.copier-answers.yml"; rm "$other/.copier-answers.yml.bak"
+  git -C "$other" add -A
+  out="$(python3 "$checker" --root "$other" --no-network 2>&1)"
+  if ! grep -q "release.yml" <<<"$out"; then ok "a $a instance is not asked for release.yml"
+  else bad "a $a instance was asked for release.yml"; fi
+  rm -rf "$other"
+done
 web_rules="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web | jq -c '[.rules[] | . + {ruleset_source_type: "Repository", ruleset_id: 1}]')"
 for drop in "ci / migrations" "ci / deploy-check"; do
   jq -c --arg d "$drop" 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != $d)) else . end)' <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"

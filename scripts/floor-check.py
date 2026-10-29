@@ -134,10 +134,18 @@ IMAGE_CHECK = "image"
 # The checks python-ci.yml runs for the web archetype alone, with its `web`
 # input (#614); the door's ruleset adds them for that archetype.
 WEB_CHECKS = ("ci / migrations", "ci / deploy-check")
-# The archetypes whose floor includes publishing a package on a version tag:
-# plinth-template's .github/workflows/release.yml, on GitHub (#703).
+# The archetypes whose floor includes publishing on a version tag through
+# plinth-template's .github/workflows/release.yml, on GitHub: a package to
+# PyPI (#703), a backend's image to GHCR (#706). What each publishes, where,
+# the template release that adds the file, and what the run pushes with in
+# place of a stored secret.
 PACKAGE_ARCHETYPES = ("cli", "library")
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
+RELEASES = {
+    "cli": ("this package to PyPI", "1.29.0", "Trusted Publishing needs none"),
+    "library": ("this package to PyPI", "1.29.0", "Trusted Publishing needs none"),
+    "backend": ("this image to GHCR", "1.30.0", "the run's own token pushes the image"),
+}
 # GitLab's name for the same job: `image` is a GitLab CI keyword (plinth-template v1.13.0).
 GITLAB_IMAGE_JOB = "docker-image"
 # The GitLab pipeline beside this script; its floor-check job holds the include rule (#543).
@@ -1606,7 +1614,7 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
             # A repository-level file: GitHub reads workflows at the root, not
             # under --project, and the host is the one the run resolved,
             # --host before the answers (#720 review).
-            check_release_workflow(root, host)
+            check_release_workflow(root, host, archetype)
         return
     on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
     result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
@@ -1618,22 +1626,25 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
         check_render_yaml(project)
     elif archetype == "web":
         check_hosted_elsewhere(answers.get("hosting_elsewhere"))
+    if archetype in RELEASES:
+        check_release_workflow(root, host, archetype)
 
 
-def check_release_workflow(root: Path, host: str) -> None:
+def check_release_workflow(root: Path, host: str, archetype: str) -> None:
     """A `cli` or `library` publishes to PyPI on a version tag through the
-    template's release.yml (plinth-template 1.29.0, #703). Read as text,
-    standard library only: present, started by a tag and nothing else, and
-    reading no stored secret. Each finding is a WARN, never a FAIL:
-    publishing is the person's choice, and an instance rendered before the
-    file existed passes as it did."""
+    template's release.yml (plinth-template 1.29.0, #703), and a `backend`
+    its image to GHCR (#706). Read as text, standard library only: present,
+    started by a tag and nothing else, and reading no stored secret. Each
+    finding is a WARN, never a FAIL: publishing is the person's choice, and
+    an instance rendered before the file existed passes as it did."""
+    what, since, instead = RELEASES[archetype]
     if host == "gitlab":
         result("INFO", f"{RELEASE_WORKFLOW} not required: on GitLab the template renders no release workflow")
         return
     p = root / RELEASE_WORKFLOW
     if not p.is_file():
-        result("WARN", f"{RELEASE_WORKFLOW} missing: a version tag does not publish this package to PyPI")
-        result("INFO", "  plinth-template 1.29.0 adds it, with its steps in docs/how-to/publish-a-release.md: "
+        result("WARN", f"{RELEASE_WORKFLOW} missing: a version tag does not publish {what}")
+        result("INFO", f"  plinth-template {since} adds it, with its steps in docs/how-to/publish-a-release.md: "
                        "copier update, then follow that page")
         return
     result("PASS", f"{RELEASE_WORKFLOW} present")
@@ -1660,7 +1671,7 @@ def check_release_workflow(root: Path, host: str) -> None:
     stored = [x for x in re.findall(r"secrets\.\w+|^\s*password:", text, re.MULTILINE) if x != "secrets.GITHUB_TOKEN"]
     if stored:
         result("WARN", f"{RELEASE_WORKFLOW} reads a stored secret ({', '.join(sorted({s.strip() for s in stored}))}): "
-                       "Trusted Publishing needs none, and a stored PyPI token can be copied and used from anywhere")
+                       f"{instead}, and a stored token can be copied and used from anywhere")
     else:
         result("PASS", f"{RELEASE_WORKFLOW} reads no stored secret")
 
