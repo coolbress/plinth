@@ -45,6 +45,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.31.0
+  (coolbress/plinth-template#144, #146, #147, #148, #149). A new `data-ml`
+  project trains a small model saved with skops and publishes it, its
+  metrics and its model card to a GitHub Release when a version tag is
+  pushed. A new `web` project's pages pass axe-core. The owner's answers
+  about a shared pull-request template and issue forms are recorded in the
+  project, and an existing GitHub repository now gets the end-or-hand-over
+  form through `/plinth:template-update`, whose update line carries those
+  answers (#726).
+
 - The template update carries the owner's answers (#726). On GitHub, the
   `copier update` line `/plinth:floor-check` prints and
   `/plinth:template-update` runs now ends in
