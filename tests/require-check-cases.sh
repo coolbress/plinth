@@ -85,6 +85,9 @@ trig neg-target.yml negtarget $'on:\n  pull_request_target:\n    branches: [\'**
 trig neg-wrapped.yml negwrapped $'on:\n  pull_request:\n    branches: [\'**\',\n      \'!main\']'
 trig neg-escape.yml negescape $'on:\n  pull_request:\n    branches: ["**", "\\x21main"]'
 trig neg-alias.yml negalias $'x: &neg \'!main\'\non:\n  pull_request:\n    branches:\n      - \'**\'\n      - *neg'
+# An unreadable list is that event's reason only: another event that runs on main still counts, in either order.
+trig escape-then-target.yml esctarget $'on:\n  pull_request:\n    branches: ["**", "\\x21main"]\n  pull_request_target:'
+trig target-then-escape.yml targetesc $'on:\n  pull_request_target:\n  pull_request:\n    branches: ["**", "\\x21main"]'
 trig flow-main.yml flowmain $'on:\n  pull_request:\n    branches: [main]'
 trig all.yml allbranches $'on:\n  pull_request:\n    branches: [\'**\']'
 
@@ -149,7 +152,8 @@ case "$args" in
       60) p=.github/workflows/neg-plain.yml ;; 61) p=.github/workflows/neg-target.yml ;;
       62) p=.github/workflows/neg-wrapped.yml ;; 63) p=.github/workflows/neg-escape.yml ;;
       64) p=.github/workflows/neg-alias.yml ;; 65) p=.github/workflows/flow-main.yml ;;
-      66) p=.github/workflows/all.yml ;; *) p="" ;;
+      66) p=.github/workflows/all.yml ;; 67) p=.github/workflows/escape-then-target.yml ;;
+      68) p=.github/workflows/target-then-escape.yml ;; *) p="" ;;
     esac
     jq -n --arg p "$p" '{workflow_runs: [{path: $p}]}' | out "$@" ;;
   *"/contents/"*)
@@ -190,6 +194,8 @@ case "$args" in
       {name: "negalias", app: {id: 15368}, check_suite: {id: 64}},
       {name: "flowmain", app: {id: 15368}, check_suite: {id: 65}},
       {name: "allbranches", app: {id: 15368}, check_suite: {id: 66}},
+      {name: "esctarget", app: {id: 15368}, check_suite: {id: 67}},
+      {name: "targetesc", app: {id: 15368}, check_suite: {id: 68}},
       {name: "Vercel", app: {id: 8329}, check_suite: {id: 30}}]}' | out "$@" ;;
   "api repos/r/r --jq"*)
     jq -n --argjson a "${ADMIN:-true}" '{permissions: {admin: $a}, default_branch: "main"}' | out "$@" ;;
@@ -288,14 +294,17 @@ run 1 "a ! pattern under pull_request_target is refused" --repo r/r 'negtarget'
 said "it names the event" 'its `pull_request_target:` branches list'
 unwritten "pull_request_target"
 run 1 "a branches list that goes on past its line is refused, not read in part" --repo r/r 'negwrapped'
-said "it names the workflow and the line" "line 3 of .github/workflows/neg-wrapped.yml"
+said "it names the workflow and the line" ".github/workflows/neg-wrapped.yml does not run 'negwrapped'"
+said "it says the list cannot be read, with the line" "branches list cannot be read here (line 3)"
 unwritten "wrapped list"
 run 1 "an escape that may spell ! is refused" --repo r/r 'negescape'
-said "it names the line" "line 3 of .github/workflows/neg-escape.yml"
+said "it names the line" "branches list cannot be read here (line 3)"
 unwritten "escape"
 run 1 "an alias in a branches list is refused" --repo r/r 'negalias'
 said "it says why" "an anchor or alias"
 unwritten "alias"
+run 0 "an unreadable pull_request list beside a pull_request_target that runs is accepted" --repo r/r 'esctarget'
+run 0 "the same with the events the other way round" --repo r/r 'targetesc'
 run 0 "branches: [main] is accepted" --repo r/r 'flowmain'
 run 0 "branches: ['**'] is accepted" --repo r/r 'allbranches'
 

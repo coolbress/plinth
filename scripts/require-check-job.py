@@ -200,7 +200,7 @@ def items(value: str, under: list[tuple[int, int, str]]) -> list[str]:
 PR_EVENTS = {"pull_request", "pull_request_target"}
 
 
-def pull_request_trigger(text: str, branch: str, path: str = "the workflow") -> str | None:
+def pull_request_trigger(text: str, branch: str) -> str | None:
     """None when the workflow runs on every new commit of a pull request to
     `branch`; otherwise why not. A form not read here is a reason too."""
     rows = list(lines(text))
@@ -246,16 +246,22 @@ def pull_request_trigger(text: str, branch: str, path: str = "the workflow") -> 
             elif fkey == "branches-ignore":
                 why = f"its `{m.group(3)}:` has `branches-ignore:` (line {fn}), which this script does not read"
             elif fkey == "branches":
+                # A list not read here is this event's reason, not the workflow's: another event may run it.
+                unread = f"its `{m.group(3)}:` branches list cannot be read here"
                 try:
                     written = raw_items(fval, fn, fsub)
                 except Unreadable as e:
-                    raise Unreadable(f"line {fn} of {path}, `{m.group(3)}:` branches: {e}") from None
+                    why = f"{unread} (line {fn}): {e}"
+                    break
                 names = []
                 for ln_no, v in written:
                     try:
                         names.append(scalar(v))
                     except Unreadable as e:
-                        raise Unreadable(f"line {ln_no} of {path}, `{m.group(3)}:` branches: {e}") from None
+                        why = f"{unread} (line {ln_no}): {e}"
+                        break
+                if why:
+                    break
                 # GitHub reads the list in order and a `!` pattern drops a branch an earlier one matched;
                 # an anchor or alias may carry one in. Neither is read here.
                 odd = next(((ln_no, v, p) for (ln_no, v), p in zip(written, names)
@@ -358,7 +364,7 @@ def main(argv: list[str]) -> int:
         return 2
     repo, ref, path, name = argv[1:]
     try:
-        why = pull_request_trigger(fetch(repo, ref, path), ref, path)
+        why = pull_request_trigger(fetch(repo, ref, path), ref)
         if why:
             print(f"{path} does not run '{name}' on every pull request to {ref}: {why}.", file=sys.stderr)
             print("  a required name that does not report on a pull request holds it. Fix the workflow's `on:`,"
