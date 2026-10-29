@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/require-check.sh` refuses a workflow whose `pull_request:` or
+  `pull_request_target:` branch list has a pattern starting with `!`, and
+  names the workflow and the line (#736). GitHub reads that list in order, so
+  `branches: ['**', '!main']` never runs on pull requests to `main`; the
+  script used to accept it, and the required name would then hold every pull
+  request. A list it cannot read line by line (one that goes on past its
+  line, an escape, an anchor or alias) is refused too.
+
 ## [2.18.0] - 2026-10-29
 
 New `data-ml` projects come from plinth-template v1.31.0: they train a
@@ -83,16 +93,6 @@ tested with plinth-template v1.31.0
   gives no line and says what was not read, rather than a guess. On GitLab
   nothing changes. This is what lets the template release after 1.30.0
   give existing GitHub repositories its end-or-hand-over form by update.
-
-### Fixed
-
-- `scripts/require-check.sh` refuses a workflow whose `pull_request:` or
-  `pull_request_target:` branch list has a pattern starting with `!`, and
-  names the workflow and the line (#736). GitHub reads that list in order, so
-  `branches: ['**', '!main']` never runs on pull requests to `main`; the
-  script used to accept it, and the required name would then hold every pull
-  request. A list it cannot read line by line (one that goes on past its
-  line, an escape, an anchor or alias) is refused too.
 
 ## [2.17.0] - 2026-10-29
 
