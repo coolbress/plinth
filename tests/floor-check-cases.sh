@@ -2136,6 +2136,16 @@ printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$libless/floor-check.py" -
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "lib/shared-github.sh not found beside the checker" "$work/print-err"
 then ok "no scripts/lib/shared-github.sh beside the checker: no line, rather than a guess"
 else bad "missing shared-github.sh (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+# `ci / floor-check` downloads the checker into $RUNNER_TEMP/plinth: the
+# layout rebuilt from that step's own curl lines must give the line too.
+cilayout="$work/ci-layout"; mkdir -p "$cilayout/lib"
+fetch="$(sed -n '/name: Fetch the checker from the same plinth commit/,/name: Floor check/p' "$root/.github/workflows/python-ci.yml")"
+for f in $(sed -nE 's/^ *for f in (.*); do$/\1/p' <<<"$fetch"); do cp "$root/$f" "$cilayout/$(basename "$f")"; done
+grep -q 'curl .*-o "\$d/lib/shared-github.sh"' <<<"$fetch" && cp "$root/scripts/lib/shared-github.sh" "$cilayout/lib/"
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$cilayout/floor-check.py" --root "$ocopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 0 ] && grep -q -- "$no_shared\$" <<<"$printed"
+then ok "the files ci / floor-check downloads include the shared-template decisions: the update line prints there"
+else bad "ci / floor-check's downloaded layout (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 
 # Single-sourced: the target comes from scripts/new-project.sh beside the
 # checker, never a copy inside floor-check.py itself.

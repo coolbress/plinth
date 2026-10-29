@@ -1705,11 +1705,15 @@ jobs:
           PLINTH_SHA: ${{ job.workflow_sha }}
         run: |
           set -euo pipefail
-          d="$RUNNER_TEMP/plinth"; mkdir -p "$d"
+          d="$RUNNER_TEMP/plinth"; mkdir -p "$d/lib"
           for f in scripts/floor-check.py ruleset.json ruleset-merge.json labels.txt scripts/new-project.sh; do
             curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
               "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
           done
+          # The owner's shared-template decisions the update line needs (#726),
+          # beside the checker as in the plugin: scripts/lib/.
+          curl -fsSL --retry 3 -o "$d/lib/shared-github.sh" \
+            "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/scripts/lib/shared-github.sh"
           echo "plinth ${PLINTH_SHA}"
 
       - name: Floor check
