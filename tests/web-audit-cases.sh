@@ -167,11 +167,23 @@ printf '{"error":"TimeoutError: Navigation timeout of 60000 ms exceeded"}' > "$d
 verdict "$d"
 if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in), Lighthouse was unable to reliably load the page you requested. (Status code: 500); a run where Lighthouse loads the page confirms it" \
    && has "$d/summary" "not yet confirmed: Lighthouse's scores for /accounts/login/ (not logged in), lhci collect exited 1;" \
-   && has "$d/summary" "not yet confirmed: / (logged in) answered HTTP 500, so the audit read an error page" \
+   && has "$d/summary" "not yet confirmed: axe-core on / (logged in), the page answered HTTP 500, so the audit read an error page;" \
+   && ! has "$d/summary" "pass: axe-core" \
    && has "$d/summary" "not yet confirmed: axe-core on /accounts/login/ (not logged in), TimeoutError: Navigation timeout of 60000 ms exceeded;" \
    && ! has "$d/summary" "pass: Lighthouse" && has "$d/stdout" "exit 0"; then
   ok "a page Lighthouse or axe-core could not read, or that answered an error: not yet confirmed, never a pass"
 else bad "unreadable pages" "$(cat "$d/summary" "$d/stdout")"; fi
+
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/1.lhr.json" 1; clean_axe "$d/web-audit/1.axe.json"
+printf '{"finalDisplayedUrl":"http://localhost:8000/","categories":{"accessibility":{"score":null},"best-practices":{"score":1},"seo":{"score":1},"performance":{"score":null}}}' > "$d/web-audit/0.lhr.json"
+printf '{"status":404,"violations":[{"id":"image-alt","impact":"critical","help":"Images must have alternative text","helpUrl":"u","nodes":1,"target":["img"]}],"incomplete":[],"rules":5}' > "$d/web-audit/0.axe.json"
+verdict "$d"
+if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in), its report has no score for Accessibility, Performance;" \
+   && has "$d/summary" "not yet confirmed: axe-core on / (logged in), the page answered HTTP 404" \
+   && ! has "$d/summary" "pass: Lighthouse scored / (logged in)" && ! has "$d/summary" "image-alt" \
+   && has "$d/summary" "| \`/\` (logged in) | ? | 100 | 100 | ? | ? |"; then
+  ok "a report missing a score, or an error page with violations: not yet confirmed, no pass and no violations from the error page"
+else bad "missing score or error page" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d" no-login; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 1
 clean_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; verdict "$d"
@@ -181,7 +193,7 @@ if has "$d/summary" "not yet confirmed: / as a logged-in person, the audit could
 else bad "no log-in" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; lhr "$d/web-audit/1.lhr.json" 1; clean_axe "$d/web-audit/1.axe.json"
-printf '{"finalDisplayedUrl":"http://localhost:8000/accounts/login/?next=/","categories":{"accessibility":{"score":0.88}}}' > "$d/web-audit/0.lhr.json"
+printf '{"finalDisplayedUrl":"http://localhost:8000/accounts/login/?next=/","categories":{"accessibility":{"score":0.88},"best-practices":{"score":1},"seo":{"score":0.9},"performance":{"score":1}}}' > "$d/web-audit/0.lhr.json"
 printf '{"status":200,"url":"http://localhost:8000/accounts/login/?next=/","violations":[{"id":"html-has-lang","impact":"serious","help":"<html> element must have a lang attribute","helpUrl":"https://dequeuniversity.com/rules/axe/4.14/html-has-lang","nodes":1,"target":["html"]}],"incomplete":[],"rules":20}' > "$d/web-audit/0.axe.json"
 verdict "$d"
 if has "$d/summary" "not yet confirmed: / as a logged-in person, the audit's session did not hold and the page sent it to /accounts/login/, so the results above for / (logged in) are the log-in page's;" \

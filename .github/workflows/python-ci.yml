@@ -2269,8 +2269,12 @@ jobs:
                                "a run that logs in confirms it")
               lhr = load(f"{i}.lhr.json")
               scores = {}
-              if isinstance(lhr, dict) and not lhr.get("runtimeError"):
-                  scores = {k: (lhr.get("categories", {}).get(k) or {}).get("score") for k, _ in CATS}
+              got = ({k: ((lhr.get("categories") or {}).get(k) or {}).get("score") for k, _ in CATS}
+                     if isinstance(lhr, dict) else {})
+              # A pass needs all four scores: a report without one read nothing to score.
+              if isinstance(lhr, dict) and not lhr.get("runtimeError") and all(
+                      isinstance(x, (int, float)) for x in got.values()):
+                  scores = got
                   landed = lhr.get("finalDisplayedUrl") or lhr.get("finalUrl") or p["url"]
                   said = ", ".join(f"{n.lower()} {'?' if scores[k] is None else round(scores[k] * 100)}"
                                    for k, n in CATS)
@@ -2279,11 +2283,19 @@ jobs:
                   lines.append(f"pass: Lighthouse scored {label}{moved}: {said}, out of 100; no score is judged yet")
               else:
                   err = (lhr or {}).get("runtimeError") or load(f"{i}.lhr.error.json") or {}
-                  msg = err.get("message") or err.get("error") or "it wrote no report"
+                  msg = (err.get("message") or err.get("error")
+                         or ("its report has no score for " + ", ".join(n for k, n in CATS if got.get(k) is None)
+                             if isinstance(lhr, dict) else "it wrote no report"))
                   lines.append(f"not yet confirmed: Lighthouse's scores for {label}, {str(msg)[:200]}; "
                                "a run where Lighthouse loads the page confirms it")
               ax = load(f"{i}.axe.json")
-              if isinstance(ax, dict):
+              status = ax.get("status") if isinstance(ax, dict) else None
+              if isinstance(status, int) and status >= 400:
+                  # An error page was read, not the page: neither a pass nor its violations.
+                  lines.append(f"not yet confirmed: axe-core on {label}, the page answered HTTP {status}, so the "
+                               "audit read an error page; a run where the page answers confirms it")
+                  v = None
+              elif isinstance(ax, dict):
                   v = ax.get("violations") or []
                   if v:
                       listed = "; ".join(f"{x['id']} on {x['nodes']} element{'s' if x['nodes'] != 1 else ''} "
@@ -2295,10 +2307,8 @@ jobs:
                   else:
                       lines.append(f"pass: axe-core's automated rules found no accessibility violation on {label} "
                                    f"({ax.get('rules', '?')} rules applied); they catch only part of accessibility")
-                  if ax.get("status") and ax["status"] >= 400:
-                      lines.append(f"not yet confirmed: {label} answered HTTP {ax['status']}, so the audit read an error "
-                                   "page; a run where the page answers confirms it")
-                  axe_cell = str(len(v))
+              if isinstance(ax, dict):
+                  axe_cell = "?" if v is None else str(len(v))
                   out_at.add(urlsplit(ax.get("url") or p["url"]).path)
               else:
                   err = (load(f"{i}.axe.error.json") or {}).get("error", "it wrote no report")
@@ -2310,7 +2320,7 @@ jobs:
                                f"hold and the page sent it to {p['login']}, so the results above for {label} are "
                                "the log-in page's; a run where the session holds confirms it")
               rows.append(f"| `{p['page']}` ({p['who']}) | " + " | ".join(
-                  "?" if scores.get(k) is None else str(round(scores[k] * 100)) for k, _ in CATS) + f" | {axe_cell} |")
+                  str(round(got[k] * 100)) if isinstance(got.get(k), (int, float)) else "?" for k, _ in CATS) + f" | {axe_cell} |")
           if rows:
               md += ["", "### Lighthouse and axe-core on the app's pages", "",
                      "| Page | " + " | ".join(n for _, n in CATS) + " | axe-core violations |",
