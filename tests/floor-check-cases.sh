@@ -1769,8 +1769,19 @@ drift "a recorded tag behind the target is named, with both tags" "v1.0.0" \
   "WARN  template: v1\.0\.0 is behind $target_ref, the tag plinth is tested with"
 drift "offline, the changed files could not be read, and it says so rather than staying silent" "v1.0.0" \
   "the changed files could not be read \(offline or API error\)"
-drift "offline, the update command still carries the pin this repository's own CI calls today" "v1.0.0" \
-  "copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40"
+# The update line needs the owner's answers (#726), read with --repo; an
+# owner with no .github repository (every fixture directory below answers
+# 404 unless a case writes one) gives both as false.
+no_shared=" --data owner_has_pr_template=false --data owner_has_issue_forms=false"
+dcopy="$work/drift-line"; rm -rf "$dcopy"; cp -R "$good" "$dcopy"
+printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$dcopy/.copier-answers.yml"
+tag_names "$work/api-tag-only" "$target_sha"
+out="$(FLOOR_CHECK_API_DIR="$work/api-tag-only" python3 "$checker" --root "$dcopy" --repo o/r --print-update-command 2>&1)"
+if grep -q "copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40$no_shared\$" <<<"$out"
+then ok "the update command carries the pin this repository's own CI calls today, then the owner's two answers"
+else bad "the update command's pin and answers"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+drift "without --repo the owner's answers are not read: no update command, and it says why" "v1.0.0" \
+  "INFO    no update command: no --repo, so whether the owner's \.github publishes a pull-request template or issue forms was not read"
 drift "a recorded tag ahead of the target is a plain statement, not a not-verified count" "v99.0.0" \
   "INFO  template: the recorded tag v99\.0\.0 is ahead of $target_ref, the tag plinth is tested with"
 quiet "an ahead tag is not counted as not verified" \
@@ -1911,9 +1922,9 @@ fixed "while the plinth reference moves" "pr-label\.yml@$sha40\$"
 # required" (measured, copier 9.18.2), and the skill has no terminal.
 pcopy="$work/print-cmd"; rm -rf "$pcopy"; cp -R "$good" "$pcopy"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy/.copier-answers.yml"
-warned="$(python3 "$checker" --root "$pcopy" --no-network 2>&1 | sed -n 's/^  INFO    \(uvx .*copier update.*\)$/\1/p')"
 pinned_api="$work/api-pinned"; tag_names "$pinned_api" "$target_sha"
-printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$pcopy" --print-update-command 2>/dev/null)"; rc=$?
+warned="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$pcopy" --repo o/r 2>&1 | sed -n 's/^  INFO    \(uvx .*copier update.*\)$/\1/p')"
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command 2>/dev/null)"; rc=$?
 if [ "$rc" = 0 ] && [ -n "$warned" ] && [ "$printed" = "$warned" ]; then ok "--print-update-command prints exactly the line the drift WARN prints"
 else bad "--print-update-command (rc=$rc): printed '$printed', WARN printed '$warned'"; fi
 case "$printed" in *"copier update --defaults "*) ok "the update command runs without a terminal (--defaults)" ;;
@@ -1922,15 +1933,15 @@ case "$printed" in *"copier update --defaults "*) ok "the update command runs wi
 # the doors check the same pair before rendering, and so does the line.
 moved="$(printf '%040d' 5)"
 moved_api="$work/api-moved"; tag_names "$moved_api" "$moved"
-out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" 2>&1)"
+out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --repo o/r 2>&1 | grep -E 'template|copier')"
 if grep -q "WARN  template: $target_ref now names commit $moved, not $target_sha, the commit plinth was tested with; no update command" <<<"$out" \
    && ! grep -q "copier update" <<<"$out"
 then ok "a moved target tag: a WARN naming both commits, and no update command"
 else bad "moved tag, drift item"; printf '%s\n' "$out" | grep -E 'template|copier' | sed 's/^/        /'; fi
-printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --print-update-command 2>"$work/print-err")"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved, not $target_sha" "$work/print-err"; then ok "a moved target tag: --print-update-command prints no line, exit 1, names both commits"
 else bad "--print-update-command, moved tag (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
-printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved" "$work/print-err"; then ok "a moved target tag: --plinth-pin tested prints no line either"
 else bad "--plinth-pin tested, moved tag (rc=$rc, stdout '$printed')"; fi
 out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$good" 2>&1)"
@@ -1946,12 +1957,16 @@ if grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<
    && grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error)" <<<"$out"
 then ok "a repository on the target tag, the tag's commit not read: the PASS says the tags only, and a line says the commit was not verified"
 else bad "current tag unread"; printf '%s\n' "$out" | grep -E 'template|verified' | sed 's/^/        /'; fi
-out="$(python3 "$checker" --root "$pcopy" --no-network 2>&1)"
+# The tag's read fails (unparseable, as an API failure reads); the owner's
+# .github answers 404, so the line itself can be built.
+tag_err="$work/api-tag-error"; mkdir -p "$tag_err/repos/coolbress/plinth-template/commits"
+printf 'not json\n' > "$tag_err/repos/coolbress/plinth-template/commits/$target_ref.json"
+out="$(FLOOR_CHECK_API_DIR="$tag_err" python3 "$checker" --root "$pcopy" --repo o/r 2>&1 | grep -E 'template|copier|verified')"
 if grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error); the template-update skill checks it before it runs this line:" <<<"$out" \
    && grep -q "INFO    uvx .*copier update" <<<"$out"
 then ok "the target tag's commit not read: the drift item still shows the line, and says it was not verified"
 else bad "unread tag, drift item"; printf '%s\n' "$out" | grep -E 'template|copier|verified' | sed 's/^/        /'; fi
-printed="$(FLOOR_CHECK_API_DIR="$work/api-none-at-all" python3 "$checker" --root "$pcopy" --print-update-command 2>"$work/print-err")"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$work/api-none-at-all" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "not verified that $target_ref still names $target_sha, the commit plinth was tested with (the tag was not found)" "$work/print-err"
 then ok "the target tag's commit not read: --print-update-command, the line that runs, prints none (fail closed)"
 else bad "--print-update-command, tag unread (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
@@ -1996,7 +2011,7 @@ else ok "a behind repository is a WARN, and only a WARN"; fi
 empty_api="$work/api-template-empty"; mkdir -p "$empty_api/repos/coolbress/plinth-template"
 tcopy2="$work/tmpl-drift-404"; rm -rf "$tcopy2"; cp -R "$good" "$tcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy2/.copier-answers.yml"
-out="$(FLOOR_CHECK_API_DIR="$empty_api" python3 "$checker" --root "$tcopy2" 2>&1)"
+out="$(FLOOR_CHECK_API_DIR="$empty_api" python3 "$checker" --root "$tcopy2" --repo o/r 2>&1 | grep -E 'template|copier')"
 if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40" <<<"$out"; then
   ok "a compare call that 404s still prints the update command, and names the file list as unread"
 else bad "a 404 on the compare call"; printf '%s\n' "$out" | grep -E 'template|copier update' | sed 's/^/        /'; fi
@@ -2019,7 +2034,7 @@ pin_api() { # <copier.yml plinth_sha default or "-" for none> <compare status or
 }
 pcopy2="$work/pin-choice"; rm -rf "$pcopy2"; cp -R "$good" "$pcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy2/.copier-answers.yml"
-pin_out() { out="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"; }
+pin_out() { out="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r 2>&1 | grep -E 'template|plinth|copier|pin')"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"; }
 live_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40"
 tested_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$tested"
 pin_api "$tested" ahead; pin_out
@@ -2029,13 +2044,13 @@ else bad "tested ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|c
 has "the comparison names both SHAs, the tested pin's tag and the compare URL" \
   "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested \(v9\.0\.0\), 4 commit\(s\) newer: https://github\.com/coolbress/plinth/compare/$sha40\.\.\.$tested\$"
 has "the second line is offered, not chosen" "the line above keeps the live pin; this one moves it to the tested pin, if you choose it:"
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
-if [ "$rc" = 0 ] && [ "$printed" = "$(sed -n 's/^  INFO    \(uvx .*plinth_sha='"$tested"'\)$/\1/p' <<<"$out")" ] && grep -q "4 commit(s) newer" "$work/print-err" \
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 0 ] && [ "$printed" = "$(sed -n 's/^  INFO    \(uvx .*plinth_sha='"$tested$no_shared"'\)$/\1/p' <<<"$out")" ] && grep -q "4 commit(s) newer" "$work/print-err" \
    && grep -q "^recommended: move the plinth pin to $tested (v9.0.0): this repository's checks then run the plinth commit $target_ref was tested with, 4 commit(s) newer than the one they run now" "$work/print-err"
 then ok "--print-update-command --plinth-pin tested prints exactly the second line, the comparison and the recommendation on stderr"
 else bad "--plinth-pin tested, ahead (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command 2>/dev/null)"
-case "$printed" in *"$live_line") ok "--print-update-command without --plinth-pin still prints the live line" ;;
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command 2>/dev/null)"
+case "$printed" in *"$live_line$no_shared") ok "--print-update-command without --plinth-pin still prints the live line" ;;
   *) bad "--print-update-command default: '$printed'" ;; esac
 
 rm "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"; pin_out
@@ -2048,7 +2063,7 @@ if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
    && grep -q "INFO    plinth pin: the workflows call $sha40, newer than $tested (v9.0.0) that $target_ref was tested with; the live pin is kept, never moved backwards" <<<"$out"
 then ok "live pin ahead of the tested one: one line, kept because it is newer"
 else bad "live ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "never moved backwards" "$work/print-err" && ! grep -q "^recommended:" "$work/print-err"; then ok "--plinth-pin tested never prints a line that moves the pin backwards, nor recommends one: exit 1, says why"
 else bad "--plinth-pin tested, live ahead (rc=$rc, stdout '$printed')"; fi
 
@@ -2062,7 +2077,7 @@ if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
    && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, but the two were not compared (offline or API error); the live pin is kept" <<<"$out"
 then ok "the compare unreadable: one line, the comparison named as not read"
 else bad "compare unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin tested 2>/dev/null)"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>/dev/null)"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "--plinth-pin tested past an unread comparison prints no line, exit 1"
 else bad "--plinth-pin tested, compare unread (rc=$rc, stdout '$printed')"; fi
 
@@ -2076,16 +2091,108 @@ if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
    && grep -q "INFO    plinth pin: the one $target_ref was tested with was not read (coolbress/plinth-template copier.yml at $target_ref: offline or API error); the live pin $sha40 is kept" <<<"$out"
 then ok "the tested pin unreadable: one line, named as not read"
 else bad "tested unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
-out="$(python3 "$checker" --root "$pcopy2" --no-network 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"
-if [ "$lines" = 1 ] && grep -q "plinth pin: the one $target_ref was tested with was not read" <<<"$out"; then ok "offline: one line, the tested pin not read"
+out="$(FLOOR_CHECK_API_DIR="$work/api-none-at-all" python3 "$checker" --root "$pcopy2" --repo o/r 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"
+if [ "$lines" = 1 ] && grep -q "plinth pin: the one $target_ref was tested with was not read" <<<"$out"; then ok "nothing read but the owner's 404: one line, the tested pin not read"
 else bad "offline ($lines lines)"; fi
 pin_api "not-a-sha" ahead; pin_out
 if [ "$lines" = 1 ] && grep -q "has no plinth_sha default that is a full commit SHA" <<<"$out"; then ok "a plinth_sha default that is not a full SHA is not read, not offered"
 else bad "malformed default ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
 python3 "$checker" --root "$pcopy2" --no-network --plinth-pin tested >/dev/null 2>&1; rc=$?
 if [ "$rc" = 2 ]; then ok "--plinth-pin without --print-update-command is a usage error"; else bad "--plinth-pin alone (rc=$rc)"; fi
-python3 "$checker" --root "$pcopy2" --print-update-command --plinth-pin newest >/dev/null 2>&1; rc=$?
+python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin newest >/dev/null 2>&1; rc=$?
 if [ "$rc" = 2 ]; then ok "an unknown --plinth-pin value is a usage error"; else bad "--plinth-pin newest (rc=$rc)"; fi
+
+# The owner's shared templates (#726). The update carries whether
+# `<owner>/.github` publishes a pull-request template and issue forms, as
+# /plinth:new-project's render did, read the same way and decided by the
+# same functions (scripts/lib/shared-github.sh). Without them the update
+# reads both as false and can write one local form that hides every shared
+# one. A read that fails is not an answer: no line. An answer is true only
+# while the repository has none of its own: its own already replace the
+# owner's, and true would have copier delete them. $ocopy has no local
+# issue forms; the good fixture ($pcopy) has three.
+ocopy="$work/owner-copy"; rm -rf "$ocopy"; cp -R "$pcopy" "$ocopy"; rm -r "$ocopy/.github/ISSUE_TEMPLATE"
+owner_api() { # <name>: a copy of the pinned fixture, o/.github public, in $oa
+  oa="$work/api-owner-$1"; rm -rf "$oa"; cp -R "$pinned_api" "$oa"
+  mkdir -p "$oa/repos/o/.github/contents/.github/ISSUE_TEMPLATE" "$oa/repos/o/.github/contents/docs"
+  printf '{"visibility":"public"}\n' > "$oa/repos/o/.github.json"
+}
+form_file() { # <name> <text>: a form in o/.github's shared folder, as the contents API gives it
+  printf '%s' "$2" | base64 | tr -d '\n' | jq -R '{content: .}' > "$oa/repos/o/.github/contents/.github/ISSUE_TEMPLATE/$1.json"
+}
+listing() { jq -n '[$ARGS.positional[] | {name: .}]' --args "$@" > "$oa/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"; }
+owner_line() { # <description> <ERE for the printed line's end, or "-" for none> [ERE on stderr] [root]
+  local printed rc
+  printed="$(FLOOR_CHECK_API_DIR="$oa" python3 "$checker" --root "${4:-$ocopy}" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
+  if [ "$2" = - ]; then
+    if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qE -- "$3" "$work/print-err"; then ok "$1"
+    else bad "$1 (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+  elif [ "$rc" = 0 ] && grep -qE -- "$2\$" <<<"$printed" && { [ -z "${3:-}" ] || grep -qE -- "$3" "$work/print-err"; }; then ok "$1"
+  else bad "$1 (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+}
+owner_api forms; listing bug.yml config.yml
+form_file bug.yml $'name: Bug\ndescription: d\nbody:\n  - type: textarea\n'
+owner_line "an owner whose public .github shares issue forms: owner_has_issue_forms=true" \
+  "plinth_sha=$sha40 --data owner_has_pr_template=false --data owner_has_issue_forms=true"
+out="$(FLOOR_CHECK_API_DIR="$oa" python3 "$checker" --root "$ocopy" --repo o/r 2>&1 | sed -n 's/^  INFO    \(uvx .*copier update.*\)$/\1/p')"
+if [ "$out" = "$(FLOOR_CHECK_API_DIR="$oa" python3 "$checker" --root "$ocopy" --repo o/r --print-update-command 2>/dev/null)" ]
+then ok "the drift item prints the same line, answers and all"; else bad "drift item line with the owner's answers: '$out'"; fi
+owner_line "the repository's own forms replace the owner's already: false, kept, and said so" "$no_shared" \
+  "^o/\.github shares issue forms, but this repository's own \.github/ISSUE_TEMPLATE replaces them; the update keeps those" "$pcopy"
+printf '{}\n' > "$oa/repos/o/.github/contents/docs/PULL_REQUEST_TEMPLATE.md.json"
+owner_line "a pull-request template in the owner's docs/ counts, as the door counts it: owner_has_pr_template=true" \
+  "--data owner_has_pr_template=true --data owner_has_issue_forms=true"
+own_pr="$work/owner-own-pr"; rm -rf "$own_pr"; cp -R "$ocopy" "$own_pr"; mkdir -p "$own_pr/docs"; printf '## What\n' > "$own_pr/docs/PULL_REQUEST_TEMPLATE.md"
+owner_line "the repository's own pull-request template, in docs/: false, kept, and said so" \
+  "--data owner_has_pr_template=false --data owner_has_issue_forms=true" \
+  "^o/\.github shares a pull-request template, but this repository has its own; the update keeps it" "$own_pr"
+both_own="$work/owner-both-own"; rm -rf "$both_own"; cp -R "$pcopy" "$both_own"; printf '## What\n' > "$both_own/.github/PULL_REQUEST_TEMPLATE.md"
+owner_api empty-form; listing bug.yml; printf '{"content":""}\n' > "$oa/repos/o/.github/contents/.github/ISSUE_TEMPLATE/bug.yml.json"
+owner_line "a shared form that is empty is not a form GitHub offers: false" "$no_shared"
+owner_api config; listing config.yml
+owner_line "a shared folder with only a config: false, and the line says that config will not apply" "$no_shared" \
+  "^o/\.github publishes an issue-template config but no form; the update writes the template's forms and config"
+owner_api private; printf '{"visibility":"private"}\n' > "$oa/repos/o/.github.json"; listing bug.yml
+form_file bug.yml $'name: Bug\ndescription: d\nbody:\n  - type: textarea\n'
+owner_line "a private .github is never inherited from: both false, whatever it holds" "$no_shared"
+owner_api vis-unread; printf 'not json\n' > "$oa/repos/o/.github.json"
+owner_line "the .github repository's visibility not read: no line, and it says what was not read" - \
+  "cannot read whether o/\.github is public \(offline or API error\); a failed lookup is not an answer"
+owner_line "a repository with its own forms and pull-request template needs no read: both false, even then" "$no_shared" "" "$both_own"
+owner_api list-unread; printf 'not json\n' > "$oa/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
+owner_line "the shared folder's listing not read: no line" - \
+  "cannot read whether o/\.github publishes shared templates \(\.github/ISSUE_TEMPLATE: offline or API error\)"
+owner_api form-unread; listing bug.yml
+printf 'not json\n' > "$oa/repos/o/.github/contents/.github/ISSUE_TEMPLATE/bug.yml.json"
+owner_line "one shared form not read: no line, naming it" - \
+  "cannot read whether o/\.github publishes shared templates \(\.github/ISSUE_TEMPLATE/bug\.yml: offline or API error\)"
+owner_api pr-unread; printf 'not json\n' > "$oa/repos/o/.github/contents/PULL_REQUEST_TEMPLATE.md.json"
+owner_line "the pull-request template's read failing: no line" - \
+  "cannot read whether o/\.github publishes shared templates \(PULL_REQUEST_TEMPLATE\.md: offline or API error\)"
+out="$(FLOOR_CHECK_API_DIR="$oa" python3 "$checker" --root "$ocopy" --repo o/r 2>&1)"
+if grep -q "INFO    no update command: cannot read whether o/.github publishes shared templates" <<<"$out" && ! grep -q "INFO    uvx" <<<"$out"
+then ok "and the drift item prints no line either, with the same reason"
+else bad "drift item, owner unread"; printf '%s\n' "$out" | grep -E 'template|copier' | sed 's/^/        /'; fi
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$ocopy" --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "no --repo, so whether the owner's .github publishes" "$work/print-err"
+then ok "--print-update-command without --repo prints no line: the owner's answers were not read"
+else bad "--print-update-command without --repo (rc=$rc, stdout '$printed')"; fi
+# The decisions are new-project.sh's own: the checker finds them beside it.
+libless="$work/libless"; mkdir -p "$libless"; cp "$checker" "$root/scripts/new-project.sh" "$libless/"
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$libless/floor-check.py" --root "$ocopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "lib/shared-github.sh not found beside the checker" "$work/print-err"
+then ok "no scripts/lib/shared-github.sh beside the checker: no line, rather than a guess"
+else bad "missing shared-github.sh (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+# `ci / floor-check` downloads the checker into $RUNNER_TEMP/plinth: the
+# layout rebuilt from that step's own curl lines must give the line too.
+cilayout="$work/ci-layout"; mkdir -p "$cilayout/lib"
+fetch="$(sed -n '/name: Fetch the checker from the same plinth commit/,/name: Floor check/p' "$root/.github/workflows/python-ci.yml")"
+for f in $(sed -nE 's/^ *for f in (.*); do$/\1/p' <<<"$fetch"); do cp "$root/$f" "$cilayout/$(basename "$f")"; done
+grep -q 'curl .*-o "\$d/lib/shared-github.sh"' <<<"$fetch" && cp "$root/scripts/lib/shared-github.sh" "$cilayout/lib/"
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$cilayout/floor-check.py" --root "$ocopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 0 ] && grep -q -- "$no_shared\$" <<<"$printed"
+then ok "the files ci / floor-check downloads include the shared-template decisions: the update line prints there"
+else bad "ci / floor-check's downloaded layout (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 
 # Single-sourced: the target comes from scripts/new-project.sh beside the
 # checker, never a copy inside floor-check.py itself.
