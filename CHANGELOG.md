@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-10-29
+
+New `cli` and `library` projects come from plinth-template v1.29.0 and
+publish to PyPI when a version tag is pushed, with no stored secret, and
+`/plinth:floor-check` reads that workflow. `/plinth:guide` tells a beginner
+where the project is and the one command to type next. Five more planning
+and clean-up skills install by default, a new `ci / code-growth` job says
+when code has grown enough to clean up, and `third-party / review` says
+when the reviewer took a request and never finished.
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6484392948>
+
+tested with plinth-template v1.29.0
+
 ### Added
 
 - `scripts/eval-suite-probe.sh` checks whether `claude plugin eval` can run
@@ -3928,7 +3942,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.15.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.16.0...HEAD
+[2.16.0]: https://github.com/coolbress/plinth/releases/tag/v2.16.0
 [2.15.0]: https://github.com/coolbress/plinth/releases/tag/v2.15.0
 [2.14.0]: https://github.com/coolbress/plinth/releases/tag/v2.14.0
 [2.13.0]: https://github.com/coolbress/plinth/releases/tag/v2.13.0
