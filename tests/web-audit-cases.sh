@@ -54,6 +54,22 @@ PY
 for s in "Verdict:verdict" "Audit the pages:audit" "Install Node (official release, SHA256 verified):node" "Install Chrome for Testing (SHA256 verified):chrome"; do
   job_step web-audit "${s%%:*}" > "$tmp/${s##*:}.sh" || { echo "  FAIL  web-audit / ${s%%:*}: step not found in python-ci.yml"; exit 1; }
 done
+# A web-audit step's literal `env:` values as KEY=VALUE words: the pins the
+# install steps check against, passed as the runner passes them.
+step_env() {
+  python3 -c '
+import re, sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+j = lines.index("  web-audit:")
+at = next(i for i in range(j, len(lines)) if lines[i].strip() == "- name: " + sys.argv[2])
+e = next(i for i in range(at, len(lines)) if lines[i].strip() == "env:")
+for l in lines[e + 1:]:
+    m = re.match(r"^ {10}([A-Z0-9_]+): \"([^\"$ ]*)\"$", l)
+    if not m:
+        break
+    print(m.group(1) + "=" + m.group(2))
+' "$wf" "$1"
+}
 
 # One run of the Verdict step: the results are in $RUNNER_TEMP/web-audit, the
 # outcomes in the environment (each `success` unless the case says otherwise).
@@ -214,8 +230,11 @@ ready=
 if [ "$(uname -s)-$(uname -m)" = Linux-x86_64 ]; then
   # The workflow's own install steps, as the runner runs them.
   : > "$tmp/path"; : > "$tmp/env"
-  if RUNNER_TEMP="$tmp" GITHUB_PATH="$tmp/path" bash "$tmp/node.sh" > "$tmp/node.log" 2>&1 \
-     && RUNNER_TEMP="$tmp" GITHUB_ENV="$tmp/env" bash "$tmp/chrome.sh" > "$tmp/chrome.log" 2>&1; then
+  node_env="$(step_env "Install Node (official release, SHA256 verified)")"
+  chrome_env="$(step_env "Install Chrome for Testing (SHA256 verified)")"
+  # shellcheck disable=SC2086 # one KEY=VALUE word per pin
+  if env $node_env RUNNER_TEMP="$tmp" GITHUB_PATH="$tmp/path" bash "$tmp/node.sh" > "$tmp/node.log" 2>&1 \
+     && env $chrome_env RUNNER_TEMP="$tmp" GITHUB_ENV="$tmp/env" bash "$tmp/chrome.sh" > "$tmp/chrome.log" 2>&1; then
     PATH="$(cat "$tmp/path"):$PATH"; export "$(grep '^WEB_AUDIT_CHROME=' "$tmp/env")"
     ready=1
   else

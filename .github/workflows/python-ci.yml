@@ -2114,7 +2114,9 @@ jobs:
 
       # `job.workflow_sha`: see floor-check. `npm ci` installs exactly the
       # lockfile, every package checked against its integrity hash, and runs
-      # no install script.
+      # no install script. The package.json's `overrides` raise what
+      # `@lhci/cli` 0.15.1 pins (Lighthouse 12.6.1 and older packages with
+      # published advisories): Lighthouse runs as 13.5.0.
       - name: Install Lighthouse CI and axe-core from plinth's lockfile
         id: tools
         if: inputs.web && steps.node.outcome == 'success'
