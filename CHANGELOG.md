@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-10-29
+
+A `web` project gets `ci / web-audit`, which runs Lighthouse and axe-core
+on its pages and reports scores and accessibility violations without
+failing. New `backend` projects come from plinth-template v1.30.0 and
+publish their container image to GHCR when a version tag is pushed, and
+`/plinth:floor-check` reads that workflow. `ci / code-growth` now measures
+one file list with both of its tools.
+
+tested with plinth-template v1.30.0
+
 ### Added
 
 - `ci / web-audit`, a new job in `python-ci.yml` for the `web` archetype
@@ -3984,7 +3995,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.16.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.17.0...HEAD
+[2.17.0]: https://github.com/coolbress/plinth/releases/tag/v2.17.0
 [2.16.0]: https://github.com/coolbress/plinth/releases/tag/v2.16.0
 [2.15.0]: https://github.com/coolbress/plinth/releases/tag/v2.15.0
 [2.14.0]: https://github.com/coolbress/plinth/releases/tag/v2.14.0
