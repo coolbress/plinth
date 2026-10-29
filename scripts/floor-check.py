@@ -55,7 +55,7 @@ naming the gap and what stands in its place; a licence state the API does not
 answer is a SKIP, or with --actions-token an INFO naming the run that judges
 it. Every other item is expected as on a public repository.
 
-One more is WARN-only and reads no network beyond one GitHub compare call and the three reads named below
+One more is WARN-only and reads no network beyond one GitHub compare call and the reads named below
 (#219): whether the template tag this repository was rendered from
 (.copier-answers.yml's _commit) is behind the tag plinth is tested with
 today (scripts/new-project.sh's template_ref, read from that file alone).
@@ -69,7 +69,12 @@ plinth's tags and a compare of the two plinth commits (#511). Each line is
 printed only while the target tag still names new-project.sh's template_sha,
 the commit plinth was tested with, read with one more call: a moved tag is a
 WARN with no line, and an unread one prints the line here but not from
---print-update-command, the line that runs (#519).
+--print-update-command, the line that runs (#519). On GitHub the line also
+carries the owner's two answers, read as /plinth:new-project reads them
+(the owner's .github: its visibility, three pull-request template paths,
+the shared issue-template folder and each form in it, #726), true only
+while the repository has none of its own; without --repo, or with a read
+that fails, there is no line, here or from --print-update-command.
 
 A GitLab checkout (--host gitlab, or `host: gitlab` in .copier-answers.yml)
 is read as one (#543): glab's token and config reads in the agent settings,
@@ -323,7 +328,7 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
         check_agent_settings(root, host)
         check_doc_links(root)
         check_tracked_dotenv(root)
-        check_template_drift(root, network, host)
+        check_template_drift(root, network, host, owner)
         return
 
     forms = root / ".github" / "ISSUE_TEMPLATE"
@@ -374,7 +379,7 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
     check_doc_links(root)
     check_tracked_dotenv(root)
     check_action_pins(root)
-    check_template_drift(root, network, host)
+    check_template_drift(root, network, host, owner)
 
 
 def md_front_matter_name(text: str) -> str:
@@ -1212,6 +1217,7 @@ def template_drift(root: Path, host: str | None = None) -> dict:
     # this line has none. It answers each question with the recorded answer.
     out.update(copier_version=copier_version, copier_newer=copier_newer)
     out["integrity"] = integrity
+    out["host"] = host or answers.get("host")
     return {**out, "state": "behind", "cmd": update_line(out, sha, integrity) if sha else None, "why_not": why_not, "live": sha}
 
 
@@ -1223,7 +1229,116 @@ def update_line(d: dict, pin: str, integrity: str | None = None) -> str:
     `_commit` (measured, copier 9.18.2)."""
     return (f"uvx --from copier=={d['copier_version']} --exclude-newer {d['copier_newer']} "
             f"copier update --defaults --vcs-ref {d['target_sha']} --data plinth_sha={pin}"
-            + (f" --data plinth_gitlab_integrity={shlex.quote(integrity)}" if integrity else ""))
+            + (f" --data plinth_gitlab_integrity={shlex.quote(integrity)}" if integrity else "")
+            + d.get("owner_data", ""))
+
+
+SHARED_GITHUB = Path(__file__).resolve().parent / "lib" / "shared-github.sh"
+PR_TEMPLATE_PATHS = ("PULL_REQUEST_TEMPLATE.md", ".github/PULL_REQUEST_TEMPLATE.md", "docs/PULL_REQUEST_TEMPLATE.md")
+
+
+def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
+    """On GitHub, give the update line the owner's answers, as
+    /plinth:new-project gives `copier copy` (#726): whether `<owner>/.github`
+    publishes a pull-request template and issue forms. Without them the
+    update reads both as false, and a form the target tag added lands as one
+    local file, which hides every form the owner shares. The same reads as
+    new-project.sh, decided by the same functions (scripts/lib/shared-github.sh);
+    fetched here, through `api`, so fixtures serve them. A read that fails is
+    not an answer: `cmd` is withdrawn and `why_not` says why.
+
+    An answer is true only while this repository has none of its own. Its
+    own already replace the owner's (the forms per folder, the pull-request
+    template per file), so a new one beside them hides nothing; and true
+    would have copier delete them, a form edited by hand included, without
+    a conflict (measured, copier 9.18.2). `owner_notes` say when either
+    happens, and when the owner's folder holds a config and no form."""
+    if not d.get("cmd") or (d.get("host") or "github") == "gitlab":
+        return
+    forms_dir = root / ".github" / "ISSUE_TEMPLATE"
+    own_forms = forms_dir.is_dir() and any(p.is_file() and p.suffix in FORM_SUFFIXES for p in forms_dir.iterdir())
+    own_pr = any((root / p).is_file() for p in PR_TEMPLATE_PATHS)
+    notes: list[str] = []
+    d["owner_notes"] = notes
+
+    def withdraw(why: str) -> None:
+        d["cmd"], d["why_not"] = None, why
+
+    if own_forms and own_pr:
+        d["owner_data"] = " --data owner_has_pr_template=false --data owner_has_issue_forms=false"
+        d["cmd"] = update_line(d, d["live"], d.get("integrity"))
+        return
+    if not owner:
+        withdraw("no --repo, so whether the owner's .github publishes a pull-request template or issue forms was "
+                 "not read; without that answer the update reads both as false and can write a form that hides "
+                 "the owner's shared ones")
+        return
+    if not SHARED_GITHUB.is_file():
+        withdraw(f"{SHARED_GITHUB} not found beside the checker, so the owner's .github could not be judged")
+        return
+
+    def fetched(data, text) -> str:  # an `api` answer as new-project.sh's gh_read writes it
+        if data is ABSENT:
+            return "err:HTTP 404 Not Found"
+        if data is ERROR:
+            return "err:offline or API error"
+        got = text(data)
+        return "err:an unexpected response" if got is None else "ok:" + got
+
+    def decide(fn: str, *answers: str) -> str:
+        try:
+            r = subprocess.run(["bash", "-c", '. "$0" && "$@"', str(SHARED_GITHUB), fn, *answers],
+                               capture_output=True, text=True, check=False)
+        except OSError as e:
+            return f"unknown: {fn} did not run ({e})"
+        out = r.stdout.strip()
+        return out if r.returncode == 0 and out else f"unknown: {fn} gave no answer ({r.stderr.strip()})"
+
+    def why(answer: str) -> str:
+        return answer.removeprefix("unknown: ")
+
+    shared = f"repos/{owner}/.github"
+    vis = decide("shared_repo_public", fetched(api(shared, network), lambda j: j.get("visibility")
+                                                if isinstance(j, dict) and isinstance(j.get("visibility"), str)
+                                                else None))
+    if vis.startswith("unknown"):
+        withdraw(f"cannot read whether {owner}/.github is public ({why(vis)}); a failed lookup is not an answer: "
+                 f"only a public .github repository is inherited from")
+        return
+    has_pr = has_forms = "no"
+    if vis == "yes":
+        pr_answers: list[str] = []
+        for path in PR_TEMPLATE_PATHS:
+            pr_answers += [path, fetched(api(f"{shared}/contents/{path}", network), lambda _: "")]
+        has_pr = decide("shared_of", *pr_answers)
+        listing = api(f"{shared}/contents/.github/ISSUE_TEMPLATE", network)
+        names: list[str] | None = ([e["name"] for e in listing if isinstance(e, dict) and isinstance(e.get("name"), str)]
+                                   if isinstance(listing, list) else None)
+        form_answers = [fetched(listing, lambda _: None if names is None else "\n".join(names))]
+        for name in names or []:
+            form_answers += [name, fetched(api(f"{shared}/contents/.github/ISSUE_TEMPLATE/{name}", network),
+                                           lambda j: j.get("content") if isinstance(j, dict)
+                                           and isinstance(j.get("content"), str) else None)]
+        has_forms = decide("shared_forms", *form_answers)
+        bad = has_pr if has_pr.startswith("unknown") else has_forms
+        if bad.startswith("unknown"):
+            withdraw(f"cannot read whether {owner}/.github publishes shared templates ({why(bad)}); a failed lookup "
+                     f"is not an answer: writing ours could replace yours, and skipping ours could leave none")
+            return
+        if has_forms == "config-only" and not own_forms:
+            notes.append(f"{owner}/.github publishes an issue-template config but no form; the update writes "
+                         f"the template's forms and config, and that config does not apply here")
+    if has_forms == "yes" and own_forms:
+        notes.append(f"{owner}/.github shares issue forms, but this repository's own .github/ISSUE_TEMPLATE "
+                     f"replaces them; the update keeps those and adds the template's new ones beside them")
+    if has_pr == "yes" and own_pr:
+        notes.append(f"{owner}/.github shares a pull-request template, but this repository has its own; the "
+                     f"update keeps it")
+    pr = has_pr == "yes" and not own_pr
+    forms = has_forms == "yes" and not own_forms
+    d["owner_data"] = (f" --data owner_has_pr_template={'true' if pr else 'false'}"
+                       f" --data owner_has_issue_forms={'true' if forms else 'false'}")
+    d["cmd"] = update_line(d, d["live"], d.get("integrity"))
 
 
 def tested_plinth_pin(template_repo: str, target: str, network: bool,
@@ -1335,7 +1450,7 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
                     f"were not compared ({why}); the live pin is kept"}
 
 
-def check_template_drift(root: Path, network: bool, host: str | None = None) -> None:
+def check_template_drift(root: Path, network: bool, host: str | None = None, owner: str | None = None) -> None:
     """#219 stage 1: has the template plinth is tested with today moved past
     the tag this repository was rendered from? Reports the drift and an
     update command; runs nothing that writes. A PASS means only that the
@@ -1396,9 +1511,12 @@ def check_template_drift(root: Path, network: bool, host: str | None = None) -> 
                 for pline in patch.splitlines():
                     result("INFO", f"    {pline}")
 
+    owner_shared(d, owner, network, root)
     if not d["cmd"]:
         result("INFO", f"  no update command: {d['why_not']}")
         return
+    for note in d.get("owner_notes", []):
+        result("INFO", f"  {note}")
     tag, why = target_tag(d, network)
     if tag == "moved":
         result("WARN", moved_note(d, why))
@@ -1416,13 +1534,17 @@ def check_template_drift(root: Path, network: bool, host: str | None = None) -> 
         result("INFO", f"  {choice['cmd']}")
 
 
-def print_update_command(root: Path, plinth_pin: str = "live", network: bool = True, host: str | None = None) -> int:
+def print_update_command(root: Path, plinth_pin: str = "live", network: bool = True, host: str | None = None,
+                         owner: str | None = None) -> int:
     """--print-update-command: the drift item's command line alone on
     stdout, exit 0; otherwise why there is none on stderr, exit 1. With
     --plinth-pin tested, the line with the tested pin, and the comparison
     on stderr whether or not there is one: --plinth-pin tested never prints
     a line that would move the pin backwards or past an unread comparison."""
     d = template_drift(root, host)
+    owner_shared(d, owner, network, root)
+    for note in d.get("owner_notes", []):
+        print(note, file=sys.stderr)
     if d.get("cmd"):
         # Fail closed: this is the line that runs.
         tag, why = target_tag(d, network)
@@ -3117,7 +3239,8 @@ def main() -> int:
     if a.plinth_pin != "live" and not a.print_update_command:
         ap.error("--plinth-pin needs --print-update-command")
     if a.print_update_command:
-        return print_update_command(root, a.plinth_pin, not a.no_network, a.host)
+        return print_update_command(root, a.plinth_pin, not a.no_network, a.host,
+                                    a.repo.split("/")[0] if a.repo else None)
     project = (root / a.project).resolve()
     if project != root and root not in project.parents:
         # Every item reads one repository: .github/, AGENTS.md, the ruleset at
