@@ -56,3 +56,15 @@ def test_database_url_becomes_a_postgres_entry() -> None:
 def test_database_url_refuses_another_engine() -> None:
     with pytest.raises(ValueError, match="postgres"):
         database("mysql://u@h/db")
+
+
+def test_home_answers_with_a_page(client: Client) -> None:
+    response = client.get("/", secure=True)
+    assert response.status_code == 200
+    assert b'<html lang="en">' in response.content
+
+
+def test_the_log_in_page_answers_a_visitor(client: Client) -> None:
+    response = client.get("/accounts/login/", secure=True)
+    assert response.status_code == 200
+    assert b'name="password"' in response.content

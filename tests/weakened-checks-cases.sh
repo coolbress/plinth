@@ -947,10 +947,11 @@ if [ "$(grep -c '^- not yet confirmed: item ' <<<"$sum")" = 12 ]; then ok "twelv
 else bad "twelve not yet confirmed: the summary does not carry all twelve" "$sum"; fi
 [ "$rc" = 0 ] && ok "twelve not yet confirmed: the step passes" || bad "the step exited $rc" "$out"
 # Every job's helper is the same text, so the cap and the marker hold in each:
-# one per job, the two web-only jobs (#614) and code-growth (#705) included.
+# one per job, the two web-only jobs (#614), code-growth (#705) and web-audit
+# (#709) included.
 helpers="$(grep -E '^ +(nw=0;|say\(\) )' "$wf" | sed 's/^ *//' | sort | uniq -c)"
 if [ "$(wc -l <<<"$helpers" | tr -d ' ')" = 2 ] && [ "$(awk '{print $1}' <<<"$helpers" | sort -u | wc -l | tr -d ' ')" = 1 ] \
-  && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 12 ]; then
+  && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 13 ]; then
   ok "every step that writes verdicts defines the same capped say helper ($(awk 'NR==1{print $1}' <<<"$helpers") steps)"
 else bad "the say helpers differ between steps, or a step lacks the cap" "$helpers"; fi
 fake_verdicts "fail: a" "${twelve[@]}"; sed -i.bak 's/^print("  PASS  x")$/print("  FAIL  a"); sys.exit(1)/' "$tmp/rt/plinth/floor-check.py"

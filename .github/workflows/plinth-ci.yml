@@ -81,6 +81,11 @@ jobs:
       - name: ci / migrations and ci / deploy-check fail and pass where they must, on Postgres
         run: ./tests/web-checks-cases.sh
 
+      # The workflow's own Node and Chrome steps, then a real audit of a page
+      # with known violations.
+      - name: ci / web-audit names a known violation, says what automated checks miss, and never fails
+        run: ./tests/web-audit-cases.sh
+
       # A stubbed `claude`: no model is called and no login is needed.
       - name: The eval suite refuses your own config, keeps GitHub out, stops at its ceiling, and its grader fails what it must
         run: ./tests/eval-suite-cases.sh

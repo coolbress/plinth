@@ -1,0 +1,11 @@
+# What must not enter the image, as the template's.
+.venv
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+dist/
+tests/
+db.sqlite3
+src/canary_web/staticfiles/

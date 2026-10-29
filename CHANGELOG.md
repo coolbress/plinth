@@ -11,8 +11,54 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The template update carries the owner's answers (#726). On GitHub, the
+  `copier update` line `/plinth:floor-check` prints and
+  `/plinth:template-update` runs now ends in
+  `--data owner_has_pr_template=… --data owner_has_issue_forms=…`, read as
+  `/plinth:new-project` reads them: whether the owner's public `.github`
+  repository publishes a pull-request template and issue forms, decided by
+  the same functions. Without them an update read both as false, so a form
+  a template release added reached a repository of an owner with shared
+  forms as one local file, and that file hides every shared form. An answer
+  is true only while the repository has none of its own: its own already
+  replace the owner's, and true would have copier delete them, a form
+  edited by hand included, without a conflict (measured, copier 9.18.2).
+  The line needs `--repo` (the skill passes it), and a read that fails
+  gives no line and says what was not read, rather than a guess. On GitLab
+  nothing changes. This is what lets the template release after 1.30.0
+  give existing GitHub repositories its end-or-hand-over form by update.
+
+## [2.17.0] - 2026-10-29
+
+A `web` project gets `ci / web-audit`, which runs Lighthouse and axe-core
+on its pages and reports scores and accessibility violations without
+failing. New `backend` projects come from plinth-template v1.30.0 and
+publish their container image to GHCR when a version tag is pushed, and
+`/plinth:floor-check` reads that workflow. `ci / code-growth` now measures
+one file list with both of its tools.
+
+tested with plinth-template v1.30.0
+
 ### Added
 
+- `ci / web-audit`, a new job in `python-ci.yml` for the `web` archetype
+  (#709). It builds and starts the app image with a throwaway Postgres, logs
+  a person made for the run in, and runs Lighthouse CI and axe-core on `/`
+  and the log-in page. The job summary gives the four Lighthouse scores per
+  page and every accessibility violation axe-core found, with the rule, its
+  impact and the first element, and says that automated checks catch only
+  part of accessibility. No account is needed and nothing is uploaded. Node,
+  Chrome for Testing and the npm tools are pinned (SHA256 and
+  `scripts/web-audit/package-lock.json`). It never fails and no ruleset
+  requires it; another archetype gets a pass that does not apply.
+  plinth-template's web pages as rendered at v1.29.0 have three or four
+  violations each (`html-has-lang`, `landmark-one-main`, `region`, and
+  `label` on the notes form), so a `web` project sees them on its next pull
+  request after the update.
+- `canary-web` has a `Dockerfile`, a `/` page and a log-in page, so
+  `canary-web / web-audit` runs the whole job on every pull request.
 - `/plinth:floor-check` and `ci / floor-check` read a `backend` project's
   `.github/workflows/release.yml` too, the workflow the next plinth-template
   release adds to publish the project's image to GHCR on a version tag
@@ -36,22 +82,6 @@ pull requests and have no tag.
   ending a project or handing it over. An existing repository gets the
   release workflow through `/plinth:template-update`; on GitHub the form
   comes only with a new project until #726.
-- The template update carries the owner's answers (#726). On GitHub, the
-  `copier update` line `/plinth:floor-check` prints and
-  `/plinth:template-update` runs now ends in
-  `--data owner_has_pr_template=… --data owner_has_issue_forms=…`, read as
-  `/plinth:new-project` reads them: whether the owner's public `.github`
-  repository publishes a pull-request template and issue forms, decided by
-  the same functions. Without them an update read both as false, so a form
-  a template release added reached a repository of an owner with shared
-  forms as one local file, and that file hides every shared form. An answer
-  is true only while the repository has none of its own: its own already
-  replace the owner's, and true would have copier delete them, a form
-  edited by hand included, without a conflict (measured, copier 9.18.2).
-  The line needs `--repo` (the skill passes it), and a read that fails
-  gives no line and says what was not read, rather than a guess. On GitLab
-  nothing changes. This is what lets the template release after 1.30.0
-  give existing GitHub repositories its end-or-hand-over form by update.
 
 ## [2.16.0] - 2026-10-29
 
@@ -3984,7 +4014,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.16.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.17.0...HEAD
+[2.17.0]: https://github.com/coolbress/plinth/releases/tag/v2.17.0
 [2.16.0]: https://github.com/coolbress/plinth/releases/tag/v2.16.0
 [2.15.0]: https://github.com/coolbress/plinth/releases/tag/v2.15.0
 [2.14.0]: https://github.com/coolbress/plinth/releases/tag/v2.14.0
