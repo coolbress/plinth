@@ -24,6 +24,9 @@ ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 mkdir -p "$work/bin"
 sha40="$(printf '%040d' 7)"
+# What the update carries for an owner with no `.github` repository (every
+# fixture directory answers 404 unless a case writes one): both answers false.
+no_shared=" --data owner_has_pr_template=false --data owner_has_issue_forms=false"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 # The checker's GitHub reads come from fixtures, never the network: a
@@ -120,7 +123,7 @@ wt_of() { printf '%s\n' "$work/$1-template-$target_ref"; }
 
 # ── plan: read-only ─────────────────────────────────────────────────────
 fixture plan; reset_logs
-want="$(python3 "$checker" --root "$repo" --print-update-command 2>/dev/null)"
+want="$(python3 "$checker" --root "$repo" --repo o/r --print-update-command 2>/dev/null)"
 run
 base="$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 0 ] && grep -qF "$want" <<<"$out" && grep -qF -- "--apply $base" <<<"$out"; then ok "the plan prints the checker's own command and the apply line naming the verified base"
@@ -145,7 +148,7 @@ else bad "unverified base (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /';
 fixture clean; reset_logs
 printf 'scratch\n' > "$repo/untracked-in-the-users-checkout"
 before_head="$(git -C "$repo" rev-parse HEAD)"; before_status="$(git -C "$repo" status --porcelain)"
-want="$(python3 "$checker" --root "$repo" --print-update-command 2>/dev/null)"
+want="$(python3 "$checker" --root "$repo" --repo o/r --print-update-command 2>/dev/null)"
 base="$(git -C "$BARE" rev-parse main)"
 run --apply "$base" --assisted-by "Claude:claude-test-1"
 wt="$(wt_of clean)"
@@ -260,7 +263,7 @@ raised="$(printf '%040d' 9)"
 sed -i.bak "s/@$sha40/@$raised/" "$repo/.github/workflows/ci.yml" && rm "$repo/.github/workflows/ci.yml.bak"
 git -C "$repo" commit -q -am "bump plinth" && git -C "$repo" push -q origin main
 run --apply "$(git -C "$BARE" rev-parse main)"
-if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$raised\$" "$work/uvx.log"; then ok "copier is given the pin the workflows carry today, not the one first rendered"
+if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$raised$no_shared\$" "$work/uvx.log"; then ok "copier is given the pin the workflows carry today, not the one first rendered"
 else bad "raised pin (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; fi
 
 # ── the plinth pin: live by default, tested on a person's choice (#511) ─
@@ -278,7 +281,7 @@ pinrun() { # <fixture dir> <args...>: run with that API fixture
 fixture pinplan; reset_logs
 base="$(git -C "$BARE" rev-parse main)"
 pinrun "$pin_api"
-if [ "$rc" = 0 ] && grep -q "^Command: .*plinth_sha=$sha40\$" <<<"$out" && grep -q "^With the tested pin: .*plinth_sha=$tested\$" <<<"$out" \
+if [ "$rc" = 0 ] && grep -q "^Command: .*plinth_sha=$sha40$no_shared\$" <<<"$out" && grep -q "^With the tested pin: .*plinth_sha=$tested$no_shared\$" <<<"$out" \
    && grep -q "^Plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 2 commit(s) newer" <<<"$out" \
    && grep -qF -- "--apply $base --plinth-pin live" <<<"$out" && grep -qF -- "--apply $base --plinth-pin tested" <<<"$out"
 then ok "a tested pin newer than the live one: the plan prints the comparison, both lines and an --apply line for each choice"
@@ -307,7 +310,7 @@ for choice in tested live default; do
   if [ "$choice" = default ]; then pinrun "$pin_api" --apply "$base"; else pinrun "$pin_api" --apply "$base" --plinth-pin "$choice"; fi
   want_sha="$sha40"; [ "$choice" = tested ] && want_sha="$tested"
   body="$(cat "$work/gh.log.body" 2>/dev/null)"
-  if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_sha --data plinth_sha=$want_sha\$" "$work/uvx.log"
+  if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_sha --data plinth_sha=$want_sha$no_shared\$" "$work/uvx.log"
   then ok "--apply $([ "$choice" = default ] && echo "without --plinth-pin" || echo "--plinth-pin $choice") runs copier with the $([ "$choice" = tested ] && echo tested || echo live) SHA"
   else bad "--plinth-pin $choice (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
   if grep -qF -- "--plinth-pin $([ "$choice" = tested ] && echo tested || echo live)" <<<"$body" && grep -q "$sha40" <<<"$body" && grep -q "$tested" <<<"$body"
@@ -324,7 +327,7 @@ tag_names "$same_api" "$target_sha"
 fixture pinsame; reset_logs
 pinrun "$same_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin tested
 body="$(cat "$work/gh.log.body" 2>/dev/null)"
-if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$sha40\$" "$work/uvx.log" && grep -q "The plinth pin: unchanged" <<<"$body" && ! grep -q "moved to" <<<"$body"
+if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$sha40$no_shared\$" "$work/uvx.log" && grep -q "The plinth pin: unchanged" <<<"$body" && ! grep -q "moved to" <<<"$body"
 then ok "--plinth-pin tested when the live pin is the tested one: the same line runs, and the description says nothing moved"
 else bad "--plinth-pin tested, equal (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
 
@@ -525,6 +528,49 @@ git -C "$repo" commit -q -am current && git -C "$repo" push -q origin main
 run
 if [ "$rc" = 1 ] && grep -q "nothing to update" <<<"$out"; then ok "at the target tag the plan says there is nothing to update"
 else bad "current (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── the owner's shared templates (#726) ─────────────────────────────────
+# The update carries what o/.github publishes, as the door's render did: an
+# owner sharing issue forms gets `owner_has_issue_forms=true`, so the update
+# writes no local form over them. A read that fails is not an answer: the
+# plan and --apply stop before a worktree or copier.
+shared_api="$work/api-shared"; rm -rf "$shared_api"; cp -R "$work/api-none" "$shared_api"
+mkdir -p "$shared_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE"
+printf '{"visibility":"public"}\n' > "$shared_api/repos/o/.github.json"
+printf '[{"name":"bug.yml"},{"name":"config.yml"}]\n' > "$shared_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
+printf 'name: Bug\ndescription: d\nbody:\n  - type: textarea\n' | base64 | tr -d '\n' | jq -R '{content: .}' \
+  > "$shared_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE/bug.yml.json"
+fixture shared; reset_logs
+git -C "$repo" rm -q -r .github/ISSUE_TEMPLATE && git -C "$repo" commit -q -m "no local forms" && git -C "$repo" push -q origin main
+pinrun "$shared_api" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$sha40 --data owner_has_pr_template=false --data owner_has_issue_forms=true\$" "$work/uvx.log"
+then ok "an owner whose public .github shares issue forms, a repository with none of its own: owner_has_issue_forms=true"
+else bad "shared forms (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The repository's own form already replaces the shared set: true would have
+# copier delete it. The plan reads the base's own templates as --apply does,
+# so the two give the same line.
+fixture ownforms; reset_logs
+pinrun "$shared_api"
+planned="$(sed -n 's/^Command:    uvx //p' <<<"$out")"
+if [ "$rc" = 0 ] && grep -q -- "--data owner_has_issue_forms=false\$" <<<"$planned" && grep -q "this repository's own .github/ISSUE_TEMPLATE replaces them" <<<"$out"
+then ok "a repository with its own forms: the plan passes false, keeping them, and says why"
+else bad "plan, own forms (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs; pinrun "$shared_api" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 0 ] && [ "$(cat "$work/uvx.log" 2>/dev/null)" = "$planned" ]
+then ok "and --apply runs the very line the plan printed"
+else bad "apply, own forms (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)', plan '$planned'"; fi
+unread_owner="$work/api-owner-unread"; rm -rf "$unread_owner"; cp -R "$shared_api" "$unread_owner"
+printf 'not json\n' > "$unread_owner/repos/o/.github/contents/.github/ISSUE_TEMPLATE/bug.yml.json"
+fixture ownerunread; reset_logs
+pinrun "$unread_owner"
+if [ "$rc" = 1 ] && grep -q "cannot read whether o/.github publishes shared templates" <<<"$out" && ! grep -q "^Command:" <<<"$out"
+then ok "a shared form that could not be read: the plan prints no command and says what was not read"
+else bad "plan, owner unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs
+pinrun "$unread_owner" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.log"
+then ok "and --apply stops before copier runs, opening nothing"
+else bad "apply, owner unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

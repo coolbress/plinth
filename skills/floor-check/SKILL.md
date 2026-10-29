@@ -390,7 +390,15 @@ among them — the template's own change, not necessarily this repository's:
 another archetype, inherited forms or a hand-made edit can mean some of it
 was never rendered here), and a `copier update` line carrying the commit of
 plinth this repository's own workflows call today, read from their `uses:`
-lines so the update does not move that pin under it. When the target tag was
+lines so the update does not move that pin under it, and, on GitHub, the
+owner's two answers `/plinth:new-project` gave the first render: whether the
+owner's public `.github` repository publishes a pull-request template and
+issue forms, read the same way, each true only while this repository has
+none of its own (its own already replace the owner's, and true would delete
+them). Without them an update reads both as false and can write one local
+form that hides every shared one (#726). They need `--repo`; without it, or
+when a read fails, the item prints the tags and files with no command and
+says what was not read. When the target tag was
 tested with a newer plinth commit (its `copier.yml` `plinth_sha` default,
 compared with the live pin on GitHub), a second line carries that one, under
 a line naming both SHAs, their release tags and the compare URL: the person
