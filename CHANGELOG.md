@@ -36,6 +36,22 @@ pull requests and have no tag.
   ending a project or handing it over. An existing repository gets the
   release workflow through `/plinth:template-update`; on GitHub the form
   comes only with a new project until #726.
+- The template update carries the owner's answers (#726). On GitHub, the
+  `copier update` line `/plinth:floor-check` prints and
+  `/plinth:template-update` runs now ends in
+  `--data owner_has_pr_template=… --data owner_has_issue_forms=…`, read as
+  `/plinth:new-project` reads them: whether the owner's public `.github`
+  repository publishes a pull-request template and issue forms, decided by
+  the same functions. Without them an update read both as false, so a form
+  a template release added reached a repository of an owner with shared
+  forms as one local file, and that file hides every shared form. An answer
+  is true only while the repository has none of its own: its own already
+  replace the owner's, and true would have copier delete them, a form
+  edited by hand included, without a conflict (measured, copier 9.18.2).
+  The line needs `--repo` (the skill passes it), and a read that fails
+  gives no line and says what was not read, rather than a guess. On GitLab
+  nothing changes. This is what lets the template release after 1.30.0
+  give existing GitHub repositories its end-or-hand-over form by update.
 
 ## [2.16.0] - 2026-10-29
 

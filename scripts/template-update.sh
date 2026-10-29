@@ -281,15 +281,19 @@ wt="$(dirname "$top")/$(basename "$top")-template-$to"
 branch="chore/template-$to"
 
 # The command, from the checker, on exactly the files it reads at the base:
-# the answers file and the workflows. With `tested`, the line with the tested
-# pin, the comparison on stderr whether or not there is one.
+# the answers file, the workflows and the repository's own issue and
+# pull-request templates (#726). With `tested`, the line with the tested
+# pin, the comparison on stderr whether or not there is one. `--repo` names
+# whose `.github` the checker reads for the two answers the update carries,
+# as the door's render did; a read that fails gives no line (#726).
 cmd_at() { # <dir> [live|tested]
-  python3 "$checker" --root "$1" --print-update-command --plinth-pin "${2:-live}"
+  python3 "$checker" --root "$1" --repo "$repo" --print-update-command --plinth-pin "${2:-live}"
 }
 if [ "$mode" = plan ]; then
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
   paths=()
-  for p in .copier-answers.yml .github/workflows; do
+  for p in .copier-answers.yml .github/workflows .github/ISSUE_TEMPLATE \
+           PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md; do
     git -C "$top" cat-file -e "$base:$p" 2>/dev/null && paths+=("$p")
   done
   [ ${#paths[@]} -gt 0 ] && git -C "$top" archive "$base" -- "${paths[@]}" | tar -x -C "$tmp"

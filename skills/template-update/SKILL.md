@@ -27,7 +27,10 @@ recorded tag is the target, no pin to carry, a base it could not verify):
 show the message and stop there.
 
 The command keeps the plinth commit the repository's workflows call today,
-so an update never undoes a pin Dependabot moved. When the target tag was
+so an update never undoes a pin Dependabot moved. On GitHub it also carries
+whether the owner's `.github` repository publishes a pull-request template
+and issue forms, so an update never writes a form that hides the owner's
+shared ones; when that cannot be read, the plan says so and stops (#726). When the target tag was
 tested with a newer plinth commit, the plan also prints a `Plinth pin:` line
 comparing the two, a second command `With the tested pin:`, a `Recommended:`
 line saying in one sentence what moving to the tested pin gains, and two
