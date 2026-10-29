@@ -11,6 +11,26 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/require-check.sh '<check name>'` makes one check required on the
+  default branch, and the how-to
+  [make your own check required](docs/how-to/make-your-own-check-required.md)
+  explains it in plain words (#707). It refuses a name that has not reported
+  on the last ten commits of the default branch, a check that does not come
+  from a GitHub Actions job in a workflow file, a workflow that does not run
+  on every new commit of a pull request to the default branch (no
+  `pull_request` event, a path filter, another branch, `types:` without
+  `synchronize`), and a job with `if:`, called from a job with `if:` or
+  needing one, since a skipped job passes without running and a skipped call
+  reports no name. A job that needs a job not yet required from GitHub
+  Actions is refused too; the same name required from another app does not
+  count. It says first that it needs a login
+  that administers the repository, stops with a plain message and changes
+  nothing without one, and prints the required list as GitHub returns it
+  after the change. `scripts/upgrade-ruleset.sh` stays for checks from other
+  apps.
+
 ### Changed
 
 - The template update carries the owner's answers (#726). On GitHub, the
