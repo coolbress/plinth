@@ -1501,16 +1501,63 @@ out="$(img_out)"
 if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab backend is not asked for release.yml"
 else bad "a GitLab backend was asked for release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm -rf "$img"
-# data-ml and web publish nothing on a tag: not asked.
-for a in data-ml web; do
-  other="$work/other-$a"; rm -rf "$other"; cp -R "$good" "$other"
-  sed -i.bak "s/^archetype: .*/archetype: $a/" "$other/.copier-answers.yml"; rm "$other/.copier-answers.yml.bak"
-  git -C "$other" add -A
-  out="$(python3 "$checker" --root "$other" --no-network 2>&1)"
-  if ! grep -q "release.yml" <<<"$out"; then ok "a $a instance is not asked for release.yml"
-  else bad "a $a instance was asked for release.yml"; fi
-  rm -rf "$other"
+# A data-ml project publishes its model, metrics and card to a GitHub Release
+# through the same file (plinth-template 1.31.0, #716): the same three items,
+# no pickle among its ASSETS, and the card beside it. Each a WARN.
+ml="$work/ml"; rm -rf "$ml"; cp -R "$good" "$ml"; rm "$ml/$rel"
+sed -i.bak "s/^archetype: .*/archetype: data-ml/" "$ml/.copier-answers.yml"; rm "$ml/.copier-answers.yml.bak"
+ml_out() { git -C "$ml" add -A; python3 "$checker" --root "$ml" --no-network 2>&1; }
+out="$(ml_out)"
+if grep -qF "WARN  $rel missing: a version tag does not publish this model to a GitHub Release" <<<"$out" \
+   && grep -qF 'INFO    plinth-template 1.31.0 adds it, with its steps in docs/how-to/publish-a-release.md' <<<"$out" \
+   && grep -qF 'WARN  MODEL_CARD.md missing: a release publishes the model without saying what it was trained on' <<<"$out" \
+   && grep -qF 'INFO    plinth-template 1.31.0 adds it with the training run: copier update' <<<"$out" \
+   && grep -q -- '-- 0 failed' <<<"$out"; then ok "a data-ml instance from before 1.31.0: two WARNs with their fixes, 0 failed"
+else bad "a data-ml instance from before 1.31.0"; printf '%s\n' "$out" | grep -E 'FAIL|release|MODEL_CARD' | sed 's/^/        /'; fi
+printf '# Model card\n' > "$ml/MODEL_CARD.md"
+printf 'name: Release\non:\n  push:\n    tags: ["v*"]\npermissions: {}\n# Never a pickle (`.pkl`, `.pickle`, `.joblib`, `.pt`).\nenv:\n  ASSETS: model.skops metrics.json MODEL_CARD.md\njobs:\n  publish:\n    permissions:\n      contents: write\n    steps:\n      - run: |\n          case "$f" in *.pkl | *.pickle | *.joblib | *.pt) exit 1 ;; esac\n      - env:\n          GH_TOKEN: ${{ github.token }}\n        run: gh release create "$GITHUB_REF_NAME" --verify-tag $ASSETS SHA256SUMS\n' > "$ml/$rel"
+out="$(ml_out)"
+if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" \
+   && grep -qF "PASS  $rel reads no stored secret" <<<"$out" \
+   && grep -qF "PASS  $rel uploads no pickle (ASSETS: model.skops metrics.json MODEL_CARD.md)" <<<"$out" \
+   && grep -qF "PASS  MODEL_CARD.md present" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "data-ml: the template's shape of release.yml and the card pass"
+else bad "data-ml: the template's shape of release.yml and the card"; printf '%s\n' "$out" | grep -E 'release|MODEL_CARD' | sed 's/^/        /'; fi
+cp "$ml/$rel" "$ml/release.good"
+sed 's/ASSETS: model.skops/ASSETS: model.pkl/' "$ml/release.good" > "$ml/$rel"
+out="$(ml_out)"
+if grep -qF "WARN  $rel uploads a pickle (model.pkl): loading one runs whatever code it holds" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "data-ml release.yml that uploads a pickle: a WARN naming it"
+else bad "data-ml release.yml that uploads a pickle was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+sed 's/ASSETS: model.skops metrics.json/ASSETS: "model.skops weights.PT/' "$ml/release.good" | sed 's/MODEL_CARD.md$/MODEL_CARD.md"/' > "$ml/$rel"
+out="$(ml_out)"
+if grep -qF "WARN  $rel uploads a pickle (weights.PT)" <<<"$out"; then ok "a quoted ASSETS line with an upper-case .PT: still a pickle"
+else bad "a quoted ASSETS line with an upper-case .PT was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+for value in '>-\n    model.pkl' 'model.skops\n    model.pkl' '${{ vars.ASSETS }}' 'model.skops (and a second ASSETS: model.pkl)'; do
+  case "$value" in
+    *second*) sed 's/^  publish:$/  publish:\n    env:\n      ASSETS: model.pkl/' "$ml/release.good" > "$ml/$rel" ;;
+    *) sed "s/ASSETS: .*/ASSETS: $value/" "$ml/release.good" > "$ml/$rel" ;;
+  esac
+  out="$(ml_out)"
+  if grep -qF "SKIP  $rel: ASSETS is not a one-line list of file names this checker reads" <<<"$out" && ! grep -q "PASS  $rel uploads no pickle" <<<"$out"; then ok "ASSETS: $value: not verified, not passed"
+  else bad "ASSETS: $value was passed or not reported"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 done
+grep -v 'ASSETS:' "$ml/release.good" > "$ml/$rel"
+out="$(ml_out)"
+if grep -qF "SKIP  $rel: no ASSETS line this checker reads; uploaded files not verified" <<<"$out"; then ok "data-ml release.yml without an ASSETS line: not verified, not passed"
+else bad "data-ml release.yml without an ASSETS line"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
+rm "$ml/$rel"; printf 'host: gitlab\n' >> "$ml/.copier-answers.yml"
+out="$(ml_out)"
+if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" \
+   && grep -qF "PASS  MODEL_CARD.md present" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab data-ml: no release.yml asked, the card still read"
+else bad "a GitLab data-ml"; printf '%s\n' "$out" | grep -E 'release|MODEL_CARD' | sed 's/^/        /'; fi
+rm -rf "$ml"
+# web deploys on green and publishes nothing on a tag: not asked.
+other="$work/other-web"; rm -rf "$other"; cp -R "$good" "$other"
+sed -i.bak "s/^archetype: .*/archetype: web/" "$other/.copier-answers.yml"; rm "$other/.copier-answers.yml.bak"
+git -C "$other" add -A
+out="$(python3 "$checker" --root "$other" --no-network 2>&1)"
+if ! grep -q "release.yml\|MODEL_CARD" <<<"$out"; then ok "a web instance is not asked for release.yml or a model card"
+else bad "a web instance was asked for release.yml or a model card"; fi
+rm -rf "$other"
 web_rules="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web | jq -c '[.rules[] | . + {ruleset_source_type: "Repository", ruleset_id: 1}]')"
 for drop in "ci / migrations" "ci / deploy-check"; do
   jq -c --arg d "$drop" 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != $d)) else . end)' <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"

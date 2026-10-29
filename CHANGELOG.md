@@ -30,6 +30,18 @@ pull requests and have no tag.
   nothing without one, and prints the required list as GitHub returns it
   after the change. `scripts/upgrade-ruleset.sh` stays for checks from other
   apps.
+- `/plinth:floor-check` and `ci / floor-check` read a `data-ml` project's
+  `.github/workflows/release.yml`, the workflow plinth-template 1.31.0
+  adds to publish the project's model, metrics and model card to a
+  GitHub Release on a version tag (#716). The same three items as for the
+  other archetypes, and one more: no file its `ASSETS:` line uploads is a
+  pickle (`.pkl`, `.pickle`, `.joblib`, `.pt`); a value that is not one line
+  of plain file names, set once, is a SKIP, not a pass. A second item asks for
+  `MODEL_CARD.md`, on GitHub and GitLab. Each finding is a WARN, never a
+  FAIL, so a `data-ml` rendered before these files existed still has 0
+  failed; both missing-file WARNs name plinth-template 1.31.0. New projects
+  get the files once `/plinth:new-project` renders that template release, a
+  separate change.
 
 ### Changed
 
