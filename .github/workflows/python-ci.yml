@@ -2339,3 +2339,6 @@ jobs:
           PY
           while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$r/verdict"
           if [ -s "$r/summary.md" ]; then cat "$r/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+          # The same text in this step's log, for whoever reads the run through
+          # the API (`gh run view --log`), where job summaries are not served.
+          sed 's/^/- /' "$r/verdict" 2>/dev/null; cat "$r/summary.md" 2>/dev/null || true

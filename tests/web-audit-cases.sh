@@ -128,8 +128,9 @@ if has "$d/summary" "pass: Lighthouse scored / (logged in): accessibility 100, b
    && has "$d/summary" "pass: axe-core's automated rules found no accessibility violation on /accounts/login/ (not logged in) (31 rules applied); they catch only part of accessibility" \
    && has "$d/summary" "| \`/accounts/login/\` (not logged in) | 95 | 100 | 90 | 97 | 0 |" \
    && has "$d/summary" "Automated checks catch only part of accessibility." \
-   && ! has "$d/stdout" "::warning::" && has "$d/stdout" "exit 0"; then
-  ok "clean pages: the scores per page, a pass per page for axe-core, the limits of automated checks, no warning"
+   && ! has "$d/stdout" "::warning::" && has "$d/stdout" "exit 0" \
+   && has "$d/stdout" "- pass: Lighthouse scored / (logged in)" && has "$d/stdout" "### Lighthouse and axe-core on the app's pages"; then
+  ok "clean pages: the scores per page, a pass per page for axe-core, the limits of automated checks, no warning; the same text in the log"
 else bad "clean pages" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 0.78; lhr "$d/web-audit/1.lhr.json" 1
