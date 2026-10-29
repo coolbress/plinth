@@ -1,3 +1,3 @@
-jobs: build code-growth deploy-check deps diff-size floor-check lint migrations pr-title secrets test typecheck
+jobs: build code-growth deploy-check deps diff-size floor-check lint migrations pr-title secrets test typecheck web-audit
 inputs: deps-fail-on-severity diff-size-exclude extra-python-versions floor-check-required-checks max-diff-lines web working-directory
 secrets: (none)

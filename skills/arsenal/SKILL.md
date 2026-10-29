@@ -195,6 +195,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | Proof | A green that did not check the property | The required checks; the three questions | CI; person | Ask run-a-project.md's three questions of every green | every run; each recorded false green was caught by the person looking (U1 23, 26; U2 13; #403 record 3) |
 | Use | Can I see it running | Built-in `/run`; the built-in `/verify` is shadowed by the template's (#476) | person or agent | Type `/run`, or ask to see it running | `run` 1 (U2) |
 | Proof | What no check asserts | `third-party / review` | CI | Turn on the reviewer (configure-the-third-party-reviewer.md) | off in the observed runs |
+| Use | A `web` page that some people cannot use: no label, too little contrast, a slow load | `ci / web-audit`: Lighthouse CI and axe-core on `/` and the log-in page; reports, never fails, required by no ruleset | CI | Nothing to type on a `web` project: read the job's summary on the pull request. Automated checks catch only part of accessibility, so also try the page with the keyboard alone and a screen reader | 0; no recorded run had it (#709) |
 
 ### 6 Merge, 7 Break, 8 Resume
 

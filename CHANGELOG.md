@@ -24,6 +24,36 @@ pull requests and have no tag.
   failed; both missing-file WARNs name plinth-template 1.31.0. New projects
   get the files once `/plinth:new-project` renders that template release, a
   separate change.
+
+## [2.17.0] - 2026-10-29
+
+A `web` project gets `ci / web-audit`, which runs Lighthouse and axe-core
+on its pages and reports scores and accessibility violations without
+failing. New `backend` projects come from plinth-template v1.30.0 and
+publish their container image to GHCR when a version tag is pushed, and
+`/plinth:floor-check` reads that workflow. `ci / code-growth` now measures
+one file list with both of its tools.
+
+tested with plinth-template v1.30.0
+
+### Added
+
+- `ci / web-audit`, a new job in `python-ci.yml` for the `web` archetype
+  (#709). It builds and starts the app image with a throwaway Postgres, logs
+  a person made for the run in, and runs Lighthouse CI and axe-core on `/`
+  and the log-in page. The job summary gives the four Lighthouse scores per
+  page and every accessibility violation axe-core found, with the rule, its
+  impact and the first element, and says that automated checks catch only
+  part of accessibility. No account is needed and nothing is uploaded. Node,
+  Chrome for Testing and the npm tools are pinned (SHA256 and
+  `scripts/web-audit/package-lock.json`). It never fails and no ruleset
+  requires it; another archetype gets a pass that does not apply.
+  plinth-template's web pages as rendered at v1.29.0 have three or four
+  violations each (`html-has-lang`, `landmark-one-main`, `region`, and
+  `label` on the notes form), so a `web` project sees them on its next pull
+  request after the update.
+- `canary-web` has a `Dockerfile`, a `/` page and a log-in page, so
+  `canary-web / web-audit` runs the whole job on every pull request.
 - `/plinth:floor-check` and `ci / floor-check` read a `backend` project's
   `.github/workflows/release.yml` too, the workflow the next plinth-template
   release adds to publish the project's image to GHCR on a version tag
@@ -33,7 +63,7 @@ pull requests and have no tag.
   so a `backend` rendered before the file existed still has 0 failed; the
   missing-file WARN names plinth-template 1.30.0 and the project's
   `docs/how-to/publish-a-release.md`. A GitLab `backend` gets an INFO, and
-  `web` is not asked (`data-ml`: the entry above). New projects get the file once
+  `data-ml` and `web` are not asked. New projects get the file once
   `/plinth:new-project` renders that template release, a separate change.
 
 ### Changed
@@ -3979,7 +4009,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.16.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.17.0...HEAD
+[2.17.0]: https://github.com/coolbress/plinth/releases/tag/v2.17.0
 [2.16.0]: https://github.com/coolbress/plinth/releases/tag/v2.16.0
 [2.15.0]: https://github.com/coolbress/plinth/releases/tag/v2.15.0
 [2.14.0]: https://github.com/coolbress/plinth/releases/tag/v2.14.0
