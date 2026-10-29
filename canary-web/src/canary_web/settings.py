@@ -76,7 +76,8 @@ ROOT_URLCONF = f"{__package__}.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # canary-web's own log-in page (registration/login.html), for `ci / web-audit`.
+        "DIRS": [PACKAGE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

@@ -13,6 +13,22 @@ pull requests and have no tag.
 
 ### Added
 
+- `ci / web-audit`, a new job in `python-ci.yml` for the `web` archetype
+  (#709). It builds and starts the app image with a throwaway Postgres, logs
+  a person made for the run in, and runs Lighthouse CI and axe-core on `/`
+  and the log-in page. The job summary gives the four Lighthouse scores per
+  page and every accessibility violation axe-core found, with the rule, its
+  impact and the first element, and says that automated checks catch only
+  part of accessibility. No account is needed and nothing is uploaded. Node,
+  Chrome for Testing and the npm tools are pinned (SHA256 and
+  `scripts/web-audit/package-lock.json`). It never fails and no ruleset
+  requires it; another archetype gets a pass that does not apply.
+  plinth-template's web pages as rendered at v1.29.0 have three or four
+  violations each (`html-has-lang`, `landmark-one-main`, `region`, and
+  `label` on the notes form), so a `web` project sees them on its next pull
+  request after the update.
+- `canary-web` has a `Dockerfile`, a `/` page and a log-in page, so
+  `canary-web / web-audit` runs the whole job on every pull request.
 - `/plinth:floor-check` and `ci / floor-check` read a `backend` project's
   `.github/workflows/release.yml` too, the workflow the next plinth-template
   release adds to publish the project's image to GHCR on a version tag

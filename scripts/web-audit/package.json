@@ -1,0 +1,16 @@
+{
+  "name": "plinth-web-audit",
+  "private": true,
+  "description": "The tools ci / web-audit runs, installed with npm ci from the lockfile beside this file",
+  "dependencies": {
+    "@lhci/cli": "0.15.1",
+    "axe-core": "4.14.0",
+    "puppeteer-core": "25.14.0"
+  },
+  "overrides": {
+    "basic-ftp": "6.2.3",
+    "lighthouse": "13.5.0",
+    "tmp": "0.2.7",
+    "uuid": "11.1.1"
+  }
+}

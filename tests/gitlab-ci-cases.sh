@@ -45,7 +45,8 @@ fails = []
 WEB_ONLY = {"migrations", "deploy-check"}
 # The code-growth sensor is report-only and on GitHub alone in its first
 # release (#705); a GitLab twin waits for its warnings to be seen there.
-GITHUB_ONLY = {"code-growth"}
+# web-audit (#709) belongs to the web archetype, which is GitHub only (#604).
+GITHUB_ONLY = {"code-growth", "web-audit"}
 gh_jobs = sorted(j for j in re.findall(r"^  ([a-z][a-z0-9-]*):\s*$", gh.split("\njobs:\n", 1)[1], re.M)
                  if j not in WEB_ONLY | GITHUB_ONLY)
 spec, body = gl.split("\n---\n", 1)
