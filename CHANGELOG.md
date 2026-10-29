@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-10-29
+
+New `data-ml` projects come from plinth-template v1.31.0: they train a
+small model saved with skops and publish it, its metrics and its model card
+to a GitHub Release on a version tag, and `/plinth:floor-check` reads that
+workflow. The template update now carries the owner's answers about shared
+issue forms, so an existing GitHub project gets new forms without hiding
+the owner's. `scripts/require-check.sh` makes one of your own checks
+required after checking that it will report.
+
+tested with plinth-template v1.31.0
+
 ### Added
 
 - `scripts/require-check.sh '<check name>'` makes one check required on the
@@ -4066,7 +4078,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.17.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.18.0...HEAD
+[2.18.0]: https://github.com/coolbress/plinth/releases/tag/v2.18.0
 [2.17.0]: https://github.com/coolbress/plinth/releases/tag/v2.17.0
 [2.16.0]: https://github.com/coolbress/plinth/releases/tag/v2.16.0
 [2.15.0]: https://github.com/coolbress/plinth/releases/tag/v2.15.0
