@@ -52,8 +52,10 @@ tested with plinth-template v1.29.0
   largest functions (complexity above 10 or more than 50 statements, by the
   project's own ruff) and Python files above 1000 lines, and names the next
   step: `/improve-codebase-architecture` on that file, or `/ponytail-audit`.
-  A `# noqa` or the project's ruff configuration hides nothing from it.
-  A file ruff cannot parse is named as not measured, never passed.
+  A `# noqa`, the project's ruff configuration or `.gitignore` hides
+  nothing from it: ruff and the line count read the same list of git's
+  files (#723), and a listed file ruff skipped, could not read or could not
+  parse is named as not measured, never passed.
   The limits are conventions, not validated numbers. It never fails and no
   ruleset requires it; it is not on GitLab yet.
 - `/plinth:floor-check` and `ci / floor-check` read a `cli` or `library`

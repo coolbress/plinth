@@ -150,19 +150,53 @@ new_repo proj; complex tangled > "$p/src/pkg/a.py"; run
 expect "in a working directory below the root, the warning names the file from the root" 1 '^- not yet confirmed: ' \
   "file=proj/src/pkg/a.py,line=1"
 
+echo "ci / code-growth: one list for both measures (#723)"
+# ruff gets git's list as paths, so a file its directory walk would skip
+# (here `.gitignore`) is measured as the line count measures it.
+new_repo; printf 'gen/\n' > "$r/.gitignore"; mkdir -p "$p/src/gen"; complex generated > "$p/src/gen/big.py"
+lines 1100 > "$p/src/gen/long.py"; git -C "$r" add -f "$p/src/gen" >/dev/null; run
+expect "a tracked file .gitignore also matches is measured by both: its function and its length are warned about" 2 \
+  '^- not yet confirmed: code size within the conventions, 1 function and 1 file are above them' "$NEXT" \
+  && { printf '%s\n' "$warns" | grep -qF 'file=src/gen/big.py,line=1,title=Code growth::src/gen/big.py:1 function `generated` has complexity 12' \
+         && ok "the ignored file's function is named" || bad "no warning names src/gen/big.py's function" "$warns"; }
+
+new_repo; rm -rf "$p/src"; complex tangled > "$p/-dash.py"; run
+expect "a file whose name starts with a dash is a path to ruff, not an option" 1 '^- not yet confirmed: ' "file=-dash.py,line=1"
+
+# More names than one batch holds: the function in the last one is still found.
+printf '#!/bin/sh\necho "$*" >> "%s"\nexec "%s" "$@"\n' "$tmp/ruff.calls" "$bin/ruff" > "$tmp/count-ruff"; chmod +x "$tmp/count-ruff"
+new_repo; d="$p/src/pkg/a_directory_name_long_enough_to_fill_the_command_line_quickly"; mkdir -p "$d"
+for i in $(seq 1400); do : > "$d/module_$i.py"; done; complex tangled > "$d/zz_last.py"
+: > "$tmp/ruff.calls"; ln -sf "$tmp/count-ruff" "$tmp/bin/ruff"; run; ln -sf "$bin/ruff" "$tmp/bin/ruff"
+if expect "1402 files in more than one batch: the function in the last file is found" 1 '^- not yet confirmed: ' "zz_last.py,line=1"; then
+  n="$(grep -c -- '--output-format json' "$tmp/ruff.calls")"
+  [ "$n" -ge 2 ] && ok "ruff ran in $n batches" || bad "ruff ran in $n batch, the list was not split" "$(cut -c1-200 "$tmp/ruff.calls")"
+fi
+
 echo "ci / code-growth: when it could not measure"
 new_repo; complex tangled > "$p/src/pkg/a.py"; printf 'def broken(:\n    pass\n' >> "$p/src/pkg/a.py"; run
 expect "a file ruff cannot parse is not yet confirmed and named, never a pass, even with nothing measured above" 1 \
-  '^- not yet confirmed: code size within the conventions, ruff could not parse 1 Python file, so the functions in them were not measured: src/pkg/a.py; ' \
-  'ruff could not parse 1 Python file'
+  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/a.py \(could not parse\); ' \
+  'ruff did not measure the functions in 1 Python file'
 new_repo; for f in one two three; do complex "$f"; done > "$p/src/pkg/a.py"; printf 'def broken(:\n' > "$p/src/pkg/b.py"; run
 if expect "an unparsed file and three functions above: still three warnings, the unparsed file first" 3 \
-  '^- not yet confirmed: code size within the conventions, ruff could not parse 1 Python file'; then
+  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/b.py \(could not parse\)'; then
   printf '%s\n' "$sum" | grep -qE '^- not yet confirmed: code size within the conventions, 3 functions and 0 files are above them' \
     && ok "the summary carries both verdict lines" || bad "the summary lacks the line for the functions above" "$sum"
-  printf '%s\n' "$warns" | head -1 | grep -qF '::warning::not yet confirmed: code size within the conventions, ruff could not parse' \
+  printf '%s\n' "$warns" | head -1 | grep -qF '::warning::not yet confirmed: code size within the conventions, ruff did not measure' \
     && ok "the first warning is the unparsed file's" || bad "the first warning is not the unparsed file's" "$warns"
 fi
+new_repo; complex tangled > "$p/src/pkg/a.py"; { printf "x = '\351'\n"; complex hidden; } > "$p/src/pkg/b.py"; run
+expect "a file ruff cannot read (not UTF-8) is named as not measured, never passed" 2 \
+  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/b.py \(could not read\); '
+
+# A ruff that leaves a listed file out of what it checks: named as skipped.
+printf '#!/bin/sh\ncase " $* " in *" --show-files "*) "%s" "$@" | grep -v "/b\\.py$"; exit 0 ;; esac\nexec "%s" "$@"\n' "$bin/ruff" "$bin/ruff" > "$tmp/skip-ruff"; chmod +x "$tmp/skip-ruff"
+new_repo; small ok > "$p/src/pkg/a.py"; small fine > "$p/src/pkg/b.py"; ln -sf "$tmp/skip-ruff" "$tmp/bin/ruff"; run; ln -sf "$bin/ruff" "$tmp/bin/ruff"
+expect "a listed file ruff skipped is named as not measured, never passed" 1 \
+  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/b.py \(skipped\); ' \
+  'src/pkg/b.py (skipped)'
+
 new_repo; complex tangled > "$p/src/pkg/a.py"; run failure
 expect "a failed uv sync is one not yet confirmed warning, never a pass" 1 \
   '^- not yet confirmed: code size within the conventions, it did not run because an earlier step failed' 'not yet confirmed'
