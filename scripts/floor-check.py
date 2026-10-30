@@ -2931,12 +2931,15 @@ def check_plugins() -> None:
                 result("SKIP", f"{pid} ({where}) not checked: its install records no full {how}")
             elif have != want:
                 shown = (lambda s: s[:12]) if how == "commit" else (lambda s: s)
-                # Before Claude Code 2.1.281, `update` without --scope updated
-                # the user install only; a project or local one is updated with
-                # its scope, from its own project folder (third-party review on #744).
+                # The install's own scope, always named: without --scope,
+                # `update` took user before Claude Code 2.1.281 and the most
+                # specific scope of the current folder after it (third-party
+                # review on #744). A project or local one runs from its folder.
                 fix = f"claude plugin update {pid}"
                 scope = rec.get("scope")
-                if scope in ("project", "local"):
+                if scope == "user":
+                    fix += " --scope user"
+                elif scope in ("project", "local"):
                     fix += f" --scope {scope}"
                     path = rec.get("projectPath")
                     fix = f"cd {shlex.quote(path)} && {fix}" if isinstance(path, str) and path else \

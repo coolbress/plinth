@@ -16,7 +16,8 @@ pull requests and have no tag.
 - `/plinth:floor-check` compares each plugin installed from plinth's
   marketplace with the commit its entry pins (#743). One left behind, as
   `claude plugin update plinth@plinth` leaves a dependency whose pin was
-  raised (#714), is a WARN naming it and `claude plugin update <name>@plinth`;
+  raised (#714), is a WARN naming it and `claude plugin update <name>@plinth` with its
+  `--scope`;
   the skill gives that command and does not run it. A plugin from another
   marketplace, or plugin files it cannot read, is reported as not checked.
 - `tests/install-smoke.sh` reads the default install's skill listing on a

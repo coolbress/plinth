@@ -47,8 +47,8 @@ marketplace's copy), read from this machine's Claude Code plugin files.
 `claude plugin update plinth@plinth` leaves a dependency at its old commit
 while reading the entry's new skill list, so one of its skills can report
 "Path not found" (#714). A plugin behind its pin is a WARN naming it and the
-one command that moves it, `claude plugin update <name>@plinth` (for a
-project or local install, with its `--scope`, from its project folder): give that
+one command that moves it, `claude plugin update <name>@plinth --scope
+<scope>` (for a project or local install, from its project folder): give that
 line to the user and do not run it yourself. Plugins at their pin are one
 INFO line. A plugin from another marketplace, an entry or an install without a
 full commit, and plugin files this run cannot read are a SKIP, not checked:

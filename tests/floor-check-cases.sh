@@ -955,7 +955,7 @@ plugins_fixture() { # <mattpocock-skills commit> [extra JSON entries]: a fresh c
 plugins_run() { out="$(CLAUDE_CONFIG_DIR="$pc" python3 "$checker" --root "$good" --no-network --plugins 2>&1)"; rc=$?; }
 behind_line='WARN  mattpocock-skills@plinth (user) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d'
 plugins_fixture "$old"; plugins_run
-if [ "$rc" = 0 ] && grep -qF "$behind_line" <<<"$out" && grep -qF 'fix: claude plugin update mattpocock-skills@plinth' <<<"$out" \
+if [ "$rc" = 0 ] && grep -qF "$behind_line" <<<"$out" && grep -qF 'fix: claude plugin update mattpocock-skills@plinth --scope user' <<<"$out" \
    && ! grep -qE 'at the plinth.*mattpocock-skills' <<<"$out" && grep -qE 'INFO  at the plinth marketplace.s pin: plinth@plinth \(user\), taste-skill@plinth \(user\)$' <<<"$out"
 then ok "--plugins: a dependency at an old commit is named with its update command, the others are at their pin"
 else bad "--plugins behind"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
@@ -993,7 +993,7 @@ else bad "--plugins scoped"; grep -E '@plinth' <<<"$out" | sed 's/^/        /'; 
 # plinth itself is compared by version with the marketplace copy's plugin.json.
 plugins_fixture "$pin"; printf '{"name":"plinth","version":"2.19.2"}\n' > "$pm/.claude-plugin/plugin.json"; plugins_run
 grep -qF 'WARN  plinth@plinth (user) is behind its pin: installed version 2.19.1, the plinth marketplace pins 2.19.2' <<<"$out" \
-  && grep -qF 'fix: claude plugin update plinth@plinth' <<<"$out" \
+  && grep -qF 'fix: claude plugin update plinth@plinth --scope user' <<<"$out" \
   && ok "--plugins: plinth behind its marketplace copy is named by version" || { bad "--plugins plinth version"; grep -E '@plinth' <<<"$out" | sed 's/^/        /'; }
 # Not checked, never at the pin: another marketplace, an entry with no full
 # commit, an install with no commit, an entry the marketplace does not have.
