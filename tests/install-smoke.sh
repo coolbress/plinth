@@ -151,7 +151,37 @@ not_expect mattpocock-skills@plinth "${leaving[@]}"
 # installed plugin, so a hook that inventory does not list is not seen here.
 for dep in "${deps[@]}"; do expect "$dep" "Hooks (0)"; done
 
-[ "${fresh:-no}" = yes ] || { echo "  INFO  extra plugin and upgrade path not checked: a kept configuration"; exit 0; }
+[ "${fresh:-no}" = yes ] || { echo "  INFO  skill listing, extra plugin and upgrade path not checked: a kept configuration"; exit 0; }
+
+# The default install's skill listing on a 200k model, in a folder holding the
+# budget setting of the template plinth renders (#743). At Claude Code's default
+# budget a 200k model drops some default skills' descriptions, and
+# plinth-template's skillListingBudgetFraction restores them (#704, #714); a pin
+# raise or a longer `skills` list can use that room up. `/context` is read
+# locally, without a login or an API call (measured on 2.1.314); a dropped
+# description shows as `< 20` tokens. Only this fresh configuration, so the
+# listing holds the default set and nothing else.
+tsha="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$root/scripts/new-project.sh")"
+[ -n "$tsha" ] || { echo "  FAIL  no template_sha in scripts/new-project.sh"; exit 1; }
+listing="$CLAUDE_CONFIG_DIR/listing"; mkdir -p "$listing/.claude"
+budget="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/coolbress/plinth-template/$tsha/template/.claude/settings.json.jinja" \
+  | sed -nE 's/^ *"skillListingBudgetFraction": *([0-9.]+),?$/\1/p')"
+[ -n "$budget" ] || { echo "  FAIL  no skillListingBudgetFraction read from plinth-template $tsha"; exit 1; }
+printf '{"skillListingBudgetFraction": %s}\n' "$budget" > "$listing/.claude/settings.json"
+(cd "$listing" && claude -p --model claude-haiku-4-5 /context) | python3 -c '
+import re, sys
+text, plugins = sys.stdin.read(), sys.argv[2:]
+fail = [] if re.search(r"^\*\*Tokens:\*\* .* / 200k ", text, re.M) else ["the listing is not a 200k model'"'"'s"]
+rows = re.findall(r"^\| (\S+) \| Plugin \(([^)]+)\) \| ([^|]+?) \|$", text, re.M)
+rows = [(s, p, t) for s, p, t in rows if p in plugins]
+fail += ["no skill of " + p + " in the listing" for p in plugins if p not in {r[1] for r in rows}]
+fail += ["description cut: " + s + " (" + t + ")" for s, _, t in rows if t.startswith("<")]
+for f in fail:
+    print("  FAIL  200k listing with skillListingBudgetFraction " + sys.argv[1] + ": " + f)
+if fail:
+    print(text); sys.exit(1)
+print("  PASS  200k listing with skillListingBudgetFraction " + sys.argv[1] + ": no default skill description cut (" + str(len(rows)) + " listed)")
+' "$budget" plinth "${deps[@]%@plinth}"
 # On the clean install too, the six still listed arrive beside the fifteen,
 # none of the seven #704 and #714 added is under both names, and
 # resolving-merge-conflicts, gone upstream, is not listed (#714).
@@ -167,8 +197,6 @@ expect mattpocock-skills@plinth "Skills (15)" "${added[@]}"
 # name would have the skills write one file and the pointers read another. The
 # template files are read at the commit scripts/new-project.sh renders; the
 # skills are the ones each mattpocock entry mounts, as installed above.
-tsha="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$root/scripts/new-project.sh")"
-[ -n "$tsha" ] || { echo "  FAIL  no template_sha in scripts/new-project.sh"; exit 1; }
 tdir="$CLAUDE_CONFIG_DIR/template-files"; mkdir -p "$tdir"
 for p in template/docs/agents/domain.md template/AGENTS.md.jinja \
          template/.github/ISSUE_TEMPLATE/end-or-hand-over.yml template/.gitlab/issue_templates/End-or-hand-over.md; do

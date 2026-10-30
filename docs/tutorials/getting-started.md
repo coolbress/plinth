@@ -256,3 +256,6 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   ("Path not found" for `retro`), `/retro` is missing and the other skills
   still name `CONTEXT.md`
   ([#714](https://github.com/coolbress/plinth/issues/714)).
+  `/plinth:floor-check` names a dependency left at an older commit than
+  plinth's marketplace pins, with the command that moves it
+  ([#743](https://github.com/coolbress/plinth/issues/743)).

@@ -19,7 +19,7 @@ the argument if the user gave one (`$ARGUMENTS`), otherwise the remote:
 
 ```bash
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"   # or the argument
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox --credentials \
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox --plugins --credentials \
   --ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset.json" --merge-ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset-merge.json" \
   ${repo:+--repo} ${repo:+"$repo"}
 ```
@@ -40,6 +40,18 @@ Relay those lines as they are and do not tell the user to turn the sandbox
 on or off; on Linux and WSL2 nothing was measured. This SKIP is one the
 not-verified line below names without a way to verify it: nothing plinth
 reads can.
+
+`--plugins` compares each plugin installed from the plinth marketplace with
+the commit its marketplace entry pins (plinth itself with the version of the
+marketplace's copy), read from this machine's Claude Code plugin files.
+`claude plugin update plinth@plinth` leaves a dependency at its old commit
+while reading the entry's new skill list, so one of its skills can report
+"Path not found" (#714). A plugin behind its pin is a WARN naming it and the
+one command that moves it, `claude plugin update <name>@plinth`: give that
+line to the user and do not run it yourself. Plugins at their pin are one
+INFO line. A plugin from another marketplace, an entry or an install without a
+full commit, and plugin files this run cannot read are a SKIP, not checked:
+never tell the user those are up to date.
 
 `--credentials` adds the other item of this machine: what can push to
 github.com besides the agent's token. It names `GH_TOKEN` or `GITHUB_TOKEN`
@@ -131,7 +143,7 @@ gitlab.com, run this instead of the command above, with the project's path
 
 ```bash
 repo="$(git remote get-url origin 2>/dev/null | sed -nE 's#^(https://gitlab\.com/|git@gitlab\.com:)(.+)$#\2#p' | sed 's#\.git$##')"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --host gitlab --sandbox --credentials ${repo:+--repo} ${repo:+"$repo"}
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --host gitlab --sandbox --plugins --credentials ${repo:+--repo} ${repo:+"$repo"}
 ```
 
 The wall is read through `glab api` with the user's own login: the
