@@ -49,27 +49,42 @@ pull requests and have no tag.
   Measured on an untouched instance with the real copier: a rename, no
   conflict.
 
+- Upstream's other new skills are not installed: `pr` (the agent can call
+  it, and its pull-request shape differs from CONTRIBUTING's),
+  `implement-spec` (typed by a person; parallel agents building a whole plan
+  on one branch) and `chief-of-staff` (not in upstream's plugin yet).
+  `/ask-matt` can suggest the first two; the arsenal says plinth installs
+  neither.
+- An existing install needs, once, after `claude plugin update plinth`:
+  `claude plugin update mattpocock-skills@plinth`, and
+  `claude plugin update mattpocock-skills-extra@plinth` if you installed it,
+  then `/reload-plugins`. `update plinth` alone keeps the dependency at its
+  old commit: until then `mattpocock-skills` reports an error ("Path not
+  found" for `retro`), `/retro` is missing and the other skills still name
+  `CONTEXT.md`. No `claude plugin prune` is needed (measured on
+  the update from v2.18.0, with and without the extra plugin).
+- `/plinth:new-project` renders plinth-template v1.32.0
+  (coolbress/plinth-template#150, #151). A new project's `AGENTS.md` and
+  `docs/agents/domain.md` name `GLOSSARY.md`, and its end-or-hand-over form
+  says that `/retro` suggests the rules and checks to add. An existing
+  project gets both through `/plinth:template-update`, which also moves its
+  `CONTEXT.md` (#714).
+
 ### Removed
 
 - `resolving-merge-conflicts` leaves `mattpocock-skills-extra`: upstream
   removed it in v1.3.2 (#714). The arsenal's merge-conflict row now says no
   tool is installed for it.
 
-Upstream's other new skills are not installed: `pr` (the agent can call
-it, and its pull-request shape differs from CONTRIBUTING's),
-`implement-spec` (typed by a person; parallel agents building a whole plan
-on one branch) and `chief-of-staff` (not in upstream's plugin yet).
-`/ask-matt` can suggest the first two; the arsenal says plinth installs
-neither.
+### Fixed
 
-An existing install needs, once, after `claude plugin update plinth`:
-`claude plugin update mattpocock-skills@plinth`, and
-`claude plugin update mattpocock-skills-extra@plinth` if you installed it,
-then `/reload-plugins`. `update plinth` alone keeps the dependency at its
-old commit: until then `mattpocock-skills` reports an error ("Path not
-found" for `retro`), `/retro` is missing and the other skills still name
-`CONTEXT.md`. No `claude plugin prune` is needed (measured on
-the update from v2.18.0, with and without the extra plugin).
+- `scripts/require-check.sh` refuses a workflow whose `pull_request:` or
+  `pull_request_target:` branch list has a pattern starting with `!`, and
+  names the workflow and the line (#736). GitHub reads that list in order, so
+  `branches: ['**', '!main']` never runs on pull requests to `main`; the
+  script used to accept it, and the required name would then hold every pull
+  request. A list it cannot read line by line (one that goes on past its
+  line, an escape, an anchor or alias) is refused too.
 
 ## [2.18.0] - 2026-10-29
 

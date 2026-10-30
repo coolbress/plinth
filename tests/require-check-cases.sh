@@ -76,6 +76,20 @@ trig other-branch.yml rel $'on:\n  pull_request:\n    branches: [release]'
 trig types.yml typed $'on:\n  pull_request:\n    types: [opened]'
 trig block.yml blocky $'on:\n  push:\n    branches: [main]\n  pull_request:\n    branches:\n      - main\n    types: [opened, synchronize, reopened]'
 trig list.yml listy $'on:\n  - push\n  - pull_request'
+# A `!` pattern under branches: drops a branch an earlier pattern matched (#736), in every way a list is written.
+trig neg-flow.yml negflow $'on:\n  pull_request:\n    branches: [\'**\', \'!main\']'
+trig neg-dq.yml negdq $'on:\n  pull_request:\n    branches: ["**", "!main"]'
+trig neg-block.yml negblock $'on:\n  pull_request:\n    branches:\n      - \'**\'\n      - \'!main\'  # not main'
+trig neg-plain.yml negplain $'on:\n  pull_request:\n    branches:\n      - "**"\n      - !main'
+trig neg-target.yml negtarget $'on:\n  pull_request_target:\n    branches: [\'**\', \'!main\']'
+trig neg-wrapped.yml negwrapped $'on:\n  pull_request:\n    branches: [\'**\',\n      \'!main\']'
+trig neg-escape.yml negescape $'on:\n  pull_request:\n    branches: ["**", "\\x21main"]'
+trig neg-alias.yml negalias $'x: &neg \'!main\'\non:\n  pull_request:\n    branches:\n      - \'**\'\n      - *neg'
+# An unreadable list is that event's reason only: another event that runs on main still counts, in either order.
+trig escape-then-target.yml esctarget $'on:\n  pull_request:\n    branches: ["**", "\\x21main"]\n  pull_request_target:'
+trig target-then-escape.yml targetesc $'on:\n  pull_request_target:\n  pull_request:\n    branches: ["**", "\\x21main"]'
+trig flow-main.yml flowmain $'on:\n  pull_request:\n    branches: [main]'
+trig all.yml allbranches $'on:\n  pull_request:\n    branches: [\'**\']'
 
 cat > "$work/files/r/r/.github/workflows/inner.yml" <<'YML'
 on:
@@ -133,7 +147,13 @@ case "$args" in
       40) p=.github/workflows/dyn.yml ;; 51) p=.github/workflows/push-only.yml ;;
       52) p=.github/workflows/paths.yml ;; 53) p=.github/workflows/other-branch.yml ;;
       54) p=.github/workflows/types.yml ;; 55) p=.github/workflows/block.yml ;;
-      56) p=.github/workflows/list.yml ;; *) p="" ;;
+      56) p=.github/workflows/list.yml ;; 57) p=.github/workflows/neg-flow.yml ;;
+      58) p=.github/workflows/neg-dq.yml ;; 59) p=.github/workflows/neg-block.yml ;;
+      60) p=.github/workflows/neg-plain.yml ;; 61) p=.github/workflows/neg-target.yml ;;
+      62) p=.github/workflows/neg-wrapped.yml ;; 63) p=.github/workflows/neg-escape.yml ;;
+      64) p=.github/workflows/neg-alias.yml ;; 65) p=.github/workflows/flow-main.yml ;;
+      66) p=.github/workflows/all.yml ;; 67) p=.github/workflows/escape-then-target.yml ;;
+      68) p=.github/workflows/target-then-escape.yml ;; *) p="" ;;
     esac
     jq -n --arg p "$p" '{workflow_runs: [{path: $p}]}' | out "$@" ;;
   *"/contents/"*)
@@ -164,6 +184,18 @@ case "$args" in
       {name: "typed", app: {id: 15368}, check_suite: {id: 54}},
       {name: "blocky", app: {id: 15368}, check_suite: {id: 55}},
       {name: "listy", app: {id: 15368}, check_suite: {id: 56}},
+      {name: "negflow", app: {id: 15368}, check_suite: {id: 57}},
+      {name: "negdq", app: {id: 15368}, check_suite: {id: 58}},
+      {name: "negblock", app: {id: 15368}, check_suite: {id: 59}},
+      {name: "negplain", app: {id: 15368}, check_suite: {id: 60}},
+      {name: "negtarget", app: {id: 15368}, check_suite: {id: 61}},
+      {name: "negwrapped", app: {id: 15368}, check_suite: {id: 62}},
+      {name: "negescape", app: {id: 15368}, check_suite: {id: 63}},
+      {name: "negalias", app: {id: 15368}, check_suite: {id: 64}},
+      {name: "flowmain", app: {id: 15368}, check_suite: {id: 65}},
+      {name: "allbranches", app: {id: 15368}, check_suite: {id: 66}},
+      {name: "esctarget", app: {id: 15368}, check_suite: {id: 67}},
+      {name: "targetesc", app: {id: 15368}, check_suite: {id: 68}},
       {name: "Vercel", app: {id: 8329}, check_suite: {id: 30}}]}' | out "$@" ;;
   "api repos/r/r --jq"*)
     jq -n --argjson a "${ADMIN:-true}" '{permissions: {admin: $a}, default_branch: "main"}' | out "$@" ;;
@@ -243,6 +275,38 @@ said "the refusal names the missing type" "leave out synchronize"
 unwritten "types"
 run 0 "a block on: with the default branch and the three types is accepted" --repo r/r 'blocky'
 run 0 "an on: written as a list is accepted" --repo r/r 'listy'
+
+run 1 "branches: ['**', '!main'] is refused" --repo r/r 'negflow'
+said "the refusal names the workflow" ".github/workflows/neg-flow.yml does not run 'negflow'"
+said "the refusal names the pattern and its line" "branches list has \`'!main'\` (line 3)"
+said "the refusal says why in plain words" 'a pattern starting with `!` leaves branches out'
+unwritten "negative pattern"
+run 1 "a double-quoted ! pattern is refused" --repo r/r 'negdq'
+said "it names the line" "(line 3)"
+unwritten "double-quoted"
+run 1 "a ! pattern as a block list item, with a comment, is refused" --repo r/r 'negblock'
+said "it names the item's own line" "(line 5)"
+unwritten "block item"
+run 1 "an unquoted ! item is refused" --repo r/r 'negplain'
+said "it names the item's own line" "\`!main\` (line 5)"
+unwritten "unquoted"
+run 1 "a ! pattern under pull_request_target is refused" --repo r/r 'negtarget'
+said "it names the event" 'its `pull_request_target:` branches list'
+unwritten "pull_request_target"
+run 1 "a branches list that goes on past its line is refused, not read in part" --repo r/r 'negwrapped'
+said "it names the workflow and the line" ".github/workflows/neg-wrapped.yml does not run 'negwrapped'"
+said "it says the list cannot be read, with the line" "branches list cannot be read here (line 3)"
+unwritten "wrapped list"
+run 1 "an escape that may spell ! is refused" --repo r/r 'negescape'
+said "it names the line" "branches list cannot be read here (line 3)"
+unwritten "escape"
+run 1 "an alias in a branches list is refused" --repo r/r 'negalias'
+said "it says why" "an anchor or alias"
+unwritten "alias"
+run 0 "an unreadable pull_request list beside a pull_request_target that runs is accepted" --repo r/r 'esctarget'
+run 0 "the same with the events the other way round" --repo r/r 'targetesc'
+run 0 "branches: [main] is accepted" --repo r/r 'flowmain'
+run 0 "branches: ['**'] is accepted" --repo r/r 'allbranches'
 
 run 1 "a check GitHub runs itself (CodeQL default setup) is refused" --repo r/r 'Analyze (python)'
 said "the refusal says GitHub runs it itself" "which GitHub runs itself"
