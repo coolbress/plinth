@@ -2931,9 +2931,19 @@ def check_plugins() -> None:
                 result("SKIP", f"{pid} ({where}) not checked: its install records no full {how}")
             elif have != want:
                 shown = (lambda s: s[:12]) if how == "commit" else (lambda s: s)
+                # Before Claude Code 2.1.281, `update` without --scope updated
+                # the user install only; a project or local one is updated with
+                # its scope, from its own project folder (third-party review on #744).
+                fix = f"claude plugin update {pid}"
+                scope = rec.get("scope")
+                if scope in ("project", "local"):
+                    fix += f" --scope {scope}"
+                    path = rec.get("projectPath")
+                    fix = f"cd {shlex.quote(path)} && {fix}" if isinstance(path, str) and path else \
+                        f"{fix}, run from the project folder it was installed for"
                 result("WARN", f"{pid} ({where}) is behind its pin: installed {how} {shown(have)}, the plinth "
                                f"marketplace pins {shown(want)}; its skills may report \"Path not found\". "
-                               f"fix: claude plugin update {pid}")
+                               f"fix: {fix}")
             else:
                 current.append(f"{pid} ({where})")
     if current:

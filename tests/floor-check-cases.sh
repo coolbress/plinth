@@ -972,6 +972,24 @@ if [ "$rc" = 0 ] && ! grep -qE '(WARN|SKIP|FAIL).*@plinth' <<<"$out" && ! grep -
    && grep -qF 'at the plinth marketplace'"'"'s pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)' <<<"$out"
 then ok "--plugins: every plugin at its pin reports nothing to do"
 else bad "--plugins up to date"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
+# A project or local install is updated with its scope, from its project folder:
+# before Claude Code 2.1.281 `update` without --scope updated the user install only.
+plugins_fixture "$pin"
+python3 - "$pc/plugins/installed_plugins.json" "$old" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+d["plugins"]["mattpocock-skills@plinth"] += [
+    {"scope": "project", "projectPath": "/w/my app", "gitCommitSha": sys.argv[2]},
+    {"scope": "local", "gitCommitSha": sys.argv[2]}]
+json.dump(d, open(p, "w"))
+PY
+plugins_run
+if grep -qF "mattpocock-skills@plinth (project in /w/my app) is behind" <<<"$out" \
+   && grep -qF "fix: cd '/w/my app' && claude plugin update mattpocock-skills@plinth --scope project" <<<"$out" \
+   && grep -qF "fix: claude plugin update mattpocock-skills@plinth --scope local, run from the project folder it was installed for" <<<"$out" \
+   && grep -qE 'at the plinth.*mattpocock-skills@plinth \(user\)' <<<"$out"
+then ok "--plugins: a project or local install behind its pin gets its scope and folder in the command, the user one stays at its pin"
+else bad "--plugins scoped"; grep -E '@plinth' <<<"$out" | sed 's/^/        /'; fi
 # plinth itself is compared by version with the marketplace copy's plugin.json.
 plugins_fixture "$pin"; printf '{"name":"plinth","version":"2.19.2"}\n' > "$pm/.claude-plugin/plugin.json"; plugins_run
 grep -qF 'WARN  plinth@plinth (user) is behind its pin: installed version 2.19.1, the plinth marketplace pins 2.19.2' <<<"$out" \
