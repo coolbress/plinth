@@ -77,6 +77,8 @@ for a in "$@"; do [ "$prev" = --vcs-ref ] && ref="$a"; prev="$a"; done
 [ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
 printf 'template line\n' >> AGENTS.md
+# MOCK_GLOSSARY: the template names GLOSSARY.md too, whatever MOCK_COPIER does.
+[ -n "${MOCK_GLOSSARY:-}" ] && mkdir -p docs/agents && printf -- '- Root **`GLOSSARY.md`**: the glossary.\n' > docs/agents/domain.md
 case "${MOCK_COPIER:-clean}" in
   conflict)
     base="$(git hash-object -w CONTRIBUTING.md)"
@@ -87,6 +89,9 @@ case "${MOCK_COPIER:-clean}" in
       | git update-index --index-info
     printf '<<<<<<< before updating\nours\n=======\ntheirs\n>>>>>>> after updating\n' > CONTRIBUTING.md ;;
   rej) printf -- '--- a\n+++ b\n' > CONTRIBUTING.md.rej ;;
+  # A template that names GLOSSARY.md, as plinth-template's domain docs do
+  # from the release that follows mattpocock/skills v1.3.2 (#714).
+  glossary) mkdir -p docs/agents && printf -- '- Root **`GLOSSARY.md`**: the glossary.\n' > docs/agents/domain.md ;;
 esac
 MOCK
 # ── wrapper: git, failing only `ls-remote` when MOCK_LSREMOTE_FAIL is set ─
@@ -571,6 +576,71 @@ pinrun "$unread_owner" --apply "$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.log"
 then ok "and --apply stops before copier runs, opening nothing"
 else bad "apply, owner unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── the glossary follows the template's name (#714) ─────────────────────
+# An untouched instance whose /domain-modeling wrote CONTEXT.md: an update to
+# a template naming GLOSSARY.md moves it, content unchanged, and says so; one
+# to a template still naming CONTEXT.md leaves it.
+glossary_fixture() { # <name>
+  fixture "$1"
+  printf '# Glossary\n\n**Order**: what a customer asked for.\n' > "$repo/CONTEXT.md"
+  git -C "$repo" add CONTEXT.md && git -C "$repo" commit -q -m glossary && git -C "$repo" push -q origin main
+}
+glossary_fixture glossary; reset_logs
+before="$(git -C "$repo" rev-parse HEAD:CONTEXT.md)"
+out="$(cd "$repo" && MOCK_COPIER=glossary PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+wt="$(wt_of glossary)"
+if [ "$rc" = 0 ] && [ "$(git -C "$wt" rev-parse HEAD:GLOSSARY.md 2>/dev/null)" = "$before" ] \
+   && ! git -C "$wt" cat-file -e HEAD:CONTEXT.md 2>/dev/null
+then ok "CONTEXT.md is moved to GLOSSARY.md with its content unchanged, in the update's one commit"
+else bad "glossary rename (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if [ "$(git -C "$wt" diff --name-status -M HEAD~1 HEAD -- CONTEXT.md GLOSSARY.md)" = "$(printf 'R100\tCONTEXT.md\tGLOSSARY.md')" ]
+then ok "git records it as a rename (R100), so the file's history follows"
+else bad "not a rename: $(git -C "$wt" diff --name-status -M HEAD~1 HEAD)"; fi
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if grep -qxF -- "- CONTEXT.md -> GLOSSARY.md" <<<"$body" && ! grep -q "^- GLOSSARY.md" <<<"$body" \
+   && grep -A2 -i "left in conflict by copier" <<<"$body" | grep -q "^- none"
+then ok "the description lists the rename apart from copier's merge, and no conflict"
+else bad "glossary description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+# Must not rename: the template still names CONTEXT.md (an update to an older tag).
+glossary_fixture oldname; reset_logs
+run --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 0 ] && git -C "$(wt_of oldname)" cat-file -e HEAD:CONTEXT.md 2>/dev/null \
+   && ! git -C "$(wt_of oldname)" cat-file -e HEAD:GLOSSARY.md 2>/dev/null && ! grep -q "Renamed" "$work/gh.log.body"
+then ok "a template that does not name GLOSSARY.md leaves CONTEXT.md where it is"
+else bad "renamed without the template's new name (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Must not overwrite: a GLOSSARY.md the repository already has.
+glossary_fixture both; reset_logs
+printf 'mine\n' > "$repo/GLOSSARY.md"; git -C "$repo" add GLOSSARY.md && git -C "$repo" commit -q -m both && git -C "$repo" push -q origin main
+out="$(cd "$repo" && MOCK_COPIER=glossary PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && [ "$(git -C "$(wt_of both)" show HEAD:GLOSSARY.md 2>/dev/null)" = mine ] \
+   && git -C "$(wt_of both)" cat-file -e HEAD:CONTEXT.md 2>/dev/null \
+   && grep -qF -- "- CONTEXT.md: GLOSSARY.md already exists" "$work/gh.log.body"
+then ok "an existing GLOSSARY.md is kept, CONTEXT.md too, and the description says why it was not renamed"
+else bad "both files (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$work/gh.log.body" 2>/dev/null | sed 's/^/        /'; fi
+
+# Must stay tracked: a .gitignore that matches the new name (Codex review on #740).
+glossary_fixture ignored; reset_logs
+printf 'GLOSSARY.md\n' > "$repo/.gitignore"; git -C "$repo" add .gitignore && git -C "$repo" commit -q -m ignore && git -C "$repo" push -q origin main
+before="$(git -C "$repo" rev-parse HEAD:CONTEXT.md)"
+out="$(cd "$repo" && MOCK_COPIER=glossary PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && [ "$(git -C "$(wt_of ignored)" rev-parse HEAD:GLOSSARY.md 2>/dev/null)" = "$before" ] \
+   && ! git -C "$(wt_of ignored)" cat-file -e HEAD:CONTEXT.md 2>/dev/null
+then ok "a .gitignore matching GLOSSARY.md: the moved file is still committed, content unchanged"
+else bad "ignored destination (rc=$rc): $(git -C "$(wt_of ignored)" show --stat --format= HEAD 2>/dev/null | tr '\n' ' ')"; fi
+# Must not claim "unchanged": a person edits GLOSSARY.md while another file
+# waits in conflict, then finishes (Codex review on #740).
+glossary_fixture edited; reset_logs
+out="$(cd "$repo" && MOCK_COPIER=conflict MOCK_GLOSSARY=1 PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+wt="$(wt_of edited)"
+printf 'theirs\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add CONTRIBUTING.md
+printf '**Refund**: money returned.\n' >> "$wt/GLOSSARY.md"
+reset_logs; run --finish "$wt" --resolved CONTRIBUTING.md "the template's side"
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -A3 "Edited by a person" <<<"$body" | grep -qxF -- "- GLOSSARY.md" \
+   && grep -qF -- "- CONTEXT.md -> GLOSSARY.md (edited after the move" <<<"$body"
+then ok "a glossary edited after the move is listed as a person's edit, and the rename line says so"
+else bad "edited after the move (rc=$rc)"; printf '%s\n' "$body" | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

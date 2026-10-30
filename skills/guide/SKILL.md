@@ -59,8 +59,11 @@ What to keep to:
   be not there yet, never described as if it were.
 - Stopping or coming back (step 8): the issues and pull requests come first;
   `/handoff` only when the work moves to another tool or another person.
+- The retrospective moment: say, in plain words, that `/retro` typed in the
+  session being looked back on suggests rules and checks for the next run
+  and changes nothing.
 - A skill typed only by the person (`/plinth:new-project`,
-  `/plinth:template-update`, `/implement`, `/triage`, this guide) is typed as
+  `/plinth:template-update`, `/implement`, `/triage`, `/retro`, this guide) is typed as
   `/` and picked from the list, not pasted. Do not run the command yourself.
 - `where: not read` means the script could not read the repository: say what
   was not read, from the line that says so, and the one thing that fixes it

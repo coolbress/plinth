@@ -24,7 +24,8 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   reset, rebase or stash another task's checkout.
 - `version` moves only in a release: `scripts/make-release.sh vX.Y.Z <why-file>` bumps both manifests,
   then tags from the merged `main`; never bump it elsewhere. `tests/make-release-guards.sh` checks it.
-- Pin every third-party marketplace entry to a full commit SHA. Raising a pin is a pull request.
+- Pin every third-party marketplace entry to a full commit SHA. Raising a pin is a pull request, and its
+  release note names `claude plugin update <name>@plinth`: `update plinth` does not fetch a raised pin (#714).
 - Keep the caller job named `ci` in `.github/workflows/ci.yml`. Check names are
   `ci / <job>` and rulesets require them by name
   ([the list](docs/reference/required-checks.md)). Renaming a `python-ci.yml`
@@ -124,7 +125,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   above are not applied by it, and a skill carrying its own example format does
   not override this repository's. Whoever opens the pull request applies them.
 - Issue tracker, triage labels, domain docs: [docs/agents/](docs/agents/issue-tracker.md)
-  (`issue-tracker.md`, `triage-labels.md`, `domain.md`); glossary in `CONTEXT.md`.
+  (`issue-tracker.md`, `triage-labels.md`, `domain.md`); glossary in `GLOSSARY.md`.
 
 ## Code Review Rules
 

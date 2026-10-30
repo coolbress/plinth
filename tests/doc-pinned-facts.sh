@@ -53,7 +53,7 @@ want = {None: count(None), **{a: count(a) for a in service}}
 
 words = {"eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14}
 number = re.compile(r"\b(" + "|".join(words) + r"|\d+)\b", re.I)
-pages = [docs / "README.md", docs / "CONTEXT.md", docs / "CONTRIBUTING.md",
+pages = [docs / "README.md", docs / "GLOSSARY.md", docs / "CONTRIBUTING.md",
          *sorted((docs / "docs").rglob("*.md")), *sorted((docs / "skills").rglob("*.md"))]
 stated = 0
 for page in pages:
@@ -106,7 +106,7 @@ check "$root" || status=1
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 copy() {
   rm -rf "$tmp/docs"; mkdir -p "$tmp/docs"
-  cp "$root"/README.md "$root"/CONTEXT.md "$root"/CONTRIBUTING.md "$tmp/docs/"
+  cp "$root"/README.md "$root"/GLOSSARY.md "$root"/CONTRIBUTING.md "$tmp/docs/"
   cp -R "$root/docs" "$root/skills" "$tmp/docs/"
 }
 expect_fail() {
@@ -128,8 +128,8 @@ copy; printf '\n[old](https://github.com/coolbress/plinth-template/releases/tag/
 expect_fail "a tutorial template tag other than template_ref" docs/tutorials/getting-started.md
 copy; printf '\nWait for the required checks: eight on GitHub.\n' >>"$tmp/docs/docs/how-to/run-a-project.md"
 expect_fail "a wrong count for an archetype without a service" docs/how-to/run-a-project.md
-copy; printf '\nThe required checks: nine on GitHub (ten for a service).\n' >>"$tmp/docs/CONTEXT.md"
-expect_fail "\"ten for a service\", which the web archetype is not" CONTEXT.md
+copy; printf '\nThe required checks: nine on GitHub (ten for a service).\n' >>"$tmp/docs/GLOSSARY.md"
+expect_fail "\"ten for a service\", which the web archetype is not" GLOSSARY.md
 copy; printf '\nThe required checks: nine on GitHub (ten for `backend` or `data-ml`, eleven for `web`).\n' >>"$tmp/docs/docs/reference/required-checks.md"
 expect_fail "a wrong count for web" docs/reference/required-checks.md
 exit "$status"

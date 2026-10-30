@@ -92,7 +92,7 @@ can see these: guidance only.
   looks up facts itself and brings you only decisions, then opens an issue
   saying what "done" means (several sessions' work: step 3 first).
 - **Look at:** that you both mean the same thing. Have it put the agreed
-  words into `CONTEXT.md`, and a hard-to-reverse trade-off under `docs/adr/`
+  words into `GLOSSARY.md`, and a hard-to-reverse trade-off under `docs/adr/`
   (`domain-modeling`; `/grill-with-docs`,
   [listed](#skills-plinth-lists-but-does-not-install), does both).
 - **Yours:** the answers; "I don't know, recommend one" is valid. Push back
@@ -214,6 +214,12 @@ can see these: guidance only.
   moves work to another tool, folder or person. It writes a temporary file
   whose path the next session needs, so the issues and pull requests stay
   the first record.
+- **Looking back:** after a piece of work, and above all one that went
+  wrong, type `/retro` in that same session before you clear it. It reads
+  the session and suggests what to change for the next run, most serious
+  first: a rule in `AGENTS.md`, a check that fails, a clearer pointer to a
+  file. It changes nothing; put the ones you agree with in an issue. At the
+  end of a project, the end-or-hand-over issue form asks the same questions.
 - **Look at:** the answer, who it works as, and anything not verified.
 - **Yours:** what to pick up next.
 - **If you forget:** guidance only: what is not in an issue or pull request
@@ -242,7 +248,7 @@ can see these: guidance only.
 ## What you type, and what runs by itself
 
 These skills, among others, run only when you type them: `/implement #N`,
-`/triage`, `/plinth:new-project`, `/plinth:template-update` and
+`/triage`, `/retro`, `/plinth:new-project`, `/plinth:template-update` and
 `/plinth:guide`. Asking in your own words
 ("update the template") does not run them: the agent may do the work by hand,
 without their safeguards (`/plinth:new-project` tries to delete a repository
@@ -251,14 +257,16 @@ at all. Type the skill.
 
 ### Skills plinth lists but does not install
 
-Seven more of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
+Six more of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
 `/wait-what` among them, and `/ponytail-audit` are listed, not installed;
 `/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved them on
 [#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set
 with them and one without, so whether they change a result is not known.
 `/to-spec`, `/to-tickets`, `/wayfinder`, `/improve-codebase-architecture`
 and `/handoff` are installed by default since
-[#704](https://github.com/coolbress/plinth/issues/704). Run either line once, then start a new session:
+[#704](https://github.com/coolbress/plinth/issues/704), and `/retro` since
+[#714](https://github.com/coolbress/plinth/issues/714). `/ask-matt` can
+suggest `/implement-spec` or `/pr`, which plinth does not install. Run either line once, then start a new session:
 
 ```sh
 claude plugin install mattpocock-skills-extra@plinth

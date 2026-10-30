@@ -20,7 +20,7 @@ Point them to it when they ask what to type next.
 | Repository made, its first pull request open (step 1) | Wait for green, squash and merge it, then `git switch main && git pull` in its folder | The pull request's page, or the merge command in `${CLAUDE_PLUGIN_ROOT}/docs/tutorials/getting-started.md` |
 | A repository plinth did not make (step 1) | List what is missing; nothing is changed | `/plinth:floor-check` |
 | First pull request merged (step 1) | Before step 2: a token that cannot change the checks, the agent's own account, four things by hand | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`, `give-the-agent-its-own-account.md` and `set-four-things-by-hand.md` there; candidate `wizard` (listed, no evidence yet) |
-| An idea in your own words (step 2) | An interview, then an issue saying what "done" means | `/grilling`, with `domain-modeling` for `CONTEXT.md`; `/grill-with-docs` (listed) |
+| An idea in your own words (step 2) | An interview, then an issue saying what "done" means | `/grilling`, with `domain-modeling` for `GLOSSARY.md`; `/grill-with-docs` (listed) |
 | A job bigger than one session (step 3) | A plan in one issue, cut into tickets | Ask for it; `/to-spec`, `/to-tickets`, or `/wayfinder` when the way is unclear |
 | A ticket ready (step 4) | A fresh session, test first, one ticket | `/clear`, then `/implement #N`; a page: `/design-taste-frontend`; dense product UI: `/design` |
 | A pull request with checks running (step 5) | Wait for green, then the three questions, and see it run | The required checks; `/run`; the reviewer's comments |
@@ -30,7 +30,7 @@ Point them to it when they ask what to type next.
 | Between pieces of work (step 9) | Dependency updates on green; the template update after a plinth release | Dependabot; `/plinth:floor-check`, then `/plinth:template-update`, typed; `/improve-codebase-architecture`; `/ponytail-audit` (listed) |
 | A merged change to put out (release and deploy, after step 6) | A `web` app on Render goes out by itself once `main` is green; the other archetypes publish nothing yet | Render, from `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`; a release on a tag is planned for `library` and `cli` (#703) and `backend` (#706), not built yet |
 | The project in use (operate) | Read the host's logs when something looks wrong; keep the spend ceiling and the restore you tried | The host's dashboard; `${CLAUDE_PLUGIN_ROOT}/docs/how-to/set-four-things-by-hand.md`. Error tracking and uptime monitors are paid services, not installed: the person adds one if they want it |
-| Looking back on a piece of work (retrospective) | What went well, what did not, what to change, written into an issue | The record; no retrospective tool is installed yet (#714) |
+| Looking back on a piece of work (retrospective) | In the session you are looking back on, before you clear it, ask what to change for the next run; keep what you agree with as a rule or a check, written into an issue | `/retro`, typed: it reads the session and suggests rules and checks, most serious first, and changes nothing; at the end of a project, the end-or-hand-over form's questions |
 | Ending the project, or handing it over (end) | Do what the README says from step 2: data deleted or handed over, keys revoked, users told; what is left goes in issues | The README; the record; `/handoff` when another person or tool takes it over |
 | A `web` project to put online (after step 1) | Choose where it runs: Render, built and checked by plinth, or a listed place whose steps and risks become the person's | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md` |
 | Correcting the agent the same way again (any step) | A line in `AGENTS.md`, then a reviewer rule, then a test that fails on the old mistake | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/turn-a-correction-into-a-rule.md` |
@@ -68,27 +68,32 @@ line arrived as text, and this catalog being open shows plinth is installed.
 
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
-| `mattpocock-skills` | Thirteen skills: `/implement` (calls `tdd`, `code-review`), `/triage`, `grilling`, `domain-modeling`, `codebase-design`, `diagnosing-bugs`; for planning `/to-spec`, `/to-tickets`, `/wayfinder`; for clean-up `/improve-codebase-architecture`; and `/handoff` | Any change bigger than a typo: `/grilling` to shape it, `/implement #N` to build it; a job bigger than one session: `/to-spec`, then `/to-tickets` | ~0.49k tokens always on (6 skills listed; `/implement`, `/triage` and the five added by #704 are user-only) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
+| `mattpocock-skills` | Fifteen skills: `/implement` (calls `tdd`, `code-review`), `/triage`, `grilling`, `domain-modeling`, `codebase-design`, `diagnosing-bugs`; for planning `/to-spec`, `/to-tickets`, `/wayfinder`; for clean-up `/improve-codebase-architecture`; `/handoff`; and for looking back `/retro`, with `writing-for-agents`, which it calls | Any change bigger than a typo: `/grilling` to shape it, `/implement #N` to build it; a job bigger than one session: `/to-spec`, then `/to-tickets`; after a piece of work: `/retro` | ~0.54k tokens always on (7 skills listed; `/implement`, `/triage`, `/retro` and the five added by #704 are user-only; `writing-for-agents` is listed, ~50 of it, since the agent can call it by itself) | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
 | `taste-skill` | One skill, `design-taste-frontend`: frontend design that does not look templated, for landing pages, portfolios and redesigns, with its own redesign mode and pre-flight check. Dashboards and dense product UI go to `/design` first | A page a person will look at, server-rendered HTML included: say so in the ticket or the prompt, or type `/design-taste-frontend`; on a repository rendered from the template the agent did not reach for it on its own (one run, #469). Dashboards and dense product UI: `/design` first | ~0.1k tokens always on (1 skill), ~34k when it fires | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) (MIT) |
 
 "Always on" is each plugin's share of the skill listing, as `/context`
 reports it with a 1M-context model (#255, again for #354, #468, #469 on an
 installed default set, #477 with each plugin loaded as the catalog narrows
 it, #593 on an installed default set after `claude plugin update`, #598
-after `claude plugin update` and `claude plugin prune`, and #704 before and
-after the five user-only skills joined, which left it unchanged). With
-plinth's own two listed skills (~0.23k) the set comes to ~0.82k; it was
-~0.97k before #598 listed `ponytail-skills` and ~1.28k before #593 listed
+after `claude plugin update` and `claude plugin prune`, #704 before and
+after the five user-only skills joined, which left it unchanged, and #714
+before and after the raise to mattpocock/skills v1.3.2, on a fresh install
+and on an update, where `writing-for-agents` added ~50). With
+plinth's own two listed skills (~0.23k) the set comes to ~0.87k; it was
+~0.82k before #714, ~0.97k before #598 listed `ponytail-skills` and ~1.28k before #593 listed
 twelve `mattpocock-skills` skills. Claude Code caps the listing, built-in skills
 included, at 1% of the context window. At 1M that leaves room for all of it.
 At 200k the cap is ~2k, and on Haiku 4.5, the 200k model measured for #469
 and #477, 9 of the 14 descriptions the default set had then were cut to under 20 tokens, about
 the skill's name, because the built-in skills share the same cap. For #704
 two were still cut (`code-review`, `design-taste-frontend`), six with
-`mattpocock-skills-extra` installed. Setting `skillListingBudgetFraction` to
+`mattpocock-skills-extra` installed. For #714, `writing-for-agents` (~40 at
+200k) pushed the built-in `security-review` under 20 as well, and with the
+extra plugin installed it was cut itself. Setting `skillListingBudgetFraction` to
 0.015 in a repository's `.claude/settings.json` left none cut, for ~0.2k more
-tokens always on at 200k (~0.4k with the extra plugin) and none at 1M;
-plinth-template sets it from the release after v1.28.0
+tokens always on at 200k (~0.4k with the extra plugin) and none at 1M, measured
+again for #714 (2.1k before the raise, 2.2k after; 2.4k with the extra
+plugin both times); plinth-template sets it from the release after v1.28.0
 (coolbress/plinth-template#138).
 
 `code-review` is the one installed skill that shares its name with a Claude
@@ -97,6 +102,28 @@ effort, and `mattpocock-skills:code-review` reviews it against the
 repository's standards and the issue's spec. A session lists both. plinth
 keeps the plugin's because `/implement` calls `/code-review` by name when it
 finishes a ticket (#520).
+
+What changed for you with mattpocock/skills v1.3.2 (#714), where you can
+see it:
+
+- The glossary file is `GLOSSARY.md`, no longer `CONTEXT.md`; the skills read
+  and write the new name. `/plinth:template-update` renames a project's file,
+  its content kept.
+- `/implement #N` first fetches the ticket and says its title; given an
+  unclear reference, it asks which one.
+- `tdd` gives each place it proposes to test a one-line note on what a test
+  there catches and what it misses.
+- `diagnosing-bugs`, when it breaks code on purpose to see a test fail,
+  checks against an untouched copy that the change really happened before
+  trusting the failure.
+- `grilling` words each question so that "yes" accepts its recommended
+  answer.
+- `/to-tickets`, cutting up an existing issue, makes each ticket a sub-issue
+  of it, and leaves out "Blocked by" when the blocking is set as links.
+- `/wayfinder` gives the map and its tickets only `wayfinder:` labels, never
+  `ready-for-agent`; writes cross-references with real issue numbers; pushes
+  research branches without opening a pull request; and reads a ticket's
+  type from its label.
 
 Built into Claude Code, nothing to install: `/design` for screen mockups and
 layouts before building, `/dataviz` for charts, `/security-review` for a
@@ -109,16 +136,16 @@ Carbon, Atlassian, Polaris).
 
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |
-| `mattpocock-skills-extra` | The seven other Matt Pocock skills plinth carries: `/ask-matt`, `/grill-with-docs`, `/wait-what` (these three user-only), and `prototype`, `research`, `resolving-merge-conflicts`, `wizard` | When you want one of them; `/ask-matt` routes to the rest of the set, so it is listed with them (#593) | ~0.32k tokens always on (4 skills listed), no hooks; same pin as `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
+| `mattpocock-skills-extra` | The six other Matt Pocock skills plinth carries: `/ask-matt`, `/grill-with-docs`, `/wait-what` (these three user-only), and `prototype`, `research`, `wizard` | When you want one of them; `/ask-matt` routes to the rest of the set, so it is listed with them (#593). It can also suggest `/implement-spec` or `/pr`, which plinth does not install | ~0.28k tokens always on (3 skills listed), no hooks; same pin as `mattpocock-skills` | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) |
 | `ponytail-skills` | One skill, `/ponytail-audit`, pre-v5 (pin `2ed6c52`): a ranked list of over-engineering to delete, simplify or replace with the standard library or the platform, repository-wide, biggest cut first; bugs, security and performance are out of its scope; applies nothing. Held on purpose: ponytail v5 rewrote it into a full quality audit (bugs, security, scale, missing tests, lean), which repeats the review step (#711, #715) | Every week or two, or after a burst of work, if you install it | ~0.15k tokens always on (1 skill), no hooks | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions, when you want that research. Not for deciding; verify with `/research` | ~90 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail` | The full ponytail plugin with its hooks: the least-code mode every turn, its review, and the audit too | Only if you want the mode enforced every turn | 3 hooks, ~1k tokens | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `impeccable` | A design with a point of view; writes a product record (`PRODUCT.md`) and a design record (`DESIGN.md`) | A page that should be remembered, when you will answer its questions: five of them and 43 minutes on the page where `taste-skill` asked none and took five (one measurement, 2026-09-12) | Hooks, agents and skills written into the repository (`.claude/`, `.github/`); no plinth pin | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) |
 
 `mattpocock-skills-extra` installs with
-`claude plugin install mattpocock-skills-extra@plinth` and adds its seven
-beside the default set's thirteen, none twice (measured for #593, and again
-for #704 after the five moved); start a new session after it.
+`claude plugin install mattpocock-skills-extra@plinth` and adds its six
+beside the default set's fifteen, none twice (measured for #593, again
+for #704 after the five moved, and for #714); start a new session after it.
 `ponytail-skills` installs with `claude plugin install ponytail-skills@plinth`; an install from before #598
 keeps it until `claude plugin prune`. `last30days` installs with
 `claude plugin install last30days@plinth` and `ponytail` with
@@ -131,10 +158,15 @@ on Claude Code 2.1.269.
 
 Every third-party entry is pinned to a commit in this repository's
 `.claude-plugin/marketplace.json`; the licenses are listed in `NOTICE`.
-`mattpocock-skills` installs 13 of the 25 skills upstream ships and
-`mattpocock-skills-extra` lists 7 more at the same commit (#520, #593, #704). The
-five in neither are `setup-matt-pocock-skills`, `grill-me`, `teach`,
-`to-questionnaire` and `writing-for-agents` (#475, #477).
+`mattpocock-skills` installs 15 of the 27 skills upstream ships, and
+`mattpocock-skills-extra` lists 6 more at the same commit (#520, #593, #704
+and #714). The six in neither are `setup-matt-pocock-skills`, `grill-me`,
+`teach`, `to-questionnaire`, `implement-spec` and `pr` (#475, #477 and
+issue #714).
+`/ask-matt` can suggest `/implement-spec` (build a whole plan at once with
+several agents) or `/pr` (a pull-request description in its own shape); plinth
+installs neither, so type `/implement #N` per ticket and follow the
+repository's own pull-request shape instead.
 
 ## By step and concern
 
@@ -166,7 +198,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 
 | Concern | Problem | Tool | Who | How to use it | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Value | The wrong problem built | `/grilling`, with `domain-modeling` for `CONTEXT.md`; `/grill-with-docs` (listed) runs both | person | Type it with the idea before any code | 0; the generated text asked instead (U1 six questions, RC1 one, U2 one) |
+| Value | The wrong problem built | `/grilling`, with `domain-modeling` for `GLOSSARY.md`; `/grill-with-docs` (listed) runs both | person | Type it with the idea before any code | 0; the generated text asked instead (U1 six questions, RC1 one, U2 one) |
 | Proof | A "done" nobody can see | The one rule; the template's "Done means" field (#299) | text | Write in the issue what you will look at to call it done | followed via text (U1, RC1) |
 | Value | A question code or a source can settle first | `prototype`, `research` (listed) | agent | Say "prototype it first" or "research this" | 0 |
 
@@ -186,7 +218,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | Health | Scaffolding or reshuffling the change did not need | The template's `verify`, its cleanup step | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | Sonnet 5.5 4 of 5 with one skill and shell writes refused, 0 of 5 before; Opus 5.5 5 of 5 (#496) |
 | Proof | A commit over a red or wrong check | The template's `verify` | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | 5 of 6 (#458); on Sonnet 5.5 0 of 10 beside `simplify` (#474), 4 of 5 as one skill with shell writes refused (#496); Opus 5.5 5 of 5 (#496) |
 | Use | A page that looks templated | `design-taste-frontend` | person names it | Say so in the ticket, or type `/design-taste-frontend` | 1 named (U2); 0 unnamed on a rendered repository (#469) |
-| Flow | A merge or rebase conflict | `resolving-merge-conflicts` (listed) | agent | Say "resolve the conflict" | 0; none arose |
+| Flow | A merge or rebase conflict | None installed: `resolving-merge-conflicts` was removed upstream in v1.3.2 (#714) | person | Ask the agent to show both sides of each conflict, and say which to keep | 0; none arose |
 
 ### 5 Check
 
@@ -215,17 +247,17 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | 9 | Stewardship | Drift behind the template | `/plinth:floor-check`, `/plinth:template-update` | person | `floor-check` reports it; type `/plinth:template-update` to apply | 0; no project crossed a release |
 | 9 | Stewardship | Code that grew more than it needs | `/ponytail-audit` (listed) | person | Type it every week or two | 0 |
 | 9 | Health | Shallow modules, hard-to-test seams | `/improve-codebase-architecture` (uses `codebase-design`); the hardest for a beginner: engineer vocabulary, a design interview, an HTML report | person | Type it after a burst of work | 0 |
+| After | Health | How the work went, for the next round | `/retro` (calls `writing-for-agents`) | person | Type it in the session you are looking back on, before `/clear`; it suggests rules and checks, and you choose which to keep | 0; new in #714 |
 | Any | Flow | Which skill now | `/ask-matt` (listed: it routes to listed skills, #593) | person | Type it with where you are | 0 |
 | Any | Use | An answer that did not land | `/wait-what` (listed) | person | Type it after the answer | 0 |
 | Any | Use | Which tool for a concern | `/plinth:arsenal` | agent or person | Ask, or type it | 3 agent, 2 typed |
 
-No tool answers these three yet, and no recorded run shows the cost of the gap:
+No tool answers these two yet, and no recorded run shows the cost of the gap:
 
 | Concern | Problem |
 | --- | --- |
 | Value | What shipped, held against what was asked |
 | Stewardship | The end of a project: data, keys, users told, who takes over |
-| Health | How the work went, for the next round |
 
 ## How a tool gets on this list
 
@@ -282,7 +314,9 @@ Named exceptions:
   measured cost, since no run compared a set with them and one without, and
   `/ask-matt` routes to them (#593); #702 moved five of them back into the
   default set (#704), user-only skills for planning, clean-up and handoff
-  that cost nothing in the listing;
+  that cost nothing in the listing; #714 added `/retro`, user-only, with
+  `writing-for-agents`, which the agent can call by itself and so is in the
+  listing;
   `ponytail-skills` runs none, but `/ponytail-audit` had no call in any
   recorded run (#520), and #594 measured that dropping the dependency while
   the entry stays leaves an installed plinth working.

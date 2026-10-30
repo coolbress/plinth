@@ -15,13 +15,13 @@
     },
     {
       "name": "mattpocock-skills",
-      "description": "Matt Pocock's engineering skills, 13 of the 25 upstream ships: implement, TDD, code review, triage, grilling, domain modelling, bug diagnosis, planning (to-spec, to-tickets, wayfinder), architecture clean-up and handoff. No hooks; pinned here to a commit.",
+      "description": "Matt Pocock's engineering skills, 15 of the 27 upstream ships: implement, TDD, code review, triage, grilling, domain modelling, bug diagnosis, planning (to-spec, to-tickets, wayfinder), architecture clean-up, handoff, and a retrospective (retro, with writing-for-agents). No hooks; pinned here to a commit.",
       "category": "development",
       "source": {
         "source": "git-subdir",
         "url": "https://github.com/mattpocock/skills.git",
         "path": "skills",
-        "sha": "c55ee46073ed923f86ce59a5eb3b6d895095d1b7"
+        "sha": "d1478fcb140db0b93c0c8df17bcfd311844749d0"
       },
       "strict": false,
       "skills": [
@@ -36,19 +36,21 @@
         "./engineering/to-tickets",
         "./engineering/wayfinder",
         "./engineering/improve-codebase-architecture",
+        "./engineering/retro",
         "./productivity/grilling",
-        "./productivity/handoff"
+        "./productivity/handoff",
+        "./productivity/writing-for-agents"
       ]
     },
     {
       "name": "mattpocock-skills-extra",
-      "description": "The seven Matt Pocock skills plinth lists but does not install: ask-matt, grill-with-docs, prototype, research, resolving-merge-conflicts, wizard and wait-what. Not installed by default (#520): moved here on #475's four criteria and their measured cost; no run compared a set with them and one without. The planning, clean-up and handoff five moved to mattpocock-skills (#704). No hooks; pinned to the same commit as mattpocock-skills.",
+      "description": "The six Matt Pocock skills plinth lists but does not install: ask-matt, grill-with-docs, prototype, research, wizard and wait-what. Not installed by default (#520): moved here on #475's four criteria and their measured cost; no run compared a set with them and one without. The planning, clean-up and handoff five moved to mattpocock-skills (#704). No hooks; pinned to the same commit as mattpocock-skills.",
       "category": "development",
       "source": {
         "source": "git-subdir",
         "url": "https://github.com/mattpocock/skills.git",
         "path": "skills",
-        "sha": "c55ee46073ed923f86ce59a5eb3b6d895095d1b7"
+        "sha": "d1478fcb140db0b93c0c8df17bcfd311844749d0"
       },
       "strict": false,
       "skills": [
@@ -56,7 +58,6 @@
         "./engineering/grill-with-docs",
         "./engineering/prototype",
         "./engineering/research",
-        "./engineering/resolving-merge-conflicts",
         "./engineering/wizard",
         "./productivity/wait-what"
       ]

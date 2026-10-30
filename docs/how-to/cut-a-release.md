@@ -109,7 +109,11 @@ the move changes what a new project's agent reads, and then asks for
    plus any one-time command the version's `CHANGELOG.md` section names (the
    first release after v1.10.0 names `claude plugin update taste-skill@plinth`;
    the first after v1.11.0 names `claude plugin install plinth@plinth` and then
-   `claude plugin prune`, in that order).
+   `claude plugin prune`, in that order). A release that raises a dependency's
+   pin names `claude plugin update <name>@plinth` for that entry: neither
+   `update plinth` nor `install plinth@plinth` fetches the new commit
+   (measured for #714; the first after v2.18.0 names it for
+   `mattpocock-skills` and `mattpocock-skills-extra`).
 
 ## If the script refuses
 

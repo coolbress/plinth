@@ -11,6 +11,71 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/retro` is installed by default, with the `writing-for-agents` skill it
+  calls (#714). Typed in the session you are looking back on, before you
+  clear it, it suggests what to change for the next run, most serious
+  first: a rule, a check that fails, a clearer pointer. It changes nothing.
+  The arsenal, the workflow how-to, `/plinth:guide` and plinth-template's
+  end-or-hand-over form name it at the retrospective step.
+  `writing-for-agents` can be called by the agent itself, so it is in the
+  skill listing: ~50 tokens at 1M; at 200k (Haiku 4.5) it pushed the
+  built-in `security-review` under 20 tokens, and was cut itself with
+  `mattpocock-skills-extra` installed, unless the repository sets
+  `skillListingBudgetFraction` to 0.015, as plinth-template does.
+- `tests/guidance-skills.sh` fails when the arsenal's table, or the
+  how-to's or the guide's retrospective passage, names a skill the default
+  install does not carry. `tests/install-smoke.sh` fails when an installed
+  skill names a glossary file other than the one the template plinth
+  renders points to, and when the end-or-hand-over form names a skill the
+  default install does not carry.
+
+### Changed
+
+- `mattpocock-skills` and `mattpocock-skills-extra` are pinned to
+  mattpocock/skills v1.3.2 (`d1478fc`), under the same names (#714). No hook,
+  script or dependency was added upstream; the licence is still MIT. What
+  changed where you can see it is in the arsenal: `/implement #N` says the
+  ticket's title first, `tdd` notes what each test place catches and
+  misses, `diagnosing-bugs` checks that a deliberate break really landed,
+  `grilling` asks questions "yes" accepts, `/to-tickets` makes sub-issues,
+  and `/wayfinder` keeps triage labels off its tickets.
+- The domain glossary is `GLOSSARY.md`, no longer `CONTEXT.md`, as upstream
+  renamed it (#714). plinth's own glossary moved, and
+  `/plinth:template-update` moves a project's `CONTEXT.md` (and
+  `CONTEXT-MAP.md`) to the new name, content unchanged, when the template
+  it updates to names `GLOSSARY.md`; a `GLOSSARY.md` already there is kept.
+  Measured on an untouched instance with the real copier: a rename, no
+  conflict.
+
+- Upstream's other new skills are not installed: `pr` (the agent can call
+  it, and its pull-request shape differs from CONTRIBUTING's),
+  `implement-spec` (typed by a person; parallel agents building a whole plan
+  on one branch) and `chief-of-staff` (not in upstream's plugin yet).
+  `/ask-matt` can suggest the first two; the arsenal says plinth installs
+  neither.
+- An existing install needs, once, after `claude plugin update plinth`:
+  `claude plugin update mattpocock-skills@plinth`, and
+  `claude plugin update mattpocock-skills-extra@plinth` if you installed it,
+  then `/reload-plugins`. `update plinth` alone keeps the dependency at its
+  old commit: until then `mattpocock-skills` reports an error ("Path not
+  found" for `retro`), `/retro` is missing and the other skills still name
+  `CONTEXT.md`. No `claude plugin prune` is needed (measured on
+  the update from v2.18.0, with and without the extra plugin).
+- `/plinth:new-project` renders plinth-template v1.32.0
+  (coolbress/plinth-template#150, #151). A new project's `AGENTS.md` and
+  `docs/agents/domain.md` name `GLOSSARY.md`, and its end-or-hand-over form
+  says that `/retro` suggests the rules and checks to add. An existing
+  project gets both through `/plinth:template-update`, which also moves its
+  `CONTEXT.md` (#714).
+
+### Removed
+
+- `resolving-merge-conflicts` leaves `mattpocock-skills-extra`: upstream
+  removed it in v1.3.2 (#714). The arsenal's merge-conflict row now says no
+  tool is installed for it.
+
 ### Fixed
 
 - `scripts/require-check.sh` refuses a workflow whose `pull_request:` or

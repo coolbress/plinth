@@ -130,12 +130,13 @@ expect() {  # expect <plugin> <needle>...
 }
 expect plinth@plinth "Skills (5)" "arsenal" "floor-check" "guide" "new-project" "template-update" "Hooks (0)"
 expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
-# 13 of the 25 skills upstream ships (#520, #593, #704): 7 more are listed in
-# mattpocock-skills-extra, and five are in neither (#475, #477).
-five=(to-spec to-tickets wayfinder improve-codebase-architecture handoff)
-leaving=(grill-me setup-matt-pocock-skills teach to-questionnaire writing-for-agents
-  ask-matt grill-with-docs prototype research resolving-merge-conflicts wizard wait-what)
-expect mattpocock-skills@plinth "Skills (13)" "implement" "tdd" "code-review" "triage" "grilling" "${five[@]}" "Hooks (0)"
+# 15 of the 27 skills upstream ships (#520, #593, #704, #714): 6 more are listed
+# in mattpocock-skills-extra, and six are in neither (#475, #477, #714).
+added=(to-spec to-tickets wayfinder improve-codebase-architecture handoff retro writing-for-agents)
+extra=(ask-matt grill-with-docs prototype research wizard wait-what)
+leaving=(grill-me setup-matt-pocock-skills teach to-questionnaire implement-spec pr
+  resolving-merge-conflicts "${extra[@]}")
+expect mattpocock-skills@plinth "Skills (15)" "implement" "tdd" "code-review" "triage" "grilling" "${added[@]}" "Hooks (0)"
 not_expect() {  # not_expect <plugin> <skill>...: none on the details' Skills line
   local out p
   out="$(claude plugin details "$1" | grep -E '^ *Skills \(')"
@@ -151,12 +152,69 @@ not_expect mattpocock-skills@plinth "${leaving[@]}"
 for dep in "${deps[@]}"; do expect "$dep" "Hooks (0)"; done
 
 [ "${fresh:-no}" = yes ] || { echo "  INFO  extra plugin and upgrade path not checked: a kept configuration"; exit 0; }
-# On the clean install too, the seven still listed arrive beside the thirteen,
-# and the five #704 moved are not under both names.
+# On the clean install too, the six still listed arrive beside the fifteen,
+# none of the seven #704 and #714 added is under both names, and
+# resolving-merge-conflicts, gone upstream, is not listed (#714).
 echo "+ claude plugin install mattpocock-skills-extra@plinth -y"; claude plugin install mattpocock-skills-extra@plinth -y
-expect mattpocock-skills-extra@plinth "Skills (7)" "ask-matt" "grill-with-docs" "prototype" "research" "resolving-merge-conflicts" "wizard" "wait-what" "Hooks (0)"
-not_expect mattpocock-skills-extra@plinth "${five[@]}"
-expect mattpocock-skills@plinth "Skills (13)" "${five[@]}"
+expect mattpocock-skills-extra@plinth "Skills (6)" "${extra[@]}" "Hooks (0)"
+not_expect mattpocock-skills-extra@plinth resolving-merge-conflicts
+not_expect mattpocock-skills-extra@plinth "${added[@]}"
+expect mattpocock-skills@plinth "Skills (15)" "${added[@]}"
+
+# The installed skills and the template plinth renders name the same glossary
+# file (#714): mattpocock/skills v1.3.2 renamed CONTEXT.md to GLOSSARY.md, and a
+# rendered project whose AGENTS.md and docs/agents/domain.md point to the old
+# name would have the skills write one file and the pointers read another. The
+# template files are read at the commit scripts/new-project.sh renders; the
+# skills are the ones each mattpocock entry mounts, as installed above.
+tsha="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$root/scripts/new-project.sh")"
+[ -n "$tsha" ] || { echo "  FAIL  no template_sha in scripts/new-project.sh"; exit 1; }
+tdir="$CLAUDE_CONFIG_DIR/template-files"; mkdir -p "$tdir"
+for p in template/docs/agents/domain.md template/AGENTS.md.jinja \
+         template/.github/ISSUE_TEMPLATE/end-or-hand-over.yml template/.gitlab/issue_templates/End-or-hand-over.md; do
+  curl -fsSL --retry 3 -o "$tdir/$(basename "$p")" "https://raw.githubusercontent.com/coolbress/plinth-template/$tsha/$p" \
+    || { echo "  FAIL  could not read $p at plinth-template $tsha"; exit 1; }
+done
+claude plugin list --json | python3 -c '
+import json, re, sys
+from pathlib import Path
+root, tdir = Path(sys.argv[1]), Path(sys.argv[2])
+installed = {p["id"]: Path(p["installPath"]) for p in json.load(sys.stdin)}
+entries = {e["name"]: e for e in json.loads((root / ".claude-plugin/marketplace.json").read_text())["plugins"]}
+named = {}  # file name -> the skill files that name it
+for name in ("mattpocock-skills", "mattpocock-skills-extra"):
+    for skill in entries[name]["skills"]:
+        for f in sorted((installed[name + "@plinth"] / skill).rglob("*.md")):
+            for m in set(re.findall(r"\b(?:CONTEXT|GLOSSARY)\.md\b", f.read_text(encoding="utf-8"))):
+                named.setdefault(m, []).append(name + "/" + skill[2:] + "/" + f.name)
+m = re.search(r"Root \*\*`([^`]+)`\*\*: the glossary", (tdir / "domain.md").read_text(encoding="utf-8"))
+want = m.group(1) if m else None
+fail = [] if want else ["docs/agents/domain.md names no root glossary file"]
+if want and want not in (tdir / "AGENTS.md.jinja").read_text(encoding="utf-8"):
+    fail.append("AGENTS.md does not name " + want + ", the glossary docs/agents/domain.md names")
+if want and want not in named:
+    fail.append("the template names " + want + ", which no installed skill names: " + str(sorted(named)))
+for other in sorted(set(named) - {want}):
+    fail.append(", ".join(named[other]) + " name " + other + "; the template names " + str(want))
+for f in fail:
+    print("  FAIL  " + f)
+if fail:
+    sys.exit(1)
+print("  PASS  the installed skills and the rendered template name one glossary file, " + want)
+' "$root" "$tdir"
+# The end-or-hand-over form, from the same commit, may name only skills this
+# default install lists (its `/retro`, bare /retro in the GitLab template);
+# GitLab's `/label` quick action is not a skill.
+default="$(for p in plinth@plinth "${deps[@]}"; do claude plugin details "$p" | grep -E '^ *Skills \('; done \
+  | sed -E 's/^ *Skills \([0-9]+\) *//' | tr ', ' '\n\n' | sed '/^$/d' | sort -u)"
+for f in "$tdir/end-or-hand-over.yml" "$tdir/End-or-hand-over.md"; do
+  cmds="$(grep -oE "(^|[[:space:]\`])/[a-z][a-z0-9-]*" "$f" | sed -E 's|^[^/]*/||' | grep -vx label | sort -u)"
+  [ -n "$cmds" ] || { echo "  FAIL  $(basename "$f") names no skill: its retrospective line is gone"; exit 1; }
+  while IFS= read -r c; do
+    grep -qxF -- "$c" <<<"$default" || { echo "  FAIL  $(basename "$f") names /$c, which the default install does not carry"; exit 1; }
+  done <<<"$cmds"
+  echo "  PASS  $(basename "$f") names only default skills: $(tr '\n' ' ' <<<"$cmds")"
+done
 
 # The upgrade path, from the latest release to this checkout, in a second
 # configuration this run creates (so a kept CLAUDE_CONFIG_DIR skips it): install
@@ -173,6 +231,16 @@ upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
 for doc in README.md docs/tutorials/getting-started.md; do
   grep -qF "\`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/$doc")" \
     || { echo "  FAIL  $doc does not name \`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`"; exit 1; }
+done
+# A raised dependency pin is fetched by neither `update plinth` nor
+# `install plinth@plinth`: the entry's new skill list is read against the old
+# commit's files, and a skill the old commit keeps elsewhere goes missing
+# (measured for #714). Each entry is updated by name, as the docs say.
+dep_cmds=("claude plugin update mattpocock-skills@plinth" "claude plugin update mattpocock-skills-extra@plinth")
+for doc in README.md docs/tutorials/getting-started.md; do
+  for c in "${dep_cmds[@]}"; do
+    grep -qF "\`$c\`" "$root/$doc" || { echo "  FAIL  $doc does not name \`$c\`"; exit 1; }
+  done
 done
 tag="$(git ls-remote --tags --refs https://github.com/coolbress/plinth.git 'v*' | sed 's|.*refs/tags/||' | sort -V | tail -1)"
 [ -n "$tag" ] || { echo "  FAIL  no release tag read from github.com/coolbress/plinth"; exit 1; }
@@ -204,17 +272,19 @@ rm -rf "$up/mkt/.git"
 for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
   for c in "${upgrade_cmds[@]}"; do echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
+  for c in "${dep_cmds[@]}"; do echo "+ $c"; read -ra cmd <<<"$c"; "${cmd[@]}"; done
   # check_list holds no ponytail-skills here: the release installed it as a
   # dependency, and `prune` removed it once plinth no longer names it (#598).
   # mattpocock-skills-extra was installed by hand, so `prune` keeps it.
   deps+=(mattpocock-skills-extra@plinth)
   check_list yes
-  expect mattpocock-skills@plinth "Skills (13)" "${five[@]}" "Hooks (0)"
+  expect mattpocock-skills@plinth "Skills (15)" "${added[@]}" "Hooks (0)"
   not_expect mattpocock-skills@plinth "${leaving[@]}"
-  # The seven still listed stay beside the thirteen (#593), and the five #704
+  # The six still listed stay beside the fifteen (#593), and the seven #704 and #714
   # moved are not under both names.
-  expect mattpocock-skills-extra@plinth "Skills (7)" "ask-matt" "grill-with-docs" "prototype" "research" "resolving-merge-conflicts" "wizard" "wait-what" "Hooks (0)"
-  not_expect mattpocock-skills-extra@plinth "${five[@]}"
+  expect mattpocock-skills-extra@plinth "Skills (6)" "${extra[@]}" "Hooks (0)"
+  not_expect mattpocock-skills-extra@plinth resolving-merge-conflicts
+  not_expect mattpocock-skills-extra@plinth "${added[@]}"
   # /ponytail-audit comes back the same way, from the entry the marketplace keeps (#598).
   echo "+ claude plugin install ponytail-skills@plinth -y"; claude plugin install ponytail-skills@plinth -y
   expect ponytail-skills@plinth "Skills (1)" "ponytail-audit" "Hooks (0)"

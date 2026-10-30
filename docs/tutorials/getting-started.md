@@ -66,7 +66,7 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.31.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.32.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
 It takes a few minutes, most of them waiting for GitHub to run the first
@@ -249,4 +249,10 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   you installed yourself stays beside plinth's ([#477](https://github.com/coolbress/plinth/issues/477)). From v2.1.0 or earlier,
   `claude plugin prune` after the update also removes `/ponytail-audit`,
   which plinth now lists instead of installing; without it the skill keeps
-  working ([#598](https://github.com/coolbress/plinth/issues/598)).
+  working ([#598](https://github.com/coolbress/plinth/issues/598)). From v2.18.0 or earlier, also run
+  `claude plugin update mattpocock-skills@plinth` once, and
+  `claude plugin update mattpocock-skills-extra@plinth` if you installed it,
+  before `/reload-plugins`: until then `mattpocock-skills` reports an error
+  ("Path not found" for `retro`), `/retro` is missing and the other skills
+  still name `CONTEXT.md`
+  ([#714](https://github.com/coolbress/plinth/issues/714)).

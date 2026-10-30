@@ -113,7 +113,11 @@ the plan; then show the plan again and ask again.
 The pull request's description says which plinth pin was chosen and names
 both SHAs, and lists what copier merged cleanly, each conflicted file with
 how it was resolved (from `--resolved`), and anything else a person changed
-after the update. It
+after the update. When the updated template names `GLOSSARY.md` and the
+repository's glossary is still `CONTEXT.md` (and `CONTEXT-MAP.md`), the
+script moves it to the new name with its content unchanged, after copier and
+before the commit, and the description lists the move; a `GLOSSARY.md` that
+already exists is kept and named as the reason. Tell the user in one line. It
 uses the two headings of the pull-request template plinth-template renders;
 it does not read a template this repository or its owner changed. If theirs
 differs, tell the user, and leave the rewording to them. The
