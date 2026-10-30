@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-10-31
+
+`/retro` is installed by default: typed at the end of a session, it
+suggests what to change for the next run and changes nothing. The Matt
+Pocock skills move to their latest release, and the domain glossary is now
+`GLOSSARY.md`; `/plinth:template-update` renames a project's `CONTEXT.md`.
+An existing install needs `claude plugin update mattpocock-skills@plinth`
+once after updating plinth (and `mattpocock-skills-extra@plinth` if you
+installed it). `scripts/require-check.sh` also refuses a `!` pattern in a
+pull_request branch list.
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6526663357>
+
+tested with plinth-template v1.32.0
+
 ### Added
 
 - `/retro` is installed by default, with the `writing-for-agents` skill it
@@ -4143,7 +4158,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.18.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.19.0...HEAD
+[2.19.0]: https://github.com/coolbress/plinth/releases/tag/v2.19.0
 [2.18.0]: https://github.com/coolbress/plinth/releases/tag/v2.18.0
 [2.17.0]: https://github.com/coolbress/plinth/releases/tag/v2.17.0
 [2.16.0]: https://github.com/coolbress/plinth/releases/tag/v2.16.0
