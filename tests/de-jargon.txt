@@ -1,5 +1,5 @@
 # Vocabulary that must not appear in public text. One extended regex per line.
-# Korean metaphors: product text uses the English terms in CONTEXT.md.
+# Korean metaphors: product text uses the English terms in GLOSSARY.md.
 벽
 문
 안내

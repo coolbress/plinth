@@ -118,7 +118,13 @@ the official copy only where it arrived as plinth's dependency; one you
 installed yourself stays beside plinth's (#477). Moving from v2.1.0 or
 earlier, `claude plugin prune` after the update also removes
 `/ponytail-audit`, which plinth now lists instead of installing; without it
-the skill keeps working (#598).
+the skill keeps working (#598). Moving from v2.18.0 or earlier also takes
+`claude plugin update mattpocock-skills@plinth` once, and
+`claude plugin update mattpocock-skills-extra@plinth` if you installed it,
+before `/reload-plugins`: `update plinth` reads the dependency's new skill
+list but keeps its files at the old commit, so until then
+`mattpocock-skills` reports an error ("Path not found" for `retro`), `/retro`
+is missing and the other skills still name `CONTEXT.md` (#714). No `prune` is needed.
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
@@ -136,13 +142,14 @@ Five skills, prefixed `/plinth:`:
 
 Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
-[mattpocock-skills](https://github.com/mattpocock/skills) (thirteen skills,
-from `/implement` and `/grilling` to `code-review`, `/to-spec` and `/handoff`) and
+[mattpocock-skills](https://github.com/mattpocock/skills) (fifteen skills,
+from `/implement` and `/grilling` to `code-review`, `/to-spec`, `/handoff` and
+`/retro`) and
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
 `design-taste-frontend`: frontend design that does not look templated).
 Listed but not installed:
-`mattpocock-skills-extra`, seven more Matt Pocock skills, such as
-`/ask-matt`, `/grill-with-docs` and `wizard` (#520, #704);
+`mattpocock-skills-extra`, six more Matt Pocock skills, such as
+`/ask-matt`, `/grill-with-docs` and `wizard` (#520, #704, #714);
 `ponytail-skills`, one skill, `/ponytail-audit`: what to delete or replace
 with the standard library, repository-wide (#598);
 [last30days](https://github.com/mvanhorn/last30days-skill) (what people said
@@ -215,7 +222,7 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 - How-to, for maintainers: [cut a release](docs/how-to/cut-a-release.md),
   [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md),
   [run the eval suite](docs/how-to/run-the-eval-suite.md).
-- [CONTEXT.md](CONTEXT.md): the vocabulary (wall, door, box, floor, arsenal, lab, profile).
+- [GLOSSARY.md](GLOSSARY.md): the vocabulary (wall, door, box, floor, arsenal, lab, profile).
 - [plinth-lab](https://github.com/coolbress/plinth-lab): the evidence behind the rules. Optional.
 
 Rebuilt in September 2026 from an earlier internal repository; its issues and

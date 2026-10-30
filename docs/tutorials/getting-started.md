@@ -249,4 +249,10 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   you installed yourself stays beside plinth's ([#477](https://github.com/coolbress/plinth/issues/477)). From v2.1.0 or earlier,
   `claude plugin prune` after the update also removes `/ponytail-audit`,
   which plinth now lists instead of installing; without it the skill keeps
-  working ([#598](https://github.com/coolbress/plinth/issues/598)).
+  working ([#598](https://github.com/coolbress/plinth/issues/598)). From v2.18.0 or earlier, also run
+  `claude plugin update mattpocock-skills@plinth` once, and
+  `claude plugin update mattpocock-skills-extra@plinth` if you installed it,
+  before `/reload-plugins`: until then `mattpocock-skills` reports an error
+  ("Path not found" for `retro`), `/retro` is missing and the other skills
+  still name `CONTEXT.md`
+  ([#714](https://github.com/coolbress/plinth/issues/714)).

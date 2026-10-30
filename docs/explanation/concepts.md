@@ -2,7 +2,7 @@
 
 Why plinth is shaped the way it is. For the checks themselves, see
 [Required checks](../reference/required-checks.md); the vocabulary is in
-[CONTEXT.md](../../CONTEXT.md).
+[GLOSSARY.md](../../GLOSSARY.md).
 
 ## About why plinth exists
 
