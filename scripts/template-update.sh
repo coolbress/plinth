@@ -174,7 +174,10 @@ finish() { # <worktree>
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     grep -qxF "conflict=$path" "$sf" && continue
-    sed -n 's/^renamed=//p' "$sf" | tr '\t' '\n' | grep -qxF -- "$path" && continue
+    # A renamed glossary is the script's only while its content is the one it
+    # moved; a later edit is a person's, listed with theirs (Codex review on #740).
+    sed -n 's/^renamed=//p' "$sf" | cut -f1 | grep -qxF -- "$path" && continue
+    sed -n 's/^renamed=//p' "$sf" | awk -F '\t' -v p="$path" -v h="$(blob "$wt" "$path")" '$2 == p && $3 == h { f = 1 } END { exit !f }' && continue
     h="$(awk -v p="$path" 'sub(/^clean=/, "") { h = $1; sub(/^[^ ]* /, ""); if ($0 == p) print h }' "$sf")"
     if [ -n "$h" ] && [ "$h" = "$(blob "$wt" "$path")" ]; then clean="$clean$path"$'\n'
     else edited="$edited$path"$'\n'; fi
@@ -215,9 +218,12 @@ finish() { # <worktree>
     list "$edited"
     echo
     if grep -qE '^(not_)?renamed=' "$sf"; then
-      echo "Renamed by this script to the glossary name the template now uses, content unchanged:"
+      echo "Renamed by this script to the glossary name the template now uses; the move changes no content:"
       echo
-      list "$(sed -n 's/^renamed=//p' "$sf" | awk -F '\t' '{ print $1 " -> " $2 }')"
+      list "$(sed -n 's/^renamed=//p' "$sf" | while IFS=$'\t' read -r o n h; do
+        if [ "$h" = "$(blob "$wt" "$n")" ]; then echo "$o -> $n"
+        else echo "$o -> $n (edited after the move: listed with the person's edits above)"; fi
+      done)"
       echo
       if grep -q '^not_renamed=' "$sf"; then
         echo "Not renamed:"
@@ -396,8 +402,10 @@ if grep -qF '`GLOSSARY.md`' "$wt/docs/agents/domain.md" 2>/dev/null; then
     read -r old new <<<"$pair"
     git -C "$wt" ls-files --error-unmatch -- "$old" >/dev/null 2>&1 || continue
     if [ -e "$wt/$new" ]; then not_renamed="$not_renamed$old: $new already exists"$'\n'; continue; fi
-    mv -- "$wt/$old" "$wt/$new" || die "moving $old to $new failed in $wt; nothing committed or pushed"
-    renamed="$renamed$old"$'\t'"$new"$'\n'
+    # git mv, not mv: the index entry moves, so the file stays tracked where
+    # the repository's .gitignore matches the new name (Codex review on #740).
+    git -C "$wt" mv -- "$old" "$new" || die "moving $old to $new failed in $wt; nothing committed or pushed"
+    renamed="$renamed$old"$'\t'"$new"$'\t'"$(blob "$wt" "$new")"$'\n'
   done
   # A context's own CONTEXT.md, which a map points to, keeps its name: the
   # map's links would have to change with it.
@@ -420,7 +428,7 @@ sf="$(state_file "$wt")"
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     grep -qxF "$p" <<<"$conflicts" && continue
-    printf '%s\n' "$renamed" | tr '\t' '\n' | grep -qxF -- "$p" && continue
+    printf '%s\n' "$renamed" | cut -f1,2 | tr '\t' '\n' | grep -qxF -- "$p" && continue
     printf 'clean=%s %s\n' "$(blob "$wt" "$p")" "$p"
   done < <(changed_since "$wt" "$base")
 } > "$sf"

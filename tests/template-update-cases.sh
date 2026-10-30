@@ -77,6 +77,8 @@ for a in "$@"; do [ "$prev" = --vcs-ref ] && ref="$a"; prev="$a"; done
 [ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
 printf 'template line\n' >> AGENTS.md
+# MOCK_GLOSSARY: the template names GLOSSARY.md too, whatever MOCK_COPIER does.
+[ -n "${MOCK_GLOSSARY:-}" ] && mkdir -p docs/agents && printf -- '- Root **`GLOSSARY.md`**: the glossary.\n' > docs/agents/domain.md
 case "${MOCK_COPIER:-clean}" in
   conflict)
     base="$(git hash-object -w CONTRIBUTING.md)"
@@ -616,6 +618,29 @@ if [ "$rc" = 0 ] && [ "$(git -C "$(wt_of both)" show HEAD:GLOSSARY.md 2>/dev/nul
    && grep -qF -- "- CONTEXT.md: GLOSSARY.md already exists" "$work/gh.log.body"
 then ok "an existing GLOSSARY.md is kept, CONTEXT.md too, and the description says why it was not renamed"
 else bad "both files (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$work/gh.log.body" 2>/dev/null | sed 's/^/        /'; fi
+
+# Must stay tracked: a .gitignore that matches the new name (Codex review on #740).
+glossary_fixture ignored; reset_logs
+printf 'GLOSSARY.md\n' > "$repo/.gitignore"; git -C "$repo" add .gitignore && git -C "$repo" commit -q -m ignore && git -C "$repo" push -q origin main
+before="$(git -C "$repo" rev-parse HEAD:CONTEXT.md)"
+out="$(cd "$repo" && MOCK_COPIER=glossary PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && [ "$(git -C "$(wt_of ignored)" rev-parse HEAD:GLOSSARY.md 2>/dev/null)" = "$before" ] \
+   && ! git -C "$(wt_of ignored)" cat-file -e HEAD:CONTEXT.md 2>/dev/null
+then ok "a .gitignore matching GLOSSARY.md: the moved file is still committed, content unchanged"
+else bad "ignored destination (rc=$rc): $(git -C "$(wt_of ignored)" show --stat --format= HEAD 2>/dev/null | tr '\n' ' ')"; fi
+# Must not claim "unchanged": a person edits GLOSSARY.md while another file
+# waits in conflict, then finishes (Codex review on #740).
+glossary_fixture edited; reset_logs
+out="$(cd "$repo" && MOCK_COPIER=conflict MOCK_GLOSSARY=1 PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+wt="$(wt_of edited)"
+printf 'theirs\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add CONTRIBUTING.md
+printf '**Refund**: money returned.\n' >> "$wt/GLOSSARY.md"
+reset_logs; run --finish "$wt" --resolved CONTRIBUTING.md "the template's side"
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -A3 "Edited by a person" <<<"$body" | grep -qxF -- "- GLOSSARY.md" \
+   && grep -qF -- "- CONTEXT.md -> GLOSSARY.md (edited after the move" <<<"$body"
+then ok "a glossary edited after the move is listed as a person's edit, and the rename line says so"
+else bad "edited after the move (rc=$rc)"; printf '%s\n' "$body" | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
