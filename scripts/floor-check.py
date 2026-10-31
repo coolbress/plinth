@@ -43,6 +43,12 @@ the Actions token never gets them, and the skill, run by a person, does.
 The summary line counts such INFOs on their own, `K left to
 /plinth:floor-check`, printed only when K is above 0 (#436).
 
+Two more WARN-only items read settings the same way (#747): the Actions
+allowlist against the `uses:` lines of the local workflows (an action it
+refuses ends its run in startup_failure), and private vulnerability
+reporting, which SECURITY.md names (an INFO on a private repository, which
+GitHub does not offer it).
+
 With --merge-ruleset, one line says whether the merge is guidance or a
 boundary for the login the run reads with (#569): its admin role on the
 repository decides, with the merge ruleset. Under --actions-token it is not
@@ -108,6 +114,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import fnmatch
 import ipaddress
 import json
 import math
@@ -2419,6 +2426,126 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
         result("SKIP", "push protection not verified (GitHub reports no push protection status for this repository)")
 
 
+def check_private_reporting(repo: str, meta: dict, network: bool, actions_token: bool = False) -> None:
+    """Is private vulnerability reporting on (#747)? SECURITY.md sends a
+    reporter to Security → Report a vulnerability, and the form is off until
+    someone turns it on. The door does, on a public repository.
+
+    A private repository is not offered it: on a private repository of a
+    personal account on GitHub Free, GET and PUT of the setting both answered
+    404 on 2026-10-31, where a public repository of the same account answered
+    `{"enabled": true}` with the same token (GitHub Docs: "Owners and
+    administrators of public repositories"). Other plans are not measured.
+    There SECURITY.md names the route that works, so it is an INFO.
+    Off is a WARN with the call; an answer that is not read is a SKIP, or
+    with --actions-token an INFO left to the skill (the Actions token is not
+    known to read it, which is not measured either)."""
+    if is_private(meta):
+        result("INFO", "private vulnerability reporting is not offered on a private repository: its SECURITY.md "
+                       "names an issue instead where it was rendered with the answer visibility=private")
+        return
+    got = api(f"repos/{repo}/private-vulnerability-reporting", network)
+    enabled = got.get("enabled") if isinstance(got, dict) else None
+    if enabled is True:
+        result("PASS", "private vulnerability reporting is on: SECURITY.md's Security → Report a vulnerability works")
+    elif enabled is False:
+        result("WARN", "private vulnerability reporting is off: SECURITY.md sends a reporter to "
+                       "Security → Report a vulnerability, which this repository does not show")
+        result("INFO", f"  gh api -X PUT repos/{repo}/private-vulnerability-reporting   (needs repository administration)")
+    elif actions_token:
+        result("INFO", "private vulnerability reporting is not read here: /plinth:floor-check reads it "
+                       "with a login that administers the repository", deferred=True)
+    else:
+        result("SKIP", "private vulnerability reporting not verified (GitHub gave no answer this checker reads; "
+                       "a login with repository administration reads it)")
+
+
+# Owners whose actions `github_owned_allowed` lets run (GitHub Docs, "Managing
+# GitHub Actions settings for a repository": actions/* and github/*).
+GITHUB_OWNED = {"actions", "github"}
+
+
+def allowlist_allows(value: str, patterns: list[str]) -> bool:
+    """Whether one of `patterns_allowed` matches `owner/repo[/path]@ref`.
+    GitHub documents `*` as the wildcard (`monalisa/octocat@*`,
+    `monalisa/*`); matched here as a shell pattern, case-insensitively, the
+    way owner and repository names are. `coolbress/plinth/*` (the door's, for
+    a reusable workflow at a path) and `<owner>/<repo>@*` (the door's release
+    actions) are the two shapes measured to start a run."""
+    v = value.lower()
+    return any(isinstance(p, str) and fnmatch.fnmatchcase(v, p.lower()) for p in patterns)
+
+
+def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token: bool = False) -> None:
+    """Would every action the workflows use start (#747)? The door lets only
+    GitHub-owned actions and the patterns it names run. A `uses:` outside
+    them ends its run in startup_failure: no job, no check name, and no
+    message saying why (the door's first release on a tag did, before #747).
+    `copier update` changes files, not this setting, so a repository made
+    before a template began to use an action learns of it here.
+
+    Read: actions/permissions and its selected-actions, which need repository
+    administration; a token without it is a SKIP, or with --actions-token an
+    INFO left to the skill. The workflows are the local checkout's, as for
+    the pins. A local `./` action is the repository's own and allowed; a
+    `docker://` image is not judged (SKIP), since what the policy does with
+    one is not measured. WARN, never FAIL, as push protection."""
+    if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
+        return  # the wall's own SKIP says offline
+    uses: list[tuple[str, int, str]] = []
+    for p in workflow_files(root):
+        rel = p.relative_to(root).as_posix()
+        uses += [(rel, n, v) for n, v, readable in iter_uses(read(p)) if readable and not v.startswith("./")]
+    if not uses:
+        return
+    perms = api(f"repos/{repo}/actions/permissions", network)
+    allowed = perms.get("allowed_actions") if isinstance(perms, dict) else None
+    selected = api(f"repos/{repo}/actions/permissions/selected-actions", network) if allowed == "selected" else None
+    if allowed not in ("all", "local_only", "selected") or (allowed == "selected" and not isinstance(selected, dict)):
+        if actions_token:
+            result("INFO", "the Actions allowlist is not read here: /plinth:floor-check reads it with a login "
+                           "that administers the repository", deferred=True)
+        else:
+            result("SKIP", "the Actions allowlist not verified (this token does not read the repository's Actions "
+                           "permissions; one with repository administration does)")
+        return
+    if perms.get("enabled") is False:
+        result("WARN", "GitHub Actions is turned off on this repository: no workflow runs")
+        return
+    docker = [(f, n, v) for f, n, v in uses if v.startswith("docker://")]
+    uses = [(f, n, v) for f, n, v in uses if not v.startswith("docker://")]
+    if allowed == "all":
+        refused = []
+    elif allowed == "local_only":
+        refused = uses
+    else:
+        assert isinstance(selected, dict)
+        patterns = selected.get("patterns_allowed")
+        patterns = patterns if isinstance(patterns, list) else []
+        owned = selected.get("github_owned_allowed") is True
+        refused = [(f, n, v) for f, n, v in uses
+                   if not (owned and v.split("/", 1)[0].lower() in GITHUB_OWNED) and not allowlist_allows(v, patterns)]
+    for f, n, v in docker:
+        result("SKIP", f"{f}: line {n} {v}: whether the Actions allowlist lets an image run is not judged here")
+    if not refused:
+        if uses:
+            result("PASS", f"the Actions allowlist lets every action the workflows use start ({len(uses)} uses)")
+        return
+    result("WARN", "the Actions allowlist refuses: " + ", ".join(f"{f} line {n} {v.split('@', 1)[0]}" for f, n, v in refused)
+           + ". A run that uses one ends in startup_failure, with no job and no message saying why")
+    if allowed != "selected":
+        result("INFO", f"  gh api -X PUT repos/{repo}/actions/permissions -F enabled=true -f allowed_actions=selected"
+                       "   (needs repository administration; then run this again for the allowlist)")
+        return
+    assert isinstance(selected, dict)
+    add = sorted({v.split("@", 1)[0] + "@*" for _, _, v in refused})
+    body = json.dumps({"github_owned_allowed": selected.get("github_owned_allowed") is True,
+                       "verified_allowed": selected.get("verified_allowed") is True,
+                       "patterns_allowed": [*patterns, *add]})
+    result("INFO", f"  gh api -X PUT repos/{repo}/actions/permissions/selected-actions --input - <<<{shlex.quote(body)}"
+                   "   (needs repository administration)")
+
+
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
                sources: dict[str, int | None] | None = None, actions_token: bool = False,
                merge: dict | None = None, not_applying: list[str] | None = None) -> None:
@@ -2475,6 +2602,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
            "squash commits carry the pull request title and description",
            f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
     check_push_protection(repo, meta, actions_token)
+    check_private_reporting(repo, meta, network, actions_token)
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
     # The merge line is printed on these two paths as well (#583): the skill's
     # summary relays it, and the role alone decides much of it.
@@ -3475,6 +3603,7 @@ def main() -> int:
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
         merge = json.loads(read(Path(a.merge_ruleset))) if a.merge_ruleset else None
         check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying)
+        check_actions_allowlist(root, a.repo, network, a.actions_token)
         check_labels(a.repo, network)
     else:
         result("SKIP", "no --repo: wall not checked")

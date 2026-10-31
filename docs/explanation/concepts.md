@@ -416,11 +416,12 @@ bots push were not measured). On a private repository without GitHub Code
 Security, GitHub refuses dependency review, and `ci / deps` passes saying
 nothing was checked where the dependency graph still answers; where the
 graph is off, the review fails instead (#395). The third kind is a setting
-the Actions token cannot read: push protection, the ruleset's bypass actors,
-the CodeQL default setup languages, the squash commit settings.
+the Actions token cannot read: push protection, private vulnerability
+reporting, the Actions allowlist, the ruleset's bypass actors, the CodeQL
+default setup languages, the squash commit settings.
 The checker behind `ci / floor-check` prints PASS, FAIL, WARN, INFO and SKIP
 lines; a SKIP is a not yet confirmed, never a PASS, and the summary counts
-them as not verified. In consumer CI those four settings, and on a private
+them as not verified. In consumer CI those settings, and on a private
 repository a missing CodeQL rule, are INFO instead, outside that count; the
 summary line counts them on their own, as `left to /plinth:floor-check`,
 the run that reads them. Their verdict lines stay `not yet confirmed` in the

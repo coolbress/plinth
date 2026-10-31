@@ -23,7 +23,8 @@
 # Then: create, render the box (copier, one tested tag), push main (the baseline,
 # before the wall, and the proof the token can push), confirm main is the
 # default branch the ruleset will target, labels, ruleset, secret scanning,
-# Dependabot, Actions allowlist, squash only, CodeQL (once GitHub has detected
+# Dependabot, private vulnerability reporting (public only), Actions allowlist
+# (each archetype's release actions named), squash only, CodeQL (once GitHub has detected
 # the languages, and waited for until its first analysis of main is done), and
 # the first pull request, whose workflow must start. Then the baseline's CI
 # run, red because it ran before the wall, has its failed jobs re-run (#401).
@@ -460,6 +461,7 @@ env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --e
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
+  --data "visibility=$([ "$private" = 1 ] && echo private || echo public)" \
   ${hosting_data[@]+"${hosting_data[@]}"} \
   --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
 rm -rf "$dir/.git"
@@ -631,13 +633,30 @@ setup_call() { # <what> <gh api arguments...>
     -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
 setup_call "Dependabot alerts" -X PUT "repos/$repo/vulnerability-alerts"
 setup_call "Dependabot security updates" -X PUT "repos/$repo/automated-security-fixes"
+# Private vulnerability reporting: SECURITY.md sends a reporter to Security →
+# Report a vulnerability, which is off until turned on (#747). A private
+# repository is not offered it (GET and PUT answered 404 on a personal
+# account's private repository, 2026-10-31), and its SECURITY.md names
+# another route, so the call is made on a public one only.
+[ "$private" = 1 ] ||
+  setup_call "private vulnerability reporting" -X PUT "repos/$repo/private-vulnerability-reporting"
 # Actions: SHA pins required, and only GitHub-owned actions plus plinth's own
 # reusable workflow may run. Without `coolbress/plinth/*` the first CI run dies
 # with startup_failure, no check name ever reports, and the repository is locked.
+# The release workflow of each archetype calls actions of its own, named here
+# one by one (any ref: the pin is the workflow's, required above): without
+# them the first `v*` tag ends in startup_failure, with no job (#747).
+# tests/release-allowlist.sh checks this list against the template's workflows.
+release_actions=()
+case "$arch" in
+  cli|library) release_actions=('pypa/gh-action-pypi-publish@*') ;;
+  backend)     release_actions=('docker/setup-buildx-action@*' 'docker/build-push-action@*') ;;
+esac
+allow_args=(-f 'patterns_allowed[]=coolbress/plinth/*')
+for a in ${release_actions[@]+"${release_actions[@]}"}; do allow_args+=(-f "patterns_allowed[]=$a"); done
 setup_call "the Actions permissions" -X PUT "repos/$repo/actions/permissions" -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true
 setup_call "the Actions allowlist" -X PUT "repos/$repo/actions/permissions/selected-actions" \
-  -F github_owned_allowed=true -F verified_allowed=false \
-  -f 'patterns_allowed[]=coolbress/plinth/*'
+  -F github_owned_allowed=true -F verified_allowed=false "${allow_args[@]}"
 # Merge settings agree with the ruleset, or there is no merge button at all.
 # The squash commit is the pull request: its title (checked by ci / pr-title)
 # and its description, not a list of the branch's commits (#72).

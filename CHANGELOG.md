@@ -11,6 +11,33 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+- A repository made by `/plinth:new-project` can start its release
+  (#747). The door allowed only GitHub-owned actions and
+  `coolbress/plinth/*`, so the first `v*` tag of a `cli`, `library` or
+  `backend` repository ended in `startup_failure`, with no job and no
+  message: reproduced on a door-made `cli` and `backend` test repository.
+  The door now also allows each archetype's release actions by name, at
+  any ref (the workflow's SHA pin is still required):
+  `pypa/gh-action-pypi-publish` for `cli` and `library`,
+  `docker/setup-buildx-action` and `docker/build-push-action` for
+  `backend`. `tests/release-allowlist.sh` renders every archetype and fails
+  when an action is refused or a named one is not needed. A repository made
+  before this keeps its allowlist: `/plinth:floor-check` names the action
+  and prints the one call that allows it (it needs repository
+  administration).
+- The door turns on private vulnerability reporting on a public
+  repository, the form `SECURITY.md` names, and passes the template a
+  `visibility` answer. A private repository is not offered the form (GitHub
+  answered 404 there), and its `SECURITY.md` names an issue instead.
+
+### Added
+- `/plinth:floor-check` WARNs when the Actions allowlist refuses an action
+  a workflow uses, and when private vulnerability reporting is off on a
+  public repository, each with its call (#747). Under `--actions-token`
+  both are left to the skill, so `ci / floor-check`'s `left to` count can
+  grow by two.
+
 ## [2.20.0] - 2026-10-31
 
 `/plinth:floor-check` now tells you when a plugin plinth installed was left

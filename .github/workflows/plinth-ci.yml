@@ -84,6 +84,9 @@ jobs:
       - name: ci / migrations and ci / deploy-check fail and pass where they must, on Postgres
         run: ./tests/web-checks-cases.sh
 
+      - name: The door's Actions allowlist and SECURITY.md route agree with the template it renders
+        run: ./tests/release-allowlist.sh
+
       # The workflow's own Node and Chrome steps, then a real audit of a page
       # with known violations.
       - name: ci / web-audit names a known violation, says what automated checks miss, and never fails
