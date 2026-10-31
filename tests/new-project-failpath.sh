@@ -778,7 +778,9 @@ check "the door prints the times it saw, so a live run is its own record" \
   'grep -qE "^CodeQL default setup: enabled [0-9:]+Z, configured with languages \[actions,python\], first run on main completed 2026-09-10T00:01:00Z, analysis of main listed 2026-09-10T00:02:00Z /language:python, first pull request pushed [0-9:]+Z$" "$work/home-none/out" && [ "$(grep -cE "^  [0-9:]+Z (updated|run|analysis): " "$work/home-none/out")" = 3 ]'
 check "the first pull request head is checked for a CodeQL check run" 'grep -q "/check-runs" "$log"'
 check "the Actions allowlist names coolbress/plinth/*" 'grep -q "patterns_allowed\[\]=coolbress/plinth/\*" "$log"'
-check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 1 ]'
+check "the Actions allowlist names the cli release action (#747)" 'grep -q "patterns_allowed\[\]=pypa/gh-action-pypi-publish@\*" "$log"'
+check "the Actions allowlist names nothing else" '[ "$(grep -o "patterns_allowed" "$log" | wc -l | tr -d " ")" = 2 ]'
+check "a public repository gets private vulnerability reporting turned on (#747)" 'grep -q "PUT repos/[^ ]*/private-vulnerability-reporting" "$log"'
 check "Actions: selected, SHA pins required" 'grep -q "allowed_actions=selected -F sha_pinning_required=true" "$log"'
 check "the squash commit is the pull request title and description" 'grep -q "squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY" "$log"'
 # Issue forms are inherited from `.github/ISSUE_TEMPLATE` alone, and that is the
@@ -954,6 +956,8 @@ else bad $c "the ruleset posted is not the wall minus code_scanning"; fi
 hasnt $c "CodeQL default setup is not enabled, read or waited for" log 'code-scanning|/languages|check-runs|^sleep 60'
 hasnt $c "nothing about CodeQL is promised or warned"        out 'warning: CodeQL|CodeQL default setup:'
 hasnt $c "secret scanning and push protection are not turned on" log 'security_and_analysis\[secret_scanning'
+hasnt $c "private vulnerability reporting is not turned on: a private repository is not offered it (#747)" log 'private-vulnerability-reporting'
+has   $c "the template is told the repository is private, so SECURITY.md names an issue (#747)" log 'visibility=private'
 has   $c "Dependabot, the Actions allowlist and the merge settings are set as for a public repository" log 'allow_merge_commit=false'
 has   $c "the summary names the code scanning gap, its reason and what stands in its place" out "^  not raised: code scanning\. GitHub Code Security is not enabled on tester/probe.*ci / lint's security rules"
 has   $c "the summary names the dependency review gap, what ci / deps does and what stands in its place (#395)" out "^  not raised: dependency review\\..*ci / deps reports.*not checked.*Dependabot alerts"

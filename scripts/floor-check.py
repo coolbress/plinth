@@ -2514,14 +2514,15 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
         return
     docker = [(f, n, v) for f, n, v in uses if v.startswith("docker://")]
     uses = [(f, n, v) for f, n, v in uses if not v.startswith("docker://")]
+    patterns: list[str] = []
     if allowed == "all":
         refused = []
     elif allowed == "local_only":
         refused = uses
     else:
         assert isinstance(selected, dict)
-        patterns = selected.get("patterns_allowed")
-        patterns = patterns if isinstance(patterns, list) else []
+        listed = selected.get("patterns_allowed")
+        patterns = [p for p in listed if isinstance(p, str)] if isinstance(listed, list) else []
         owned = selected.get("github_owned_allowed") is True
         refused = [(f, n, v) for f, n, v in uses
                    if not (owned and v.split("/", 1)[0].lower() in GITHUB_OWNED) and not allowlist_allows(v, patterns)]

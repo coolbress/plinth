@@ -12,6 +12,7 @@ pull requests and have no tag.
 ## [Unreleased]
 
 ### Fixed
+
 - A repository made by `/plinth:new-project` can start its release
   (#747). The door allowed only GitHub-owned actions and
   `coolbress/plinth/*`, so the first `v*` tag of a `cli`, `library` or
@@ -32,6 +33,7 @@ pull requests and have no tag.
   answered 404 there), and its `SECURITY.md` names an issue instead.
 
 ### Added
+
 - `/plinth:floor-check` WARNs when the Actions allowlist refuses an action
   a workflow uses, and when private vulnerability reporting is off on a
   public repository, each with its call (#747). Under `--actions-token`
