@@ -78,7 +78,8 @@ each check by name.
 > user tasks ran on 2.1.282 and 2.1.283; skills follow the Agent Skills
 > format and may load elsewhere, but only Claude Code is tested) · macOS / Linux (Windows via WSL) · tools: `claude`,
 > `gh`, `git` (2.37 or newer: on an older one, the macOS system git included, the
-> install fails with `index.lock: File exists`; `brew install git`), `uv`.
+> install fails with `index.lock: File exists`; `brew install git`), `uv`,
+> `python3`.
 >
 > **Outside:** when a wall cannot be raised (no admin, no `gh` auth, a private
 > repository on GitHub Free, personal or organization, where the token reads the
@@ -93,16 +94,15 @@ each check by name.
 
 ## Install, in detail
 
-The default set runs no hook. Its skills cost context: Claude Code lists 9
-of them for the model and caps the whole skill listing, its own built-in
-skills included, at 1% of the model's context window. As `/context` estimates
-it, with a 1M-context model all 9 keep their descriptions, about 820 tokens
-(#598). With Haiku 4.5, a 200k-context model, the listing is cut to about
-2,000 tokens; on the larger set measured for #469 and #477, 9 of 14 skills
-kept about their name: they still run when called by name, but Claude is
-less likely to pick them on its own. The `skillListingBudgetFraction`
-setting raises the cap (#255; measured again for #354 and, on Claude Code
-2.1.296, for #469 and #477).
+The default set runs no hook. Its skills cost context: Claude Code lists
+them for the model and caps the whole skill listing, its own built-in skills
+included, at 1% of the model's context window. At 1M that leaves room for all
+of them; at 200k some descriptions are cut to about the skill's name, so they
+still run when called by name, but Claude is less likely to pick them on its
+own. The `skillListingBudgetFraction` setting raises the cap, and
+plinth-template sets it. What each plugin costs and how the cap was measured
+is in the arsenal's [Installed by default](skills/arsenal/SKILL.md#installed-by-default)
+table and the paragraph under it.
 
 Third-party marketplaces do not auto-update. To move to a new version, run
 `claude plugin update plinth`, then `/reload-plugins`. Moving from v1.10.0 or

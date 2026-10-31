@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Two facts the docs state that drifted from the source (#641): the template
+# Facts the docs state that drifted from the source (#641, #752): the template
 # tag README.md and the tutorial name must be scripts/new-project.sh's
-# template_ref, and a per-archetype count of required checks a doc states must
-# be the count floor-check.py's ruleset gives that archetype. A doc that states
-# no count passes; a wrong one fails with its file and line. The checker then
-# runs on copies with one wrong line each, so it cannot pass without looking.
+# template_ref; a per-archetype count of required checks a doc states must
+# be the count floor-check.py's ruleset gives that archetype; and the tools
+# README.md's supported box and the tutorial's "Before you start" list (and the
+# tutorial's count of them) must be the ones new-project.sh stops without. A doc
+# that states no count passes; a wrong one fails with its file and line. The
+# checker then runs on copies with one wrong line each, so it cannot pass
+# without looking.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -91,6 +94,38 @@ for page in pages:
                 if got != want[a]:
                     fail(f"{rel}:{line} states {got} required checks for "
                          f"{a or 'an archetype without a service'}; floor-check.py's ruleset has {want[a]}")
+# 3. The tools the door stops without, as the two install pages list them.
+src = (root / "scripts/new-project.sh").read_text(encoding="utf-8")
+tools = re.findall(r"^command -v ([a-z0-9]+)\s+>/dev/null \|\| stop ", src, re.M)
+if not tools:
+    fail("scripts/new-project.sh has no `command -v <tool> >/dev/null || stop` line")
+def listed(rel, start, stop):
+    text = (docs / rel).read_text(encoding="utf-8")
+    i = text.find(start)
+    if i < 0:
+        fail(f"{rel} has no {start!r}: the tool list moved")
+        return None, text, 0
+    j = text.find(stop, i)
+    span = text[i:j if j >= 0 else len(text)]
+    return re.findall(r"`([a-z0-9]+)`", span), span, text.count("\n", 0, i) + 1
+numbers = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
+for rel, start, stop in (("README.md", "tools: `", "\n>\n"),
+                         ("docs/tutorials/getting-started.md", "- Tools: ", "\n- ")):
+    names, span, line = listed(rel, start, stop)
+    if names is None:
+        continue
+    if sorted(set(names)) != sorted(tools):
+        fail(f"{rel}:{line} lists the tools {sorted(set(names))}; scripts/new-project.sh checks {sorted(tools)}")
+    else:
+        print(f"  PASS  {rel}: lists the {len(tools)} tools new-project.sh checks")
+    m = re.search(r"checks\s+all\s+(\w+)", span)
+    if m:
+        got = numbers.get(m.group(1).lower(), int(m.group(1)) if m.group(1).isdigit() else -1)
+        if got != len(tools):
+            fail(f"{rel}:{line} says the generator checks all {m.group(1)}; it checks {len(tools)}")
+        else:
+            print(f"  PASS  {rel}: \"checks all {m.group(1)}\" matches")
+
 print(f"  PASS  {stated} stated check count(s) read; expected "
       + ", ".join(f"{a or 'other'} {n}" for a, n in want.items()) if not fails else
       f"-- {fails} failed")
@@ -132,4 +167,23 @@ copy; printf '\nThe required checks: nine on GitHub (ten for a service).\n' >>"$
 expect_fail "\"ten for a service\", which the web archetype is not" GLOSSARY.md
 copy; printf '\nThe required checks: nine on GitHub (ten for `backend` or `data-ml`, eleven for `web`).\n' >>"$tmp/docs/docs/reference/required-checks.md"
 expect_fail "a wrong count for web" docs/reference/required-checks.md
+
+# A tool list or count edited in place: the failure names the list's line.
+expect_fail_at() {
+  local what="$1" where="$2" out line
+  out="$(check "$tmp/docs")"
+  line="$(grep -m1 "FAIL  $where " <<<"$out")"
+  if [ -n "$line" ]; then
+    echo "  PASS  a copy with $what fails: ${line#*FAIL  }"
+  else
+    echo "  FAIL  a copy with $what did not fail at $where: the checker does not look"; status=1
+  fi
+}
+tool_line() { grep -n -m1 -- "$1" "$tmp/docs/$2" | cut -d: -f1; }
+copy; sed -i.bak 's/`uv`,$/`uv`./; /^> `python3`\.$/d' "$tmp/docs/README.md"
+expect_fail_at "a README tool list without python3" "README.md:$(tool_line 'tools: `' README.md)"
+copy; sed -i.bak 's/`uv`, `python3`\. The$/`uv`. The/' "$tmp/docs/docs/tutorials/getting-started.md"
+expect_fail_at "a tutorial tool list without python3" "docs/tutorials/getting-started.md:$(tool_line '^- Tools: ' docs/tutorials/getting-started.md)"
+copy; sed -i.bak 's/checks all five/checks all four/' "$tmp/docs/docs/tutorials/getting-started.md"
+expect_fail_at "\"checks all four\" for five tools" "docs/tutorials/getting-started.md:$(tool_line '^- Tools: ' docs/tutorials/getting-started.md)"
 exit "$status"
