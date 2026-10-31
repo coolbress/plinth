@@ -44,6 +44,22 @@ pull requests and have no tag.
   both are left to the skill, so `ci / floor-check`'s `left to` count can
   grow by two.
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.33.0
+  (coolbress/plinth-template#155, #156, #157). A new project's
+  `SECURITY.md` follows the `visibility` answer the door passes: a public
+  repository names the reporting form, a private one an issue (#747). A
+  `web` project checks passwords with Django's four standard validators and
+  opens its Postgres connection per request; a `cli` installs its command
+  on PATH through `[project.scripts]`; a `data-ml` model card says how the
+  model was made; `library` and `cli` ship `py.typed`; and
+  `docs/agents/issue-tracker.md` says an issue title is one sentence
+  (#746). `/plinth:floor-check` reports a repository on v1.32.0 as behind.
+  A private instance made before this passes `--data visibility=private`
+  once to `copier update`, the command the `SECURITY.md` route WARN above
+  prints.
+
 ## [2.20.0] - 2026-10-31
 
 `/plinth:floor-check` now tells you when a plugin plinth installed was left
