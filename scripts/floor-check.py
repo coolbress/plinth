@@ -2519,14 +2519,22 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
     INFO left to the skill. The workflows are the local checkout's, as for
     the pins. A local `./` action is the repository's own and allowed; a
     `docker://` image is not judged (SKIP), since what the policy does with
-    one is not measured. WARN, never FAIL, as push protection."""
+    one is not measured. A `uses` the line pattern cannot read (iter_uses)
+    is a SKIP that names its line, and the all-actions PASS is not printed
+    beside it, as check_action_pins does: it could name a refused action.
+    WARN, never FAIL, as push protection."""
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         return  # the wall's own SKIP says offline
     uses: list[tuple[str, int, str]] = []
+    unread: list[tuple[str, int]] = []
     for p in workflow_files(root):
         rel = p.relative_to(root).as_posix()
-        uses += [(rel, n, v) for n, v, readable in iter_uses(read(p)) if readable and not v.startswith("./")]
-    if not uses:
+        for n, v, readable in iter_uses(read(p)):
+            if not readable:
+                unread.append((rel, n))
+            elif not v.startswith("./"):
+                uses.append((rel, n, v))
+    if not uses and not unread:
         return
     perms = api(f"repos/{repo}/actions/permissions", network)
     allowed = perms.get("allowed_actions") if isinstance(perms, dict) else None
@@ -2558,8 +2566,12 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
                    if not (owned and v.split("/", 1)[0].lower() in GITHUB_OWNED) and not allowlist_allows(v, patterns)]
     for f, n, v in docker:
         result("SKIP", f"{f}: line {n} {v}: whether the Actions allowlist lets an image run is not judged here")
+    for f in sorted({f for f, _ in unread}):
+        lines = ", ".join(str(n) for g, n in unread if g == f)
+        result("SKIP", f"{f}: the Actions allowlist not verified for line {lines}: it mentions uses in a form "
+                       "this checker does not read")
     if not refused:
-        if uses:
+        if uses and not unread:
             result("PASS", f"the Actions allowlist lets every action the workflows use start ({len(uses)} uses)")
         return
     result("WARN", "the Actions allowlist refuses: " + ", ".join(f"{f} line {n} {v.split('@', 1)[0]}" for f, n, v in refused)

@@ -36,7 +36,9 @@ pull requests and have no tag.
 
 - `/plinth:floor-check` WARNs when the Actions allowlist refuses an action
   a workflow uses, and when private vulnerability reporting is off on a
-  public repository, each with its call (#747). It also WARNs when
+  public repository, each with its call (#747). A `uses` written in a form
+  the checker does not read is a SKIP naming its line, never counted as
+  allowed. It also WARNs when
   `SECURITY.md` names the reporting form on a private repository, or an
   issue on a public one, with the `copier update` that re-renders it: an
   instance made before the template asked `visibility` and updated with

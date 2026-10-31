@@ -670,6 +670,16 @@ allowlist "Actions turned off is a WARN" "WARN  GitHub Actions is turned off on 
 allowlist "Actions permissions the token does not read are a SKIP, not a pass" "SKIP  the Actions allowlist not verified" "rm \"$api/repos/o/r/actions/permissions.json\""
 allowlist "an allowlist the token does not read is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/actions/permissions/selected-actions.json\""
 allowlist "a docker image is not judged, a SKIP" "SKIP  .github/workflows/release.yml: line 4 docker://alpine@sha256:" "printf 'jobs:\n  a:\n    steps:\n      - uses: docker://alpine@sha256:%064d\n' 0 > \"$rel\""
+# A `uses` the line pattern does not read (flow style) could name a refused
+# action: a SKIP naming the line, and never the all-actions PASS beside it.
+uses_flow="printf 'jobs:\n  publish:\n    steps:\n      - uses: actions/checkout@%040d\n      - {uses: pypa/gh-action-pypi-publish@%040d}\n' 0 0 > \"$rel\""
+out="$(eval "$uses_flow"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/release.yml.keep" "$rel"
+if ! grep -q "PASS  the Actions allowlist" <<<"$out" && grep -q "SKIP  .github/workflows/release.yml: the Actions allowlist not verified for line 5: it mentions uses in a form this checker does not read" <<<"$out"
+then ok "must not pass: a uses the checker does not read is a SKIP naming its line, never the all-actions PASS"
+else bad "a uses the checker does not read was passed over, or its line was not named"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
+# Counted: the allowlist's SKIP beside the pin check's and the plinth-pin lookup's on the same line, and the fixture's labels SKIP.
+allowlist "a uses the checker does not read is counted as not verified" "-- 0 failed, 4 not verified" "$uses_flow"
+allowlist "a readable refused action beside an unread one is still refused" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish" "printf 'jobs:\n  publish:\n    steps:\n      - {uses: actions/checkout@%040d}\n      - uses: pypa/gh-action-pypi-publish@%040d\n' 0 0 > \"$rel\""
 out="$(rm "$api/repos/o/r/actions/permissions.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
 printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
 if grep -q "INFO  the Actions allowlist is not read here" <<<"$out" && ! grep -qE "(PASS|SKIP)  the Actions allowlist" <<<"$out"; then ok "--actions-token: an unread allowlist is an INFO left to the skill"

@@ -375,6 +375,9 @@ repository, and never run it.
   keeps what is allowed and adds `<owner>/<repo>@*` for each. `copier update`
   never changes this setting, so a repository made before its template used
   an action learns of it here. A `docker://` image is a SKIP: not judged.
+  A `uses` written in a form the checker does not read (flow style, an
+  anchored key) is a SKIP naming its line, and the PASS is not printed
+  beside it, as for the pins.
 - **Private vulnerability reporting.** `SECURITY.md` sends a reporter to
   Security → Report a vulnerability, which is off until turned on; the door
   turns it on for a public repository. Off is the WARN; the call is
