@@ -939,6 +939,94 @@ if grep -q "^  INFO  sandbox.enabled is true in .*settings.local.json" <<<"$out"
    && grep -q 'Read(~/.config/gh' <<<"$out" && grep -q 'uvx --from copier copier' <<<"$out"
 then ok "--sandbox: sandbox.enabled true is an INFO, and the measured macOS lines still follow it"; else bad "--sandbox on"; printf '%s\n' "$out" | grep -iE 'sandbox|gh|uvx' | sed 's/^/        /'; fi
 
+# --plugins compares each plugin installed from the plinth marketplace with the
+# commit its entry pins (#743): `update plinth@plinth` leaves a dependency at
+# its old commit (#714). The files are in the shape Claude Code 2.1.314 writes.
+pin=d1478fcb140db0b93c0c8df17bcfd311844749d0; old=c55ee46073ed923f86ce59a5eb3b6d895095d1b7
+tpin=ccbc15639c97057cbfcf32ecebc38ef716e4bb37
+pc="$work/pconf"; pm="$work/pmarket"
+plugins_fixture() { # <mattpocock-skills commit> [extra JSON entries]: a fresh config and marketplace copy
+  rm -rf "$pc" "$pm"; mkdir -p "$pc/plugins" "$pm/.claude-plugin"
+  printf '{"name":"plinth","plugins":[{"name":"plinth","source":"./"},{"name":"mattpocock-skills","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"taste-skill","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"last30days","source":{"source":"url","url":"u","ref":"main"}}]}\n' "$pin" "$tpin" > "$pm/.claude-plugin/marketplace.json"
+  printf '{"name":"plinth","version":"2.19.1"}\n' > "$pm/.claude-plugin/plugin.json"
+  printf '{"plinth":{"source":{"source":"git","url":"u"},"installLocation":"%s"}}\n' "$pm" > "$pc/plugins/known_marketplaces.json"
+  printf '{"version":2,"plugins":{"plinth@plinth":[{"scope":"user","version":"2.19.1","gitCommitSha":"%040d"}],"mattpocock-skills@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}],"taste-skill@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}]%s}}\n' 0 "$1" "$tpin" "${2:-}" > "$pc/plugins/installed_plugins.json"
+}
+plugins_run() { out="$(CLAUDE_CONFIG_DIR="$pc" python3 "$checker" --root "$good" --no-network --plugins 2>&1)"; rc=$?; }
+behind_line='WARN  mattpocock-skills@plinth (user) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d'
+plugins_fixture "$old"; plugins_run
+if [ "$rc" = 0 ] && grep -qF "$behind_line" <<<"$out" && grep -qF 'fix: claude plugin update mattpocock-skills@plinth --scope user' <<<"$out" \
+   && ! grep -qE 'at the plinth.*mattpocock-skills' <<<"$out" && grep -qE 'INFO  at the plinth marketplace.s pin: plinth@plinth \(user\), taste-skill@plinth \(user\)$' <<<"$out"
+then ok "--plugins: a dependency at an old commit is named with its update command, the others are at their pin"
+else bad "--plugins behind"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
+# Must not pass: an old commit that shares the pin's first characters, a
+# truncated pin, or a commit in another letter case is not the pin.
+for have in "${pin:0:12}0000000000000000000000000000" "${pin:0:12}" "$(tr a-f A-F <<<"$pin")"; do
+  plugins_fixture "$have"; plugins_run
+  if grep -qE 'at the plinth.*mattpocock-skills' <<<"$out"; then bad "--plugins: $have was reported at the pin $pin"
+  elif grep -qE "(WARN|SKIP)  mattpocock-skills@plinth" <<<"$out"; then ok "--plugins: $have is not reported at the pin"
+  else bad "--plugins: $have is neither behind nor not checked"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
+done
+plugins_fixture "$pin"; plugins_run
+if [ "$rc" = 0 ] && ! grep -qE '(WARN|SKIP|FAIL).*@plinth' <<<"$out" && ! grep -q 'plugins not checked' <<<"$out" \
+   && grep -qF 'at the plinth marketplace'"'"'s pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)' <<<"$out"
+then ok "--plugins: every plugin at its pin reports nothing to do"
+else bad "--plugins up to date"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
+# A project or local install is updated with its scope, from its project folder:
+# before Claude Code 2.1.281 `update` without --scope updated the user install only.
+plugins_fixture "$pin"
+python3 - "$pc/plugins/installed_plugins.json" "$old" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+d["plugins"]["mattpocock-skills@plinth"] += [
+    {"scope": "project", "projectPath": "/w/my app", "gitCommitSha": sys.argv[2]},
+    {"scope": "local", "gitCommitSha": sys.argv[2]}]
+json.dump(d, open(p, "w"))
+PY
+plugins_run
+if grep -qF "mattpocock-skills@plinth (project in /w/my app) is behind" <<<"$out" \
+   && grep -qF "fix: cd '/w/my app' && claude plugin update mattpocock-skills@plinth --scope project" <<<"$out" \
+   && grep -qF "fix: claude plugin update mattpocock-skills@plinth --scope local, run from the project folder it was installed for" <<<"$out" \
+   && grep -qE 'at the plinth.*mattpocock-skills@plinth \(user\)' <<<"$out"
+then ok "--plugins: a project or local install behind its pin gets its scope and folder in the command, the user one stays at its pin"
+else bad "--plugins scoped"; grep -E '@plinth' <<<"$out" | sed 's/^/        /'; fi
+# plinth itself is compared by version with the marketplace copy's plugin.json.
+plugins_fixture "$pin"; printf '{"name":"plinth","version":"2.19.2"}\n' > "$pm/.claude-plugin/plugin.json"; plugins_run
+grep -qF 'WARN  plinth@plinth (user) is behind its pin: installed version 2.19.1, the plinth marketplace pins 2.19.2' <<<"$out" \
+  && grep -qF 'fix: claude plugin update plinth@plinth --scope user' <<<"$out" \
+  && ok "--plugins: plinth behind its marketplace copy is named by version" || { bad "--plugins plinth version"; grep -E '@plinth' <<<"$out" | sed 's/^/        /'; }
+# Not checked, never at the pin: another marketplace, an entry with no full
+# commit, an install with no commit, an entry the marketplace does not have.
+plugins_fixture "$pin" ',"codex@openai-codex":[{"scope":"user","gitCommitSha":"'"$pin"'"}],"last30days@plinth":[{"scope":"project","projectPath":"/p","gitCommitSha":"'"$pin"'"}],"gone@plinth":[{"scope":"user","gitCommitSha":"'"$pin"'"}]'
+python3 - "$pc/plugins/installed_plugins.json" <<'PY'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); del d["plugins"]["taste-skill@plinth"][0]["gitCommitSha"]; json.dump(d, open(p, "w"))
+PY
+plugins_run
+for want in 'SKIP  plugins not checked, not from the plinth marketplace: codex@openai-codex' \
+            'SKIP  last30days@plinth (project in /p) not checked: its entry pins no full commit' \
+            'SKIP  taste-skill@plinth (user) not checked: its install records no full commit' \
+            'SKIP  gone@plinth (user) not checked: the plinth marketplace has no entry for it'; do
+  grep -qF -- "$want" <<<"$out" || { bad "--plugins: expected '$want'"; grep -E 'plugin|@' <<<"$out" | sed 's/^/        /'; }
+done
+grep -qE 'at the plinth.*(codex|last30days|taste-skill|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
+  || ok "--plugins: another marketplace, no pinned commit, no installed commit and no entry are not checked, never at the pin"
+# A state it cannot read is one SKIP and no plugin at its pin.
+for broken in installed shape known market name; do
+  plugins_fixture "$pin"
+  case $broken in
+    installed) rm "$pc/plugins/installed_plugins.json" ;;
+    shape) printf '{"version":1,"plugins":{}}\n' > "$pc/plugins/installed_plugins.json" ;;
+    known) printf '{}\n' > "$pc/plugins/known_marketplaces.json" ;;
+    market) rm "$pm/.claude-plugin/marketplace.json" ;;
+    name) sed -i.bak 's/"name":"plinth","plugins"/"name":"fork","plugins"/' "$pm/.claude-plugin/marketplace.json" ;;
+  esac
+  plugins_run
+  if [ "$rc" = 0 ] && [ "$(grep -c 'SKIP  plugins not checked' <<<"$out")" = 1 ] && ! grep -q 'at the plinth' <<<"$out"
+  then ok "--plugins: an unreadable state ($broken) is not checked, and nothing is at its pin"
+  else bad "--plugins unreadable $broken"; grep -E 'plugin|@' <<<"$out" | sed 's/^/        /'; fi
+done
+
 # --credentials lists what else on this machine can push to github.com (#336):
 # stored gh accounts, git helpers besides gh's, an Authorization header, ~/.netrc,
 # GH_TOKEN/GITHUB_TOKEN. Presence only, never a value; what it cannot read is a

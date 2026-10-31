@@ -2852,6 +2852,109 @@ def check_sandbox() -> None:
     result("INFO", "  Linux, WSL2 and native Windows: not measured")
 
 
+SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def check_plugins() -> None:
+    """Each plugin installed from the plinth marketplace against the commit
+    its entry pins (#743). `claude plugin update plinth@plinth` and
+    `claude plugin install plinth@plinth` leave a dependency at its old commit
+    while reading the entry's new skill list, so a skill the old commit keeps
+    elsewhere reports "Path not found" until the dependency is updated by name
+    (measured for #714). Read from Claude Code's own files under the config
+    directory: installed_plugins.json (version 2) for what is installed and
+    known_marketplaces.json for where the marketplace's copy is, whose
+    marketplace.json holds the pins `claude plugin update <name>@plinth` moves
+    to. A behind plugin is a WARN with that command; this never runs it.
+    Anything not read or not comparable is a SKIP, never "at its pin": a
+    plugin from another marketplace, an entry or install without a full
+    commit, a file in a shape not known here. plinth itself has no pinned
+    commit (its entry is the marketplace), so its installed version is
+    compared with the marketplace copy's plugin.json."""
+    conf = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    plugins_dir = conf / "plugins"
+    try:
+        installed = json.loads(read(plugins_dir / "installed_plugins.json"))
+    except (OSError, ValueError) as e:
+        result("SKIP", f"plugins not checked: {plugins_dir / 'installed_plugins.json'} not read ({type(e).__name__})")
+        return
+    if not isinstance(installed, dict) or installed.get("version") != 2 or not isinstance(installed.get("plugins"), dict):
+        result("SKIP", f"plugins not checked: {plugins_dir / 'installed_plugins.json'} is not in the shape read here "
+                       "(version 2 with a plugins map)")
+        return
+    try:
+        loc = Path(json.loads(read(plugins_dir / "known_marketplaces.json"))["plinth"]["installLocation"])
+        market = json.loads(read(loc / ".claude-plugin" / "marketplace.json"))
+        if market.get("name") != "plinth":
+            raise ValueError("not the plinth marketplace")
+        entries = {e["name"]: e for e in market["plugins"]}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+        result("SKIP", f"plugins not checked: the plinth marketplace's copy and its marketplace.json not read "
+                       f"through {plugins_dir / 'known_marketplaces.json'} ({type(e).__name__})")
+        return
+
+    def pinned(name: str) -> tuple[str | None, str]:
+        """What the entry pins and how an install is compared with it: a full
+        commit, or plinth's version; (None, why) when it pins neither."""
+        e = entries.get(name)
+        if not isinstance(e, dict):
+            return None, "the plinth marketplace has no entry for it"
+        if e.get("source") == "./":
+            try:
+                v = json.loads(read(loc / ".claude-plugin" / "plugin.json")).get("version")
+            except (OSError, ValueError, AttributeError):
+                v = None
+            return (v, "version") if isinstance(v, str) and v else (None, "the marketplace copy's plugin.json version not read")
+        sha = e.get("source", {}).get("sha") if isinstance(e.get("source"), dict) else None
+        return (sha, "commit") if isinstance(sha, str) and SHA.fullmatch(sha) else (None, "its entry pins no full commit")
+
+    current: list[str] = []
+    other: list[str] = []
+    for pid, installs in sorted(installed["plugins"].items()):
+        name, _, mkt = pid.rpartition("@")
+        if mkt != "plinth" or not name:
+            other.append(pid)
+            continue
+        want, how = pinned(name)
+        if not isinstance(installs, list) or not installs:
+            result("SKIP", f"{pid} not checked: no install record read")
+            continue
+        for rec in installs:
+            rec = rec if isinstance(rec, dict) else {}
+            where = rec.get("scope") or "unknown scope"
+            if rec.get("projectPath"):
+                where += f" in {rec['projectPath']}"
+            have = rec.get("gitCommitSha") if how == "commit" else rec.get("version")
+            if want is None:
+                result("SKIP", f"{pid} ({where}) not checked: {how}")
+            elif not isinstance(have, str) or (how == "commit" and not SHA.fullmatch(have)):
+                result("SKIP", f"{pid} ({where}) not checked: its install records no full {how}")
+            elif have != want:
+                shown = (lambda s: s[:12]) if how == "commit" else (lambda s: s)
+                # The install's own scope, always named: without --scope,
+                # `update` took user before Claude Code 2.1.281 and the most
+                # specific scope of the current folder after it (third-party
+                # review on #744). A project or local one runs from its folder.
+                fix = f"claude plugin update {pid}"
+                scope = rec.get("scope")
+                if scope == "user":
+                    fix += " --scope user"
+                elif scope in ("project", "local"):
+                    fix += f" --scope {scope}"
+                    path = rec.get("projectPath")
+                    fix = f"cd {shlex.quote(path)} && {fix}" if isinstance(path, str) and path else \
+                        f"{fix}, run from the project folder it was installed for"
+                result("WARN", f"{pid} ({where}) is behind its pin: installed {how} {shown(have)}, the plinth "
+                               f"marketplace pins {shown(want)}; its skills may report \"Path not found\". "
+                               f"fix: {fix}")
+            else:
+                current.append(f"{pid} ({where})")
+    if current:
+        result("INFO", "at the plinth marketplace's pin: " + ", ".join(current))
+    if other:
+        result("SKIP", "plugins not checked, not from the plinth marketplace: " + ", ".join(other))
+
+
 # gh's own git helper, whatever path it was installed under, and nothing else:
 # a `!` helper that also calls gh may answer with its own token first. A path
 # with a space comes single-quoted from `gh auth setup-git` (gh 2.101.0).
@@ -3251,6 +3354,8 @@ def main() -> int:
                     help="also write one verdict line per FAIL, SKIP and read left to /plinth:floor-check, "
                          "or a pass line, to FILE (ci / floor-check's job summary)")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
+    ap.add_argument("--plugins", action="store_true",
+                    help="also compare each plugin installed from the plinth marketplace with the commit its entry pins")
     ap.add_argument("--credentials", action="store_true",
                     help="also report what else on this machine can push to github.com (gitlab.com with --host gitlab): "
                          "gh accounts, git helpers, ~/.netrc; and a production database URL in the environment, "
@@ -3376,6 +3481,8 @@ def main() -> int:
 
     if a.sandbox:
         check_sandbox()
+    if a.plugins:
+        check_plugins()
     if a.credentials:
         check_credentials(root, host)
         check_database_urls(root)

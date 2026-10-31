@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:floor-check` compares each plugin installed from plinth's
+  marketplace with the commit its entry pins (#743). One left behind, as
+  `claude plugin update plinth@plinth` leaves a dependency whose pin was
+  raised (#714), is a WARN naming it and `claude plugin update <name>@plinth` with its
+  `--scope`;
+  the skill gives that command and does not run it. A plugin from another
+  marketplace, or plugin files it cannot read, is reported as not checked.
+- `tests/install-smoke.sh` reads the default install's skill listing on a
+  200k model (Haiku 4.5) in a folder with plinth-template's
+  `skillListingBudgetFraction`, and fails when a default skill's description
+  is cut (#743), so a pin raise or a longer `skills` list that uses up the
+  room fails its pull request.
+
 ## [2.19.0] - 2026-10-31
 
 `/retro` is installed by default: typed at the end of a session, it

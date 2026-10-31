@@ -125,6 +125,8 @@ before `/reload-plugins`: `update plinth` reads the dependency's new skill
 list but keeps its files at the old commit, so until then
 `mattpocock-skills` reports an error ("Path not found" for `retro`), `/retro`
 is missing and the other skills still name `CONTEXT.md` (#714). No `prune` is needed.
+`/plinth:floor-check` names a dependency left at an older commit than plinth's
+marketplace pins, with the command that moves it (#743).
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
