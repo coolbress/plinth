@@ -192,7 +192,7 @@ and otherwise prints the repository to delete; a step it can go on without,
 such as a label, is named and left. If the create's own answer is lost, it
 does neither, so check whether the repository exists (its failure paths run in CI against a mocked
 `gh`). It renders
-[plinth-template v1.32.0](https://github.com/coolbress/plinth-template/releases/tag/v1.32.0),
+[plinth-template v1.33.0](https://github.com/coolbress/plinth-template/releases/tag/v1.33.0),
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its release commit, has
 created a repository on real GitHub, merged its first pull request and deleted
@@ -224,8 +224,7 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 - How-to, for maintainers: [cut a release](docs/how-to/cut-a-release.md),
   [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md),
   [run the eval suite](docs/how-to/run-the-eval-suite.md).
-- [GLOSSARY.md](GLOSSARY.md): the vocabulary (wall, door, box, floor, arsenal, lab, profile).
-- [plinth-lab](https://github.com/coolbress/plinth-lab): the evidence behind the rules. Optional.
+- [GLOSSARY.md](GLOSSARY.md): the vocabulary (wall, door, box, floor, arsenal, profile).
 
 Rebuilt in September 2026 from an earlier internal repository; its issues and
 decisions moved here (the map is #15, the spec #31).
