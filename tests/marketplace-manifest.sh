@@ -118,6 +118,11 @@ check(all(re.fullmatch(r"\./(engineering|productivity)/[a-z-]+", s) for s in mat
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
 check(skills == ["arsenal", "floor-check", "guide", "new-project", "template-update"],
       f"plinth skills are arsenal, floor-check, guide, new-project, template-update: {skills}")
+# The catalog description is what `/plugin` shows before install (#752): it
+# names exactly the skills under skills/, no more and no fewer.
+said = re.match(r"Skills: ([a-z0-9, -]+)\. ", plinth_says)
+said = sorted(s.strip() for s in said.group(1).split(",")) if said else []
+check(said == skills, f"plinth entry: the description's 'Skills:' list is the directories under skills/: {said}")
 
 def frontmatter(name):
     text = (root / "skills" / name / "SKILL.md").read_text()

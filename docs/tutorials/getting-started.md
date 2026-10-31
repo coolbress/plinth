@@ -6,8 +6,8 @@ and merge the pull request the generator opens for you.
 
 ## Before you start
 
-- Tools: `claude` (2.1.274 or newer), `gh`, `git`, `uv`. The generator checks
-  all four and names the missing one. Installing the plugin needs git 2.37 or
+- Tools: `claude` (2.1.274 or newer), `gh`, `git`, `uv`, `python3`. The
+  generator checks all five and names the missing one. Installing the plugin needs git 2.37 or
   newer: an older one (the macOS system git can be 2.30) fails with
   `index.lock: File exists`. `brew install git` fixes it.
 - Log in to GitHub with `gh auth login -s repo,workflow,delete_repo`

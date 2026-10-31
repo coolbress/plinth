@@ -14,3 +14,8 @@ codex-native
 divcal
 # Paths into the archived Korean evidence repository.
 direction/[0-9]{2}
+# The deleted, never-filled evidence repository and its term (#752). Released
+# CHANGELOG.md sections are history and keep it: "@history " before a pattern
+# exempts them and nothing else; the [Unreleased] section is still read.
+@history plinth-lab
+@history (^|[^[:alnum:]_-])[Ll]abs?([^[:alnum:]_-]|$)
