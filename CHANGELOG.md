@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.22.0] - 2026-10-31
+
+`/plinth:floor-check` no longer reports an Actions allowlist with a `!`
+pattern as letting every action start: it says the policy was not verified
+and names the pattern. What you read before installing now matches the
+plugin: the marketplace entry names all five skills, `guide` included, and
+the README and the tutorial list `python3` among the tools the generator
+needs.
+
+tested with plinth-template v1.33.0
+
 ### Fixed
 
 - `/plinth:floor-check` no longer reports an Actions allowlist with a `!`
@@ -4253,7 +4264,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.21.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.22.0...HEAD
+[2.22.0]: https://github.com/coolbress/plinth/releases/tag/v2.22.0
 [2.21.0]: https://github.com/coolbress/plinth/releases/tag/v2.21.0
 [2.20.0]: https://github.com/coolbress/plinth/releases/tag/v2.20.0
 [2.19.0]: https://github.com/coolbress/plinth/releases/tag/v2.19.0
