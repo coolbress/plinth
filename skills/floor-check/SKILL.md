@@ -377,7 +377,10 @@ repository, and never run it.
   an action learns of it here. A `docker://` image is a SKIP: not judged.
   A `uses` written in a form the checker does not read (flow style, an
   anchored key) is a SKIP naming its line, and the PASS is not printed
-  beside it, as for the pins.
+  beside it, as for the pins. An allowlist with a `!` pattern (one that
+  blocks what it matches, written by hand; the door writes none) is a SKIP
+  naming that pattern, never the PASS: GitHub documents no order between
+  blocking and allowing patterns.
 - **Private vulnerability reporting.** `SECURITY.md` sends a reporter to
   Security → Report a vulnerability, which is off until turned on; the door
   turns it on for a public repository. Off is the WARN; the call is
