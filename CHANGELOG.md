@@ -11,6 +11,57 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A repository made by `/plinth:new-project` can start its release
+  (#747). The door allowed only GitHub-owned actions and
+  `coolbress/plinth/*`, so the first `v*` tag of a `cli`, `library` or
+  `backend` repository ended in `startup_failure`, with no job and no
+  message: reproduced on a door-made `cli` and `backend` test repository.
+  The door now also allows each archetype's release actions by name, at
+  any ref (the workflow's SHA pin is still required):
+  `pypa/gh-action-pypi-publish` for `cli` and `library`,
+  `docker/setup-buildx-action` and `docker/build-push-action` for
+  `backend`. `tests/release-allowlist.sh` renders every archetype and fails
+  when an action is refused or a named one is not needed. A repository made
+  before this keeps its allowlist: `/plinth:floor-check` names the action
+  and prints the one call that allows it (it needs repository
+  administration).
+- The door turns on private vulnerability reporting on a public
+  repository, the form `SECURITY.md` names, and passes the template a
+  `visibility` answer. A private repository is not offered the form (GitHub
+  answered 404 there), and its `SECURITY.md` names an issue instead.
+
+### Added
+
+- `/plinth:floor-check` WARNs when the Actions allowlist refuses an action
+  a workflow uses, and when private vulnerability reporting is off on a
+  public repository, each with its call (#747). A `uses` written in a form
+  the checker does not read is a SKIP naming its line, never counted as
+  allowed. It also WARNs when
+  `SECURITY.md` names the reporting form on a private repository, or an
+  issue on a public one, with the `copier update` that re-renders it: an
+  instance made before the template asked `visibility` and updated with
+  `--defaults` gets the public route. Under `--actions-token`
+  both are left to the skill, so `ci / floor-check`'s `left to` count can
+  grow by two.
+
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.33.0
+  (coolbress/plinth-template#155, #156, #157). A new project's
+  `SECURITY.md` follows the `visibility` answer the door passes: a public
+  repository names the reporting form, a private one an issue (#747). A
+  `web` project checks passwords with Django's four standard validators and
+  opens its Postgres connection per request; a `cli` installs its command
+  on PATH through `[project.scripts]`; a `data-ml` model card says how the
+  model was made; `library` and `cli` ship `py.typed`; and
+  `docs/agents/issue-tracker.md` says an issue title is one sentence
+  (#746). `/plinth:floor-check` reports a repository on v1.32.0 as behind.
+  A private instance made before this passes `--data visibility=private`
+  once to `copier update`, the command the `SECURITY.md` route WARN above
+  prints.
+
 ## [2.20.0] - 2026-10-31
 
 `/plinth:floor-check` now tells you when a plugin plinth installed was left
