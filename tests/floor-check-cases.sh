@@ -326,6 +326,13 @@ jq -n --arg c "$(base64 < "$good/.github/workflows/ci.yml" | tr -d '\n')" '{type
   > "$api/repos/o/r/contents/.github/workflows/ci.yml.json"
 good_setup='{"state":"configured","languages":["actions","python"],"query_suite":"default"}'
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+# The Actions allowlist the door sets, and private vulnerability reporting on (#747).
+mkdir -p "$api/repos/o/r/actions/permissions"
+good_perms='{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}'
+good_allow='{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":["coolbress/plinth/*"]}'
+printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
+printf '%s' "$good_allow" > "$api/repos/o/r/actions/permissions/selected-actions.json"
+printf '{"enabled":true}' > "$api/repos/o/r/private-vulnerability-reporting.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
   local out; [ -n "${3:-}" ] && eval "$3"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
@@ -336,6 +343,9 @@ wall() { # <description> <expected substring in output> [shell that edits the fi
   printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
   printf '%s' "$good_meta" > "$api/repos/o/r.json"
   printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+  printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
+  printf '%s' "$good_allow" > "$api/repos/o/r/actions/permissions/selected-actions.json"
+  printf '{"enabled":true}' > "$api/repos/o/r/private-vulnerability-reporting.json"
 }
 wall "intact wall passes" "-- 0 failed"
 wall "squash commits are the pull request title and description" "PASS  squash commits carry"
@@ -607,6 +617,73 @@ printf '%s' "$good_meta" > "$api/repos/o/r.json"
 # The item belongs to the repository, not to the rules: it is reported where no
 # rule governs the branch too.
 wall "push protection is reported when the wall is down" "PASS  push protection is on" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
+# Private vulnerability reporting (#747): SECURITY.md names its form, which is
+# off until turned on. On is a PASS, off a WARN with the call, unread a SKIP;
+# a private repository is not offered it, and SECURITY.md names another route.
+wall "private vulnerability reporting on is a PASS" "PASS  private vulnerability reporting is on"
+wall "private vulnerability reporting off is a WARN" "WARN  private vulnerability reporting is off" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
+wall "private vulnerability reporting off carries the call that turns it on" "INFO    gh api -X PUT repos/o/r/private-vulnerability-reporting   (needs repository administration)" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
+wall "private vulnerability reporting unread is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
+wall "private vulnerability reporting on a private repository is an INFO, not read" "INFO  private vulnerability reporting is not offered on a private repository" "jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\"; rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
+# SECURITY.md's route against the repository (#747): an instance rendered
+# before the template asked `visibility`, updated with --defaults, names the
+# form on a private repository too. The must-not-pass direction first.
+sec="$good/SECURITY.md"; cp "$sec" "$work/SECURITY.md.keep"
+form_md="printf '# Security\\n\\n**Do not open a public issue.** Use the repository%ss private reporting form:\\n**Security → Report a vulnerability**\\n' \"'\" > \"$sec\""
+issue_md="printf '# Security\\n\\nOpen an issue in this repository. It is private, so only people with access\\n' > \"$sec\""
+private_meta="jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+route() { wall "$@"; cp "$work/SECURITY.md.keep" "$sec"; }
+route "must not pass: a private repository whose SECURITY.md names the form is a WARN" "WARN  SECURITY.md sends a reporter to Security → Report a vulnerability, which a private repository is not offered" "$form_md; $private_meta"
+route "...with the update that re-renders it" "INFO    re-render it with the issue route: copier update --defaults --data visibility=private" "$form_md; $private_meta"
+route "a public repository whose SECURITY.md names an issue is a WARN" "WARN  SECURITY.md tells a reporter to open an issue, and this repository is public" "$issue_md; jq -c '. + {private: false}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+route "a route mismatch never fails the floor" "-- 0 failed, 1 not verified" "$form_md; $private_meta"
+out="$(eval "$issue_md; $private_meta"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+! grep -q "WARN  SECURITY.md" <<<"$out" && ok "a private repository whose SECURITY.md names an issue is not warned" || bad "a matching private route was warned"
+out="$(eval "$form_md"; jq -c '. + {private: false}' <<<"$good_meta" > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+! grep -q "WARN  SECURITY.md" <<<"$out" && grep -q "PASS  private vulnerability reporting is on" <<<"$out" && ok "a public repository whose SECURITY.md names the form is not warned" || bad "a matching public route was warned"
+out="$(eval "$form_md"; printf '{"default_branch":"main"}' > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+! grep -q "WARN  SECURITY.md" <<<"$out" && ok "visibility the API does not report is not judged" || bad "a route was judged with no visibility read"
+# The Actions allowlist (#747): a `uses:` the allowlist refuses ends its run in
+# startup_failure with no job and no message. The must-not-pass case first: a
+# workflow that uses one action the allowlist does not name is never reported
+# as fine, and the WARN names it with the call that allows it.
+rel="$good/.github/workflows/release.yml"; cp "$rel" "$work/release.yml.keep"
+uses_pypi="printf 'jobs:\n  publish:\n    steps:\n      - uses: actions/checkout@%040d\n      - uses: pypa/gh-action-pypi-publish@%040d # v1\n' 0 0 > \"$rel\""
+allow() { printf "printf '%%s' '{\"github_owned_allowed\":true,\"verified_allowed\":false,\"patterns_allowed\":%s}' > \"%s\"" "$1" "$api/repos/o/r/actions/permissions/selected-actions.json"; }
+allowlist() { wall "$@"; cp "$work/release.yml.keep" "$rel"; }
+allowlist "the door's allowlist lets the template's actions start" "PASS  the Actions allowlist lets every action the workflows use start (1 uses)"
+out="$(eval "$uses_pypi"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/release.yml.keep" "$rel"
+if ! grep -q "PASS  the Actions allowlist" <<<"$out" && grep -q "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish\. A run that uses one ends in startup_failure" <<<"$out"
+then ok "must not pass: an allowlist missing one action is never reported as fine, and the action is named"
+else bad "an allowlist missing one action was reported as fine, or the action was not named"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
+allowlist "the refusal carries the one call that allows it, keeping what is allowed, and says it needs administration" \
+  "INFO    gh api -X PUT repos/o/r/actions/permissions/selected-actions --input - <<<'{\"github_owned_allowed\": true, \"verified_allowed\": false, \"patterns_allowed\": \[\"coolbress/plinth/\*\", \"pypa/gh-action-pypi-publish@\*\"\]}'   (needs repository administration)" "$uses_pypi"
+allowlist "a refused action never fails the floor" "-- 0 failed, 1 not verified" "$uses_pypi"
+allowlist "an allowlist naming the action lets it start" "PASS  the Actions allowlist lets every action the workflows use start (3 uses)" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/gh-action-pypi-publish@*"]')"
+allowlist "a pattern naming another action does not cover it" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/other@*"]')"
+allowlist "a pattern pinned to another ref does not cover it" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/gh-action-pypi-publish@v1"]')"
+allowlist "GitHub-owned actions are refused when github_owned_allowed is off" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 4 actions/checkout" "$uses_pypi; printf '%s' '{\"github_owned_allowed\":false,\"patterns_allowed\":[\"coolbress/plinth/*\",\"pypa/gh-action-pypi-publish@*\"]}' > \"$api/repos/o/r/actions/permissions/selected-actions.json\""
+allowlist "a patterns list that is not a list allows nothing" "WARN  the Actions allowlist refuses: .github/workflows/ci.yml line 3 coolbress/plinth/.github/workflows/python-ci.yml" "$(allow '"coolbress/plinth/*"')"
+allowlist "allowed_actions all lets everything start" "PASS  the Actions allowlist lets every action" "$uses_pypi; printf '{\"enabled\":true,\"allowed_actions\":\"all\"}' > \"$api/repos/o/r/actions/permissions.json\""
+allowlist "allowed_actions local_only refuses every action from elsewhere" "WARN  the Actions allowlist refuses: .github/workflows/ci.yml line 3" "printf '{\"enabled\":true,\"allowed_actions\":\"local_only\"}' > \"$api/repos/o/r/actions/permissions.json\""
+allowlist "Actions turned off is a WARN" "WARN  GitHub Actions is turned off on this repository" "printf '{\"enabled\":false,\"allowed_actions\":\"selected\"}' > \"$api/repos/o/r/actions/permissions.json\""
+allowlist "Actions permissions the token does not read are a SKIP, not a pass" "SKIP  the Actions allowlist not verified" "rm \"$api/repos/o/r/actions/permissions.json\""
+allowlist "an allowlist the token does not read is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/actions/permissions/selected-actions.json\""
+allowlist "a docker image is not judged, a SKIP" "SKIP  .github/workflows/release.yml: line 4 docker://alpine@sha256:" "printf 'jobs:\n  a:\n    steps:\n      - uses: docker://alpine@sha256:%064d\n' 0 > \"$rel\""
+# A `uses` the line pattern does not read (flow style) could name a refused
+# action: a SKIP naming the line, and never the all-actions PASS beside it.
+uses_flow="printf 'jobs:\n  publish:\n    steps:\n      - uses: actions/checkout@%040d\n      - {uses: pypa/gh-action-pypi-publish@%040d}\n' 0 0 > \"$rel\""
+out="$(eval "$uses_flow"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/release.yml.keep" "$rel"
+if ! grep -q "PASS  the Actions allowlist" <<<"$out" && grep -q "SKIP  .github/workflows/release.yml: the Actions allowlist not verified for line 5: it mentions uses in a form this checker does not read" <<<"$out"
+then ok "must not pass: a uses the checker does not read is a SKIP naming its line, never the all-actions PASS"
+else bad "a uses the checker does not read was passed over, or its line was not named"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
+# Counted: the allowlist's SKIP beside the pin check's and the plinth-pin lookup's on the same line, and the fixture's labels SKIP.
+allowlist "a uses the checker does not read is counted as not verified" "-- 0 failed, 4 not verified" "$uses_flow"
+allowlist "a readable refused action beside an unread one is still refused" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish" "printf 'jobs:\n  publish:\n    steps:\n      - {uses: actions/checkout@%040d}\n      - uses: pypa/gh-action-pypi-publish@%040d\n' 0 0 > \"$rel\""
+out="$(rm "$api/repos/o/r/actions/permissions.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
+printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
+if grep -q "INFO  the Actions allowlist is not read here" <<<"$out" && ! grep -qE "(PASS|SKIP)  the Actions allowlist" <<<"$out"; then ok "--actions-token: an unread allowlist is an INFO left to the skill"
+else bad "--actions-token: an unread allowlist was not left to the skill"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
 # `ci / floor-check` runs on the Actions token, which never gets the security
 # settings: a SKIP there is one no consumer can clear, in every run. The step
 # passes --actions-token, and only the read that token cannot make changes: an

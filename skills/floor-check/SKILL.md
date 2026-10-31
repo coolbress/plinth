@@ -271,8 +271,8 @@ that those items pass.
 A third count, `K left to /plinth:floor-check`, appears only in a run with
 `--actions-token` (`ci / floor-check`) and only when K is above 0: INFO
 lines for reads that token cannot make and this skill, run with a login that
-administers the repository, does (push protection, the ruleset's bypass
-actors, the CodeQL default setup languages, the squash commit settings, and
+administers the repository, does (push protection, private vulnerability
+reporting, the Actions allowlist, the ruleset's bypass actors, the CodeQL default setup languages, the squash commit settings, and
 a private repository's missing CodeQL rule). In that job's summary their
 `not yet confirmed` lines end `; left to /plinth:floor-check` and are not
 annotated; the other `not yet confirmed` lines are. This skill's own run
@@ -359,6 +359,39 @@ reports no status for. `ci / floor-check` passes `--actions-token`, which
 turns the first of those into an INFO, because the Actions token never gets
 them and no consumer could clear that SKIP: this skill, with the user's
 login, is the run that reads the item. Never pass that flag here.
+
+## The Actions allowlist and private vulnerability reporting
+
+Three more items read the repository with `--repo` (#747), each a WARN,
+never a FAIL, with the call under it; relay the call as printed, behind
+`with-admin-token.sh` when the user's login cannot administer the
+repository, and never run it.
+
+- **The Actions allowlist.** The door lets only GitHub-owned actions,
+  `coolbress/plinth/*` and each archetype's named release actions run. A
+  `uses:` in `.github/workflows/` outside them ends its run in
+  `startup_failure`, with no job and no message saying why. The WARN names
+  each such action, file and line; the INFO is one `gh api -X PUT` that
+  keeps what is allowed and adds `<owner>/<repo>@*` for each. `copier update`
+  never changes this setting, so a repository made before its template used
+  an action learns of it here. A `docker://` image is a SKIP: not judged.
+  A `uses` written in a form the checker does not read (flow style, an
+  anchored key) is a SKIP naming its line, and the PASS is not printed
+  beside it, as for the pins.
+- **Private vulnerability reporting.** `SECURITY.md` sends a reporter to
+  Security → Report a vulnerability, which is off until turned on; the door
+  turns it on for a public repository. Off is the WARN; the call is
+  `gh api -X PUT repos/<owner>/<name>/private-vulnerability-reporting`. A
+  private repository is not offered it (GitHub answers 404), so there it is
+  an INFO.
+- **SECURITY.md's route.** A WARN when the file names the form on a private
+  repository, or an issue on a public one, with the `copier update` that
+  re-renders it. An instance made before the template asked `visibility`
+  and updated with `--defaults` gets `public`, the form, whatever the
+  repository is. A file naming neither route is the user's own: not judged.
+
+Both read settings a token without repository administration does not get:
+a SKIP here, and under `--actions-token` an INFO left to this skill.
 
 ## A private repository
 
