@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.20.0] - 2026-10-31
+
+`/plinth:floor-check` now tells you when a plugin plinth installed was left
+at an old version after an update, and prints the one command that moves it.
+plinth's own checks also fail when the default skills' descriptions no longer
+fit a 200k model's skill listing.
+
+tested with plinth-template v1.32.0
+
 ### Added
 
 - `/plinth:floor-check` compares each plugin installed from plinth's
@@ -4173,7 +4182,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.19.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.20.0...HEAD
+[2.20.0]: https://github.com/coolbress/plinth/releases/tag/v2.20.0
 [2.19.0]: https://github.com/coolbress/plinth/releases/tag/v2.19.0
 [2.18.0]: https://github.com/coolbress/plinth/releases/tag/v2.18.0
 [2.17.0]: https://github.com/coolbress/plinth/releases/tag/v2.17.0
