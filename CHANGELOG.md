@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.21.0] - 2026-10-31
+
+A repository made by `/plinth:new-project` can now start its release on a
+tag: the door allows each archetype's release actions, which it refused
+before, so the first release ended with no job. A public repository gets
+private vulnerability reporting, and a private one's `SECURITY.md` names an
+issue instead. New projects come from plinth-template v1.33.0: a `web`
+project checks passwords, a `cli` installs a command, and a `data-ml` model
+card says how the model was made. A repository made earlier: run
+`/plinth:floor-check`, which names a refused action and prints the command
+that allows it.
+
+tested with plinth-template v1.33.0
+
 ### Fixed
 
 - A repository made by `/plinth:new-project` can start its release
@@ -4233,7 +4247,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.20.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.21.0...HEAD
+[2.21.0]: https://github.com/coolbress/plinth/releases/tag/v2.21.0
 [2.20.0]: https://github.com/coolbress/plinth/releases/tag/v2.20.0
 [2.19.0]: https://github.com/coolbress/plinth/releases/tag/v2.19.0
 [2.18.0]: https://github.com/coolbress/plinth/releases/tag/v2.18.0
