@@ -36,7 +36,11 @@ pull requests and have no tag.
 
 - `/plinth:floor-check` WARNs when the Actions allowlist refuses an action
   a workflow uses, and when private vulnerability reporting is off on a
-  public repository, each with its call (#747). Under `--actions-token`
+  public repository, each with its call (#747). It also WARNs when
+  `SECURITY.md` names the reporting form on a private repository, or an
+  issue on a public one, with the `copier update` that re-renders it: an
+  instance made before the template asked `visibility` and updated with
+  `--defaults` gets the public route. Under `--actions-token`
   both are left to the skill, so `ci / floor-check`'s `left to` count can
   grow by two.
 

@@ -624,7 +624,25 @@ wall "private vulnerability reporting on is a PASS" "PASS  private vulnerability
 wall "private vulnerability reporting off is a WARN" "WARN  private vulnerability reporting is off" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
 wall "private vulnerability reporting off carries the call that turns it on" "INFO    gh api -X PUT repos/o/r/private-vulnerability-reporting   (needs repository administration)" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
 wall "private vulnerability reporting unread is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
-wall "private vulnerability reporting on a private repository is an INFO, not read" "INFO  private vulnerability reporting is not offered on a private repository: its SECURITY.md names an issue" "jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\"; rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
+wall "private vulnerability reporting on a private repository is an INFO, not read" "INFO  private vulnerability reporting is not offered on a private repository" "jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\"; rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
+# SECURITY.md's route against the repository (#747): an instance rendered
+# before the template asked `visibility`, updated with --defaults, names the
+# form on a private repository too. The must-not-pass direction first.
+sec="$good/SECURITY.md"; cp "$sec" "$work/SECURITY.md.keep"
+form_md="printf '# Security\\n\\n**Do not open a public issue.** Use the repository%ss private reporting form:\\n**Security → Report a vulnerability**\\n' \"'\" > \"$sec\""
+issue_md="printf '# Security\\n\\nOpen an issue in this repository. It is private, so only people with access\\n' > \"$sec\""
+private_meta="jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+route() { wall "$@"; cp "$work/SECURITY.md.keep" "$sec"; }
+route "must not pass: a private repository whose SECURITY.md names the form is a WARN" "WARN  SECURITY.md sends a reporter to Security → Report a vulnerability, which a private repository is not offered" "$form_md; $private_meta"
+route "...with the update that re-renders it" "INFO    re-render it with the issue route: copier update --defaults --data visibility=private" "$form_md; $private_meta"
+route "a public repository whose SECURITY.md names an issue is a WARN" "WARN  SECURITY.md tells a reporter to open an issue, and this repository is public" "$issue_md; jq -c '. + {private: false}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+route "a route mismatch never fails the floor" "-- 0 failed, 1 not verified" "$form_md; $private_meta"
+out="$(eval "$issue_md; $private_meta"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+! grep -q "WARN  SECURITY.md" <<<"$out" && ok "a private repository whose SECURITY.md names an issue is not warned" || bad "a matching private route was warned"
+out="$(eval "$form_md"; jq -c '. + {private: false}' <<<"$good_meta" > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+! grep -q "WARN  SECURITY.md" <<<"$out" && grep -q "PASS  private vulnerability reporting is on" <<<"$out" && ok "a public repository whose SECURITY.md names the form is not warned" || bad "a matching public route was warned"
+out="$(eval "$form_md"; printf '{"default_branch":"main"}' > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+! grep -q "WARN  SECURITY.md" <<<"$out" && ok "visibility the API does not report is not judged" || bad "a route was judged with no visibility read"
 # The Actions allowlist (#747): a `uses:` the allowlist refuses ends its run in
 # startup_failure with no job and no message. The must-not-pass case first: a
 # workflow that uses one action the allowlist does not name is never reported

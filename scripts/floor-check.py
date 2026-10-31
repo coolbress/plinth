@@ -47,7 +47,8 @@ Two more WARN-only items read settings the same way (#747): the Actions
 allowlist against the `uses:` lines of the local workflows (an action it
 refuses ends its run in startup_failure), and private vulnerability
 reporting, which SECURITY.md names (an INFO on a private repository, which
-GitHub does not offer it).
+GitHub does not offer it), and whether SECURITY.md's route fits the
+repository's visibility.
 
 With --merge-ruleset, one line says whether the merge is guidance or a
 boundary for the login the run reads with (#569): its admin role on the
@@ -2426,7 +2427,35 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
         result("SKIP", "push protection not verified (GitHub reports no push protection status for this repository)")
 
 
-def check_private_reporting(repo: str, meta: dict, network: bool, actions_token: bool = False) -> None:
+# The two routes plinth-template's SECURITY.md names (#747), by the line
+# that opens each: the form on a public repository, an issue on a private one.
+ROUTE_FORM = "Use the repository's private reporting form"
+ROUTE_ISSUE = "Open an issue in this repository. It is private"
+
+
+def check_security_route(root: Path, private: bool) -> None:
+    """Does SECURITY.md send a reporter where this repository can take a
+    report (#747)? A private repository is not offered the form, and a
+    public repository's issues are public. An instance rendered before the
+    template asked `visibility` and updated with `--defaults` gets `public`,
+    the form, whatever the repository is (measured on a v1.32.0 instance,
+    copier 9.18.2). A file naming neither route is someone's own: not judged."""
+    f = root / "SECURITY.md"
+    text = read(f) if f.is_file() else ""
+    if private and ROUTE_FORM in text:
+        result("WARN", "SECURITY.md sends a reporter to Security → Report a vulnerability, which a private "
+                       "repository is not offered: a report has nowhere to go")
+        result("INFO", "  re-render it with the issue route: copier update --defaults --data visibility=private "
+                       "(or /plinth:template-update with that answer), then commit SECURITY.md and .copier-answers.yml")
+    elif not private and ROUTE_ISSUE in text:
+        result("WARN", "SECURITY.md tells a reporter to open an issue, and this repository is public: "
+                       "the report is public too")
+        result("INFO", "  re-render it with the form: copier update --defaults --data visibility=public, "
+                       "then turn private vulnerability reporting on")
+
+
+def check_private_reporting(repo: str, meta: dict, network: bool, actions_token: bool = False,
+                            root: Path | None = None) -> None:
     """Is private vulnerability reporting on (#747)? SECURITY.md sends a
     reporter to Security → Report a vulnerability, and the form is off until
     someone turns it on. The door does, on a public repository.
@@ -2440,9 +2469,10 @@ def check_private_reporting(repo: str, meta: dict, network: bool, actions_token:
     Off is a WARN with the call; an answer that is not read is a SKIP, or
     with --actions-token an INFO left to the skill (the Actions token is not
     known to read it, which is not measured either)."""
+    if root is not None and meta.get("private") in (True, False):
+        check_security_route(root, is_private(meta))
     if is_private(meta):
-        result("INFO", "private vulnerability reporting is not offered on a private repository: its SECURITY.md "
-                       "names an issue instead where it was rendered with the answer visibility=private")
+        result("INFO", "private vulnerability reporting is not offered on a private repository")
         return
     got = api(f"repos/{repo}/private-vulnerability-reporting", network)
     enabled = got.get("enabled") if isinstance(got, dict) else None
@@ -2549,7 +2579,7 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
                sources: dict[str, int | None] | None = None, actions_token: bool = False,
-               merge: dict | None = None, not_applying: list[str] | None = None) -> None:
+               merge: dict | None = None, not_applying: list[str] | None = None, root: Path | None = None) -> None:
     """not_applying: on a JavaScript or TypeScript repository (#681), the
     expected checks only python-ci.yml runs, already left out of `expected`.
     When nothing is left, the required-checks rule is not asked for either,
@@ -2603,7 +2633,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
            "squash commits carry the pull request title and description",
            f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
     check_push_protection(repo, meta, actions_token)
-    check_private_reporting(repo, meta, network, actions_token)
+    check_private_reporting(repo, meta, network, actions_token, root)
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
     # The merge line is printed on these two paths as well (#583): the skill's
     # summary relays it, and the role alone decides much of it.
@@ -3603,7 +3633,7 @@ def main() -> int:
             sources = {c: pinned.get(c, common) for c in expected}
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
         merge = json.loads(read(Path(a.merge_ruleset))) if a.merge_ruleset else None
-        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying)
+        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying, root)
         check_actions_allowlist(root, a.repo, network, a.actions_token)
         check_labels(a.repo, network)
     else:

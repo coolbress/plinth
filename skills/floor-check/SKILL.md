@@ -362,7 +362,7 @@ login, is the run that reads the item. Never pass that flag here.
 
 ## The Actions allowlist and private vulnerability reporting
 
-Two more items read repository settings with `--repo` (#747), each a WARN,
+Three more items read the repository with `--repo` (#747), each a WARN,
 never a FAIL, with the call under it; relay the call as printed, behind
 `with-admin-token.sh` when the user's login cannot administer the
 repository, and never run it.
@@ -380,10 +380,12 @@ repository, and never run it.
   turns it on for a public repository. Off is the WARN; the call is
   `gh api -X PUT repos/<owner>/<name>/private-vulnerability-reporting`. A
   private repository is not offered it (GitHub answers 404), so there it is
-  an INFO: its `SECURITY.md` names an issue instead where the template
-  rendered it with the answer `visibility: private`. A private instance
-  without that answer in `.copier-answers.yml` still names the form: say
-  that `copier update` with `--data visibility=private` changes it.
+  an INFO.
+- **SECURITY.md's route.** A WARN when the file names the form on a private
+  repository, or an issue on a public one, with the `copier update` that
+  re-renders it. An instance made before the template asked `visibility`
+  and updated with `--defaults` gets `public`, the form, whatever the
+  repository is. A file naming neither route is the user's own: not judged.
 
 Both read settings a token without repository administration does not get:
 a SKIP here, and under `--actions-token` an INFO left to this skill.
