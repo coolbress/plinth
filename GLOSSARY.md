@@ -1,7 +1,6 @@
 # Glossary
 
-One meaning per term, in code, docs and issues. The Korean metaphors these came
-from stay in the lab.
+One meaning per term, in code, docs and issues.
 
 - **wall**: what the host enforces on `main` before a merge. On GitHub, the
   required status checks and branch rules a repository's ruleset enforces; on
@@ -34,8 +33,6 @@ from stay in the lab.
   manual install. A listed tool can be outside the plugin system (a test
   library, a scanner); listing one installs nothing. `/plinth:arsenal` is the
   catalog. Nothing in it is enforced.
-- **lab**: `plinth-lab`, the evidence behind the rules. Optional reading; the
-  product is written to be understood without it.
 - **verdict**: what plinth says about one property: pass, fail, or not yet
   confirmed. The floor checker's SKIP is a not yet confirmed; its WARN is a
   pass that names something to look at.
