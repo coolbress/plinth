@@ -2503,7 +2503,7 @@ def allowlist_allows(value: str, patterns: list[str]) -> bool:
     a reusable workflow at a path) and `<owner>/<repo>@*` (the door's release
     actions) are the two shapes measured to start a run."""
     v = value.lower()
-    return any(isinstance(p, str) and fnmatch.fnmatchcase(v, p.lower()) for p in patterns)
+    return any(isinstance(p, str) and not p.startswith("!") and fnmatch.fnmatchcase(v, p.lower()) for p in patterns)
 
 
 def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token: bool = False) -> None:
@@ -2522,6 +2522,11 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
     one is not measured. A `uses` the line pattern cannot read (iter_uses)
     is a SKIP that names its line, and the all-actions PASS is not printed
     beside it, as check_action_pins does: it could name a refused action.
+    A `!` pattern blocks what it matches (#756). GitHub's page shows it
+    beside allowing patterns (`space-org/*, !space-org/action@*`) but gives
+    no order between them or against github_owned_allowed, so a policy that
+    carries one is a SKIP naming it, and never the all-actions PASS. An
+    action no allowing pattern matches is still refused: `!` only blocks.
     WARN, never FAIL, as push protection."""
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
         return  # the wall's own SKIP says offline
@@ -2570,8 +2575,13 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
         lines = ", ".join(str(n) for g, n in unread if g == f)
         result("SKIP", f"{f}: the Actions allowlist not verified for line {lines}: it mentions uses in a form "
                        "this checker does not read")
+    blocking = [p for p in patterns if p.startswith("!")]
+    if blocking and uses:
+        result("SKIP", "the Actions allowlist not verified: it carries the blocking pattern"
+                       + ("s " if len(blocking) > 1 else " ") + ", ".join(blocking)
+                       + ", and GitHub documents no order between blocking and allowing patterns")
     if not refused:
-        if uses and not unread:
+        if uses and not unread and not blocking:
             result("PASS", f"the Actions allowlist lets every action the workflows use start ({len(uses)} uses)")
         return
     result("WARN", "the Actions allowlist refuses: " + ", ".join(f"{f} line {n} {v.split('@', 1)[0]}" for f, n, v in refused)

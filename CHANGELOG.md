@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:floor-check` no longer reports an Actions allowlist with a `!`
+  pattern as letting every action start: such a pattern blocks what it
+  matches, so the allowlist is a SKIP that names it (#756).
+
 ## [2.21.0] - 2026-10-31
 
 A repository made by `/plinth:new-project` can now start its release on a

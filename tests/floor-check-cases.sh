@@ -669,6 +669,16 @@ allowlist "allowed_actions local_only refuses every action from elsewhere" "WARN
 allowlist "Actions turned off is a WARN" "WARN  GitHub Actions is turned off on this repository" "printf '{\"enabled\":false,\"allowed_actions\":\"selected\"}' > \"$api/repos/o/r/actions/permissions.json\""
 allowlist "Actions permissions the token does not read are a SKIP, not a pass" "SKIP  the Actions allowlist not verified" "rm \"$api/repos/o/r/actions/permissions.json\""
 allowlist "an allowlist the token does not read is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/actions/permissions/selected-actions.json\""
+# A `!` pattern blocks what it matches (#756). GitHub's page gives examples
+# but no order against the allowing patterns or github_owned_allowed, so a
+# policy that carries one is not verified, never a PASS.
+out="$(eval "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/*","!pypa/gh-action-pypi-publish@*"]')"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/release.yml.keep" "$rel"; printf '%s' "$good_allow" > "$api/repos/o/r/actions/permissions/selected-actions.json"
+if ! grep -q "PASS  the Actions allowlist" <<<"$out" && grep -q "SKIP  the Actions allowlist not verified: it carries the blocking pattern !pypa/gh-action-pypi-publish@\*" <<<"$out"
+then ok "must not pass: an allowlist whose ! pattern blocks a used action is never reported as fine, and the pattern is named"
+else bad "an allowlist with a ! pattern was reported as fine, or the pattern was not named"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
+# Counted: the fixture's labels SKIP and the blocking pattern's.
+allowlist "a ! pattern is counted as not verified, never failed" "-- 0 failed, 2 not verified" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/*","!pypa/gh-action-pypi-publish@*"]')"
+allowlist "an action no pattern allows is still refused beside a ! pattern" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish" "$uses_pypi; $(allow '["coolbress/plinth/*","!octo/x@*"]')"
 allowlist "a docker image is not judged, a SKIP" "SKIP  .github/workflows/release.yml: line 4 docker://alpine@sha256:" "printf 'jobs:\n  a:\n    steps:\n      - uses: docker://alpine@sha256:%064d\n' 0 > \"$rel\""
 # A `uses` the line pattern does not read (flow style) could name a refused
 # action: a SKIP naming the line, and never the all-actions PASS beside it.
