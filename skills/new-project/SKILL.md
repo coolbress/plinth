@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--dir=<path>] [--private] [--host=github|gitlab]"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--license=mit|apache-2.0] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -11,11 +11,91 @@ Creates `[<owner>/]<name>` on GitHub with the wall already up. When a step it
 cannot go on without fails, it deletes the repository if its token can, and
 names it otherwise. The owner is optional: a bare name goes under the user's login. One script does all of it; this skill runs it and relays what it says.
 
-Run, with the user's arguments exactly as typed:
+## Ask first what the arguments leave out
+
+Every choice that changes the wall is a flag, and the script asks nothing: a
+flag it is not given takes its default. So before running it, ask for each
+choice the arguments (`$ARGUMENTS`) do not give, in the order below, one
+question at a time, and wait for each answer. A choice given as a flag is
+never asked; arguments that give every choice are asked nothing. Values that
+only tune a check (`max-diff-lines`, `deps-fail-on-severity`,
+`extra-python-versions`) are not asked: their defaults fit most projects, and
+the project's README says how to change them.
+
+1. **The name**, when the arguments carry none: "What should the repository
+   be called? (`name`, or `owner/name` for an organization)".
+2. **The archetype**, when there is no `--archetype=`. Never choose `cli` for
+   them in silence. Ask "What kind of project is it?" with these five, in
+   these words:
+
+   > 1. **cli**: a command people install and run in a terminal.
+   > 2. **library**: Python code other projects import, published as a
+   >    package; its tests import it from the built package.
+   > 3. **backend**: a service or API that keeps running, in a container.
+   >    Adds the `image` check: the container builds and starts.
+   > 4. **data-ml**: data processing or a model you train, in a container.
+   >    Adds the `image` check, a model card (`MODEL_CARD.md`) and a test of
+   >    the training.
+   > 5. **web**: a website with logins and a Postgres database (Django), on
+   >    GitHub only, about $13 a month to run on Render. Adds the `image`,
+   >    `ci / migrations` and `ci / deploy-check` checks.
+   >
+   > Every kind gets the same nine `ci / …` checks (title, lint, types,
+   > tests, build, secrets, dependencies, diff size, floor check) and
+   > CodeQL. Not sure? Choose the narrowest.
+
+   With `--host gitlab` in the arguments, offer the first four only and say
+   that web is made on GitHub only. Add `--archetype=<the answer>`.
+3. **Where a web app runs**, for `web` only: the question in
+   [Where a web app runs](#where-a-web-app-runs), unchanged.
+4. **The recommended defaults.** Of visibility (`--private`/`--public`),
+   host (`--host=`), the third-party reviewer
+   (`--third-party-review`/`--no-third-party-review`), license (`--license=`)
+   and directory (`--dir=`), take the ones the arguments do not give. If none
+   is left, ask nothing. Otherwise ask one question, naming only those left,
+   with their defaults:
+
+   > **Use the recommended defaults?** public on GitHub, MIT license, in
+   > `~/<name>`, no third-party reviewer.
+   >
+   > 1. **Yes**: create it with these.
+   > 2. **Customize**: choose each one.
+
+   **Yes** adds no argument: the script's defaults are these. **Customize**
+   asks each one left, in this order:
+
+   - **Host**: "GitHub (recommended) or GitLab.com?" GitLab gets
+     `--host=gitlab`; for `web`, do not ask it (web is GitHub only).
+   - **Visibility**: "Public (recommended) or private?" On GitHub, say once:
+     on GitHub Free a private repository cannot keep the ruleset, so plinth
+     stops before creating it; on a paid plan it loses CodeQL and push
+     protection unless the account has GitHub Code Security and Secret
+     Protection. On GitLab a project is private unless made public. Private
+     on GitHub is `--private`; public on GitLab is `--public`; the other two
+     add nothing.
+   - **The third-party reviewer**, on GitHub only: ask it as a fact they
+     know, not a preference: "Is a code reviewer, such as Codex's, already
+     connected to your GitHub account?" Yes is `--third-party-review`: each
+     pull request then gets a `third-party / review` result, which reports
+     and is not required, so a pull request still merges without it. No, or
+     not sure, adds nothing; the last lines say when to turn it on.
+   - **License**: "MIT (recommended) or Apache-2.0?" Apache-2.0 is
+     `--license=apache-2.0`.
+   - **Directory**: "Where should the local copy go? (`~/<name>`)" Another
+     path is `--dir=<path>`; it must not exist yet, or be empty.
+
+   An answer that is not one of the choices is asked again; never pick one
+   for them, except where a question below says what to do.
+
+Then run, with the arguments as typed and the flags the answers added:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS
+${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS <added flags>
 ```
+
+Before running it, say in one line the command the person can type next time
+to get the same run with no question: `/plinth:new-project` followed by their
+arguments and the added flags, not the script's path.
 
 With `--host gitlab`, put `PLINTH_ASSISTED_BY=<agent>:<model>` in front of it,
 naming yourself as a commit trailer would (e.g. `Claude:claude-opus-5-5`): the
@@ -24,7 +104,11 @@ first merge request's description ends with that `Assisted-by` line.
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL, and
-opens the first pull request. Last, it re-runs the failed jobs of `main`'s
+opens the first pull request. With `--third-party-review` the template also
+renders `.github/workflows/third-party.yml`, the caller of the
+`third-party / review` check, and the ruleset is the same as without it: the
+check reports and is not required, so the first pull request merges whether
+or not a reviewer comes. Last, it re-runs the failed jobs of `main`'s
 first CI run, which ran before the wall and failed its floor check. With `--private` the repository is private: an
 owner on GitHub Free stops before anything is created, and elsewhere the same
 ruleset goes up, with CodeQL and push protection only where GitHub Code

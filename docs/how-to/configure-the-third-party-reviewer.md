@@ -51,7 +51,11 @@ and no secret in the repository). The page needs a login, so it is not linked.
 
 ## 2. Call the reusable workflow
 
-Add `.github/workflows/third-party.yml` to the repository:
+A repository made with `/plinth:new-project --third-party-review` (the
+answer yes to "is a code reviewer already connected?") has this file
+already, at the commit its `ci` job calls; go on with
+[step 3](#3-make-it-part-of-the-wall-optional) once it has reported.
+Otherwise, add `.github/workflows/third-party.yml` to the repository:
 
 ```yaml
 name: third-party

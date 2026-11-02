@@ -20,6 +20,24 @@ pull requests and have no tag.
   for `web`, HSTS preload and include-subdomains. Both read the one list,
   [Off by default](docs/reference/off-by-default.md), through
   `scripts/off-by-default.sh` (#763).
+- `/plinth:new-project` asks what its arguments leave out before it creates
+  anything: the kind of project, from the five with what each adds, then one
+  question, "Use the recommended defaults?" (public, GitHub, MIT, `~/<name>`,
+  no third-party reviewer), whose "customize" asks the host, visibility,
+  whether a code reviewer is already connected, the license and the
+  directory. A flag given is not asked, and the script itself still asks
+  nothing (#765).
+- `new-project.sh --third-party-review` renders the caller of
+  `third-party / review` (template `third_party_review`). The check reports
+  and is not required: the ruleset is the same as without it, and the last
+  lines name turning the reviewer on for the repository, the summons token,
+  and requiring it later through `scripts/upgrade-ruleset.sh`.
+  `--no-third-party-review` and `--public` say the defaults out loud; the
+  GitLab door refuses `--third-party-review` before reading anything (#765).
+- [Off by default](docs/reference/off-by-default.md) has a sixth column: a
+  row told only when the project has a path, used by the three reviewer
+  steps above. A Steps link may carry a `#heading` anchor, and
+  `off-by-default.sh --check` fails one the page has no heading for (#765).
 
 ## [2.23.0] - 2026-11-02
 

@@ -32,9 +32,12 @@ claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it creates
-a repository with the checks already required, or says why it could
-not. From there,
+Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it asks
+what kind of project it is and whether to use the recommended defaults (or
+customize the host, visibility, third-party reviewer, licence and directory),
+then creates a repository with the checks already required, or says why it
+could not. Each answer is also a flag, and a flag given is not asked
+([the tutorial](docs/tutorials/getting-started.md#create-the-repository)). From there,
 [run a project](docs/how-to/run-a-project.md) is the loop, stage by stage.
 
 **The limits.** A green check means the properties it asserts hold, not that

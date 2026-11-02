@@ -2,8 +2,16 @@
 # The door: create a repository with the wall already up, or create nothing.
 #
 #   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
-#                  [--private] [--force-defaults] [--host=github|gitlab]
+#                  [--private|--public] [--third-party-review|--no-third-party-review]
+#                  [--force-defaults] [--host=github|gitlab]
 #                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web only)
+#
+# Every choice is a flag, and a flag not given takes its default: cli, MIT,
+# public, ~/<name>, no third-party reviewer. /plinth:new-project asks for the
+# ones not given (#765); this script asks nothing. --public and
+# --no-third-party-review say the default out loud, so a run can give every
+# choice. --third-party-review renders the caller of the `third-party /
+# review` check; the ruleset does not require it (#765).
 #
 # --host gitlab hands the run to scripts/new-project-gitlab.sh (#353).
 #
@@ -81,10 +89,13 @@ case "$host" in
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private] [--force-defaults] [--host=github|gitlab] [--hosting=<place>]"
-target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--force-defaults] [--host=github|gitlab] [--hosting=<place>]"
+target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
 for a in "$@"; do case "$a" in
   --private)     private=1 ;;
+  --public)      said_public=1 ;;
+  --third-party-review)    review=1; review_said="$review_said+" ;;
+  --no-third-party-review) review=0; review_said="$review_said-" ;;
   --force-defaults) force_defaults=1 ;;
   --license=*)   lic="${a#*=}" ;;
   --archetype=*) arch="${a#*=}" ;;
@@ -94,6 +105,8 @@ for a in "$@"; do case "$a" in
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
 [ -n "$target" ] || { echo "$usage" >&2; exit 2; }
+[ "$private$said_public" != 11 ] || { echo "--private and --public: choose one"$'\n'"$usage" >&2; exit 2; }
+case "$review_said" in *+*-*|*-*+*) echo "--third-party-review and --no-third-party-review: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 # The same request as a public one, for the stops that offer it.
 public_cmd="/plinth:new-project"
 for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' "$a")"; done
@@ -335,6 +348,22 @@ if [ "$arch" = web ]; then
 elif [ -n "$place" ]; then
   stop "--hosting is for --archetype=web only (got --archetype=$arch); nothing was created" "  fix: drop --hosting"
 fi
+# The third-party reviewer (#765): the template renders its caller when asked
+# `third_party_review`. copier takes a --data answer to a question the
+# template does not ask and renders without it (as with `hosting` above), so
+# the answer goes only to a template whose copier.yml asks it, and any other
+# stops here, before anything exists. The ruleset below is the same either
+# way: the check reports and is not required.
+review_data=(); review_howto="https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-third-party-reviewer.md"
+if [ "$review" = 1 ]; then
+  if ! grep -q '^third_party_review:' <<<"$copier_yml"; then
+    [ -n "$arch_choices" ] || stop "could not read whether the template can render the third-party reviewer, so --third-party-review cannot be passed safely; nothing was created" \
+      "  $(unread_why)" "  fix: run it again, or drop --third-party-review and add it later: $review_howto"
+    stop "the template this plinth renders ($template_repo@$template_ref) cannot render the third-party reviewer; nothing was created" \
+      "  fix: drop --third-party-review and add it later: $review_howto"
+  fi
+  review_data=(--data third_party_review=true)
+fi
 
 # The ruleset for this archetype. ruleset.json is the wall every archetype
 # reports to; a service archetype's ci.yml also carries the `image` check, and
@@ -426,6 +455,7 @@ wall_words="ruleset + CodeQL"
 arch_words="$arch"
 [ "$arch" != web ] || arch_words="web on $place_name"
 [ "${place:-render}" = render ] || arch_words="$arch_words, which plinth does not deploy to or check"
+[ "$review" = 0 ] || arch_words="$arch_words, third-party review reporting and not required"
 echo "create $repo ($visibility, $spdx, $arch_words, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
@@ -462,9 +492,15 @@ env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --e
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
   --data "visibility=$([ "$private" = 1 ] && echo private || echo public)" \
-  ${hosting_data[@]+"${hosting_data[@]}"} \
+  ${hosting_data[@]+"${hosting_data[@]}"} ${review_data[@]+"${review_data[@]}"} \
   --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
 rm -rf "$dir/.git"
+# Asked for the reviewer, the render must have recorded it; otherwise the
+# repository would go up without the check the person chose.
+if [ "$review" = 1 ] && ! grep -qx 'third_party_review: true' "$dir/.copier-answers.yml" 2>/dev/null; then
+  echo "the template did not record third_party_review: true in $dir/.copier-answers.yml, so the third-party reviewer was not rendered" >&2
+  exit 1
+fi
 # init -b main: an empty clone would follow init.defaultBranch, and a `master`
 # there leaves the ruleset (~DEFAULT_BRANCH = main) guarding an empty branch.
 git init -q -b main "$dir"

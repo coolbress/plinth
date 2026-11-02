@@ -46,7 +46,7 @@ claude_floor="${PLINTH_DOOR_CLAUDE_FLOOR:?run it as new-project.sh <name> --host
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public]"
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review]"
 target=""; lic=mit; arch=cli; dir=""; visibility=private
 for a in "$@"; do case "$a" in
   --private)     visibility=private ;;
@@ -54,6 +54,10 @@ for a in "$@"; do case "$a" in
   --license=*)   lic="${a#*=}" ;;
   --archetype=*) arch="${a#*=}" ;;
   --dir=*)       dir="${a#*=}" ;;
+  # The third-party reviewer is a GitHub workflow (#765): asking for it here
+  # stops before anything is read; saying no to it is what GitLab has anyway.
+  --no-third-party-review) ;;
+  --third-party-review) echo "--third-party-review is for GitHub only: the check is a GitHub workflow, and a GitLab project has no caller for it; nothing was read or created"$'\n'"  fix: drop --third-party-review" >&2; exit 2 ;;
   -*)            echo "unknown option for --host gitlab: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done

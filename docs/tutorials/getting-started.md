@@ -69,11 +69,30 @@ one line with what it is about to do, for example:
 create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.33.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
+Before that line it asks what the command did not say, one question at a
+time:
+
+1. **What kind of project it is**, from five: `cli`, a command run in a
+   terminal; `library`, code other programs import; `backend`, a service that
+   answers over the network; `data-ml`, data or machine-learning work; `web`,
+   a web app with a database (then where it runs). Each answer names the
+   checks it adds. When unsure, choose `cli`, the narrowest.
+2. **Use the recommended defaults?** public, on GitHub, MIT licence, in
+   `~/my-app`, no third-party reviewer. Yes asks nothing more. Customize asks
+   each: the host, public or private, whether a code reviewer such as
+   Codex's is already connected to your GitHub account, the licence, and the
+   directory.
+
+A reviewer you say is connected gets the check `third-party / review` on
+every pull request. It reports and is not required: a pull request still
+merges without it, and the last lines say how to require it once it has
+reported. Before it runs, the agent shows the whole command with your
+answers as flags; type that next time and nothing is asked.
+
 It takes a few minutes, most of them waiting for GitHub to run the first
-checks; the last lines are the result. Unless you say otherwise the repository
-is public, under the MIT licence and a command-line program (`cli`), which is
-what the example line's `(public, MIT, cli, ...)` says. To choose otherwise,
-add to the command:
+checks; the last lines are the result. The example line's
+`(public, MIT, cli, ...)` is what the defaults give. Each answer is a flag
+you can type instead:
 
 - `--private`: only on a plan that can hold the wall on a private repository
   ([Before you start](#before-you-start)). On a personal account the
@@ -85,12 +104,14 @@ add to the command:
 - `--license=apache-2.0`: the template's other licence. Take it when your
   company, or the project you build on, asks for Apache-2.0; MIT is shorter
   and the usual choice for a small project.
-- `--archetype=<kind>`: `library` for code other programs import; `backend`
-  for a service that answers over the network; `data-ml` for data or
-  machine-learning work; `web` for a web app with a database, which costs
-  money to run (about US $13 a month on Render;
-  [where else it can run](../how-to/choose-where-a-web-app-runs.md)). When
-  unsure, keep `cli`, the narrowest.
+- `--archetype=<kind>`: `cli`, `library`, `backend`, `data-ml`, or `web` for
+  a web app with a database, which costs money to run (about US $13 a month
+  on Render; [where else it can run](../how-to/choose-where-a-web-app-runs.md)).
+- `--third-party-review`: the reviewer's check, for an account with a code
+  reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
+  `--no-third-party-review` says no without being asked.
+- `--public`, `--dir=<path>`, `--host=github`: the defaults, said out loud,
+  so that nothing is asked.
 
 If a check fails it stops there and prints the fix. Three you may meet:
 
