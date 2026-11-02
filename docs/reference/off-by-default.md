@@ -10,7 +10,7 @@ below through `scripts/off-by-default.sh`; an item added here reaches both.
 | Feature | Archetypes | Turn it on when | Steps | On when the project has | Listed only when the project has |
 | --- | --- | --- | --- | --- | --- |
 | The third-party reviewer (`third-party / review`) | all | a code reviewer such as Codex's is connected to your GitHub account | `docs/how-to/configure-the-third-party-reviewer.md` | `.github/workflows/third-party.yml` | - |
-| The reviewer on this repository (Codex code review) | all | your Codex settings turn code review on one repository at a time: until a review arrives, `third-party / review` waits 20 minutes on each pull request, then fails without blocking the merge | `docs/how-to/configure-the-third-party-reviewer.md#1-enable-the-reviewer-on-the-repository` | - | `.github/workflows/third-party.yml` |
+| Turn on Codex code review for this repository in your Codex settings, `https://chatgpt.com/codex/settings/code-review` | all | now: until it is on, `third-party / review` waits 20 minutes on each pull request and then fails; it does not block the merge | `docs/how-to/configure-the-third-party-reviewer.md#1-enable-the-reviewer-on-the-repository` | - | `.github/workflows/third-party.yml` |
 | The summons token (`SUMMONS_TOKEN`) | all | the reviewer does not start on its own once a pull request is ready | `docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer` | - | `.github/workflows/third-party.yml` |
 | Requiring the third-party reviewer (`third-party / review` in the ruleset, through `scripts/upgrade-ruleset.sh`) | all | it has reported on a pull request and you want no merge without it; the command needs repository administration | `docs/how-to/configure-the-third-party-reviewer.md#3-make-it-part-of-the-wall-optional` | - | `.github/workflows/third-party.yml` |
 | HSTS preload and include-subdomains | web | every subdomain answers over HTTPS (include-subdomains), and you accept that preload takes months to undo | `README.md` "HSTS preload and include-subdomains are off" | - | - |
@@ -27,6 +27,10 @@ The columns, as the script reads them:
 - **On when the project has**: a path in the project whose presence means the
   feature is on, so neither the creation's last lines nor the guide list it;
   `-` when nothing in the project says so, and the guide says it started off.
+- **Turn it on when**: when it begins `now:`, the row is a step to take
+  right away rather than when it is needed: the feature cell says the step,
+  the rest says what happens until it is done. `/plinth:new-project` prints
+  such rows first, under "to do now".
 - **Listed only when the project has**: a path that must be in the project
   for the row to be told at all, `-` for none. The rows that need the
   reviewer's caller are what a project made with the reviewer turned on still

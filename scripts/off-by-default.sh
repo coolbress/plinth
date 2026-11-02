@@ -7,7 +7,8 @@
 #   off-by-default.sh <archetype> <dir>    # minus what <dir> already has; an item
 #                                          # with no sign there "started off"
 #   off-by-default.sh --new <archetype> <dir>  # a project rendered just now: minus
-#                                          # what <dir> has, the rest "off:"
+#                                          # what <dir> has, the rest "off:", or
+#                                          # "now:" for a step to take right away
 #   off-by-default.sh --check              # every docs/ Steps page, and its #anchor, exists (exit 1 if not)
 #   off-by-default.sh --project-phrases    # "<project file>\t<phrase>" per project-file item
 #
@@ -77,11 +78,21 @@ while IFS=$'\t' read -r feature archetypes when cell sign needs; do
     "file "*) f="${s#file }"; where="the steps are in ${f%%$'\t'*} under \"${f#*$'\t'}\"" ;;
     *) echo "off-by-default: '$feature' has Steps '$cell' in neither form (run --check)" >&2; exit 1 ;;
   esac
-  prefix="off:"
+  prefix="off:"; now=0
+  case "$when" in "now: "*) now=1; prefix="now:"; when="${when#now: }" ;; esac
   if [ -n "$dir" ]; then
     sign="${sign//\`/}"
-    if [ "$sign" = - ]; then [ "$new" = 1 ] || prefix="started off (whether it is on now is not read):"
+    if [ "$sign" = - ]; then
+      if [ "$new" != 1 ]; then
+        if [ "$now" = 1 ]; then prefix="to do, if not done yet (whether it is done is not read):"
+        else prefix="started off (whether it is on now is not read):"; fi
+      fi
     elif [ -e "$dir/$sign" ]; then continue; fi
   fi
-  echo "$prefix $feature. Turn it on when $when: $where"
+  # A step to take now says the step, then what happens until it is done.
+  if [ "$now" = 1 ]; then
+    echo "$prefix $feature. $(tr '[:lower:]' '[:upper:]' <<<"${when:0:1}")${when:1}. The steps: $where"
+  else
+    echo "$prefix $feature. Turn it on when $when: $where"
+  fi
 done <<<"$rows"

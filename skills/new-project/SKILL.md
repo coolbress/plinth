@@ -40,10 +40,10 @@ numbered, one question at a time. Never answer a question for the person.
 
    | Label | Description |
    | --- | --- |
-   | cli | A command people install and run in a terminal. The nine `ci / …` checks and CodeQL, which every kind gets. |
-   | library | Python code other projects import, published as a package. The same checks; its tests import it from the built package. |
-   | A server or data job | Something that keeps running in a container: a service or API, or data processing and model training. Adds the `image` check. |
-   | web | A website with logins and a Postgres database (Django), GitHub only, about $13 a month on Render. Adds `image`, `ci / migrations`, `ci / deploy-check`. |
+   | A terminal command (cli) | A program people install and type in a terminal. If you are not sure, choose this one. |
+   | Code other code imports (library) | Python code that other projects install and use, published as a package. |
+   | Always-on server or data job | Something that keeps running: a service or API, or data processing and model training. It also checks that its container builds and starts. |
+   | A website people log in to (web) | A website with logins and a database, on GitHub only, about $13 a month to run on Render. It also checks the container, the database changes and the production settings. |
 
    With `--host gitlab` in the arguments, leave out `web` and say once that
    web is made on GitHub only. For the third answer ask, header `Service`:
@@ -52,11 +52,12 @@ numbered, one question at a time. Never answer a question for the person.
 
    | Label | Description |
    | --- | --- |
-   | backend | A service or API that keeps running. Adds the `image` check: the container builds and starts. |
-   | data-ml | Data processing or a model you train. Adds the `image` check, a model card (`MODEL_CARD.md`) and a test of the training. |
+   | A service or API (backend) | A program that keeps running and answers requests. It also checks that its container builds and starts. |
+   | Data or a model (data-ml) | Data processing, or a model you train. It also checks the container, and comes with a model card and a test of the training. |
 
-   In text, the same two steps; the nine checks are title, lint, types,
-   tests, build, secrets, dependencies, diff size and floor check. Add
+   Every kind gets the same checks besides (title, lint, types, tests,
+   build, secrets, dependencies, change size, the project's own setup) and
+   CodeQL; say so only if asked. In text, the same two steps. Add
    `--archetype=cli`, `library`, `backend`, `data-ml` or `web`.
 3. **Where a web app runs**, for `web` only: the question in
    [Where a web app runs](#where-a-web-app-runs), unchanged.
@@ -82,31 +83,40 @@ numbered, one question at a time. Never answer a question for the person.
    `--no-third-party-review`, `--license=mit` and `--dir=<home>/<name>`,
    with the home directory written out as an absolute path; with
    `--host gitlab` given, `--private` in place of `--public`, and no
-   reviewer flag. **Customize** asks, in one call, one question per choice still open, in this order,
-   leaving out what the arguments give and what does not apply (the host
-   for `web`, which is GitHub only; the reviewer on GitLab, which is GitHub
-   only; and the reviewer when the host answer in the same call may be
-   GitLab: then ask it right after, only if the answer was GitHub):
+   reviewer flag. **Customize** asks each choice still open, leaving out
+   what the arguments give and what does not apply: the host for `web`,
+   which is GitHub only, and the reviewer on GitLab, which is GitHub only.
+   Visibility and the reviewer depend on the host, so when the host is
+   still open, ask in two calls: first the host and the license, then
+   visibility and, on GitHub, the reviewer. When the host is already
+   settled, ask visibility, the reviewer and the license in one call.
 
    - Header `Host`: "Where should the repository live?" **GitHub
-     (Recommended)** (`--host=github`); **GitLab.com**, a GitLab.com
-     project (`--host=gitlab`).
-   - Header `Visibility`: "Public or private?" **Public (Recommended)**: the
-     whole wall on every plan. **Private**: on GitHub Free a private
-     repository cannot keep the ruleset, so plinth stops before creating it;
-     on a paid plan it has no CodeQL or push protection unless the account
-     has GitHub Code Security and Secret Protection. Public is `--public`,
-     private `--private`, on either host (on GitLab a project is private
-     unless made public).
-   - Header `Reviewer`, asked as a fact the person knows, not a preference:
-     "Is a code reviewer, such as Codex's, already connected to your GitHub
-     account?" **No, or not sure (Recommended)**: `--no-third-party-review`;
-     the last lines say when to turn it on. **Yes**: `--third-party-review`; each pull
-     request gets a `third-party / review` result, which reports and is not
-     required, so a pull request still merges without it.
+     (Recommended)** (`--host=github`). **GitLab.com**: a GitLab.com
+     project; needs `glab` installed and logged in (`--host=gitlab`).
    - Header `License`: "Which license?" **MIT (Recommended)**: short, the
-     usual choice for a small project (`--license=mit`). **Apache-2.0**: when a company or the
-     project you build on asks for it (`--license=apache-2.0`).
+     usual choice for a small project (`--license=mit`). **Apache-2.0**:
+     when a company or the project you build on asks for it
+     (`--license=apache-2.0`).
+   - Header `Visibility`: "Public or private?" Public is `--public`,
+     private `--private`, on either host. On GitHub, **Public
+     (Recommended)**: the whole wall on every plan; **Private**: on GitHub
+     Free a private repository cannot keep the ruleset, so plinth stops
+     before creating it; on a paid plan it has no CodeQL or push protection
+     unless the account has GitHub Code Security and Secret Protection; on
+     a personal account, plinth reads the plan first, which needs the
+     `read:user` permission on your GitHub login (it says the command that
+     adds it). On GitLab, **Private (Recommended)**: plinth's default there,
+     since GitLab.com's free plan protects a private project's main branch;
+     **Public**: anyone can read it.
+   - Header `Reviewer`, on GitHub only, asked as a fact the person knows,
+     not a preference: "Is a code reviewer, such as Codex's, already
+     connected to your GitHub account?" **No, or not sure (Recommended)**:
+     `--no-third-party-review`; the last lines say when to turn it on.
+     **Yes**: `--third-party-review`; each pull request gets a
+     `third-party / review` result, which reports and is not required, so a
+     pull request still merges without it. The last lines then say what to
+     do right away: turn the reviewer on for the new repository.
 
    Then, when no `--dir=` was given, ask the directory on its own, header
    `Folder`: "Where should the local copy go?" with one choice,
@@ -257,7 +267,11 @@ What to do with the output:
   project exists with part of its wall or none.
 - **It finished** (exit 0): show the final lines, the `administration:` line,
   the `where it runs:` line and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
-  and `not verified:` line as printed. Show the `starts off` block as
+  and `not verified:` line as printed. When there is a `to do now` block,
+  show it first, every line under it, as the person's next step: with the
+  third-party reviewer chosen, turning it on for this repository, without
+  which each pull request waits 20 minutes for a review and then shows a
+  failed check. Show the `starts off` block as
   printed, every line under it: what the project starts with turned off, when
   each is worth turning on, and where its steps are (the list is
   `${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`). Do not turn any

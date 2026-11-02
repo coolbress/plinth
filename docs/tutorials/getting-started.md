@@ -72,25 +72,28 @@ create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1
 Before that line it asks what the command did not say, in a picker (a
 window of choices; Other lets you type an answer instead):
 
-1. **What you are making**: `cli`, a command run in a terminal; `library`,
-   code other programs import; a server or data job, then whether it is a
-   `backend` (a service or API) or `data-ml` (data processing or training a
-   model); or `web`, a web app with a database (then where it runs). Each
-   choice names the checks it adds. When unsure, choose `cli`, the narrowest.
+1. **What you are making**: a terminal command (`cli`), the one to choose
+   when unsure; code other code imports (`library`); an always-on server or
+   data job, then whether it is a service or API (`backend`) or data and a
+   model (`data-ml`); or a website people log in to (`web`, then where it
+   runs).
 2. **Use the recommended defaults?** public, on GitHub, MIT licence, in
    `~/my-app`, no third-party reviewer. Yes asks nothing more. Customize
-   asks, in one window with a tab each, the host, public or private,
-   whether a code reviewer such as Codex's is already connected to your
-   GitHub account, and the licence; then the folder, with `~/my-app`
-   offered and any other path typed into Other.
+   asks the host (GitLab.com needs `glab` installed and logged in) and the
+   licence; then public or private, whose recommendation depends on the
+   host, and on GitHub whether a code reviewer such as Codex's is already
+   connected to your account; then the folder, with `~/my-app` offered and
+   any other path typed into Other.
 
 Where the picker cannot be shown (`claude -p`), the same questions come as
 text, numbered.
 
 A reviewer you say is connected gets the check `third-party / review` on
 every pull request. It reports and is not required: a pull request still
-merges without it, and the last lines say how to require it once it has
-reported. Before it runs, the agent shows the whole command with your
+merges without it. The last lines then start with what to do now: turn
+code review on for the new repository in your Codex settings, or each pull
+request waits 20 minutes for a review and shows a failed check. They also
+say how to require the check once it has reported. Before it runs, the agent shows the whole command with your
 answers as flags; type that next time and nothing is asked.
 
 It takes a few minutes, most of them waiting for GitHub to run the first

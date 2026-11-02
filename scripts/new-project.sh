@@ -1055,9 +1055,17 @@ EOF
 # (docs/reference/off-by-default.md, #763), minus what the rendered project
 # already has. The repository is made by now, so a list that cannot be read
 # is named, not a failure.
+# A step the person has to take right away (`now:`, the reviewer chosen at
+# creation turned on for this repository, #765) comes first, on its own.
 if off="$("$here/off-by-default.sh" --new "$arch" "$dir" 2>&1)"; then
-  echo "  starts off; each one when you need it:"
-  sed 's/^off: /    /' <<<"$off"
+  if grep -q '^now: ' <<<"$off"; then
+    echo "  to do now:"
+    sed -n 's/^now: /    /p' <<<"$off"
+  fi
+  if grep -q '^off: ' <<<"$off"; then
+    echo "  starts off; each one when you need it:"
+    sed -n 's/^off: /    /p' <<<"$off"
+  fi
 else
   echo "  starts off: not read ($(head -1 <<<"$off")); the list is docs/reference/off-by-default.md"
 fi

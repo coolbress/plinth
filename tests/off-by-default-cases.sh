@@ -16,7 +16,7 @@ bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 
 reviewer='off: The third-party reviewer (`third-party / review`). Turn it on when a code reviewer such as Codex'"'"'s is connected to your GitHub account: https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-third-party-reviewer.md'
 howto='https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-third-party-reviewer.md'
-on_repo="off: The reviewer on this repository (Codex code review). Turn it on when your Codex settings turn code review on one repository at a time: until a review arrives, \`third-party / review\` waits 20 minutes on each pull request, then fails without blocking the merge: $howto#1-enable-the-reviewer-on-the-repository"
+on_repo="now: Turn on Codex code review for this repository in your Codex settings, \`https://chatgpt.com/codex/settings/code-review\`. Until it is on, \`third-party / review\` waits 20 minutes on each pull request and then fails; it does not block the merge. The steps: $howto#1-enable-the-reviewer-on-the-repository"
 summons="off: The summons token (\`SUMMONS_TOKEN\`). Turn it on when the reviewer does not start on its own once a pull request is ready: $howto#summoning-the-reviewer"
 require="off: Requiring the third-party reviewer (\`third-party / review\` in the ruleset, through \`scripts/upgrade-ruleset.sh\`). Turn it on when it has reported on a pull request and you want no merge without it; the command needs repository administration: $howto#3-make-it-part-of-the-wall-optional"
 hsts='off: HSTS preload and include-subdomains. Turn it on when every subdomain answers over HTTPS (include-subdomains), and you accept that preload takes months to undo: the steps are in README.md under "HSTS preload and include-subdomains are off"'
@@ -74,6 +74,11 @@ else bad "--new with the caller: got"$'\n'"$out"; fi
 out="$("$script" --new cli "$work/p")"
 if [ "$out" = "$on_repo"$'\n'"$summons"$'\n'"$require" ]; then ok "--new cli with the caller: the three reviewer steps left, no HSTS"
 else bad "--new cli with the caller: got"$'\n'"$out"; fi
+# A `now:` row in the guide (a directory, not --new): a step whose doing is not read.
+out="$("$script" cli "$work/p")"
+if grep -qxF "to do, if not done yet (whether it is done is not read): ${on_repo#now: }" <<<"$out"
+then ok "the guide says the now step as one to do if not done yet, not as started off"
+else bad "the guide's now step: got"$'\n'"$out"; fi
 rm "$work/p/.github/workflows/third-party.yml"
 out="$("$script" --new web "$work/p")"
 if [ "$out" = "$reviewer"$'\n'"$hsts" ]; then ok "--new without the caller: both off"; else bad "--new without the caller: got"$'\n'"$out"; fi

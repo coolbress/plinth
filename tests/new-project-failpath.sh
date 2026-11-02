@@ -592,11 +592,13 @@ if grep -q '^uvx .* --data third_party_review=true --vcs-ref' "$work/home-review
    && ! grep -qF 'The third-party reviewer (' "$work/home-review/out" \
    && grep -qF 'Requiring the third-party reviewer' "$work/home-review/out" \
    && grep -qF 'configure-the-third-party-reviewer.md#3-make-it-part-of-the-wall-optional' "$work/home-review/out" \
-   && grep -qF 'configure-the-third-party-reviewer.md#1-enable-the-reviewer-on-the-repository' "$work/home-review/out"
-then ok review "copier gets third_party_review=true, the ruleset does not require it, and the last lines name turning it on for the repository and requiring it"
+   && grep -qF 'configure-the-third-party-reviewer.md#1-enable-the-reviewer-on-the-repository' "$work/home-review/out" \
+   && [ "$(grep -n -e '^  to do now:$' -e '^  starts off; each one when you need it:$' "$work/home-review/out" | cut -d: -f2- | tr '\n' '|')" = "  to do now:|  starts off; each one when you need it:|" ] \
+   && grep -A1 '^  to do now:$' "$work/home-review/out" | grep -qF '    Turn on Codex code review for this repository'
+then ok review "copier gets third_party_review=true, the ruleset does not require it, and the last lines put turning it on for the repository under to do now, before what starts off"
 else bad review "the reviewer's answer, the ruleset or the last lines are not what #765 says"; grep -E 'third_party|third-party' "$work/home-review/calls.log" "$work/home-review/out" | sed 's/^/        /'; fi
 E="MOCK_REVIEW_Q=1" run review-off ok yes no "(public, MIT, cli, as owner)" -- probe --no-third-party-review
-if ! grep -q 'third_party_review' "$work/home-review-off/calls.log" && grep -qF 'The third-party reviewer (' "$work/home-review-off/out"
+if ! grep -q 'third_party_review' "$work/home-review-off/calls.log" && grep -qF 'The third-party reviewer (' "$work/home-review-off/out" && ! grep -q '^  to do now:' "$work/home-review-off/out"
 then ok review-off "--no-third-party-review passes no answer and lists the reviewer as off"
 else bad review-off "--no-third-party-review passed an answer, or the list lacks the reviewer"; fi
 if cmp -s "$work/home-review/ruleset-posted.json" "$work/home-review-off/ruleset-posted.json"

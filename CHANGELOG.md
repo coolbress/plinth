@@ -22,22 +22,25 @@ pull requests and have no tag.
   `scripts/off-by-default.sh` (#763).
 - `/plinth:new-project` asks what its arguments leave out before it creates
   anything, in Claude Code's picker (numbered text where the picker cannot
-  be shown, as in `claude -p`): the kind of project, in two steps with what
-  each adds, then "Use the recommended defaults?" (public, GitHub, MIT,
-  `~/<name>`, no third-party reviewer). "Customize" asks the host,
-  visibility, whether a code reviewer is already connected and the license
-  in one window, then the folder. A flag given is not asked, and the script
+  be shown, as in `claude -p`): the kind of project in plain words, in two
+  steps, then "Use the recommended defaults?" (public, GitHub, MIT,
+  `~/<name>`, no third-party reviewer). "Customize" asks the host and the
+  license, then visibility, recommended by host, and on GitHub whether a
+  code reviewer is already connected, then the folder. A flag given is not asked, and the script
   itself still asks nothing (#765).
 - `new-project.sh --third-party-review` renders the caller of
   `third-party / review` (template `third_party_review`). The check reports
-  and is not required: the ruleset is the same as without it, and the last
-  lines name turning the reviewer on for the repository, the summons token,
-  and requiring it later through `scripts/upgrade-ruleset.sh`.
+  and is not required: the ruleset is the same as without it. The last lines
+  start with "to do now": turn Codex code review on for the repository,
+  without which each pull request waits 20 minutes and shows a failed check.
+  They then name the summons token, and requiring the check later through
+  `scripts/upgrade-ruleset.sh`.
   `--no-third-party-review` and `--public` say the defaults out loud; the
   GitLab door refuses `--third-party-review` before reading anything (#765).
 - [Off by default](docs/reference/off-by-default.md) has a sixth column: a
   row told only when the project has a path, used by the three reviewer
-  steps above. A Steps link may carry a `#heading` anchor, and
+  steps above. A row whose "Turn it on when" begins `now:` is a step to take
+  right away, printed first. A Steps link may carry a `#heading` anchor, and
   `off-by-default.sh --check` fails one the page has no heading for (#765).
 
 ### Changed
