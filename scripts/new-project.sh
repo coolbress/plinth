@@ -1015,3 +1015,13 @@ $admin_line
 EOF
 [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ] || \
   echo "  if your everyday gh token is fine-grained with selected repositories, add $name to it: https://github.com/settings/personal-access-tokens"
+# What the new project starts with off, one line each, from the one list
+# (docs/reference/off-by-default.md, #763), minus what the rendered project
+# already has. The repository is made by now, so a list that cannot be read
+# is named, not a failure.
+if off="$("$here/off-by-default.sh" --new "$arch" "$dir" 2>&1)"; then
+  echo "  starts off; each one when you need it:"
+  sed 's/^off: /    /' <<<"$off"
+else
+  echo "  starts off: not read ($(head -1 <<<"$off")); the list is docs/reference/off-by-default.md"
+fi

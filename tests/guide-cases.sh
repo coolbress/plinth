@@ -98,6 +98,18 @@ put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false S
 put "$d/issues.json" "$(issue 4 'Ask the user for their name' '')" "$(issue 5 'Show monthly totals' ready-for-agent)"
 expect "an issue open: the ready-for-agent one, not the lowest number" "$d" "A ticket ready (step 4)" "/implement #5" "before: /clear"
 grep -q "hosting: render" <<<"$(MOCK_DIR="$d" "$script" "$d")" && ok "a web project says where it runs" || bad "web: no hosting line"
+# What it started with off (#763), through scripts/off-by-default.sh.
+out="$(MOCK_DIR="$d" "$script" "$d")"
+if grep -qx 'off by default:' <<<"$out" && grep -q '^  off: The third-party reviewer' <<<"$out" && grep -q '^  started off .*: HSTS preload' <<<"$out"
+then ok "a web project names the reviewer and HSTS as off"; else bad "web: off-by-default lines"; sed 's/^/        /' <<<"$out" | head -14; fi
+d2="$(repo cli-off)"
+out="$(MOCK_DIR="$d2" "$script" "$d2")"
+if grep -q '^  off: The third-party reviewer' <<<"$out" && ! grep -q 'HSTS' <<<"$out"
+then ok "a cli project names the reviewer, not the web item"; else bad "cli: off-by-default lines"; fi
+mkdir -p "$d2/.github/workflows"; : > "$d2/.github/workflows/third-party.yml"
+out="$(MOCK_DIR="$d2" "$script" "$d2")"
+if grep -qx 'off by default: none left off' <<<"$out"; then ok "a cli project with the reviewer's caller: none left off"
+else bad "cli with the caller: off-by-default lines"; grep -i off <<<"$out" | sed 's/^/        /'; fi
 
 d="$(repo pr-open)"
 put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"

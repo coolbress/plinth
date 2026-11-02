@@ -221,6 +221,8 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
   Render or somewhere else, and what each place leaves to you;
   [make your own check required](docs/how-to/make-your-own-check-required.md),
   when pull requests should wait for a job you added.
+- [Off by default](docs/reference/off-by-default.md): what a new project
+  starts with turned off, when each is worth turning on, and how.
 - How-to, for maintainers: [cut a release](docs/how-to/cut-a-release.md),
   [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md),
   [run the eval suite](docs/how-to/run-the-eval-suite.md).

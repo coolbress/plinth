@@ -23,7 +23,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/guide-state.sh" .
 
 It prints the state (whether plinth made the repository, the archetype, where
 a `web` app runs, open pull requests with their checks, open issues with their
-labels, the last merge, whether the first pull request is merged), then
+labels, the last merge, whether the first pull request is merged, and under
+`off by default:` what the project started with turned off), then
 `where:`, `next:` and `tool:` from the one row that state points to, the
 `command:` to type (with `before:`, a command typed first, and `note:`, what
 it is about, when there are), sometimes `then:` for the row after it, and
@@ -43,7 +44,11 @@ after them:
    table. Mark the step the project is at.
 2. **Where the project is now**, from the state lines: what is open, what was
    merged last, and why that puts it at this step. A `web` project says where
-   it runs.
+   it runs. Then what it started with turned off, every line under
+   `off by default:`: the feature, when it is worth turning on, and where the
+   steps are. An `off:` line is off now; a `started off` line was off at
+   creation, and whether it is on now was not read, so say that. `none left
+   off` is one short line; `not read` says what was not read.
 3. **The one next step**, from `next:`, and the command from `command:`,
    exactly as printed, in a code block; a `before:` command goes in its own
    block before it, and `note:` in words. With `then:`, one line on what comes
