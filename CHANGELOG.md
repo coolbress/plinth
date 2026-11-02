@@ -21,12 +21,13 @@ pull requests and have no tag.
   [Off by default](docs/reference/off-by-default.md), through
   `scripts/off-by-default.sh` (#763).
 - `/plinth:new-project` asks what its arguments leave out before it creates
-  anything: the kind of project, from the five with what each adds, then one
-  question, "Use the recommended defaults?" (public, GitHub, MIT, `~/<name>`,
-  no third-party reviewer), whose "customize" asks the host, visibility,
-  whether a code reviewer is already connected, the license and the
-  directory. A flag given is not asked, and the script itself still asks
-  nothing (#765).
+  anything, in Claude Code's picker (numbered text where the picker cannot
+  be shown, as in `claude -p`): the kind of project, in two steps with what
+  each adds, then "Use the recommended defaults?" (public, GitHub, MIT,
+  `~/<name>`, no third-party reviewer). "Customize" asks the host,
+  visibility, whether a code reviewer is already connected and the license
+  in one window, then the folder. A flag given is not asked, and the script
+  itself still asks nothing (#765).
 - `new-project.sh --third-party-review` renders the caller of
   `third-party / review` (template `third_party_review`). The check reports
   and is not required: the ruleset is the same as without it, and the last
