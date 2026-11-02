@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:new-project` ends with what the new project starts with turned
+  off, one line each: when it is worth turning on and where the steps are.
+  `/plinth:guide` names the same items, minus one the project has turned on
+  since. Today that is the third-party reviewer (`third-party / review`), and
+  for `web`, HSTS preload and include-subdomains. Both read the one list,
+  [Off by default](docs/reference/off-by-default.md), through
+  `scripts/off-by-default.sh` (#763).
+
 ## [2.23.0] - 2026-11-02
 
 `ci / test` measures the source a project's own coverage configuration names,

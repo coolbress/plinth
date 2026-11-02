@@ -142,7 +142,11 @@ What to do with the output:
   project exists with part of its wall or none.
 - **It finished** (exit 0): show the final lines, the `administration:` line,
   the `where it runs:` line and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
-  and `not verified:` line as printed. The next step for the user is to open
+  and `not verified:` line as printed. Show the `starts off` block as
+  printed, every line under it: what the project starts with turned off, when
+  each is worth turning on, and where its steps are (the list is
+  `${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`). Do not turn any
+  of them on. The next step for the user is to open
   the pull request URL, wait for the checks, and merge with squash. On
   GitHub, end with one line in the person's language: try typing
   `/plinth:guide` in the new repository's folder; it explains the whole way

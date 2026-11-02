@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# What /plinth:guide reads (#710): the repository's state, the row of the
-# arsenal's "Where you are, and what to do next" table that state points to,
-# and the table itself. Read-only: it runs git and gh reads, nothing else.
+# What /plinth:guide reads (#710): the repository's state, what it started
+# with off (#763), the row of the arsenal's "Where you are, and what to do
+# next" table that state points to, and the table itself. Read-only: it runs git and gh reads, nothing else.
 #
 #   guide-state.sh [<dir>]     # default: the current directory
 #
@@ -87,6 +87,15 @@ if [ "$(answer host)" = gitlab ]; then
   echo
   echo "where: not read"
   finish
+fi
+
+# What the project started with off and does not have yet (#763), from the
+# one list new-project.sh prints at creation.
+if off="$("$plugin/scripts/off-by-default.sh" "${archetype:-none}" "$top" 2>&1)"; then
+  if [ -n "$off" ]; then echo "off by default:"; sed 's/^/  /' <<<"$off"
+  else echo "off by default: none left off"; fi
+else
+  echo "off by default: not read ($(head -1 <<<"$off"))"
 fi
 
 if ! repo="$(cd "$top" && gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
