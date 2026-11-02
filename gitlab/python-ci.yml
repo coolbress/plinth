@@ -197,9 +197,31 @@ test:
         if install_coverage; then cov=success; else cov=failure; fi
       fi
       # Under coverage when it installed; the outcome is pytest's either way.
+      # What it measures: the source coverage's own configuration names
+      # (`source`, `source_pkgs` or `source_dirs`, in pyproject.toml,
+      # .coveragerc, setup.cfg or tox.ini), when it names one, since a --source on the command line
+      # would override it (#761); otherwise `src` when that directory exists,
+      # else the whole project. Coverage itself is asked, in the synced
+      # environment, so every file it reads counts; a configuration it cannot
+      # read leaves the second rule, and `coverage run` then says what is wrong.
+      # The question's exit code: 0 a source is named, 10 none, else unreadable.
       run_pytest() {
         if [ "$cov" != success ]; then uv run pytest; return; fi
         local src=.; [ -d src ] && src=src
+        local rc=0; uv run --no-sync python - <<'PY' || rc=$?
+      import sys
+      import coverage
+      c = coverage.Coverage()
+      names = ("run:source", "run:source_pkgs", "run:source_dirs")
+      sys.exit(0 if any(c.get_option(n) for n in names) else 10)
+      PY
+        if [ "$rc" = 0 ]; then
+          echo "coverage's configuration names its source: measured as configured"
+          uv run --no-sync coverage run --branch -m pytest
+          return
+        fi
+        if [ "$rc" = 10 ]; then echo "coverage's configuration names no source: --source=$src"
+        else echo "could not read coverage's configuration (exit $rc): --source=$src"; fi
         uv run --no-sync coverage run --branch --source="$src" -m pytest
       }
       step "pytest on .python-version" run_pytest
