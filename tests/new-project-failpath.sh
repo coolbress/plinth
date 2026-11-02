@@ -588,7 +588,7 @@ E="MOCK_SHARED_PR=present PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" run gh-assi
 if [ "$(pr_last gh-assisted-shared)" = "Assisted-by: Claude:claude-opus-5-5" ]
 then ok gh-assisted-shared "under the owner's template too, the description ends with the Assisted-by line"
 else bad gh-assisted-shared "no Assisted-by line last: '$(pr_last gh-assisted-shared)'"; fi
-if ! grep -q 'Assisted-by' "$work/home-shared-pr-only/calls.log"
+if [ -s "$work/home-shared-pr-only/calls.log" ] && ! grep -q 'Assisted-by' "$work/home-shared-pr-only/calls.log"
 then ok shared-pr-only "unset, the first pull request carries no Assisted-by line"
 else bad shared-pr-only "an Assisted-by line with PLINTH_ASSISTED_BY unset"; fi
 n=0; for v in Claude 'Claude:' ':x' 'a:b:c'; do n=$((n+1))
@@ -857,7 +857,7 @@ check "the first pull request body carries the two sections, not one sentence" \
 check "the first pull request says what has not been verified yet" \
   'grep -q "the checks have not run" "$log"'
 check "with PLINTH_ASSISTED_BY unset, the first pull request carries no Assisted-by line (#767)" \
-  '! grep -q "Assisted-by" "$log"'
+  '[ -s "$log" ] && ! grep -q "Assisted-by" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
 check "every wayfinder label docs/agents/issue-tracker.md names is created (the map, and its 4 child types)" \
   '[ "$(grep -cE "label create wayfinder:(map|research|grilling|prototype|task) " "$log")" = 5 ]'
