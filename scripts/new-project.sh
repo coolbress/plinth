@@ -137,6 +137,12 @@ case "$first_pr_wait" in ''|*[!0-9]*) stop "PLINTH_FIRST_PR_WAIT must be a whole
 # Read as base 10: bash arithmetic takes a leading zero as octal, so 08 would
 # abort with "value too great for base" after the repository exists (#539).
 first_pr_wait=$((10#$first_pr_wait))
+# The Assisted-by line the first pull request ends with when an agent runs this
+# (the skill sets it to its own <agent>:<model>, as CONTRIBUTING.md asks), read
+# as the GitLab path reads it.
+assisted_by="${PLINTH_ASSISTED_BY:-}"
+[ -z "$assisted_by" ] || [[ "$assisted_by" =~ ^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$ ]] \
+  || stop "PLINTH_ASSISTED_BY must be <agent>:<model>, e.g. Claude:claude-opus-5-5 (got: $assisted_by)" "  fix: unset it, or set it in that form"
 
 if [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ]; then
   for v in GH_TOKEN GITHUB_TOKEN; do
@@ -859,6 +865,9 @@ Nothing yet: at the moment this is written the checks have not run. That is what
 
 $first_day"
 fi
+first_pr_body="$first_pr_body${assisted_by:+
+
+Assisted-by: $assisted_by}"
 pr_url="$(cd "$dir" && gh pr create --repo "$repo" --head "$branch" --title "docs: first pull request through the wall" \
   --body "$first_pr_body")"
 # `seen` counts consecutive sightings and resets; `ever_seen` records that the
