@@ -61,7 +61,10 @@ the project's README says how to change them.
    > 1. **Yes**: create it with these.
    > 2. **Customize**: choose each one.
 
-   **Yes** adds no argument: the script's defaults are these. **Customize**
+   With `--host gitlab` given, the defaults are different: say "private on
+   GitLab.com" in place of "public on GitHub", and leave out the reviewer,
+   which is GitHub only. **Yes** adds no argument: the script's defaults
+   are these. **Customize**
    asks each one left, in this order:
 
    - **Host**: "GitHub (recommended) or GitLab.com?" GitLab gets
