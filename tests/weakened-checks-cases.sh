@@ -746,6 +746,9 @@ prev=""; for a in "$@"; do
   fi; prev="$a"; done
 [ "$1" = pip ] && exit "${FAKE_PIP_RC:-0}"
 case "$*" in *"import coverage"*) exit "${FAKE_HAS_COV:-1}" ;; esac
+# The pytest step's question to coverage, read from stdin: FAKE_SRC_RC answers
+# (0 its configuration names a source, 10 it names none, else unreadable).
+[ "$*" = "run --no-sync python -" ] && { cat > "$FAKE_ARGS.probe"; exit "${FAKE_SRC_RC:-10}"; }
 exit 0
 SH
 # The fake git: the repository root the recordings were made under, and
@@ -883,11 +886,27 @@ if [ "$crc" = 0 ] && ! grep -q '^uv pip install' "$tmp/args"; then ok "coverage 
 else bad "a locked coverage was installed over (exit $crc)" "$(cat "$tmp/args")"; fi
 
 # The pytest step: under coverage when it installed, `--source=src` with a
-# src/ directory and `.` without; plain `uv run pytest` otherwise.
+# src/ directory and `.` without; plain `uv run pytest` otherwise. A source
+# coverage's own configuration names wins: no --source then (#761).
 job_step test pytest > "$tmp/p.sh" || bad "test / pytest: step not found"
-pyrun() { rm -f "$tmp/args"; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" COV="$2" bash -e "$tmp/p.sh" >/dev/null 2>&1); prc=$?; }
+pyrun() { rm -f "$tmp/args"*; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" COV="$2" ${3:+FAKE_SRC_RC="$3"} bash -e "$tmp/p.sh" >"$tmp/plog" 2>&1); prc=$?; }
+pyrun "$tmp/srcl" success 0
+grep -qx 'uv run --no-sync coverage run --branch -m pytest' "$tmp/args" && grep -q 'measured as configured' "$tmp/plog" \
+  && ok "pytest, coverage's configuration names a source: no --source, measured as configured" || bad "pytest, configured source" "$(cat "$tmp/args" "$tmp/plog")"
+grep -q 'get_option("run:source")' "$tmp/args.probe" && grep -q 'get_option("run:source_pkgs")' "$tmp/args.probe" \
+  && ok "the question to coverage asks for source and source_pkgs" || bad "the probe" "$(cat "$tmp/args.probe")"
+pyrun "$tmp/flat" success 1
+grep -qx 'uv run --no-sync coverage run --branch --source=. -m pytest' "$tmp/args" && grep -q 'could not read' "$tmp/plog" \
+  && ok "coverage's configuration unreadable: today's rule, --source=., and the log says so" || bad "pytest, unreadable configuration" "$(cat "$tmp/args" "$tmp/plog")"
+pyrun "$tmp/srcl" success 1
+grep -qx 'uv run --no-sync coverage run --branch --source=src -m pytest' "$tmp/args" && [ "$prc" = 0 ] \
+  && ok "coverage's configuration unreadable, src layout: --source=src, the step does not fail on it" || bad "pytest, unreadable, src (exit $prc)" "$(cat "$tmp/args")"
+pyrun "$tmp/flat" failure 0
+grep -qx 'uv run pytest' "$tmp/args" && [ ! -f "$tmp/args.probe" ] \
+  && ok "coverage did not install: plain uv run pytest, coverage not asked" || bad "pytest without coverage, configured" "$(cat "$tmp/args")"
 pyrun "$tmp/srcl" success
-grep -qx 'uv run --no-sync coverage run --branch --source=src -m pytest' "$tmp/args" && ok "pytest, src layout: under coverage, --source=src" || bad "pytest, src layout" "$(cat "$tmp/args")"
+grep -qx 'uv run --no-sync coverage run --branch --source=src -m pytest' "$tmp/args" && grep -qx "coverage's configuration names no source: --source=src" "$tmp/plog" \
+  && ok "pytest, src layout, no configured source: under coverage, --source=src, as before #761" || bad "pytest, src layout" "$(cat "$tmp/args" "$tmp/plog")"
 pyrun "$tmp/flat" success
 grep -qx 'uv run --no-sync coverage run --branch --source=. -m pytest' "$tmp/args" && ok "pytest, no src/: under coverage, --source=." || bad "pytest, flat" "$(cat "$tmp/args")"
 pyrun "$tmp/flat" failure

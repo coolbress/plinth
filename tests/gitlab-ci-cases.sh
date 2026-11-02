@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # gitlab/python-ci.yml, plinth's pipeline for GitLab.com (#353). Its job
 # names and inputs are python-ci.yml's; its pinned tools, the commit types,
-# the coverage requirements, the changed-lines judge and the diff-size
+# the coverage requirements, the question to coverage about its source (#761),
+# the changed-lines judge and the diff-size
 # functions named below are the same text. Every job's script goes through
 # bash -n and shellcheck; pr-title, deps, floor-check and diff-size are extracted and
 # run here against fixtures with the tool downloads stubbed, under GitLab's
@@ -67,8 +68,9 @@ for k in ("UV_VERSION", "UV_SHA256", "GITLEAKS_VERSION", "GITLEAKS_SHA256"):
     if len(a) != 1 or a != b:
         fails.append(f"{k}: python-ci.yml {sorted(a)}, gitlab {sorted(b)}")
 def heredocs(text, tag):
-    return [textwrap.dedent(m) for m in re.findall(rf"<<'{tag}'\n(.*?)\n[ \t]*{tag}\n", text, re.S)]
-for tag, mark in (("REQ", "coverage==7"), ("REQ", "diff-cover=="), ("PY", "diff-cover did not finish")):
+    return [textwrap.dedent(m) for m in re.findall(rf"<<'{tag}'[^\n]*\n(.*?)\n[ \t]*{tag}\n", text, re.S)]
+for tag, mark in (("REQ", "coverage==7"), ("REQ", "diff-cover=="), ("PY", "diff-cover did not finish"),
+                  ("PY", "run:source_pkgs")):
     a = [h for h in heredocs(gh, tag) if mark in h]; b = [h for h in heredocs(gl, tag) if mark in h]
     if len(a) != 1 or len(b) != 1 or a[0] != b[0]:
         fails.append(f"the {tag} block holding {mark!r} differs ({len(a)} in python-ci.yml, {len(b)} in gitlab)")
