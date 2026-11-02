@@ -893,8 +893,8 @@ pyrun() { rm -f "$tmp/args"*; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="
 pyrun "$tmp/srcl" success 0
 grep -qx 'uv run --no-sync coverage run --branch -m pytest' "$tmp/args" && grep -q 'measured as configured' "$tmp/plog" \
   && ok "pytest, coverage's configuration names a source: no --source, measured as configured" || bad "pytest, configured source" "$(cat "$tmp/args" "$tmp/plog")"
-grep -q 'get_option("run:source")' "$tmp/args.probe" && grep -q 'get_option("run:source_pkgs")' "$tmp/args.probe" \
-  && ok "the question to coverage asks for source and source_pkgs" || bad "the probe" "$(cat "$tmp/args.probe")"
+grep -qF '("run:source", "run:source_pkgs", "run:source_dirs")' "$tmp/args.probe" \
+  && ok "the question to coverage asks for source, source_pkgs and source_dirs" || bad "the probe" "$(cat "$tmp/args.probe")"
 pyrun "$tmp/flat" success 1
 grep -qx 'uv run --no-sync coverage run --branch --source=. -m pytest' "$tmp/args" && grep -q 'could not read' "$tmp/plog" \
   && ok "coverage's configuration unreadable: today's rule, --source=., and the log says so" || bad "pytest, unreadable configuration" "$(cat "$tmp/args" "$tmp/plog")"
