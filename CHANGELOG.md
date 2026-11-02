@@ -39,6 +39,20 @@ pull requests and have no tag.
   steps above. A Steps link may carry a `#heading` anchor, and
   `off-by-default.sh --check` fails one the page has no heading for (#765).
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.35.0, which carries
+  v1.34.0 too. From v1.34.0 (coolbress/plinth-template#160): a new
+  project's `docs/agents/issue-tracker.md` says how to pick an issue's kind
+  (a record, a `task`, or `bug`/`enhancement`) and that every issue carries a
+  kind label, read back after `gh issue create` or `glab issue create`. From
+  v1.35.0: `AGENTS.md` and `CONTRIBUTING.md` give the `Assisted-by` trailer
+  one example and one line for each model the work used
+  (coolbress/plinth-template#163), and the `third_party_review` question
+  that `--third-party-review` above passes (coolbress/plinth-template#164).
+  An existing project gets both through `/plinth:template-update`; the new
+  question defaults to off, so the update needs no hands.
+
 ## [2.23.0] - 2026-11-02
 
 `ci / test` measures the source a project's own coverage configuration names,
