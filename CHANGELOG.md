@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `ci / test` measures the source the project's own coverage configuration
+  names (`source` or `source_pkgs`, in `pyproject.toml`, `.coveragerc`,
+  `setup.cfg` or `tox.ini`), when it names one: the step no longer passes a
+  `--source` that overrides it, so a second package outside `src/` can be
+  measured. Without one it measures `src`, else the whole project, as before.
+  A consumer gets it by raising its pin of the reusable workflow (#761).
+
 ## [2.22.0] - 2026-10-31
 
 `/plinth:floor-check` no longer reports an Actions allowlist with a `!`
