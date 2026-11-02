@@ -76,36 +76,43 @@ numbered, one question at a time. Never answer a question for the person.
    | Yes (Recommended) | Create it with these. |
    | Customize | Choose each one. |
 
-   **Yes** adds no argument: the script's defaults are these. **Customize**
-   asks, in one call, one question per choice still open, in this order,
+   Every answer becomes a flag, a default included, so that the command
+   said before the run (below) asks nothing when typed again. **Yes** adds
+   the flag for each default still open: `--host=github`, `--public`,
+   `--no-third-party-review`, `--license=mit` and `--dir=<home>/<name>`,
+   with the home directory written out as an absolute path; with
+   `--host gitlab` given, `--private` in place of `--public`, and no
+   reviewer flag. **Customize** asks, in one call, one question per choice still open, in this order,
    leaving out what the arguments give and what does not apply (the host
    for `web`, which is GitHub only; the reviewer on GitLab, which is GitHub
    only; and the reviewer when the host answer in the same call may be
    GitLab: then ask it right after, only if the answer was GitHub):
 
    - Header `Host`: "Where should the repository live?" **GitHub
-     (Recommended)**; **GitLab.com**, a GitLab.com project (`--host=gitlab`).
+     (Recommended)** (`--host=github`); **GitLab.com**, a GitLab.com
+     project (`--host=gitlab`).
    - Header `Visibility`: "Public or private?" **Public (Recommended)**: the
      whole wall on every plan. **Private**: on GitHub Free a private
      repository cannot keep the ruleset, so plinth stops before creating it;
      on a paid plan it has no CodeQL or push protection unless the account
-     has GitHub Code Security and Secret Protection. Private on GitHub is
-     `--private`. On GitLab a project is private unless made public, so
-     there public is `--public` and private adds nothing.
+     has GitHub Code Security and Secret Protection. Public is `--public`,
+     private `--private`, on either host (on GitLab a project is private
+     unless made public).
    - Header `Reviewer`, asked as a fact the person knows, not a preference:
      "Is a code reviewer, such as Codex's, already connected to your GitHub
-     account?" **No, or not sure (Recommended)**: nothing is added; the last
-     lines say when to turn it on. **Yes**: `--third-party-review`; each pull
+     account?" **No, or not sure (Recommended)**: `--no-third-party-review`;
+     the last lines say when to turn it on. **Yes**: `--third-party-review`; each pull
      request gets a `third-party / review` result, which reports and is not
      required, so a pull request still merges without it.
    - Header `License`: "Which license?" **MIT (Recommended)**: short, the
-     usual choice for a small project. **Apache-2.0**: when a company or the
+     usual choice for a small project (`--license=mit`). **Apache-2.0**: when a company or the
      project you build on asks for it (`--license=apache-2.0`).
 
    Then, when no `--dir=` was given, ask the directory on its own, header
    `Folder`: "Where should the local copy go?" with one choice,
-   **`~/<name>` (Recommended)**, a new folder in your home directory;
-   another path is typed into Other and becomes `--dir=<path>`. It must not
+   **`~/<name>` (Recommended)**, a new folder in your home directory
+   (`--dir=<home>/<name>`, written out); another path is typed into Other
+   and becomes `--dir=<path>`. It must not
    exist yet, or be empty.
 
    A typed answer that is none of the choices (other than the folder) is
