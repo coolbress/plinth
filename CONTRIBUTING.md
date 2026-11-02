@@ -147,8 +147,8 @@ release needs a green run on the commit it tags
    preserved: several trailers form one contiguous block at the end. From
    another repository, include this one: `Closes coolbress/plinth#N`.
 
-   Check the template that actually applies before you write. This repository
-   has no local `PULL_REQUEST_TEMPLATE.md` and **inherits** `coolbress/.github`'s;
+   Check the template that actually applies before you write. This repository's
+   own is `.github/PULL_REQUEST_TEMPLATE.md`;
    `gh pr create --body`/`--body-file` bypasses it entirely, so read it
    yourself. Remove its guidance comments — GitHub keeps HTML comments in the
    squash message.

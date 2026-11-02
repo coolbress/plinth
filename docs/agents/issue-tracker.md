@@ -25,10 +25,11 @@ repository's templates into plinth's shape.
 
 ## Three kinds of issue (this repository's default)
 
-Forms are inherited from `coolbress/.github` (this repository has no local
-`ISSUE_TEMPLATE`, so all of them apply). The CLI does not render a form, so
-from `gh` write the body under the form's field labels as headings and add the
-form's label yourself.
+The forms are this repository's own, in `.github/ISSUE_TEMPLATE/`: the Bug,
+Feature request and Task forms below, End or hand over this project (`task`),
+and a `config.yml` that keeps blank issues open for records. The CLI does not
+render a form, so from `gh` write the body under the form's field labels as
+headings and add the form's label yourself.
 
 | Kind | Form and label | Shape |
 | --- | --- | --- |

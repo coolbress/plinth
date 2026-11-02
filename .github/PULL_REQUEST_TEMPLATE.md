@@ -6,6 +6,8 @@
 
 <!-- For each acceptance criterion this pull request meets, name the test that checks it, or say why none does; a test named here shows the criterion was exercised, not that it is proved. Then what you ran and what it showed — and what you did not verify. A behaviour or bug change comes with the test that catches it (for a bug, the one that reproduces it before the fix), or say here why not. A review run in the same session that wrote the change is not an independent review; do not describe it as one. Put user-facing explanation and history where it belongs: README, CHANGELOG, or the page that covers it. -->
 
+<!-- Review: say what was done with each of the reviewer's inline comments (fixed, answered with the reason, or moved to an issue), not only its summary. Before pushing a fix for a finding, run `scripts/merge-when-green.sh <n> --round` and put the line it prints in this description. Never write the reviewer's summons text in this description. -->
+
 <!--
 Then these two, in this order, at the end and with nothing after them:
 

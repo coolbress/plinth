@@ -5,6 +5,8 @@
     "MD024": { "siblings_only": true }
   },
   "ignores": [
-    ".scratch/**"
+    ".scratch/**",
+    // A pull-request template starts at "##": the pull request's title is its heading (MD041).
+    ".github/PULL_REQUEST_TEMPLATE.md"
   ]
 }

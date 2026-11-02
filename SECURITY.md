@@ -8,33 +8,32 @@ found, how to reproduce it, and the version or commit you tested.
 
 ## Response — targets, not an SLA
 
-| | Target |
-|---|---|
+| What | Target |
+| --- | --- |
 | Acknowledgement | within 3 business days |
 | Fix for medium severity or higher | within 60 days |
 
-These are best-effort targets. The projects are maintained by one person with no
+These are best-effort targets. The project is maintained by one person with no
 on-call rotation, and this file does not promise what cannot be operated. If your
 report is urgent, say so in the report.
 
 ## Scope
 
-- `plinth` — the plugin, the reusable CI workflows, and the scripts that create
-  repositories and apply rulesets
-- `plinth-template` — the project template
-- `plinth-lab` — research and tooling; no runtime surface
+This repository: the plugin, its marketplace, the reusable CI workflows, and the
+scripts that create repositories and apply rulesets.
 
-Projects *generated* by the template are not covered here; report those to their
-own maintainers.
+The project template is reported to `coolbress/plinth-template`. Projects
+*generated* by the template are not covered here; report those to their own
+maintainers.
 
 ## Supported versions
 
-The latest release of each repository. Older releases are not patched.
+The latest release. Older releases are not patched.
 
-## What these repositories do
+## What this repository does
 
-- Dependencies are pinned by lockfile; Dependabot opens weekly updates.
-- GitHub Actions are pinned to commit SHAs — tags are mutable and a supply-chain vector.
-- Secrets are never committed. `.env` is ignored; only `.env.example` is tracked.
+- Third-party marketplace entries and GitHub Actions are pinned to full commit SHAs —
+  tags are mutable and a supply-chain vector. Dependabot opens weekly updates for the actions.
+- Secrets are never committed.
 - `main` is protected: nothing merges without green CI.
 - No home-grown cryptography — standard libraries and vetted implementations only.
