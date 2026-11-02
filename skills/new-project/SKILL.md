@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--license=<spdx>] [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--dir=<path>] [--private] [--host=github|gitlab]"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--license=mit|apache-2.0] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -11,11 +11,132 @@ Creates `[<owner>/]<name>` on GitHub with the wall already up. When a step it
 cannot go on without fails, it deletes the repository if its token can, and
 names it otherwise. The owner is optional: a bare name goes under the user's login. One script does all of it; this skill runs it and relays what it says.
 
-Run, with the user's arguments exactly as typed:
+## Ask first what the arguments leave out
+
+Every choice that changes the wall is a flag, and the script asks nothing: a
+flag it is not given takes its default. So before running it, ask for each
+choice the arguments (`$ARGUMENTS`) do not give, in the order below, and wait
+for each answer. A choice given as a flag is never asked; arguments that give
+every choice are asked nothing. Values that only tune a check
+(`max-diff-lines`, `deps-fail-on-severity`, `extra-python-versions`) are not
+asked: their defaults fit most projects, and the project's README says how to
+change them.
+
+**How to ask.** Ask with the AskUserQuestion tool, the picker: at most four
+choices per question and four questions per call; it adds an "Other" box for
+typed text on its own, so never add one. Use the questions, labels and
+descriptions below as written, translated into the person's language. Where
+the tool is not available (a `claude -p` run, for one) or a call comes back
+with no answer, ask the same question in text instead, with its choices
+numbered, one question at a time. Never answer a question for the person.
+
+1. **The name**, when the arguments carry none, in text (it has no choices):
+   "What should the repository be called? (`name`, or `owner/name` for an
+   organization)".
+2. **The archetype**, when there is no `--archetype=`. Never choose `cli` for
+   them in silence. Ask it in two steps.
+
+   First, header `Kind`: "What are you making?"
+
+   | Label | Description |
+   | --- | --- |
+   | A terminal command (cli) | A program people install and type in a terminal. If you are not sure, choose this one. |
+   | Code other code imports (library) | Python code that other projects install and use, published as a package. |
+   | Always-on server or data job | Something that keeps running: a service or API, or data processing and model training. It also checks that its container builds and starts. |
+   | A website people log in to (web) | A website with logins and a database, on GitHub only, about $13 a month to run on Render. It also checks the container, the database changes and the production settings. |
+
+   With `--host gitlab` in the arguments, leave out `web` and say once that
+   web is made on GitHub only. For the third answer ask, header `Service`:
+   "Is it a backend (a service or API) or data-ml (data processing or
+   training a model)?"
+
+   | Label | Description |
+   | --- | --- |
+   | A service or API (backend) | A program that keeps running and answers requests. It also checks that its container builds and starts. |
+   | Data or a model (data-ml) | Data processing, or a model you train. It also checks the container, and comes with a model card and a test of the training. |
+
+   Every kind gets the same checks besides (title, lint, types, tests,
+   build, secrets, dependencies, change size, the project's own setup) and
+   CodeQL; say so only if asked. In text, the same two steps. Add
+   `--archetype=cli`, `library`, `backend`, `data-ml` or `web`.
+3. **Where a web app runs**, for `web` only: the question in
+   [Where a web app runs](#where-a-web-app-runs), unchanged.
+4. **The recommended defaults.** Of host (`--host=`), visibility
+   (`--private`/`--public`), the third-party reviewer
+   (`--third-party-review`/`--no-third-party-review`), license (`--license=`)
+   and directory (`--dir=`), take the ones the arguments do not give. If none
+   is left, ask nothing. Otherwise ask one question, header `Defaults`,
+   naming only those left with their defaults: "Use the recommended
+   defaults? public on GitHub, MIT license, in `~/<name>`, no third-party
+   reviewer." With `--host gitlab` given, say "private on GitLab.com" in
+   place of "public on GitHub" and leave out the reviewer, which is GitHub
+   only.
+
+   | Label | Description |
+   | --- | --- |
+   | Yes (Recommended) | Create it with these. |
+   | Customize | Choose each one. |
+
+   Every answer becomes a flag, a default included, so that the command
+   said before the run (below) asks nothing when typed again. **Yes** adds
+   the flag for each default still open: `--host=github`, `--public`,
+   `--no-third-party-review`, `--license=mit` and `--dir=<home>/<name>`,
+   with the home directory written out as an absolute path; with
+   `--host gitlab` given, `--private` in place of `--public`, and no
+   reviewer flag. **Customize** asks each choice still open, leaving out
+   what the arguments give and what does not apply: the host for `web`,
+   which is GitHub only, and the reviewer on GitLab, which is GitHub only.
+   Visibility and the reviewer depend on the host, so when the host is
+   still open, ask in two calls: first the host and the license, then
+   visibility and, on GitHub, the reviewer. When the host is already
+   settled, ask visibility, the reviewer and the license in one call.
+
+   - Header `Host`: "Where should the repository live?" **GitHub
+     (Recommended)** (`--host=github`). **GitLab.com**: a GitLab.com
+     project; needs `glab` installed and logged in (`--host=gitlab`).
+   - Header `License`: "Which license?" **MIT (Recommended)**: short, the
+     usual choice for a small project (`--license=mit`). **Apache-2.0**:
+     when a company or the project you build on asks for it
+     (`--license=apache-2.0`).
+   - Header `Visibility`: "Public or private?" Public is `--public`,
+     private `--private`, on either host. On GitHub, **Public
+     (Recommended)**: the whole wall on every plan; **Private**: on GitHub
+     Free a private repository cannot keep the ruleset, so plinth stops
+     before creating it; on a paid plan it has no CodeQL or push protection
+     unless the account has GitHub Code Security and Secret Protection; on
+     a personal account, plinth reads the plan first, which needs the
+     `read:user` permission on your GitHub login (it says the command that
+     adds it). On GitLab, **Private (Recommended)**: plinth's default there,
+     since GitLab.com's free plan protects a private project's main branch;
+     **Public**: anyone can read it.
+   - Header `Reviewer`, on GitHub only, asked as a fact the person knows,
+     not a preference: "Is a code reviewer, such as Codex's, already
+     connected to your GitHub account?" **No, or not sure (Recommended)**:
+     `--no-third-party-review`; the last lines say when to turn it on.
+     **Yes**: `--third-party-review`; each pull request gets a
+     `third-party / review` result, which reports and is not required, so a
+     pull request still merges without it. The last lines then say what to
+     do right away: turn the reviewer on for the new repository.
+
+   Then, when no `--dir=` was given, ask the directory on its own, header
+   `Folder`: "Where should the local copy go?" with one choice,
+   **`~/<name>` (Recommended)**, a new folder in your home directory
+   (`--dir=<home>/<name>`, written out); another path is typed into Other
+   and becomes `--dir=<path>`. It must not
+   exist yet, or be empty.
+
+   A typed answer that is none of the choices (other than the folder) is
+   asked again.
+
+Then run, with the arguments as typed and the flags the answers added:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS
+${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh $ARGUMENTS <added flags>
 ```
+
+Before running it, say in one line the command the person can type next time
+to get the same run with no question: `/plinth:new-project` followed by their
+arguments and the added flags, not the script's path.
 
 With `--host gitlab`, put `PLINTH_ASSISTED_BY=<agent>:<model>` in front of it,
 naming yourself as a commit trailer would (e.g. `Claude:claude-opus-5-5`): the
@@ -24,7 +145,11 @@ first merge request's description ends with that `Assisted-by` line.
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL, and
-opens the first pull request. Last, it re-runs the failed jobs of `main`'s
+opens the first pull request. With `--third-party-review` the template also
+renders `.github/workflows/third-party.yml`, the caller of the
+`third-party / review` check, and the ruleset is the same as without it: the
+check reports and is not required, so the first pull request merges whether
+or not a reviewer comes. Last, it re-runs the failed jobs of `main`'s
 first CI run, which ran before the wall and failed its floor check. With `--private` the repository is private: an
 owner on GitHub Free stops before anything is created, and elsewhere the same
 ruleset goes up, with CodeQL and push protection only where GitHub Code
@@ -142,7 +267,11 @@ What to do with the output:
   project exists with part of its wall or none.
 - **It finished** (exit 0): show the final lines, the `administration:` line,
   the `where it runs:` line and the `first commit on main:` line among them, and for a private repository every `private:`, `not raised:`
-  and `not verified:` line as printed. Show the `starts off` block as
+  and `not verified:` line as printed. When there is a `to do now` block,
+  show it first, every line under it, as the person's next step: with the
+  third-party reviewer chosen, turning it on for this repository, without
+  which each pull request waits 20 minutes for a review and then shows a
+  failed check. Show the `starts off` block as
   printed, every line under it: what the project starts with turned off, when
   each is worth turning on, and where its steps are (the list is
   `${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`). Do not turn any

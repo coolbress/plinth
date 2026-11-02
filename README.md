@@ -32,9 +32,12 @@ claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it creates
-a repository with the checks already required, or says why it could
-not. From there,
+Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it asks
+what kind of project it is and whether to use the recommended defaults (or
+customize the host, visibility, third-party reviewer, licence and directory),
+then creates a repository with the checks already required, or says why it
+could not. Each answer is also a flag, and a flag given is not asked
+([the tutorial](docs/tutorials/getting-started.md#create-the-repository)). From there,
 [run a project](docs/how-to/run-a-project.md) is the loop, stage by stage.
 
 **The limits.** A green check means the properties it asserts hold, not that
@@ -192,7 +195,7 @@ and otherwise prints the repository to delete; a step it can go on without,
 such as a label, is named and left. If the create's own answer is lost, it
 does neither, so check whether the repository exists (its failure paths run in CI against a mocked
 `gh`). It renders
-[plinth-template v1.33.0](https://github.com/coolbress/plinth-template/releases/tag/v1.33.0),
+[plinth-template v1.35.0](https://github.com/coolbress/plinth-template/releases/tag/v1.35.0),
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its release commit, has
 created a repository on real GitHub, merged its first pull request and deleted

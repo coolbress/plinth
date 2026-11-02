@@ -108,7 +108,7 @@ case "$step" in
                    garbage)   printf '!!! not base64 !!!' ;;
                    nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
                    hosting) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nhosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' | base64 ;;
-                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' | base64 ;;
+                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}" | base64 ;;
                  esac ;;
   # The owner's shared community-health files: present, absent (404) or
   # unreadable (any other failure). `gh` prints "Not Found" on a 404.
@@ -256,6 +256,13 @@ printf 'name = "%s"\nlicense = "%s"\nauthors = [{ name = "%s" }]\n' "$pkg" "$pli
 printf 'name = "%s"\n' "$pkg" > "$dst/uv.lock"
 : > "$dst/src/$pkg/__init__.py"; printf 'name: CI\n' > "$dst/.github/workflows/ci.yml"
 printf '_commit: mock\n' > "$dst/.copier-answers.yml"
+# The reviewer's answer (#765): recorded, and its caller rendered, unless
+# MOCK_REVIEW_NORECORD=1 plays a template that took the answer and dropped it.
+case " $* " in *" third_party_review=true "*)
+  if [ "${MOCK_REVIEW_NORECORD:-0}" != 1 ]; then
+    printf 'third_party_review: true\n' >> "$dst/.copier-answers.yml"; printf 'name: third-party\n' > "$dst/.github/workflows/third-party.yml"
+  fi ;;
+esac
 exit 0
 MOCK
 
@@ -575,6 +582,35 @@ run apache         ok yes no "(public, Apache-2.0, cli, as owner)"              
 run backend        ok yes no "(public, MIT, backend, as owner)"                                -- probe --archetype=backend
 run web            ok yes no "(public, MIT, web on Render, as owner)"                          -- probe --archetype=web
 
+echo "the third-party reviewer (#765)"
+# Asked for: copier gets the answer, the plan line says it reports and is not
+# required, the posted ruleset does not name it, and the closing list drops
+# the reviewer and names what is left to the person.
+E="MOCK_REVIEW_Q=1" run review ok yes no "(public, MIT, cli, third-party review reporting and not required, as owner)" -- probe --third-party-review
+if grep -q '^uvx .* --data third_party_review=true --vcs-ref' "$work/home-review/calls.log" \
+   && [ -s "$work/home-review/ruleset-posted.json" ] && ! grep -q 'third-party' "$work/home-review/ruleset-posted.json" \
+   && ! grep -qF 'The third-party reviewer (' "$work/home-review/out" \
+   && grep -qF 'Requiring the third-party reviewer' "$work/home-review/out" \
+   && grep -qF 'configure-the-third-party-reviewer.md#3-make-it-part-of-the-wall-optional' "$work/home-review/out" \
+   && grep -qF 'configure-the-third-party-reviewer.md#1-enable-the-reviewer-on-the-repository' "$work/home-review/out" \
+   && [ "$(grep -n -e '^  to do now:$' -e '^  starts off; each one when you need it:$' "$work/home-review/out" | cut -d: -f2- | tr '\n' '|')" = "  to do now:|  starts off; each one when you need it:|" ] \
+   && grep -A1 '^  to do now:$' "$work/home-review/out" | grep -qF '    Turn on Codex code review for this repository'
+then ok review "copier gets third_party_review=true, the ruleset does not require it, and the last lines put turning it on for the repository under to do now, before what starts off"
+else bad review "the reviewer's answer, the ruleset or the last lines are not what #765 says"; grep -E 'third_party|third-party' "$work/home-review/calls.log" "$work/home-review/out" | sed 's/^/        /'; fi
+E="MOCK_REVIEW_Q=1" run review-off ok yes no "(public, MIT, cli, as owner)" -- probe --no-third-party-review
+if ! grep -q 'third_party_review' "$work/home-review-off/calls.log" && grep -qF 'The third-party reviewer (' "$work/home-review-off/out" && ! grep -q '^  to do now:' "$work/home-review-off/out"
+then ok review-off "--no-third-party-review passes no answer and lists the reviewer as off"
+else bad review-off "--no-third-party-review passed an answer, or the list lacks the reviewer"; fi
+if cmp -s "$work/home-review/ruleset-posted.json" "$work/home-review-off/ruleset-posted.json"
+then ok review "the ruleset posted with the reviewer is byte for byte the one without it"
+else bad review "the reviewer changed the posted ruleset"; fi
+run review-old-template err no no "cannot render the third-party reviewer; nothing was created" -- probe --third-party-review
+E="MOCK_CHOICES=garbage" run review-unread err no no "could not read whether the template can render the third-party reviewer" -- probe --third-party-review
+E="MOCK_REVIEW_Q=1 MOCK_REVIEW_NORECORD=1" run review-dropped err yes yes "did not record third_party_review: true" -- probe --third-party-review
+run review-both err no no "--third-party-review and --no-third-party-review: choose one" -- probe --third-party-review --no-third-party-review
+run public-private err no no "--private and --public: choose one" -- probe --private --public
+run public-said ok yes no "(public, MIT, cli, as owner)" -- probe --public
+
 echo "where a web app runs (#677)"
 # A template without the questions (v1.26.0) renders for Render whatever it
 # is given, so Render passes nothing to it and another place stops first.
@@ -855,7 +891,7 @@ check "a web ruleset is the wall plus image, ci / migrations and ci / deploy-che
   '[ "$(jq -c "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\") | .integration_id] | unique" "$work/home-web/ruleset-posted.json")" = "[15368]" ] && [ "$(jq "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\")] | length" "$work/home-web/ruleset-posted.json")" = 3 ]'
 check "a web render passes archetype=web to copier" 'grep -q "archetype=web" "$work/home-web/calls.log"'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.33.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.35.0 in " "$work/home-none/out"'
 check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
   'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
 check "copier renders the tag's pinned commit, not the tag: a tag moved after the check changes nothing (#519)" \
@@ -1343,7 +1379,10 @@ if ! grep -q '^glab ' "$work/home-gl-web/calls.log" && grep -qF "fix: drop --hos
 then ok gl-web "nothing reached GitLab, and the fix names both ways on"
 else bad gl-web "a glab call ran before the refusal, or the fix line is missing"; grep '^glab ' "$work/home-gl-web/calls.log" | sed 's/^/        /'; fi
 gl_run gl-bad-host err no no "--host is github or gitlab" -- probe --host bitbucket
-gl_run gl-github-public err no no "unknown option: --public" -- probe --public
+gl_run gl-review err no no "--third-party-review is for GitHub only" -- probe --host gitlab --third-party-review
+if ! grep -q '^glab ' "$work/home-gl-review/calls.log"; then ok gl-review "nothing reached GitLab before the refusal"
+else bad gl-review "a glab call ran before the refusal"; fi
+gl_run gl-no-review ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- probe --host gitlab --no-third-party-review
 gl_run gl-case ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- Tester/probe --host gitlab
 E="MOCK_GLAB_VERSION_FORMAT=old MOCK_GLAB_VERSION=1.36.0" gl_run gl-glab-old-format err no no "glab 1.36.0 is below" -- probe --host gitlab
 E="MOCK_GLAB_VERSION_FORMAT=none" gl_run gl-glab-no-version err no no "could not read glab's version" -- probe --host gitlab

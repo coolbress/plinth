@@ -20,6 +20,42 @@ pull requests and have no tag.
   for `web`, HSTS preload and include-subdomains. Both read the one list,
   [Off by default](docs/reference/off-by-default.md), through
   `scripts/off-by-default.sh` (#763).
+- `/plinth:new-project` asks what its arguments leave out before it creates
+  anything, in Claude Code's picker (numbered text where the picker cannot
+  be shown, as in `claude -p`): the kind of project in plain words, in two
+  steps, then "Use the recommended defaults?" (public, GitHub, MIT,
+  `~/<name>`, no third-party reviewer). "Customize" asks the host and the
+  license, then visibility, recommended by host, and on GitHub whether a
+  code reviewer is already connected, then the folder. A flag given is not asked, and the script
+  itself still asks nothing (#765).
+- `new-project.sh --third-party-review` renders the caller of
+  `third-party / review` (template `third_party_review`). The check reports
+  and is not required: the ruleset is the same as without it. The last lines
+  start with "to do now": turn Codex code review on for the repository,
+  without which each pull request waits 20 minutes and shows a failed check.
+  They then name the summons token, and requiring the check later through
+  `scripts/upgrade-ruleset.sh`.
+  `--no-third-party-review` and `--public` say the defaults out loud; the
+  GitLab door refuses `--third-party-review` before reading anything (#765).
+- [Off by default](docs/reference/off-by-default.md) has a sixth column: a
+  row told only when the project has a path, used by the three reviewer
+  steps above. A row whose "Turn it on when" begins `now:` is a step to take
+  right away, printed first. A Steps link may carry a `#heading` anchor, and
+  `off-by-default.sh --check` fails one the page has no heading for (#765).
+
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.35.0, which carries
+  v1.34.0 too. From v1.34.0 (coolbress/plinth-template#160): a new
+  project's `docs/agents/issue-tracker.md` says how to pick an issue's kind
+  (a record, a `task`, or `bug`/`enhancement`) and that every issue carries a
+  kind label, read back after `gh issue create` or `glab issue create`. From
+  v1.35.0: `AGENTS.md` and `CONTRIBUTING.md` give the `Assisted-by` trailer
+  one example and one line for each model the work used
+  (coolbress/plinth-template#163), and the `third_party_review` question
+  that `--third-party-review` above passes (coolbress/plinth-template#164).
+  An existing project gets both through `/plinth:template-update`; the new
+  question defaults to off, so the update needs no hands.
 
 ## [2.23.0] - 2026-11-02
 

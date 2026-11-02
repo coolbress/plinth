@@ -108,7 +108,12 @@ if grep -q '^  off: The third-party reviewer' <<<"$out" && ! grep -q 'HSTS' <<<"
 then ok "a cli project names the reviewer, not the web item"; else bad "cli: off-by-default lines"; fi
 mkdir -p "$d2/.github/workflows"; : > "$d2/.github/workflows/third-party.yml"
 out="$(MOCK_DIR="$d2" "$script" "$d2")"
-if grep -qx 'off by default: none left off' <<<"$out"; then ok "a cli project with the reviewer's caller: none left off"
+# The reviewer itself is not listed; the steps a project with its caller still
+# has (#765) are, as started off, since none of them can be read from files.
+if ! grep -qF 'The third-party reviewer (' <<<"$out" && [ "$(grep -c 'started off (whether it is on now is not read)' <<<"$out")" = 2 ] \
+   && grep -qF 'to do, if not done yet (whether it is done is not read): Turn on Codex code review for this repository' <<<"$out" \
+   && grep -qF 'Requiring the third-party reviewer' <<<"$out"
+then ok "a cli project with the reviewer's caller: the reviewer is not listed; turning it on for the repository is a step to do, the other two started off"
 else bad "cli with the caller: off-by-default lines"; grep -i off <<<"$out" | sed 's/^/        /'; fi
 
 d="$(repo pr-open)"
