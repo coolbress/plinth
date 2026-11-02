@@ -15,80 +15,101 @@ names it otherwise. The owner is optional: a bare name goes under the user's log
 
 Every choice that changes the wall is a flag, and the script asks nothing: a
 flag it is not given takes its default. So before running it, ask for each
-choice the arguments (`$ARGUMENTS`) do not give, in the order below, one
-question at a time, and wait for each answer. A choice given as a flag is
-never asked; arguments that give every choice are asked nothing. Values that
-only tune a check (`max-diff-lines`, `deps-fail-on-severity`,
-`extra-python-versions`) are not asked: their defaults fit most projects, and
-the project's README says how to change them.
+choice the arguments (`$ARGUMENTS`) do not give, in the order below, and wait
+for each answer. A choice given as a flag is never asked; arguments that give
+every choice are asked nothing. Values that only tune a check
+(`max-diff-lines`, `deps-fail-on-severity`, `extra-python-versions`) are not
+asked: their defaults fit most projects, and the project's README says how to
+change them.
 
-1. **The name**, when the arguments carry none: "What should the repository
-   be called? (`name`, or `owner/name` for an organization)".
+**How to ask.** Ask with the AskUserQuestion tool, the picker: at most four
+choices per question and four questions per call; it adds an "Other" box for
+typed text on its own, so never add one. Use the questions, labels and
+descriptions below as written, translated into the person's language. Where
+the tool is not available (a `claude -p` run, for one) or a call comes back
+with no answer, ask the same question in text instead, with its choices
+numbered, one question at a time. Never answer a question for the person.
+
+1. **The name**, when the arguments carry none, in text (it has no choices):
+   "What should the repository be called? (`name`, or `owner/name` for an
+   organization)".
 2. **The archetype**, when there is no `--archetype=`. Never choose `cli` for
-   them in silence. Ask "What kind of project is it?" with these five, in
-   these words:
+   them in silence. Ask it in two steps.
 
-   > 1. **cli**: a command people install and run in a terminal.
-   > 2. **library**: Python code other projects import, published as a
-   >    package; its tests import it from the built package.
-   > 3. **backend**: a service or API that keeps running, in a container.
-   >    Adds the `image` check: the container builds and starts.
-   > 4. **data-ml**: data processing or a model you train, in a container.
-   >    Adds the `image` check, a model card (`MODEL_CARD.md`) and a test of
-   >    the training.
-   > 5. **web**: a website with logins and a Postgres database (Django), on
-   >    GitHub only, about $13 a month to run on Render. Adds the `image`,
-   >    `ci / migrations` and `ci / deploy-check` checks.
-   >
-   > Every kind gets the same nine `ci / …` checks (title, lint, types,
-   > tests, build, secrets, dependencies, diff size, floor check) and
-   > CodeQL. Not sure? Choose the narrowest.
+   First, header `Kind`: "What are you making?"
 
-   With `--host gitlab` in the arguments, offer the first four only and say
-   that web is made on GitHub only. Add `--archetype=<the answer>`.
+   | Label | Description |
+   | --- | --- |
+   | cli | A command people install and run in a terminal. The nine `ci / …` checks and CodeQL, which every kind gets. |
+   | library | Python code other projects import, published as a package. The same checks; its tests import it from the built package. |
+   | A server or data job | Something that keeps running in a container: a service or API, or data processing and model training. Adds the `image` check. |
+   | web | A website with logins and a Postgres database (Django), GitHub only, about $13 a month on Render. Adds `image`, `ci / migrations`, `ci / deploy-check`. |
+
+   With `--host gitlab` in the arguments, leave out `web` and say once that
+   web is made on GitHub only. For the third answer ask, header `Service`:
+   "Is it a backend (a service or API) or data-ml (data processing or
+   training a model)?"
+
+   | Label | Description |
+   | --- | --- |
+   | backend | A service or API that keeps running. Adds the `image` check: the container builds and starts. |
+   | data-ml | Data processing or a model you train. Adds the `image` check, a model card (`MODEL_CARD.md`) and a test of the training. |
+
+   In text, the same two steps; the nine checks are title, lint, types,
+   tests, build, secrets, dependencies, diff size and floor check. Add
+   `--archetype=cli`, `library`, `backend`, `data-ml` or `web`.
 3. **Where a web app runs**, for `web` only: the question in
    [Where a web app runs](#where-a-web-app-runs), unchanged.
-4. **The recommended defaults.** Of visibility (`--private`/`--public`),
-   host (`--host=`), the third-party reviewer
+4. **The recommended defaults.** Of host (`--host=`), visibility
+   (`--private`/`--public`), the third-party reviewer
    (`--third-party-review`/`--no-third-party-review`), license (`--license=`)
    and directory (`--dir=`), take the ones the arguments do not give. If none
-   is left, ask nothing. Otherwise ask one question, naming only those left,
-   with their defaults:
+   is left, ask nothing. Otherwise ask one question, header `Defaults`,
+   naming only those left with their defaults: "Use the recommended
+   defaults? public on GitHub, MIT license, in `~/<name>`, no third-party
+   reviewer." With `--host gitlab` given, say "private on GitLab.com" in
+   place of "public on GitHub" and leave out the reviewer, which is GitHub
+   only.
 
-   > **Use the recommended defaults?** public on GitHub, MIT license, in
-   > `~/<name>`, no third-party reviewer.
-   >
-   > 1. **Yes**: create it with these.
-   > 2. **Customize**: choose each one.
+   | Label | Description |
+   | --- | --- |
+   | Yes (Recommended) | Create it with these. |
+   | Customize | Choose each one. |
 
-   With `--host gitlab` given, the defaults are different: say "private on
-   GitLab.com" in place of "public on GitHub", and leave out the reviewer,
-   which is GitHub only. **Yes** adds no argument: the script's defaults
-   are these. **Customize**
-   asks each one left, in this order:
+   **Yes** adds no argument: the script's defaults are these. **Customize**
+   asks, in one call, one question per choice still open, in this order,
+   leaving out what the arguments give and what does not apply (the host
+   for `web`, which is GitHub only; the reviewer on GitLab, which is GitHub
+   only; and the reviewer when the host answer in the same call may be
+   GitLab: then ask it right after, only if the answer was GitHub):
 
-   - **Host**: "GitHub (recommended) or GitLab.com?" GitLab gets
-     `--host=gitlab`; for `web`, do not ask it (web is GitHub only).
-   - **Visibility**: "Public (recommended) or private?" On GitHub, say once:
-     on GitHub Free a private repository cannot keep the ruleset, so plinth
-     stops before creating it; on a paid plan it loses CodeQL and push
-     protection unless the account has GitHub Code Security and Secret
-     Protection. On GitLab a project is private unless made public. Private
-     on GitHub is `--private`; public on GitLab is `--public`; the other two
-     add nothing.
-   - **The third-party reviewer**, on GitHub only: ask it as a fact they
-     know, not a preference: "Is a code reviewer, such as Codex's, already
-     connected to your GitHub account?" Yes is `--third-party-review`: each
-     pull request then gets a `third-party / review` result, which reports
-     and is not required, so a pull request still merges without it. No, or
-     not sure, adds nothing; the last lines say when to turn it on.
-   - **License**: "MIT (recommended) or Apache-2.0?" Apache-2.0 is
-     `--license=apache-2.0`.
-   - **Directory**: "Where should the local copy go? (`~/<name>`)" Another
-     path is `--dir=<path>`; it must not exist yet, or be empty.
+   - Header `Host`: "Where should the repository live?" **GitHub
+     (Recommended)**; **GitLab.com**, a GitLab.com project (`--host=gitlab`).
+   - Header `Visibility`: "Public or private?" **Public (Recommended)**: the
+     whole wall on every plan. **Private**: on GitHub Free a private
+     repository cannot keep the ruleset, so plinth stops before creating it;
+     on a paid plan it has no CodeQL or push protection unless the account
+     has GitHub Code Security and Secret Protection. Private on GitHub is
+     `--private`. On GitLab a project is private unless made public, so
+     there public is `--public` and private adds nothing.
+   - Header `Reviewer`, asked as a fact the person knows, not a preference:
+     "Is a code reviewer, such as Codex's, already connected to your GitHub
+     account?" **No, or not sure (Recommended)**: nothing is added; the last
+     lines say when to turn it on. **Yes**: `--third-party-review`; each pull
+     request gets a `third-party / review` result, which reports and is not
+     required, so a pull request still merges without it.
+   - Header `License`: "Which license?" **MIT (Recommended)**: short, the
+     usual choice for a small project. **Apache-2.0**: when a company or the
+     project you build on asks for it (`--license=apache-2.0`).
 
-   An answer that is not one of the choices is asked again; never pick one
-   for them, except where a question below says what to do.
+   Then, when no `--dir=` was given, ask the directory on its own, header
+   `Folder`: "Where should the local copy go?" with one choice,
+   **`~/<name>` (Recommended)**, a new folder in your home directory;
+   another path is typed into Other and becomes `--dir=<path>`. It must not
+   exist yet, or be empty.
+
+   A typed answer that is none of the choices (other than the folder) is
+   asked again.
 
 Then run, with the arguments as typed and the flags the answers added:
 

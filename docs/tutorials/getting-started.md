@@ -66,22 +66,26 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.33.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.35.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
-Before that line it asks what the command did not say, one question at a
-time:
+Before that line it asks what the command did not say, in a picker (a
+window of choices; Other lets you type an answer instead):
 
-1. **What kind of project it is**, from five: `cli`, a command run in a
-   terminal; `library`, code other programs import; `backend`, a service that
-   answers over the network; `data-ml`, data or machine-learning work; `web`,
-   a web app with a database (then where it runs). Each answer names the
-   checks it adds. When unsure, choose `cli`, the narrowest.
+1. **What you are making**: `cli`, a command run in a terminal; `library`,
+   code other programs import; a server or data job, then whether it is a
+   `backend` (a service or API) or `data-ml` (data processing or training a
+   model); or `web`, a web app with a database (then where it runs). Each
+   choice names the checks it adds. When unsure, choose `cli`, the narrowest.
 2. **Use the recommended defaults?** public, on GitHub, MIT licence, in
-   `~/my-app`, no third-party reviewer. Yes asks nothing more. Customize asks
-   each: the host, public or private, whether a code reviewer such as
-   Codex's is already connected to your GitHub account, the licence, and the
-   directory.
+   `~/my-app`, no third-party reviewer. Yes asks nothing more. Customize
+   asks, in one window with a tab each, the host, public or private,
+   whether a code reviewer such as Codex's is already connected to your
+   GitHub account, and the licence; then the folder, with `~/my-app`
+   offered and any other path typed into Other.
+
+Where the picker cannot be shown (`claude -p`), the same questions come as
+text, numbered.
 
 A reviewer you say is connected gets the check `third-party / review` on
 every pull request. It reports and is not required: a pull request still
