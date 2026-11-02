@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # What /plinth:guide reads (#710): the repository's state, what it started
 # with off (#763), the row of the arsenal's "Where you are, and what to do
-# next" table that state points to, and the table itself. Read-only: it runs git and gh reads, nothing else.
+# next" table that state points to, and the table itself. Read-only: it runs
+# git and gh reads, nothing else.
 #
 #   guide-state.sh [<dir>]     # default: the current directory
 #

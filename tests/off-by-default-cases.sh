@@ -54,6 +54,16 @@ out="$("$script" web "$work/p")"
 if ! grep -qF "third-party" <<<"$out" && grep -qF "HSTS" <<<"$out"; then ok "a project with .github/workflows/third-party.yml: the reviewer is not listed"
 else bad "project with the caller: got"$'\n'"$out"; fi
 
+# 4b. --new (new-project.sh, just rendered): what the project has is dropped,
+#     an item with no sign is plainly off.
+out="$("$script" --new web "$work/p")"
+if ! grep -qF "third-party" <<<"$out" && [ "$out" = "$hsts" ]; then ok "--new: the caller rendered drops the reviewer; HSTS is off, not 'started off'"
+else bad "--new with the caller: got"$'\n'"$out"; fi
+rm "$work/p/.github/workflows/third-party.yml"
+out="$("$script" --new web "$work/p")"
+if [ "$out" = "$reviewer"$'\n'"$hsts" ]; then ok "--new without the caller: both off"; else bad "--new without the caller: got"$'\n'"$out"; fi
+if "$script" --new web >/dev/null 2>&1; then bad "--new without a directory passed"; else ok "--new needs the project directory"; fi
+
 # 5. Both callers read the list through the script, and name no item themselves.
 for f in scripts/new-project.sh scripts/guide-state.sh; do
   if grep -q 'off-by-default.sh' "$root/$f" && ! grep -qiE 'third-party\.yml|HSTS' "$root/$f"

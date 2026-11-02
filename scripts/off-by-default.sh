@@ -6,6 +6,8 @@
 #   off-by-default.sh <archetype>          # every item for that archetype, "off: ..."
 #   off-by-default.sh <archetype> <dir>    # minus what <dir> already has; an item
 #                                          # with no sign there "started off"
+#   off-by-default.sh --new <archetype> <dir>  # a project rendered just now: minus
+#                                          # what <dir> has, the rest "off:"
 #   off-by-default.sh --check              # every docs/ Steps page exists (exit 1 if not)
 #   off-by-default.sh --project-phrases    # "<project file>\t<phrase>" per project-file item
 #
@@ -15,7 +17,7 @@ set -uo pipefail
 plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 list="${PLINTH_OFF_BY_DEFAULT:-$plugin/docs/reference/off-by-default.md}"
 docs_url="https://github.com/coolbress/plinth/blob/main"
-usage="usage: off-by-default.sh <archetype> [<project dir>] | --check | --project-phrases"
+usage="usage: off-by-default.sh <archetype> [<project dir>] | --new <archetype> <project dir> | --check | --project-phrases"
 [ $# -ge 1 ] || { echo "$usage" >&2; exit 2; }
 
 # The table's rows under "## The list", header and separator dropped; five
@@ -53,10 +55,11 @@ case "$1" in
       s="$(steps "$cell")"; [ "${s%% *}" = file ] && echo "${s#file }"
     done <<<"$rows"
     exit 0 ;;
+  --new) [ $# -eq 3 ] || { echo "$usage" >&2; exit 2; }; new=1; shift ;;
   -*) echo "$usage" >&2; exit 2 ;;
 esac
 
-archetype="$1"; dir="${2:-}"
+archetype="$1"; dir="${2:-}"; new="${new:-0}"
 while IFS=$'\t' read -r feature archetypes when cell sign; do
   [ "$archetypes" = all ] || [[ ",${archetypes// /}," == *",$archetype,"* ]] || continue
   s="$(steps "$cell")"
@@ -68,7 +71,7 @@ while IFS=$'\t' read -r feature archetypes when cell sign; do
   prefix="off:"
   if [ -n "$dir" ]; then
     sign="${sign//\`/}"
-    if [ "$sign" = - ]; then prefix="started off (whether it is on now is not read):"
+    if [ "$sign" = - ]; then [ "$new" = 1 ] || prefix="started off (whether it is on now is not read):"
     elif [ -e "$dir/$sign" ]; then continue; fi
   fi
   echo "$prefix $feature. Turn it on when $when: $where"
