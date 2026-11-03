@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.24.1] - 2026-11-03
+
+`/plinth:new-project` no longer stops at the token check on Ubuntu 26.04,
+which `ubuntu-latest` became on 2026-11-03. v2.24.0 was never tagged: its
+`e2e` run stopped at that check, so this release carries everything in
+v2.24.0's section below as well. Update with `claude plugin update
+plinth@plinth`.
+
+tested with plinth-template v1.37.0
+
 ### Fixed
 
 - `/plinth:new-project` no longer stops with "cannot read
@@ -4468,7 +4478,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.24.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.24.1...HEAD
+[2.24.1]: https://github.com/coolbress/plinth/releases/tag/v2.24.1
 [2.24.0]: https://github.com/coolbress/plinth/releases/tag/v2.24.0
 [2.23.0]: https://github.com/coolbress/plinth/releases/tag/v2.23.0
 [2.22.0]: https://github.com/coolbress/plinth/releases/tag/v2.22.0
