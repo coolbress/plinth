@@ -765,6 +765,14 @@ if [ "$rc" = 1 ] && grep -qF "  .github/workflows/label.yml calls $old_pin, not 
    && ! grep -q "pr create" "$work/gh.log" && ! git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
 then ok "copier leaving label.yml unmoved: the apply stops, names it, pushes and opens nothing"
 else bad "apply, stale pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The compare read at the plan but not at the apply (review on #798): the
+# apply stops before copier, never runs with the post-copier check skipped.
+two_fixture pins-unread; reset_logs
+out="$(cd "$repo" && MOCK_PINS=move FLOOR_CHECK_API_DIR="$FLOOR_CHECK_API_DIR" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && grep -q "workflow pins disagree" <<<"$out" \
+   && grep -q "more than one commit and the update cannot carry one" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
+then ok "two pins and the compare unread at the apply: it stops before copier, names why, opens nothing"
+else bad "apply, compare unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 two_fixture pins-ahead; reset_logs
 out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$work/api-ahead" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" 2>&1)"; rc=$?
 if [ "$rc" = 1 ] && grep -q "workflow pins disagree" <<<"$out" && grep -qxF "  label.yml: coolbress/plinth at $old_pin" <<<"$out" \

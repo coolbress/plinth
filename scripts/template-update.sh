@@ -401,19 +401,30 @@ note_file="$(mktemp)"
 tested_cmd="$(cmd_at "$wt" tested 2>"$note_file")"; tested_rc=$?
 pin_note="$(sed -n '/^plinth pin: /{p;q;}' "$note_file")"
 why_none="${pin_note:-$(head -n 1 "$note_file")}"; rm -f "$note_file"
+# The live line, read once: the command itself with --plinth-pin live, and
+# with either pin the files it moves forward to the ci job's commit (#793),
+# its `moves:` lines. A read that fails while the pins disagree is a stop,
+# never an empty list that would skip the check after copier.
+live_note="$(mktemp)"
+live_cmd="$(cmd_at "$wt" 2>"$live_note")"; live_rc=$?
+moves="$(sed -n 's/^moves: //p' "$live_note")"
+if [ "$live_rc" != 0 ] && grep -q "workflow pins disagree" "$live_note"; then
+  cat "$live_note" >&2; rm -f "$live_note"
+  die "the workflows call plinth at more than one commit and the update cannot carry one (above); $wt left for inspection"
+fi
 if [ "$pin" = tested ]; then
+  rm -f "$live_note"
   [ "$tested_rc" = 0 ] && cmd="$tested_cmd" \
     || die "no update command with the tested pin (${why_none:-no reason given}); $wt left for inspection. Run the plan again, or --apply with --plinth-pin live"
   # The live pin is already the tested one: nothing moved, and the
   # description must not say it did.
-  [ "$cmd" != "$(cmd_at "$wt" 2>/dev/null)" ] || pin=same
+  [ "$cmd" != "$live_cmd" ] || pin=same
 else
-  cmd="$(cmd_at "$wt")" || die "no update command at the base (above); $wt left for inspection"
+  [ "$live_rc" = 0 ] && cmd="$live_cmd" \
+    || { grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"; die "no update command at the base (above); $wt left for inspection"; }
+  grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"
 fi
 case "$cmd" in *" --vcs-ref ${to_sha:-?} "*) ;; *) die "the command does not update to $to ($to_sha): $cmd" ;; esac
-# Each file the line moves forward to the ci job's commit (#793): the pins
-# disagreed at the base, and the update carries the ci job's.
-moves="$(cmd_at "$wt" 2>&1 >/dev/null | sed -n 's/^moves: //p')"
 read -ra words <<<"$cmd"
 echo "Running in $wt:"
 echo "  $cmd"
