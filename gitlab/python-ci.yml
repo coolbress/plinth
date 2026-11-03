@@ -410,17 +410,18 @@ pr-title:
         plinth_failed=1
       fi
       # The description, whole: GitLab cuts CI_MERGE_REQUEST_DESCRIPTION at
-      # 2700 characters, and the job token reads the merge request itself.
+      # 2700 characters, and the job token reads the merge request itself, in
+      # the merge request's project: a fork's pipeline runs in the fork.
       answer=""
       if [ "${CI_MERGE_REQUEST_DESCRIPTION+set}" != set ] || [ "${CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED:-}" = true ]; then
         answer="$PLINTH_TMP/merge-request.json"
         if ! curl -fsS --retry 3 -o "$answer" --header "JOB-TOKEN: ${CI_JOB_TOKEN:-}" \
-            "${CI_API_V4_URL:-}/projects/${CI_PROJECT_ID:-}/merge_requests/${CI_MERGE_REQUEST_IID:-}"; then
+            "${CI_API_V4_URL:-}/projects/${CI_MERGE_REQUEST_PROJECT_ID:-${CI_PROJECT_ID:-}}/merge_requests/${CI_MERGE_REQUEST_IID:-}"; then
           answer="$PLINTH_TMP/unread"
         fi
       fi
       rc=0
-      ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_PROJECT_PATH:-}" python3 - <<'PY' || rc=$?
+      ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
       import json, os, re, sys
 
       # GitLab's default issue closing pattern ("Default closing pattern" in
@@ -447,13 +448,20 @@ pr-title:
 
 
       def refs(text, project):
-          """Every issue the text names, as (project path in lower case, number)."""
+          """Every issue the text names, as (project path in lower case, number).
+
+          A URL on another GitLab instance keeps its host: its issue is not this
+          instance's issue at the same path."""
           out = []
           for ref in re.findall(REF, text):
-              url = re.match(r"https?://[^\s/]+/(.+)/-/(?:issues(?:/incident)?|work_items)/(\d+)$", ref)
+              url = re.match(r"https?://([^\s/]+)/(.+)/-/(?:issues(?:/incident)?|work_items)/(\d+)$", ref)
               bracket = re.match(r"\[issue:(?:(.+)/)?(\d+)\]$", ref)
-              if url or bracket:
-                  where, number = (url or bracket).groups()
+              if url:
+                  host, where, number = url.groups()
+                  if host.lower() != server:
+                      where = f"{host}/{where}"
+              elif bracket:
+                  where, number = bracket.groups()
               elif ref.startswith("GL-"):
                   where, number = "", ref[3:]
               else:
@@ -495,6 +503,7 @@ pr-title:
 
 
       project = os.environ.get("PROJECT", "").lower()
+      server = os.environ.get("SERVER", "").lower()
       answer = os.environ.get("ANSWER", "")
       try:
           if answer:

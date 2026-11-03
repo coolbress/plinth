@@ -122,7 +122,9 @@ does on GitHub, with two differences:
 
 The description is read whole: `CI_MERGE_REQUEST_DESCRIPTION` when GitLab
 did not cut it, and the merge request API with the job token when it did
-(at 2700 characters). A description that cannot be read fails.
+(at 2700 characters), asking the merge request's own project: a fork's
+pipeline runs in the fork. Whether a fork's job token may read the merge
+request there is not measured. A description that cannot be read fails.
 
 GitLab starts no pipeline when a description is edited, as for a retitle.
 An edited description is checked on the next pipeline only: after

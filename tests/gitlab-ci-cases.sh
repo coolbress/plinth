@@ -223,6 +223,7 @@ desc() { # <description> [truncated]: a merge request pipeline of g/p !4
   : > "$tmp_curl_log"
   CI_MERGE_REQUEST_TITLE="docs: a page" CI_MERGE_REQUEST_DESCRIPTION="$1" CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED="${2:-false}" \
     CI_PROJECT_PATH=g/p CI_PROJECT_ID=9 CI_MERGE_REQUEST_IID=4 CI_API_V4_URL=https://gitlab.example/api/v4 CI_JOB_TOKEN=jt \
+    CI_SERVER_HOST=gitlab.example \
     run_job pr-title
 }
 desc "$what It is the second of the two fixes #65 decided to land."$'\n\n'"$by"
@@ -256,6 +257,10 @@ desc "$what"$'\n\nCloses #65, fixes #66\n\n'"$by"
 expect "a closing line with a keyword before each issue names both" 0 "the closing line names #65, #66"
 desc "$what"$'\n\nCloses #65 and fixes GL-66.\n\n'"$by"
 expect "... and with \`and\`, a GL- reference and a full stop" 0 "the closing line names #65, #66"
+desc "$what The prose fixes #65 in passing."$'\n\nCloses https://gitlab.other/g/p/-/issues/65\n\n'"$by"
+expect "a closing line naming another instance's issue at the same path does not name this one" 1 "FAIL  #65"
+desc "$what The prose fixes #65 in passing."$'\n\nCloses https://gitlab.example/g/p/-/issues/65\n\n'"$by"
+expect "a closing line naming this instance's issue by URL names it" 0 "the closing line names #65"
 desc "$what CLOSES #7 is not GitLab's: its keywords are case sensitive."$'\n\n'"$by"
 expect "an upper-case keyword, which GitLab's default pattern does not match, passes" 0 "not yet confirmed: MR description"
 desc "$what"$'\n\nCloses #12\n\nMore text after it.\n\n'"$by"
@@ -268,6 +273,13 @@ STUB_MR="$(python3 -c 'import json,sys; print(json.dumps({"description": sys.arg
 expect "a truncated variable: the description is read whole from the API, and judged on that" 1 "FAIL  #66"
 grep -qF -- "--header JOB-TOKEN: jt https://gitlab.example/api/v4/projects/9/merge_requests/4" "$tmp_curl_log" \
   && ok "... with the job token, from this merge request" || bad "the API call is not the one expected" "$(cat "$tmp_curl_log")"
+: > "$tmp_curl_log"
+STUB_MR='{"description": "fine"}' CI_MERGE_REQUEST_TITLE="docs: a page" CI_MERGE_REQUEST_DESCRIPTION="cut" CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED=true \
+  CI_PROJECT_PATH=fork/p CI_PROJECT_ID=10 CI_MERGE_REQUEST_PROJECT_ID=20 CI_MERGE_REQUEST_PROJECT_PATH=g/p CI_MERGE_REQUEST_IID=4 \
+  CI_API_V4_URL=https://gitlab.example/api/v4 CI_JOB_TOKEN=jt run_job pr-title
+grep -qF -- "https://gitlab.example/api/v4/projects/20/merge_requests/4" "$tmp_curl_log" \
+  && ok "a fork's pipeline reads the merge request from the merge request's project, not the fork" \
+  || bad "a fork's pipeline asked the wrong project" "$(cat "$tmp_curl_log")"
 desc "${what:0:20}" true
 expect "a truncated variable and an API that does not answer: fails, not a pass" 1 "fail: MR description, it could not be read"
 STUB_MR='{"title": "no description key"}' desc "${what:0:20}" true
