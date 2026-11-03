@@ -126,6 +126,15 @@ pull requests and have no tag.
   each new question defaults to what a project has today, so the update
   needs no hands except in files a project changed itself (v1.36.0's
   release notes name them).
+- `/plinth:new-project` renders plinth-template v1.37.0.
+  **From v1.37.0, the `image` check of a `backend`, `data-ml` or `web`
+  project can fail**: it scans the image it built, and a high or critical
+  finding whose fix has been out for more than 14 days fails it; merging
+  the open Dependabot pull request for the base image clears what the base
+  image carries (coolbress/plinth-template#182). Each release also carries
+  an SBOM, `sbom.spdx.json` (coolbress/plinth-template#183). Neither adds an
+  action, so the Actions allowlist is unchanged, and `copier update` needs
+  no hands.
 - On GitHub too, `/plinth:new-project`'s first pull request ends with
   `Assisted-by: <agent>:<model>` when `PLINTH_ASSISTED_BY` is set, as the
   GitLab first merge request already did, and the skill sets it on both
