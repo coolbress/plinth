@@ -65,6 +65,17 @@ pull requests and have no tag.
 
 ### Changed
 
+- **`ci / pr-title` now fails a pull request whose description would close
+  an issue outside its closing line**, as plinth's own `ci / docs` does:
+  a closing keyword before `#N` in a sentence ("the two fixes #N decided")
+  closes that issue on merge. The job quotes the line to reword; a
+  `Closes #N` line directly above the attribution, or `Part of #N`, passes.
+  It reads GitHub's own list of what the merge closes, with the
+  `pull-requests: read` and `issues: read` the caller job already grants,
+  and re-runs on an edited description where `ci.yml` lists `edited`, as
+  plinth-template's does. No check name changes. A project picks it up when
+  its pin is raised; until it rewords one, an open pull request whose prose
+  closes an issue turns red (#781).
 - `/plinth:new-project` renders plinth-template v1.36.0, which carries
   v1.34.0 and v1.35.0 too. **From v1.36.0, a new `cli` project writes its
   log lines to stderr, not stdout**, and an existing one gets that change

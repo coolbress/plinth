@@ -14,14 +14,15 @@ name: python-ci
 #     ci:
 #       permissions:
 #         contents: read
-#         issues: read          # floor-check's labels
-#         pull-requests: read   # diff-size reads the reviews
+#         issues: read          # floor-check's labels, pr-title's closed issues
+#         pull-requests: read   # diff-size reads the reviews, pr-title the description
 #         actions: write        # diff-size's approval re-runs the red run
 #       uses: coolbress/plinth/.github/workflows/python-ci.yml@<commit-sha>
 #
 # Each permission is one a job here asks for: a `ci` job that does not grant
 # it fails at startup, every check with it (#586). The review event is what
-# lets an approval turn diff-size green without a push.
+# lets an approval turn diff-size green without a push; `edited` re-runs
+# pr-title when the title or the description changes.
 #
 # Why separate jobs: the floor requires lint, typecheck, test and build as
 # separate required checks. Four steps in one job stop at the first failure,
@@ -828,9 +829,15 @@ jobs:
   # types on the spot, and both were really `docs:`. A model reaches for the
   # list it was trained on. The spec mandates only feat and fix, and scope is
   # free-form, so local meaning goes into the scope (`docs(research):`).
+  # The title, and then the description: merging must not close an issue the
+  # description's closing line does not name (#781). A closing keyword before
+  # `#N` closes that issue in a sentence as much as on a line of its own.
   pr-title:
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    permissions:
+      pull-requests: read   # the description and the issues its merge will close (#781)
+      issues: read          # those issues' numbers
     steps:
       - name: Check the title
         env:
@@ -899,6 +906,61 @@ jobs:
             echo "| \`deps:\` \`security:\` | \`build(deps):\` \`fix(security):\` |"
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
+
+      # The decision plinth's own `ci / docs` runs (#293), fetched from the
+      # plinth commit this workflow file comes from (`job.workflow_sha`, see
+      # floor-check). It runs after a red title too, so one push shows both.
+      - name: Fetch the description check from the same plinth commit as this workflow
+        id: fetch-closing
+        if: ${{ !cancelled() }}
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-closing"; mkdir -p "$d"
+          for f in scripts/closing-references.sh scripts/closing-references.py; do
+            curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
+              "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
+          done
+          echo "plinth ${PLINTH_SHA}"
+
+      # GitHub's own list of the issues the merge will close, compared with the
+      # description's closing line. A review's run reads the same pull request:
+      # passing it as "not a pull request" would turn a red check green with
+      # the description unchanged. Anything unread fails, a failed fetch too,
+      # with its own line: the title's pass must not be the job's only one.
+      - name: The description closes no issue outside its closing line
+        if: ${{ !cancelled() }}
+        env:
+          FETCH: ${{ steps.fetch-closing.outcome }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          if [ -z "${PR:-}" ]; then
+            echo "Not a pull request ($EVENT_NAME): no description to read."
+            say "pass: PR description, does not apply (not a pull request: no description to read)"
+            exit 0
+          fi
+          if [ "${FETCH:-}" != success ]; then
+            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read"
+            exit 1
+          fi
+          # The verdict line first, then the script's report.
+          report="$RUNNER_TEMP/closing-references.md"; : > "$report"; rc=0
+          EVENT=pull_request GITHUB_STEP_SUMMARY="$report" \
+            bash "$RUNNER_TEMP/plinth-closing/closing-references.sh" || rc=$?
+          if [ "$rc" = 0 ]; then
+            say "pass: PR description, merging it closes no issue its closing line does not name"
+          else
+            say "fail: PR description, merging it would close an issue its closing line does not name, or GitHub's list could not be read"
+          fi
+          { echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
 
   # A wall, not a net. Dependabot reports what already got in; this job
   # blocks what a PR is bringing in. The dependency graph must be enabled
