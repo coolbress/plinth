@@ -3143,23 +3143,37 @@ answers "code_of_conduct: true with the file is a PASS" '^  PASS  code_of_conduc
   'code_of_conduct: true\n' ": > CODE_OF_CONDUCT.md"
 answers "code_of_conduct: false is not a miss" '!CODE_OF_CONDUCT|code_of_conduct' 'code_of_conduct: false\n'
 coc_api="$work/ans-owner"; mkdir -p "$coc_api/repos/o/.github/contents/docs"
+printf '{"visibility":"public"}' > "$coc_api/repos/o/.github.json"
 jq -n --arg c "$(printf '# Code\n' | base64)" '{content: $c}' > "$coc_api/repos/o/.github/contents/docs/CODE_OF_CONDUCT.md.json"
 answers "owner_has_code_of_conduct: true and the owner publishes one (in docs/) is a PASS" \
   "^  PASS  owner_has_code_of_conduct: true, and the owner's .github repository publishes CODE_OF_CONDUCT.md" 'owner_has_code_of_conduct: true\n' "" "$coc_api"
-answers "must not pass: owner_has_code_of_conduct: true and the owner's is gone is a WARN" \
-  "^  WARN  owner_has_code_of_conduct: true, and the owner's .github repository no longer publishes CODE_OF_CONDUCT.md" 'owner_has_code_of_conduct: true\n'
+answers "must not pass: owner_has_code_of_conduct: true and the owner's .github gone is a WARN" \
+  "^  WARN  owner_has_code_of_conduct: true, and o/.github is private or gone" 'owner_has_code_of_conduct: true\n'
+gone_api="$work/ans-gone"; mkdir -p "$gone_api/repos/o"; printf '{"visibility":"public"}' > "$gone_api/repos/o/.github.json"
+answers "must not pass: owner_has_code_of_conduct: true, a public .github without the file, is a WARN" \
+  "^  WARN  owner_has_code_of_conduct: true, and the owner's .github repository no longer publishes CODE_OF_CONDUCT.md" 'owner_has_code_of_conduct: true\n' "" "$gone_api"
+# Codex review on #779, round 2: GitHub inherits from a public .github only,
+# and an administrator's token still reads a private one's files.
+priv_api="$work/ans-private"; rm -rf "$priv_api"; cp -R "$coc_api" "$priv_api"; printf '{"visibility":"private"}' > "$priv_api/repos/o/.github.json"
+answers "must not pass: the owner's file readable in a private .github is a WARN, not a PASS" \
+  "^  WARN  owner_has_code_of_conduct: true, and o/.github is private or gone: GitHub inherits CODE_OF_CONDUCT.md only from a public .github repository" \
+  'owner_has_code_of_conduct: true\n' "" "$priv_api"
+answers "...and it is never passed" "!PASS  owner_has_code_of_conduct" 'owner_has_code_of_conduct: true\n' "" "$priv_api"
+unvis_api="$work/ans-unvis"; rm -rf "$unvis_api"; cp -R "$coc_api" "$unvis_api"; printf 'not json' > "$unvis_api/repos/o/.github.json"
+answers "the .github's visibility unread is a SKIP, not a PASS" \
+  "^  SKIP  owner_has_code_of_conduct: true; whether o/.github is public not verified" 'owner_has_code_of_conduct: true\n' "" "$unvis_api"
 answers "...and code_of_conduct: true beside it is not asked of the repository" '!WARN  code_of_conduct: true' \
   'owner_has_code_of_conduct: true\ncode_of_conduct: true\n' "" "$coc_api"
-bad_api="$work/ans-bad"; mkdir -p "$bad_api/repos/o/.github/contents"; printf 'not json' > "$bad_api/repos/o/.github/contents/CODE_OF_CONDUCT.md.json"
+bad_api="$work/ans-bad"; mkdir -p "$bad_api/repos/o/.github/contents"; printf 'not json' > "$bad_api/repos/o/.github/contents/CODE_OF_CONDUCT.md.json"; printf '{"visibility":"public"}' > "$bad_api/repos/o/.github.json"
 answers "an owner's file that cannot be read is a SKIP, not a WARN" "^  SKIP  owner_has_code_of_conduct: true; whether the owner's .github repository still publishes it not verified" \
   'owner_has_code_of_conduct: true\n' "" "$bad_api"
-pr_api="$work/ans-owner-pr"; mkdir -p "$pr_api/repos/o/.github/contents/.github"
+pr_api="$work/ans-owner-pr"; mkdir -p "$pr_api/repos/o/.github/contents/.github"; printf '{"visibility":"public"}' > "$pr_api/repos/o/.github.json"
 jq -n --arg c "$(printf '## What\n' | base64)" '{content: $c}' > "$pr_api/repos/o/.github/contents/.github/PULL_REQUEST_TEMPLATE.md.json"
 answers "owner_has_pr_template: true and the owner publishes one (in .github/) is a PASS" \
   "^  PASS  owner_has_pr_template: true, and the owner's .github repository publishes PULL_REQUEST_TEMPLATE.md" 'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$pr_api"
 answers "must not pass: owner_has_pr_template: true and the owner's is gone is a WARN" \
   "^  WARN  owner_has_pr_template: true, and the owner's .github repository no longer publishes PULL_REQUEST_TEMPLATE.md" \
-  'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md"
+  'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$gone_api"
 answers "owner_has_pr_template: false is not read" '!owner_has_pr_template' 'owner_has_pr_template: false\n'
 # The archetypes that get the tag ruleset: one list in the door, one in the checker.
 door_list="$(sed -n 's/^case "\$arch" in \([a-z|-]*\)) tag_ruleset=0.*/\1/p' "$root/scripts/new-project.sh")"

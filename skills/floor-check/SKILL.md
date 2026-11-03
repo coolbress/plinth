@@ -424,8 +424,10 @@ login cannot administer the repository, and never run it.
 - **The project's answers.** Each answer in `.copier-answers.yml` that turns
   something on is held against the repository: `third_party_review: true`
   and `.github/workflows/third-party.yml`; `code_of_conduct: true` and
-  `CODE_OF_CONDUCT.md`; `owner_has_code_of_conduct: true` and the owner's
-  `.github` repository still publishing one (a SKIP when it cannot be read,
+  `CODE_OF_CONDUCT.md`; `owner_has_code_of_conduct: true` (and `owner_has_pr_template: true`) and
+  the owner's `.github` repository still public and still publishing one (a
+  WARN when it is private or gone, since GitHub inherits only from a public
+  one; a SKIP when its visibility cannot be read) (a SKIP when it cannot be read,
   a PASS when the repository has its own). An answer that turns something
   off, or one not recorded, is not read. `owner_has_security_policy` needs
   no item of its own: `SECURITY.md`, local or inherited, is in the document

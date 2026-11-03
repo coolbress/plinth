@@ -1261,6 +1261,39 @@ PR_TEMPLATE_PATHS = ("PULL_REQUEST_TEMPLATE.md", ".github/PULL_REQUEST_TEMPLATE.
 OWNER_KEYS = ("owner_has_pr_template", "owner_has_issue_forms")
 
 
+def shared_fetched(data, text) -> str:
+    """An `api` answer as new-project.sh's gh_read writes it, for the
+    functions in scripts/lib/shared-github.sh."""
+    if data is ABSENT:
+        return "err:HTTP 404 Not Found"
+    if data is ERROR:
+        return "err:offline or API error"
+    got = text(data)
+    return "err:an unexpected response" if got is None else "ok:" + got
+
+
+def shared_decide(fn: str, *answers: str) -> str:
+    """One decision of scripts/lib/shared-github.sh, run with bash, so the
+    checker and the door decide alike; `unknown: <why>` when it cannot run."""
+    try:
+        r = subprocess.run(["bash", "-c", '. "$0" && "$@"', str(SHARED_GITHUB), fn, *answers],
+                           capture_output=True, text=True, check=False)
+    except OSError as e:
+        return f"unknown: {fn} did not run ({e})"
+    out = r.stdout.strip()
+    return out if r.returncode == 0 and out else f"unknown: {fn} gave no answer ({r.stderr.strip()})"
+
+
+def owner_dotgithub_public(owner: str, network: bool) -> str:
+    """`shared_repo_public` on `<owner>/.github`: yes, no (private or none),
+    or `unknown: <why>`. GitHub inherits from a public one only."""
+    if not SHARED_GITHUB.is_file():
+        return f"unknown: {SHARED_GITHUB} not found beside the checker"
+    return shared_decide("shared_repo_public", shared_fetched(
+        api(f"repos/{owner}/.github", network),
+        lambda j: j.get("visibility") if isinstance(j, dict) and isinstance(j.get("visibility"), str) else None))
+
+
 def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
     """On GitHub, give the update line the owner's answers, as
     /plinth:new-project gives `copier copy` (#726): whether `<owner>/.github`
@@ -1303,30 +1336,13 @@ def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
         withdraw(f"{SHARED_GITHUB} not found beside the checker, so the owner's .github could not be judged")
         return
 
-    def fetched(data, text) -> str:  # an `api` answer as new-project.sh's gh_read writes it
-        if data is ABSENT:
-            return "err:HTTP 404 Not Found"
-        if data is ERROR:
-            return "err:offline or API error"
-        got = text(data)
-        return "err:an unexpected response" if got is None else "ok:" + got
-
-    def decide(fn: str, *answers: str) -> str:
-        try:
-            r = subprocess.run(["bash", "-c", '. "$0" && "$@"', str(SHARED_GITHUB), fn, *answers],
-                               capture_output=True, text=True, check=False)
-        except OSError as e:
-            return f"unknown: {fn} did not run ({e})"
-        out = r.stdout.strip()
-        return out if r.returncode == 0 and out else f"unknown: {fn} gave no answer ({r.stderr.strip()})"
+    fetched, decide = shared_fetched, shared_decide
 
     def why(answer: str) -> str:
         return answer.removeprefix("unknown: ")
 
     shared = f"repos/{owner}/.github"
-    vis = decide("shared_repo_public", fetched(api(shared, network), lambda j: j.get("visibility")
-                                                if isinstance(j, dict) and isinstance(j.get("visibility"), str)
-                                                else None))
+    vis = owner_dotgithub_public(owner, network)
     if vis.startswith("unknown"):
         withdraw(f"cannot read whether {owner}/.github is public ({why(vis)}); a failed lookup is not an answer: "
                  f"only a public .github repository is inherited from")
@@ -2828,6 +2844,20 @@ def check_owner_copy(root: Path, owner: str | None, network: bool, key: str, nam
     places = (name, f".github/{name}", f"docs/{name}")
     if any((root / p).is_file() for p in places):
         result("PASS", f"{name} is the repository's own, which applies in place of the owner's")
+        return
+    if owner is None:
+        result("SKIP", f"{key}: true; whether the owner's .github repository still publishes {name} not verified "
+                       "(no --repo)")
+        return
+    vis = owner_dotgithub_public(owner, network)
+    if vis.startswith("unknown"):
+        result("SKIP", f"{key}: true; whether {owner}/.github is public not verified "
+                       f"({vis.removeprefix('unknown: ')}), and GitHub inherits only from a public one")
+        return
+    if vis != "yes":
+        result("WARN", f"{key}: true, and {owner}/.github is private or gone: GitHub inherits {name} only from "
+                       "a public .github repository, so this repository has none in effect")
+        result("INFO", "  /plinth:template-update looks at the owner's .github again and passes what it finds")
         return
     found, failed = False, False
     for path in places:
