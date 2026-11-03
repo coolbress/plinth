@@ -48,6 +48,8 @@ case "$all" in
   # GitHub reads a community-health file from the root, `.github/` or `docs/`,
   # and the door asks about all of them: match the name, not one path.
   *"/contents/"*"PULL_REQUEST_TEMPLATE.md"*)     step=shared-pr ;;
+  *"/contents/"*"CODE_OF_CONDUCT.md"*)           step=shared-coc ;;
+  *"/contents/"*"SECURITY.md"*)                  step=shared-sec ;;
   "api repos/"*"/.github --jq .visibility"*)     step=shared-visibility ;;
   *"/contents/.github/ISSUE_TEMPLATE/"*)         step=shared-form-body ;;
   *"/contents/"*"ISSUE_TEMPLATE"*)               step=shared-forms ;;
@@ -108,12 +110,20 @@ case "$step" in
                    garbage)   printf '!!! not base64 !!!' ;;
                    nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
                    hosting) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nhosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' | base64 ;;
-                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}" | base64 ;;
+                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}" | base64 ;;
                  esac ;;
   # The owner's shared community-health files: present, absent (404) or
   # unreadable (any other failure). `gh` prints "Not Found" on a 404.
   shared-pr)     case "${MOCK_SHARED_PR:-absent}" in
                    present) echo '{"path":"PULL_REQUEST_TEMPLATE.md"}' ;;
+                   error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
+                   *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+                 esac ;;
+  # The owner's code of conduct and security policy (#772), the same three answers.
+  shared-coc|shared-sec)
+                 v=MOCK_SHARED_COC; [ "$step" = shared-sec ] && v=MOCK_SHARED_SEC
+                 case "${!v:-absent}" in
+                   present) echo '{"path":"x"}' ;;
                    error)   echo "mock gh: HTTP 500" >&2; exit 1 ;;
                    *)       echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
                  esac ;;
@@ -261,6 +271,13 @@ printf '_commit: mock\n' > "$dst/.copier-answers.yml"
 case " $* " in *" third_party_review=true "*)
   if [ "${MOCK_REVIEW_NORECORD:-0}" != 1 ]; then
     printf 'third_party_review: true\n' >> "$dst/.copier-answers.yml"; printf 'name: third-party\n' > "$dst/.github/workflows/third-party.yml"
+  fi ;;
+esac
+# The code of conduct (#772): rendered with its contact unless the owner has
+# one; MOCK_COC_NORENDER=1 plays a template that took the answer and dropped it.
+case " $* " in *" code_of_conduct=true "*)
+  if [ "${MOCK_COC_NORENDER:-0}" != 1 ] && [[ " $* " != *" owner_has_code_of_conduct=true "* ]]; then
+    for a in "$@"; do case "$a" in code_of_conduct_contact=*) printf 'reports: %s\n' "${a#*=}" > "$dst/CODE_OF_CONDUCT.md" ;; esac; done
   fi ;;
 esac
 exit 0
@@ -544,7 +561,7 @@ E="MOCK_FINE=1 PLINTH_TOKEN_SOURCE=prompt" run fine-admin ok yes no "rollback: b
 # Labels are a convenience, not a wall stone: a failed create names the label and
 # the run carries on. A rollback over a label would delete a repository whose wall is up.
 E="FAIL_AT=label"     run label-fails   ok yes no "warning: could not create the label task" -- probe
-E="MOCK_SHARED_PR=present MOCK_SHARED_FORMS=present" run shared-both ok yes no "already publishes: pull-request template issue forms" -- probe
+E="MOCK_SHARED_PR=present MOCK_SHARED_FORMS=present" run shared-both ok yes no "already publishes: pull-request template, issue forms" -- probe
 E="MOCK_SHARED_PR=present" run shared-pr-only ok yes no "already publishes: pull-request template" -- probe
 # Only a public `.github` is inherited from. A private one reads fine through the
 # API and applies to nothing, so believing it would leave the new repository with
@@ -628,6 +645,54 @@ E="MOCK_REVIEW_Q=1 MOCK_REVIEW_NORECORD=1" run review-dropped err yes yes "did n
 run review-both err no no "--third-party-review and --no-third-party-review: choose one" -- probe --third-party-review --no-third-party-review
 run public-private err no no "--private and --public: choose one" -- probe --private --public
 run public-said ok yes no "(public, MIT, cli, as owner)" -- probe --public
+
+echo "the owner's code of conduct and security policy, and the description (#772)"
+# Asked for, with no owner copy: copier gets both answers and the owner
+# answers as false, the plan line names the contact.
+E="MOCK_COC_Q=1" run coc ok yes no "a code of conduct with reports to conduct@example.org" -- probe --code-of-conduct=conduct@example.org
+if grep -q -- '--data owner_has_security_policy=false --data owner_has_code_of_conduct=false --data code_of_conduct=true --data code_of_conduct_contact=conduct@example.org --vcs-ref' "$work/home-coc/calls.log" \
+   && grep -q 'api repos/tester/.github/contents/docs/CODE_OF_CONDUCT.md --silent' "$work/home-coc/calls.log" \
+   && grep -q 'api repos/tester/.github/contents/.github/SECURITY.md --silent' "$work/home-coc/calls.log"
+then ok coc "copier gets the code of conduct with its contact, after the owner's three places for each file were read"
+else bad coc "the answers copier got, or the owner lookups, are not what #772 says"; grep -E 'CODE_OF|SECURITY|^uvx' "$work/home-coc/calls.log" | cut -c1-300 | sed 's/^/        /'; fi
+# The owner's code of conduct wins, and the owner's security policy is passed.
+E="MOCK_COC_Q=1 MOCK_SHARED_COC=present MOCK_SHARED_SEC=present" run coc-owner ok yes no "already publishes: code of conduct, security policy" -- probe --code-of-conduct=conduct@example.org
+if grep -qF "the box renders none, so --code-of-conduct is not used" "$work/home-coc-owner/out" \
+   && grep -q -- '--data owner_has_security_policy=true --data owner_has_code_of_conduct=true --vcs-ref' "$work/home-coc-owner/calls.log" \
+   && ! grep -qE -- '--data (code_of_conduct=true|code_of_conduct_contact)' "$work/home-coc-owner/calls.log" \
+   && ! grep -qF 'a code of conduct with reports' "$work/home-coc-owner/out"
+then ok coc-owner "with the owner's code of conduct, ours is not asked for and the owner answers are true"
+else bad coc-owner "the owner's code of conduct did not win"; grep -E '^uvx' "$work/home-coc-owner/calls.log" | cut -c1-300 | sed 's/^/        /'; fi
+# No code of conduct asked for: the owner answers only.
+E="MOCK_COC_Q=1" run coc-off ok yes no "(public, MIT, cli, as owner)" -- probe --no-code-of-conduct
+if grep -q -- '--data owner_has_security_policy=false --data owner_has_code_of_conduct=false --vcs-ref' "$work/home-coc-off/calls.log"
+then ok coc-off "--no-code-of-conduct passes only the owner answers"; else bad coc-off "unexpected answers"; grep '^uvx' "$work/home-coc-off/calls.log" | cut -c1-300 | sed 's/^/        /'; fi
+# A template without the questions (v1.35.0 and earlier): nothing passed, the owner's
+# security policy is not claimed, and a code of conduct asked for stops first.
+E="MOCK_SHARED_SEC=present" run coc-old-template-sec ok yes no "" -- probe
+if ! grep -q 'owner_has_security_policy\|owner_has_code_of_conduct' "$work/home-coc-old-template-sec/calls.log" && ! grep -q 'already publishes' "$work/home-coc-old-template-sec/out"
+then ok coc-old-template-sec "a template that does not ask gets no owner answer, and the owner's security policy is not said to apply"
+else bad coc-old-template-sec "an owner answer reached a template that does not ask it"; fi
+run coc-old-template err no no "cannot render a code of conduct; nothing was created" -- probe --code-of-conduct=conduct@example.org
+E="MOCK_CHOICES=garbage" run coc-unread err no no "could not read whether the template can render a code of conduct" -- probe --code-of-conduct=conduct@example.org
+E="MOCK_COC_Q=1 MOCK_SHARED_COC=error" run coc-lookup-fails err no no "cannot read whether tester/.github publishes a code of conduct or a security policy" -- probe
+E="MOCK_COC_Q=1 MOCK_COC_NORENDER=1" run coc-dropped err yes yes "did not render CODE_OF_CONDUCT.md" -- probe --code-of-conduct=conduct@example.org
+run coc-both err no no "--code-of-conduct and --no-code-of-conduct: choose one" -- probe --code-of-conduct=a@b.c --no-code-of-conduct
+run coc-bare err no no "--code-of-conduct needs the address reports go to" -- probe --code-of-conduct
+run coc-empty err no no "--code-of-conduct= needs one line" -- probe "--code-of-conduct= "
+# --force-defaults reads nothing of the owner's and renders ours.
+E="MOCK_COC_Q=1 MOCK_SHARED_COC=present" run coc-force ok yes no "a code of conduct with reports to c@example.org" -- probe --force-defaults --code-of-conduct=c@example.org
+if ! grep -q 'CODE_OF_CONDUCT.md --silent' "$work/home-coc-force/calls.log"
+then ok coc-force "--force-defaults does not read the owner's files"; else bad coc-force "the owner's files were read under --force-defaults"; fi
+# The description: set at creation, none when skipped.
+run desc ok yes no "" -- probe "--description=A tool that does one thing"
+if grep -qxF 'gh repo create tester/probe --public --description A tool that does one thing' "$work/home-desc/calls.log"
+then ok desc "the description is set when the repository is created"; else bad desc "no description at creation"; grep '^gh repo create' "$work/home-desc/calls.log" | sed 's/^/        /'; fi
+run desc-none ok yes no "" -- probe --no-description
+if grep -qxF 'gh repo create tester/probe --public' "$work/home-desc-none/calls.log"
+then ok desc-none "--no-description sets none"; else bad desc-none "a description was set"; fi
+run desc-both err no no "--description and --no-description: choose one" -- probe --description=x --no-description
+run desc-long err no no "--description is one line of at most 350 characters (got 351)" -- probe "--description=$(printf 'x%.0s' $(seq 351))"
 
 echo "where a web app runs (#677)"
 # A template without the questions (v1.26.0) renders for Render whatever it
@@ -911,7 +976,7 @@ check "a web ruleset is the wall plus image, ci / migrations and ci / deploy-che
   '[ "$(jq -c "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\") | .integration_id] | unique" "$work/home-web/ruleset-posted.json")" = "[15368]" ] && [ "$(jq "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\")] | length" "$work/home-web/ruleset-posted.json")" = 3 ]'
 check "a web render passes archetype=web to copier" 'grep -q "archetype=web" "$work/home-web/calls.log"'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.35.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.36.0 in " "$work/home-none/out"'
 check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
   'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
 check "copier renders the tag's pinned commit, not the tag: a tag moved after the check changes nothing (#519)" \
@@ -1403,6 +1468,12 @@ gl_run gl-review err no no "--third-party-review is for GitHub only" -- probe --
 if ! grep -q '^glab ' "$work/home-gl-review/calls.log"; then ok gl-review "nothing reached GitLab before the refusal"
 else bad gl-review "a glab call ran before the refusal"; fi
 gl_run gl-no-review ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- probe --host gitlab --no-third-party-review
+# The code of conduct and the description are GitHub only for now (#772).
+gl_run gl-no-coc ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- probe --host gitlab --no-code-of-conduct --no-description
+gl_run gl-coc err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --code-of-conduct=a@b.c
+gl_run gl-desc err no no "--description is for GitHub only for now" -- probe --host gitlab "--description=x"
+if ! grep -q '^glab ' "$work/home-gl-coc/calls.log" "$work/home-gl-desc/calls.log"
+then ok gl-coc "the GitLab door refuses both before any glab call"; else bad gl-coc "glab was called before the refusal"; fi
 gl_run gl-case ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- Tester/probe --host gitlab
 E="MOCK_GLAB_VERSION_FORMAT=old MOCK_GLAB_VERSION=1.36.0" gl_run gl-glab-old-format err no no "glab 1.36.0 is below" -- probe --host gitlab
 E="MOCK_GLAB_VERSION_FORMAT=none" gl_run gl-glab-no-version err no no "could not read glab's version" -- probe --host gitlab

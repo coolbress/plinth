@@ -66,7 +66,7 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.35.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.36.0 in /home/you/my-app; wall: ruleset + CodeQL; then the first pull request. rollback: on
 ```
 
 Before that line it asks what the command did not say, in a picker (a
@@ -117,6 +117,12 @@ you can type instead:
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.
+- `--code-of-conduct=<email or page>`: a code of conduct, the Contributor
+  Covenant 3.0, naming where reports go; not written when your account's
+  `.github` repository already publishes one, which then applies.
+  `--no-code-of-conduct` says no without being asked.
+- `--description=<one line>`: the line under the repository's name on
+  GitHub; `--no-description` leaves it empty.
 - `--public`, `--dir=<path>`, `--host=github`: the defaults, said out loud,
   so that nothing is asked.
 
