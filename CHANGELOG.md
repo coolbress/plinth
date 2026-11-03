@@ -11,6 +11,15 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `tests/install-smoke.sh`, interrupted, repeats its KILL and remove, about
+  1 s at most, until nothing names the fresh config directory and it is
+  still gone 0.1 s later. A process forked while the KILL went down its
+  list, or one finishing a `mkdir`, had recreated the directory after the
+  remove, which failed `tests/install-smoke-interrupt.sh` now and then; a
+  new case there drives a clone that keeps forking (#786).
+
 ## [2.24.1] - 2026-11-04
 
 `/plinth:new-project` no longer stops at the token check on Ubuntu 26.04,

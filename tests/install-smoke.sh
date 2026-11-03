@@ -24,8 +24,16 @@ cleanup() {
     pgrep -P $$ >/dev/null || pgrep -f -- "$pat" >/dev/null || break
     sleep 0.2
   done
-  pkill -KILL -P $$ || true; pkill -KILL -f -- "$pat" || true
-  rm -rf "$CLAUDE_CONFIG_DIR"
+  # A KILL is not waited for, and a process forked while pkill went down its
+  # list is not on it: either can create the dir after it is removed (#786).
+  # So repeat KILL and remove, about 1 s at most, until nothing names the dir
+  # and it is still gone 0.1 s after the last remove.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pkill -KILL -P $$ || true; pkill -KILL -f -- "$pat" || true
+    rm -rf "$CLAUDE_CONFIG_DIR"
+    sleep 0.1
+    pgrep -P $$ >/dev/null || pgrep -f -- "$pat" >/dev/null || [ -e "$CLAUDE_CONFIG_DIR" ] || break
+  done
 }
 if [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
   CLAUDE_CONFIG_DIR="$(mktemp -d)"; trap cleanup EXIT; fresh=yes
