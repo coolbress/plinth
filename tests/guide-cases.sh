@@ -106,11 +106,17 @@ d2="$(repo cli-off)"
 out="$(MOCK_DIR="$d2" "$script" "$d2")"
 if grep -q '^  off: The third-party reviewer' <<<"$out" && ! grep -q 'HSTS' <<<"$out"
 then ok "a cli project names the reviewer, not the web item"; else bad "cli: off-by-default lines"; fi
+# The told rows (#772): a sign the project has drops its row; one with no
+# sign is said to have started off, since whether it is on is not read.
+: > "$d2/SUPPORT.md"; out="$(MOCK_DIR="$d2" "$script" "$d2")"; rm "$d2/SUPPORT.md"
+if ! grep -q 'A support file' <<<"$out" && grep -q '^  off: Sponsorship' <<<"$out" && grep -q '^  started off (whether it is on now is not read): Topics' <<<"$out"
+then ok "a cli project with SUPPORT.md: that row is gone, sponsorship is off, topics started off"
+else bad "the told rows in the guide"; grep -iE 'support|sponsor|topics' <<<"$out" | sed 's/^/        /'; fi
 mkdir -p "$d2/.github/workflows"; : > "$d2/.github/workflows/third-party.yml"
 out="$(MOCK_DIR="$d2" "$script" "$d2")"
 # The reviewer itself is not listed; the steps a project with its caller still
 # has (#765) are, as started off, since none of them can be read from files.
-if ! grep -qF 'The third-party reviewer (' <<<"$out" && [ "$(grep -c 'started off (whether it is on now is not read)' <<<"$out")" = 2 ] \
+if ! grep -qF 'The third-party reviewer (' <<<"$out" && [ "$(grep -cE 'started off \(whether it is on now is not read\): (The summons token|Requiring the third-party reviewer)' <<<"$out")" = 2 ] \
    && grep -qF 'to do, if not done yet (whether it is done is not read): Turn on Codex code review for this repository' <<<"$out" \
    && grep -qF 'Requiring the third-party reviewer' <<<"$out"
 then ok "a cli project with the reviewer's caller: the reviewer is not listed; turning it on for the repository is a step to do, the other two started off"
