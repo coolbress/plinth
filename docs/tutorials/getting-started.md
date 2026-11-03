@@ -117,6 +117,12 @@ you can type instead:
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.
+- `--code-of-conduct=<email or page>`: a code of conduct, the Contributor
+  Covenant 3.0, naming where reports go; not written when your account's
+  `.github` repository already publishes one, which then applies.
+  `--no-code-of-conduct` says no without being asked.
+- `--description=<one line>`: the line under the repository's name on
+  GitHub; `--no-description` leaves it empty.
 - `--public`, `--dir=<path>`, `--host=github`: the defaults, said out loud,
   so that nothing is asked.
 

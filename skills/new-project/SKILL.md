@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--license=mit|apache-2.0] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--license=mit|apache-2.0] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -69,14 +69,28 @@ numbered, one question at a time. Never answer a question for the person.
    [Where a web app runs](#where-a-web-app-runs), unchanged.
 4. **The recommended defaults.** Of host (`--host=`), visibility
    (`--private`/`--public`), the third-party reviewer
-   (`--third-party-review`/`--no-third-party-review`), license (`--license=`)
-   and directory (`--dir=`), take the ones the arguments do not give. If none
-   is left, ask nothing. Otherwise ask one question, header `Defaults`,
-   naming only those left with their defaults: "Use the recommended
-   defaults? public on GitHub, MIT license, in `~/<name>`, no third-party
-   reviewer." With `--host gitlab` given, say "private on GitLab.com" in
-   place of "public on GitHub" and leave out the reviewer, which is GitHub
-   only.
+   (`--third-party-review`/`--no-third-party-review`), the code of conduct
+   (`--code-of-conduct=`/`--no-code-of-conduct`), the description
+   (`--description=`/`--no-description`), license (`--license=`) and
+   directory (`--dir=`), take the ones the arguments do not give. First,
+   when the code of conduct is among them and the host is not GitLab, read
+   whether the owner already publishes one:
+
+   ```bash
+   ${CLAUDE_PLUGIN_ROOT}/scripts/owner-files.sh [<owner>]
+   ```
+
+   with the owner from the name, or nothing for a bare name. A
+   `code_of_conduct: yes` line means the owner's applies: leave the code of
+   conduct out of every question below and add no flag for it. Any other
+   line (`no`, or `unknown: …`) leaves it to ask; the script stops on its
+   own if the lookup fails again. If nothing is left, ask nothing. Otherwise
+   ask one question, header `Defaults`, naming only those left with their
+   defaults: "Use the recommended defaults? public on GitHub, MIT license,
+   in `~/<name>`, no third-party reviewer, no code of conduct, no
+   description." With `--host gitlab` given, say "private on GitLab.com" in
+   place of "public on GitHub" and leave out the reviewer, the code of
+   conduct and the description, which are GitHub only.
 
    | Label | Description |
    | --- | --- |
@@ -86,12 +100,14 @@ numbered, one question at a time. Never answer a question for the person.
    Every answer becomes a flag, a default included, so that the command
    said before the run (below) asks nothing when typed again. **Yes** adds
    the flag for each default still open: `--host=github`, `--public`,
-   `--no-third-party-review`, `--license=mit` and `--dir=<home>/<name>`,
-   with the home directory written out as an absolute path; with
-   `--host gitlab` given, `--private` in place of `--public`, and no
-   reviewer flag. **Customize** asks each choice still open, leaving out
-   what the arguments give and what does not apply: the host for `web`,
-   which is GitHub only, and the reviewer on GitLab, which is GitHub only.
+   `--no-third-party-review`, `--no-code-of-conduct`, `--no-description`,
+   `--license=mit` and `--dir=<home>/<name>`, with the home directory
+   written out as an absolute path; with `--host gitlab` given, `--private`
+   in place of `--public`, and none of the three GitHub-only flags.
+   **Customize** asks each choice still open, leaving out what the
+   arguments give and what does not apply: the host for `web`, which is
+   GitHub only, and on GitLab the reviewer, the code of conduct and the
+   description, which are GitHub only.
    Visibility and the reviewer depend on the host, so when the host is
    still open, ask in two calls: first the host and the license, then
    visibility and, on GitHub, the reviewer. When the host is already
@@ -124,6 +140,26 @@ numbered, one question at a time. Never answer a question for the person.
      pull request still merges without it. The last lines then say what to
      do right away: turn the reviewer on for the new repository.
 
+   Then, on GitHub, ask the code of conduct and the description still open
+   in one call:
+
+   - Header `Conduct`: "Add a code of conduct?" **No (Recommended)**:
+     `--no-code-of-conduct`; most small projects start without one, and
+     `/plinth:floor-check` does not ask for it. **Yes, the Contributor
+     Covenant**: the most used one, version 3.0, written as
+     `CODE_OF_CONDUCT.md`; it names where reports of bad behaviour go, so
+     the next question asks that.
+   - Header `Description`: "A one-line description for the repository's
+     page? Type it into Other." **Skip for now**: `--no-description`; it can
+     be added later on the repository's page. A line typed into Other
+     becomes `--description=<that line>`, at most 350 characters.
+
+   With **Yes** to the code of conduct, ask in text, since it has no
+   choices: "Where should reports under the code of conduct go? An email
+   address or a web page; anyone who can read the repository can read it."
+   The answer becomes `--code-of-conduct=<answer>`. An empty answer is
+   asked again.
+
    Then, when no `--dir=` was given, ask the directory on its own, header
    `Folder`: "Where should the local copy go?" with one choice,
    **`~/<name>` (Recommended)**, a new folder in your home directory
@@ -131,8 +167,8 @@ numbered, one question at a time. Never answer a question for the person.
    and becomes `--dir=<path>`. It must not
    exist yet, or be empty.
 
-   A typed answer that is none of the choices (other than the folder) is
-   asked again.
+   A typed answer that is none of the choices (other than the folder and
+   the description) is asked again.
 
 Then run, with the arguments as typed and the flags the answers added:
 

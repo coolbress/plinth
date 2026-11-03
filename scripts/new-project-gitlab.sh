@@ -46,7 +46,7 @@ claude_floor="${PLINTH_DOOR_CLAUDE_FLOOR:?run it as new-project.sh <name> --host
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review]"
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--no-description]"
 target=""; lic=mit; arch=cli; dir=""; visibility=private
 for a in "$@"; do case "$a" in
   --private)     visibility=private ;;
@@ -58,6 +58,10 @@ for a in "$@"; do case "$a" in
   # stops before anything is read; saying no to it is what GitLab has anyway.
   --no-third-party-review) ;;
   --third-party-review) echo "--third-party-review is for GitHub only: the check is a GitHub workflow, and a GitLab project has no caller for it; nothing was read or created"$'\n'"  fix: drop --third-party-review" >&2; exit 2 ;;
+  # The code of conduct and the description are asked and set on GitHub
+  # only for now (#772); saying no to them is what GitLab gets.
+  --no-code-of-conduct|--no-description) ;;
+  --code-of-conduct*|--description=*) echo "${a%%=*} is for GitHub only for now: the GitLab door does not render a code of conduct or set a description; nothing was read or created"$'\n'"  fix: drop ${a%%=*}" >&2; exit 2 ;;
   -*)            echo "unknown option for --host gitlab: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done

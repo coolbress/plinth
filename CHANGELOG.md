@@ -48,6 +48,21 @@ pull requests and have no tag.
   person can judge on day one is asked; one they cannot judge yet starts off
   and is told; what needs an outside account is named with its link.
   `/plinth:new-project` and `/plinth:guide` point to it (#772).
+- `/plinth:new-project` asks, under Customize, whether to add a code of
+  conduct (the Contributor Covenant 3.0, with the address reports go to)
+  and a one-line description for the repository's page, and sets the
+  description when it creates the repository. New flags:
+  `--code-of-conduct=<contact>`, `--no-code-of-conduct`,
+  `--description=<one line>` and `--no-description`; the GitLab door
+  accepts the two `--no-` flags and refuses the others for now. When the
+  owner's public `.github` repository publishes a `CODE_OF_CONDUCT.md` or a
+  `SECURITY.md` (at its root, `.github/` or `docs/`, read by the new
+  `scripts/owner-files.sh`), the door renders neither of its own and the
+  code of conduct is not asked, since GitHub applies the owner's to a
+  repository that has none. Both reach a new project only with a template
+  that asks these questions, which the pinned v1.35.0 does not:
+  until the pin is raised, `--code-of-conduct=` stops before anything is
+  created and `SECURITY.md` is rendered as before (#772).
 
 ### Changed
 

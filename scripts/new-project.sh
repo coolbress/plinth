@@ -3,14 +3,19 @@
 #
 #   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
 #                  [--private|--public] [--third-party-review|--no-third-party-review]
+#                  [--code-of-conduct=<contact>|--no-code-of-conduct]
+#                  [--description=<one line>|--no-description]
 #                  [--force-defaults] [--host=github|gitlab]
 #                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web only)
 #
 # Every choice is a flag, and a flag not given takes its default: cli, MIT,
-# public, ~/<name>, no third-party reviewer. /plinth:new-project asks for the
-# ones not given (#765); this script asks nothing. --public and
-# --no-third-party-review say the default out loud, so a run can give every
-# choice. --third-party-review renders the caller of the `third-party /
+# public, ~/<name>, no third-party reviewer, no code of conduct, no
+# description. /plinth:new-project asks for the ones not given (#765, #772);
+# this script asks nothing. --public, --no-third-party-review,
+# --no-code-of-conduct and --no-description say the default out loud, so a
+# run can give every choice. --code-of-conduct renders the Contributor
+# Covenant 3.0 naming <contact> for reports, unless the owner's `.github`
+# publishes a code of conduct, which then applies instead (#772). --third-party-review renders the caller of the `third-party /
 # review` check; the ruleset does not require it (#765).
 #
 # --host gitlab hands the run to scripts/new-project-gitlab.sh (#353).
@@ -89,9 +94,15 @@ case "$host" in
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--force-defaults] [--host=github|gitlab] [--hosting=<place>]"
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--force-defaults] [--host=github|gitlab] [--hosting=<place>]"
 target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
+coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""
 for a in "$@"; do case "$a" in
+  --code-of-conduct=*)  coc=1; coc_contact="${a#*=}"; coc_said="$coc_said+" ;;
+  --code-of-conduct)    echo "--code-of-conduct needs the address reports go to: --code-of-conduct=<email or web page>"$'\n'"$usage" >&2; exit 2 ;;
+  --no-code-of-conduct) coc=0; coc_said="$coc_said-" ;;
+  --description=*)      desc="${a#*=}"; desc_said="$desc_said+" ;;
+  --no-description)     desc=""; desc_said="$desc_said-" ;;
   --private)     private=1 ;;
   --public)      said_public=1 ;;
   --third-party-review)    review=1; review_said="$review_said+" ;;
@@ -107,6 +118,15 @@ esac; done
 [ -n "$target" ] || { echo "$usage" >&2; exit 2; }
 [ "$private$said_public" != 11 ] || { echo "--private and --public: choose one"$'\n'"$usage" >&2; exit 2; }
 case "$review_said" in *+*-*|*-*+*) echo "--third-party-review and --no-third-party-review: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
+case "$coc_said" in *+*-*|*-*+*) echo "--code-of-conduct and --no-code-of-conduct: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
+case "$desc_said" in *+*-*|*-*+*) echo "--description and --no-description: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
+# The contact is written into CODE_OF_CONDUCT.md, the description onto the
+# repository page: one line each, and the description within GitHub's 350
+# characters, so neither is refused or cut after the repository exists.
+if [ "$coc" = 1 ] && { [ -z "${coc_contact//[[:space:]]/}" ] || [[ "$coc_contact" == *$'\n'* ]]; }; then
+  echo "--code-of-conduct= needs one line: the email address or web page reports go to"$'\n'"$usage" >&2; exit 2; fi
+if [[ "$desc" == *$'\n'* ]] || [ "${#desc}" -gt 350 ]; then
+  echo "--description is one line of at most 350 characters (got ${#desc})"$'\n'"$usage" >&2; exit 2; fi
 # The same request as a public one, for the stops that offer it.
 public_cmd="/plinth:new-project"
 for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' "$a")"; done
@@ -404,7 +424,7 @@ gh_read() { # <gh api args>... -> ok:<output> | err:<output>, both streams: a fa
 # Three ways to end up rendering our own copies: the caller asked for them, the
 # owner publishes no `.github`, or that repository is private and therefore
 # never inherited from. Only a lookup that *failed* stops the run.
-has_pr=no; has_forms=no
+has_pr=no; has_forms=no; has_coc=no; has_sec=no
 if [ "$force_defaults" = 0 ]; then
   vis="$(shared_repo_public "$(gh_read "repos/$owner/.github" --jq .visibility)")"
   case "$vis" in
@@ -448,12 +468,49 @@ if [ "$force_defaults" = 0 ]; then
       # owner's contact links and blank-issue setting disappear quietly.
       [ "$has_forms" = config-only ] &&
         warn "$owner/.github publishes an issue-template config but no form; the box renders its own forms and config, and yours will not apply to $repo"
+      # The code of conduct and the security policy (#772), read by the
+      # script the skill runs before it asks about a code of conduct, so the
+      # two cannot disagree.
+      owner_files="$("$here/owner-files.sh" "$owner" 2>&1)"
+      has_coc="$(sed -n 's/^code_of_conduct: //p' <<<"$owner_files")"
+      has_sec="$(sed -n 's/^security_policy: //p' <<<"$owner_files")"
+      for got in "${has_coc:-unknown: no answer ($owner_files)}" "${has_sec:-unknown: no answer ($owner_files)}"; do
+        case "$got" in yes|no) ;; *)
+          stop "cannot read whether $owner/.github publishes a code of conduct or a security policy" \
+            "  the API said: $(why_unknown "$got")" \
+            "  a failed lookup is not an answer: writing ours could replace yours, and skipping ours could leave none" \
+            "  fix: run it again, or pass --force-defaults to render the template's own copies" ;;
+        esac
+      done
       ;;
   esac
 fi
-own_note=""
-[ "$has_pr" = yes ] && own_note="${own_note} pull-request template"
-[ "$has_forms" = yes ] && own_note="${own_note} issue forms"
+# The owner's code of conduct and security policy go to a template that asks
+# about them; another renders its own SECURITY.md, as before, and no code of
+# conduct. A code of conduct asked for goes to a template that can render it,
+# and any other stops here, before anything exists, as the reviewer does
+# above. The owner's code of conduct wins over one asked for (#772).
+asks() { grep -q "^$1:" <<<"$copier_yml"; }
+owner_files_data=()
+asks owner_has_security_policy && owner_files_data+=(--data "owner_has_security_policy=$([ "$has_sec" = yes ] && echo true || echo false)")
+asks owner_has_code_of_conduct && owner_files_data+=(--data "owner_has_code_of_conduct=$([ "$has_coc" = yes ] && echo true || echo false)")
+if [ "$coc" = 1 ] && [ "$has_coc" = yes ]; then
+  coc=0
+  warn "$owner/.github publishes a code of conduct, which applies to $repo; the box renders none, so --code-of-conduct is not used"
+elif [ "$coc" = 1 ]; then
+  if ! asks code_of_conduct; then
+    [ -n "$arch_choices" ] || stop "could not read whether the template can render a code of conduct, so --code-of-conduct cannot be passed safely; nothing was created" \
+      "  $(unread_why)" "  fix: run it again, or drop --code-of-conduct"
+    stop "the template this plinth renders ($template_repo@$template_ref) cannot render a code of conduct; nothing was created" \
+      "  fix: drop --code-of-conduct, or add CODE_OF_CONDUCT.md to the repository yourself after it is made"
+  fi
+  owner_files_data+=(--data code_of_conduct=true --data "code_of_conduct_contact=$coc_contact")
+fi
+own_note=""; own() { own_note="${own_note:+$own_note,} $1"; }
+[ "$has_pr" = yes ] && own "pull-request template"
+[ "$has_forms" = yes ] && own "issue forms"
+[ "$has_coc" = yes ] && own "code of conduct"
+[ "$has_sec" = yes ] && asks owner_has_security_policy && own "security policy"
 [ -n "$own_note" ] && echo "$owner/.github already publishes:${own_note}; the box will not write over them"
 
 wall_words="ruleset + CodeQL"
@@ -462,6 +519,7 @@ arch_words="$arch"
 [ "$arch" != web ] || arch_words="web on $place_name"
 [ "${place:-render}" = render ] || arch_words="$arch_words, which plinth does not deploy to or check"
 [ "$review" = 0 ] || arch_words="$arch_words, third-party review reporting and not required"
+[ "$coc" = 0 ] || arch_words="$arch_words, a code of conduct with reports to $coc_contact"
 echo "create $repo ($visibility, $spdx, $arch_words, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
@@ -480,7 +538,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-gh repo create "$repo" "--$visibility" >/dev/null
+desc_args=(); [ -z "$desc" ] || desc_args=(--description "$desc")
+gh repo create "$repo" "--$visibility" ${desc_args[@]+"${desc_args[@]}"} >/dev/null
 created=1
 
 # Render. Name, owner, license and package directory are settled here: the
@@ -499,12 +558,17 @@ env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --e
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
   --data "visibility=$([ "$private" = 1 ] && echo private || echo public)" \
   ${hosting_data[@]+"${hosting_data[@]}"} ${review_data[@]+"${review_data[@]}"} \
+  ${owner_files_data[@]+"${owner_files_data[@]}"} \
   --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
 rm -rf "$dir/.git"
 # Asked for the reviewer, the render must have recorded it; otherwise the
 # repository would go up without the check the person chose.
 if [ "$review" = 1 ] && ! grep -qx 'third_party_review: true' "$dir/.copier-answers.yml" 2>/dev/null; then
   echo "the template did not record third_party_review: true in $dir/.copier-answers.yml, so the third-party reviewer was not rendered" >&2
+  exit 1
+fi
+if [ "$coc" = 1 ] && ! [ -s "$dir/CODE_OF_CONDUCT.md" ]; then
+  echo "the template did not render CODE_OF_CONDUCT.md although a code of conduct was asked for" >&2
   exit 1
 fi
 # init -b main: an empty clone would follow init.defaultBranch, and a `master`
