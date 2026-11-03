@@ -57,6 +57,10 @@ after them:
 
 What to keep to:
 
+- Why an item was installed, asked or started off: the rule is
+  "How an item is sorted" in
+  `${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`; read it there
+  when asked, and do not explain it otherwise.
 - Name a step or tool only when it is in the table the script printed. A tool
   that is not there is not mentioned, however well known.
 - A tool the table marks listed is not installed: say so; `/plinth:arsenal`
