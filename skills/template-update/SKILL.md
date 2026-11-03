@@ -24,7 +24,11 @@ It fetches the default branch, checks it against GitHub's copy, and prints the
 two tags, the worktree and branch it would make, and the command. It writes
 nothing. Show that output whole. Exit 1 means nothing to do or a stop (the
 recorded tag is the target, no pin to carry, a base it could not verify):
-show the message and stop there.
+show the message and stop there. One exception at the target tag: when the
+repository recorded that its owner's `.github` shares a pull-request
+template or issue forms, the owner no longer does, and the repository has
+none of its own, the plan names each answer that turns false and gives a
+line that re-renders the same tag, which writes the template's copies (#770).
 
 The command keeps the plinth commit the repository's workflows call today,
 so an update never undoes a pin Dependabot moved. On GitHub it also carries

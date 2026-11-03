@@ -184,13 +184,23 @@ finish() { # <worktree>
   done < <(git -C "$wt" -c core.quotePath=false diff --cached --name-only "$base")
 
   local title="chore(template): update plinth-template $from to $to"
+  # At the target tag the checker gives a line only for a recorded owner
+  # answer that no longer holds (#770): a re-render, not a move.
+  [ "$from" != "$to" ] || title="chore(template): re-render plinth-template $to for the owner's templates"
   local msg body; msg="$(mktemp)"; body="$(mktemp)"
   list() { if [ -n "$1" ]; then printf '%s\n' "$1" | sed '/^$/d; s/^/- /'; else echo "- none"; fi; }
   {
     echo "## What and why"
     echo
-    echo "Updates this repository from plinth-template $from to $to, the tag plinth is"
-    echo "tested with, by running the command \`/plinth:floor-check\` prints for it:"
+    if [ "$from" = "$to" ]; then
+      echo "Re-renders this repository at plinth-template $to, the tag it already records,"
+      echo "because the owner's \`.github\` no longer publishes a pull-request template or"
+      echo "issue forms it recorded as shared (\`.copier-answers.yml\` in the diff shows the"
+      echo "answer that turned false), by running the command the checker gives for it:"
+    else
+      echo "Updates this repository from plinth-template $from to $to, the tag plinth is"
+      echo "tested with, by running the command \`/plinth:floor-check\` prints for it:"
+    fi
     echo
     echo '```text'
     echo "$cmd"
@@ -298,6 +308,9 @@ to="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$here/new-project.sh")"
 to_sha="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$here/new-project.sh")"
 wt="$(dirname "$top")/$(basename "$top")-template-$to"
 branch="chore/template-$to"
+# A re-render at the recorded tag (#770) gets its own names: the update that
+# brought the repository to $to may have left chore/template-$to behind.
+if [ "$from" = "$to" ]; then wt="$wt-owner-templates"; branch="$branch-owner-templates"; fi
 
 # The command, from the checker, on exactly the files it reads at the base:
 # the answers file, the workflows and the repository's own issue and
@@ -320,7 +333,8 @@ if [ "$mode" = plan ]; then
   tested_cmd="$(cmd_at "$tmp" tested 2>"$tmp/pin-note")" || tested_cmd=""
   [ "$tested_cmd" != "$cmd" ] || tested_cmd=""
   echo "Repository: $repo, base origin/$default at $base (verified against GitHub)"
-  echo "Template:   $from -> $to"
+  if [ "$from" = "$to" ]; then echo "Template:   $to, re-rendered for the owner answers named above"
+  else echo "Template:   $from -> $to"; fi
   echo "Worktree:   $wt (branch $branch)"
   echo "Command:    $cmd"
   echo "            (--defaults: each question takes the recorded answer; one never answered takes the template's default)"

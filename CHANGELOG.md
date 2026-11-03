@@ -62,6 +62,17 @@ pull requests and have no tag.
   hosts. A value not in that form stops the run before anything is created
   (#767).
 
+### Fixed
+
+- `/plinth:template-update` renders the template's pull-request template and
+  issue forms in a project made while its owner's `.github` shared them,
+  once the owner no longer does and the project has none of its own (#770).
+  The plan names each recorded `owner_has_*: true` that turns false. A
+  project already at the target tag used to get "nothing to update"; it now
+  gets a `copier update` at that same tag, which copier 9.18.2 was measured
+  to render without a conflict. One whose owner still shares them is
+  unchanged.
+
 ## [2.23.0] - 2026-11-02
 
 `ci / test` measures the source a project's own coverage configuration names,
