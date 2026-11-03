@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# A step of `ci / docs` in .github/workflows/plinth-ci.yml (#293): fail a pull
-# request whose description would close an issue outside its closing line.
+# A step of `ci / docs` in .github/workflows/plinth-ci.yml (#293), and of
+# `ci / pr-title` in python-ci.yml, which fetches it at its own commit (#781):
+# fail a pull request whose description would close an issue outside its
+# closing line.
 # It asks GitHub which issues the merge will close, with the description read
 # in the same call, and closing-references.py compares the two.
-# tests/closing-references-cases.sh runs it against a fake gh.
+# tests/closing-references-cases.sh runs it against a fake gh, and
+# tests/pr-title-description-cases.sh runs it through python-ci.yml's step.
 #
 # Environment: REPO (owner/name), EVENT (github.event_name), PR (the pull
 # request's number, empty on any other event). GH_TOKEN is the job's token; it
