@@ -65,11 +65,13 @@ case "$all" in
   "pr create"*)                                  step=pr ;;
   *code-scanning*)                               step=codeql ;;
   *"/rulesets"*"ruleset-merge.json"*)            step=ruleset-merge ;;
+  *"/rulesets"*"ruleset-tags.json"*)             step=ruleset-tags ;;
   "api repos/"*"/rulesets/"[0-9]*)               step=ruleset-read ;;
   *"/rulesets"*)                                 step=ruleset ;;
   *security_and_analysis*)                       step=secret ;;
   *vulnerability-alerts*|*automated-security-fixes*) step=dependabot ;;
   *selected-actions*)                            step=allowlist ;;
+  *actions/permissions/workflow*)                step=actions-workflow ;;
   *actions/permissions*)                         step=actions ;;
   *allow_merge_commit*)                          step=merge ;;
 esac
@@ -187,7 +189,12 @@ case "$step" in
   ruleset-merge) a="$all"; a="${a#*--input }"; cp "${a%% *}" "$HOME/ruleset-merge-posted.json"; echo 9 ;;
   # Read back after the write: what was posted, as GitHub adds to it, unless
   # MOCK_MERGE_READBACK says otherwise (a write that did not take as sent).
-  ruleset-read)  if [ -n "${MOCK_MERGE_READBACK:-}" ]; then echo "$MOCK_MERGE_READBACK"
+  ruleset-tags)  a="$all"; a="${a#*--input }"; cp "${a%% *}" "$HOME/ruleset-tags-posted.json"; echo 11 ;;
+  # The tag ruleset (#772) reads back as posted, unless MOCK_TAGS_READBACK says otherwise.
+  ruleset-read)  if [[ "$all" == *"/rulesets/11"* ]]; then
+                   if [ -n "${MOCK_TAGS_READBACK:-}" ]; then echo "$MOCK_TAGS_READBACK"
+                   else jq '. + {id: 11}' "$HOME/ruleset-tags-posted.json"; fi
+                 elif [ -n "${MOCK_MERGE_READBACK:-}" ]; then echo "$MOCK_MERGE_READBACK"
                  else jq '. + {id: 9, rules: [{type: "update", parameters: {update_allows_fetch_and_merge: false}}]}' "$HOME/ruleset-merge-posted.json"; fi ;;
   # On main the door asks for default setup's first run, completed: the jq
   # leaves its `updated_at`, so the answer is a time, or nothing.
@@ -757,6 +764,10 @@ E="MOCK_5XX=ruleset-merge:502:1" run 5xx-ruleset-merge err yes yes "could not ap
 # Accepted, then read back without the admin's exemption: the person could not
 # merge. Rolled back like a refusal.
 E='MOCK_MERGE_READBACK={"name":"main:_merged_by_an_admin","target":"branch","enforcement":"active","conditions":{},"rules":[{"type":"update"}],"bypass_actors":[]}' run merge-readback err yes yes "the merge ruleset (9) reads back as" -- probe
+E='MOCK_TAGS_READBACK={"name":"x","target":"tag","enforcement":"active","conditions":{},"rules":[{"type":"deletion"}],"bypass_actors":[]}' run tags-readback err yes yes "the tag ruleset (11) reads back as" -- probe
+E="FAIL_AT=ruleset-tags" run tags-fail err yes yes "could not apply the tag ruleset" -- probe
+E="FAIL_AT=actions-workflow" run actions-workflow-fail err yes yes "could not set the Actions workflow permissions" -- probe
+run data-ml ok yes no "(public, MIT, data-ml, as owner)" -- probe --archetype=data-ml
 # The push's hint follows what git said (#271): a GitHub server error is not
 # the token, and the fix is to run the door again; an authentication or
 # permission refusal keeps the token hint; anything else names both, as
@@ -880,8 +891,15 @@ echo "success: nothing is deleted, and the order is baseline, wall, first pull r
 run none ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
 log="$work/home-none/calls.log"; proj="$work/home-none/probe"
 check() { if eval "$2"; then ok none "$1"; else bad none "$1"; fi; }
-check "main is pushed before the two rulesets, the first ruleset before the merge one, the pull request after them" \
-  '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | grep -v "/rulesets/[0-9]" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*ruleset-merge.json.*/merge/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset merge pr " ]'
+check "main is pushed before the rulesets, the first ruleset before the merge one, then the tag one (cli), the pull request after them" \
+  '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | grep -v "/rulesets/[0-9]" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*ruleset-merge.json.*/merge/; s/.*rulesets.*ruleset-tags.json.*/tags/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset merge tags pr " ]'
+check "the tag ruleset posted is ruleset-tags.json, unchanged (cli), and read back" \
+  'cmp -s "$work/home-none/ruleset-tags-posted.json" "$root/ruleset-tags.json" && grep -q "api repos/tester/probe/rulesets/11" "$log"'
+check "the tag ruleset is posted for backend too" 'cmp -s "$work/home-backend/ruleset-tags-posted.json" "$root/ruleset-tags.json"'
+check "data-ml and web get no tag ruleset" \
+  '! grep -q ruleset-tags.json "$work/home-web/calls.log" "$work/home-data-ml/calls.log"'
+check "the Actions token reads only by default and approves no pull request" \
+  'grep -qF -- "-X PUT repos/tester/probe/actions/permissions/workflow -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false" "$log"'
 # main must be the *first* push: an empty repository adopts the first branch
 # pushed as its default, and the ruleset targets ~DEFAULT_BRANCH (#105).
 check "main is the first branch pushed" \

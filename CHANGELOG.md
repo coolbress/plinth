@@ -62,6 +62,16 @@ pull requests and have no tag.
   repository that has none. The questions come with plinth-template
   v1.36.0, below; against an older template `--code-of-conduct=` stops
   before anything is created (#772).
+- `/plinth:new-project` raises a third ruleset for `cli`, `library` and
+  `backend`, the archetypes that release from a `v*` tag:
+  [`ruleset-tags.json`](ruleset-tags.json) blocks deleting and updating a
+  `v*` tag, with no bypass, so a released tag cannot be moved or removed;
+  making one is not blocked. It is read back like the other two, and a
+  failure rolls the repository back. The door also sets the repository's
+  Actions workflow permissions instead of leaving them to GitHub's
+  default: the token a workflow gets without naming permissions reads only
+  (`default_workflow_permissions=read`), and no workflow can approve a pull
+  request (`can_approve_pull_request_reviews=false`) (#772).
 
 ### Changed
 
