@@ -84,6 +84,14 @@ pull requests and have no tag.
   repository has a description (an INFO when it has none). All are WARN or
   INFO, never FAIL, because `ci / floor-check` runs them in every
   repository made before them (#772).
+- [Off by default](docs/reference/off-by-default.md) gains seven rows a
+  new project is told about, not asked: immutable releases (for the
+  archetypes that release), `SUPPORT.md`, `.github/FUNDING.yml`,
+  `CITATION.cff` (`library` and `data-ml`), `.github/CODEOWNERS`, topics,
+  and turning off the wiki. Each says when it is worth turning on, and
+  [Turn on what a new project starts without](docs/how-to/turn-on-what-starts-off.md)
+  says how. `/plinth:new-project`'s last lines and `/plinth:guide` list
+  them; a project that has the file a row names is not told it (#772).
 
 ### Changed
 
@@ -136,6 +144,15 @@ pull requests and have no tag.
   each new question defaults to what a project has today, so the update
   needs no hands except in files a project changed itself (v1.36.0's
   release notes name them).
+- `/plinth:new-project` renders plinth-template v1.37.0.
+  **From v1.37.0, the `image` check of a `backend`, `data-ml` or `web`
+  project can fail**: it scans the image it built, and a high or critical
+  finding whose fix has been out for more than 14 days fails it; merging
+  the open Dependabot pull request for the base image clears what the base
+  image carries (coolbress/plinth-template#182). Each release also carries
+  an SBOM, `sbom.spdx.json` (coolbress/plinth-template#183). Neither adds an
+  action, so the Actions allowlist is unchanged, and `copier update` needs
+  no hands.
 - On GitHub too, `/plinth:new-project`'s first pull request ends with
   `Assisted-by: <agent>:<model>` when `PLINTH_ASSISTED_BY` is set, as the
   GitLab first merge request already did, and the skill sets it on both
