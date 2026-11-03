@@ -25,9 +25,9 @@ gh api -X PUT repos/<owner>/<name>/immutable-releases    # needs repository admi
 gh api repos/<owner>/<name>/immutable-releases           # reads it back
 ```
 
-The `v*` tags of a `cli`, `library` or `backend` project are already kept
-from moving by the tag ruleset `/plinth:new-project` raises; immutable
-releases add the release's files. Whether the template's release workflow
+The `v*` tags of a `cli`, `library`, `backend` or `data-ml` project are
+already kept from moving by the tag ruleset `/plinth:new-project` raises;
+immutable releases add the release's files. Whether the template's release workflow
 for `data-ml`, which uploads its files with `gh release create`, publishes
 cleanly with immutability on has not been measured.
 
