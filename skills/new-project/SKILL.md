@@ -41,9 +41,10 @@ run itself.
 ## What the script printed
 
 Every stop, every `warning:` line and the final lines are shown verbatim, in
-a code block, in English: they are what a person searches for. Under the
-block, add one plain sentence for each line, in the person's language and in
-the same order: what it means for them, not a word-for-word translation. A
+a code block, as the script printed them, untranslated: they are what a
+person searches for. Under the block, add one plain sentence for each line,
+in the language the person writes to you in, whatever it is, and in the same
+order: what it means for them, not a word-for-word translation. A
 line indented under another (a `fix:` or a continuation) shares its
 parent's sentence. The first time a word appears, say what it is in a few
 words: the ruleset (the rules GitHub enforces on `main`: no direct push, and
