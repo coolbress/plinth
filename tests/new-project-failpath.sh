@@ -90,7 +90,12 @@ case "$step" in
   auth)          [ "${MOCK_NOAUTH:-0}" = 1 ] && exit 1 ;;
   headers)       printf 'HTTP/2.0 200 OK\n'
                  [ "${MOCK_FINE:-0}" = 1 ] || printf 'X-Oauth-Scopes: %s\n' "${MOCK_SCOPES-gist, read:org, repo, workflow, delete_repo}"
-                 printf '\n{"login":"tester"}\n' ;;
+                 printf '\n'
+                 # The body after a pause and past a pipe buffer: a reader that
+                 # stops at the blank line has gone by then, and the writer
+                 # between them dies on the pipe (Ubuntu 26.04's tr, #788).
+                 if [ "${MOCK_SLOW_BODY:-0}" = 1 ]; then sleep 0.3; printf '{"login":"tester","bio":"%s"}\n' "$(head -c 200000 /dev/zero | tr '\0' x)"
+                 else printf '{"login":"tester"}\n'; fi ;;
   login)         echo tester ;;
   owner)         case "$all" in *users/nobody*) exit 1 ;; *users/someorg*) echo Organization ;; *) echo User ;; esac ;;
   membership)    [ "${MOCK_MEMBER:-1}" = 1 ] || exit 1; echo member ;;
@@ -374,6 +379,7 @@ E="FAIL_AT=headers"   run token-unread   err no no "cannot read api.github.com/u
 E="MOCK_NOAUTH=1"     run gh-logged-out err no no "gh auth login"                            -- probe
 E="MOCK_SCOPES=repo"  run scope-missing err no no "lacks the scope(s) workflow"              -- probe
 E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"                      -- probe --archetype=backend
+E="MOCK_SLOW_BODY=1" run headers-slow-body ok no no "preflight: ok" -- --preflight
 
 echo "--preflight: the tools and the token, before the skill asks anything (#771)"
 # The skill runs it before its first question, when it may know no name yet:

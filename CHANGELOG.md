@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:new-project` no longer stops with "cannot read
+  api.github.com/user" on a Linux whose `tr` writes the headers before the
+  body, Ubuntu 26.04 included: the header read takes the whole response
+  instead of closing its pipe at the blank line. The agent's credential,
+  read the same way, is no longer reported unread when it was read (#788).
+
 ## [2.24.0] - 2026-11-03
 
 `/plinth:new-project` now asks what a person can decide on day one in Claude
