@@ -2161,6 +2161,95 @@ else bad "--print-update-command at the target (rc=$rc, stdout '$printed')"; sed
 printed="$(python3 "$checker" --root "$loosecopy" --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "not pinned to a full commit SHA" "$work/print-err"; then ok "--print-update-command with no established pin prints no command, names the reason, exit 1"
 else bad "--print-update-command, loose pin (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+# ci.yml raised by hand and label.yml left where the template rendered it
+# (#793). When label.yml's commit is an ancestor of the ci job's, the update
+# carries the ci job's and says which file moves from which commit to which.
+# Otherwise it still stops, since it cannot pick one of two pins, and the stop
+# names each file with its commit, which is the newer when GitHub's compare
+# says so, and the same fix line the pin-agreement item prints.
+two="$work/two-pins"; rm -rf "$two"; cp -R "$pcopy" "$two"
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$sha1" > "$two/.github/workflows/label.yml"
+stop() { # <api dir> [--plinth-pin tested] -- runs --print-update-command on $two; sets printed, rc, err
+  local api="$1"; shift
+  printed="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$two" --repo o/r --print-update-command "$@" 2>"$work/print-err")"; rc=$?
+  err="$(cat "$work/print-err")"
+}
+in_err() { # <description> <ERE one stderr line must match>
+  if grep -qE -- "$2" <<<"$err"; then ok "$1"; else bad "$1 (expected a line matching '$2')"; sed 's/^/        /' <<<"$err"; fi
+}
+cmp_api() { # <dir> <status>: a compare of the ci job's SHA against label.yml's
+  rm -rf "$1"; cp -R "$pinned_api" "$1"; mkdir -p "$1/repos/coolbress/plinth/compare"
+  printf '{"status":"%s"}\n' "$2" > "$1/repos/coolbress/plinth/compare/$sha40...$sha1.json"
+}
+one_pin="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command 2>/dev/null)"
+cmp_api "$work/api-label-behind" behind; stop "$work/api-label-behind"
+if [ "$rc" = 0 ] && [ -n "$one_pin" ] && [ "$printed" = "$one_pin" ]
+then ok "label.yml at an ancestor of the ci job's commit: the update carries the ci job's commit, the line ci.yml alone gives"
+else bad "ancestor: rc=$rc, stdout '$printed', want '$one_pin'"; sed 's/^/        /' <<<"$err"; fi
+in_err "and it says label.yml moves from its commit to the ci job's" \
+  "^moves: label\.yml from $sha1 to $sha40, the commit the ci job calls \($sha1 is an ancestor of it\)\$"
+if grep -qE "disagree|sed -i" <<<"$err"; then bad "the ancestor case prints the stop too"; else ok "and prints nothing of the stop"; fi
+out="$(FLOOR_CHECK_API_DIR="$work/api-label-behind" python3 "$checker" --root "$two" --repo o/r 2>&1)"
+if grep -qF "  INFO    $one_pin" <<<"$out" && grep -q "^  INFO    moves: label\.yml from $sha1 to $sha40" <<<"$out"
+then ok "floor-check's drift item prints the same line and the same move"
+else bad "drift item, ancestor"; printf '%s\n' "$out" | grep -E 'template|copier|moves' | sed 's/^/        /'; fi
+stop "$work/api-label-behind" --plinth-pin tested
+if grep -q "^moves:" <<<"$err"; then bad "--plinth-pin tested prints a move to the ci job's commit it does not carry"
+else ok "--plinth-pin tested names no move to the ci job's commit: its line carries another pin"; fi
+
+cmp_api "$work/api-label-ahead" ahead; stop "$work/api-label-ahead"
+if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "label.yml newer than ci.yml: the update prints no command, exit 1"
+else bad "label newer: rc=$rc, stdout '$printed'"; fi
+in_err "the stop still gives the reason it gave" "^no update command: v1\.0\.0 is behind $target_ref, but there is no update command: workflow pins disagree: $sha40, $sha1\$"
+in_err "the stop names ci.yml with its commit" "^  ci\.yml: coolbress/plinth at $sha40\$"
+in_err "the stop names label.yml with its commit" "^  label\.yml: coolbress/plinth at $sha1\$"
+in_err "the stop says label.yml's is the newer, and that raising the ci job keeps it" \
+  "^newer: $sha1; the ci job's $sha40 is behind it, so the line below moves $sha1 back: to keep the newer one, raise the ci job's uses: to $sha1 instead\$"
+pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1"   # floor-check's own item, on the same two pins
+fix_line="$(sed -n 's/^  INFO    \(sed .*\.bak\)   (moves.*/\1/p' <<<"$out")"
+if [ -n "$fix_line" ] && grep -qxF -- "  $fix_line" <<<"$err"; then ok "the stop prints the same fix line the pin-agreement item prints"
+else bad "the stop's fix line is not floor-check's ('$fix_line')"; sed 's/^/        /' <<<"$err"; fi
+cmp_api "$work/api-label-diverged" diverged; stop "$work/api-label-diverged"
+if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "two commits neither of which is behind the other: the update prints no command, exit 1"
+else bad "diverged: rc=$rc, stdout '$printed'"; fi
+in_err "diverged: the stop names ci.yml with its commit" "^  ci\.yml: coolbress/plinth at $sha40\$"
+in_err "diverged: the stop names label.yml with its commit" "^  label\.yml: coolbress/plinth at $sha1\$"
+in_err "diverged: neither is called the newer" "^newer: not known for $sha40 and $sha1 \(the two have diverged\)\$"
+if grep -qxF -- "  $fix_line" <<<"$err"; then ok "diverged: the stop prints the fix line"; else bad "diverged: no fix line"; sed 's/^/        /' <<<"$err"; fi
+stop "$pinned_api"
+if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "the compare not read: the update stops, never guesses an ancestor"
+else bad "compare unread: rc=$rc, stdout '$printed'"; fi
+in_err "the compare not read: the stop says so" "^newer: not known for $sha40 and $sha1 \(offline or API error\)\$"
+if grep -qxF -- "  $fix_line" <<<"$err"; then ok "and the fix line stands without the compare"; else bad "no fix line without the compare"; fi
+# Three commits, one behind the ci job's and one ahead: still a stop.
+three_api="$work/api-three"; cmp_api "$three_api" behind; sha2="$(printf '%040d' 2)"
+printf '{"status":"ahead"}\n' > "$three_api/repos/coolbress/plinth/compare/$sha40...$sha2.json"
+printf 'jobs:\n  r:\n    uses: coolbress/plinth/.github/workflows/pr-review.yml@%s\n' "$sha2" > "$two/.github/workflows/review.yml"
+stop "$three_api"
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "^newer: $sha2; the ci job's" <<<"$err"; then ok "one file behind the ci job's commit and another ahead of it: a stop, the newer named"
+else bad "three pins: rc=$rc, stdout '$printed'"; sed 's/^/        /' <<<"$err"; fi
+rm "$two/.github/workflows/review.yml"
+( cd "$two" && eval "$fix_line" )
+stop "$pinned_api"
+if [ "$rc" = 0 ] && [ "$printed" = "$one_pin" ] && ! grep -q "^moves:" <<<"$err"
+then ok "run as printed, the fix line makes the pins one, and the update prints the command it prints with one pin"
+else bad "after the fix line: rc=$rc, stdout '$printed'"; sed 's/^/        /' <<<"$err"; fi
+# The pins agree: nothing of the stop is added, and the line is the one
+# printed with ci.yml alone.
+agree="$work/agree-pins"; rm -rf "$agree"; cp -R "$pcopy" "$agree"
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$sha40" > "$agree/.github/workflows/label.yml"
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$agree" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 0 ] && [ "$printed" = "$warned" ] && ! grep -qE "disagree|newer:|sed -i|moves:" "$work/print-err"
+then ok "ci.yml and label.yml at one commit: the same command as ci.yml alone, nothing of the stop"
+else bad "pins agree: rc=$rc, stdout '$printed'"; sed 's/^/        /' "$work/print-err"; fi
+# floor-check's own drift item points to the pin-agreement WARN under it.
+rm -rf "$two"; cp -R "$pcopy" "$two"
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$sha1" > "$two/.github/workflows/label.yml"
+out="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$two" --repo o/r 2>&1)"
+if grep -q '^  INFO    the "workflow pins disagree" WARN below names each file and the line that makes them one$' <<<"$out" \
+   && grep -q "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$" <<<"$out"
+then ok "floor-check: the drift item's reason points to the pin-agreement WARN, which follows it"
+else bad "floor-check two pins"; printf '%s\n' "$out" | grep -E 'disagree|update' | sed 's/^/        /'; fi
 printed="$(python3 "$checker" --root "$noarch" --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "no .copier-answers.yml" "$work/print-err"; then ok "--print-update-command outside a door-made repository prints no command, exit 1"
 else bad "--print-update-command, no answers file (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi

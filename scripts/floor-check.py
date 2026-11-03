@@ -1025,6 +1025,49 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
         result("INFO", f"  {latest}")
 
 
+def plinth_pins(root: Path) -> dict:
+    """The coolbress/plinth `uses:` of the checkout's workflow files (#447),
+    read once for the pin-agreement item and the update's stop (#793).
+    `by_file` maps each file to its (owner/repository, ref) pairs as written,
+    in order, once each; `unread` names each `uses:` it cannot read; `names`
+    puts the ci job's file first; `target` is the SHA the ci job calls, or
+    None when that job does not call plinth's caller workflow at a full SHA;
+    `fix` is the sed line for each plinth reference not at `target`. A plinth
+    `uses:` not on a full SHA is not counted here."""
+    by_file: dict[str, list[tuple[str, str]]] = {}
+    unread: list[str] = []
+    for p in workflow_files(root):
+        for n, value, readable in iter_uses(read(p)):
+            if not readable:
+                unread.append(f"{p.name} line {n}")
+                continue
+            m = re.fullmatch(r"([^/@]+/[^/@]+)/[^@]*@([0-9a-fA-F]{40})", value)
+            if m and m.group(1).lower() == PLINTH_REPO and m.groups() not in by_file.setdefault(p.name, []):
+                by_file[p.name].append((m.group(1), m.group(2)))
+    by_file = {f: pins for f, pins in by_file.items() if pins}
+    names = sorted(by_file, key=lambda f: (f != "ci.yml", f))
+    target = None
+    ci = root / ".github" / "workflows" / "ci.yml"
+    if ci.is_file():
+        kind, value, _ = caller_job(read(ci))
+        m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@([0-9a-fA-F]{40})", value) if kind == "uses" else None
+        if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
+            target = m.group(3)
+    fix = []
+    for f in names if target is not None else []:
+        for repo, old in by_file[f]:
+            if target is not None and old.lower() != target.lower():
+                path = shlex.quote(f".github/workflows/{f}")
+                # Only `<owner/repository>/<path>@<old>`: the same SHA elsewhere in the file is left alone.
+                repo_re = repo.replace(".", r"\.")
+                fix.append(f"sed -i.bak 's|{repo_re}/\\([^@]*\\)@{old}|{repo}/\\1@{target}|g' {path} && rm {path}.bak")
+    shas = {ref.lower() for pins in by_file.values() for _, ref in pins}
+    parts = [f"{f} at {' and '.join(dict.fromkeys(ref.lower() for _, ref in by_file[f]))}" for f in names]
+    warn = (f"workflow pins disagree: {names[0]} calls plinth{parts[0][len(names[0]):]}"
+            + "".join(f", {x}" for x in parts[1:])) if len(shas) > 1 else None
+    return {"by_file": by_file, "unread": unread, "names": names, "target": target, "fix": fix, "warn": warn}
+
+
 def check_plinth_pins_agree(root: Path) -> None:
     """Every `uses:` of coolbress/plinth across the checkout's workflow files
     names the same full commit SHA (#447). ci.yml and label.yml are rendered
@@ -1037,45 +1080,90 @@ def check_plinth_pins_agree(root: Path) -> None:
     at another commit. The owner/repository and the SHA compare in lower case,
     as GitHub reads them; the fix line names each as written, since sed
     matches case, and rewrites only plinth references."""
-    # file -> (owner/repository as written, ref as written), in order, once each
-    by_file: dict[str, list[tuple[str, str]]] = {}
-    unread: list[str] = []
-    for p in workflow_files(root):
-        for n, value, readable in iter_uses(read(p)):
-            if not readable:
-                unread.append(f"{p.name} line {n}")
-                continue
-            m = re.fullmatch(r"([^/@]+/[^/@]+)/[^@]*@([0-9a-fA-F]{40})", value)
-            if m and m.group(1).lower() == PLINTH_REPO and m.groups() not in by_file.setdefault(p.name, []):
-                by_file[p.name].append((m.group(1), m.group(2)))
-    if len({ref.lower() for pins in by_file.values() for _, ref in pins}) < 2:
-        if unread:
-            result("SKIP", f"plinth workflow pins not compared: {', '.join(unread)} mentions uses in a form "
+    pins = plinth_pins(root)
+    if pins["warn"] is None:
+        if pins["unread"]:
+            result("SKIP", f"plinth workflow pins not compared: {', '.join(pins['unread'])} mentions uses in a form "
                            "this checker does not read, and could pin coolbress/plinth at another commit")
         return
     # The ci job's file first: the fix moves the others to the SHA it calls.
-    names = sorted(by_file, key=lambda f: (f != "ci.yml", f))
-    parts = [f"{f} at {' and '.join(dict.fromkeys(ref.lower() for _, ref in by_file[f]))}" for f in names]
-    result("WARN", f"workflow pins disagree: {names[0]} calls plinth{parts[0][len(names[0]):]}"
-                   + "".join(f", {x}" for x in parts[1:]))
-    target = None
-    ci = root / ".github" / "workflows" / "ci.yml"
-    if ci.is_file():
-        kind, value, _ = caller_job(read(ci))
-        m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@([0-9a-fA-F]{40})", value) if kind == "uses" else None
-        if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
-            target = m.group(3)
-    if target is None:
+    result("WARN", pins["warn"])
+    if pins["target"] is None:
         result("INFO", f"  set every {PLINTH_REPO} uses: to the one commit the ci job should call")
         return
-    for f in names:
-        for repo, old in by_file[f]:
-            if old.lower() != target.lower():
-                path = shlex.quote(f".github/workflows/{f}")
-                # Only `<owner/repository>/<path>@<old>`: the same SHA elsewhere in the file is left alone.
-                repo_re = repo.replace(".", r"\.")
-                result("INFO", f"  sed -i.bak 's|{repo_re}/\\([^@]*\\)@{old}|{repo}/\\1@{target}|g' {path} && rm {path}.bak   "
-                               "(moves it to the SHA the ci job calls)")
+    for line in pins["fix"]:
+        result("INFO", f"  {line}   (moves it to the SHA the ci job calls)")
+
+
+def pins_disagree_stop(root: Path, network: bool) -> list[str]:
+    """What the update's "workflow pins disagree" stop adds (#793): each
+    file with the plinth commit it calls, which of two is the newer when
+    GitHub's compare says one is behind the other, and the fix lines the
+    pin-agreement item prints. The update cannot pick one of two pins; the
+    person makes them one, merges that, and runs the update again."""
+    pins = plinth_pins(root)
+    if pins["warn"] is None:
+        return []
+    out = [f"  {f}: {PLINTH_REPO} at {' and '.join(dict.fromkeys(ref.lower() for _, ref in pins['by_file'][f]))}"
+           for f in pins["names"]]
+    target = pins["target"]
+    if target is None:
+        out.append(f"set every {PLINTH_REPO} uses: line (ci.yml and label.yml) to the one commit the ci job "
+                   "should call, merge that, and run the update again")
+        return out
+    target = target.lower()
+    for other in dict.fromkeys(ref.lower() for f in pins["names"] for _, ref in pins["by_file"][f]):
+        if other == target:
+            continue
+        cmp = api(f"repos/{PLINTH_REPO}/compare/{target}...{other}", network)
+        status = cmp.get("status") if isinstance(cmp, dict) else None
+        if status == "behind":
+            out.append(f"newer: {target}, the ci job's; {other} is behind it")
+        elif status == "ahead":
+            out.append(f"newer: {other}; the ci job's {target} is behind it, so the line below moves {other} "
+                       f"back: to keep the newer one, raise the ci job's uses: to {other} instead")
+        else:
+            why = ("the two have diverged" if status == "diverged"
+                   else "offline or API error" if cmp in (ABSENT, ERROR) else "an unexpected compare response")
+            out.append(f"newer: not known for {target} and {other} ({why})")
+    out.append("to make them one, move every plinth uses: to the ci job's commit (the line floor-check's "
+               "\"Plinth pins agree\" item prints), merge that, and run the update again:")
+    out += [f"  {line}" for line in pins["fix"]]
+    return out
+
+
+def pins_forward(root: Path, network: bool) -> list[tuple[str, str, str]]:
+    """When the workflows call plinth at two or more commits and every one
+    but the ci job's is an ancestor of the ci job's (#793): (file, from, to)
+    for each file the update moves forward, `to` being the ci job's commit,
+    which the update then carries. Empty otherwise: the ci job not calling
+    plinth's caller workflow at a full SHA, another file newer than the ci
+    job's, two commits neither of which is behind the other, or a compare not
+    read. It never moves the ci job's own pin: that is a person's choice."""
+    pins = plinth_pins(root)
+    target = pins["target"].lower() if pins["target"] else None
+    if pins["warn"] is None or target is None:
+        return []
+    moves: list[tuple[str, str, str]] = []
+    verdict: dict[str, bool] = {}
+    for f in pins["names"]:
+        for _, ref in pins["by_file"][f]:
+            ref = ref.lower()
+            if ref == target:
+                continue
+            if ref not in verdict:
+                cmp = api(f"repos/{PLINTH_REPO}/compare/{target}...{ref}", network)
+                verdict[ref] = isinstance(cmp, dict) and cmp.get("status") == "behind"
+            if not verdict[ref]:
+                return []
+            moves.append((f, ref, target))
+    return moves
+
+
+def moves_lines(d: dict) -> list[str]:
+    """One line per file the update moves forward to the ci job's commit (#793)."""
+    return [f"moves: {f} from {old} to {new}, the commit the ci job calls ({old} is an ancestor of it)"
+            for f, old, new in d.get("moves", [])]
 
 
 def new_project_pin() -> tuple[str, str, str, str, str] | None:
@@ -1177,10 +1265,10 @@ def resolve_gitlab_pin(root: Path) -> tuple[str | None, str | None, str | None]:
     return sha, integrity, None
 
 
-def template_drift(root: Path, host: str | None = None) -> dict:
+def template_drift(root: Path, host: str | None = None, network: bool = False) -> dict:
     """Where this repository stands against the template tag plinth is
     tested with, and the one `copier update` command that moves it there
-    (#219). Offline. The drift item below prints it; --print-update-command
+    (#219). Offline but for the one compare named at the end. The drift item below prints it; --print-update-command
     prints the command alone for the template-update skill (#232), so the
     command that runs is the one this item prints, never a second
     construction of it. `state` is skip, ahead, current or behind; `reason`
@@ -1190,7 +1278,10 @@ def template_drift(root: Path, host: str | None = None) -> dict:
     current and `cmd` a same-tag line, which owner_shared keeps only when
     that answer turns false (#770); the drift item does not print it. `host` is
     the host the run resolved (--host first, then the answers); without it,
-    the answers' `host:` (#547 review)."""
+    the answers' `host:` (#547 review). When the workflows call plinth at two
+    commits and every other one is an ancestor of the ci job's, `cmd` carries
+    the ci job's and `moves` names each file the update moves forward (#793);
+    that needs GitHub's compare, so `network` (or fixtures) decides it."""
     pin = new_project_pin()
     if pin is None:
         return {"state": "skip", "reason": "scripts/new-project.sh not found beside the checker, or unreadable"}
@@ -1235,6 +1326,10 @@ def template_drift(root: Path, host: str | None = None) -> dict:
         sha, integrity, why_not = resolve_gitlab_pin(root)
     else:
         sha, why_not = resolve_plinth_pin(root)
+        if sha is None and str(why_not).startswith("workflow pins disagree"):
+            moves = pins_forward(root, network)
+            if moves:
+                sha, why_not, out["moves"] = moves[0][2], None, moves
     # --defaults: without a terminal copier update stops at "Interactive
     # session required" (measured, copier 9.18.2), and the skill that runs
     # this line has none. It answers each question with the recorded answer.
@@ -1512,7 +1607,7 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
     recorded tag is the target tag -- not that this repository's own render
     matches it file for file: another archetype, inherited forms or a
     hand-made edit can mean a changed template file was never rendered here."""
-    d = template_drift(root, host)
+    d = template_drift(root, host, network)
     if d["state"] == "skip":
         result("SKIP", f"template drift not verified ({d['reason']})")
         return
@@ -1569,6 +1664,8 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
     owner_shared(d, owner, network, root)
     if not d["cmd"]:
         result("INFO", f"  no update command: {d['why_not']}")
+        if str(d["why_not"]).startswith("workflow pins disagree"):
+            result("INFO", "  the \"workflow pins disagree\" WARN below names each file and the line that makes them one")
         return
     for note in d.get("owner_notes", []):
         result("INFO", f"  {note}")
@@ -1580,6 +1677,8 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
         result("INFO", f"  not verified that {target} still names {d['target_sha']}, the commit plinth was tested "
                        f"with ({why}); the template-update skill checks it before it runs this line:")
     result("INFO", f"  {d['cmd']}")
+    for line in moves_lines(d):
+        result("INFO", f"  {line}")
     choice = plinth_pin_choice(d, network)
     if choice["state"] == "equal":
         return
@@ -1595,8 +1694,10 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
     stdout, exit 0; otherwise why there is none on stderr, exit 1. With
     --plinth-pin tested, the line with the tested pin, and the comparison
     on stderr whether or not there is one: --plinth-pin tested never prints
-    a line that would move the pin backwards or past an unread comparison."""
-    d = template_drift(root, host)
+    a line that would move the pin backwards or past an unread comparison.
+    With the live pin, each file the line moves forward to the ci job's
+    commit is a `moves:` line on stderr (#793)."""
+    d = template_drift(root, host, network)
     owner_shared(d, owner, network, root)
     for note in d.get("owner_notes", []):
         print(note, file=sys.stderr)
@@ -1619,6 +1720,8 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
         print("no update command with the tested pin: only the live pin's line stands", file=sys.stderr)
         return 1
     if d.get("cmd"):
+        for line in moves_lines(d):
+            print(line, file=sys.stderr)
         print(d["cmd"])
         return 0
     why = {
@@ -1630,6 +1733,9 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
         "behind": lambda: f"{d['recorded']} is behind {d['target']}, but there is no update command: {d['why_not']}",
     }[d["state"]]()
     print(f"no update command: {why}", file=sys.stderr)
+    if d["state"] == "behind" and str(d.get("why_not", "")).startswith("workflow pins disagree"):
+        for line in pins_disagree_stop(root, network):
+            print(line, file=sys.stderr)
     return 1
 
 

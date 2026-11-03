@@ -24,7 +24,16 @@ It fetches the default branch, checks it against GitHub's copy, and prints the
 two tags, the worktree and branch it would make, and the command. It writes
 nothing. Show that output whole. Exit 1 means nothing to do or a stop (the
 recorded tag is the target, no pin to carry, a base it could not verify):
-show the message and stop there. One exception at the target tag: when the
+show the message and stop there. When the workflows call plinth at two
+commits (`ci.yml` raised by hand, `label.yml` not) and each other file's is
+an ancestor of the `ci` job's, the plan carries the `ci` job's commit and a
+`Moves:` line names each file it moves forward; after copier, the apply
+stops if any plinth `uses:` does not name that pin. Otherwise (another file
+newer, two commits neither behind the other, a compare not read) it stops:
+the message names each file with its commit, which is the newer when GitHub
+says, and the line that makes them one. Never move the `ci` job's pin for
+the person: that is their change, in its own pull request, before the update
+runs again (#793). One exception at the target tag: when the
 repository recorded that its owner's `.github` shares a pull-request
 template or issue forms, the owner no longer does, and the repository has
 none of its own, the plan names each answer that turns false and gives a

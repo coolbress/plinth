@@ -77,6 +77,15 @@ for a in "$@"; do [ "$prev" = --vcs-ref ] && ref="$a"; prev="$a"; done
 [ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
 printf 'template line\n' >> AGENTS.md
+# MOCK_PINS=move: every plinth uses: now names the plinth_sha the line
+# carries, as the template renders it (#793); unset, the workflows are left
+# as they were.
+if [ "${MOCK_PINS:-}" = move ]; then
+  pin=""; for a in "$@"; do case "$a" in plinth_sha=*) pin="${a#plinth_sha=}" ;; esac; done
+  for f in .github/workflows/*.yml; do
+    sed -E -i.bak "s|(coolbress/plinth/[^@]*)@[0-9a-fA-F]{40}|\1@$pin|" "$f" && rm "$f.bak"
+  done
+fi
 # MOCK_GLOSSARY: the template names GLOSSARY.md too, whatever MOCK_COPIER does.
 [ -n "${MOCK_GLOSSARY:-}" ] && mkdir -p docs/agents && printf -- '- Root **`GLOSSARY.md`**: the glossary.\n' > docs/agents/domain.md
 case "${MOCK_COPIER:-clean}" in
@@ -713,6 +722,63 @@ if [ "$rc" = 0 ] && grep -A3 "Edited by a person" <<<"$body" | grep -qxF -- "- G
    && grep -qF -- "- CONTEXT.md -> GLOSSARY.md (edited after the move" <<<"$body"
 then ok "a glossary edited after the move is listed as a person's edit, and the rename line says so"
 else bad "edited after the move (rc=$rc)"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+
+# ── two plinth pins (#793) ──────────────────────────────────────────────
+# ci.yml raised by hand, label.yml left at an ancestor of its commit: the
+# plan carries the ci job's commit and says label.yml moves; the apply
+# checks after copier that every plinth uses: names it, and the description
+# lists the move. label.yml newer than ci.yml: the plan stops with the fix.
+old_pin="$(printf '%040d' 1)"
+pins_api() { # <dir> <status of label.yml's commit against the ci job's>
+  rm -rf "$1"; cp -R "$FLOOR_CHECK_API_DIR" "$1"; mkdir -p "$1/repos/coolbress/plinth/compare"
+  printf '{"status":"%s"}\n' "$2" > "$1/repos/coolbress/plinth/compare/$sha40...$old_pin.json"
+}
+two_fixture() { # <name>
+  fixture "$1"
+  printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$old_pin" > "$repo/.github/workflows/label.yml"
+  git -C "$repo" add -A && git -C "$repo" commit -q -m label && git -C "$repo" push -q origin main
+}
+pins_api "$work/api-behind" behind; pins_api "$work/api-ahead" ahead
+two_fixture pins-behind; reset_logs
+want="$(cd "$repo" && FLOOR_CHECK_API_DIR="$work/api-behind" python3 "$checker" --root "$repo" --repo o/r --print-update-command 2>/dev/null)"
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$work/api-behind" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "Command:    $want" <<<"$out" && grep -qF -- "--data plinth_sha=$sha40" <<<"$want"
+then ok "label.yml at an ancestor of ci.yml's commit: the plan carries ci.yml's commit"
+else bad "plan, ancestor (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if grep -qxF "Moves:      label.yml from $old_pin to $sha40, the commit the ci job calls ($old_pin is an ancestor of it)" <<<"$out" \
+   && ! grep -q "^moves: " <<<"$out"
+then ok "the plan says which file moves from which commit to which, once"
+else bad "plan, Moves line"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs
+out="$(cd "$repo" && MOCK_PINS=move FLOOR_CHECK_API_DIR="$work/api-behind" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+wt="$(wt_of pins-behind)"; body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && [ "$(cat "$work/uvx.log" 2>/dev/null)" = "${want#uvx }" ] \
+   && grep -q "pr-label.yml@$sha40" "$wt/.github/workflows/label.yml" && grep -q "python-ci.yml@$sha40" "$wt/.github/workflows/ci.yml"
+then ok "the apply runs that line, and label.yml ends at ci.yml's commit, ci.yml unmoved"
+else bad "apply, ancestor (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if grep -qxF -- "- label.yml from $old_pin to $sha40, the commit the ci job calls ($old_pin is an ancestor of it)" <<<"$body"
+then ok "the description lists the move"
+else bad "description, move"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+two_fixture pins-stale; reset_logs
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$work/api-behind" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -qF "  .github/workflows/label.yml calls $old_pin, not $sha40" <<<"$out" \
+   && ! grep -q "pr create" "$work/gh.log" && ! git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
+then ok "copier leaving label.yml unmoved: the apply stops, names it, pushes and opens nothing"
+else bad "apply, stale pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+two_fixture pins-ahead; reset_logs
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$work/api-ahead" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -q "workflow pins disagree" <<<"$out" && grep -qxF "  label.yml: coolbress/plinth at $old_pin" <<<"$out" \
+   && grep -qxF "  ci.yml: coolbress/plinth at $sha40" <<<"$out" && grep -q "^  sed -i.bak .*label\.yml" <<<"$out" \
+   && ! grep -q "^Command:" <<<"$out"
+then ok "label.yml newer than ci.yml: the plan stops, naming both files and the fix line"
+else bad "plan, label newer (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The pins agree: the plan is the one it was, with no Moves line.
+fixture pins-agree; reset_logs
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$sha40" > "$repo/.github/workflows/label.yml"
+git -C "$repo" add -A && git -C "$repo" commit -q -m label && git -C "$repo" push -q origin main
+run
+if [ "$rc" = 0 ] && ! grep -qE "^Moves:|workflow pins disagree" <<<"$out"; then ok "ci.yml and label.yml at one commit: no Moves line, no stop"
+else bad "plan, pins agree (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
