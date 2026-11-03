@@ -2628,6 +2628,188 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
                    "   (needs repository administration)")
 
 
+# The archetypes that release from a `v*` tag, and get the door's tag
+# ruleset (ruleset-tags.json, #772). `data-ml` publishes from a tag too, but
+# the door does not raise the ruleset for it, so it is not expected here.
+TAG_RELEASING = ("cli", "library", "backend")
+TAG_RULESET = {"name": "tags: v* not moved or deleted", "target": "tag", "enforcement": "active",
+               "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+               "rules": [{"type": "deletion"}, {"type": "update"}]}
+
+
+def check_actions_token(repo: str, network: bool, actions_token: bool = False) -> None:
+    """The token a workflow gets without naming permissions reads only, and
+    no workflow approves a pull request: what the door sets (#772) instead of
+    GitHub's default, which an owner's settings change. Read with repository
+    administration; a token without it is a SKIP, or an INFO left to the
+    skill under --actions-token. WARN, never FAIL: a repository made before
+    #772 relied on the default, and `ci / floor-check` runs in each one."""
+    if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
+        return
+    w = api(f"repos/{repo}/actions/permissions/workflow", network)
+    if not isinstance(w, dict) or "default_workflow_permissions" not in w:
+        if actions_token:
+            result("INFO", "the Actions token's default permissions are not read here: /plinth:floor-check reads "
+                           "them with a login that administers the repository", deferred=True)
+        else:
+            result("SKIP", "the Actions token's default permissions not verified (this token does not read the "
+                           "repository's Actions settings; one with repository administration does)")
+        return
+    off = []
+    if w.get("default_workflow_permissions") != "read":
+        off.append(f"a workflow that names no permissions gets a token that can write "
+                   f"(default_workflow_permissions: {w.get('default_workflow_permissions')})")
+    if w.get("can_approve_pull_request_reviews") is not False:
+        off.append("a workflow can approve a pull request (can_approve_pull_request_reviews: "
+                   f"{json.dumps(w.get('can_approve_pull_request_reviews'))})")
+    if not off:
+        result("PASS", "the Actions token reads only by default and cannot approve a pull request")
+        return
+    result("WARN", "the Actions settings: " + "; ".join(off))
+    result("INFO", f"  gh api -X PUT repos/{repo}/actions/permissions/workflow -f default_workflow_permissions=read "
+                   "-F can_approve_pull_request_reviews=false   (needs repository administration)")
+
+
+def tag_ruleset_covers(rs: dict) -> list[str]:
+    """What a tag ruleset leaves open of what TAG_RULESET closes: empty when
+    it is active, matches a `v*` tag, and blocks its deletion and its update.
+    `non_fast_forward` is not `update`: it lets a tag move to a later commit."""
+    import fnmatch
+    gaps = []
+    if rs.get("enforcement") != "active":
+        gaps.append(f"enforcement is {rs.get('enforcement')}")
+    cond = (rs.get("conditions") or {}).get("ref_name") or {}
+    probe = "refs/tags/v1.0.0"
+    inc = [p for p in cond.get("include") or [] if isinstance(p, str)]
+    exc = [p for p in cond.get("exclude") or [] if isinstance(p, str)]
+    if not (any(p == "~ALL" or fnmatch.fnmatchcase(probe, p) for p in inc)
+            and not any(p == "~ALL" or fnmatch.fnmatchcase(probe, p) for p in exc)):
+        gaps.append("it does not match v* tags")
+    types = {r.get("type") for r in rs.get("rules") or [] if isinstance(r, dict)}
+    gaps += [f"no {t} rule" for t in ("deletion", "update") if t not in types]
+    return gaps
+
+
+def check_tag_ruleset(repo: str, archetype: str | None, network: bool) -> None:
+    """A releasing archetype's `v*` tags can be neither moved nor deleted
+    (#772): a moved tag changes what a release names, a deleted one makes it
+    vanish. Rulesets are read with read access, so this needs no
+    administration. WARN, never FAIL, as the merge ruleset: every repository
+    made before #772 lacks it, and `ci / floor-check` runs in each one."""
+    if archetype not in TAG_RELEASING or (not network and not os.environ.get("FLOOR_CHECK_API_DIR")):
+        return
+    listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
+    if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
+        result("SKIP", "the tag ruleset not verified: this repository's rulesets could not be listed")
+        return
+    best: list[str] | None = None
+    unread = False
+    for item in listed if isinstance(listed, list) else []:
+        if not isinstance(item, dict) or item.get("target") != "tag" or item.get("source_type", "Repository") != "Repository":
+            continue
+        rs = api(f"repos/{repo}/rulesets/{item.get('id')}", network)
+        if not isinstance(rs, dict):
+            unread = True
+            continue
+        gaps = tag_ruleset_covers(rs)
+        if not gaps:
+            result("PASS", f"the tag ruleset keeps v* tags from being moved or deleted (ruleset {item.get('id')})")
+            return
+        best = gaps if best is None or len(gaps) < len(best) else best
+    if unread and best is None:
+        result("SKIP", "the tag ruleset not verified: a tag ruleset is listed and could not be read")
+        return
+    why = f"the tag rulesets here leave v* tags open: {', '.join(best)}" if best else "no tag ruleset"
+    result("WARN", f"{why}: for a {archetype}, which releases from a v* tag, anyone with write access can move "
+                   "or delete a released tag")
+    result("INFO", f"  gh api -X POST repos/{repo}/rulesets --input - <<<{shlex.quote(json.dumps(TAG_RULESET))}"
+                   "   (needs repository administration)")
+
+
+def check_description(repo: str, network: bool) -> None:
+    """The line under the repository's name, which GitHub's community profile
+    counts. Asked at creation and skippable (#772), and not recorded in the
+    answers, so an empty one is said, never a miss."""
+    if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
+        return
+    meta = api(f"repos/{repo}", network)
+    if not isinstance(meta, dict) or "description" not in meta:
+        return
+    if (meta.get("description") or "").strip():
+        result("PASS", "the repository has a description")
+    else:
+        result("INFO", f"the repository has no description: GitHub's community profile counts one; "
+                       f"set it with gh repo edit {repo} --description '<one line>'")
+
+
+def answered_true(answers: dict[str, str], key: str) -> bool:
+    return answers.get(key, "").lower() == "true"
+
+
+def check_answers(root: Path, owner: str | None, network: bool, host: str = "github") -> None:
+    """The project against the answers it was made with (#772): each answer
+    in .copier-answers.yml that turns something on, and the file it renders
+    or relies on. An answer that turns something off is not a miss, and an
+    answer not recorded is not read. WARN, never FAIL: the fix is the
+    person's, and an older instance records fewer answers."""
+    answers = copier_answers(root)
+    if not answers:
+        return
+    if answered_true(answers, "third_party_review") and host == "github":
+        caller = root / ".github" / "workflows" / "third-party.yml"
+        if caller.is_file():
+            result("PASS", "third_party_review: true, and .github/workflows/third-party.yml is there")
+        else:
+            result("WARN", "third_party_review: true, and .github/workflows/third-party.yml is missing: no pull "
+                           "request gets the third-party / review check the project was made with")
+            result("INFO", "  bring it back from the commit that removed it (git log --diff-filter=D -- "
+                           ".github/workflows/third-party.yml), or record third_party_review: false with "
+                           "/plinth:template-update if the reviewer is no longer wanted")
+    want_own = answered_true(answers, "code_of_conduct") and not (
+        host == "github" and answered_true(answers, "owner_has_code_of_conduct"))
+    if want_own:
+        if (root / "CODE_OF_CONDUCT.md").is_file():
+            result("PASS", "code_of_conduct: true, and CODE_OF_CONDUCT.md is there")
+        else:
+            result("WARN", "code_of_conduct: true, and CODE_OF_CONDUCT.md is missing")
+            result("INFO", "  bring it back from the commit that removed it (git log --diff-filter=D -- "
+                           "CODE_OF_CONDUCT.md), or record code_of_conduct: false with /plinth:template-update")
+    if host == "github":
+        # The owner's copy, answered at creation and relied on since: still
+        # published, or this repository has none in effect. Issue forms are
+        # judged in the document set above, local or inherited.
+        for key, name in (("owner_has_code_of_conduct", "CODE_OF_CONDUCT.md"),
+                          ("owner_has_pr_template", "PULL_REQUEST_TEMPLATE.md")):
+            if answered_true(answers, key):
+                check_owner_copy(root, owner, network, key, name)
+
+
+def check_owner_copy(root: Path, owner: str | None, network: bool, key: str, name: str) -> None:
+    """`<key>: true` and the owner's `.github` still publishing `name` at one
+    of the three places GitHub reads it from, unless the repository has its
+    own, which applies in its place."""
+    places = (name, f".github/{name}", f"docs/{name}")
+    if any((root / p).is_file() for p in places):
+        result("PASS", f"{name} is the repository's own, which applies in place of the owner's")
+        return
+    found, failed = False, False
+    for path in places:
+        got = inherited_file(owner, path, network)
+        if isinstance(got, str):
+            found = True
+            break
+        failed = failed or got is ERROR
+    if found:
+        result("PASS", f"{key}: true, and the owner's .github repository publishes {name}")
+    elif failed:
+        result("SKIP", f"{key}: true; whether the owner's .github repository still "
+                       "publishes it not verified (offline or API error)")
+    else:
+        result("WARN", f"{key}: true, and the owner's .github repository no longer "
+                       f"publishes {name}: this repository has none in effect")
+        result("INFO", "  /plinth:template-update looks at the owner's .github again and passes what it finds")
+
+
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
                sources: dict[str, int | None] | None = None, actions_token: bool = False,
                merge: dict | None = None, not_applying: list[str] | None = None, root: Path | None = None) -> None:
@@ -2912,7 +3094,10 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
             if not rid or rid in in_effect or item.get("source_type", "Repository") != "Repository":
                 continue
             rs = api(f"repos/{repo}/rulesets/{rid}", network)
-            if isinstance(rs, dict) and any(r.get("type") == "update" for r in rs.get("rules", [])):
+            # A tag ruleset (ruleset-tags.json, #772) carries `update` too and
+            # never governs a branch.
+            if isinstance(rs, dict) and rs.get("target", "branch") == "branch" \
+                    and any(r.get("type") == "update" for r in rs.get("rules", [])):
                 idle.append(f"ruleset {rid} ({rs.get('enforcement')}, {rs.get('target')}, {rs.get('conditions')})")
         if idle:
             result("FAIL", f"{branch}: the merge ruleset is not in effect: {'; '.join(idle)}. Any account with write "
@@ -3625,6 +3810,7 @@ def main() -> int:
                        "Dependabot, tracked .env files, action pins and, with a repository name, the ruleset, push "
                        "protection and CodeQL")
     check_files(root, owner, network, host)
+    check_answers(root, owner, network, host)
     archetype = archetype_of(project, a.archetype)
     if javascript:
         check_javascript_project(project)
@@ -3686,6 +3872,9 @@ def main() -> int:
         merge = json.loads(read(Path(a.merge_ruleset))) if a.merge_ruleset else None
         check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying, root)
         check_actions_allowlist(root, a.repo, network, a.actions_token)
+        check_actions_token(a.repo, network, a.actions_token)
+        check_tag_ruleset(a.repo, archetype, network)
+        check_description(a.repo, network)
         check_labels(a.repo, network)
     else:
         result("SKIP", "no --repo: wall not checked")

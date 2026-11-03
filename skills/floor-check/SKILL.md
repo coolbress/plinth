@@ -272,7 +272,7 @@ A third count, `K left to /plinth:floor-check`, appears only in a run with
 `--actions-token` (`ci / floor-check`) and only when K is above 0: INFO
 lines for reads that token cannot make and this skill, run with a login that
 administers the repository, does (push protection, private vulnerability
-reporting, the Actions allowlist, the ruleset's bypass actors, the CodeQL default setup languages, the squash commit settings, and
+reporting, the Actions allowlist, the Actions token settings, the ruleset's bypass actors, the CodeQL default setup languages, the squash commit settings, and
 a private repository's missing CodeQL rule). In that job's summary their
 `not yet confirmed` lines end `; left to /plinth:floor-check` and are not
 annotated; the other `not yet confirmed` lines are. This skill's own run
@@ -395,6 +395,37 @@ repository, and never run it.
 
 Both read settings a token without repository administration does not get:
 a SKIP here, and under `--actions-token` an INFO left to this skill.
+
+## What the door sets beside the wall, and the project's own answers
+
+These items (#772) are each a WARN, never a FAIL, with the fix under it;
+relay the call as printed, behind `with-admin-token.sh` when the user's
+login cannot administer the repository, and never run it.
+
+- **The Actions token.** With `--repo`: the token a workflow gets when it
+  names no permissions reads only, and no workflow can approve a pull
+  request, which the door sets. Either one otherwise is the WARN, with one
+  `gh api -X PUT …/actions/permissions/workflow`. It needs repository
+  administration to read: a SKIP here, an INFO left to this skill under
+  `--actions-token`.
+- **The tag ruleset.** With `--repo`, for `cli`, `library` and `backend`,
+  which release from a `v*` tag: an active tag ruleset matching `v*` that
+  blocks deletion and update. None, or one that leaves a gap (a
+  `non_fast_forward` rule in place of `update` lets a tag move to a later
+  commit), is the WARN naming the gap, with the `gh api -X POST` that adds
+  the door's. Rulesets are read with read access.
+- **The description.** With `--repo`: one is a PASS, none an INFO with the
+  `gh repo edit` that sets one. It is asked at creation and skippable, and
+  not recorded, so none is never a miss.
+- **The project's answers.** Each answer in `.copier-answers.yml` that turns
+  something on is held against the repository: `third_party_review: true`
+  and `.github/workflows/third-party.yml`; `code_of_conduct: true` and
+  `CODE_OF_CONDUCT.md`; `owner_has_code_of_conduct: true` and the owner's
+  `.github` repository still publishing one (a SKIP when it cannot be read,
+  a PASS when the repository has its own). An answer that turns something
+  off, or one not recorded, is not read. `owner_has_security_policy` needs
+  no item of its own: `SECURITY.md`, local or inherited, is in the document
+  set above.
 
 ## A private repository
 
