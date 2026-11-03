@@ -333,6 +333,14 @@ good_allow='{"github_owned_allowed":true,"verified_allowed":false,"patterns_allo
 printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
 printf '%s' "$good_allow" > "$api/repos/o/r/actions/permissions/selected-actions.json"
 printf '{"enabled":true}' > "$api/repos/o/r/private-vulnerability-reporting.json"
+# The Actions token settings and the tag ruleset the door sets (#772): the
+# fixture is a backend, which releases from a v* tag.
+good_wperms='{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}'
+printf '%s' "$good_wperms" > "$api/repos/o/r/actions/permissions/workflow.json"
+good_tags="$(jq -c '. + {id: 3}' "$root/ruleset-tags.json")"
+good_listing='[{"id":1,"target":"branch","source_type":"Repository"},{"id":3,"target":"tag","source_type":"Repository"}]'
+printf '%s' "$good_listing" > "$api/repos/o/r/rulesets?per_page=100.json"
+printf '%s' "$good_tags" > "$api/repos/o/r/rulesets/3.json"
 wall() { # <description> <expected substring in output> [shell that edits the fixture first]
   local out; [ -n "${3:-}" ] && eval "$3"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
@@ -346,6 +354,8 @@ wall() { # <description> <expected substring in output> [shell that edits the fi
   printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
   printf '%s' "$good_allow" > "$api/repos/o/r/actions/permissions/selected-actions.json"
   printf '{"enabled":true}' > "$api/repos/o/r/private-vulnerability-reporting.json"
+  printf '%s' "$good_wperms" > "$api/repos/o/r/actions/permissions/workflow.json"
+  printf '%s' "$good_listing" > "$api/repos/o/r/rulesets?per_page=100.json"; printf '%s' "$good_tags" > "$api/repos/o/r/rulesets/3.json"
 }
 wall "intact wall passes" "-- 0 failed"
 wall "squash commits are the pull request title and description" "PASS  squash commits carry"
@@ -3029,6 +3039,149 @@ printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 js_wall "$js" --expect-checks "ci / lint, CodeQL"
 grep -q "N/A   main: requiring ci / lint does not apply" <<<"$out" && grep -q "PASS  main: all 1 expected checks are required" <<<"$out" \
   && ok "JavaScript only, wall: a non-Python expected check is still judged" || { bad "JavaScript only, wall: --expect-checks"; grep -E 'N/A|expected checks' <<<"$out" | sed 's/^/        /'; }
+
+echo "-- what the door sets beside the wall, and the project's own answers (#772)"
+# The tag ruleset, for a releasing archetype (the fixture is a backend). The
+# must-not-pass cases first: a tag ruleset that lets a v* tag move, a
+# disabled one, one for other tags, and none.
+tagrs="$api/repos/o/r/rulesets/3.json"
+wall "must not pass: a tag ruleset with non_fast_forward in place of update is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: no update rule" "jq -c '.rules = [{type:\"deletion\"},{type:\"non_fast_forward\"}]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a tag ruleset in evaluate mode is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: enforcement is evaluate" "jq -c '.enforcement = \"evaluate\"' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a tag ruleset for other tags is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: it includes \\['refs/tags/release-\\*'\\], not every v\\* tag" "jq -c '.conditions.ref_name.include = [\"refs/tags/release-*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: no tag ruleset is a WARN naming why it matters" \
+  "WARN  no tag ruleset: for a backend, which releases from a v\* tag, anyone with write access can move or delete a released tag" \
+  "printf '[{\"id\":1,\"target\":\"branch\"}]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
+wall "...with the call that adds the door's one, which needs administration" \
+  "INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{\"name\": \"tags: v\\* not moved or deleted\"" \
+  "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
+wall "a missing tag ruleset never fails the floor" "-- 0 failed, 1 not verified" "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
+wall "the door's tag ruleset is a PASS" "PASS  the tag ruleset keeps v\\* tags from being moved or deleted, with no bypass actor (ruleset 3)"
+# Codex review on #779: one sample tag is not the namespace, and a bypass
+# actor is a way round it. Must-not-pass cases, each a WARN naming the gap.
+wall "must not pass: v* with v2* excluded is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: it excludes \\['refs/tags/v2\\*'\\], which can match a v\\* tag" \
+  "jq -c '.conditions.ref_name.exclude = [\"refs/tags/v2*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a ruleset for v1.0.0 alone is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: it includes \\['refs/tags/v1.0.0'\\], not every v\\* tag" \
+  "jq -c '.conditions.ref_name.include = [\"refs/tags/v1.0.0\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a write role that always bypasses it is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: bypass actors present: RepositoryRole 4 (always)" \
+  "jq -c '.bypass_actors = [{actor_id: 4, actor_type: \"RepositoryRole\", bypass_mode: \"always\"}]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "an exclude that cannot match a v* tag is not a gap" "PASS  the tag ruleset keeps v\\* tags" \
+  "jq -c '.conditions.ref_name.exclude = [\"refs/tags/nightly\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "bypass actors the token does not get are a SKIP, never a PASS" \
+  "SKIP  the tag ruleset (ruleset 3) covers v\\* tags, and its bypass actors are not read here" "jq -c 'del(.bypass_actors)' <<<\"\$good_tags\" > \"$tagrs\""
+wall "...counted as not verified" "-- 0 failed, 2 not verified" "jq -c 'del(.bypass_actors)' <<<\"\$good_tags\" > \"$tagrs\""
+out="$(jq -c 'del(.bypass_actors)' <<<"$good_tags" > "$tagrs"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --actions-token --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_tags" > "$tagrs"
+if grep -q "INFO  the tag ruleset (ruleset 3) covers v\\* tags, and its bypass actors are not read here: /plinth:floor-check reads them" <<<"$out" && ! grep -q "PASS  the tag ruleset" <<<"$out"
+then ok "--actions-token: unread tag bypass actors are left to /plinth:floor-check, not passed"; else bad "--actions-token: unread tag bypass actors"; grep 'tag ruleset' <<<"$out" | sed 's/^/        /'; fi
+wall "~ALL with deletion and update is a PASS too" "PASS  the tag ruleset keeps v\* tags" "jq -c '.conditions.ref_name.include = [\"~ALL\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "a listing that cannot be read is a SKIP, counted" "-- 0 failed, 2 not verified" "printf 'not json' > \"$api/repos/o/r/rulesets?per_page=100.json\""
+wall "a listed tag ruleset that cannot be read is a SKIP" "SKIP  the tag ruleset not verified: a tag ruleset is listed and could not be read" "rm \"$tagrs\""
+# floor-check.py has no file beside it in consumer CI, so the ruleset it
+# offers is its own copy: it must be the door's file.
+if python3 - "$root" <<'PY'
+import json, sys, importlib.util as u
+root = sys.argv[1]
+s = u.spec_from_file_location("fc", f"{root}/scripts/floor-check.py"); m = u.module_from_spec(s); s.loader.exec_module(m)
+sys.exit(0 if m.TAG_RULESET == json.load(open(f"{root}/ruleset-tags.json")) else 1)
+PY
+then ok "the tag ruleset floor-check offers is ruleset-tags.json"; else bad "floor-check.py's TAG_RULESET differs from ruleset-tags.json"; fi
+out="$(printf '[]' > "$api/repos/o/r/rulesets?per_page=100.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --archetype data-ml --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_listing" > "$api/repos/o/r/rulesets?per_page=100.json"
+if grep -q "WARN  no tag ruleset: for a data-ml, which releases from a v\\* tag" <<<"$out"; then ok "data-ml, which releases its model from a tag, is held to the tag ruleset"; else bad "data-ml was not judged on a tag ruleset"; fi
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --archetype web --expect-checks "ci / a, ci / b" 2>&1)"
+if ! grep -q "tag ruleset" <<<"$out"; then ok "web, which deploys on green, is not held to a tag ruleset"; else bad "web was judged on a tag ruleset"; fi
+# The merge ruleset's search for one not in effect skips a tag ruleset, which
+# carries update too: before #772's fix this was a false FAIL.
+merge_wall "a tag ruleset is not taken for a merge ruleset out of effect" \
+  '^  WARN  main: no ruleset reserves the merge to an admin' \
+  "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '%s' \"\$good_listing\" > \"$mapi/repos/o/r/rulesets?per_page=100.json\"; printf '%s' \"\$good_tags\" > \"$mapi/repos/o/r/rulesets/3.json\"" "${M[@]}"
+# The Actions token settings.
+wperms="$api/repos/o/r/actions/permissions/workflow.json"
+wall "must not pass: a token that writes by default is a WARN" \
+  "WARN  the Actions settings: a workflow that names no permissions gets a token that can write (default_workflow_permissions: write)" \
+  "printf '{\"default_workflow_permissions\":\"write\",\"can_approve_pull_request_reviews\":false}' > \"$wperms\""
+wall "must not pass: a workflow that can approve is a WARN" \
+  "WARN  the Actions settings: a workflow can approve a pull request (can_approve_pull_request_reviews: true)" \
+  "printf '{\"default_workflow_permissions\":\"read\",\"can_approve_pull_request_reviews\":true}' > \"$wperms\""
+wall "...with the call that sets both" \
+  "INFO    gh api -X PUT repos/o/r/actions/permissions/workflow -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false   (needs repository administration)" \
+  "printf '{\"default_workflow_permissions\":\"write\",\"can_approve_pull_request_reviews\":true}' > \"$wperms\""
+wall "the settings the door sets are a PASS" "PASS  the Actions token reads only by default and cannot approve a pull request"
+wall "settings the token does not read are a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$wperms\""
+out="$(rm -f "$wperms"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --actions-token --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_wperms" > "$wperms"
+if grep -q "INFO  the Actions token's default permissions are not read here" <<<"$out" && ! grep -q "SKIP  the Actions token" <<<"$out"
+then ok "--actions-token: unread settings are left to /plinth:floor-check, not a SKIP"; else bad "--actions-token: unread settings"; fi
+# The description: said, never a miss.
+wall "a description is a PASS" "PASS  the repository has a description" "jq -c '. + {description: \"x\"}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+wall "no description is an INFO with the command" "INFO  the repository has no description: GitHub's community profile counts one; set it with gh repo edit o/r --description" \
+  "jq -c '. + {description: null}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+wall "no description fails nothing and is not counted" "-- 0 failed, 1 not verified" "jq -c '. + {description: \"\"}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+
+# The project's answers: each one that turns something on, against the file.
+answers() { # <description> <expected regex, or !regex for absent> <answers lines> [shell in the copy] [api dir]
+  local copy="$work/ans"; rm -rf "$copy"; cp -R "$good" "$copy"; printf '%b' "$3" >> "$copy/.copier-answers.yml"
+  [ -n "${4:-}" ] && ( cd "$copy" && eval "$4" )
+  local out want="$2" neg=0; [ "${want#!}" != "$want" ] && { neg=1; want="${want#!}"; }
+  out="$(FLOOR_CHECK_API_DIR="${5:-$work/ans-none}" python3 "$checker" --root "$copy" --repo o/r 2>&1)"
+  if { [ "$neg" = 0 ] && grep -qE -- "$want" <<<"$out"; } || { [ "$neg" = 1 ] && ! grep -qE -- "$want" <<<"$out"; }; then ok "$1"
+  else bad "$1 (expected ${2})"; grep -E 'third_party|code_of_conduct|CODE_OF' <<<"$out" | sed 's/^/        /'; fi
+}
+mkdir -p "$work/ans-none"
+answers "must not pass: third_party_review: true without its caller is a WARN" \
+  '^  WARN  third_party_review: true, and .github/workflows/third-party.yml is missing' 'third_party_review: true\n'
+answers "...with how to bring it back or record false" 'git log --diff-filter=D -- .github/workflows/third-party.yml' 'third_party_review: true\n'
+answers "third_party_review: true with its caller is a PASS" '^  PASS  third_party_review: true, and .github/workflows/third-party.yml is there' \
+  'third_party_review: true\n' "printf 'name: third-party\\n' > .github/workflows/third-party.yml"
+answers "third_party_review: false is not a miss" '!third_party_review' 'third_party_review: false\n'
+answers "must not pass: code_of_conduct: true without the file is a WARN" '^  WARN  code_of_conduct: true, and CODE_OF_CONDUCT.md is missing' \
+  'code_of_conduct: true\ncode_of_conduct_contact: a@b.c\n'
+answers "code_of_conduct: true with the file is a PASS" '^  PASS  code_of_conduct: true, and CODE_OF_CONDUCT.md is there' \
+  'code_of_conduct: true\n' ": > CODE_OF_CONDUCT.md"
+answers "code_of_conduct: false is not a miss" '!CODE_OF_CONDUCT|code_of_conduct' 'code_of_conduct: false\n'
+coc_api="$work/ans-owner"; mkdir -p "$coc_api/repos/o/.github/contents/docs"
+printf '{"visibility":"public"}' > "$coc_api/repos/o/.github.json"
+jq -n --arg c "$(printf '# Code\n' | base64)" '{content: $c}' > "$coc_api/repos/o/.github/contents/docs/CODE_OF_CONDUCT.md.json"
+answers "owner_has_code_of_conduct: true and the owner publishes one (in docs/) is a PASS" \
+  "^  PASS  owner_has_code_of_conduct: true, and the owner's .github repository publishes CODE_OF_CONDUCT.md" 'owner_has_code_of_conduct: true\n' "" "$coc_api"
+answers "must not pass: owner_has_code_of_conduct: true and the owner's .github gone is a WARN" \
+  "^  WARN  owner_has_code_of_conduct: true, and o/.github is private or gone" 'owner_has_code_of_conduct: true\n'
+gone_api="$work/ans-gone"; mkdir -p "$gone_api/repos/o"; printf '{"visibility":"public"}' > "$gone_api/repos/o/.github.json"
+answers "must not pass: owner_has_code_of_conduct: true, a public .github without the file, is a WARN" \
+  "^  WARN  owner_has_code_of_conduct: true, and the owner's .github repository no longer publishes CODE_OF_CONDUCT.md" 'owner_has_code_of_conduct: true\n' "" "$gone_api"
+# Codex review on #779, round 2: GitHub inherits from a public .github only,
+# and an administrator's token still reads a private one's files.
+priv_api="$work/ans-private"; rm -rf "$priv_api"; cp -R "$coc_api" "$priv_api"; printf '{"visibility":"private"}' > "$priv_api/repos/o/.github.json"
+answers "must not pass: the owner's file readable in a private .github is a WARN, not a PASS" \
+  "^  WARN  owner_has_code_of_conduct: true, and o/.github is private or gone: GitHub inherits CODE_OF_CONDUCT.md only from a public .github repository" \
+  'owner_has_code_of_conduct: true\n' "" "$priv_api"
+answers "...and it is never passed" "!PASS  owner_has_code_of_conduct" 'owner_has_code_of_conduct: true\n' "" "$priv_api"
+unvis_api="$work/ans-unvis"; rm -rf "$unvis_api"; cp -R "$coc_api" "$unvis_api"; printf 'not json' > "$unvis_api/repos/o/.github.json"
+answers "the .github's visibility unread is a SKIP, not a PASS" \
+  "^  SKIP  owner_has_code_of_conduct: true; whether o/.github is public not verified" 'owner_has_code_of_conduct: true\n' "" "$unvis_api"
+answers "...and code_of_conduct: true beside it is not asked of the repository" '!WARN  code_of_conduct: true' \
+  'owner_has_code_of_conduct: true\ncode_of_conduct: true\n' "" "$coc_api"
+bad_api="$work/ans-bad"; mkdir -p "$bad_api/repos/o/.github/contents"; printf 'not json' > "$bad_api/repos/o/.github/contents/CODE_OF_CONDUCT.md.json"; printf '{"visibility":"public"}' > "$bad_api/repos/o/.github.json"
+answers "an owner's file that cannot be read is a SKIP, not a WARN" "^  SKIP  owner_has_code_of_conduct: true; whether the owner's .github repository still publishes it not verified" \
+  'owner_has_code_of_conduct: true\n' "" "$bad_api"
+pr_api="$work/ans-owner-pr"; mkdir -p "$pr_api/repos/o/.github/contents/.github"; printf '{"visibility":"public"}' > "$pr_api/repos/o/.github.json"
+jq -n --arg c "$(printf '## What\n' | base64)" '{content: $c}' > "$pr_api/repos/o/.github/contents/.github/PULL_REQUEST_TEMPLATE.md.json"
+answers "owner_has_pr_template: true and the owner publishes one (in .github/) is a PASS" \
+  "^  PASS  owner_has_pr_template: true, and the owner's .github repository publishes PULL_REQUEST_TEMPLATE.md" 'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$pr_api"
+answers "must not pass: owner_has_pr_template: true and the owner's is gone is a WARN" \
+  "^  WARN  owner_has_pr_template: true, and the owner's .github repository no longer publishes PULL_REQUEST_TEMPLATE.md" \
+  'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$gone_api"
+answers "owner_has_pr_template: false is not read" '!owner_has_pr_template' 'owner_has_pr_template: false\n'
+# The archetypes that get the tag ruleset: one list in the door, one in the checker.
+door_list="$(sed -n 's/^case "\$arch" in \([a-z|-]*\)) tag_ruleset=0.*/\1/p' "$root/scripts/new-project.sh")"
+checker_list="$(python3 -c "import importlib.util as u; s=u.spec_from_file_location('fc','$root/scripts/floor-check.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print('|'.join(m.TAG_NOT_RELEASING))")"
+if [ -n "$door_list" ] && [ "$door_list" = "$checker_list" ]; then ok "the door and the checker leave out the same archetypes from the tag ruleset ($door_list)"
+else bad "the door leaves out '$door_list' from the tag ruleset, the checker '$checker_list'"; fi
+answers "a repository's own code of conduct applies in place of the owner's" "^  PASS  CODE_OF_CONDUCT.md is the repository's own" \
+  'owner_has_code_of_conduct: true\n' ": > CODE_OF_CONDUCT.md"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

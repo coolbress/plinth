@@ -72,6 +72,18 @@ pull requests and have no tag.
   default: the token a workflow gets without naming permissions reads only
   (`default_workflow_permissions=read`), and no workflow can approve a pull
   request (`can_approve_pull_request_reviews=false`) (#772).
+- `/plinth:floor-check` holds a project to the answers it was made with:
+  `third_party_review: true` without `.github/workflows/third-party.yml`,
+  `code_of_conduct: true` without `CODE_OF_CONDUCT.md`, and
+  `owner_has_code_of_conduct: true` when the owner's `.github` no longer
+  publishes one are each a WARN with its fix; an answer that turns
+  something off is not a miss. With `--repo` it also reports the Actions
+  token settings the door now sets, a `cli`, `library`, `backend` or `data-ml`
+  repository without a tag ruleset that keeps every `v*` tag from being
+  moved or deleted, with no bypass actor (each a WARN with the call that fixes it), and whether the
+  repository has a description (an INFO when it has none). All are WARN or
+  INFO, never FAIL, because `ci / floor-check` runs them in every
+  repository made before them (#772).
 
 ### Changed
 
