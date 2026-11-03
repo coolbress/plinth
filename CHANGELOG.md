@@ -84,6 +84,14 @@ pull requests and have no tag.
   repository has a description (an INFO when it has none). All are WARN or
   INFO, never FAIL, because `ci / floor-check` runs them in every
   repository made before them (#772).
+- [Off by default](docs/reference/off-by-default.md) gains seven rows a
+  new project is told about, not asked: immutable releases (for the
+  archetypes that release), `SUPPORT.md`, `.github/FUNDING.yml`,
+  `CITATION.cff` (`library` and `data-ml`), `.github/CODEOWNERS`, topics,
+  and turning off the wiki. Each says when it is worth turning on, and
+  [Turn on what a new project starts without](docs/how-to/turn-on-what-starts-off.md)
+  says how. `/plinth:new-project`'s last lines and `/plinth:guide` list
+  them; a project that has the file a row names is not told it (#772).
 
 ### Changed
 

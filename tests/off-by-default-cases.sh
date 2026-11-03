@@ -19,6 +19,19 @@ howto='https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-t
 on_repo="now: Turn on Codex code review for this repository in your Codex settings, \`https://chatgpt.com/codex/settings/code-review\`. Until it is on, \`third-party / review\` waits 20 minutes on each pull request and then fails; it does not block the merge. The steps: $howto#1-enable-the-reviewer-on-the-repository"
 summons="off: The summons token (\`SUMMONS_TOKEN\`). Turn it on when the reviewer does not start on its own once a pull request is ready: $howto#summoning-the-reviewer"
 require="off: Requiring the third-party reviewer (\`third-party / review\` in the ruleset, through \`scripts/upgrade-ruleset.sh\`). Turn it on when it has reported on a pull request and you want no merge without it; the command needs repository administration: $howto#3-make-it-part-of-the-wall-optional"
+# The rows told, not asked (#772), in the list's order.
+h='https://github.com/coolbress/plinth/blob/main/docs/how-to/turn-on-what-starts-off.md'
+imm="off: Immutable releases (a published release's files and tag can never change). Turn it on when the project publishes GitHub Releases others download, and you accept that a tag name, once released, can never be used again: $h#immutable-releases"
+sup="off: A support file (\`SUPPORT.md\`). Turn it on when people ask for help in issues and you want to say where help is: $h#a-support-file"
+fund="off: Sponsorship (\`.github/FUNDING.yml\`). Turn it on when you accept money for the project: $h#sponsorship"
+cit="off: A citation file (\`CITATION.cff\`). Turn it on when people may cite the project in a paper or a report: $h#a-citation-file"
+owners="off: Code owners (\`.github/CODEOWNERS\`). Turn it on when a second person shares the repository and some paths should be reviewed by a particular person: $h#code-owners"
+topics="off: Topics, for GitHub's search. Turn it on when you want people to find the project in GitHub's search: $h#topics"
+wiki="off: Turning off the wiki GitHub gives every new repository. Turn it on when the project's documents live in the repository, and you want one place for them: $h#turning-the-wiki-off"
+lines() { local IFS=$'\n'; printf '%s' "$*"; }
+general="$(lines "$sup" "$fund" "$owners" "$topics" "$wiki")"
+for_cli="$(lines "$imm" "$general")"
+for_library="$(lines "$imm" "$sup" "$fund" "$cit" "$owners" "$topics" "$wiki")"
 hsts='off: HSTS preload and include-subdomains. Turn it on when every subdomain answers over HTTPS (include-subdomains), and you accept that preload takes months to undo: the steps are in README.md under "HSTS preload and include-subdomains are off"'
 
 # 1. A Steps page that does not exist fails --check; so does a table with no rows.
@@ -46,11 +59,12 @@ if out="$("$script" --check 2>&1)"; then ok "the list's Steps pages all exist"; 
 # 3. What each archetype is told.
 for a in cli library backend data-ml; do
   out="$("$script" "$a")"
-  if [ "$out" = "$reviewer" ]; then ok "$a: the reviewer only, not the web item"
+  case "$a" in cli|backend) want="$(lines "$reviewer" "$for_cli")" ;; *) want="$(lines "$reviewer" "$for_library")" ;; esac
+  if [ "$out" = "$want" ]; then ok "$a: the reviewer and the told rows for $a, not the web item"
   else bad "$a: got"$'\n'"$out"; fi
 done
 out="$("$script" web)"
-if [ "$out" = "$reviewer"$'\n'"$hsts" ]; then ok "web: the reviewer and HSTS"; else bad "web: got"$'\n'"$out"; fi
+if [ "$out" = "$(lines "$reviewer" "$general" "$hsts")" ]; then ok "web: the reviewer, the told rows without releases or citation, and HSTS"; else bad "web: got"$'\n'"$out"; fi
 if "$script" >/dev/null 2>&1; then bad "no archetype given passed"; else ok "no archetype given is a usage error"; fi
 
 # 4. With a project directory: a feature it has is not listed; one with no
@@ -69,10 +83,10 @@ else bad "project with the caller: got"$'\n'"$out"; fi
 # 4b. --new (new-project.sh, just rendered): what the project has is dropped,
 #     an item with no sign is plainly off.
 out="$("$script" --new web "$work/p")"
-if [ "$out" = "$on_repo"$'\n'"$summons"$'\n'"$require"$'\n'"$hsts" ]; then ok "--new: the caller rendered drops the reviewer and names what is left of it (#765); HSTS is off, not 'started off'"
+if [ "$out" = "$(lines "$on_repo" "$summons" "$require" "$general" "$hsts")" ]; then ok "--new: the caller rendered drops the reviewer and names what is left of it (#765); HSTS is off, not 'started off'"
 else bad "--new with the caller: got"$'\n'"$out"; fi
 out="$("$script" --new cli "$work/p")"
-if [ "$out" = "$on_repo"$'\n'"$summons"$'\n'"$require" ]; then ok "--new cli with the caller: the three reviewer steps left, no HSTS"
+if [ "$out" = "$(lines "$on_repo" "$summons" "$require" "$for_cli")" ]; then ok "--new cli with the caller: the three reviewer steps left, no HSTS"
 else bad "--new cli with the caller: got"$'\n'"$out"; fi
 # A `now:` row in the guide (a directory, not --new): a step whose doing is not read.
 out="$("$script" cli "$work/p")"
@@ -81,7 +95,7 @@ then ok "the guide says the now step as one to do if not done yet, not as starte
 else bad "the guide's now step: got"$'\n'"$out"; fi
 rm "$work/p/.github/workflows/third-party.yml"
 out="$("$script" --new web "$work/p")"
-if [ "$out" = "$reviewer"$'\n'"$hsts" ]; then ok "--new without the caller: both off"; else bad "--new without the caller: got"$'\n'"$out"; fi
+if [ "$out" = "$(lines "$reviewer" "$general" "$hsts")" ]; then ok "--new without the caller: both off"; else bad "--new without the caller: got"$'\n'"$out"; fi
 if "$script" --new web >/dev/null 2>&1; then bad "--new without a directory passed"; else ok "--new needs the project directory"; fi
 
 # 5. Both callers read the list through the script, and name no item themselves.
