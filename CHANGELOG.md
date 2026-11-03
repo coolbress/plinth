@@ -21,6 +21,10 @@ pull requests and have no tag.
 
 ## [2.24.0] - 2026-11-03
 
+Never tagged: its `e2e` run stopped at the token check on Ubuntu 26.04
+(#788). The next release carries this section's changes. The link below is
+the commit that set the version.
+
 `/plinth:new-project` now asks what a person can decide on day one in Claude
 Code's picker, checks the tools and the login before the first question, and
 ends by naming what the new project starts without and when to turn each on.
@@ -4469,7 +4473,7 @@ tested with plinth-template v1.4.1
   number is the old one minus 68, and the full table is pinned on #31.
 
 [Unreleased]: https://github.com/coolbress/plinth/compare/v2.24.0...HEAD
-[2.24.0]: https://github.com/coolbress/plinth/releases/tag/v2.24.0
+[2.24.0]: https://github.com/coolbress/plinth/commit/8cfdc6400a893f56d4ab9d4217ea44e3a6ee2f31
 [2.23.0]: https://github.com/coolbress/plinth/releases/tag/v2.23.0
 [2.22.0]: https://github.com/coolbress/plinth/releases/tag/v2.22.0
 [2.21.0]: https://github.com/coolbress/plinth/releases/tag/v2.21.0
