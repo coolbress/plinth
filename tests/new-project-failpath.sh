@@ -895,9 +895,9 @@ check "main is pushed before the rulesets, the first ruleset before the merge on
   '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | grep -v "/rulesets/[0-9]" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*ruleset-merge.json.*/merge/; s/.*rulesets.*ruleset-tags.json.*/tags/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset merge tags pr " ]'
 check "the tag ruleset posted is ruleset-tags.json, unchanged (cli), and read back" \
   'cmp -s "$work/home-none/ruleset-tags-posted.json" "$root/ruleset-tags.json" && grep -q "api repos/tester/probe/rulesets/11" "$log"'
-check "the tag ruleset is posted for backend too" 'cmp -s "$work/home-backend/ruleset-tags-posted.json" "$root/ruleset-tags.json"'
-check "data-ml and web get no tag ruleset" \
-  '! grep -q ruleset-tags.json "$work/home-web/calls.log" "$work/home-data-ml/calls.log"'
+check "the tag ruleset is posted for backend and data-ml too" 'cmp -s "$work/home-backend/ruleset-tags-posted.json" "$root/ruleset-tags.json" && cmp -s "$work/home-data-ml/ruleset-tags-posted.json" "$root/ruleset-tags.json"'
+check "web, which deploys on green and has no tag release, gets no tag ruleset" \
+  '! grep -q ruleset-tags.json "$work/home-web/calls.log"'
 check "the Actions token reads only by default and approves no pull request" \
   'grep -qF -- "-X PUT repos/tester/probe/actions/permissions/workflow -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false" "$log"'
 # main must be the *first* push: an empty repository adopts the first branch

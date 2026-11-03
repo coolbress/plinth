@@ -515,8 +515,9 @@ own_note=""; own() { own_note="${own_note:+$own_note,} $1"; }
 
 wall_words="ruleset + CodeQL"
 [ "$private" = 0 ] || wall_words="ruleset, with CodeQL and push protection only where the repository has GitHub Code Security and Secret Protection enabled (plan: ${plan:-not verified})"
-# The archetypes that release from a `v*` tag get the tag ruleset below (#772).
-case "$arch" in cli|library|backend) tag_ruleset=1; wall_words="$wall_words + v* tags kept" ;; *) tag_ruleset=0 ;; esac
+# The archetypes that release from a `v*` tag (every one but `web`, which
+# deploys on green) get the tag ruleset below (#772).
+case "$arch" in web) tag_ruleset=0 ;; *) tag_ruleset=1; wall_words="$wall_words + v* tags kept" ;; esac
 arch_words="$arch"
 [ "$arch" != web ] || arch_words="web on $place_name"
 [ "${place:-render}" = render ] || arch_words="$arch_words, which plinth does not deploy to or check"
@@ -713,7 +714,8 @@ if ! merge_got="$(ruleset_reads_as "$repo" "$merge_id" "$here/../ruleset-merge.j
   exit 1
 fi
 # The tag ruleset (#772), for the archetypes that release from a `v*` tag:
-# a `cli` or `library` publishes to PyPI, a `backend` its image. Without it a
+# a `cli` or `library` publishes to PyPI, a `backend` its image, a `data-ml`
+# its model to a GitHub Release. Without it a
 # writer can move or delete a released tag, and the release it names changes
 # or vanishes. Deletion and every update are blocked, with no bypass; making a
 # tag is not, or no release could be cut. Rolled back like the rulesets above.

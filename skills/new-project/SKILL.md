@@ -188,7 +188,8 @@ first pull request's description (the first merge request's, with
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL (and,
-for `cli`, `library` and `backend`, which release from a `v*` tag, a tag
+for `cli`, `library`, `backend` and `data-ml`, which release from a `v*`
+tag, a tag
 ruleset no one can bypass that keeps those tags from being moved or
 deleted), makes the Actions token read-only by default and unable to approve
 a pull request, and opens the first pull request. With `--third-party-review` the template also
