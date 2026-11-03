@@ -252,7 +252,11 @@ is "Unreleased is empty"           [ -z "$(section_of Unreleased)" ]
 is "[Unreleased] compares from the new tag" grep -qxF "[Unreleased]: $base/compare/v$next...HEAD" "$repo/CHANGELOG.md"
 is "  and is the only [Unreleased] link" [ "$(grep -c '^\[Unreleased\]: ' "$repo/CHANGELOG.md")" = 1 ]
 is "the new version links its Release" grep -qxF "[$next]: $base/releases/tag/v$next" "$repo/CHANGELOG.md"
-is "the version before keeps its link" grep -qxF "[$current]: $base/releases/tag/v$current" "$repo/CHANGELOG.md"
+# Unchanged, not a given form: a version that was never tagged links its
+# release commit instead (2.24.0, #788).
+before_link="$(grep -m1 "^\[$current\]: $base/" "$root/CHANGELOG.md")"
+is "the version before has a link"   [ -n "$before_link" ]
+is "  and keeps it"                  grep -qxF "$before_link" "$repo/CHANGELOG.md"
 
 echo "-- tag and release, after the merge"
 g switch -q main; g merge -q --ff-only "release/v$next"; g push -q origin main
