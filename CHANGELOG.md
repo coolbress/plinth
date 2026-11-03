@@ -59,24 +59,40 @@ pull requests and have no tag.
   `SECURITY.md` (at its root, `.github/` or `docs/`, read by the new
   `scripts/owner-files.sh`), the door renders neither of its own and the
   code of conduct is not asked, since GitHub applies the owner's to a
-  repository that has none. Both reach a new project only with a template
-  that asks these questions, which the pinned v1.35.0 does not:
-  until the pin is raised, `--code-of-conduct=` stops before anything is
-  created and `SECURITY.md` is rendered as before (#772).
+  repository that has none. The questions come with plinth-template
+  v1.36.0, below; against an older template `--code-of-conduct=` stops
+  before anything is created (#772).
 
 ### Changed
 
-- `/plinth:new-project` renders plinth-template v1.35.0, which carries
-  v1.34.0 too. From v1.34.0 (coolbress/plinth-template#160): a new
-  project's `docs/agents/issue-tracker.md` says how to pick an issue's kind
+- `/plinth:new-project` renders plinth-template v1.36.0, which carries
+  v1.34.0 and v1.35.0 too. **From v1.36.0, a new `cli` project writes its
+  log lines to stderr, not stdout**, and an existing one gets that change
+  through `/plinth:template-update`: a script that read them from stdout
+  must read stderr (coolbress/plinth-template#171). Its command also gains
+  `--help` and `--version` (argparse). Also from v1.36.0
+  (coolbress/plinth-template#171): a `web` project's README says how to run
+  it on your computer, it answers a missing page and a server error with
+  `404.html` and `500.html`, and every page carries the viewport meta; a
+  `data-ml` project says where its data and notebooks live (`data/raw`,
+  `data/processed`, notebooks committed with outputs cleared). A ticket
+  split across pull requests divides its criteria in the open, and every
+  description keeps its not-verified line (coolbress/plinth-template#170).
+  coolbress/plinth-template#179 brings the code of conduct and owner
+  questions above, and release steps that never tell a person to delete a
+  `v*` tag. v1.36.0's `AGENTS.md` changed, so the release that carries this
+  pin runs the eval suite. From v1.34.0 (coolbress/plinth-template#160): a
+  new project's `docs/agents/issue-tracker.md` says how to pick an issue's kind
   (a record, a `task`, or `bug`/`enhancement`) and that every issue carries a
   kind label, read back after `gh issue create` or `glab issue create`. From
   v1.35.0: `AGENTS.md` and `CONTRIBUTING.md` give the `Assisted-by` trailer
   one example and one line for each model the work used
   (coolbress/plinth-template#163), and the `third_party_review` question
   that `--third-party-review` above passes (coolbress/plinth-template#164).
-  An existing project gets both through `/plinth:template-update`; the new
-  question defaults to off, so the update needs no hands.
+  An existing project gets all of it through `/plinth:template-update`;
+  each new question defaults to what a project has today, so the update
+  needs no hands except in files a project changed itself (v1.36.0's
+  release notes name them).
 - On GitHub too, `/plinth:new-project`'s first pull request ends with
   `Assisted-by: <agent>:<model>` when `PLINTH_ASSISTED_BY` is set, as the
   GitLab first merge request already did, and the skill sets it on both

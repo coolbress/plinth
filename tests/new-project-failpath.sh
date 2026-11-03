@@ -667,7 +667,7 @@ else bad coc-owner "the owner's code of conduct did not win"; grep -E '^uvx' "$w
 E="MOCK_COC_Q=1" run coc-off ok yes no "(public, MIT, cli, as owner)" -- probe --no-code-of-conduct
 if grep -q -- '--data owner_has_security_policy=false --data owner_has_code_of_conduct=false --vcs-ref' "$work/home-coc-off/calls.log"
 then ok coc-off "--no-code-of-conduct passes only the owner answers"; else bad coc-off "unexpected answers"; grep '^uvx' "$work/home-coc-off/calls.log" | cut -c1-300 | sed 's/^/        /'; fi
-# A template without the questions (v1.35.0): nothing passed, the owner's
+# A template without the questions (v1.35.0 and earlier): nothing passed, the owner's
 # security policy is not claimed, and a code of conduct asked for stops first.
 E="MOCK_SHARED_SEC=present" run coc-old-template-sec ok yes no "" -- probe
 if ! grep -q 'owner_has_security_policy\|owner_has_code_of_conduct' "$work/home-coc-old-template-sec/calls.log" && ! grep -q 'already publishes' "$work/home-coc-old-template-sec/out"
@@ -976,7 +976,7 @@ check "a web ruleset is the wall plus image, ci / migrations and ci / deploy-che
   '[ "$(jq -c "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\") | .integration_id] | unique" "$work/home-web/ruleset-posted.json")" = "[15368]" ] && [ "$(jq "[.rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks[] | select(.context == \"image\" or .context == \"ci / migrations\" or .context == \"ci / deploy-check\")] | length" "$work/home-web/ruleset-posted.json")" = 3 ]'
 check "a web render passes archetype=web to copier" 'grep -q "archetype=web" "$work/home-web/calls.log"'
 check "the summary line names owner, visibility, license, archetype, role and the template tag" \
-  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.35.0 in " "$work/home-none/out"'
+  'grep -q "^create tester/probe (public, MIT, cli, as owner) from coolbress/plinth-template@v1.36.0 in " "$work/home-none/out"'
 check "the tag's commit is checked, and the template's copier.yml read at that commit, not at the tag (#519)" \
   'grep -q "^git ls-remote https://github.com/coolbress/plinth-template refs/tags/$TEMPLATE_REF " "$log" && grep -qF "contents/copier.yml?ref=$TEMPLATE_SHA" "$log"'
 check "copier renders the tag's pinned commit, not the tag: a tag moved after the check changes nothing (#519)" \
