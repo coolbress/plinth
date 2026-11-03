@@ -576,6 +576,24 @@ if grep -q "does not follow tester/.github's pull-request template" "$work/home-
 else bad shared-pr-only "the first pull request is silent about the inherited template"; fi
 if grep -q "^gh pr create.*## What and why" "$work/home-shared-pr-only/calls.log"; then bad shared-pr-only "plinth's headings were imposed over the owner's template"
 else ok shared-pr-only "plinth's headings are not imposed over the owner's template"; fi
+# The Assisted-by line, as on GitLab (#767): the mock logs `gh $*` and --body is
+# the last argument of `gh pr create`, so the body's last line is the last line
+# before the next logged `gh` call.
+pr_last() { sed -n '/^gh pr create/,/^gh /p' "$work/home-$1/calls.log" | sed '$d' | tail -1; }
+E="PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" run gh-assisted ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
+if [ "$(pr_last gh-assisted)" = "Assisted-by: Claude:claude-opus-5-5" ]
+then ok gh-assisted "an AI-assisted run ends the first pull request's description with its Assisted-by line"
+else bad gh-assisted "no Assisted-by line last: '$(pr_last gh-assisted)'"; fi
+E="MOCK_SHARED_PR=present PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" run gh-assisted-shared ok yes no "" -- probe
+if [ "$(pr_last gh-assisted-shared)" = "Assisted-by: Claude:claude-opus-5-5" ]
+then ok gh-assisted-shared "under the owner's template too, the description ends with the Assisted-by line"
+else bad gh-assisted-shared "no Assisted-by line last: '$(pr_last gh-assisted-shared)'"; fi
+if [ -s "$work/home-shared-pr-only/calls.log" ] && ! grep -q 'Assisted-by' "$work/home-shared-pr-only/calls.log"
+then ok shared-pr-only "unset, the first pull request carries no Assisted-by line"
+else bad shared-pr-only "an Assisted-by line with PLINTH_ASSISTED_BY unset"; fi
+n=0; for v in Claude 'Claude:' ':x' 'a:b:c'; do n=$((n+1))
+  E="PLINTH_ASSISTED_BY=$v" run "gh-assisted-bad$n" err no no "PLINTH_ASSISTED_BY must be <agent>:<model>" -- probe
+done
 E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "" -- probe --force-defaults
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
@@ -838,6 +856,8 @@ check "the first pull request body carries the two sections, not one sentence" \
   'grep -q "^gh pr create.*## What and why" "$log" && grep -q "^## How it was verified$" "$log"'
 check "the first pull request says what has not been verified yet" \
   'grep -q "the checks have not run" "$log"'
+check "with PLINTH_ASSISTED_BY unset, the first pull request carries no Assisted-by line (#767)" \
+  '[ -s "$log" ] && ! grep -q "Assisted-by" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
 check "every wayfinder label docs/agents/issue-tracker.md names is created (the map, and its 4 child types)" \
   '[ "$(grep -cE "label create wayfinder:(map|research|grilling|prototype|task) " "$log")" = 5 ]'

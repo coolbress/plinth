@@ -138,9 +138,10 @@ Before running it, say in one line the command the person can type next time
 to get the same run with no question: `/plinth:new-project` followed by their
 arguments and the added flags, not the script's path.
 
-With `--host gitlab`, put `PLINTH_ASSISTED_BY=<agent>:<model>` in front of it,
+Put `PLINTH_ASSISTED_BY=<agent>:<model>` in front of it, on either host,
 naming yourself as a commit trailer would (e.g. `Claude:claude-opus-5-5`): the
-first merge request's description ends with that `Assisted-by` line.
+first pull request's description (the first merge request's, with
+`--host gitlab`) ends with that `Assisted-by` line.
 
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into

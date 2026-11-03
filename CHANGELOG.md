@@ -56,6 +56,11 @@ pull requests and have no tag.
   that `--third-party-review` above passes (coolbress/plinth-template#164).
   An existing project gets both through `/plinth:template-update`; the new
   question defaults to off, so the update needs no hands.
+- On GitHub too, `/plinth:new-project`'s first pull request ends with
+  `Assisted-by: <agent>:<model>` when `PLINTH_ASSISTED_BY` is set, as the
+  GitLab first merge request already did, and the skill sets it on both
+  hosts. A value not in that form stops the run before anything is created
+  (#767).
 
 ## [2.23.0] - 2026-11-02
 
