@@ -515,6 +515,9 @@ own_note=""; own() { own_note="${own_note:+$own_note,} $1"; }
 
 wall_words="ruleset + CodeQL"
 [ "$private" = 0 ] || wall_words="ruleset, with CodeQL and push protection only where the repository has GitHub Code Security and Secret Protection enabled (plan: ${plan:-not verified})"
+# The archetypes that release from a `v*` tag (every one but `web`, which
+# deploys on green) get the tag ruleset below (#772).
+case "$arch" in web) tag_ruleset=0 ;; *) tag_ruleset=1; wall_words="$wall_words + v* tags kept" ;; esac
 arch_words="$arch"
 [ "$arch" != web ] || arch_words="web on $place_name"
 [ "${place:-render}" = render ] || arch_words="$arch_words, which plinth does not deploy to or check"
@@ -710,6 +713,22 @@ if ! merge_got="$(ruleset_reads_as "$repo" "$merge_id" "$here/../ruleset-merge.j
   printf 'the merge ruleset (%s) reads back as %s, not as ruleset-merge.json\n' "$merge_id" "${merge_got:-nothing}" >&2
   exit 1
 fi
+# The tag ruleset (#772), for the archetypes that release from a `v*` tag:
+# a `cli` or `library` publishes to PyPI, a `backend` its image, a `data-ml`
+# its model to a GitHub Release. Without it a
+# writer can move or delete a released tag, and the release it names changes
+# or vanishes. Deletion and every update are blocked, with no bypass; making a
+# tag is not, or no release could be cut. Rolled back like the rulesets above.
+if [ "$tag_ruleset" = 1 ]; then
+  if ! tag_id="$(gh api "repos/$repo/rulesets" -X POST --input "$here/../ruleset-tags.json" --jq .id 2>&1)"; then
+    printf 'could not apply the tag ruleset (ruleset-tags.json):\n%s\n' "$tag_id" >&2
+    exit 1
+  fi
+  if ! tag_got="$(ruleset_reads_as "$repo" "$tag_id" "$here/../ruleset-tags.json")"; then
+    printf 'the tag ruleset (%s) reads back as %s, not as ruleset-tags.json\n' "$tag_id" "${tag_got:-nothing}" >&2
+    exit 1
+  fi
+fi
 # The calls from here to the merge settings set values, so sending one again
 # changes nothing. GitHub answers them 502, 503 or 504 now and then (#356):
 # on 2026-09-30 the Actions allowlist call answered 502 on three tries in a
@@ -763,6 +782,12 @@ for a in ${release_actions[@]+"${release_actions[@]}"}; do allow_args+=(-f "patt
 setup_call "the Actions permissions" -X PUT "repos/$repo/actions/permissions" -F enabled=true -f allowed_actions=selected -F sha_pinning_required=true
 setup_call "the Actions allowlist" -X PUT "repos/$repo/actions/permissions/selected-actions" \
   -F github_owned_allowed=true -F verified_allowed=false "${allow_args[@]}"
+# The token each workflow gets when it names no permissions reads only, and
+# no workflow can approve a pull request (#772): set, not left to GitHub's
+# default, which an owner's or organization's settings can change. Every
+# workflow the template renders names its own permissions.
+setup_call "the Actions workflow permissions" -X PUT "repos/$repo/actions/permissions/workflow" \
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
 # Merge settings agree with the ruleset, or there is no merge button at all.
 # The squash commit is the pull request: its title (checked by ci / pr-title)
 # and its description, not a list of the branch's commits (#72).
