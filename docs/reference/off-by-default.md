@@ -5,6 +5,27 @@ is worth turning on, and where the steps are. `/plinth:new-project` prints
 these as its last lines and `/plinth:guide` says them, both from the table
 below through `scripts/off-by-default.sh`; an item added here reaches both.
 
+## How an item is sorted
+
+Every item `/plinth:new-project` could set up falls in one of four places,
+and a new item is placed by this rule before it is built. A safety or
+quality floor (the ruleset, the checks, a security policy) is installed
+without asking, and where the owner already publishes their own version, in
+their `.github` repository, theirs wins and plinth renders none: secure by
+default, as [CISA's Secure by Design](https://www.cisa.gov/securebydesign)
+asks, in the order GitHub itself reads
+[community health files](https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file).
+Otherwise, a choice a person can judge on day one (the kind of project, its
+license, whether a code reviewer is connected) is asked in plain words, with a
+default that is right for most and one "use the recommended defaults?"
+question in front of the rest, as [clig.dev](https://clig.dev/#interactivity)
+and [create-next-app](https://nextjs.org/docs/app/api-reference/cli/create-next-app)
+do; a flag that gives the answer is never asked. A choice they cannot judge
+yet starts off and is told, in the list below, with when it is worth turning
+on and how ([progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/)).
+What plinth cannot do for them, because it needs an account outside the
+repository, is named with its link, as the Codex settings row below is.
+
 ## The list
 
 | Feature | Archetypes | Turn it on when | Steps | On when the project has | Listed only when the project has |

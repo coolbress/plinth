@@ -90,6 +90,15 @@ for f in scripts/new-project.sh scripts/guide-state.sh; do
   then ok "$f calls the reader and names no item"; else bad "$f does not call scripts/off-by-default.sh, or names an item itself"; fi
 done
 
+# 5b. The sorting rule is written once, in the list's page, and both skills
+#     point to it by its heading (#772).
+if grep -qx '## How an item is sorted' "$root/docs/reference/off-by-default.md"
+then ok "the list's page carries the sorting rule"; else bad "docs/reference/off-by-default.md has no '## How an item is sorted'"; fi
+for f in skills/new-project/SKILL.md skills/guide/SKILL.md; do
+  if grep -q 'How an item' "$root/$f" && grep -q 'off-by-default.md' "$root/$f"
+  then ok "$f points to the sorting rule"; else bad "$f does not point to 'How an item is sorted'"; fi
+done
+
 # 6. A project-file phrase is in the template at the pinned tag.
 template="${TEMPLATE_REPO:-coolbress/plinth-template}"
 ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$root/scripts/new-project.sh")}"

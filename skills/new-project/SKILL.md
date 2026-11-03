@@ -13,6 +13,12 @@ names it otherwise. The owner is optional: a bare name goes under the user's log
 
 ## Ask first what the arguments leave out
 
+What is installed without asking, what is asked and what starts off and is
+told follows one rule, "How an item is sorted" in
+`${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`; when the person
+asks why a choice is or is not asked, read it there rather than answer from
+this file.
+
 Every choice that changes the wall is a flag, and the script asks nothing: a
 flag it is not given takes its default. So before running it, ask for each
 choice the arguments (`$ARGUMENTS`) do not give, in the order below, and wait

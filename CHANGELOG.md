@@ -42,6 +42,12 @@ pull requests and have no tag.
   steps above. A row whose "Turn it on when" begins `now:` is a step to take
   right away, printed first. A Steps link may carry a `#heading` anchor, and
   `off-by-default.sh --check` fails one the page has no heading for (#765).
+- [Off by default](docs/reference/off-by-default.md#how-an-item-is-sorted)
+  opens with the rule that places every item: a safety or quality floor is
+  installed without asking, the owner's own version winning; a choice a
+  person can judge on day one is asked; one they cannot judge yet starts off
+  and is told; what needs an outside account is named with its link.
+  `/plinth:new-project` and `/plinth:guide` point to it (#772).
 
 ### Changed
 
