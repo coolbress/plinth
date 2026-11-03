@@ -408,8 +408,8 @@ login cannot administer the repository, and never run it.
   `gh api -X PUT …/actions/permissions/workflow`. It needs repository
   administration to read: a SKIP here, an INFO left to this skill under
   `--actions-token`.
-- **The tag ruleset.** With `--repo`, for `cli`, `library` and `backend`,
-  which release from a `v*` tag: an active tag ruleset matching `v*` that
+- **The tag ruleset.** With `--repo`, for `cli`, `library`, `backend` and
+  `data-ml`, which release from a `v*` tag: an active tag ruleset matching `v*` that
   blocks deletion and update. None, or one that leaves a gap (a
   `non_fast_forward` rule in place of `update` lets a tag move to a later
   commit), is the WARN naming the gap, with the `gh api -X POST` that adds

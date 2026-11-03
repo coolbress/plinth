@@ -2629,9 +2629,10 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
 
 
 # The archetypes that release from a `v*` tag, and get the door's tag
-# ruleset (ruleset-tags.json, #772). `data-ml` publishes from a tag too, but
-# the door does not raise the ruleset for it, so it is not expected here.
-TAG_RELEASING = ("cli", "library", "backend")
+# ruleset (ruleset-tags.json, #772): every one but `web`, which deploys on
+# green. The exception is named, not the list: the template owns the
+# archetypes (tests/archetype-single-source.sh).
+TAG_NOT_RELEASING = ("web",)
 TAG_RULESET = {"name": "tags: v* not moved or deleted", "target": "tag", "enforcement": "active",
                "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
                "rules": [{"type": "deletion"}, {"type": "update"}]}
@@ -2696,7 +2697,7 @@ def check_tag_ruleset(repo: str, archetype: str | None, network: bool) -> None:
     vanish. Rulesets are read with read access, so this needs no
     administration. WARN, never FAIL, as the merge ruleset: every repository
     made before #772 lacks it, and `ci / floor-check` runs in each one."""
-    if archetype not in TAG_RELEASING or (not network and not os.environ.get("FLOOR_CHECK_API_DIR")):
+    if archetype is None or archetype in TAG_NOT_RELEASING or (not network and not os.environ.get("FLOOR_CHECK_API_DIR")):
         return
     listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
     if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):

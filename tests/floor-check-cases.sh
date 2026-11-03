@@ -3071,8 +3071,10 @@ s = u.spec_from_file_location("fc", f"{root}/scripts/floor-check.py"); m = u.mod
 sys.exit(0 if m.TAG_RULESET == json.load(open(f"{root}/ruleset-tags.json")) else 1)
 PY
 then ok "the tag ruleset floor-check offers is ruleset-tags.json"; else bad "floor-check.py's TAG_RULESET differs from ruleset-tags.json"; fi
-out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --archetype data-ml --expect-checks "ci / a, ci / b" 2>&1)"
-if ! grep -q "tag ruleset" <<<"$out"; then ok "data-ml is not held to a tag ruleset"; else bad "data-ml was judged on a tag ruleset"; fi
+out="$(printf '[]' > "$api/repos/o/r/rulesets?per_page=100.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --archetype data-ml --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_listing" > "$api/repos/o/r/rulesets?per_page=100.json"
+if grep -q "WARN  no tag ruleset: for a data-ml, which releases from a v\\* tag" <<<"$out"; then ok "data-ml, which releases its model from a tag, is held to the tag ruleset"; else bad "data-ml was not judged on a tag ruleset"; fi
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --archetype web --expect-checks "ci / a, ci / b" 2>&1)"
+if ! grep -q "tag ruleset" <<<"$out"; then ok "web, which deploys on green, is not held to a tag ruleset"; else bad "web was judged on a tag ruleset"; fi
 # The merge ruleset's search for one not in effect skips a tag ruleset, which
 # carries update too: before #772's fix this was a false FAIL.
 merge_wall "a tag ruleset is not taken for a merge ruleset out of effect" \
@@ -3141,10 +3143,10 @@ answers "must not pass: owner_has_pr_template: true and the owner's is gone is a
   'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md"
 answers "owner_has_pr_template: false is not read" '!owner_has_pr_template' 'owner_has_pr_template: false\n'
 # The archetypes that get the tag ruleset: one list in the door, one in the checker.
-door_list="$(sed -n 's/^case "\$arch" in \([a-z|-]*\)) tag_ruleset=1.*/\1/p' "$root/scripts/new-project.sh")"
-checker_list="$(python3 -c "import importlib.util as u; s=u.spec_from_file_location('fc','$root/scripts/floor-check.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print('|'.join(m.TAG_RELEASING))")"
-if [ -n "$door_list" ] && [ "$door_list" = "$checker_list" ]; then ok "the door and the checker name the same archetypes for the tag ruleset ($door_list)"
-else bad "the door raises the tag ruleset for '$door_list', the checker expects it of '$checker_list'"; fi
+door_list="$(sed -n 's/^case "\$arch" in \([a-z|-]*\)) tag_ruleset=0.*/\1/p' "$root/scripts/new-project.sh")"
+checker_list="$(python3 -c "import importlib.util as u; s=u.spec_from_file_location('fc','$root/scripts/floor-check.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print('|'.join(m.TAG_NOT_RELEASING))")"
+if [ -n "$door_list" ] && [ "$door_list" = "$checker_list" ]; then ok "the door and the checker leave out the same archetypes from the tag ruleset ($door_list)"
+else bad "the door leaves out '$door_list' from the tag ruleset, the checker '$checker_list'"; fi
 answers "a repository's own code of conduct applies in place of the owner's" "^  PASS  CODE_OF_CONDUCT.md is the repository's own" \
   'owner_has_code_of_conduct: true\n' ": > CODE_OF_CONDUCT.md"
 

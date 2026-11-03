@@ -78,7 +78,7 @@ pull requests and have no tag.
   `owner_has_code_of_conduct: true` when the owner's `.github` no longer
   publishes one are each a WARN with its fix; an answer that turns
   something off is not a miss. With `--repo` it also reports the Actions
-  token settings the door now sets, a `cli`, `library` or `backend`
+  token settings the door now sets, a `cli`, `library`, `backend` or `data-ml`
   repository without a tag ruleset that keeps `v*` tags from being moved or
   deleted (each a WARN with the call that fixes it), and whether the
   repository has a description (an INFO when it has none). All are WARN or
