@@ -577,6 +577,78 @@ if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.
 then ok "and --apply stops before copier runs, opening nothing"
 else bad "apply, owner unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
+# ── the owner's shared templates are gone (#770) ────────────────────────
+# Made while o/.github shared both, so the answers record true and the
+# repository holds neither; o/.github has none now (api-none answers 404).
+# copier 9.18.2 was measured to render both and record false on an update
+# with the answers changed, at a newer tag and at the same tag, without a
+# conflict; this mock copier does not act that out, so these cases check the
+# line plinth gives it and what the plan says.
+gone_fixture() { # <name> [recorded tag]
+  fixture "$1"
+  git -C "$repo" rm -q -r .github/ISSUE_TEMPLATE
+  sed -i.bak "s/^_commit: .*/_commit: ${2:-$target_ref}/" "$repo/.copier-answers.yml" && rm "$repo/.copier-answers.yml.bak"
+  printf 'owner_has_issue_forms: true\nowner_has_pr_template: true\n' >> "$repo/.copier-answers.yml"
+  git -C "$repo" commit -q -am "made with the owner's shared templates" && git -C "$repo" push -q origin main
+}
+gone_fixture gonecurrent; reset_logs
+run
+planned="$(sed -n 's/^Command:    uvx //p' <<<"$out")"
+if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_sha .*--data owner_has_pr_template=false --data owner_has_issue_forms=false\$" <<<"$planned" \
+   && grep -q "owner_has_pr_template: true, but o/.github no longer publishes a pull-request template" <<<"$out" \
+   && grep -q "owner_has_issue_forms: true, but o/.github no longer publishes issue forms" <<<"$out"
+then ok "at the target tag, recorded true and the owner's templates gone: the plan names the change and gives a line"
+else bad "plan, owner's templates gone at the target tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs; run --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 0 ] && [ "$(cat "$work/uvx.log" 2>/dev/null)" = "$planned" ] && grep -q "pr create" "$work/gh.log" \
+   && grep -qF -- "--title chore(template): re-render plinth-template $target_ref for the owner's templates" "$work/gh.log" \
+   && grep -q "^Re-renders this repository at plinth-template $target_ref" "$work/gh.log.body"
+then ok "and --apply runs that line and opens a pull request that says it re-renders, not updates"
+else bad "apply, owner's templates gone at the target tag (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# The re-render has its own branch: the update that reached the tag may have
+# left chore/template-<tag> on origin.
+if git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref-owner-templates" >/dev/null
+then ok "the re-render pushes its own branch, not the tag's update branch"
+else bad "re-render branch: $(git -C "$BARE" branch --format='%(refname:short)' | tr '\n' ' ')"; fi
+# Its own forms and pull-request template already replace the owner's: a
+# recorded true changes nothing at the target tag.
+gone_fixture ownboth; reset_logs
+mkdir -p "$repo/.github/ISSUE_TEMPLATE"; printf 'name: task\n' > "$repo/.github/ISSUE_TEMPLATE/task.yml"
+printf '## What\n' > "$repo/.github/PULL_REQUEST_TEMPLATE.md"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "own templates" && git -C "$repo" push -q origin main
+run
+if [ "$rc" = 1 ] && grep -q "nothing to update" <<<"$out" && ! grep -q "^Command:" <<<"$out"
+then ok "at the target tag, recorded true and the repository holding its own: nothing to update"
+else bad "plan, own templates at the target tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The owner still shares both: at the target tag nothing changes.
+both_api="$work/api-shared-both"; rm -rf "$both_api"; cp -R "$shared_api" "$both_api"
+printf '{"content":""}\n' > "$both_api/repos/o/.github/contents/.github/PULL_REQUEST_TEMPLATE.md.json"
+gone_fixture stillshared; reset_logs
+pinrun "$both_api"
+if [ "$rc" = 1 ] && grep -q "nothing to update" <<<"$out" && ! grep -q "^Command:" <<<"$out" && ! grep -q "no longer publishes" <<<"$out"
+then ok "at the target tag, recorded true and the owner still sharing both: nothing to update"
+else bad "plan, owner still shares (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs; pinrun "$both_api" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.log"
+then ok "and --apply runs no copier and opens nothing"
+else bad "apply, owner still shares (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Forms still shared, the pull-request template gone: only that answer moves.
+gone_fixture halfgone; reset_logs
+pinrun "$shared_api"
+planned="$(sed -n 's/^Command:    uvx //p' <<<"$out")"
+if [ "$rc" = 0 ] && grep -q -- "--data owner_has_pr_template=false --data owner_has_issue_forms=true\$" <<<"$planned" \
+   && grep -q "owner_has_pr_template: true, but o/.github no longer publishes" <<<"$out" && ! grep -q "owner_has_issue_forms: true, but" <<<"$out"
+then ok "the forms still shared and the pull-request template gone: only that answer turns false, and the plan names only it"
+else bad "plan, half gone (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Behind the target tag the update runs anyway; the plan still names the change.
+gone_fixture gonebehind v1.0.0; reset_logs
+run
+if [ "$rc" = 0 ] && grep -q "Command:.*--data owner_has_pr_template=false --data owner_has_issue_forms=false\$" <<<"$out" \
+   && grep -q "owner_has_issue_forms: true, but o/.github no longer publishes issue forms" <<<"$out"
+then ok "behind the target tag, recorded true and the owner's templates gone: the plan names the change"
+else bad "plan, owner's templates gone behind the target tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
 # ── the glossary follows the template's name (#714) ─────────────────────
 # An untouched instance whose /domain-modeling wrote CONTEXT.md: an update to
 # a template naming GLOSSARY.md moves it, content unchanged, and says so; one

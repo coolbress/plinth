@@ -1185,7 +1185,10 @@ def template_drift(root: Path, host: str | None = None) -> dict:
     command that runs is the one this item prints, never a second
     construction of it. `state` is skip, ahead, current or behind; `reason`
     says why a skip was not verified; `cmd` is set only when behind and the
-    plinth pin is established, and `why_not` says why it is not. `host` is
+    plinth pin is established, and `why_not` says why it is not. At the
+    target tag on GitHub with an owner answer recorded true, `state` is
+    current and `cmd` a same-tag line, which owner_shared keeps only when
+    that answer turns false (#770); the drift item does not print it. `host` is
     the host the run resolved (--host first, then the answers); without it,
     the answers' `host:` (#547 review)."""
     pin = new_project_pin()
@@ -1216,8 +1219,16 @@ def template_drift(root: Path, host: str | None = None) -> dict:
 
     if key(recorded) > key(target):
         return {**out, "state": "ahead"}
+    state = "behind"
     if recorded == target:
-        return {**out, "state": "current"}
+        # At the target tag there is nothing to update, unless an owner
+        # answer recorded true may no longer hold (#770): the owner's shared
+        # templates were removed after this repository was made. copier
+        # update at the same tag renders what the answer changed (measured,
+        # copier 9.18.2); owner_shared decides whether it changed.
+        if (host or answers.get("host")) == "gitlab" or not any(answers.get(k) == "true" for k in OWNER_KEYS):
+            return {**out, "state": "current"}
+        state = "current"
 
     integrity = None
     if (host or answers.get("host")) == "gitlab":
@@ -1230,7 +1241,7 @@ def template_drift(root: Path, host: str | None = None) -> dict:
     out.update(copier_version=copier_version, copier_newer=copier_newer)
     out["integrity"] = integrity
     out["host"] = host or answers.get("host")
-    return {**out, "state": "behind", "cmd": update_line(out, sha, integrity) if sha else None, "why_not": why_not, "live": sha}
+    return {**out, "state": state, "cmd": update_line(out, sha, integrity) if sha else None, "why_not": why_not, "live": sha}
 
 
 def update_line(d: dict, pin: str, integrity: str | None = None) -> str:
@@ -1247,6 +1258,7 @@ def update_line(d: dict, pin: str, integrity: str | None = None) -> str:
 
 SHARED_GITHUB = Path(__file__).resolve().parent / "lib" / "shared-github.sh"
 PR_TEMPLATE_PATHS = ("PULL_REQUEST_TEMPLATE.md", ".github/PULL_REQUEST_TEMPLATE.md", "docs/PULL_REQUEST_TEMPLATE.md")
+OWNER_KEYS = ("owner_has_pr_template", "owner_has_issue_forms")
 
 
 def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
@@ -1279,6 +1291,8 @@ def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
     if own_forms and own_pr:
         d["owner_data"] = " --data owner_has_pr_template=false --data owner_has_issue_forms=false"
         d["cmd"] = update_line(d, d["live"], d.get("integrity"))
+        if d["state"] == "current":  # its own files: a recorded true changes nothing here
+            d["cmd"] = None
         return
     if not owner:
         withdraw("no --repo, so whether the owner's .github publishes a pull-request template or issue forms was "
@@ -1348,9 +1362,22 @@ def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
                      f"update keeps it")
     pr = has_pr == "yes" and not own_pr
     forms = has_forms == "yes" and not own_forms
+    # A recorded true whose files the owner no longer publishes, in a
+    # repository with none of its own: the update renders the template's
+    # copies and records false (#770). The plan names it before it runs.
+    recorded = copier_answers(root) or {}
+    gone = [f"recorded {key}: true, but {owner}/.github no longer publishes {what} and this repository has none; "
+            f"the update renders the template's {path} and records false"
+            for key, has, own, what, path in (
+                ("owner_has_pr_template", has_pr, own_pr, "a pull-request template", ".github/PULL_REQUEST_TEMPLATE.md"),
+                ("owner_has_issue_forms", has_forms, own_forms, "issue forms", ".github/ISSUE_TEMPLATE"))
+            if recorded.get(key) == "true" and has != "yes" and not own]
+    notes.extend(gone)
     d["owner_data"] = (f" --data owner_has_pr_template={'true' if pr else 'false'}"
                        f" --data owner_has_issue_forms={'true' if forms else 'false'}")
     d["cmd"] = update_line(d, d["live"], d.get("integrity"))
+    if d["state"] == "current" and not gone:
+        d["cmd"] = None
 
 
 def tested_plinth_pin(template_repo: str, target: str, network: bool,
@@ -1581,7 +1608,9 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
     why = {
         "skip": lambda: f"template drift not verified ({d['reason']})",
         "ahead": lambda: f"the recorded tag {d['recorded']} is ahead of {d['target']}, the tag plinth is tested with",
-        "current": lambda: f"the recorded tag is the target tag ({d['target']}): nothing to update",
+        "current": lambda: f"the recorded tag is the target tag ({d['target']})" + (
+            f"; a recorded owner answer is true, and no line re-renders for it: {d['why_not']}" if d.get("why_not")
+            else ": nothing to update"),
         "behind": lambda: f"{d['recorded']} is behind {d['target']}, but there is no update command: {d['why_not']}",
     }[d["state"]]()
     print(f"no update command: {why}", file=sys.stderr)
