@@ -199,7 +199,9 @@ url="https://github.com/$repo"
 dir="${dir:-$HOME/$name}"
 
 # A classic token answers with X-OAuth-Scopes; a fine-grained or app token has no such header.
-headers="$(gh api -i user 2>&1 | tr -d '\r' | sed '/^$/q')" || stop "cannot read api.github.com/user as $login:" "$headers"
+# The sed reads to the end: one that quit at the blank line closed the pipe on a
+# tr still writing the body, and pipefail failed the read (Ubuntu 26.04, #788).
+headers="$(gh api -i user 2>&1 | tr -d '\r' | sed '/^$/,$d')" || stop "cannot read api.github.com/user as $login:" "$headers"
 scopes="$(awk 'tolower($1)=="x-oauth-scopes:"{sub(/^[^:]*: ?/,""); print; exit}' <<<"$headers")"
 has_scope() { grep -qE "(^|,) *$1 *(,|$)" <<<"$scopes"; }
 # gh reads these before the login it stores: with one set, a login or refresh
@@ -1131,7 +1133,7 @@ guide="https://github.com/coolbress/plinth/blob/main/docs/how-to/give-the-agent-
 if [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   who="gh's own login (not the token typed for this run)"
   as_agent() { env -u GH_TOKEN -u GITHUB_TOKEN gh "$@"; }
-  agent_headers="$(as_agent api -i user 2>/dev/null | tr -d '\r' | sed '/^$/q')" || agent_headers=""
+  agent_headers="$(as_agent api -i user 2>/dev/null | tr -d '\r' | sed '/^$/,$d')" || agent_headers=""
 else
   who="the gh credential this ran with"
   as_agent() { gh "$@"; }
