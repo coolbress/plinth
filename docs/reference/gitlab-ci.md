@@ -109,8 +109,10 @@ does on GitHub, with two differences:
   the job token (`CI_JOB_TOKEN`), measured below. So the job applies
   GitLab's default closing pattern to the description: the keywords
   `close`, `fix`, `resolve` and `implement` in every form GitLab lists, an
-  optional colon, then `#N`, `project#N`, `group/project#N` or an issue
-  URL. What it cannot see is a `not yet confirmed` line on every run that
+  optional colon, then `#N`, `project#N`, `group/project#N`, `GL-N`,
+  `[issue:N]`, `[issue:group/project/N]`, or an issue, incident or work item
+  URL. A closing line may give each issue its own keyword
+  (`Closes #65, fixes #66`). What it cannot see is a `not yet confirmed` line on every run that
   does not fail, never a pass: a project's or instance's own closing
   pattern, and the issues the merge request's commit messages close, which
   GitLab's list also counts (measured below).

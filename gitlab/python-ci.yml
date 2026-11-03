@@ -425,13 +425,17 @@ pr-title:
 
       # GitLab's default issue closing pattern ("Default closing pattern" in
       # GitLab's docs on managing issues), %{issue_ref} filled with the forms
-      # an issue reference takes: #N, project#N, group/project#N, an issue or
-      # work item URL. Case matters as in GitLab's: Closes, closes, never CLOSES.
-      REF = r"(?:(?:[\w.-]+/)*[\w.-]+#\d+|#\d+|https?://[^\s/]+/(?:[\w.-]+/)+-/(?:issues|work_items)/\d+)"
+      # an issue reference takes in GitLab's Issue.reference_pattern and
+      # link_reference_pattern: #N, project#N, group/project#N, GL-N,
+      # [issue:N], [issue:group/project/N], an issue, incident or work item
+      # URL. Case matters as in GitLab's: Closes, closes, never CLOSES.
+      REF = (r"(?:(?:[\w.-]+/)*[\w.-]+#\d+|#\d+|\bGL-\d+|\[issue:(?:(?:[\w.-]+/)*[\w.-]+/)?\d+\]"
+             r"|https?://[^\s/]+/(?:[\w.-]+/)+-/(?:issues(?:/incident)?|work_items)/\d+)")
       KEYWORD = r"(?:[Cc]los(?:e[sd]?|ing)|\b[Ff]ix(?:e[sd]|ing)?|\b[Rr]esolv(?:e[sd]?|ing)|\b[Ii]mplement(?:s|ed|ing)?)"
       CLOSES = re.compile(rf"\b{KEYWORD}:? +(?:(?:issues? +)?{REF}(?: *,? +and +| *,? *)?|[A-Z][A-Z0-9_]+-\d+)+")
-      # A line that is only a closing phrase: GitLab closes every issue it chains.
-      CLOSING_LINE = re.compile(rf"^\s*{CLOSES.pattern}\s*\.?\s*$")
+      # A line that is only closing phrases: GitLab closes every issue each one
+      # chains, with or without a keyword of its own (`Closes #65, fixes #66`).
+      CLOSING_LINE = re.compile(rf"^\s*(?:{CLOSES.pattern}\s*)+\.?\s*$")
       # `Part of #12`, `Related to #12, #13.`: issues only. A sentence that starts
       # with the same words is prose, and would let the line below it pass as a
       # closing line (#368's review).
@@ -446,8 +450,14 @@ pr-title:
           """Every issue the text names, as (project path in lower case, number)."""
           out = []
           for ref in re.findall(REF, text):
-              url = re.match(r"https?://[^\s/]+/(.+)/-/(?:issues|work_items)/(\d+)$", ref)
-              where, number = url.groups() if url else ref.rsplit("#", 1)
+              url = re.match(r"https?://[^\s/]+/(.+)/-/(?:issues(?:/incident)?|work_items)/(\d+)$", ref)
+              bracket = re.match(r"\[issue:(?:(.+)/)?(\d+)\]$", ref)
+              if url or bracket:
+                  where, number = (url or bracket).groups()
+              elif ref.startswith("GL-"):
+                  where, number = "", ref[3:]
+              else:
+                  where, number = ref.rsplit("#", 1)
               out.append(((where or project).lower(), int(number)))
           return out
 
