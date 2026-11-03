@@ -11,6 +11,71 @@ Creates `[<owner>/]<name>` on GitHub with the wall already up. When a step it
 cannot go on without fails, it deletes the repository if its token can, and
 names it otherwise. The owner is optional: a bare name goes under the user's login. One script does all of it; this skill runs it and relays what it says.
 
+## Check first, before any question
+
+Before the first question, and before reading the owner's files, run the
+script's preflight with the arguments as typed:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh --preflight $ARGUMENTS
+```
+
+It checks only the tools and the login and token (glab's with `--host
+gitlab`, gh's otherwise), reads nothing about an owner or a repository and
+creates nothing; the name may be missing. Exit 0 ends with a
+`preflight: ok` line: go on to the questions. Any `warning:` line before it
+is shown and explained as below, then the questions follow. Exit 2 is a
+stop: show it and explain it as [What the script printed](#what-the-script-printed)
+says, with the fix in the `!` form, and ask nothing. When the person says it
+is fixed, run the preflight again; ask the first question only once it
+passes. One stop is the exception: a fine-grained token whose owner wants to
+keep it rather than log in again. Then ask the questions and run the script;
+it stops at the same check and prints the admin-token path (below). A host
+chosen in the questions that the arguments did not give is checked by the run
+itself.
+
+## What the script printed
+
+Every stop, every `warning:` line and the final lines are shown verbatim, in
+a code block, in English: they are what a person searches for. Under the
+block, add one plain sentence for each line, in the person's language and in
+the same order: what it means for them, not a word-for-word translation. A
+line indented under another (a `fix:` or a continuation) shares its
+parent's sentence. The first time a word appears, say what it is in a few
+words: the ruleset (the rules GitHub enforces on `main`: no direct push, and
+the required checks pass before a merge), CodeQL (GitHub's automatic security
+scan of the code), the wall (the ruleset and its checks together), rollback
+(deleting a repository a failed run half made), `plinth-template@vX.Y.Z` (the
+version of the template the project is made from), a scope (one permission
+a GitHub login carries).
+
+Two lines get a fuller sentence:
+
+- `administration:` saying the credential has it: the login used here can
+  remove these safety rules or delete the repository, so an agent working
+  with it could too. After the first merge, follow the link in the line to
+  give the agent a token without that permission; it takes about five
+  minutes.
+- A stop that offers `--force-defaults`: it means the owner's shared files
+  (a code of conduct, a security policy, forms) could not be read, and the
+  flag writes the template's own copies instead of using the owner's. Running
+  again usually reads them; the flag is for when it does not.
+
+**How a fix is run.** You never run a fix yourself, `gh auth` above all.
+When the fix is a command the person types (`gh auth login …`,
+`gh auth refresh …`, `curl … | sh`, `claude update`, `brew install git`),
+show it in its own code block with `!` in front, for example
+`! gh auth refresh -h github.com -s repo,workflow,delete_repo`, and say in
+the person's language: type it into Claude Code's prompt, `!` included; it
+runs the command here and its output lands in the conversation. For
+`gh auth`, add that it prints a one-time code and a URL, the URL opens in
+the browser, and the code is entered there. After a program is installed
+(`uv`, `git`, `gh`), say that the running session does not see it yet: quit
+Claude Code (`/exit`), start it again (`claude`), and type
+`/plinth:new-project` again. A fix that is a web page or a flag is said as
+one, without `!`. The admin-token path is the exception: its three lines run
+in a separate terminal window, never with `!` (below).
+
 ## Ask first what the arguments leave out
 
 What is installed without asking, what is asked and what starts off and is
@@ -291,8 +356,10 @@ project is private unless `--public` is given.
 What to do with the output:
 
 - **It stopped before creating anything** (exit 2): show the user the message
-  verbatim. It names the one fix. Do not work around it; do not run
-  `gh repo create`, `gh auth`, or the script with different arguments.
+  verbatim and explain it, with the fix in the `!` form, as
+  [What the script printed](#what-the-script-printed) says. It names the one
+  fix. Do not work around it; do not run `gh repo create`, `gh auth`, or the
+  script with different arguments.
 - **It asks for the admin path**: the message contains three short lines, a
   `P=` assignment, a call through it to `with-admin-token.sh` ending in a
   backslash, and the arguments. Show all three verbatim, as one block, and
@@ -322,7 +389,9 @@ What to do with the output:
   printed, every line under it: what the project starts with turned off, when
   each is worth turning on, and where its steps are (the list is
   `${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`). Do not turn any
-  of them on. The next step for the user is to open
+  of them on. Under the lines, the plain sentence for each, as
+  [What the script printed](#what-the-script-printed) says, the
+  `administration:` line's included. The next step for the user is to open
   the pull request URL, wait for the checks, and merge with squash. On
   GitHub, end with one line in the person's language: try typing
   `/plinth:guide` in the new repository's folder; it explains the whole way

@@ -126,6 +126,23 @@ for rel, start, stop in (("README.md", "tools: `", "\n>\n"),
         else:
             print(f"  PASS  {rel}: \"checks all {m.group(1)}\" matches")
 
+# 4. The git floor the door stops below, which the install needs too (#771).
+gf = re.search(r'^git_floor="([^"]+)"$', src, re.M)
+if not gf:
+    fail("scripts/new-project.sh has no git_floor line")
+else:
+    gitv = re.compile(r"\bgit`?\s+\(?(\d+\.\d+(?:\.\d+)?)\s+or\s+newer")
+    for rel in ("README.md", "docs/tutorials/getting-started.md"):
+        text = (docs / rel).read_text(encoding="utf-8")
+        found = [(text.count("\n", 0, m.start()) + 1, m.group(1)) for m in gitv.finditer(text)]
+        if not found:
+            fail(f"{rel} states no git floor (\"git {gf.group(1)} or newer\")")
+        for n, v in found:
+            if v != gf.group(1):
+                fail(f"{rel}:{n} states git {v} or newer; the door's git_floor is {gf.group(1)}")
+        if found and all(v == gf.group(1) for _, v in found):
+            print(f"  PASS  {rel}: git {gf.group(1)} or newer, as the door checks")
+
 print(f"  PASS  {stated} stated check count(s) read; expected "
       + ", ".join(f"{a or 'other'} {n}" for a, n in want.items()) if not fails else
       f"-- {fails} failed")
@@ -186,4 +203,6 @@ copy; sed -i.bak 's/`uv`, `python3`\. The$/`uv`. The/' "$tmp/docs/docs/tutorials
 expect_fail_at "a tutorial tool list without python3" "docs/tutorials/getting-started.md:$(tool_line '^- Tools: ' docs/tutorials/getting-started.md)"
 copy; sed -i.bak 's/checks all five/checks all four/' "$tmp/docs/docs/tutorials/getting-started.md"
 expect_fail_at "\"checks all four\" for five tools" "docs/tutorials/getting-started.md:$(tool_line '^- Tools: ' docs/tutorials/getting-started.md)"
+copy; printf '\nNeeds git 2.28 or newer.\n' >>"$tmp/docs/docs/tutorials/getting-started.md"
+expect_fail "a git floor other than the door's" docs/tutorials/getting-started.md
 exit "$status"

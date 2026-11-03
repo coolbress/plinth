@@ -69,8 +69,10 @@ one line with what it is about to do, for example:
 create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.36.0 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
 ```
 
-Before that line it asks what the command did not say, in a picker (a
-window of choices; Other lets you type an answer instead):
+Before any question, the generator checks the tools and your GitHub login
+and its token, so a missing `uv` or a login without `workflow` stops it
+before you answer anything. Then it asks what the command did not say, in a
+picker (a window of choices; Other lets you type an answer instead):
 
 1. **What you are making**: a terminal command (`cli`), the one to choose
    when unsure; code other code imports (`library`); an always-on server or
@@ -126,8 +128,16 @@ you can type instead:
 - `--public`, `--dir=<path>`, `--host=github`: the defaults, said out loud,
   so that nothing is asked.
 
-If a check fails it stops there and prints the fix. Three you may meet:
+If a check fails it stops there and prints the fix; the agent shows it and
+says what each line means. A fix that is a command you type goes into
+Claude Code's prompt with `!` in front, for example
+`! gh auth refresh -h github.com -s repo,workflow,delete_repo`: the command
+runs here and its output lands in the conversation. After installing a
+program such as `uv`, quit Claude Code (`/exit`) and start it again, or it
+does not see the new program. Four you may meet:
 
+- `uv is not installed`: run the printed `curl … | sh` line with `!`, then
+  restart Claude Code and type `/plinth:new-project` again.
 - `gh's token lacks the scope(s)`: run the printed
   `gh auth refresh -h github.com -s repo,workflow,delete_repo`. Like the
   login, it runs from inside Claude Code, prints a one-time code and a URL,
@@ -159,8 +169,21 @@ If a check fails it stops there and prints the fix. Three you may meet:
   delete it by hand. `gh auth refresh -h github.com -s delete_repo` turns
   rollback on.
 
-When it finishes it prints the repository URL, the local directory, and the
-URL of the first pull request.
+When it finishes, the last lines start with `done:` and the repository's
+URL. Under it: `local:`, the folder; `first pull request:`, its URL, with
+what to do (wait for every check, then squash-merge); where the first day's
+notes are; an `administration:` line, saying whether the login used here can
+change the repository's rules, and so whether an agent using it could; and
+the `next:` line:
+
+```text
+  next: cd /home/you/my-app && claude, then type /plinth:guide for the whole way and the command after this merge
+```
+
+A `starts off` block
+follows, listing what the project starts with turned off, when each is worth
+turning on, and where its steps are. The agent adds a plain sentence for each
+line.
 
 ## Merge the first pull request
 
@@ -198,9 +221,15 @@ If you ask the agent to merge instead, Claude Code may first ask you to
 approve its `gh pr merge` command: approving it is your merge, as in
 [step 6 of Run a project](../how-to/run-a-project.md#6-merge-on-your-word).
 
-Then, in the repository's folder, `git switch main && git pull`: the
-generator left the checkout on the pull request's branch, and the next
-session starts from `main`.
+Then do what the `next:` line said: `cd ~/my-app`, and there
+`git switch main && git pull` first (the generator left the checkout on the
+pull request's branch, and the next session starts from `main`). Then
+`claude`, and type `/plinth:guide`: it shows the whole way in plain words
+and names the command to type after this merge.
+
+If the `administration:` line said the login has it, do its link next, before
+the agent works on its own: about five minutes for a token without that
+permission ([Next](#next)).
 
 That is the whole journey: install, create, merge.
 

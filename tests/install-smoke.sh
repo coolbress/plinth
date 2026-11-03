@@ -58,8 +58,11 @@ echo "  PASS  claude $v (floor $floor)"
 # git: below this, `git checkout` segfaults in the tree-less partial clone the installer
 # makes for a git-subdir source and leaves index.lock behind; the installer's retry dies on
 # that lock and prints only "index.lock: File exists" (#171). Measured: 2.30.1 to 2.35.3
-# crash, 2.37.0 and newer do not; 2.36 was not measured.
-git_floor="2.37.0"
+# crash, 2.37.0 and newer do not; 2.36 was not measured. One source, the door's
+# own check, which stops below it too (#771); tests/doc-pinned-facts.sh holds the
+# README and the tutorial to it.
+git_floor="$(sed -nE 's/^git_floor="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+[ -n "$git_floor" ] || { echo "  FAIL  no git_floor in scripts/new-project.sh"; exit 1; }
 git_v="$(git --version | awk '{print $3}')"
 [ "$(printf '%s\n%s\n' "$git_floor" "$git_v" | sort -V | head -1)" = "$git_floor" ] \
   || { echo "  FAIL  git $git_v is below $git_floor: the install would fail on a stale index.lock (#171). fix: upgrade git (macOS: brew install git)"; exit 1; }
