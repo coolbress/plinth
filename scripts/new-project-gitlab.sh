@@ -2,6 +2,10 @@
 # The door for GitLab.com (#353 slice 2): run as
 #   new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>]
 #                  [--archetype=<a>] [--dir=<path>] [--private|--public]
+#   new-project.sh --host gitlab --preflight [<the same arguments>]
+#
+# --preflight runs steps 1 and 2 (the tools, glab's login and its token) and
+# ends with `preflight: ok`; the name is optional (#771).
 #
 # It checks, renders and prints the plan (#531), creates the project and
 # pushes main (#532), raises the wall (#533), then opens the first merge
@@ -15,7 +19,7 @@
 # answer for the GitLab host of the repository it is run from.
 #
 # Preflight, in order; the first miss stops with the one line that fixes it:
-#   1 tools       claude, git >= 2.28, uv, python3, curl, glab >= the tested
+#   1 tools       claude, git >= the GitHub door's floor, uv, python3, curl, glab >= the tested
 #                 version, logged in to gitlab.com
 #   2 login       the username glab is logged in as
 #   3 namespace   a bare name goes under that username; <group>/<name> needs
@@ -41,14 +45,16 @@ template_sha="${PLINTH_DOOR_TEMPLATE_SHA:?run it as new-project.sh <name> --host
 copier_version="${PLINTH_DOOR_COPIER_VERSION:?run it as new-project.sh <name> --host gitlab}"
 copier_newer="${PLINTH_DOOR_COPIER_NEWER:?run it as new-project.sh <name> --host gitlab}"
 claude_floor="${PLINTH_DOOR_CLAUDE_FLOOR:?run it as new-project.sh <name> --host gitlab}"
+git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitlab}"
 # The glab this door was run with on GitLab.com (#353): `glab api` with -X and
 # -f, `glab auth status --hostname`, and `glab auth git-credential`.
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--no-description]"
-target=""; lic=mit; arch=cli; dir=""; visibility=private
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--no-description] [--preflight]"
+preflight=0; target=""; lic=mit; arch=cli; dir=""; visibility=private
 for a in "$@"; do case "$a" in
+  --preflight)   preflight=1 ;;
   --private)     visibility=private ;;
   --public)      visibility=public ;;
   --license=*)   lic="${a#*=}" ;;
@@ -65,7 +71,7 @@ for a in "$@"; do case "$a" in
   -*)            echo "unknown option for --host gitlab: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
-[ -n "$target" ] || { echo "$usage" >&2; exit 2; }
+[ -n "$target" ] || [ "$preflight" = 1 ] || { echo "$usage" >&2; exit 2; }
 # Before any tool or login is read, so nothing on GitLab is touched; the
 # template's own validator says the same, later (#615).
 [ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
@@ -93,8 +99,9 @@ assisted_by="${PLINTH_ASSISTED_BY:-}"
 # ── 1 tools ──────────────────────────────────────────────────────────────
 command -v git >/dev/null || stop "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
 git_v="$(git --version | awk '{print $3}')"
-below 2.28 "$git_v" && stop "git $git_v is too old (2.28 or newer: init -b, switch)" "  fix: upgrade git"
-command -v uv >/dev/null || stop "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh"
+below "$git_floor" "$git_v" && stop "git $git_v is too old ($git_floor or newer: installing the plugin needs it)" "  fix: upgrade git (macOS: brew install git)"
+command -v uv >/dev/null || stop "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh" \
+  "  in Claude Code, type it after ! (! curl ...), then restart Claude Code (or open a new shell) so it finds uv"
 command -v python3 >/dev/null || stop "python3 is not installed (it reads GitLab's answers)" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install python3"
 command -v curl >/dev/null || stop "curl is not installed (it reads the template's choices)" "  fix: install curl"
 command -v claude >/dev/null || stop "claude (Claude Code) is not installed" "  fix: curl -fsSL https://claude.ai/install.sh | bash"
@@ -139,6 +146,11 @@ else
     *)
       stop "could not read glab's token scopes from $gitlab (GitLab answered: ${why:-nothing readable})" "$token_fix" ;;
   esac
+fi
+
+if [ "$preflight" = 1 ]; then
+  echo "preflight: ok (tools; glab logged in to $gitlab as $login${token_note:+; $token_note})"
+  exit 0
 fi
 
 # ── 3 namespace ──────────────────────────────────────────────────────────

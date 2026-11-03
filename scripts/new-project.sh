@@ -7,6 +7,13 @@
 #                  [--description=<one line>|--no-description]
 #                  [--force-defaults] [--host=github|gitlab]
 #                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web only)
+#   new-project.sh --preflight [<the same arguments>]
+#
+# --preflight runs steps 1 and 2 below (the tools, gh's login and its token)
+# and ends with `preflight: ok`, reading nothing about an owner, a repository
+# or the template; the name is optional. /plinth:new-project runs it before
+# its first question, so a missing uv or a token without workflow stops the
+# person before they answer anything (#771).
 #
 # Every choice is a flag, and a flag not given takes its default: cli, MIT,
 # public, ~/<name>, no third-party reviewer, no code of conduct, no
@@ -22,7 +29,7 @@
 #
 # Preflight, in order; the first miss stops with the one line that fixes it,
 # before anything exists:
-#   1 tools       claude >= 2.1.274, git >= 2.28, uv, gh logged in (warnings: token
+#   1 tools       claude >= 2.1.274, git >= 2.37, uv, gh logged in (warnings: token
 #                 in the environment, native Windows)
 #   2 token       classic: scopes repo and workflow; delete_repo is optional and
 #                 without it rollback is off. Fine-grained: the admin path, because
@@ -72,6 +79,10 @@ template_ci=".github/workflows/ci.yml"
 copier_version="9.18.2"
 copier_newer="2026-09-09"
 claude_floor="2.1.274"
+# Installing the plugin needs git 2.37 (tests/install-smoke.sh, #171), which
+# reads this line; the door itself needs 2.28 (init -b, switch). One floor, the
+# higher, so the door and the install never disagree (#771).
+git_floor="2.37"
 tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-started.md"
 
 # --host: github (this script) or gitlab (scripts/new-project-gitlab.sh, #353).
@@ -89,13 +100,13 @@ case "$host" in
   gitlab) PLINTH_DOOR_TEMPLATE_REPO="$template_repo" PLINTH_DOOR_TEMPLATE_REF="$template_ref" \
             PLINTH_DOOR_TEMPLATE_SHA="$template_sha" \
             PLINTH_DOOR_COPIER_VERSION="$copier_version" PLINTH_DOOR_COPIER_NEWER="$copier_newer" \
-            PLINTH_DOOR_CLAUDE_FLOOR="$claude_floor" \
+            PLINTH_DOOR_CLAUDE_FLOOR="$claude_floor" PLINTH_DOOR_GIT_FLOOR="$git_floor" \
             exec "$here/new-project-gitlab.sh" ${rest[@]+"${rest[@]}"} ;;
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--force-defaults] [--host=github|gitlab] [--hosting=<place>]"
-target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight]"
+preflight=0; target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
 coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""
 for a in "$@"; do case "$a" in
   --code-of-conduct=*)  coc=1; coc_contact="${a#*=}"; coc_said="$coc_said+" ;;
@@ -108,6 +119,7 @@ for a in "$@"; do case "$a" in
   --third-party-review)    review=1; review_said="$review_said+" ;;
   --no-third-party-review) review=0; review_said="$review_said-" ;;
   --force-defaults) force_defaults=1 ;;
+  --preflight)   preflight=1 ;;
   --license=*)   lic="${a#*=}" ;;
   --archetype=*) arch="${a#*=}" ;;
   --dir=*)       dir="${a#*=}" ;;
@@ -115,7 +127,7 @@ for a in "$@"; do case "$a" in
   -*)            echo "unknown option: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
-[ -n "$target" ] || { echo "$usage" >&2; exit 2; }
+[ -n "$target" ] || [ "$preflight" = 1 ] || { echo "$usage" >&2; exit 2; }
 [ "$private$said_public" != 11 ] || { echo "--private and --public: choose one"$'\n'"$usage" >&2; exit 2; }
 case "$review_said" in *+*-*|*-*+*) echo "--third-party-review and --no-third-party-review: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 case "$coc_said" in *+*-*|*-*+*) echo "--code-of-conduct and --no-code-of-conduct: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
@@ -138,8 +150,9 @@ for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' 
 # ── 1 tools ──────────────────────────────────────────────────────────────
 command -v git >/dev/null || stop "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
 git_v="$(git --version | awk '{print $3}')"
-below 2.28 "$git_v" && stop "git $git_v is too old (2.28 or newer: init -b, switch)" "  fix: upgrade git"
-command -v uv  >/dev/null || stop "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh"
+below "$git_floor" "$git_v" && stop "git $git_v is too old ($git_floor or newer: installing the plugin needs it)" "  fix: upgrade git (macOS: brew install git)"
+command -v uv  >/dev/null || stop "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh" \
+  "  in Claude Code, type it after ! (! curl ...), then restart Claude Code (or open a new shell) so it finds uv"
 command -v gh  >/dev/null || stop "gh (GitHub CLI) is not installed" "  fix: https://cli.github.com, then gh auth login"
 command -v python3 >/dev/null || stop "python3 is not installed (it shapes the ruleset for the archetype)" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install python3"
 command -v claude >/dev/null || stop "claude (Claude Code) is not installed" "  fix: curl -fsSL https://claude.ai/install.sh | bash"
@@ -177,7 +190,9 @@ case "$target" in
   */*) owner="${target%%/*}"; name="${target#*/}" ;;
   *)   owner="$login"; name="$target" ;;
 esac
-[[ "$owner" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ && "$name" =~ ^[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] \
+# A preflight with no name yet: the token's checks below name <name> in its place.
+[ -n "$target" ] || name="<name>"
+[ -z "$target" ] || [[ "$owner" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ && "$name" =~ ^[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] \
   || stop "'$target' is not <name> or <owner>/<name> (letters, digits, . _ -; a bare name goes under $login)"
 repo="$owner/$name"
 url="https://github.com/$repo"
@@ -207,11 +222,20 @@ if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
     ${env_where:+"  $env_where"} \
     ${env_first:+"  then, if gh holds no login of its own: gh auth login -s repo,workflow,delete_repo instead of the refresh below"} \
     "  fix: gh auth refresh -h github.com -s repo,workflow,delete_repo   (delete_repo is optional: it lets a failed run delete what it created)" \
-    "  it runs here, in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
+    "  it runs here, in Claude Code too, typed after ! (! gh auth refresh ...): it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  a personal access token instead: https://github.com/settings/tokens with the same scopes"
   has_scope delete_repo || rollback="off (no delete_repo scope; on failure the repository stays: delete it at $url/settings)"
 elif [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   rollback="best effort (fine-grained token: needs Administration: write on $owner's repositories)"
+elif [ "$preflight" = 1 ]; then
+  # The admin-token path below prints the whole command, which needs the
+  # answers the questions give; before them, the browser login is the fix.
+  stop "gh is using a fine-grained token; whether it reaches a repository that does not exist yet cannot be read" \
+    ${env_first:+"  $env_first"} \
+    ${env_where:+"  $env_where"} \
+    "  fix: gh auth login -s repo,workflow,delete_repo   (browser login)" \
+    "  it runs here, in Claude Code too, typed after ! (! gh auth login ...): it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
+    "  to keep the fine-grained token instead: run the door with every choice given; it stops here and prints the command for a separate terminal window"
 else
   # A fine-grained admin token, pre-filled for this owner (GitHub's token-template
   # parameters); the repository selection has no parameter, so it is named.
@@ -231,7 +255,7 @@ else
     ${env_first:+"     $env_first"} \
     ${env_where:+"     $env_where"} \
     "       gh auth login -s repo,workflow,delete_repo" \
-    "     it runs in Claude Code too: it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
+    "     it runs in Claude Code too, typed after ! (! gh auth login ...): it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  2. run the door with an admin token, typed at a prompt (never on the command line)," \
     "     in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
     "    P=$(printf '%q' "$here")" \
@@ -242,6 +266,11 @@ else
     ${kind_note:+"     $kind_note"} \
     "     the one choice left there: Repository access \"All repositories\" (a repository that does not exist yet is not selectable)" \
     "     or classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)"
+fi
+
+if [ "$preflight" = 1 ]; then
+  echo "preflight: ok (tools; gh logged in as $login, scopes: ${scopes:-none}; rollback: ${rollback%% (*})"
+  exit 0
 fi
 
 # ── 3 owner ──────────────────────────────────────────────────────────────

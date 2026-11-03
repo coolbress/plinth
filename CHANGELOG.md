@@ -95,6 +95,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` checks the tools and the login before its first
+  question (`scripts/new-project.sh --preflight`), so a missing `uv` or a
+  GitHub login without `workflow` stops it before anything is asked. A fix
+  the person types is shown with `!` in front, to run it in Claude Code, and
+  after installing a program the skill says to restart Claude Code. Every
+  stop and the final lines stay verbatim, with one plain sentence each in
+  the person's language. Both doors now stop below git 2.37, the version
+  installing the plugin needs, instead of 2.28; the tutorial's end matches
+  the lines the run prints (#771).
+
 - **`ci / pr-title` now fails a pull request whose description would close
   an issue outside its closing line**, as plinth's own `ci / docs` does:
   a closing keyword before `#N` in a sentence ("the two fixes #N decided")

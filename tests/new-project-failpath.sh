@@ -374,6 +374,32 @@ E="FAIL_AT=headers"   run token-unread   err no no "cannot read api.github.com/u
 E="MOCK_NOAUTH=1"     run gh-logged-out err no no "gh auth login"                            -- probe
 E="MOCK_SCOPES=repo"  run scope-missing err no no "lacks the scope(s) workflow"              -- probe
 E="MOCK_FINE=1"       run fine-grained  err no no "with-admin-token.sh"                      -- probe --archetype=backend
+
+echo "--preflight: the tools and the token, before the skill asks anything (#771)"
+# The skill runs it before its first question, when it may know no name yet:
+# it reads the tools and gh's login and token, and nothing about an owner, a
+# repository or the template.
+run pre-ok ok no no "preflight: ok" -- --preflight
+if grep -qE '^gh api users/|^gh api repos/|^git ls-remote|^gh api /licenses' "$work/home-pre-ok/calls.log"
+then bad pre-ok "--preflight read past the token:"; sed 's/^/        /' "$work/home-pre-ok/calls.log"
+else ok pre-ok "reads no owner, repository, license or template"; fi
+run pre-named ok no no "preflight: ok" -- probe --archetype=backend --preflight
+P="$work/bin-nouv" run pre-no-uv err no no "uv is not installed" -- --preflight
+E="MOCK_SCOPES=repo" run pre-scope err no no "lacks the scope(s) workflow" -- --preflight
+E="MOCK_NOAUTH=1"    run pre-noauth err no no "gh is not logged in" -- --preflight
+# The admin-token path needs the whole command, which the questions make: the
+# preflight stop names the browser login and says the run prints that path.
+E="MOCK_FINE=1"      run pre-fine err no no "gh auth login -s repo,workflow,delete_repo" -- --preflight
+if grep -qF "with-admin-token.sh" "$work/home-pre-fine/out" || ! grep -qF "prints the command" "$work/home-pre-fine/out"
+then bad pre-fine "the preflight fine-grained stop prints a command with --preflight in it, or does not say the run prints it"; sed 's/^/        /' "$work/home-pre-fine/out"
+else ok pre-fine "names the browser login; the admin-token command is left to the run"; fi
+# A command the person types is typed after ! in Claude Code, and a new
+# install of uv is found only by a restarted session (#771).
+if grep -qF "! gh auth refresh" "$work/home-pre-scope/out" && grep -qF "restart Claude Code" "$work/home-pre-no-uv/out"
+then ok pre-bang "the scope fix shows the ! form, the uv fix says to restart"
+else bad pre-bang "no ! form in the scope stop, or no restart after uv"; cat "$work/home-pre-scope/out" "$work/home-pre-no-uv/out" | sed 's/^/        /'; fi
+# The install needs git 2.37 (tests/install-smoke.sh); the door asks the same.
+E="MOCK_GIT_VERSION=2.36.1" run git-236 err no no "git 2.36.1 is too old (2.37 or newer" -- --preflight
 # The separate terminal is one of two fixes, not a property of the door: a
 # browser login with the scopes the door reads runs it in the session (#228).
 if grep -qF "gh auth login -s repo,workflow,delete_repo" "$work/home-fine-grained/out"
@@ -1448,6 +1474,13 @@ gl_run gl-group ok yes no "create gitlab.com/someorg/probe (private, Apache-2.0,
 E="MOCK_GL_LEVEL=40" gl_run gl-group-maintainer ok yes no "rollback: off" -- someorg/probe --host gitlab
 P="$work/glbin-noglab" gl_run gl-no-glab err no no "glab (GitLab CLI) is not installed" -- probe --host gitlab
 E="MOCK_GLAB_VERSION=1.40.0" gl_run gl-glab-old err no no "glab 1.40.0 is below" -- probe --host gitlab
+# --preflight on GitLab: the tools, glab's login and token, no namespace (#771).
+gl_run gl-preflight ok no no "preflight: ok (tools; glab logged in to gitlab.com as tester" -- --host gitlab --preflight
+if grep -qE 'namespaces/|groups/|projects/' "$work/home-gl-preflight/calls.log"
+then bad gl-preflight "--preflight read past the login:"; sed 's/^/        /' "$work/home-gl-preflight/calls.log"
+else ok gl-preflight "reads no namespace, group or project"; fi
+E="MOCK_GLAB_NOAUTH=1" gl_run gl-preflight-noauth err no no "glab is not logged in" -- --host gitlab --preflight
+E="MOCK_GIT_VERSION=2.36.1" gl_run gl-git-236 err no no "git 2.36.1 is too old (2.37 or newer" -- --host gitlab --preflight
 E="MOCK_GLAB_NOAUTH=1" gl_run gl-logged-out err no no "glab auth login --hostname gitlab.com" -- probe --host gitlab
 E="MOCK_GL_GROUP=0" gl_run gl-group-missing err no no "group 'someorg' does not exist on GitLab.com" -- someorg/probe --host gitlab
 E="MOCK_GL_LEVEL=30" gl_run gl-group-developer err no no "needs the Maintainer role" -- someorg/probe --host gitlab
