@@ -30,9 +30,13 @@ says, with the fix in the `!` form, and ask nothing. When the person says it
 is fixed, run the preflight again; ask the first question only once it
 passes. One stop is the exception: a fine-grained token whose owner wants to
 keep it rather than log in again. Then ask the questions and run the script;
-it stops at the same check and prints the admin-token path (below). A host
-chosen in the questions that the arguments did not give is checked by the run
-itself.
+it stops at the same check and prints the admin-token path (below). When the
+arguments give no `--host` and the stop is about `gh` (not installed, not
+logged in, its token), the person may not want GitHub at all: before the fix,
+ask the `Host` question below on its own. For GitLab.com, add `--host=gitlab`,
+run the preflight again with it, and do not ask the host again; for GitHub,
+go on with the fix. A host chosen later in the questions is checked by the
+run itself.
 
 ## What the script printed
 

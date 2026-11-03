@@ -170,8 +170,9 @@ does not see the new program. Four you may meet:
   rollback on.
 
 When it finishes, the last lines start with `done:` and the repository's
-URL. Under it: `local:`, the folder; `first pull request:`, its URL, with
-what to do (wait for every check, then squash-merge); where the first day's
+URL. Under it, after a line for each part a private repository or a host
+other than Render leaves out: `local:`, the folder; `first pull request:`,
+its URL, with what to do (wait for every check, then squash-merge); where the first day's
 notes are; an `administration:` line, saying whether the login used here can
 change the repository's rules, and so whether an agent using it could; and
 the `next:` line:
@@ -180,9 +181,9 @@ the `next:` line:
   next: cd /home/you/my-app && claude, then type /plinth:guide for the whole way and the command after this merge
 ```
 
-A `starts off` block
-follows, listing what the project starts with turned off, when each is worth
-turning on, and where its steps are. The agent adds a plain sentence for each
+A `to do now` block follows when you said a code reviewer is connected, then
+a `starts off` block, listing what the project starts with turned off, when
+each is worth turning on, and where its steps are. The agent adds a plain sentence for each
 line.
 
 ## Merge the first pull request
