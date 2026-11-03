@@ -91,8 +91,42 @@ its log under `Verdict`: GitLab has no job summary and no annotations, so a
 | `secrets` | Nothing in the job. GitLab Free has no secret push protection, so this job is the only secret check, and it runs after the secret has reached GitLab |
 | `deps` | osv-scanner 2.6.0 (checked against its SHA-256) instead of GitHub's dependency review. It downloads the OSV database once, scans `uv.lock` at the head and at the merge base offline against that one copy, and fails on an advisory the head has and the base does not, at `deps-fail-on-severity` or above. The severity is the advisory's highest CVSS score: critical from 9.0, high from 7.0, moderate from 4.0, low above 0; an advisory with no score counts as at or above. A scan that cannot run (the download, a tool error, a lockfile it cannot read) fails the job. Both scans use an empty configuration of plinth's, so an `osv-scanner.toml` in the project cannot ignore an advisory |
 | `diff-size` | The pipeline definition is `.gitlab-ci.yml` and anything under `.gitlab/ci/`. The description is `CI_MERGE_REQUEST_DESCRIPTION`, which GitLab cuts at 2700 characters; a path named past the cut reads as not named. A listed change the description does not name is a WARN in the log, never a failure: GitLab Free has no required approvals. The agent's own rules (`AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, `.claude/skills/`, `.claude/output-styles/`) are listed as on GitHub, before the pipeline definition, so a move between `.gitlab/ci/` and one of them gives the agent's reason; on GitHub such a change can need an admin's approval, here it is a WARN like the rest. The `web` input's rows are not here |
-| `pr-title` | The merge request's title. A draft prefix (`Draft:`, `[Draft]`, `(Draft)`) is left out, since marking the merge request ready removes it without a new pipeline. A title ending in `(#N)` passes: GitLab's squash commit does not add the merge request's number to its title. GitLab starts no pipeline when a merge request is retitled, so a title changed after the last pipeline is never checked, and the squash commit takes it |
+| `pr-title` | The merge request's title. A draft prefix (`Draft:`, `[Draft]`, `(Draft)`) is left out, since marking the merge request ready removes it without a new pipeline. A title ending in `(#N)` passes: GitLab's squash commit does not add the merge request's number to its title. GitLab starts no pipeline when a merge request is retitled, so a title changed after the last pipeline is never checked, and the squash commit takes it. Then the description, [below](#the-description-in-pr-title) |
 | `floor-check` | Reads only the pipeline definition (`CI_CONFIG_PATH`, `.gitlab-ci.yml` by default), with PyYAML 6.0.3 installed by hash, so it reads YAML as GitLab does (a duplicate key's last value, GitLab's tags as data); a definition that is not YAML, or a PyYAML that does not install, fails. An inputs header (`spec:`, `---`, then the configuration) is read as GitLab lays it out. A URL that names plinth in any other form than the pinned raw URL (a query, a fragment, another host) fails. It reads the top-level `include:` only, so include this file from the root definition, not from a nested local file. It fails unless every include of this file there is at a full commit SHA, and passes the checksum only when each of those includes names one; otherwise that the fetched bytes are not checked is a `not yet confirmed` line. The protected branch, the merge checks, this include on the default branch after the merge, and the rest of the floor are `not yet confirmed` lines on every run, left to `/plinth:floor-check`, never passes |
+
+### The description in `pr-title`
+
+GitLab closes an issue when a merge request whose description has a
+closing keyword before the issue merges into the default branch, in a
+sentence as much as on a line of its own. `pr-title` fails a description
+whose closing keyword stands before an issue that the closing line
+(`Closes #N` in a paragraph of its own, directly above the attribution)
+does not name, and quotes the line to reword. It decides as `ci / pr-title`
+does on GitHub, with two differences:
+
+- GitLab's own list of the issues a merge closes
+  (`GET /projects/:id/merge_requests/:iid/closes_issues`) answers 404 to
+  the job token (`CI_JOB_TOKEN`), measured below. So the job applies
+  GitLab's default closing pattern to the description: the keywords
+  `close`, `fix`, `resolve` and `implement` in every form GitLab lists, an
+  optional colon, then `#N`, `project#N`, `group/project#N` or an issue
+  URL. What it cannot see is a `not yet confirmed` line on every run that
+  does not fail, never a pass: a project's or instance's own closing
+  pattern, and the issues the merge request's commit messages close, which
+  GitLab's list also counts (measured below).
+- A project that turned off "Auto-close referenced issues on default
+  branch", or changed the pattern, can see a fail for an issue GitLab
+  would not close. Rewording the sentence passes either way.
+
+The description is read whole: `CI_MERGE_REQUEST_DESCRIPTION` when GitLab
+did not cut it, and the merge request API with the job token when it did
+(at 2700 characters). A description that cannot be read fails.
+
+GitLab starts no pipeline when a description is edited, as for a retitle.
+An edited description is checked on the next pipeline only: after
+rewording, run a new pipeline for the merge request, or push a commit.
+Until then the merge request shows the last pipeline's result, and a
+pipeline that passed before the edit lets it merge with the new text.
 
 ## Inputs
 
@@ -113,3 +147,16 @@ with its checksum:
 | A merge request changing two lines with a test | All nine jobs passed: `diff size, 10 lines`, `all 2 changed lines ran`, no added dependency version with an advisory, the title passed. The merge request could merge |
 | A merge request with a wrong checksum | The pipeline failed with no job (`failed integrity check`), and the merge request could not merge (`ci_must_pass`) |
 | Compute minutes | GitLab counted 8 minutes for the two green pipelines (500 seconds on `saas-linux-small-amd64`), about 4 per pipeline: the nine jobs run 23 to 34 seconds each, most of it pulling the image and installing tools. At GitLab.com Free's 400 minutes a month per top-level namespace, that is about 100 pipelines a month |
+
+On 2026-11-03 (UTC), on another private project in a personal namespace on the
+Free plan, with this file's `pr-title` included as a local file and the
+other jobs turned off ([#782](https://github.com/coolbress/plinth/issues/782)):
+
+| Run | Result |
+| --- | --- |
+| The job token on GitLab's API, from a merge request pipeline | `GET .../merge_requests/:iid/closes_issues` answered 404, `GET .../merge_requests/:iid` answered 200 with the whole description, and GraphQL answered 401 |
+| A description with "the two fixes #1 decided" in a sentence | `pr-title` failed, naming #1 and quoting the line. GitLab's own list, read with a maintainer's token, also held #1 |
+| The description edited to a closing line only, `Closes #1` | No pipeline started in the 90 seconds after the edit. A pipeline run by hand passed, with the description's `not yet confirmed` line |
+| The description edited to `Part of #1` and a reworded sentence | A pipeline run by hand passed, with the same line |
+| A 3162-character description whose "fixes #2" stands past the 2700-character cut | `pr-title` failed, naming #2: the description was read whole through the API |
+| A commit message on the merge request's branch with "fixes #2", and a description with no closing keyword | GitLab's list held #2, and a squash merge closed #2. The job reads the description only, so it does not see this |

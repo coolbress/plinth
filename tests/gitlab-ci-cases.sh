@@ -120,6 +120,28 @@ if not re.search(r'OSV_SCANNER_SHA256: "[0-9a-f]{64}"', gl) or "sha256sum -c" no
 print("\n".join(fails)); sys.exit(1 if fails else 0)
 PY
 if out="$(python3 "$tmp/contract.py" "$gh" "$gl" 2>&1)"; then ok "job names, inputs, pins and the shared text match python-ci.yml"; else bad "gitlab/python-ci.yml drifted from python-ci.yml" "$out"; fi
+# pr-title's description check (#782) finds the closing line as GitHub's
+# decision does: those definitions are scripts/closing-references.py's text.
+cat > "$tmp/closing.py" <<'PY'
+import re, sys, textwrap
+py = open(sys.argv[1], encoding="utf-8").read()
+job = open(sys.argv[2], encoding="utf-8").read().split("\npr-title:", 1)[1]
+gl = textwrap.dedent(job.split("<<'PY'", 1)[1].split("\n", 1)[1].split("\n      PY\n", 1)[0])
+def block(text, start):
+    lines = text.split("\n")
+    a = next((i for i, l in enumerate(lines) if l.startswith(start)), None)
+    if a is None:
+        return ""
+    b = a + 1
+    while b < len(lines) and (not lines[b].strip() or lines[b][0] in " )"):
+        b += 1
+    return "\n".join(lines[a:b]).rstrip()
+fails = [s for s in ("LINK_LINE = ", "TRAILER = ", "def closing_position(", "def own_paragraph(", "def excerpt(")
+         if not block(py, s) or block(py, s) != block(gl, s)]
+print("\n".join(f"{s.strip()} differs from scripts/closing-references.py" for s in fails)); sys.exit(1 if fails else 0)
+PY
+if out="$(python3 "$tmp/closing.py" "$root/scripts/closing-references.py" "$gl" 2>&1)"; then ok "pr-title finds the closing line with closing-references.py's own definitions"
+else bad "pr-title's closing-line definitions drifted from scripts/closing-references.py" "$out"; fi
 
 # A job's script, after the shared helpers: `.plinth`'s before_script, the
 # overrides given, then the job's script block.
@@ -171,7 +193,7 @@ refuse() { # <label> <pattern that must not be in out>
 }
 
 echo "-- pr-title"
-title() { export CI_MERGE_REQUEST_TITLE="$1"; run_job pr-title; unset CI_MERGE_REQUEST_TITLE; }
+title() { export CI_MERGE_REQUEST_TITLE="$1" CI_MERGE_REQUEST_DESCRIPTION=""; run_job pr-title; unset CI_MERGE_REQUEST_TITLE CI_MERGE_REQUEST_DESCRIPTION; }
 title "feat: add a thing";            expect "a Conventional Commits title passes" 0 "pass: MR title follows the convention"
 title "Draft: fix(cli): exit code";   expect "a draft prefix is left out" 0 "pass: MR title follows the convention"
 title "[Draft] docs: a page";         expect "a [Draft] prefix is left out" 0 "pass: MR title follows the convention"
@@ -181,6 +203,65 @@ title "fix: x (#12)";                 expect "a trailing (#N) passes: GitLab's s
 title "";                             expect "not a merge request: a pass that says so" 0 "pass: MR title, does not apply"
 CI_OPEN_MERGE_REQUESTS='g/p!3' run_job pr-title
 expect "a branch pipeline while a merge request is open fails, it is not a pass" 1 "fail: MR title, this is a branch pipeline while merge request g/p!3 is open"
+expect "... and says so for the description too" 1 "fail: MR description, this is a branch pipeline while merge request g/p!3 is open"
+
+echo "-- pr-title: the description (#782)"
+# A fake curl for the merge request API: it logs its arguments and serves
+# $STUB_MR, or fails when there is none.
+cat > "$tmp/bin/curl" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$tmp_curl_log"
+out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
+[ -n "${STUB_MR:-}" ] || { echo "curl: (22) The requested URL returned error: 404" >&2; exit 22; }
+printf '%s' "$STUB_MR" > "$out"
+SH
+chmod +x "$tmp/bin/curl"
+export tmp_curl_log="$tmp/curl.log"
+what=$'## What and why\n\nThe pin moves to v1.5.3.'
+by='Assisted-by: Claude:claude-opus-5-5'
+desc() { # <description> [truncated]: a merge request pipeline of g/p !4
+  : > "$tmp_curl_log"
+  CI_MERGE_REQUEST_TITLE="docs: a page" CI_MERGE_REQUEST_DESCRIPTION="$1" CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED="${2:-false}" \
+    CI_PROJECT_PATH=g/p CI_PROJECT_ID=9 CI_MERGE_REQUEST_IID=4 CI_API_V4_URL=https://gitlab.example/api/v4 CI_JOB_TOKEN=jt \
+    run_job pr-title
+}
+desc "$what It is the second of the two fixes #65 decided to land."$'\n\n'"$by"
+expect "\"the two fixes #65 decided\" fails, the line quoted" 1 "fail: MR description, merging it would close" \
+  "FAIL  #65: GitLab's default closing pattern closes it" "line 3: " "the two fixes #65 decided"
+refuse "... with no not yet confirmed line beside the fail" "not yet confirmed: MR description"
+desc "$what"$'\n\nCloses #12\n\n'"$by"
+expect "a closing line alone: the job passes, and says GitLab's own list was not read" 0 \
+  "pass: MR title" "not yet confirmed: MR description" "the closing line names #12"
+refuse "... and never a pass line for the description" "pass: MR description"
+desc "$what"$'\n\nPart of #12\n\n'"$by"
+expect "\`Part of #12\` alone: the job passes" 0 "not yet confirmed: MR description"
+desc "$what The two fixes that #65 decided land here."$'\n\nPart of #65\n\n'"$by"
+expect "the reworded sentence passes" 0 "not yet confirmed: MR description"
+desc "$what This also closes #65, in passing."$'\n\nCloses #12\n\n'"$by"
+expect "a sentence closing #65 beside a closing line for #12 fails" 1 "FAIL  #65" "This also closes #65"
+refuse "... and #12 on the closing line is not named as a fail" "FAIL  #12"
+for k in Closing Fixing Resolving Implements "fixes issue" "Closes:"; do
+  desc "$what The change $k #7 at last."$'\n\n'"$by"
+  expect "GitLab's keyword form \"$k #7\" in a sentence fails" 1 "FAIL  #7"
+done
+desc "$what It fixes other/proj#8 and https://gitlab.example/g/q/-/issues/9 too."$'\n\n'"$by"
+expect "another project's issue, by path and by URL, fails" 1 "FAIL  other/proj#8" "FAIL  g/q#9"
+desc "$what CLOSES #7 is not GitLab's: its keywords are case sensitive."$'\n\n'"$by"
+expect "an upper-case keyword, which GitLab's default pattern does not match, passes" 0 "not yet confirmed: MR description"
+desc "$what"$'\n\nCloses #12\n\nMore text after it.\n\n'"$by"
+expect "a closing line with text below it fails and says to move it" 1 "is a closing line with text below it" "move it directly above the attribution"
+desc "$what"$'\n\nCloses #12, #13 and #14\n\n'"$by"
+expect "a closing line chaining three issues names all three" 0 "the closing line names #12, #13, #14"
+[ -s "$tmp_curl_log" ] && bad "a whole description still called the API" "$(cat "$tmp_curl_log")" || ok "a whole description is not fetched again"
+STUB_MR="$(python3 -c 'import json,sys; print(json.dumps({"description": sys.argv[1]}))' "$what"$'\n\nCut here, but further on it fixes #66 too.\n\n'"$by")" \
+  desc "${what:0:20}" true
+expect "a truncated variable: the description is read whole from the API, and judged on that" 1 "FAIL  #66"
+grep -qF -- "--header JOB-TOKEN: jt https://gitlab.example/api/v4/projects/9/merge_requests/4" "$tmp_curl_log" \
+  && ok "... with the job token, from this merge request" || bad "the API call is not the one expected" "$(cat "$tmp_curl_log")"
+desc "${what:0:20}" true
+expect "a truncated variable and an API that does not answer: fails, not a pass" 1 "fail: MR description, it could not be read"
+STUB_MR='{"title": "no description key"}' desc "${what:0:20}" true
+expect "an API answer without a description fails" 1 "fail: MR description, it could not be read"
 
 echo "-- deps (osv-scanner stubbed: it answers per lockfile from fixtures)"
 cat > "$tmp/bin/osv-scanner" <<'SH'
