@@ -2671,32 +2671,57 @@ def check_actions_token(repo: str, network: bool, actions_token: bool = False) -
                    "-F can_approve_pull_request_reviews=false   (needs repository administration)")
 
 
-def tag_ruleset_covers(rs: dict) -> list[str]:
-    """What a tag ruleset leaves open of what TAG_RULESET closes: empty when
-    it is active, matches a `v*` tag, and blocks its deletion and its update.
-    `non_fast_forward` is not `update`: it lets a tag move to a later commit."""
-    import fnmatch
+# The patterns that cover every `v*` tag: the door's, and the two wider ones.
+TAG_NAMESPACE = ("refs/tags/v*", "refs/tags/*", "~ALL")
+
+
+def excludes_a_v_tag(pattern: str) -> bool:
+    """Could this exclude pattern match some `v*` tag? Only a pattern that
+    names a tag starting with a literal other than `v` is known not to."""
+    if not pattern.startswith("refs/tags/"):
+        return pattern == "~ALL" or any(c in pattern for c in "*?[")
+    first = pattern[len("refs/tags/"):][:1]
+    return first in ("", "v", "*", "?", "[", "\\")
+
+
+def tag_ruleset_covers(rs: dict) -> tuple[list[str], bool]:
+    """What a tag ruleset leaves open of what TAG_RULESET closes, and whether
+    its bypass actors were read. No gaps when it is active, includes the
+    whole `v*` namespace (TAG_NAMESPACE, not a sample tag: `refs/tags/v1.0.0`
+    alone matches one release), excludes nothing a `v*` tag could match,
+    blocks deletion and update, and lets no actor bypass it. `non_fast_forward`
+    is not `update`: it lets a tag move to a later commit. Bypass actors are
+    returned only to a token that administers the repository; without the
+    key they are unread, never taken as none."""
     gaps = []
     if rs.get("enforcement") != "active":
         gaps.append(f"enforcement is {rs.get('enforcement')}")
     cond = (rs.get("conditions") or {}).get("ref_name") or {}
-    probe = "refs/tags/v1.0.0"
     inc = [p for p in cond.get("include") or [] if isinstance(p, str)]
     exc = [p for p in cond.get("exclude") or [] if isinstance(p, str)]
-    if not (any(p == "~ALL" or fnmatch.fnmatchcase(probe, p) for p in inc)
-            and not any(p == "~ALL" or fnmatch.fnmatchcase(probe, p) for p in exc)):
-        gaps.append("it does not match v* tags")
+    if not any(p in TAG_NAMESPACE for p in inc):
+        gaps.append(f"it includes {inc or 'nothing'}, not every v* tag (refs/tags/v*)")
+    open_exc = [p for p in exc if excludes_a_v_tag(p)]
+    if open_exc:
+        gaps.append(f"it excludes {open_exc}, which can match a v* tag")
     types = {r.get("type") for r in rs.get("rules") or [] if isinstance(r, dict)}
     gaps += [f"no {t} rule" for t in ("deletion", "update") if t not in types]
-    return gaps
+    actors = rs.get("bypass_actors")
+    if isinstance(actors, list) and actors:
+        gaps.append("bypass actors present: " + ", ".join(
+            f"{a.get('actor_type')} {a.get('actor_id')} ({a.get('bypass_mode')})" for a in actors if isinstance(a, dict)))
+    return gaps, isinstance(actors, list)
 
 
-def check_tag_ruleset(repo: str, archetype: str | None, network: bool) -> None:
+def check_tag_ruleset(repo: str, archetype: str | None, network: bool, actions_token: bool = False) -> None:
     """A releasing archetype's `v*` tags can be neither moved nor deleted
     (#772): a moved tag changes what a release names, a deleted one makes it
-    vanish. Rulesets are read with read access, so this needs no
-    administration. WARN, never FAIL, as the merge ruleset: every repository
-    made before #772 lacks it, and `ci / floor-check` runs in each one."""
+    vanish. Rulesets are listed with read access; their bypass actors need
+    administration, so a ruleset that covers everything else and whose
+    actors are unread is a SKIP (an INFO left to the skill under
+    --actions-token), never a PASS. WARN, never FAIL, as the merge ruleset:
+    every repository made before #772 lacks it, and `ci / floor-check` runs
+    in each one."""
     if archetype is None or archetype in TAG_NOT_RELEASING or (not network and not os.environ.get("FLOOR_CHECK_API_DIR")):
         return
     listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
@@ -2705,6 +2730,7 @@ def check_tag_ruleset(repo: str, archetype: str | None, network: bool) -> None:
         return
     best: list[str] | None = None
     unread = False
+    actors_unread: object = None
     for item in listed if isinstance(listed, list) else []:
         if not isinstance(item, dict) or item.get("target") != "tag" or item.get("source_type", "Repository") != "Repository":
             continue
@@ -2712,15 +2738,25 @@ def check_tag_ruleset(repo: str, archetype: str | None, network: bool) -> None:
         if not isinstance(rs, dict):
             unread = True
             continue
-        gaps = tag_ruleset_covers(rs)
-        if not gaps:
-            result("PASS", f"the tag ruleset keeps v* tags from being moved or deleted (ruleset {item.get('id')})")
+        gaps, actors_read = tag_ruleset_covers(rs)
+        if not gaps and actors_read:
+            result("PASS", f"the tag ruleset keeps v* tags from being moved or deleted, with no bypass actor (ruleset {item.get('id')})")
             return
+        if not gaps:
+            actors_unread = item.get("id")
+            continue
         best = gaps if best is None or len(gaps) < len(best) else best
+    if actors_unread is not None:
+        msg = (f"the tag ruleset (ruleset {actors_unread}) covers v* tags, and its bypass actors are not read here")
+        if actions_token:
+            result("INFO", f"{msg}: /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+        else:
+            result("SKIP", f"{msg}: this token does not get them; one with repository administration does")
+        return
     if unread and best is None:
         result("SKIP", "the tag ruleset not verified: a tag ruleset is listed and could not be read")
         return
-    why = f"the tag rulesets here leave v* tags open: {', '.join(best)}" if best else "no tag ruleset"
+    why = f"the tag rulesets here leave v* tags open: {'; '.join(best)}" if best else "no tag ruleset"
     result("WARN", f"{why}: for a {archetype}, which releases from a v* tag, anyone with write access can move "
                    "or delete a released tag")
     result("INFO", f"  gh api -X POST repos/{repo}/rulesets --input - <<<{shlex.quote(json.dumps(TAG_RULESET))}"
@@ -3874,7 +3910,7 @@ def main() -> int:
         check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying, root)
         check_actions_allowlist(root, a.repo, network, a.actions_token)
         check_actions_token(a.repo, network, a.actions_token)
-        check_tag_ruleset(a.repo, archetype, network)
+        check_tag_ruleset(a.repo, archetype, network, a.actions_token)
         check_description(a.repo, network)
         check_labels(a.repo, network)
     else:

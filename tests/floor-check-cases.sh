@@ -3050,7 +3050,7 @@ wall "must not pass: a tag ruleset with non_fast_forward in place of update is a
 wall "must not pass: a tag ruleset in evaluate mode is a WARN" \
   "WARN  the tag rulesets here leave v\\* tags open: enforcement is evaluate" "jq -c '.enforcement = \"evaluate\"' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: a tag ruleset for other tags is a WARN" \
-  "WARN  the tag rulesets here leave v\\* tags open: it does not match v\\* tags" "jq -c '.conditions.ref_name.include = [\"refs/tags/release-*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+  "WARN  the tag rulesets here leave v\\* tags open: it includes \\['refs/tags/release-\\*'\\], not every v\\* tag" "jq -c '.conditions.ref_name.include = [\"refs/tags/release-*\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: no tag ruleset is a WARN naming why it matters" \
   "WARN  no tag ruleset: for a backend, which releases from a v\* tag, anyone with write access can move or delete a released tag" \
   "printf '[{\"id\":1,\"target\":\"branch\"}]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
@@ -3058,7 +3058,26 @@ wall "...with the call that adds the door's one, which needs administration" \
   "INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{\"name\": \"tags: v\\* not moved or deleted\"" \
   "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "a missing tag ruleset never fails the floor" "-- 0 failed, 1 not verified" "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
-wall "the door's tag ruleset is a PASS" "PASS  the tag ruleset keeps v\* tags from being moved or deleted (ruleset 3)"
+wall "the door's tag ruleset is a PASS" "PASS  the tag ruleset keeps v\\* tags from being moved or deleted, with no bypass actor (ruleset 3)"
+# Codex review on #779: one sample tag is not the namespace, and a bypass
+# actor is a way round it. Must-not-pass cases, each a WARN naming the gap.
+wall "must not pass: v* with v2* excluded is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: it excludes \\['refs/tags/v2\\*'\\], which can match a v\\* tag" \
+  "jq -c '.conditions.ref_name.exclude = [\"refs/tags/v2*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a ruleset for v1.0.0 alone is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: it includes \\['refs/tags/v1.0.0'\\], not every v\\* tag" \
+  "jq -c '.conditions.ref_name.include = [\"refs/tags/v1.0.0\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a write role that always bypasses it is a WARN" \
+  "WARN  the tag rulesets here leave v\\* tags open: bypass actors present: RepositoryRole 4 (always)" \
+  "jq -c '.bypass_actors = [{actor_id: 4, actor_type: \"RepositoryRole\", bypass_mode: \"always\"}]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "an exclude that cannot match a v* tag is not a gap" "PASS  the tag ruleset keeps v\\* tags" \
+  "jq -c '.conditions.ref_name.exclude = [\"refs/tags/nightly\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "bypass actors the token does not get are a SKIP, never a PASS" \
+  "SKIP  the tag ruleset (ruleset 3) covers v\\* tags, and its bypass actors are not read here" "jq -c 'del(.bypass_actors)' <<<\"\$good_tags\" > \"$tagrs\""
+wall "...counted as not verified" "-- 0 failed, 2 not verified" "jq -c 'del(.bypass_actors)' <<<\"\$good_tags\" > \"$tagrs\""
+out="$(jq -c 'del(.bypass_actors)' <<<"$good_tags" > "$tagrs"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --actions-token --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_tags" > "$tagrs"
+if grep -q "INFO  the tag ruleset (ruleset 3) covers v\\* tags, and its bypass actors are not read here: /plinth:floor-check reads them" <<<"$out" && ! grep -q "PASS  the tag ruleset" <<<"$out"
+then ok "--actions-token: unread tag bypass actors are left to /plinth:floor-check, not passed"; else bad "--actions-token: unread tag bypass actors"; grep 'tag ruleset' <<<"$out" | sed 's/^/        /'; fi
 wall "~ALL with deletion and update is a PASS too" "PASS  the tag ruleset keeps v\* tags" "jq -c '.conditions.ref_name.include = [\"~ALL\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "a listing that cannot be read is a SKIP, counted" "-- 0 failed, 2 not verified" "printf 'not json' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "a listed tag ruleset that cannot be read is a SKIP" "SKIP  the tag ruleset not verified: a tag ruleset is listed and could not be read" "rm \"$tagrs\""

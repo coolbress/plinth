@@ -409,8 +409,12 @@ login cannot administer the repository, and never run it.
   administration to read: a SKIP here, an INFO left to this skill under
   `--actions-token`.
 - **The tag ruleset.** With `--repo`, for `cli`, `library`, `backend` and
-  `data-ml`, which release from a `v*` tag: an active tag ruleset matching `v*` that
-  blocks deletion and update. None, or one that leaves a gap (a
+  `data-ml`, which release from a `v*` tag: an active tag ruleset that
+  includes every `v*` tag (`refs/tags/v*`, `refs/tags/*` or `~ALL`, not a
+  sample tag), excludes none of them, blocks deletion and update, and lets
+  no actor bypass it. Bypass actors are read only with repository
+  administration: a ruleset otherwise right whose actors are unread is a
+  SKIP, an INFO left to this skill under `--actions-token`. None, or one that leaves a gap (a
   `non_fast_forward` rule in place of `update` lets a tag move to a later
   commit), is the WARN naming the gap, with the `gh api -X POST` that adds
   the door's. Rulesets are read with read access.
