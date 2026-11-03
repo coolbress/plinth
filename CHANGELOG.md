@@ -11,6 +11,23 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.24.0] - 2026-11-03
+
+`/plinth:new-project` now asks what a person can decide on day one in Claude
+Code's picker, checks the tools and the login before the first question, and
+ends by naming what the new project starts without and when to turn each on.
+It renders plinth-template v1.37.0: a code of conduct and description on
+request, a tag ruleset and read-only Actions token settings, `cli` logs on
+stderr, and an `image` check that fails on an old high or critical finding.
+`/plinth:floor-check` holds a project to the answers it was made with, and
+`ci / pr-title` fails a description whose prose would close an issue. A
+consumer gets the CI change by raising its pin of the reusable workflow, and
+the template's through `/plinth:template-update`.
+
+tested with plinth-template v1.37.0
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6604409251>
+
 ### Added
 
 - `/plinth:new-project` ends with what the new project starts with turned
@@ -4443,7 +4460,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.23.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.24.0...HEAD
+[2.24.0]: https://github.com/coolbress/plinth/releases/tag/v2.24.0
 [2.23.0]: https://github.com/coolbress/plinth/releases/tag/v2.23.0
 [2.22.0]: https://github.com/coolbress/plinth/releases/tag/v2.22.0
 [2.21.0]: https://github.com/coolbress/plinth/releases/tag/v2.21.0
