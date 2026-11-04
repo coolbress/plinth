@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:template-update` counts its own diff before it pushes, as
+  `ci / diff-size` does, with the project's own `max-diff-lines` and
+  `diff-size-exclude`. Over the limit it pushes nothing and proposes a split
+  (exit 4): the paths of a first pull request that fits, issue forms first,
+  with the lines that make it, then the update with the rest and
+  `.copier-answers.yml`. `--finish <worktree> --over-limit` opens it as it is.
+  The pull request description says what was counted. Issue forms stay
+  counted by `diff-size-exclude`'s default: a form's `labels:`,
+  `assignees:` and validations change what an issue does (#795).
+
 ### Changed
 
 - GitLab's `pr-title` now reads the merge request's description after the
