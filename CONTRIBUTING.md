@@ -11,7 +11,7 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke, markdownlint, workflow-lint, python-lint and gitlab-ci-cases need network
+# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases and template-rules-drift need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
@@ -124,9 +124,15 @@ release needs a green run on the commit it tags
 
    The problem, what actually changed, the result, and why this approach.
 
+   ## What I checked myself
+
+   What you ran, opened or read yourself, and what you saw; or `Skipped: <reason>`.
+
    ## How it was verified
 
    What was run and what it showed; important unverified items and follow-ups.
+
+   Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)
 
    Closes #N
 
