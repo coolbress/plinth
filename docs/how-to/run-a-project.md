@@ -80,9 +80,10 @@ boundary.
 
 #### Set four things by hand that no check covers
 
-Production data kept out of the agent's session, a spend ceiling on every
-paid service, a restore tried once, private data tried from outside. No check
-can see these: guidance only.
+Production data kept out of the agent's session, a spend limit wherever a
+paid service has one, a restore tried once, private data tried from outside;
+after the first deploy, an uptime monitor and an error tracker. No check can
+see these: guidance only.
 
 ### 2. Shape the idea: `/grilling`
 
