@@ -51,8 +51,13 @@ if [ $# = 0 ]; then
   printf '  %s --apply %s --plinth-pin live\n  %s --apply %s --plinth-pin tested\n' "$0" "$(git rev-parse HEAD)" "$0" "$(git rev-parse HEAD)"
   exit 0
 fi
-[ "${APPLY_RC:-0}" = 0 ] || { echo "copier left conflicts"; exit "$APPLY_RC"; }
 wt="$(dirname "$top")/$(basename "$top")-template-v1.1.0"
+if [ "$1" = --finish ]; then
+  [ "$2" = "$wt" ] && [ "${3:-}" = --over-limit ] || { echo "finish: not this worktree, or not --over-limit"; exit 2; }
+  [ "${FINISH_RC:-0}" = 0 ] || exit "$FINISH_RC"
+  echo "Draft pull request: https://github.com/tester/x/pull/1"; exit 0
+fi
+[ "${APPLY_RC:-0}" = 0 ] || { echo "copier left conflicts"; exit "$APPLY_RC"; }
 git -C "$top" worktree add -q -b chore/template-v1.1.0 "$wt"
 printf '_commit: %s\nplinth_sha: %s\n' "${TU_TAG:-v1.1.0}" "${TU_ANSWERS:-$NEW_PIN}" > "$wt/.copier-answers.yml"
 printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "${TU_CI:-$NEW_PIN}" > "$wt/.github/workflows/ci.yml"
@@ -60,6 +65,10 @@ printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml
 if [ "${TU_NOLABEL:-0}" = 1 ]; then rm "$wt/.github/workflows/label.yml"
 else printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n# uses: coolbress/plinth/.github/workflows/pr-review.yml@<sha>\n' "${TU_LABEL:-$NEW_PIN}" > "$wt/.github/workflows/label.yml"; fi
 git -C "$wt" commit -q -am update
+case "${OVER_LIMIT:-}" in
+  1) echo "Over the limit: 629 reviewable lines, against the limit of 400 that ci / diff-size would apply"; exit 4 ;;
+  silent) exit 4 ;;
+esac
 echo "Draft pull request: https://github.com/tester/x/pull/1"
 STUB
   chmod +x "$1/scripts/"*.sh
@@ -191,6 +200,19 @@ run APPLY_RC=3;                check "a conflict copier left is a failure" no $?
 is "named as a conflict"       said "exited 3 (3 is a conflict"
 is "deleted"                   deletes 1
 run PLAN_RC=1;                 check "a plan that stops is a failure" no $?
+is "deleted"                   deletes 1
+
+echo "-- over ci / diff-size's limit (#804)"
+run OVER_LIMIT=1 GITHUB_STEP_SUMMARY="$work/summary3"; check "exit 4 over the limit: opened with --over-limit, the pins checked" ok $?
+is "--finish on the update's worktree, --over-limit" bash -c 'grep -qE "^template-update --finish .*-template-v1\.1\.0 --over-limit$" "$1"' _ "$GH_LOG"
+is "the summary says so"       grep -q "Over the limit: 629 reviewable lines.*opened with --over-limit" "$work/summary3"
+is "deleted"                   deletes 1
+run OVER_LIMIT=1 TU_CI="$old_pin"; check "over the limit, and a pin that did not land" no $?
+run OVER_LIMIT=1 FINISH_RC=1;  check "over the limit, and --finish --over-limit fails" no $?
+is "named"                     said "--finish --over-limit exited 1"
+is "deleted"                   deletes 1
+run OVER_LIMIT=silent;         check "exit 4 without the over-limit report is a failure" no $?
+is "no --finish"               not saw "^template-update --finish"
 is "deleted"                   deletes 1
 
 echo "-- the repository"

@@ -22,7 +22,20 @@ pull requests and have no tag.
   closing pattern with references written with no space between them
   (`#11#11...`) no longer backtracks until the job's timeout (#800).
 
+### Fixed
+
+- The `e2e` upgrade path (`scripts/e2e-upgrade.sh`) no longer fails on an
+  update over `ci / diff-size`'s limit. `/plinth:template-update` now stops
+  there with exit 4 and proposes a split (#795). The driver opens such an
+  update as it is, with `--finish --over-limit`, and checks its pins as
+  before. The test repository runs no Actions, so nothing reads its size. An
+  exit 4 without the over-limit report still fails (#804).
+
 ## [2.25.0] - 2026-11-04
+
+Never tagged: its `e2e` upgrade path stopped on template-update's new
+over-the-limit exit (#804). The next release carries this section's changes.
+The link below is the commit that set the version.
 
 `/plinth:template-update` now counts its own diff before it pushes. Over the size limit it proposes a split instead of opening a pull request that `ci / diff-size` would fail. When `ci.yml`'s plinth pin was raised by hand ahead of the other files, the update now carries those files forward to that pin instead of stopping. GitLab's `pr-title` now reads the merge request description for prose that would close an issue. The install smoke test no longer races its own cleanup.
 
@@ -4548,7 +4561,7 @@ tested with plinth-template v1.4.1
   number is the old one minus 68, and the full table is pinned on #31.
 
 [Unreleased]: https://github.com/coolbress/plinth/compare/v2.25.0...HEAD
-[2.25.0]: https://github.com/coolbress/plinth/releases/tag/v2.25.0
+[2.25.0]: https://github.com/coolbress/plinth/commit/3309912f41a6af31d9f91daf28708923377b8c4b
 [2.24.1]: https://github.com/coolbress/plinth/releases/tag/v2.24.1
 [2.24.0]: https://github.com/coolbress/plinth/commit/8cfdc6400a893f56d4ab9d4217ea44e3a6ee2f31
 [2.23.0]: https://github.com/coolbress/plinth/releases/tag/v2.23.0

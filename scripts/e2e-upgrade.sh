@@ -20,7 +20,9 @@
 #     workflow of the rendered template runs on it), main pushed.
 #   3 template-update.sh beside this file, the one this commit ships: the
 #     plan, then --apply with --plinth-pin tested, which opens a draft pull
-#     request. A conflict is a failure: nothing here resolves one.
+#     request. A conflict is a failure: nothing here resolves one. An update
+#     over ci / diff-size's limit (exit 4) is opened with --finish
+#     --over-limit; the repository runs no check that would read its size.
 #   4 the update branch as pushed: every coolbress/plinth `uses:` line in
 #     .github/workflows (ci.yml's and label.yml's at least) and
 #     .copier-answers.yml's plinth_sha must name the plinth_sha default of
@@ -171,14 +173,23 @@ plan="$(cd "$dir" && "$here/template-update.sh")" || fail "the template-update p
 printf '%s\n' "$plan"
 base="$(sed -nE 's/^ *[^ ]*template-update\.sh --apply ([0-9a-f]{40})( .*)?$/\1/p' <<<"$plan" | head -n 1)"
 [ -n "$base" ] || fail "the plan printed no --apply line"
+wt="$work/$name-template-$template_ref"; branch="chore/template-$template_ref"
 rc=0; out="$(cd "$dir" && "$here/template-update.sh" --apply "$base" --plinth-pin tested 2>&1)" || rc=$?
 printf '%s\n' "$out"
+# Over ci / diff-size's limit the update stays a local commit and a split is
+# proposed (exit 4, #795). The repository runs no Actions, so it is opened as
+# it is: what this path checks is the pins, not the size (#804).
+if [ "$rc" = 4 ] && grep -q '^Over the limit: ' <<<"$out"; then
+  say "upgrade: $(grep -m1 '^Over the limit: ' <<<"$out" | sed 's/,$//'); opened with --over-limit"
+  rc=0; out="$(cd "$dir" && "$here/template-update.sh" --finish "$wt" --over-limit 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  [ "$rc" = 0 ] || fail "template-update.sh --finish --over-limit exited $rc"
+fi
 [ "$rc" = 0 ] || fail "template-update.sh --apply --plinth-pin tested exited $rc (3 is a conflict copier left; nothing here resolves one)"
 pr="$(sed -n 's/^Draft pull request: //p' <<<"$out")"
 [ -n "$pr" ] || fail "template-update.sh reported no draft pull request"
 
 # ── 4 what landed ────────────────────────────────────────────────────────
-wt="$work/$name-template-$template_ref"; branch="chore/template-$template_ref"
 head="$(git -C "$wt" rev-parse HEAD)"
 pushed="$(git -C "$wt" ls-remote origin "refs/heads/$branch" | cut -f1)"
 [ "$pushed" = "$head" ] || fail "$branch on GitHub is ${pushed:-absent}, not the update commit $head"
