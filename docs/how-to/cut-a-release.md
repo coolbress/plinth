@@ -31,7 +31,9 @@ the move changes what a new project's agent reads, and then asks for
 2. Write the why in a file outside the repository, for example
    `${TMPDIR:-/tmp}/why.md`: a short paragraph on why this release exists, and one
    line `tested with plinth-template <tag>` with the tag from step 1. Use no
-   heading lines.
+   heading lines. When it tells a consumer to raise its plinth pin, name every
+   `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`): one raised
+   alone leaves two pins, and `/plinth:template-update` stops on them (#793).
 
    If that tag is not the one the release before was tested with (the
    `tested with` line of the previous version's `CHANGELOG.md` section), the

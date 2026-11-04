@@ -214,6 +214,13 @@ finish() { # <worktree>
       echo "The plinth pin: kept at the one the workflows called before the update (\`--plinth-pin live\`)."
     fi
     [ -z "$pin_note" ] || { echo; echo "Before the update: ${pin_note#plinth pin: }"; }
+    if grep -q '^moves=' "$sf"; then
+      echo
+      echo "Before the update the workflows called plinth at two commits; each file below called an"
+      echo "ancestor of the ci job's commit, and the update moved it to the pin above:"
+      echo
+      sed -n 's/^moves=/- /p' "$sf"
+    fi
     echo
     echo "Merged cleanly (copier's merge, unchanged since):"
     echo
@@ -329,7 +336,10 @@ if [ "$mode" = plan ]; then
     git -C "$top" cat-file -e "$base:$p" 2>/dev/null && paths+=("$p")
   done
   [ ${#paths[@]} -gt 0 ] && git -C "$top" archive "$base" -- "${paths[@]}" | tar -x -C "$tmp"
-  cmd="$(cmd_at "$tmp")" || exit 1
+  # Its stderr as before, but for the `moves:` lines (#793), which the plan
+  # prints under the command.
+  cmd="$(cmd_at "$tmp" 2>"$tmp/live-note")" || { cat "$tmp/live-note" >&2; exit 1; }
+  grep -v '^moves: ' "$tmp/live-note" >&2
   tested_cmd="$(cmd_at "$tmp" tested 2>"$tmp/pin-note")" || tested_cmd=""
   [ "$tested_cmd" != "$cmd" ] || tested_cmd=""
   echo "Repository: $repo, base origin/$default at $base (verified against GitHub)"
@@ -338,6 +348,10 @@ if [ "$mode" = plan ]; then
   echo "Worktree:   $wt (branch $branch)"
   echo "Command:    $cmd"
   echo "            (--defaults: each question takes the recorded answer; one never answered takes the template's default)"
+  sed -n 's/^moves: /Moves:      /p' "$tmp/live-note"
+  if [ -n "$tested_cmd" ] && grep -q '^moves: ' "$tmp/live-note"; then
+    echo "            (with the tested pin, each moves to that pin instead, and so does ci.yml)"
+  fi
   sed -n 's/^plinth pin: /Plinth pin: /p' "$tmp/pin-note"
   if [ -n "$tested_cmd" ]; then
     echo "With the tested pin: $tested_cmd"
@@ -387,14 +401,28 @@ note_file="$(mktemp)"
 tested_cmd="$(cmd_at "$wt" tested 2>"$note_file")"; tested_rc=$?
 pin_note="$(sed -n '/^plinth pin: /{p;q;}' "$note_file")"
 why_none="${pin_note:-$(head -n 1 "$note_file")}"; rm -f "$note_file"
+# The live line, read once: the command itself with --plinth-pin live, and
+# with either pin the files it moves forward to the ci job's commit (#793),
+# its `moves:` lines. A read that fails while the pins disagree is a stop,
+# never an empty list that would skip the check after copier.
+live_note="$(mktemp)"
+live_cmd="$(cmd_at "$wt" 2>"$live_note")"; live_rc=$?
+moves="$(sed -n 's/^moves: //p' "$live_note")"
+if [ "$live_rc" != 0 ] && grep -q "workflow pins disagree" "$live_note"; then
+  cat "$live_note" >&2; rm -f "$live_note"
+  die "the workflows call plinth at more than one commit and the update cannot carry one (above); $wt left for inspection"
+fi
 if [ "$pin" = tested ]; then
+  rm -f "$live_note"
   [ "$tested_rc" = 0 ] && cmd="$tested_cmd" \
     || die "no update command with the tested pin (${why_none:-no reason given}); $wt left for inspection. Run the plan again, or --apply with --plinth-pin live"
   # The live pin is already the tested one: nothing moved, and the
   # description must not say it did.
-  [ "$cmd" != "$(cmd_at "$wt" 2>/dev/null)" ] || pin=same
+  [ "$cmd" != "$live_cmd" ] || pin=same
 else
-  cmd="$(cmd_at "$wt")" || die "no update command at the base (above); $wt left for inspection"
+  [ "$live_rc" = 0 ] && cmd="$live_cmd" \
+    || { grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"; die "no update command at the base (above); $wt left for inspection"; }
+  grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"
 fi
 case "$cmd" in *" --vcs-ref ${to_sha:-?} "*) ;; *) die "the command does not update to $to ($to_sha): $cmd" ;; esac
 read -ra words <<<"$cmd"
@@ -403,6 +431,29 @@ echo "  $cmd"
 # As the door runs copier: without the token in its environment.
 ( cd "$wt" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) \
   || die "copier update failed (above); nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $(q "$wt") && git branch -D $branch"
+
+# When the pins disagreed at the base (#793), every plinth uses: that copier
+# did not leave in conflict must now name the pin the command carried: copier
+# applies a diff, and a hand-edited line is not what it rendered. Read by the
+# checker, as the pin items read them (a `run: |` block's text is not a
+# uses:); a uses: it cannot read counts as not named. Fails closed.
+if [ -n "$moves" ]; then
+  want_pin="$(sed -nE 's/.* --data plinth_sha=([0-9a-fA-F]{40})( .*)?$/\1/p' <<<"$cmd" | tr 'A-F' 'a-f')"
+  left="$(conflicts_in "$wt" "$base")"; stale=""
+  found="$(python3 "$checker" --root "$wt" --print-plinth-pins)" || found="? the workflows could not be read"
+  while IFS=' ' read -r file ref; do
+    [ -n "$file" ] || continue
+    grep -qxF -- ".github/workflows/$file" <<<"$left" && continue
+    case "$ref" in
+      "unread line "*) stale="$stale  .github/workflows/$file has a uses: at ${ref#unread } that cannot be read"$'\n' ;;
+      *) [ "$(tr 'A-F' 'a-f' <<<"$ref")" = "$want_pin" ] || stale="$stale  .github/workflows/$file calls $ref, not $want_pin"$'\n' ;;
+    esac
+  done <<<"$found"
+  if [ -n "$stale" ]; then
+    printf 'template-update: after copier, a plinth uses: line does not name the pin the command carried:\n%s' "$stale" >&2
+    die "nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $(q "$wt") && git branch -D $branch"
+  fi
+fi
 
 # The glossary's name follows the template (#714). copier never touches the
 # repository's own glossary, a file /domain-modeling wrote, so when the
@@ -433,6 +484,7 @@ sf="$(state_file "$wt")"
   printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin=%s\npin_note=%s\n' \
     "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin" "$pin_note"
   while IFS= read -r p; do [ -n "$p" ] && printf 'renamed=%s\n' "$p"; done <<<"$renamed"
+  while IFS= read -r p; do [ -n "$p" ] && printf 'moves=%s\n' "$p"; done <<<"$moves"
   while IFS= read -r p; do [ -n "$p" ] && printf 'not_renamed=%s\n' "$p"; done <<<"$not_renamed"
   conflicts="$(conflicts_in "$wt" "$base")"
   while IFS= read -r p; do [ -n "$p" ] && printf 'conflict=%s\n' "$p"; done <<<"$conflicts"

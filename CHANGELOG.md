@@ -26,6 +26,17 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:template-update` no longer stops when `ci.yml`'s plinth pin was
+  raised by hand and `label.yml` still calls an ancestor of that commit: it
+  keeps the `ci` job's commit, moves `label.yml` forward to it, and the plan
+  and the pull request say which file moved from which commit to which.
+  After copier it stops if a plinth `uses:` does not name that pin. When
+  another file is newer than `ci.yml`, or the two commits have diverged, it
+  still stops, and now names each file with its commit, says which is the
+  newer when GitHub's compare tells, and prints the line `/plinth:floor-check`
+  prints to make them one. The release notes and the release how-to that tell
+  a consumer to raise the pin name every `coolbress/plinth` `uses:` line
+  (`ci.yml` and `label.yml`) (#793).
 - `tests/install-smoke.sh`, interrupted, repeats its KILL and remove, about
   1 s at most, until nothing names the fresh config directory and it is
   still gone 0.1 s later. A process forked while the KILL went down its
@@ -65,8 +76,9 @@ request, a tag ruleset and read-only Actions token settings, `cli` logs on
 stderr, and an `image` check that fails on an old high or critical finding.
 `/plinth:floor-check` holds a project to the answers it was made with, and
 `ci / pr-title` fails a description whose prose would close an issue. A
-consumer gets the CI change by raising its pin of the reusable workflow, and
-the template's through `/plinth:template-update`.
+consumer gets the CI change by raising every `coolbress/plinth` `uses:` line
+(`ci.yml` and `label.yml`), and the template's through
+`/plinth:template-update`.
 
 tested with plinth-template v1.37.0
 
@@ -237,7 +249,8 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6604409
 when it names one, instead of overriding it with `--source=src`: a repository
 with a second package outside `src/` can now have that package's changed lines
 measured. A project with no configured source is measured as before. A
-consumer gets it by raising its pin of the reusable workflow.
+consumer gets it by raising every `coolbress/plinth` `uses:` line (`ci.yml`
+and `label.yml`).
 
 tested with plinth-template v1.33.0
 
@@ -248,8 +261,9 @@ tested with plinth-template v1.33.0
   `setup.cfg` or `tox.ini`), when it names one: the step no longer passes a
   `--source` that overrides it, so a second package outside `src/` can be
   measured. Without one it measures `src`, else the whole project, as before.
-  The GitLab pipeline does the same. A consumer gets it by raising its pin of
-  the reusable workflow (#761).
+  The GitLab pipeline does the same. A consumer gets it by raising every
+  `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`), or on GitLab
+  the include and its checksum (#761).
 
 ## [2.22.0] - 2026-10-31
 
