@@ -29,21 +29,23 @@ not been measured.
      usage; a spend cap budget, where Google offers one, pauses the services
      until you lift it
      ([budgets](https://docs.cloud.google.com/billing/docs/how-to/budgets)).
-   - Render cannot stop spending on the whole account: an account-level
-     spending limit is a request on its feedback board
+   - Render's docs describe no limit that stops spending on the whole
+     account, and an account-level spending limit is a request on its
+     feedback board
      ([account spending limits](https://feedback.render.com/features/p/account-spending-limits)).
-     Its one spend limit is on build pipeline minutes, and reaching it stops
-     builds for the rest of the month
-     ([build pipeline](https://render.com/docs/build-pipeline)); outbound
-     bandwidth past the included amount is billed per GB with no limit to set
-     ([outbound bandwidth](https://render.com/docs/outbound-bandwidth)).
-     The nearest controls are the plans' fixed monthly prices, which
-     the template's `render.yaml` sets, and the database disk: `diskSizeGB: 1`
-     there keeps it at the size the price includes, and a new database's
-     storage autoscaling is off when `storageAutoscalingEnabled` is left
-     out, as the template leaves it
-     ([Blueprint spec](https://render.com/docs/blueprint-spec)).
-     Check the Billing page yourself after the first month.
+     - Its one documented spend limit is on build pipeline minutes; reaching
+       it stops builds for the rest of the month
+       ([build pipeline](https://render.com/docs/build-pipeline)).
+     - Outbound bandwidth past the included amount is billed per GB, and the
+       page describes no limit to set
+       ([outbound bandwidth](https://render.com/docs/outbound-bandwidth)).
+     - The nearest controls: the plans' fixed monthly prices, which the
+       template's `render.yaml` sets; `diskSizeGB: 1` there, the disk size
+       the database price includes; and storage autoscaling, off for a new
+       database when `storageAutoscalingEnabled` is left out, as the
+       template leaves it
+       ([Blueprint spec](https://render.com/docs/blueprint-spec)).
+     - Check the Billing page yourself after the first month.
 3. Restore once, on purpose, before it matters: roll back one merged change.
    On the merged pull request's page press **Revert**, or run
    `gh pr revert <n>` (gh 2.83.0 or newer); either opens a new pull request
