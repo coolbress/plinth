@@ -890,6 +890,8 @@ UNREAD_LINE = "<unread>"
 # visible after the pull request that set it. The other inputs have no agreed
 # direction of "looser".
 DEFAULT_MAX_DIFF_LINES = 400
+# python-ci.yml's diff-size-exclude default; tests/floor-check-cases.sh holds the two in step.
+DEFAULT_DIFF_SIZE_EXCLUDE = "*.md *.lock *lock.json *lock.yaml *lock.yml LICENSE"
 DEFAULT_SEVERITY = "high"
 
 
@@ -1158,6 +1160,46 @@ def pins_forward(root: Path, network: bool) -> list[tuple[str, str, str]]:
                 return []
             moves.append((f, ref, target))
     return moves
+
+
+def print_diff_size(root: Path) -> int:
+    """--print-diff-size (#795): what ci / diff-size counts against in this
+    checkout, read from the ci job's `with:` as check_caller reads it, each
+    input it does not pass taking plinth's default. Three lines on stdout,
+    `max=<n>`, `exclude=<patterns>` and `root=<working-directory>`, exit 0;
+    otherwise why it is not read on stderr, exit 1: no ci job calling plinth
+    at a full SHA, or one of the three passed as an expression or in a form
+    this reader does not take. template-update.sh measures its own diff with
+    it before opening the pull request."""
+    ci = root / ".github" / "workflows" / "ci.yml"
+    if not ci.is_file():
+        print("no .github/workflows/ci.yml", file=sys.stderr)
+        return 1
+    kind, value, inputs = caller_job(read(ci))
+    if kind != "uses" or not value.lower().startswith(f"{PLINTH_REPO}/"):
+        print(f"the ci job does not call plinth's workflow ({kind}: {value})", file=sys.stderr)
+        return 1
+    if UNREAD_LINE in inputs:
+        print(f"the ci job has a with: line this checker does not read: {inputs[UNREAD_LINE]}", file=sys.stderr)
+        return 1
+    got = {"max-diff-lines": str(DEFAULT_MAX_DIFF_LINES), "diff-size-exclude": DEFAULT_DIFF_SIZE_EXCLUDE,
+           "working-directory": "."}
+    for name in got:
+        if name not in inputs:
+            continue
+        v = inputs[name]
+        if v is None or "${{" in v:
+            print(f"the ci job passes {name} in a form not read (an expression, or one this checker does not read)",
+                  file=sys.stderr)
+            return 1
+        got[name] = v
+    if not re.fullmatch(r"-?\d+", got["max-diff-lines"]):
+        print(f"the ci job passes max-diff-lines: {got['max-diff-lines']}: not read as a whole number", file=sys.stderr)
+        return 1
+    print(f"max={got['max-diff-lines']}")
+    print(f"exclude={got['diff-size-exclude']}")
+    print(f"root={got['working-directory']}")
+    return 0
 
 
 def print_plinth_pins(root: Path) -> int:
@@ -3945,6 +3987,9 @@ def main() -> int:
                          "gh accounts, git helpers, ~/.netrc; and a production database URL in the environment, "
                          ".env* files or the env of .claude/settings*.json")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--print-diff-size", action="store_true",
+                    help="print what ci / diff-size counts against here, from the ci job's with: or plinth's defaults, "
+                         "as max=, exclude= and root= lines, and exit 0 (1, with the reason, when not read) (#795)")
     ap.add_argument("--print-plinth-pins", action="store_true",
                     help="print each coolbress/plinth uses: of the workflow files as `<file> <ref>`, or `<file> unread "
                          "line <n>` for a uses: this checker cannot read, and exit 0 (#793)")
@@ -3976,6 +4021,8 @@ def main() -> int:
         ap.error("--plinth-pin needs --print-update-command")
     if a.print_plinth_pins:
         return print_plinth_pins(root)
+    if a.print_diff_size:
+        return print_diff_size(root)
     if a.print_update_command:
         return print_update_command(root, a.plinth_pin, not a.no_network, a.host,
                                     a.repo.split("/")[0] if a.repo else None)

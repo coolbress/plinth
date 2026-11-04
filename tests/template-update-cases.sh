@@ -77,6 +77,17 @@ for a in "$@"; do [ "$prev" = --vcs-ref ] && ref="$a"; prev="$a"; done
 [ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
 printf 'template line\n' >> AGENTS.md
+# MOCK_BIG: an update over ci / diff-size's default limit of 400, mostly
+# issue forms (#795): 380 lines of form, 40 of source, 500 of docs (excluded).
+if [ "${MOCK_BIG:-}" = three ]; then
+  # Three files of 350 lines: a split three ways (review on #801).
+  mkdir -p src; for f in a b c; do for i in $(seq 1 350); do echo "$f$i = $i"; done > "src/$f.py"; done
+elif [ -n "${MOCK_BIG:-}" ]; then
+  mkdir -p .github/ISSUE_TEMPLATE src
+  for i in $(seq 1 380); do echo "  - label: line $i"; done > .github/ISSUE_TEMPLATE/bug.yml
+  for i in $(seq 1 40); do echo "x$i = $i"; done > src/extra.py
+  for i in $(seq 1 500); do echo "doc $i"; done >> CONTRIBUTING.md
+fi
 # MOCK_PINS=move: every plinth uses: now names the plinth_sha the line
 # carries, as the template renders it (#793); unset, the workflows are left
 # as they were.
@@ -798,6 +809,99 @@ git -C "$repo" add -A && git -C "$repo" commit -q -m label && git -C "$repo" pus
 run
 if [ "$rc" = 0 ] && ! grep -qE "^Moves:|workflow pins disagree" <<<"$out"; then ok "ci.yml and label.yml at one commit: no Moves line, no stop"
 else bad "plan, pins agree (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── over ci / diff-size's limit (#795) ───────────────────────────────────
+# The update counts its own diff before pushing, as ci / diff-size does with
+# the ci job's inputs; over the limit it pushes nothing and proposes a split.
+big() { # <fixture> [env...]: --apply with MOCK_BIG; sets out, rc, wt
+  local name="$1"; shift
+  out="$(cd "$repo" && env MOCK_BIG=1 "$@" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+  wt="$(wt_of "$name")"
+}
+fixture big-split; reset_logs; big big-split
+# Counted as ci / diff-size counts: CONTRIBUTING.md (docs) excluded; the
+# forms, the source, the answers file and AGENTS.md's one line are not.
+if [ "$rc" = 4 ] && grep -q "^Over the limit: 422 reviewable lines, against the limit of 400" <<<"$out" \
+   && ! git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null && ! grep -q "pr create" "$work/gh.log"
+then ok "over the limit: exit 4, the count named, nothing pushed, no pull request"
+else bad "over the limit (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+first="$(sed -n '/^Proposed split/,/^This update keeps/p' <<<"$out")"
+rest="$(sed -n '/^This update keeps/,/^$/p' <<<"$out")"
+if grep -qxF "  .github/ISSUE_TEMPLATE/bug.yml" <<<"$first" && grep -q "first a pull request with these paths (" <<<"$first" \
+   && grep -qF "  .copier-answers.yml (" <<<"$rest" && ! grep -q "copier-answers" <<<"$first"
+then ok "the split puts the issue forms first and keeps .copier-answers.yml in this update"
+else bad "split paths"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if git -C "$wt" log -1 --format=%s | grep -q "^chore(template): update plinth-template" && [ -z "$(git -C "$wt" status --porcelain)" ]
+then ok "the update is a local commit, the worktree clean, so the default branch can be merged into it later"
+else bad "local commit"; fi
+# Run the proposal as printed: the first part, merged into main, then this one.
+( set -e; while IFS= read -r l; do eval "$l"; done < <(sed -n '/^To make the first/,/^then open/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+p1="$wt-part-1"
+if [ "$(git -C "$p1" diff --name-only HEAD~1 HEAD)" = ".github/ISSUE_TEMPLATE/bug.yml" ] \
+   && git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref-part-1" >/dev/null
+then ok "run as printed, the first part carries the forms alone, pushed to its own branch"
+else bad "first part"; git -C "$p1" show --stat HEAD 2>&1 | sed 's/^/        /'; fi
+git -C "$BARE" update-ref refs/heads/main "$(git -C "$p1" rev-parse HEAD)"   # the first part is merged
+reset_logs
+( while IFS= read -r l; do eval "$l"; done < <(sed -n '/^Once it is merged/,/^$/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "counted here before pushing: 42 reviewable lines, within the limit of 400" <<<"$body" \
+   && ! grep -q "bug.yml" <<<"$body"
+then ok "after the first part is merged, --finish counts from the new merge base and opens the rest"
+else bad "second part (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; printf '%s\n' "$body" | sed 's/^/        /'; fi
+
+# Split three ways: each proposal names a branch and worktree not yet used.
+fixture big-three; reset_logs; big big-three MOCK_BIG=three
+part() { # <n>: run the printed first-part lines, merge that part into main, follow it, --finish
+  ( while IFS= read -r l; do eval "$l"; done < <(sed -n '/^To make the first/,/^then open/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+  git -C "$BARE" update-ref refs/heads/main "$(git -C "$wt-part-$1" rev-parse HEAD 2>/dev/null)" 2>/dev/null
+  ( while IFS= read -r l; do eval "$l"; done < <(sed -n '/^Once it is merged/,/^$/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+  reset_logs; out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
+}
+first_cmd="$(grep -m1 'worktree add' <<<"$out")"
+part 1
+if [ "$rc" = 4 ] && grep -q "worktree add --no-track -b chore/template-$target_ref-part-2 " <<<"$out" && grep -q -- "-part-1 " <<<"$first_cmd"
+then ok "a split three ways: after the first part, the next proposal names part-2, not the part-1 still there"
+else bad "three-way split, second proposal (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+part 2
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && [ "$(git -C "$wt-part-2" diff --name-only HEAD~1 HEAD 2>/dev/null | wc -l | tr -d ' ')" = 1 ]
+then ok "and run as printed, the second part is made and the rest opens"
+else bad "three-way split, end (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+fixture big-anyway; reset_logs; big big-anyway
+reset_logs; run --finish "$wt" --over-limit
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "422 reviewable lines, over the limit of 400" <<<"$body" \
+   && grep -qF "Opened as it is on \`--over-limit\`" <<<"$body"
+then ok "--over-limit opens it as it is, and the description says it is over"
+else bad "--over-limit (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+run --apply "$(git -C "$BARE" rev-parse main)" --over-limit
+if [ "$rc" = 2 ]; then ok "--over-limit is for --finish only, after the count was read"; else bad "--over-limit with --apply (rc=$rc)"; fi
+
+# The project's own inputs: its diff-size-exclude leaves out the forms, its
+# max-diff-lines of 0 measures only, an expression is not read.
+own() { # <fixture> <with: lines>
+  fixture "$1"
+  printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n%b\n' "$sha40" "$2" > "$repo/.github/workflows/ci.yml"
+  git -C "$repo" add -A && git -C "$repo" commit -q -m own && git -C "$repo" push -q origin main
+  reset_logs; big "$1"; body="$(cat "$work/gh.log.body" 2>/dev/null)"
+}
+own big-exclude '      diff-size-exclude: "*.md .github/ISSUE_TEMPLATE/*"'
+if [ "$rc" = 0 ] && grep -qF "42 reviewable lines, within the limit of 400 (excluded: \`*.md .github/ISSUE_TEMPLATE/*\`)" <<<"$body"
+then ok "a project's own diff-size-exclude is the one counted with"
+else bad "own exclude (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+own big-zero '      max-diff-lines: 0'
+if [ "$rc" = 0 ] && grep -qF "422 reviewable lines; max-diff-lines is 0, so it is measured, not enforced" <<<"$body"
+then ok "max-diff-lines: 0: counted, never a stop"
+else bad "max 0 (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+own big-expr '      max-diff-lines: ${{ vars.MAX }}'
+if [ "$rc" = 0 ] && grep -qF "was not counted here before pushing (the ci job passes max-diff-lines in a form not read" <<<"$body"
+then ok "an expression is not read: no stop, and the description says it was not counted"
+else bad "expression (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+own big-limit '      max-diff-lines: 500'
+if [ "$rc" = 0 ] && grep -qF "422 reviewable lines, within the limit of 500" <<<"$body"
+then ok "a project's own max-diff-lines is the limit counted against"
+else bad "own max (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

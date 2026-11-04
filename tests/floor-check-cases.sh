@@ -2100,6 +2100,36 @@ pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\
 fixed "the same SHA on another action in label.yml is left as it was" "someone/fork@$sha1\$"
 fixed "while the plinth reference moves" "pr-label\.yml@$sha40\$"
 
+# --print-diff-size (#795): what ci / diff-size counts against, from the ci
+# job's with: or plinth's defaults, for template-update.sh to count its own
+# diff before it pushes. The defaults are python-ci.yml's own.
+wf_default() { # <input name>: its default in python-ci.yml
+  awk -v n="      $1:" '$0 == n { f = 1; next } f && /^        default:/ { sub(/^        default: */, ""); gsub(/^"|"$/, ""); print; exit }' "$root/.github/workflows/python-ci.yml"
+}
+dsz="$(python3 "$checker" --root "$good" --print-diff-size 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && [ "$dsz" = "$(printf 'max=%s\nexclude=%s\nroot=.' "$(wf_default max-diff-lines)" "$(wf_default diff-size-exclude)")" ]
+then ok "no with: inputs: --print-diff-size prints python-ci.yml's own defaults"
+else bad "--print-diff-size defaults (rc=$rc): '$dsz' vs max $(wf_default max-diff-lines), exclude $(wf_default diff-size-exclude)"; fi
+dcopy="$work/diff-size"
+dsize() { # <with: lines> -- sets dsz, rc
+  rm -rf "$dcopy"; cp -R "$good" "$dcopy"
+  printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n%b\n' "$sha40" "$1" > "$dcopy/.github/workflows/ci.yml"
+  dsz="$(python3 "$checker" --root "$dcopy" --print-diff-size 2>&1)"; rc=$?
+}
+dsize '      max-diff-lines: 250\n      diff-size-exclude: "*.md docs/**"\n      working-directory: app'
+if [ "$rc" = 0 ] && [ "$dsz" = "$(printf 'max=250\nexclude=*.md docs/**\nroot=app')" ]; then ok "the ci job's own three inputs are the ones printed"
+else bad "own inputs (rc=$rc): $dsz"; fi
+dsize '      diff-size-exclude: ${{ vars.EXCLUDE }}'
+if [ "$rc" = 1 ] && grep -q "passes diff-size-exclude in a form not read" <<<"$dsz"; then ok "an expression is not read: exit 1, named"
+else bad "expression (rc=$rc): $dsz"; fi
+dsize '      max-diff-lines: lots'
+if [ "$rc" = 1 ] && grep -q "not read as a whole number" <<<"$dsz"; then ok "a max-diff-lines that is no whole number: exit 1"
+else bad "not a number (rc=$rc): $dsz"; fi
+rm -rf "$dcopy"; cp -R "$good" "$dcopy"; printf 'jobs:\n  ci:\n    uses: someone/else/.github/workflows/python-ci.yml@%s\n' "$sha40" > "$dcopy/.github/workflows/ci.yml"
+dsz="$(python3 "$checker" --root "$dcopy" --print-diff-size 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -q "does not call plinth's workflow" <<<"$dsz"; then ok "a ci job that does not call plinth: exit 1, nothing printed as if read"
+else bad "not plinth (rc=$rc): $dsz"; fi
+
 # The template-update skill (#232) runs the command stage 1 prints, not a
 # second construction of it: --print-update-command prints that same line
 # and nothing else, or a reason on stderr and exit 1. `--defaults` is in it

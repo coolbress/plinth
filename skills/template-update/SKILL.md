@@ -118,6 +118,18 @@ the plan; then show the plan again and ask again.
   again on the run that finishes.
   `--resolved` is a record for the description, not a check, so it never
   lets an unresolved file through.
+- **Exit 4, over the diff limit**: counted as `ci / diff-size` counts, with
+  this repository's own `max-diff-lines` and `diff-size-exclude`, the update
+  is over the limit. It is a commit in the worktree and nothing is pushed.
+  Show the count and the proposed split: the paths of a first pull request
+  that fits (issue forms first), and this update with the rest, which keeps
+  `.copier-answers.yml`. Recommend the split, and run its lines only on the
+  user's word. They make the first part from the update's own changes, and
+  a person opens and merges its pull request. Then merge the default branch
+  into this worktree and run `--finish` again; it counts from the new merge
+  base. The other choice is `--finish <worktree> --over-limit`: the pull
+  request opens as it is, and `ci / diff-size` stays red on it until it is
+  split, since an approval does not lift the size limit (#795).
 - **Exit 1**: it stopped. Show the message; it names what to do. When the
   push or the pull request failed, that is the same `--finish` line again,
   which pushes the commit already made and does not make a second one. Do not
