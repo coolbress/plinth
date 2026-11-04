@@ -278,10 +278,10 @@ a private repository's missing CodeQL rule). In that job's summary their
 annotated; the other `not yet confirmed` lines are. This skill's own run
 never prints the count; without the flag those reads are SKIPs.
 
-## What five of the checks read, and what they do not
+## What the static checks read, and what they do not
 
-Five checks are static reads with a stated scope (#95, the predicates #42
-left open; the plinth pins, #447; the release workflow, #703). A finding from any of them is a WARN, never a FAIL, so a
+These checks are static reads with a stated scope (#95, the predicates #42
+left open; the plinth pins, #447; the release workflow, #703; render.yaml, #811). A finding from any of them is a WARN, never a FAIL, so a
 repository that passed before they existed still passes; a PASS from them
 covers only what is listed here.
 
@@ -292,6 +292,7 @@ covers only what is listed here.
 | Plinth pins agree | The same `uses:` lines as Action pins, those of `coolbress/plinth/...` at a full commit SHA: two or more SHAs across the files (`ci.yml` and `label.yml` are rendered at one commit; a hand edit moves one) are a WARN naming each file with its SHA, and the INFO under it is the `sed` line that moves each lagging file's plinth references, and nothing else in it, to the SHA the `ci` job calls. The owner, repository and SHA compare in any letter case, as GitHub reads them. One SHA, or none outside the `ci` job, prints nothing, whatever the template state | A plinth `uses:` on a tag or branch (the Action pins WARN, not repeated). A `uses` it cannot read is a SKIP naming the file and line, unless the readable ones already disagree. Not a FAIL: `label / label` is not a required check |
 | Release workflow | For a `cli`, `library`, `backend` or `data-ml` on GitHub, `.github/workflows/release.yml` at the repository root (also with `--project`) as text, comments dropped: present (plinth-template 1.29.0 renders it for `cli` and `library`, 1.30.0 for `backend`, 1.31.0 for `data-ml`); every line of its `on:` block is `push:`, `tags:` or a tag pattern under it, so another event, another filter or a key it cannot read (a quoted one) is a WARN naming that line; no `secrets.<name>` other than `GITHUB_TOKEN`, and no `password:`. For `data-ml`, the files its `ASSETS:` line names: one ending in `.pkl`, `.pickle`, `.joblib` or `.pt`, in any letter case, is a WARN; no such line, or a value that is not one line of plain file names (a folded or literal block such as `>-`, a value continued on a deeper-indented line, a second `ASSETS:` line, an expression, a comment), is a SKIP | Whether PyPI has a publisher registered, whether the `pypi` environment exists or what protects it, whether the image was pushed or who can fetch it, whether the release exists or its files match their `SHA256SUMS`, which files a `data-ml` step uploads other than through `ASSETS`, whether the tag-against-version step is still there, what the jobs do. Missing on an instance rendered before the template release that adds it is a WARN whose INFO names the update. On GitLab, an INFO: the template renders no release workflow there. `web` is not asked |
 | Model card | For a `data-ml`, on either host, `MODEL_CARD.md` in the project directory: present (plinth-template 1.31.0 renders it). Missing is a WARN whose INFO names the update | What the card says, whether its personal-data answer is true or filled in, whether the training run fills its results. Other archetypes are not asked |
+| Render Blueprint | `render.yaml` in the project directory, whenever it is there (#811): for a `web` instance hosted on Render, whether it is there at all is the separate `render.yaml present` item; for any other repository it is read when present and nothing is said when it is not. Read as block YAML with the standard library: each `type: web` service has a `healthCheckPath` and `autoDeployTrigger: checksPass`, each database names a `plan` other than `free` (Render deletes a free Postgres after 30 days, with no backups), and no `envVars` entry, under a service or an `envVarGroups` group, whose key names a secret (`SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`, `PRIVATE_KEY`, `CREDENTIAL`, `DATABASE_URL`, `..._DSN`) carries a literal `value:`. Each gap is a WARN with one fix line, one per service or database that has it, and never a FAIL. The name match errs toward a WARN: `TOKEN_TTL_SECONDS` with a literal value is one. A file with no web service or no `envVars` says so as an INFO, not a PASS | Dashboard-only settings: Blueprint Auto Sync, health alerts, spend limits. Whether the plan named exists, whether the path answers, a secret under a name the pattern does not match. A file in a form the reader does not read (a flow collection other than `[]` or `{}`, a block scalar, an anchor or alias, a merge key, a nested list, a plain value holding a colon and a space, a tab in the indentation) is one SKIP for the whole file, never a PASS. Railway and Fly files are not read |
 | JSON logs | For a service archetype (`backend`, `data-ml`, `web`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
 
 ## The ci job
@@ -346,8 +347,9 @@ request: here, run by a person, or by the e2e runner.
 One item reads whether GitHub's push protection is on (#303): it refuses a
 push that carries a secret in a format GitHub knows, where `ci / secrets`
 reports one only after it is on GitHub. On is a PASS that says that much and
-no more: the person pushing can let a secret through, and a format GitHub
-does not know passes. Off is a WARN, never a FAIL, and the INFO line under it
+no more, and it says so: anyone with write access can push a secret past
+the block by giving a reason, and a format GitHub does not know passes. The
+WARN's fix lines say the same of the setting once it is on. Off is a WARN, never a FAIL, and the INFO line under it
 is one `gh api` call that sends what the door sends. It needs repository
 administration, and on a private repository GitHub Secret Protection too:
 relay it as printed for the user to run, behind `with-admin-token.sh` in a
@@ -355,7 +357,11 @@ separate terminal when their login cannot administer the repository, and
 never run it. The status
 sits in the repository's security settings, which a token without repository
 administration does not get: that is a SKIP, and so is a repository GitHub
-reports no status for. `ci / floor-check` passes `--actions-token`, which
+reports no status for. A private repository that answers no settings even
+to a login that administers it is a SKIP of its own: GitHub Secret Protection
+not on its plan, or a token without the Administration permission (measured
+on a personal account's private repository, #811; the login's role is in the
+answer, the token's permissions are not). `ci / floor-check` passes `--actions-token`, which
 turns the first of those into an INFO, because the Actions token never gets
 them and no consumer could clear that SKIP: this skill, with the user's
 login, is the run that reads the item. Never pass that flag here.

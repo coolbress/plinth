@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:floor-check` reads `render.yaml` when a repository has one, made
+  from the template or not: a web service with no `healthCheckPath`, one
+  that does not wait for the checks (`autoDeployTrigger` other than
+  `checksPass`), a database on plan `free` or naming none (Render deletes a
+  free Postgres after 30 days, and it has no backups), and a secret-named
+  `envVars` key with a literal `value:` are each a WARN with one fix line.
+  A file in a form its reader does not read is a SKIP, never a pass. A
+  repository without the file reports nothing new (#811).
+
 ### Changed
 
 - `docs/how-to/set-four-things-by-hand.md` step 2 no longer asks every paid
@@ -22,6 +33,13 @@ pull requests and have no tag.
   autoscaling, which is off for a new database when left out. A new "After
   the first deploy" list adds an uptime monitor on `/healthz` and an error
   tracker, each with a free plan and where its key lives (#807).
+- `/plinth:floor-check`'s push protection lines say that anyone with write
+  access can still push a secret past the block by giving a reason: on the
+  PASS, and under the WARN's call that turns it on (#811).
+- A private repository that answers no security settings even to a login
+  that administers it is a push protection SKIP of its own: Secret
+  Protection not on its plan, or a token without the Administration
+  permission. It used to say only that the token does not read them (#811).
 
 ## [2.25.1] - 2026-11-04
 

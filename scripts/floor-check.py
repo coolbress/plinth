@@ -43,6 +43,12 @@ the Actions token never gets them, and the skill, run by a person, does.
 The summary line counts such INFOs on their own, `K left to
 /plinth:floor-check`, printed only when K is above 0 (#436).
 
+render.yaml is read whenever it is there (#811), WARN-only: each web
+service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
+other than free, and no literal value for a secret-named envVars key. A form
+the small block-YAML reader does not read is one SKIP for the file. Without
+the file nothing is said, except on a Render web instance, which needs it.
+
 Two more WARN-only items read settings the same way (#747): the Actions
 allowlist against the `uses:` lines of the local workflows (an action it
 refuses ends its run in startup_failure), and private vulnerability
@@ -1947,10 +1953,16 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
         ok((project / "uv.lock").is_file(), "uv.lock committed",
            "uv.lock missing: CI runs `uv sync --locked`")
 
+    answers = copier_answers(project) or {}
+    on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
+    # A render.yaml outside a Render web instance (another archetype, no
+    # template, a hand-written one) is still what Render deploys from (#811):
+    # read it when it is there, and say nothing when it is not.
+    if not on_render and (project / "render.yaml").is_file():
+        check_render_blueprint(project / "render.yaml")
     if archetype is None:
         result("SKIP", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")
         return
-    answers = copier_answers(project) or {}
     if archetype not in CONDITIONAL_ARCHETYPES:
         result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
         if archetype in PACKAGE_ARCHETYPES:
@@ -1959,7 +1971,6 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
             # --host before the answers (#720 review).
             check_release_workflow(root, host, archetype)
         return
-    on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
     result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
                    + (", and render.yaml" if on_render else ""))
     check_dockerfile(project)
@@ -2067,6 +2078,194 @@ def check_render_yaml(project: Path) -> None:
     if not ok((project / "render.yaml").is_file(), "render.yaml present",
               "render.yaml missing: the web archetype deploys from it, after the checks pass"):
         result("INFO", "  restore it from the default branch: git restore --source=origin/main -- render.yaml")
+        return
+    check_render_blueprint(project / "render.yaml")
+
+
+class Unreadable(Exception):
+    """A YAML form the block reader below does not read."""
+
+
+def drop_comment(line: str) -> str:
+    """The line without a trailing comment: a `#` after whitespace, outside a
+    quoted value. A value is quoted only when its quote opens it, after `: `
+    or `- ` (an apostrophe inside a word, `don't`, opens nothing), and `''`
+    inside single quotes is an escaped quote."""
+    quote, i = None, 0
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == quote and quote == "'" and line[i + 1:i + 2] == "'":
+                i += 1
+            elif c == quote:
+                quote = None
+            elif c == "\\" and quote == '"':
+                i += 1
+        elif c in "'\"" and re.fullmatch(r"\s*(- )*([^\s].*:\s+)?", line[:i]):
+            quote = c
+        elif c == "#" and (i == 0 or line[i - 1] in " \t"):
+            return line[:i].rstrip()
+        i += 1
+    return line
+
+
+def read_block_yaml(text: str):
+    """The block-style YAML a Render Blueprint is written in: mappings, lists
+    and plain or quoted scalars, standard library only. Anything else (a flow
+    collection other than `[]` or `{}`, a block scalar, an anchor, an alias,
+    a merge key, a tab, a second document) raises Unreadable rather than being
+    read as something it is not."""
+    lines: list[tuple[int, str]] = []
+    for raw in text.splitlines():
+        if "\t" in raw[:len(raw) - len(raw.lstrip())]:
+            raise Unreadable("a tab in the indentation")
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped in ("---", "..."):
+            if lines:
+                raise Unreadable("more than one document")
+            continue
+        body = drop_comment(raw.rstrip())
+        lines.append((len(body) - len(body.lstrip()), body.strip()))
+
+    def scalar(v: str):
+        if v in ("[]", "{}"):
+            return [] if v == "[]" else {}
+        # A nested list (`- - x`) or a plain value holding `: ` is not a
+        # string this reader may take as one.
+        if v[0] in "[{|>&*!%@`" or v.startswith("- ") or (v[0] not in "'\"" and ": " in v):
+            raise Unreadable(f"the value {v!r}")
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+            return v[1:-1]
+        if v[0] in "'\"":
+            raise Unreadable(f"the value {v!r}")
+        return v
+
+    def block(i: int, indent: int):
+        if lines[i][1].startswith("- ") or lines[i][1] == "-":
+            items = []
+            while i < len(lines) and lines[i][0] == indent and (lines[i][1].startswith("- ") or lines[i][1] == "-"):
+                rest = lines[i][1][1:].lstrip()
+                if not rest:
+                    if i + 1 < len(lines) and lines[i + 1][0] > indent:
+                        node, i = block(i + 1, lines[i + 1][0])
+                    else:
+                        node, i = None, i + 1
+                elif re.match(r"""^([\w.-]+|"[^"]*"|'[^']*'):(\s|$)""", rest):
+                    # `- key: v` opens a mapping whose keys sit where `key` does.
+                    lines[i] = (indent + len(lines[i][1]) - len(rest), rest)
+                    node, i = block(i, lines[i][0])
+                else:
+                    node, i = scalar(rest), i + 1
+                items.append(node)
+            return items, i
+        mapping = {}
+        while i < len(lines) and lines[i][0] == indent and not lines[i][1].startswith("- "):
+            m = re.fullmatch(r"""([\w.-]+|"[^"]*"|'[^']*'):(?:\s+(.*))?""", lines[i][1])
+            if not m:
+                raise Unreadable(f"the line {lines[i][1]!r}")
+            key = m.group(1).strip("'\"")
+            if key in mapping:
+                raise Unreadable(f"the key {key} twice")
+            i += 1
+            if m.group(2):
+                mapping[key] = scalar(m.group(2))
+            elif i < len(lines) and (lines[i][0] > indent
+                                     or (lines[i][0] == indent and lines[i][1].startswith("-"))):
+                mapping[key], i = block(i, lines[i][0])
+            else:
+                mapping[key] = None
+        return mapping, i
+
+    if not lines:
+        return {}
+    if lines[0][0] != 0:
+        raise Unreadable("an indented first line")
+    doc, end = block(0, 0)
+    if end != len(lines):
+        raise Unreadable(f"the line {lines[end][1]!r}")
+    return doc
+
+
+# An envVars key whose name says it holds a secret (#811). A literal `value:`
+# for one sits in the repository, and in every clone of it.
+SECRET_NAME = re.compile(r"SECRET|PASSWORD|PASSWD|TOKEN|API_?KEY|PRIVATE_?KEY|CREDENTIAL|DATABASE_URL|_DSN$",
+                         re.IGNORECASE)
+
+
+def check_render_blueprint(path: Path) -> None:
+    """What a Render Blueprint says about the deploy (#811): every web service
+    has a health check and deploys only after the checks pass, every database
+    is on a paid plan (Render deletes a free Postgres after 30 days, and it
+    has no backups), and no secret-named variable carries a literal value.
+    plinth-template's render.yaml sets all four; this catches a file edited
+    away from them, or one not made from the template. Each gap is a WARN with
+    one fix line, never a FAIL; a file this reader does not read is a SKIP.
+    Dashboard-only settings (Blueprint Auto Sync, monitors, spend) are not in
+    the file and not read."""
+    try:
+        doc = read_block_yaml(read(path))
+    except Unreadable as e:
+        result("SKIP", f"render.yaml not read ({e} is not a form this checker reads): "
+                       "health check, deploy trigger, database plan and secret values not verified")
+        return
+    if not isinstance(doc, dict):
+        result("SKIP", "render.yaml not read (it is not a mapping): "
+                       "health check, deploy trigger, database plan and secret values not verified")
+        return
+
+    def entries(key: str) -> list:
+        value = doc.get(key)
+        return [e for e in value if isinstance(e, dict)] if isinstance(value, list) else []
+
+    def name(entry: dict, i: int) -> str:
+        given = entry.get("name")
+        return given if isinstance(given, str) else f"#{i + 1}"
+
+    webs = [(name(s, i), s) for i, s in enumerate(entries("services")) if s.get("type") == "web"]
+    if not webs:
+        result("INFO", "render.yaml declares no web service: health check and deploy trigger not read")
+    for svc, s in webs:
+        path_ = s.get("healthCheckPath")
+        if isinstance(path_, str) and path_.startswith("/"):
+            result("PASS", f"render.yaml: web service {svc} has a health check (healthCheckPath: {path_})")
+        else:
+            result("WARN", f"render.yaml: web service {svc} has no healthCheckPath: Render sends traffic to a "
+                           "new deploy without asking it whether it started")
+            result("INFO", "  add healthCheckPath: /healthz to the service (the template's route that answers "
+                           "without touching the database)")
+        trigger = s.get("autoDeployTrigger")
+        if trigger == "checksPass":
+            result("PASS", f"render.yaml: web service {svc} deploys only after the checks pass "
+                           "(autoDeployTrigger: checksPass)")
+        else:
+            said = f"autoDeployTrigger: {trigger}" if isinstance(trigger, str) else "no autoDeployTrigger"
+            result("WARN", f"render.yaml: web service {svc} deploys without waiting for the checks ({said})")
+            result("INFO", "  set autoDeployTrigger: checksPass on the service")
+    for i, d in enumerate(entries("databases")):
+        db, plan = name(d, i), d.get("plan")
+        if isinstance(plan, str) and plan and plan.lower() != "free":
+            result("PASS", f"render.yaml: database {db} is on a paid plan ({plan})")
+        else:
+            said = f"is on plan {plan}" if isinstance(plan, str) and plan else "names no plan, so it is not read as a paid one"
+            result("WARN", f"render.yaml: database {db} {said}: Render deletes a free Postgres after 30 days, "
+                           "and it has no backups")
+            result("INFO", "  set plan: to a paid one, as the template's plan: 0.1c-256mb (about US $6 a month)")
+    # Under a service, or under a group several services share.
+    env = [v for h in entries("services") + entries("envVarGroups")
+           for v in (h.get("envVars") if isinstance(h.get("envVars"), list) else [])
+           if isinstance(v, dict) and isinstance(v.get("key"), str)]
+    literal = sorted({v["key"] for v in env if SECRET_NAME.search(v["key"]) and "value" in v})
+    if not env:
+        result("INFO", "render.yaml declares no envVars entries: secret values not read")
+    elif literal:
+        result("WARN", f"render.yaml: secret-named envVars set with a literal value ({', '.join(literal)}): "
+                       "the value sits in the repository and in every clone of it")
+        result("INFO", "  set each with sync: false (typed in Render's dashboard), generateValue: true or "
+                       "fromDatabase instead, then change the exposed value where it is used")
+    else:
+        result("PASS", "render.yaml: no secret-named envVars entry carries a literal value")
 
 
 # The places whose README section tells a person to set up HTTPS, backups and
@@ -2604,6 +2803,16 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
         result("INFO", "push protection is not read here: the Actions token does not get the repository's security "
                        "settings; /plinth:floor-check reads it with a person's login", deferred=True)
         return
+    perms = meta.get("permissions")
+    if security is None and is_private(meta) and isinstance(perms, dict) and perms.get("admin") is True:
+        # Measured on a personal account's private repository (#811): GitHub
+        # leaves the settings out even for its administrator when no
+        # security product is on offer there. Still not read, so a SKIP.
+        result("SKIP", "push protection not verified (GitHub answers no security settings for this private "
+                       "repository to a login that administers it: GitHub Secret Protection (a paid product for "
+                       "Team and Enterprise) not on its plan, or a token without the Administration permission. "
+                       "In its place: `ci / secrets`, which finds a secret after the push)")
+        return
     if security is None:
         result("SKIP", "push protection not verified (this token does not read the repository's security settings; "
                        "one with repository administration does)")
@@ -2612,7 +2821,8 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
     status = entry.get("status") if isinstance(entry, dict) else None
     protection = product_status(meta, "secret_scanning") if is_private(meta) else "enabled"
     if status == "enabled":
-        result("PASS", "push protection is on: GitHub refuses a push that carries a secret in a format it knows")
+        result("PASS", "push protection is on: GitHub refuses a push that carries a secret in a format it knows; "
+                       "anyone with write access can still push it past the block by giving a reason")
     elif protection == "disabled":
         result("INFO", "push protection is not expected here: GitHub Secret Protection is not enabled on this private "
                        "repository (a paid product for Team and Enterprise), so a push that carries a secret is not "
@@ -2632,6 +2842,8 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
                                                      for k in ("secret_scanning", "secret_scanning_push_protection")}})
         result("INFO", f"  gh api -X PATCH repos/{repo} --input - <<<'{body}'"
                        "   (needs repository administration; on a private repository, GitHub Secret Protection too)")
+        result("INFO", "  once on, anyone with write access can still push a secret past it by giving a reason, "
+                       "and GitHub records who and why")
     else:
         result("SKIP", "push protection not verified (GitHub reports no push protection status for this repository)")
 

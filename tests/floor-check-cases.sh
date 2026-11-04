@@ -607,6 +607,8 @@ security() { # <json for security_and_analysis, or nothing to leave the key out>
 pp_off='{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"disabled"}}'
 wall "push protection on is a PASS" "PASS  push protection is on"
 wall "push protection off is a WARN" "WARN  push protection is off" "security '$pp_off'"
+wall "push protection on says who can push past it" "PASS  push protection is on: GitHub refuses a push that carries a secret in a format it knows; anyone with write access can still push it past the block by giving a reason"
+wall "push protection off says who could push past it once on" "INFO    once on, anyone with write access can still push a secret past it by giving a reason, and GitHub records who and why" "security '$pp_off'"
 wall "push protection off carries the call that turns it on, and says what the call needs" \
   "INFO    gh api -X PATCH repos/o/r --input - <<<'{\"security_and_analysis\": {\"secret_scanning\": {\"status\": \"enabled\"}, \"secret_scanning_push_protection\": {\"status\": \"enabled\"}}}'   (needs repository administration; on a private repository, GitHub Secret Protection too)" "security '$pp_off'"
 wall "push protection off never fails the floor, and is not counted as not verified" "-- 0 failed, 1 not verified" "security '$pp_off'"
@@ -786,6 +788,21 @@ counted "private, no Code Security: default setup, which cannot exist there, is 
 private "$(sec disabled disabled disabled)" "$(jq -c 'map(if .type=="required_status_checks" then .parameters.required_status_checks |= map(select(.context!="ci / a")) else . end)' <<<"$rules_neither")"
 has   "private: a dropped required check is still a FAIL" "^  FAIL  main: required checks dropped: \['ci / a'\]"
 counted "private: a dropped required check still fails the run" 1 1 1
+# A private repository on a plan without GitHub Secret Protection answers no
+# security settings at all, even to a login that administers it (measured on
+# a private test repository of a personal account, #811). That is not the
+# token's fault: its own SKIP, never a PASS, and not the token line.
+admin_null() { # <admin: true|false>
+  printf '{%s,"private":true,"permissions":{"admin":%s}}' "$repo_meta" "$1" > "$api/repos/o/r.json"
+  out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"
+}
+admin_null true
+has   "private, no settings answered to an administrator: a SKIP naming the plan, not the token" '^  SKIP  push protection not verified \(GitHub answers no security settings for this private repository to a login that administers it: GitHub Secret Protection \(a paid product for Team and Enterprise\) not on its plan, or a token without the Administration permission'
+lacks "private, no settings answered to an administrator: not blamed on the token" 'push protection not verified \(this token does not read'
+lacks "private, no settings answered to an administrator: never a PASS" '^  PASS +push protection'
+admin_null false
+has   "private, no settings answered to a login that does not administer it: the token line" '^  SKIP  push protection not verified \(this token does not read the repository'"'"'s security settings'
 # With the licence, a missing rule is the defect it is on a public repository.
 for key in code_security advanced_security; do
   private "$(sec enabled enabled enabled "$key")" "$rules_neither"
@@ -1553,6 +1570,127 @@ rm -rf "$web.empty"; cp -R "$web" "$web.empty"; sed -i.bak 's/^archetype: web$/a
 git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
 if grep -q '^  INFO  archetype cli: ' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "another archetype is not asked for render.yaml"
 else bad "a cli instance was asked for render.yaml"; fi
+# What render.yaml says (#811), read when the file is there: each web
+# service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
+# other than free, and secret-named envVars set without a literal value. Each
+# gap is a WARN with one fix line; a file this checker cannot read is a SKIP.
+rb="$work/render-blueprint"; rm -rf "$rb"; cp -R "$web" "$rb"
+cat > "$work/render-complete.yaml" <<'YAML'
+# Render Blueprint: one web service and one Postgres.
+services:
+  - type: web
+    name: "app"
+    runtime: docker
+    plan: 0.5c-512mb
+    # Deploy a commit only after its checks pass.
+    autoDeployTrigger: checksPass
+    healthCheckPath: /healthz
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: app.settings
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: "app-db"
+          property: connectionString
+databases:
+  - name: "app-db"
+    plan: 0.1c-256mb
+    diskSizeGB: 1
+    ipAllowList: []
+YAML
+cp "$work/render-complete.yaml" "$rb/render.yaml"
+blueprint_out() { git -C "$rb" add -A; python3 "$checker" --root "$rb" --no-network 2>&1; }
+out="$(blueprint_out)"; rc=$?
+if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && ! grep -qE '^  (WARN|SKIP) +render.yaml' <<<"$out" \
+   && grep -qF 'PASS  render.yaml: web service app has a health check (healthCheckPath: /healthz)' <<<"$out" \
+   && grep -qF 'PASS  render.yaml: web service app deploys only after the checks pass (autoDeployTrigger: checksPass)' <<<"$out" \
+   && grep -qF 'PASS  render.yaml: database app-db is on a paid plan (0.1c-256mb)' <<<"$out" \
+   && grep -qF 'PASS  render.yaml: no secret-named envVars entry carries a literal value' <<<"$out"; then
+  ok "a render.yaml with all four settings: four PASS lines, no WARN"
+else bad "a render.yaml with all four settings"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
+gap() { # <name> <sed expression on the complete file> <WARN line> <fix line>
+  sed -e "$2" "$work/render-complete.yaml" > "$rb/render.yaml"
+  out="$(blueprint_out)"; rc=$?
+  if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && grep -qF "WARN  $3" <<<"$out" && grep -qF "INFO    $4" <<<"$out" \
+     && [ "$(grep -c '^  WARN  render.yaml' <<<"$out")" = 1 ]; then ok "render.yaml $1: one WARN with its fix, no FAIL"
+  else bad "render.yaml $1"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
+}
+gap "without healthCheckPath" '/healthCheckPath/d' \
+  "render.yaml: web service app has no healthCheckPath: Render sends traffic to a new deploy without asking it whether it started" \
+  "add healthCheckPath: /healthz to the service"
+gap "deploying on every commit" 's/autoDeployTrigger: checksPass/autoDeployTrigger: commit/' \
+  "render.yaml: web service app deploys without waiting for the checks (autoDeployTrigger: commit)" \
+  "set autoDeployTrigger: checksPass on the service"
+gap "without autoDeployTrigger" '/autoDeployTrigger/d' \
+  "render.yaml: web service app deploys without waiting for the checks (no autoDeployTrigger)" \
+  "set autoDeployTrigger: checksPass on the service"
+gap "with a free database" 's/plan: 0.1c-256mb/plan: free/' \
+  "render.yaml: database app-db is on plan free: Render deletes a free Postgres after 30 days, and it has no backups" \
+  "set plan: to a paid one, as the template's plan: 0.1c-256mb"
+gap "with a database naming no plan" '/plan: 0.1c-256mb/d' \
+  "render.yaml: database app-db names no plan, so it is not read as a paid one" \
+  "set plan: to a paid one"
+gap "with a free database behind a comment holding a quote" "s/plan: 0.1c-256mb/plan: free # don't/" \
+  "render.yaml: database app-db is on plan free" "set plan: to a paid one"
+gap "with a free database spelled Free" 's/plan: 0.1c-256mb/plan: Free/' \
+  "render.yaml: database app-db is on plan Free" "set plan: to a paid one"
+gap "with its web service behind a comment holding a quote" "s/  - type: web/  - type: web # it's the app/;/healthCheckPath/d" \
+  "render.yaml: web service app has no healthCheckPath" "add healthCheckPath: /healthz to the service"
+gap "with a secret as a literal value" 's/generateValue: true/value: "not-so-secret"/' \
+  "render.yaml: secret-named envVars set with a literal value (DJANGO_SECRET_KEY): the value sits in the repository" \
+  "set each with sync: false (typed in Render's dashboard), generateValue: true or fromDatabase instead"
+# A literal value for a name that holds no secret stays a PASS (the settings
+# module), and so does a secret-named one set another way.
+awk '{print} /DJANGO_ALLOWED_HOSTS/{getline; print; print "      - key: SENTRY_DSN"; print "        sync: false"}' \
+  "$work/render-complete.yaml" > "$rb/render.yaml"
+out="$(blueprint_out)"
+if grep -qF 'PASS  render.yaml: no secret-named envVars entry carries a literal value' <<<"$out" && ! grep -q '^  WARN  render.yaml' <<<"$out" \
+   && grep -q 'SENTRY_DSN' "$rb/render.yaml"; then
+  ok "render.yaml: plain values and secrets set another way are not a WARN"
+else bad "render.yaml: plain values or non-literal secrets were a WARN"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
+# All four gaps at once: four WARN lines, no PASS for them, still 0 failed.
+sed -e '/healthCheckPath/d' -e '/autoDeployTrigger/d' -e 's/plan: 0.1c-256mb/plan: free/' -e 's/generateValue: true/value: x/' \
+  "$work/render-complete.yaml" > "$rb/render.yaml"
+out="$(blueprint_out)"; rc=$?
+if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && [ "$(grep -c '^  WARN  render.yaml' <<<"$out")" = 4 ] \
+   && ! grep -q '^  PASS  render.yaml:' <<<"$out"; then ok "render.yaml with all four gaps: four WARN lines, no PASS for them, 0 failed"
+else bad "render.yaml with all four gaps"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
+# A form the reader does not read is a SKIP, counted (one more than the
+# complete file gives), and never a PASS.
+cp "$work/render-complete.yaml" "$rb/render.yaml"
+read_count="$(blueprint_out | sed -nE 's/^-- 0 failed, ([0-9]+) not verified.*/\1/p')"
+for form in 'services: [{type: web, name: app}]' $'services:\n  - &web\n    type: web' $'services:\n  - type: web\n    name: app\n    buildCommand: |\n      make'; do
+  printf '%s\n' "$form" > "$rb/render.yaml"
+  out="$(blueprint_out)"
+  if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out" \
+     && grep -q -- "-- 0 failed, $((read_count + 1)) not verified" <<<"$out"; then ok "render.yaml in a form not read ($(head -1 <<<"$form" | cut -c1-30)...): one SKIP, no PASS"
+  else bad "render.yaml in a form not read ($(head -1 <<<"$form"))"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
+done
+# An empty file, or one with no envVars at all, reads nothing to pass.
+printf '# nothing here yet\n' > "$rb/render.yaml"
+out="$(blueprint_out)"
+if ! grep -q '^  PASS  render.yaml:' <<<"$out" && grep -q '^  INFO  render.yaml declares no envVars' <<<"$out"; then ok "an empty render.yaml gets no PASS for what it does not say"
+else bad "an empty render.yaml"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
+# A nested list or a plain value holding ': ' is not read as a string.
+for form in $'services:\n  - - type: web' $'services:\n  - type: web\n    name: a: b'; do
+  printf '%s\n' "$form" > "$rb/render.yaml"
+  out="$(blueprint_out)"
+  if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out"; then ok "render.yaml with $(tail -1 <<<"$form" | sed 's/^ *//'): a SKIP"
+  else bad "render.yaml with $(tail -1 <<<"$form")"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
+done
+# A repository not made as a web instance still has its render.yaml read;
+# without one, nothing is said (the cli case above).
+sed 's/plan: 0.1c-256mb/plan: free/' "$work/render-complete.yaml" > "$web.empty/render.yaml"
+git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
+if grep -qF 'WARN  render.yaml: database app-db is on plan free' <<<"$out" && ! grep -q 'render.yaml present' <<<"$out" \
+   && grep -q -- '-- 0 failed' <<<"$out"; then ok "a cli instance carrying render.yaml has it read, as a WARN, not asked for it"
+else bad "a cli instance carrying render.yaml"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
+rm -f "$web.empty/render.yaml"; git -C "$web.empty" add -A
+rm -rf "$rb"
 # The hosting answer (#678, plinth-template#128): `render`, the default, or
 # `elsewhere` with a hosting_elsewhere place. A web instance rendered before
 # the question has no hosting key and is a Render one; `hosting: render` and
