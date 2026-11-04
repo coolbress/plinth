@@ -433,7 +433,10 @@ pr-title:
       REF = (r"(?:(?:[\w.-]+/)*[\w.-]+#\d+|#\d+|\bGL-\d+|\[issue:(?:(?:[\w.-]+/)*[\w.-]+/)?\d+\]"
              r"|https?://[^\s/]+/(?:[\w.-]+/)+-/(?:issues(?:/incident)?|work_items)/\d+)")
       KEYWORD = r"(?:[Cc]los(?:e[sd]?|ing)|\b[Ff]ix(?:e[sd]|ing)?|\b[Rr]esolv(?:e[sd]?|ing)|\b[Ii]mplement(?:s|ed|ing)?)"
-      CLOSES = re.compile(rf"\b{KEYWORD}:? +(?:(?:issues? +)?{REF}(?: *,? +and +| *,? *)?|[A-Z][A-Z0-9_]+-\d+)+")
+      # The separator between references is atomic (Python 3.11+): its two
+      # ` *` could split the same spaces between them, and a line of n
+      # references then backtracks 2**n ways when the line does not end there.
+      CLOSES = re.compile(rf"\b{KEYWORD}:? +(?:(?:issues? +)?{REF}(?>(?: *,? +and +| *,? *))?|[A-Z][A-Z0-9_]+-\d+)+")
       # A line that is only closing phrases: GitLab closes every issue each one
       # chains, with or without a keyword of its own (`Closes #65, fixes #66`).
       CLOSING_LINE = re.compile(rf"^\s*(?:{CLOSES.pattern}\s*)+\.?\s*$")

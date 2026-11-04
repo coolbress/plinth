@@ -261,6 +261,10 @@ desc "$what The prose fixes #65 in passing."$'\n\nCloses https://gitlab.other/g/
 expect "a closing line naming another instance's issue at the same path does not name this one" 1 "FAIL  #65"
 desc "$what The prose fixes #65 in passing."$'\n\nCloses https://gitlab.example/g/p/-/issues/65\n\n'"$by"
 expect "a closing line naming this instance's issue by URL names it" 0 "the closing line names #65"
+# 46 s at 20 references before the separator was atomic, over 60 s at 22:
+# a regression here stalls this file until CI's job timeout fails it.
+desc "$what"$'\n\nCloses '"$(for i in $(seq 1 40); do printf '#%d ' "$i"; done)"$'in this change.\n\n'"$by"
+expect "\`Closes\` and 40 issues followed by prose: no backtracking, each issue reported" 1 "FAIL  #1:" "FAIL  #40:"
 desc "$what CLOSES #7 is not GitLab's: its keywords are case sensitive."$'\n\n'"$by"
 expect "an upper-case keyword, which GitLab's default pattern does not match, passes" 0 "not yet confirmed: MR description"
 desc "$what"$'\n\nCloses #12\n\nMore text after it.\n\n'"$by"
