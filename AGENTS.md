@@ -129,7 +129,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 
 ## Code Review Rules
 
-Read by the third-party reviewer (`third-party / review`) to decide what to look at.
+Read by the fresh-context review and by the third-party reviewer (`third-party / review`) to decide what to look at.
 
 - Do not report what the machines catch: actionlint, shellcheck, zizmor, `bash -n`, CodeQL, `tests/*.sh`. No style, formatting or naming.
 - Report: a check that can pass without running (fail-open); a declared input
