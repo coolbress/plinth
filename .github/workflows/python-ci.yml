@@ -963,9 +963,12 @@ jobs:
           # What the person checked themselves and which review ran (#810),
           # from the description just read: a missing, empty or bare "done"
           # field is a not yet confirmed line, so a warning, never a red.
-          if [ -s "$answer" ]; then
-            while IFS= read -r line; do [ -z "$line" ] || say "$line"; done \
-              < <(python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer")
+          fields="$RUNNER_TEMP/description-fields.txt"
+          if [ ! -s "$answer" ]; then :
+          elif python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer" > "$fields"; then
+            while IFS= read -r line; do [ -z "$line" ] || say "$line"; done < "$fields"
+          else
+            say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); a run where it finishes confirms them"
           fi
           { echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"

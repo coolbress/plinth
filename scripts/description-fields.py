@@ -18,7 +18,7 @@ import sys
 COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)
 FENCE = re.compile(r"^\s{0,3}(```|~~~)")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
-CHECKED = re.compile(r"^\s{0,3}#{1,6}\s+what i checked myself\s*#*\s*$", re.I)
+CHECKED = re.compile(r"^\s{0,3}#{1,6}\s+what i checked myself\s*:?\s*#*\s*$", re.I)
 REVIEW = re.compile(r"^\s*(?:[-*]\s+)?\**review\**\s*:\**\s*(.*?)\s*$", re.I)
 # Lines that end a description rather than fill a section: the closing or
 # link line and the attribution's trailers.
@@ -27,7 +27,9 @@ ENDING = re.compile(
     r"|(?:assisted-by|co-authored-by|signed-off-by):\s)",
     re.I,
 )
-KINDS = ("fresh-context", "third-party", "same-session", "none")
+# fresh-context or same-session alone; third-party and none with what goes in
+# their brackets, a placeholder such as `<name>` not counting.
+KINDS = re.compile(r"^(?:(?:fresh-context|same-session)\b|(?:third-party|none)\s*\(\s*[^\s<)][^)]*\))", re.I)
 REVIEW_FORM = "Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
 
 
@@ -45,7 +47,7 @@ def unfenced(body):
 
 def bare(text):
     """Empty, or only a word that says nothing was recorded."""
-    words = re.sub(r"[\s`*_.!:()<>-]+", " ", text).strip().lower()
+    words = re.sub(r"\[[ xX]?\]|[\s`*_.!:()<>-]+", " ", text).strip().lower()
     return words in ("", "done", "skipped", "none", "reason", "skipped reason", "none reason")
 
 
@@ -67,8 +69,8 @@ def review_values(lines):
 
 
 def review_filled(value):
-    v = value.strip().lower()
-    return not bare(v) and any(v.startswith(k) for k in KINDS)
+    v = value.strip()
+    return not bare(v) and "|" not in v and bool(KINDS.match(v))
 
 
 def field_lines(body, what):
@@ -81,7 +83,7 @@ def field_lines(body, what):
     else:
         why = ("there is no `What I checked myself` section" if checked is None
                else "its `What I checked myself` section is empty" if not checked.strip()
-               else f'its `What I checked myself` section says only "{checked.strip()}", and "done" or a bare "Skipped" records nothing')
+               else f'its `What I checked myself` section says only "{" ".join(checked.split())}", and "done" or a bare "Skipped" records nothing')
         out.append(f"not yet confirmed: {what} description, does not say what the person checked themselves: {why};"
                    " under that heading write what you ran, opened or read and what you saw (a command's output,"
                    " a page, a number), or `Skipped: <reason>`; an edited description is read again on the next run")
@@ -91,7 +93,7 @@ def field_lines(body, what):
     else:
         why = ("there is no `Review:` line" if not values
                else "its `Review:` line is empty" if not values[-1].strip()
-               else f'its `Review:` line says "{values[-1].strip()}", which names none of the four answers or gives no reason')
+               else f'its `Review:` line says "{" ".join(values[-1].split())}", which names none of the four answers or gives no reason')
         out.append(f"not yet confirmed: {what} description, does not say which review ran: {why};"
                    f" write one line, `{REVIEW_FORM}`; an edited description is read again on the next run")
     return out

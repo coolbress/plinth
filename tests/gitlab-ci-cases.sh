@@ -335,6 +335,11 @@ fields $'## What I checked myself\n\nDone.' 'Review: done'
 expect "bare \"done\" in both: warns for both, and the job passes" 0 \
   "does not say what the person checked themselves: its \`What I checked myself\` section says only \"Done.\"" \
   "does not say which review ran: its \`Review:\` line says \"done\""
+fields $'## What I checked myself\n\n- [x] done' 'Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)'
+expect "\"- [x] done\" and the form's four answers copied: warns for both, and the job passes" 0 \
+  "says only \"- [x] done\"" "names none of the four answers"
+fields $'## What I checked myself:\n\nRan make check: 12 passed.' 'Review: third-party (Codex)'
+expect "a heading with a colon and a named third-party review: two pass lines" 0 "pass: MR description, says what the person checked themselves" "pass: MR description, says which review ran"
 desc "$what It is the second of the two fixes #65 decided."$'\n\n'"$checked"$'\n\nReview: fresh-context\n\n'"$by"
 expect "a red closing check still writes the fields' lines" 1 "fail: MR description, merging it would close" "pass: MR description, says which review ran"
 desc "${what:0:20}" true
