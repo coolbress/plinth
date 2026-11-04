@@ -18,6 +18,11 @@
 #       Each --resolved says how one conflicted file was resolved (which
 #       side, on whose word) for the description; it is a record, not a
 #       check, and names only a file copier left in conflict (#556).
+#       Before it pushes, it counts the reviewable diff as ci / diff-size
+#       does, with the ci job's own max-diff-lines and diff-size-exclude
+#       (#795). Over the limit it pushes nothing (exit 4) and proposes the
+#       split: the paths of a first pull request that fits, then this one.
+#       --over-limit opens it as it is, red ci / diff-size and all.
 #
 # The command is the checker's own line (floor-check.py
 # --print-update-command), run word for word: never a second construction of
@@ -32,7 +37,8 @@
 # on a person's word for that file (#556), resolves it in the worktree.
 #
 # Exit: 0 done (a plan printed, or a draft opened), 1 stopped or nothing to
-# update, 2 usage, 3 a conflict is waiting for a person.
+# update, 2 usage, 3 a conflict is waiting for a person, 4 over the diff
+# limit, nothing pushed, a split proposed.
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 checker="$here/floor-check.py"
@@ -41,9 +47,9 @@ state_name="plinth-template-update"
 # A path as a shell word, for a line the user or the skill runs as printed.
 q() { printf '%q' "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
-usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested] | --finish <worktree> [--resolved <path> <how>]...] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
+usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested] | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 
-mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=()
+mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=(); over_limit=no
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)       [ $# -ge 2 ] || usage; mode=apply; base_arg="$2"; shift 2 ;;
@@ -52,6 +58,7 @@ while [ $# -gt 0 ]; do
     --resolved)    [ $# -ge 3 ] && [ -n "$2" ] && [ -n "$3" ] || usage
                    case "$2$3" in *$'\n'* | *$'\t'*) usage ;; esac
                    resolutions+=("$2" "$3"); shift 3 ;;
+    --over-limit)  over_limit=yes; shift ;;
     --plinth-pin)  [ $# -ge 2 ] || usage; pin="$2"; shift 2
                    case "$pin" in live|tested) ;; *) usage ;; esac ;;
     *) usage ;;
@@ -61,6 +68,8 @@ done
 # a choice that does nothing.
 [ -z "$pin" ] || [ "$mode" = apply ] || usage
 [ ${#resolutions[@]} = 0 ] || [ "$mode" = finish ] || usage
+# Opening over the limit is a choice made after reading the measurement.
+[ "$over_limit" = no ] || [ "$mode" = finish ] || usage
 pin="${pin:-live}"
 
 for tool in git gh python3 uvx; do
@@ -98,6 +107,56 @@ blob() { git -C "$1" hash-object -- "$2" 2>/dev/null || echo -; }
 changed_since() { # <worktree> <base>
   { git -C "$1" -c core.quotePath=false diff --name-only "$2"
     git -C "$1" -c core.quotePath=false ls-files --others --exclude-standard; } | sort -u
+}
+
+# Over ci / diff-size's limit (#795): what a first pull request that fits
+# would carry, file by file (issue forms first, as the update that raised
+# this was mostly forms; then by path), and the update after it, which
+# always keeps .copier-answers.yml: it records the tag, so it lands last.
+# Excluded paths (docs, lockfiles) are not counted and stay with the rest.
+# It prints; it runs nothing.
+split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <default> <to> <pathspec...>
+  local wt="$1" mb="$2" total="$3" max="$4" exclude="$5" branch="$6" repo="$7" default="$8" to="$9"; shift 9
+  local n path first=() firstn=0 rest=() restn=0
+  while IFS=$'\t' read -r n path; do
+    [ -n "$path" ] || continue
+    if [ "$path" != .copier-answers.yml ] && [ $((firstn + n)) -le "$max" ]; then
+      first+=("$path"); firstn=$((firstn + n))
+    else
+      rest+=("$path ($n)"); restn=$((restn + n))
+    fi
+  done < <(git -C "$wt" -c core.quotePath=false diff --no-renames --numstat "$mb" HEAD -- "$@" \
+             | awk -F '\t' '$1 != "-" { k = ($3 ~ /^\.github\/ISSUE_TEMPLATE\//) ? 0 : ($3 == ".copier-answers.yml") ? 2 : 1
+                                       print k "\t" $3 "\t" ($1 + $2) }' \
+             | LC_ALL=C sort -t "$(printf '\t')" -k1,1n -k2,2 | cut -f2,3 | awk -F '\t' '{ print $2 "\t" $1 }')
+  echo "Over the limit: $total reviewable lines, against the limit of $max that ci / diff-size would apply"
+  echo "(excluded from the count: $exclude). The update is committed in $wt; nothing was pushed."
+  echo
+  if [ ${#first[@]} = 0 ]; then
+    echo "No file fits under the limit on its own, so no split by file is proposed."
+  else
+    echo "Proposed split: first a pull request with these paths ($firstn lines), then this update ($restn lines):"
+    local f
+    for f in "${first[@]}"; do echo "  $f"; done
+    echo "This update keeps the rest:"
+    for f in ${rest+"${rest[@]}"}; do echo "  $f"; done
+    [ "$restn" -le "$max" ] || echo "  (still over the limit: after the first is merged, --finish proposes the next split)"
+    echo
+    local p1="$wt-part-1" b1="$branch-part-1" words=()
+    for f in "${first[@]}"; do words+=("$(q "$f")"); done
+    echo "To make the first (the update's own changes to those paths, nothing else):"
+    echo "  git -C $(q "$wt") worktree add --no-track -b $(q "$b1") $(q "$p1") $mb"
+    echo "  git -C $(q "$wt") diff --binary $mb HEAD -- ${words[*]} | git -C $(q "$p1") apply --index"
+    echo "  git -C $(q "$p1") commit -m $(q "chore(template): part of the plinth-template $to update")"
+    echo "  git -C $(q "$p1") push origin HEAD:refs/heads/$(q "$b1")"
+    echo "then open a draft pull request from $b1 into $default of $repo, in this repository's pull-request shape."
+    echo "Once it is merged, this update follows it:"
+    echo "  git -C $(q "$wt") fetch origin $(q "$default") && git -C $(q "$wt") merge --no-edit origin/$(q "$default")"
+    echo "  $(q "$0") --finish $(q "$wt")"
+  fi
+  echo
+  echo "Or open this update as it is, knowing ci / diff-size fails on it until it is split:"
+  echo "  $(q "$0") --finish $(q "$wt") --over-limit"
 }
 
 # ── finish: commit, push the branch, open the draft ─────────────────────
@@ -159,6 +218,41 @@ finish() { # <worktree>
     die "$wt has a commit and further changes; commit or discard them by hand, then run --finish again"
   fi
 
+  # The reviewable diff, counted as ci / diff-size counts it (#795): the
+  # pathspecs and numstat of its step, with the ci job's own inputs read by
+  # the checker, from the merge base with origin/<default>, which a merge
+  # of the default branch moves (the second half of a split). The tree is
+  # the one about to be pushed: the index, or the commit already made.
+  local mb size_line="" cfg max exclude droot split=no
+  mb="$(git -C "$wt" merge-base HEAD "refs/remotes/origin/$default" 2>/dev/null)" || mb="$base"
+  local tree=(--cached "$mb"); [ "$committed" = yes ] && tree=("$mb" HEAD)
+  if cfg="$(python3 "$checker" --root "$wt" --print-diff-size 2>&1)"; then
+    max="$(sed -n 's/^max=//p' <<<"$cfg")"; exclude="$(sed -n 's/^exclude=//p' <<<"$cfg")"; droot="$(sed -n 's/^root=//p' <<<"$cfg")"
+    local prefix="" spec=(".") pats=() p
+    droot="${droot%/}"
+    if [ -n "$droot" ] && [ "$droot" != . ]; then prefix="$droot/"; spec=("$droot"); fi
+    [ -z "$exclude" ] || read -r -a pats <<<"$exclude"
+    for p in ${pats+"${pats[@]}"}; do spec+=(":(exclude)$prefix$p"); done
+    local numstat total=0 a d
+    numstat="$(git -C "$wt" diff --numstat "${tree[@]}" -- "${spec[@]}")" || die "the diff could not be counted in $wt"
+    while read -r a d _; do
+      [ -n "$a" ] && [ "$a" != - ] || continue
+      total=$((total + a + d))
+    done <<<"$numstat"
+    if [ "$max" -le 0 ]; then
+      size_line="\`ci / diff-size\`, counted here before pushing: $total reviewable lines; max-diff-lines is $max, so it is measured, not enforced."
+    elif [ "$total" -le "$max" ]; then
+      size_line="\`ci / diff-size\`, counted here before pushing: $total reviewable lines, within the limit of $max (excluded: \`$exclude\`)."
+    elif [ "$over_limit" = yes ]; then
+      size_line="\`ci / diff-size\`, counted here before pushing: $total reviewable lines, over the limit of $max (excluded: \`$exclude\`). Opened as it is on \`--over-limit\`: the check fails until the update is split."
+    else
+      split=yes
+      size_line="\`ci / diff-size\`, counted here before pushing: $total reviewable lines, over the limit of $max (excluded: \`$exclude\`); nothing was pushed, and a split was proposed."
+    fi
+  else
+    size_line="\`ci / diff-size\` was not counted here before pushing ($cfg); its own run counts it."
+  fi
+
   # What went in, by who: copier's clean merges (unchanged since copier left
   # them), the files it left in conflict, and anything else a person changed.
   local clean="" resolved="" edited="" path h
@@ -181,7 +275,7 @@ finish() { # <worktree>
     h="$(awk -v p="$path" 'sub(/^clean=/, "") { h = $1; sub(/^[^ ]* /, ""); if ($0 == p) print h }' "$sf")"
     if [ -n "$h" ] && [ "$h" = "$(blob "$wt" "$path")" ]; then clean="$clean$path"$'\n'
     else edited="$edited$path"$'\n'; fi
-  done < <(git -C "$wt" -c core.quotePath=false diff --cached --name-only "$base")
+  done < <(git -C "$wt" -c core.quotePath=false diff --cached --name-only "$mb")
 
   local title="chore(template): update plinth-template $from to $to"
   # At the target tag the checker gives a line only for a recorded owner
@@ -260,6 +354,8 @@ finish() { # <worktree>
     echo "copier's questions were answered with \`--defaults\`: each takes this"
     echo "repository's recorded answer, and a question it never answered takes the"
     echo "template's default (\`.copier-answers.yml\` in the diff shows any)."
+    echo
+    echo "$size_line"
     if [ -n "$assisted" ]; then echo; echo "Assisted-by: $assisted"; fi
   } > "$body"
   { echo "$title"; echo; cat "$body"; } > "$msg"
@@ -268,6 +364,13 @@ finish() { # <worktree>
     git -C "$wt" commit -q -F "$msg" || { rm -f "$msg" "$body"; die "git commit failed in $wt"; }
   fi
   rm -f "$msg"
+  # Over the limit: the update stays a local commit, which a merge of the
+  # default branch can follow once the first part is merged (#795).
+  if [ "$split" = yes ]; then
+    rm -f "$body"
+    split_proposal "$wt" "$mb" "$total" "$max" "$exclude" "$branch" "$repo" "$default" "$to" "${spec[@]}"
+    exit 4
+  fi
   # The one push this script makes, to the update branch by name. The
   # default branch is refused above and never named here.
   git -C "$wt" push -q origin "HEAD:refs/heads/$branch" \
