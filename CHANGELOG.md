@@ -21,6 +21,18 @@ pull requests and have no tag.
   the README link it, `/plinth:guide` explains each term from it the first
   time it uses one, and `tests/term-table.sh` checks it (#809).
 
+### Changed
+
+- `docs/how-to/set-four-things-by-hand.md` step 2 no longer asks every paid
+  service for a limit that stops the spending: Render's docs describe none
+  for the account. It says which services stop (the Anthropic API), which
+  only alert or stop where offered (Google Cloud budgets) and which describe
+  none (Render), with
+  Render's nearest controls: fixed plan prices, `diskSizeGB` and storage
+  autoscaling, which is off for a new database when left out. A new "After
+  the first deploy" list adds an uptime monitor on `/healthz` and an error
+  tracker, each with a free plan and where its key lives (#807).
+
 ## [2.25.1] - 2026-11-04
 
 v2.25.0 was never tagged: its `e2e` upgrade path stopped on template-update's new over-the-limit exit (#804). This release carries v2.25.0's changes and the fix to the `e2e` upgrade driver. It also adds GitLab `pr-title` reading the title, the commit messages and closing chains that start with a link (#800).
