@@ -32,12 +32,17 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   job is a MAJOR change: every consumer ruleset requires the old name forever.
 - Never skip a job with `if:`. Report a pass instead; a skipped job has no check name.
 - Product text is English. `.ko.md` translations are optional and never canonical.
+  Answer the person in the language they write in. The first time you use one
+  of the everyday terms in [the term table](docs/reference/terms.md) with the
+  person, add its plain explanation once, in their language, and keep the
+  English term in brackets after the translation, the same word every time,
+  so it matches the host's screen.
 - A commit made with AI carries `Assisted-by: <agent>:<model>` (the Linux kernel's
   form, e.g. `Assisted-by: Claude:claude-fable-5-1`), one line for each model the
   work used, and so do the last lines of the pull request description, which becomes the squash commit when merged as
   [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change) step 5 says. AI is never a
   `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
-- A same-session `/code-review` helps but is not independent; say so. `third-party / review` only records an accepted reviewer's signal on the commit.
+- The default review is a fresh-context review, before the description is written: a new subagent (not a fork of this session) or a new session, given only the diff (`git diff origin/main...HEAD`), the issue's acceptance criteria and this file's Code Review Rules, never this conversation; its findings go in the description as it reported them. A same-session `/code-review` helps but is not independent; say which review ran. `third-party / review` only records an accepted reviewer's signal on the commit.
   A release pull request (`chore(release): vX.Y.Z` whose diff has run 1's shape: the two manifests' `"version"` lines raised and `CHANGELOG.md` only adding lines, the replaced `[Unreleased]` link aside) is passed by that check without a summons or a review, by design
   ([cut a release](docs/how-to/cut-a-release.md), step 4): merge it on green checks; do not wait for the reviewer, toggle draft, or post the summons for it.
   Whoever opens or merges a pull request reads the reviewer's inline comments
@@ -129,7 +134,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
 
 ## Code Review Rules
 
-Read by the third-party reviewer (`third-party / review`) to decide what to look at.
+Read by the fresh-context review and by the third-party reviewer (`third-party / review`) to decide what to look at.
 
 - Do not report what the machines catch: actionlint, shellcheck, zizmor, `bash -n`, CodeQL, `tests/*.sh`. No style, formatting or naming.
 - Report: a check that can pass without running (fail-open); a declared input
