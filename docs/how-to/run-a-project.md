@@ -126,12 +126,14 @@ see these: guidance only.
 - **Where you are:** a ticket that says what "done" means.
 - **Next:** `/clear`, then type `/implement #N`: one ticket per session. The
   agent writes a failing test first where it can, then the code, has it
-  reviewed and commits; then it opens the pull request. For a page a person
+  reviewed and commits; then a new subagent that never saw the session
+  reviews the diff (what it is given: step 5), and the agent opens the pull
+  request. For a page a person
   will look at, name `taste-skill` in the ticket or type
   `/design-taste-frontend` (unnamed, the agent did not reach for it, one run,
   [#469](https://github.com/coolbress/plinth/issues/469)); for dashboards and dense product UI, `/design` first.
 - **Look at:** the commit and the pull request's description: that the
-  description says what `/code-review` found, and that the `Assisted-by`
+  description says which review ran and what it found, and that the `Assisted-by`
   line the repository's `CONTRIBUTING.md` asks for ends both the commit and
   the description, whose text becomes the squash commit's message at the
   merge. In one run the agent skipped both, and said so when asked
@@ -156,7 +158,18 @@ see these: guidance only.
   `backend` or `data-ml`, twelve for `web`), with the code-scan rule beside
   them. Then ask: "What shows it
   works, and what did you not check?", "Can I see it?", "What did the reviewer
-  say?".
+  say?". The reviewer, by default, is a fresh-context review the agent ran
+  before opening the pull request: a new subagent given only the diff, the
+  issue's acceptance criteria and the repository's Code Review Rules, never
+  the conversation that wrote the change. In one study, a model judging code
+  it had written in the same conversation let wrong or risky changes through
+  more often than the same model reading them in a new context
+  ([arXiv 2603.04582](https://arxiv.org/abs/2603.04582)). A project gets this
+  default from the plinth-template release after v1.37.0, in its `AGENTS.md`;
+  the agent may still skip it, so ask which review ran. `/implement`'s
+  `/code-review` is briefed and summed up by the session that wrote the
+  change, so it is not independent; the optional third-party reviewer is the
+  more independent one.
 - **Look at:** the description, for each thing "done" meant. Run the
   command, open the page, or check a number; `/run` launches the app
   (`/verify` runs the checks, not the app, [#476](https://github.com/coolbress/plinth/issues/476)). If the optional third-party
