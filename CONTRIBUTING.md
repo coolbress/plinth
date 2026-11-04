@@ -32,7 +32,7 @@ first time; a missing tool is a FAIL that names the install command, never a
 skip. `tests/weakened-checks-cases.sh` needs `python3` 3.11 or later, the
 version whose standard library parses TOML, as the runner's does.
 `tests/install-smoke-interrupt.sh` needs `perl`, `pkill` and `pgrep` and takes
-about 15 seconds. `tests/gitlab-ci-cases.sh` installs the GitLab
+about 20 seconds. `tests/gitlab-ci-cases.sh` installs the GitLab
 `floor-check` job's PyYAML from PyPI, pinned by hash, so it needs network.
 Everything else runs offline in seconds.
 
