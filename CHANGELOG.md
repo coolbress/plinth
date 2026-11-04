@@ -34,8 +34,9 @@ pull requests and have no tag.
   `checksPass`), a database on plan `free` or naming none (Render deletes a
   free Postgres after 30 days, and it has no backups), and a secret-named
   `envVars` key with a literal `value:` are each a WARN with one fix line.
-  A file in a form its reader does not read is a SKIP, never a pass. A
-  repository without the file reports nothing new (#811).
+  A file in a form its reader does not read is a SKIP, never a pass,
+  naming the line number and never what the line holds. A repository
+  without the file reports nothing new (#811).
 
 ### Changed
 

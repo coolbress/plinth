@@ -2116,45 +2116,54 @@ def read_block_yaml(text: str):
     """The block-style YAML a Render Blueprint is written in: mappings, lists
     and plain or quoted scalars, standard library only. Anything else (a flow
     collection other than `[]` or `{}`, a block scalar, an anchor, an alias,
-    a merge key, a tab, a second document) raises Unreadable rather than being
-    read as something it is not."""
-    lines: list[tuple[int, str]] = []
-    for raw in text.splitlines():
+    a tag, a merge key, a nested list, a tab, a second document, a backslash
+    escape in double quotes, key or value) raises Unreadable rather than being
+    read as something it is not.
+
+    Unreadable names the line number and the form, never what the line holds:
+    the message becomes a SKIP line, which `ci / floor-check` publishes as an
+    annotation and in the job summary, and the line may hold a secret."""
+    lines: list[tuple[int, str, int]] = []
+    for n, raw in enumerate(text.splitlines(), 1):
         if "\t" in raw[:len(raw) - len(raw.lstrip())]:
-            raise Unreadable("a tab in the indentation")
+            raise Unreadable(f"line {n}: a tab in the indentation")
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
             continue
         if stripped in ("---", "..."):
             if lines:
-                raise Unreadable("more than one document")
+                raise Unreadable(f"line {n}: a second document")
             continue
         body = drop_comment(raw.rstrip())
-        lines.append((len(body) - len(body.lstrip()), body.strip()))
+        # Double quotes take escapes (`\u0065` is `e`), in a key as in a
+        # value, which this reader does not decode.
+        if '"' in body and "\\" in body:
+            raise Unreadable(f"line {n}: a backslash escape in double quotes")
+        lines.append((len(body) - len(body.lstrip()), body.strip(), n))
 
-    def scalar(v: str):
+    def scalar(v: str, n: int):
         if v in ("[]", "{}"):
             return [] if v == "[]" else {}
-        # A nested list (`- - x`) or a plain value holding `: ` is not a
-        # string this reader may take as one.
-        if v[0] in "[{|>&*!%@`" or v.startswith("- ") or (v[0] not in "'\"" and ": " in v):
-            raise Unreadable(f"the value {v!r}")
-        # Double quotes take escapes (`\u0065` is `e`), which this reader
-        # does not decode; inside single quotes `''` is one quote.
+        if v[0] in "[{|>&*!%@`":
+            raise Unreadable(f"line {n}: a flow collection, block scalar, anchor, alias or tag")
+        if v.startswith("- "):
+            raise Unreadable(f"line {n}: a nested list")
+        if v[0] not in "'\"" and ": " in v:
+            raise Unreadable(f"line {n}: a plain value holding a colon and a space")
         if len(v) >= 2 and v[0] == v[-1] == '"':
-            if "\\" in v:
-                raise Unreadable(f"the escaped value {v}")
             return v[1:-1]
+        # Inside single quotes `''` is one quote.
         if len(v) >= 2 and v[0] == v[-1] == "'":
             return v[1:-1].replace("''", "'")
         if v[0] in "'\"":
-            raise Unreadable(f"the value {v!r}")
+            raise Unreadable(f"line {n}: a quote left open")
         return v
 
     def block(i: int, indent: int):
         if lines[i][1].startswith("- ") or lines[i][1] == "-":
             items = []
             while i < len(lines) and lines[i][0] == indent and (lines[i][1].startswith("- ") or lines[i][1] == "-"):
+                n = lines[i][2]
                 rest = lines[i][1][1:].lstrip()
                 if not rest:
                     if i + 1 < len(lines) and lines[i + 1][0] > indent:
@@ -2163,23 +2172,24 @@ def read_block_yaml(text: str):
                         node, i = None, i + 1
                 elif re.match(r"""^([\w.-]+|"[^"]*"|'[^']*'):(\s|$)""", rest):
                     # `- key: v` opens a mapping whose keys sit where `key` does.
-                    lines[i] = (indent + len(lines[i][1]) - len(rest), rest)
+                    lines[i] = (indent + len(lines[i][1]) - len(rest), rest, n)
                     node, i = block(i, lines[i][0])
                 else:
-                    node, i = scalar(rest), i + 1
+                    node, i = scalar(rest, n), i + 1
                 items.append(node)
             return items, i
         mapping = {}
         while i < len(lines) and lines[i][0] == indent and not lines[i][1].startswith("- "):
+            n = lines[i][2]
             m = re.fullmatch(r"""([\w.-]+|"[^"]*"|'[^']*'):(?:\s+(.*))?""", lines[i][1])
             if not m:
-                raise Unreadable(f"the line {lines[i][1]!r}")
+                raise Unreadable(f"line {n}: a line that is not `key: value` or `- item`")
             key = m.group(1).strip("'\"")
             if key in mapping:
-                raise Unreadable(f"the key {key} twice")
+                raise Unreadable(f"line {n}: a key given twice")
             i += 1
             if m.group(2):
-                mapping[key] = scalar(m.group(2))
+                mapping[key] = scalar(m.group(2), n)
             elif i < len(lines) and (lines[i][0] > indent
                                      or (lines[i][0] == indent and lines[i][1].startswith("-"))):
                 mapping[key], i = block(i, lines[i][0])
@@ -2190,10 +2200,10 @@ def read_block_yaml(text: str):
     if not lines:
         return {}
     if lines[0][0] != 0:
-        raise Unreadable("an indented first line")
+        raise Unreadable(f"line {lines[0][2]}: an indented first line")
     doc, end = block(0, 0)
     if end != len(lines):
-        raise Unreadable(f"the line {lines[end][1]!r}")
+        raise Unreadable(f"line {lines[end][2]}: indentation this reader does not follow")
     return doc
 
 
@@ -2216,7 +2226,7 @@ def check_render_blueprint(path: Path) -> None:
     try:
         doc = read_block_yaml(read(path))
     except Unreadable as e:
-        result("SKIP", f"render.yaml not read ({e} is not a form this checker reads): "
+        result("SKIP", f"render.yaml not read ({e}, a form this checker does not read): "
                        "health check, deploy trigger, database plan and secret values not verified")
         return
     if not isinstance(doc, dict):

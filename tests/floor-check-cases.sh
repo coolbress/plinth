@@ -1679,6 +1679,18 @@ for form in $'envVarGroups:\n  - name: shared\n    envVars:\n      - key: LOG_LE
   if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out"; then ok "render.yaml with $(grep -oE '^(projects|ungrouped)' <<<"$form"): a SKIP, no PASS"
   else bad "render.yaml with $(grep -oE '^(projects|ungrouped)' <<<"$form")"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
 done
+# A backslash escape in double quotes, in a key as in a value, is a SKIP;
+# the SKIP line names the line, never what it holds, since ci / floor-check
+# publishes it as an annotation (#817 review).
+for form in $'services:\n  - type: web\n    name: app\n    envVars:\n      - key: DATABASE_URL\n        "val\\u0075e": postgres://u:hunter2secret@h/db' \
+            $'services:\n  - type: web\n    name: app\n    envVars:\n      - key: DATABASE_URL\n        value: "postgres://u:hunter2secret@h/db?x=\\u0061"' \
+            $'services:\n  - type: web\n    name: app: hunter2secret'; do
+  printf '%s\n' "$form" > "$rb/render.yaml"
+  out="$(blueprint_out)"
+  if grep -qE '^  SKIP  render.yaml not read \(line [0-9]+: ' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out" \
+     && ! grep -q 'hunter2secret' <<<"$out"; then ok "render.yaml line $(tail -1 <<<"$form" | sed 's/^ *//' | cut -c1-24)...: a SKIP naming the line, not its content"
+  else bad "render.yaml line $(tail -1 <<<"$form" | cut -c1-40)"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
+done
 # An empty file, or one with no envVars at all, reads nothing to pass.
 printf '# nothing here yet\n' > "$rb/render.yaml"
 out="$(blueprint_out)"
