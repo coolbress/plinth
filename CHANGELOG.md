@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- **The default review is a fresh-context review** (#808): `run-a-project.md`
+  steps 4 and 5 and the arsenal's step 5 row, which `/plinth:guide` reads, say
+  the agent has a new subagent review the change before opening the pull
+  request, given only the diff, the issue's acceptance criteria and the Code
+  Review Rules, never the conversation that wrote it. `/implement`'s
+  `/code-review` stays, named as not independent; the third-party reviewer
+  stays opt-in, named as the more independent one. Guidance only: no check,
+  hook or dependency. Projects get the matching `AGENTS.md` line from the
+  plinth-template release that carries it.
+
 ## [2.25.1] - 2026-11-04
 
 v2.25.0 was never tagged: its `e2e` upgrade path stopped on template-update's new over-the-limit exit (#804). This release carries v2.25.0's changes and the fix to the `e2e` upgrade driver. It also adds GitLab `pr-title` reading the title, the commit messages and closing chains that start with a link (#800).
