@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.25.1] - 2026-11-04
+
+v2.25.0 was never tagged: its `e2e` upgrade path stopped on template-update's new over-the-limit exit (#804). This release carries v2.25.0's changes and the fix to the `e2e` upgrade driver. It also adds GitLab `pr-title` reading the title, the commit messages and closing chains that start with a link (#800).
+
+tested with plinth-template v1.37.0
+
 ### Changed
 
 - GitLab's `pr-title` also reads the merge request's title and commit
@@ -4560,7 +4566,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.25.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.25.1...HEAD
+[2.25.1]: https://github.com/coolbress/plinth/releases/tag/v2.25.1
 [2.25.0]: https://github.com/coolbress/plinth/commit/3309912f41a6af31d9f91daf28708923377b8c4b
 [2.24.1]: https://github.com/coolbress/plinth/releases/tag/v2.24.1
 [2.24.0]: https://github.com/coolbress/plinth/commit/8cfdc6400a893f56d4ab9d4217ea44e3a6ee2f31
