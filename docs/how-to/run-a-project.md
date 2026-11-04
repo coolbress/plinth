@@ -165,7 +165,7 @@ see these: guidance only.
   it had written in the same conversation let wrong or risky changes through
   more often than the same model reading them in a new context
   ([arXiv 2603.04582](https://arxiv.org/abs/2603.04582)). A project gets this
-  default from the plinth-template release after v1.37.0, in its `AGENTS.md`;
+  default from plinth-template v1.38.0, in its `AGENTS.md`;
   the agent may still skip it, so ask which review ran. `/implement`'s
   `/code-review` is briefed and summed up by the session that wrote the
   change, so it is not independent; the optional third-party reviewer is the
