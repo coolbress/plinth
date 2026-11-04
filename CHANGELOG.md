@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.25.0] - 2026-11-04
+
+`/plinth:template-update` now counts its own diff before it pushes. Over the size limit it proposes a split instead of opening a pull request that `ci / diff-size` would fail. When `ci.yml`'s plinth pin was raised by hand ahead of the other files, the update now carries those files forward to that pin instead of stopping. GitLab's `pr-title` now reads the merge request description for prose that would close an issue. The install smoke test no longer races its own cleanup.
+
+tested with plinth-template v1.37.0
+
 ### Added
 
 - `/plinth:template-update` counts its own diff before it pushes, as
@@ -4530,7 +4536,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.24.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.25.0...HEAD
+[2.25.0]: https://github.com/coolbress/plinth/releases/tag/v2.25.0
 [2.24.1]: https://github.com/coolbress/plinth/releases/tag/v2.24.1
 [2.24.0]: https://github.com/coolbress/plinth/commit/8cfdc6400a893f56d4ab9d4217ea44e3a6ee2f31
 [2.23.0]: https://github.com/coolbress/plinth/releases/tag/v2.23.0
