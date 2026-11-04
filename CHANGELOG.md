@@ -13,6 +13,15 @@ pull requests and have no tag.
 
 ### Changed
 
+- `docs/how-to/set-four-things-by-hand.md` step 2 no longer asks every paid
+  service for a limit that stops the spending: Render's docs describe none
+  for the account. It says which services stop (the Anthropic API), which
+  only alert or stop where offered (Google Cloud budgets) and which describe
+  none (Render), with
+  Render's nearest controls: fixed plan prices, `diskSizeGB` and storage
+  autoscaling, which is off for a new database when left out. A new "After
+  the first deploy" list adds an uptime monitor on `/healthz` and an error
+  tracker, each with a free plan and where its key lives (#807).
 - **The default review is a fresh-context review** (#808): `run-a-project.md`
   steps 4 and 5 and the arsenal's step 5 row, which `/plinth:guide` reads, say
   the agent has a new subagent review the change before opening the pull
