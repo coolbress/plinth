@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- GitLab's `pr-title` now reads the merge request's description after the
+  title, as `ci / pr-title` does on GitHub: it fails when a closing keyword
+  stands before an issue the closing line does not name ("the two fixes
+  #N decided"), and quotes the line to reword. GitLab's own list of the
+  issues a merge closes cannot be read with the job token, so the job
+  applies GitLab's default closing pattern, and a description it passes
+  gets a `not yet confirmed` line, never a pass. An open merge request
+  whose prose closes an issue fails its next pipeline once a project's
+  include is raised. GitLab starts no pipeline on an edited description:
+  the check runs on the next one (#782).
+
 ### Fixed
 
 - `tests/install-smoke.sh`, interrupted, repeats its KILL and remove, about

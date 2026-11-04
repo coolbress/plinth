@@ -386,10 +386,11 @@ pr-title:
   script:
     - |
       title="${CI_MERGE_REQUEST_TITLE:-}"
-      if plinth_branch_of_mr "MR title"; then verdict; fi
+      if plinth_branch_of_mr "MR title"; then plinth_branch_of_mr "MR description"; verdict; fi
       if [ -z "$title" ]; then
         echo "Not a merge request: no title to check."
         say "pass: MR title, does not apply (not a merge request: no title to check)"
+        say "pass: MR description, does not apply (not a merge request: no description to read)"
         verdict
       fi
       shopt -s nocasematch
@@ -408,6 +409,166 @@ pr-title:
         say "fail: MR title, it is not Conventional Commits"
         plinth_failed=1
       fi
+      # The description, whole: GitLab cuts CI_MERGE_REQUEST_DESCRIPTION at
+      # 2700 characters, and the job token reads the merge request itself, in
+      # the merge request's project: a fork's pipeline runs in the fork.
+      answer=""
+      if [ "${CI_MERGE_REQUEST_DESCRIPTION+set}" != set ] || [ "${CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED:-}" = true ]; then
+        answer="$PLINTH_TMP/merge-request.json"
+        if ! curl -fsS --retry 3 -o "$answer" --header "JOB-TOKEN: ${CI_JOB_TOKEN:-}" \
+            "${CI_API_V4_URL:-}/projects/${CI_MERGE_REQUEST_PROJECT_ID:-${CI_PROJECT_ID:-}}/merge_requests/${CI_MERGE_REQUEST_IID:-}"; then
+          answer="$PLINTH_TMP/unread"
+        fi
+      fi
+      rc=0
+      ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
+      import json, os, re, sys
+
+      # GitLab's default issue closing pattern ("Default closing pattern" in
+      # GitLab's docs on managing issues), %{issue_ref} filled with the forms
+      # an issue reference takes in GitLab's Issue.reference_pattern and
+      # link_reference_pattern: #N, project#N, group/project#N, GL-N,
+      # [issue:N], [issue:group/project/N], an issue, incident or work item
+      # URL. Case matters as in GitLab's: Closes, closes, never CLOSES.
+      REF = (r"(?:(?:[\w.-]+/)*[\w.-]+#\d+|#\d+|\bGL-\d+|\[issue:(?:(?:[\w.-]+/)*[\w.-]+/)?\d+\]"
+             r"|https?://[^\s/]+/(?:[\w.-]+/)+-/(?:issues(?:/incident)?|work_items)/\d+)")
+      KEYWORD = r"(?:[Cc]los(?:e[sd]?|ing)|\b[Ff]ix(?:e[sd]|ing)?|\b[Rr]esolv(?:e[sd]?|ing)|\b[Ii]mplement(?:s|ed|ing)?)"
+      # The separator between references is atomic (Python 3.11+): its two
+      # ` *` could split the same spaces between them, and a line of n
+      # references then backtracks 2**n ways when the line does not end there.
+      CLOSES = re.compile(rf"\b{KEYWORD}:? +(?:(?:issues? +)?{REF}(?>(?: *,? +and +| *,? *))?|[A-Z][A-Z0-9_]+-\d+)+")
+      # A line that is only closing phrases: GitLab closes every issue each one
+      # chains, with or without a keyword of its own (`Closes #65, fixes #66`).
+      CLOSING_LINE = re.compile(rf"^\s*(?:{CLOSES.pattern}\s*)+\.?\s*$")
+      # `Part of #12`, `Related to #12, #13.`: issues only. A sentence that starts
+      # with the same words is prose, and would let the line below it pass as a
+      # closing line (#368's review).
+      LINK_LINE = re.compile(
+          rf"^\s*(?:part of|related to)\s+{REF}(?:\s*(?:,\s*and|,|and)\s*{REF})*\s*\.?\s*$",
+          re.IGNORECASE,
+      )
+      TRAILER = re.compile(r"^[A-Za-z][A-Za-z0-9-]*: \S")
+
+
+      def refs(text, project):
+          """Every issue the text names, as (project path in lower case, number).
+
+          A URL on another GitLab instance keeps its host: its issue is not this
+          instance's issue at the same path."""
+          out = []
+          for ref in re.findall(REF, text):
+              url = re.match(r"https?://([^\s/]+)/(.+)/-/(?:issues(?:/incident)?|work_items)/(\d+)$", ref)
+              bracket = re.match(r"\[issue:(?:(.+)/)?(\d+)\]$", ref)
+              if url:
+                  host, where, number = url.groups()
+                  if host.lower() != server:
+                      where = f"{host}/{where}"
+              elif bracket:
+                  where, number = bracket.groups()
+              elif ref.startswith("GL-"):
+                  where, number = "", ref[3:]
+              else:
+                  where, number = ref.rsplit("#", 1)
+              out.append(((where or project).lower(), int(number)))
+          return out
+
+
+      def closing_position(lines: list[str]) -> set[int]:
+          """Indexes of the closing lines at the end of the description."""
+          found = set()
+          for i in range(len(lines) - 1, -1, -1):
+              line = lines[i]
+              if not line.strip():
+                  continue
+              if CLOSING_LINE.match(line):
+                  if not own_paragraph(lines, i):
+                      break
+                  found.add(i)
+              elif not (LINK_LINE.match(line) or TRAILER.match(line)):
+                  break
+          return found
+
+
+      def own_paragraph(lines: list[str], i: int) -> bool:
+          """Is every line above this one, up to the blank line, a closing or link line?"""
+          for line in reversed(lines[:i]):
+              if not line.strip():
+                  break
+              if not (CLOSING_LINE.match(line) or LINK_LINE.match(line)):
+                  return False
+          return True
+
+
+      def excerpt(line: str, start: int, end: int, around: int = 50) -> str:
+          """The match with some of the sentence on each side; a description line can be a whole paragraph."""
+          a, b = max(0, start - around), min(len(line), end + around)
+          return ("... " if a > 0 else "") + line[a:b].strip() + (" ..." if b < len(line) else "")
+
+
+      project = os.environ.get("PROJECT", "").lower()
+      server = os.environ.get("SERVER", "").lower()
+      answer = os.environ.get("ANSWER", "")
+      try:
+          if answer:
+              with open(answer, encoding="utf-8") as f:
+                  body = json.load(f)["description"] or ""
+          else:
+              body = os.environ.get("BODY", "")
+      except (OSError, ValueError, KeyError, TypeError) as e:
+          print(f"  FAIL  could not read the merge request's description from GitLab ({type(e).__name__}: {e})")
+          sys.exit(2)
+
+
+
+      def show(issue):
+          return f"#{issue[1]}" if issue[0] == project else f"{issue[0]}#{issue[1]}"
+
+
+      lines = body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+      position = closing_position(lines)
+      named = {issue for i in position for issue in refs(lines[i], project)}
+      outside = {}
+      for i, line in enumerate(lines):
+          if i in position:
+              continue
+          for m in CLOSES.finditer(line):
+              for issue in refs(m.group(0), project):
+                  if issue not in named:
+                      outside.setdefault(issue, []).append((i, m))
+      if not outside:
+          said = f", and the closing line names {', '.join(show(i) for i in sorted(named))}" if named else ""
+          print(f"  no closing keyword stands before an issue outside the closing line{said}")
+          sys.exit(0)
+      misplaced = False
+      for issue, hits in outside.items():
+          print(f"  FAIL  {show(issue)}: GitLab's default closing pattern closes it when this merge request merges, and the closing line does not name it")
+          for i, m in hits:
+              if CLOSING_LINE.match(lines[i]):
+                  misplaced = True
+                  print(f"        line {i + 1} is a closing line with text below it: {lines[i].strip()}")
+              else:
+                  print(f"        line {i + 1}: {excerpt(lines[i], m.start(), m.end())}")
+      example = show(next(iter(outside)))
+      print()
+      print("  A closing keyword (close, closes, closed, closing, fix, fixes, fixed, fixing, resolve,")
+      print("  resolves, resolved, resolving, implement, implements, implemented, implementing) before")
+      print("  an issue closes that issue when the merge request merges into the default branch, in a")
+      print("  sentence as much as on a line of its own.")
+      print(f'  Reword the sentence so the keyword does not stand before the number: "the two fixes that {example}')
+      print(f'  decided", or the issue first: "{example} decided two fixes".')
+      print("  If this merge request does complete the issue, say so in a paragraph of its own, directly above")
+      print(f"  the attribution (the last line, with no attribution): Closes {example}")
+      if misplaced:
+          print("  A closing line further up is not read as one: move it directly above the attribution.")
+      print("  GitLab starts no pipeline when a description is edited: after rewording, run a new pipeline")
+      print("  for the merge request, or push a commit.")
+      sys.exit(1)
+      PY
+      case "$rc" in
+        0) say "not yet confirmed: MR description, no closing keyword stands before an issue outside its closing line by GitLab's default closing pattern; GitLab's own list of the issues the merge closes cannot be read with the job token, so a project's own closing pattern and the commit messages are not read" ;;
+        1) say "fail: MR description, merging it would close an issue its closing line does not name (the lines are above)"; plinth_failed=1 ;;
+        *) say "fail: MR description, it could not be read, so it was not checked"; plinth_failed=1 ;;
+      esac
       verdict
 
 # A wall, not a net: blocks a vulnerable dependency version a merge request
