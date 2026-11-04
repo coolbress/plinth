@@ -26,8 +26,8 @@ pull requests and have no tag.
   `Review:` line (`fresh-context`, `third-party (<name>)`, `same-session
   (not independent)` or `none (<reason>)`). Each one missing, empty or
   saying only "done" is a `not yet confirmed` line, a warning on GitHub;
-  the job stays green. No new check or job. The template's pull-request
-  and merge-request forms carry both fields (#810).
+  the job stays green. No new check or job. plinth-template's pull-request
+  and merge-request forms gain both fields in its next release (#810).
 
 ### Changed
 

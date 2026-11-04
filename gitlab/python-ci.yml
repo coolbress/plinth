@@ -481,21 +481,21 @@ pr-title:
       TRAILER = re.compile(r"^[A-Za-z][A-Za-z0-9-]*: \S")
       # What the person checked themselves and which review ran (#810):
       # scripts/description-fields.py's text (tests/gitlab-ci-cases.sh).
-      COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)
+      COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
       FENCE = re.compile(r"^\s{0,3}(```|~~~)")
       HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
-      CHECKED = re.compile(r"^\s{0,3}#{1,6}\s+what i checked myself\s*:?\s*#*\s*$", re.I)
-      REVIEW = re.compile(r"^\s*(?:[-*]\s+)?\**review\**\s*:\**\s*(.*?)\s*$", re.I)
+      CHECKED = re.compile(r"^\s{0,3}#{1,6}\s+what i checked myself\s*:?\s*#*\s*$", re.IGNORECASE)
+      REVIEW = re.compile(r"^\s*(?:[-*]\s+)?\**review\**\s*:\**\s*(.*?)\s*$", re.IGNORECASE)
       # Lines that end a description rather than fill a section: the closing or
       # link line and the attribution's trailers.
       ENDING = re.compile(
           r"^\s*(?:(?:closes|fixes|resolves|part of|related to)\s+\S*#\d+"
           r"|(?:assisted-by|co-authored-by|signed-off-by):\s)",
-          re.I,
+          re.IGNORECASE,
       )
       # fresh-context or same-session alone; third-party and none with what goes in
       # their brackets, a placeholder such as `<name>` not counting.
-      KINDS = re.compile(r"^(?:(?:fresh-context|same-session)\b|(?:third-party|none)\s*\(\s*[^\s<)][^)]*\))", re.I)
+      KINDS = re.compile(r"^(?:(?:fresh-context|same-session)\b|(?:third-party|none)\s*\(\s*[^\s<)][^)]*\))", re.IGNORECASE)
       REVIEW_FORM = "Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
 
 
