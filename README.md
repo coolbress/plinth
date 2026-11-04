@@ -230,6 +230,9 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
   [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md),
   [run the eval suite](docs/how-to/run-the-eval-suite.md).
 - [GLOSSARY.md](GLOSSARY.md): the vocabulary (wall, door, box, floor, arsenal, profile).
+- [Terms a first project meets](docs/reference/terms.md): repository, pull
+  request, check, merge and the rest, each in one plain line, and the rule that
+  an explanation in another language keeps the English term in brackets.
 
 Rebuilt in September 2026 from an earlier internal repository; its issues and
 decisions moved here (the map is #15, the spec #31).
