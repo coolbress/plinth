@@ -2223,6 +2223,15 @@ def check_render_blueprint(path: Path) -> None:
         result("SKIP", "render.yaml not read (it is not a mapping): "
                        "health check, deploy trigger, database plan and secret values not verified")
         return
+    # Resources can also sit under projects[].environments[] and ungrouped
+    # (Render's root-level fields), which this reads no further: a file
+    # using either is not read at all, rather than passed for what it left
+    # out (#817 review).
+    nested = [k for k in ("projects", "ungrouped") if k in doc]
+    if nested:
+        result("SKIP", f"render.yaml not read (its {' and '.join(nested)} layout is not one this checker reads): "
+                       "health check, deploy trigger, database plan and secret values not verified")
+        return
 
     def entries(key: str) -> list:
         value = doc.get(key)

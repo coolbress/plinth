@@ -1670,6 +1670,15 @@ for form in 'services: [{type: web, name: app}]' $'databases:\n  - name: db\n   
      && grep -q -- "-- 0 failed, $((read_count + 1)) not verified" <<<"$out"; then ok "render.yaml in a form not read ($(head -1 <<<"$form" | cut -c1-30)...): one SKIP, no PASS"
   else bad "render.yaml in a form not read ($(head -1 <<<"$form"))"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
 done
+# Resources nested under projects[].environments[] or ungrouped are not
+# read: the file is one SKIP, never a PASS for what sits there (#817 review).
+for form in $'envVarGroups:\n  - name: shared\n    envVars:\n      - key: LOG_LEVEL\n        value: info\nprojects:\n  - name: p\n    environments:\n      - name: prod\n        databases:\n          - name: db\n            plan: free' \
+            $'ungrouped:\n  - type: web\n    name: app'; do
+  printf '%s\n' "$form" > "$rb/render.yaml"
+  out="$(blueprint_out)"
+  if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out"; then ok "render.yaml with $(grep -oE '^(projects|ungrouped)' <<<"$form"): a SKIP, no PASS"
+  else bad "render.yaml with $(grep -oE '^(projects|ungrouped)' <<<"$form")"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
+done
 # An empty file, or one with no envVars at all, reads nothing to pass.
 printf '# nothing here yet\n' > "$rb/render.yaml"
 out="$(blueprint_out)"
