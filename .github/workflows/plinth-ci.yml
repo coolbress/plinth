@@ -66,6 +66,9 @@ jobs:
       - name: The guide's next step per state, and only the arsenal's tools
         run: ./tests/guide-cases.sh
 
+      - name: The term table has every first-project term, and the guide points at it
+        run: ./tests/term-table.sh
+
       - name: The off-by-default list has one source, read by the door and the guide
         run: ./tests/off-by-default-cases.sh
 

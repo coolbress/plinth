@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- One fixed term table, `docs/reference/terms.md`: the twelve terms a
+  beginner meets in the first project (repository, issue, pull request,
+  branch, commit, check, CI, merge, ruleset, draft, review, template update),
+  each with a plain explanation, and the rule that a translation keeps the
+  English term in brackets so it matches GitHub's screen. `GLOSSARY.md` and
+  the README link it, `/plinth:guide` explains each term from it the first
+  time it uses one, and `tests/term-table.sh` checks it (#809).
+
 ### Changed
 
 - `docs/how-to/set-four-things-by-hand.md` step 2 no longer asks every paid
