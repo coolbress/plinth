@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.26.0] - 2026-11-05
+
+A project's agent now reviews a change in a fresh context by default, explains the everyday terms the first time it uses them, and ends a research record in its `## Decision`; `ci / pr-title` warns, without failing, when a description does not say what the person checked or which review ran. `/plinth:new-project` renders plinth-template v1.38.0, which carries those rules and the two description fields; plinth's own rules follow the same template, and a test now fails a pin raise that leaves a shared rule behind. `/plinth:floor-check` reads `render.yaml`'s deploy settings and says who can push past push protection. The four-things how-to says which services can stop spending and adds an uptime monitor and an error tracker. A consumer gets the CI change by raising every `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`), and the template's through `/plinth:template-update`.
+
+tested with plinth-template v1.38.0
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6634428953>
+
 ### Added
 
 - One fixed term table, `docs/reference/terms.md`: the twelve terms a
@@ -4640,7 +4648,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.25.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.26.0...HEAD
+[2.26.0]: https://github.com/coolbress/plinth/releases/tag/v2.26.0
 [2.25.1]: https://github.com/coolbress/plinth/releases/tag/v2.25.1
 [2.25.0]: https://github.com/coolbress/plinth/commit/3309912f41a6af31d9f91daf28708923377b8c4b
 [2.24.1]: https://github.com/coolbress/plinth/releases/tag/v2.24.1
