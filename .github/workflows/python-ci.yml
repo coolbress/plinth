@@ -918,7 +918,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/plinth-closing"; mkdir -p "$d"
-          for f in scripts/closing-references.sh scripts/closing-references.py; do
+          for f in scripts/closing-references.sh scripts/closing-references.py scripts/description-fields.py; do
             curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
               "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
           done
@@ -950,14 +950,22 @@ jobs:
             say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read"
             exit 1
           fi
-          # The verdict line first, then the script's report.
+          # The verdict lines first, then the script's report.
           report="$RUNNER_TEMP/closing-references.md"; : > "$report"; rc=0
-          EVENT=pull_request GITHUB_STEP_SUMMARY="$report" \
+          answer="$RUNNER_TEMP/description.json"; rm -f "$answer"
+          EVENT=pull_request GITHUB_STEP_SUMMARY="$report" ANSWER_COPY="$answer" \
             bash "$RUNNER_TEMP/plinth-closing/closing-references.sh" || rc=$?
           if [ "$rc" = 0 ]; then
             say "pass: PR description, merging it closes no issue its closing line does not name"
           else
             say "fail: PR description, merging it would close an issue its closing line does not name, or GitHub's list could not be read"
+          fi
+          # What the person checked themselves and which review ran (#810),
+          # from the description just read: a missing, empty or bare "done"
+          # field is a not yet confirmed line, so a warning, never a red.
+          if [ -s "$answer" ]; then
+            while IFS= read -r line; do [ -z "$line" ] || say "$line"; done \
+              < <(python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer")
           fi
           { echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"

@@ -155,5 +155,43 @@ setup "$what"$'\n\n'"$how"$'\n\nCloses #12\n\n'"$by" "12"; export FETCH=failure
 run "a failed fetch: fails with its own line, no call to GitHub" 1 "" "fail: PR description, plinth's check could not be fetched"
 [ -s "$FX/calls" ] && no "a failed fetch still called gh" "$FX/calls" || ok "a failed fetch asks GitHub nothing"
 
+echo "-- what the person checked and which review ran (#810): a warning, never a red"
+grep -qF "/coolbress/plinth/$SHA/scripts/description-fields.py" "$FX/curl" \
+  && ok "the fields check is fetched at the workflow's own commit too" || no "description-fields.py is not fetched at $SHA" "$FX/curl"
+checked=$'## What I checked myself\n\nOpened the preview: the new heading shows, and `make check` printed 12 passed.'
+# fields <label> <checked section> <review line>: closes nothing, so only the fields can warn.
+fields() { setup "$what"$'\n\n'"$2"$'\n\n'"$how"$'\n\n'"$3"$'\n\nPart of #12\n\n'"$by" ""; run "$1" 0; }
+quiet() { # no warning and both pass lines
+  if grep -q 'not yet confirmed' "$FX/summary" || grep -q '::warning::' "$FX/out"; then no "$1: it warned" "$FX/out" "$FX/summary"
+  elif grep -qF 'pass: PR description, says what the person checked themselves' "$FX/summary" \
+    && grep -qF 'pass: PR description, says which review ran' "$FX/summary"; then ok "$1: no warning, two pass lines"
+  else no "$1: the two pass lines are missing" "$FX/summary"; fi
+}
+warns() { # <label> <field words> <what the summary also says>: a ::warning:: and a not yet confirmed line naming the field
+  if grep -qF "::warning::not yet confirmed: PR description, $2" "$FX/out" \
+    && grep -qF -- "- not yet confirmed: PR description, $2" "$FX/summary" && grep -qF -- "$3" "$FX/summary"; then ok "$1"
+  else no "$1: no warning for \"$2\" saying \"$3\"" "$FX/out" "$FX/summary"; fi
+}
+fields "filled: what was opened and what it showed, a fresh-context review" "$checked" 'Review: fresh-context'
+quiet "filled"
+fields "skipped with a reason, no review with a reason" $'## What I checked myself\n\nSkipped: a typo fix in a comment, nothing to open.' 'Review: none (a one-word typo)'
+quiet "Skipped: <reason>"
+fields "a third-party review named" "$checked" 'Review: third-party (Codex)'
+quiet "third-party (<name>)"
+fields "empty: the template's comment left alone, no Review line" $'## What I checked myself\n\n<!-- What you ran, opened or read, and what you saw. -->' ''
+warns "an empty section warns, saying how to fill it or skip it" "does not say what the person checked themselves" "Skipped: <reason>"
+warns "a missing Review line warns, naming the four answers" "does not say which review ran" "fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
+fields "bare \"done\" in both" $'## What I checked myself\n\nDone.' 'Review: done'
+warns "\"done\" alone in the section warns" "does not say what the person checked themselves" "\"done\""
+warns "\"Review: done\" warns" "does not say which review ran" "Review:"
+fields "\"Skipped:\" with no reason, \"none\" with no reason" $'## What I checked myself\n\nSkipped:' 'Review: none'
+warns "\"Skipped:\" alone warns" "does not say what the person checked themselves" "Skipped: <reason>"
+warns "\"Review: none\" alone warns" "does not say which review ran" "none (<reason>)"
+setup "$what"$'\n\n'"$how"$'\n\n'"$by" ""
+run "a description without either field still passes" 0 "" "pass: PR description, merging it closes"
+warns "without the section it warns" "does not say what the person checked themselves" "What I checked myself"
+setup "$what It is the second of the two fixes #65 decided."$'\n\n'"$checked"$'\n\nReview: fresh-context\n\n'"$by" "65"
+run "a red closing check still writes the fields' lines" 1 "" "pass: PR description, says which review ran"
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

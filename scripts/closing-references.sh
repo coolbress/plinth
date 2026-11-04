@@ -10,7 +10,8 @@
 #
 # Environment: REPO (owner/name), EVENT (github.event_name), PR (the pull
 # request's number, empty on any other event). GH_TOKEN is the job's token; it
-# needs `pull-requests: read` and `issues: read`.
+# needs `pull-requests: read` and `issues: read`. ANSWER_COPY, when set, is a
+# path that gets GitHub's answer once read, for description-fields.py (#810).
 #
 # Anything that cannot be read fails: a pass here means GitHub's list was read
 # and compared, as it stood when this ran. An issue linked in the sidebar
@@ -43,6 +44,7 @@ if ! gh api graphql -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$PR" 
   echo "::error::could not read #$PR's description and closing list from GitHub"
   exit 1
 fi
+[ -z "${ANSWER_COPY:-}" ] || cp "$answer" "$ANSWER_COPY"
 
 rc=0
 report="$(python3 "$here/closing-references.py" "$REPO" "$answer")" || rc=$?
