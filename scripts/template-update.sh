@@ -142,7 +142,14 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
     for f in ${rest+"${rest[@]}"}; do echo "  $f"; done
     [ "$restn" -le "$max" ] || echo "  (still over the limit: after the first is merged, --finish proposes the next split)"
     echo
-    local p1="$wt-part-1" b1="$branch-part-1" words=()
+    # The first number whose branch (local or on origin, as last fetched)
+    # and worktree are free: an update split three ways makes a second part
+    # after the first is merged, while the first's branch is still there.
+    local k=1
+    while git -C "$wt" rev-parse -q --verify "refs/heads/$branch-part-$k" >/dev/null \
+          || git -C "$wt" rev-parse -q --verify "refs/remotes/origin/$branch-part-$k" >/dev/null \
+          || [ -e "$wt-part-$k" ]; do k=$((k + 1)); done
+    local p1="$wt-part-$k" b1="$branch-part-$k" words=()
     for f in "${first[@]}"; do words+=("$(q "$f")"); done
     echo "To make the first (the update's own changes to those paths, nothing else):"
     echo "  git -C $(q "$wt") worktree add --no-track -b $(q "$b1") $(q "$p1") $mb"

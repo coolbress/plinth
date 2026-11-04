@@ -79,7 +79,10 @@ sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-ans
 printf 'template line\n' >> AGENTS.md
 # MOCK_BIG: an update over ci / diff-size's default limit of 400, mostly
 # issue forms (#795): 380 lines of form, 40 of source, 500 of docs (excluded).
-if [ -n "${MOCK_BIG:-}" ]; then
+if [ "${MOCK_BIG:-}" = three ]; then
+  # Three files of 350 lines: a split three ways (review on #801).
+  mkdir -p src; for f in a b c; do for i in $(seq 1 350); do echo "$f$i = $i"; done > "src/$f.py"; done
+elif [ -n "${MOCK_BIG:-}" ]; then
   mkdir -p .github/ISSUE_TEMPLATE src
   for i in $(seq 1 380); do echo "  - label: line $i"; done > .github/ISSUE_TEMPLATE/bug.yml
   for i in $(seq 1 40); do echo "x$i = $i"; done > src/extra.py
@@ -848,6 +851,23 @@ if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "counted here
 then ok "after the first part is merged, --finish counts from the new merge base and opens the rest"
 else bad "second part (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; printf '%s\n' "$body" | sed 's/^/        /'; fi
 
+# Split three ways: each proposal names a branch and worktree not yet used.
+fixture big-three; reset_logs; big big-three MOCK_BIG=three
+part() { # <n>: run the printed first-part lines, merge that part into main, follow it, --finish
+  ( while IFS= read -r l; do eval "$l"; done < <(sed -n '/^To make the first/,/^then open/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+  git -C "$BARE" update-ref refs/heads/main "$(git -C "$wt-part-$1" rev-parse HEAD 2>/dev/null)" 2>/dev/null
+  ( while IFS= read -r l; do eval "$l"; done < <(sed -n '/^Once it is merged/,/^$/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+  reset_logs; out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
+}
+first_cmd="$(grep -m1 'worktree add' <<<"$out")"
+part 1
+if [ "$rc" = 4 ] && grep -q "worktree add --no-track -b chore/template-$target_ref-part-2 " <<<"$out" && grep -q -- "-part-1 " <<<"$first_cmd"
+then ok "a split three ways: after the first part, the next proposal names part-2, not the part-1 still there"
+else bad "three-way split, second proposal (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+part 2
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && [ "$(git -C "$wt-part-2" diff --name-only HEAD~1 HEAD 2>/dev/null | wc -l | tr -d ' ')" = 1 ]
+then ok "and run as printed, the second part is made and the rest opens"
+else bad "three-way split, end (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 fixture big-anyway; reset_logs; big big-anyway
 reset_logs; run --finish "$wt" --over-limit
 body="$(cat "$work/gh.log.body" 2>/dev/null)"
