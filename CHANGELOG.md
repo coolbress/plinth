@@ -33,7 +33,8 @@ pull requests and have no tag.
 
 - plinth's own rules follow those of plinth-template v1.38.0: its
   pull-request template asks what the person checked and which review ran,
-  so its own pull requests no longer carry `ci / pr-title`'s two warnings;
+  so a pull request that fills both no longer gets `ci / pr-title`'s two
+  warnings;
   `CLAUDE.md` names the fresh-context review as the default and the
   term-table rule. `tests/template-rules-drift.sh` checks each rule the two
   share, as a named phrase, against the tag the door pins, so a pin raise
