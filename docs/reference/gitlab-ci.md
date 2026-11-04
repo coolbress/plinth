@@ -151,6 +151,12 @@ rewording, run a new pipeline for the merge request, or push a commit.
 Until then the merge request shows the last pipeline's result, and a
 pipeline that passed before the edit lets it merge with the new text.
 
+The description's two fields are read as `ci / pr-title` reads them on GitHub (#810):
+a `What I checked myself` section and a `Review:` line. Each one missing, empty or
+bare ("done", `Skipped:` or `none` with no reason) is a `not yet confirmed` line in
+the verdict, saying how to fill it or skip it with a reason; neither fails the job.
+The definitions are `scripts/description-fields.py`'s text.
+
 ## Inputs
 
 `working-directory`, `max-diff-lines`, `deps-fail-on-severity`,

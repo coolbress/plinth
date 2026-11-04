@@ -440,8 +440,8 @@ pr-title:
         echo "  could not list the merge request's commits from ${base:-<no CI_MERGE_REQUEST_DIFF_BASE_SHA>} to ${head:-<no head>}"
         commits="$PLINTH_TMP/unread"
       fi
-      rc=0
-      COMMITS="$commits" TITLE="$title" ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
+      rc=0; fields="$PLINTH_TMP/fields"; : > "$fields"
+      FIELDS="$fields" COMMITS="$commits" TITLE="$title" ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
       import json, os, re, sys
 
       # GitLab's default issue closing pattern ("Default closing pattern" in
@@ -479,7 +479,90 @@ pr-title:
           re.IGNORECASE,
       )
       TRAILER = re.compile(r"^[A-Za-z][A-Za-z0-9-]*: \S")
+      # What the person checked themselves and which review ran (#810):
+      # scripts/description-fields.py's text (tests/gitlab-ci-cases.sh).
+      COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
+      FENCE = re.compile(r"^\s{0,3}(```|~~~)")
+      HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
+      CHECKED = re.compile(r"^\s{0,3}#{1,6}\s+what i checked myself\s*:?\s*#*\s*$", re.IGNORECASE)
+      REVIEW = re.compile(r"^\s*(?:[-*]\s+)?\**review\**\s*:\**\s*(.*?)\s*$", re.IGNORECASE)
+      # Lines that end a description rather than fill a section: the closing or
+      # link line and the attribution's trailers.
+      ENDING = re.compile(
+          r"^\s*(?:(?:closes|fixes|resolves|part of|related to)\s+\S*#\d+"
+          r"|(?:assisted-by|co-authored-by|signed-off-by):\s)",
+          re.IGNORECASE,
+      )
+      # fresh-context or same-session alone; third-party and none with what goes in
+      # their brackets, a placeholder such as `<name>` not counting.
+      KINDS = re.compile(r"^(?:(?:fresh-context|same-session)\b|(?:third-party|none)\s*\(\s*[^\s<)][^)]*\))", re.IGNORECASE)
+      REVIEW_FORM = "Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
 
+
+      def unfenced(body):
+          """The description's lines without its HTML comments, each with whether it sits in a code fence."""
+          out, fenced = [], False
+          for line in COMMENT.sub("", body).replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+              if FENCE.match(line):
+                  fenced = not fenced
+                  out.append((line, True))
+                  continue
+              out.append((line, fenced))
+          return out
+
+
+      def bare(text):
+          """Empty, or only a word that says nothing was recorded."""
+          words = re.sub(r"\[[ xX]?\]|[\s`*_.!:()<>-]+", " ", text).strip().lower()
+          return words in ("", "done", "skipped", "none", "reason", "skipped reason", "none reason")
+
+
+      def checked_text(lines):
+          """The text under a `What I checked myself` heading, or None without one."""
+          text, inside, found = [], False, False
+          for line, fenced in lines:
+              if not fenced and HEADING.match(line):
+                  inside = bool(CHECKED.match(line))
+                  found = found or inside
+                  continue
+              if inside and (fenced or not (REVIEW.match(line) or ENDING.match(line))):
+                  text.append(line)
+          return "\n".join(text).strip() if found else None
+
+
+      def review_values(lines):
+          return [m.group(1) for line, fenced in lines if not fenced for m in [REVIEW.match(line)] if m]
+
+
+      def review_filled(value):
+          v = value.strip()
+          return not bare(v) and "|" not in v and bool(KINDS.match(v))
+
+
+      def field_lines(body, what):
+          """One verdict line for each field; `what` is PR or MR."""
+          lines = unfenced(body or "")
+          out = []
+          checked = checked_text(lines)
+          if checked is not None and not bare(checked):
+              out.append(f"pass: {what} description, says what the person checked themselves")
+          else:
+              why = ("there is no `What I checked myself` section" if checked is None
+                     else "its `What I checked myself` section is empty" if not checked.strip()
+                     else f'its `What I checked myself` section says only "{" ".join(checked.split())}", and "done" or a bare "Skipped" records nothing')
+              out.append(f"not yet confirmed: {what} description, does not say what the person checked themselves: {why};"
+                         " under that heading write what you ran, opened or read and what you saw (a command's output,"
+                         " a page, a number), or `Skipped: <reason>`; an edited description is read again on the next run")
+          values = review_values(lines)
+          if any(review_filled(v) for v in values):
+              out.append(f"pass: {what} description, says which review ran")
+          else:
+              why = ("there is no `Review:` line" if not values
+                     else "its `Review:` line is empty" if not values[-1].strip()
+                     else f'its `Review:` line says "{" ".join(values[-1].split())}", which names none of the four answers or gives no reason')
+              out.append(f"not yet confirmed: {what} description, does not say which review ran: {why};"
+                         f" write one line, `{REVIEW_FORM}`; an edited description is read again on the next run")
+          return out
 
       def refs(text, project):
           """Every issue the text names, as (project path in lower case, number).
@@ -552,6 +635,13 @@ pr-title:
       except (OSError, ValueError, KeyError, TypeError) as e:
           print(f"  FAIL  could not read the merge request's description from GitLab ({type(e).__name__}: {e})")
           sys.exit(2)
+      # The two fields, for the verdict after the closing line's: a warning, never a red.
+      try:
+          said = field_lines(body, "MR")
+      except Exception as e:  # never the closing check's verdict
+          said = [f"not yet confirmed: MR description, the fields were not read ({type(e).__name__}); a run where the check finishes confirms them"]
+      with open(os.environ["FIELDS"], "w", encoding="utf-8") as f:
+          f.write("\n".join(said) + "\n")
       # `git log -z --format=%H%n%B`: each commit is its hash, a newline, its message.
       try:
           with open(os.environ.get("COMMITS", ""), encoding="utf-8", errors="replace") as f:
@@ -633,6 +723,9 @@ pr-title:
         3) say "fail: MR description, the merge request's commit messages could not be read, so they were not checked"; plinth_failed=1 ;;
         *) say "fail: MR description, it could not be read, so it was not checked"; plinth_failed=1 ;;
       esac
+      # What the person checked themselves and which review ran (#810): a
+      # missing, empty or bare "done" field is a not yet confirmed line.
+      while IFS= read -r line; do [ -z "$line" ] || say "$line"; done < "$fields"
       verdict
 
 # A wall, not a net: blocks a vulnerable dependency version a merge request
