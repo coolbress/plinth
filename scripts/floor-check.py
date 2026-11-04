@@ -1910,6 +1910,9 @@ def check_javascript_project(project: Path) -> None:
     if bun and not any((project / n).is_file() for n in NODE_LOCKFILES):
         result("INFO", f"{bun[0]} is the only lockfile here: GitHub's dependency review does not read it, "
                        "so a vulnerable dependency is not reported before a merge")
+    # What Render deploys does not depend on the language (#811 review).
+    if (project / "render.yaml").is_file():
+        check_render_blueprint(project / "render.yaml")
 
 
 def check_project(project: Path, root: Path, archetype: str | None, host: str = "github") -> None:
@@ -2136,8 +2139,14 @@ def read_block_yaml(text: str):
         # string this reader may take as one.
         if v[0] in "[{|>&*!%@`" or v.startswith("- ") or (v[0] not in "'\"" and ": " in v):
             raise Unreadable(f"the value {v!r}")
-        if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        # Double quotes take escapes (`\u0065` is `e`), which this reader
+        # does not decode; inside single quotes `''` is one quote.
+        if len(v) >= 2 and v[0] == v[-1] == '"':
+            if "\\" in v:
+                raise Unreadable(f"the escaped value {v}")
             return v[1:-1]
+        if len(v) >= 2 and v[0] == v[-1] == "'":
+            return v[1:-1].replace("''", "'")
         if v[0] in "'\"":
             raise Unreadable(f"the value {v!r}")
         return v

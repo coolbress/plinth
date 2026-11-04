@@ -1663,7 +1663,7 @@ else bad "render.yaml with all four gaps"; grep -E 'render|failed' <<<"$out" | s
 # complete file gives), and never a PASS.
 cp "$work/render-complete.yaml" "$rb/render.yaml"
 read_count="$(blueprint_out | sed -nE 's/^-- 0 failed, ([0-9]+) not verified.*/\1/p')"
-for form in 'services: [{type: web, name: app}]' $'services:\n  - &web\n    type: web' $'services:\n  - type: web\n    name: app\n    buildCommand: |\n      make'; do
+for form in 'services: [{type: web, name: app}]' $'databases:\n  - name: db\n    plan: "fr\\u0065e"' $'services:\n  - &web\n    type: web' $'services:\n  - type: web\n    name: app\n    buildCommand: |\n      make'; do
   printf '%s\n' "$form" > "$rb/render.yaml"
   out="$(blueprint_out)"
   if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out" \
@@ -3210,6 +3210,12 @@ git -C "$js" add -A
 js_run "$js" --no-network
 [ "$(sed -n 2p <<<"$out")" = "  INFO  read as a JavaScript or TypeScript project (package.json here, no pyproject.toml): plinth has no checks for its language, so no lint, typecheck, test or build check; the checks that do not depend on the language still apply: the documents, .claude/settings.json, .gitattributes, Dependabot, tracked .env files, action pins and, with a repository name, the ruleset, push protection and CodeQL" ] \
   && ok "JavaScript only: one plain INFO line right under the header" || { bad "JavaScript only: the INFO line under the header"; sed -n 1,3p <<<"$out" | sed 's/^/        /'; }
+# render.yaml does not depend on the language (#811): read here too.
+printf 'databases:\n  - name: db\n    plan: free\n' > "$js/render.yaml"; git -C "$js" add -A
+js_run "$js" --no-network
+grep -qF 'WARN  render.yaml: database db is on plan free' <<<"$out" && ok "JavaScript only: render.yaml is read" \
+  || { bad "JavaScript only: render.yaml is read"; grep -E 'render' <<<"$out" | sed 's/^/        /'; }
+rm "$js/render.yaml"; git -C "$js" add -A; js_run "$js" --no-network
 for want in '^  N/A   pyproject.toml does not apply: ' '^  N/A   uv.lock does not apply: ' \
             '^  N/A   the ci job.s call to coolbress/plinth/.github/workflows/python-ci.yml does not apply: ' \
             '^  N/A   the container image, .env.example and JSON logs items: does not apply: '; do
