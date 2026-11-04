@@ -1160,6 +1160,22 @@ def pins_forward(root: Path, network: bool) -> list[tuple[str, str, str]]:
     return moves
 
 
+def print_plinth_pins(root: Path) -> int:
+    """--print-plinth-pins (#793): every coolbress/plinth `uses:` of the
+    workflow files, read as the pin items read them (iter_uses: comments and
+    the interior of a `run: |` block skipped), one `<file> <ref>` line each,
+    the ref as written; a `uses:` it cannot read is `<file> unread line <n>`,
+    since it could be one. template-update.sh checks with it, after copier,
+    that every plinth pin names the one its command carried."""
+    for p in workflow_files(root):
+        for n, value, readable in iter_uses(read(p)):
+            if not readable:
+                print(f"{p.name} unread line {n}")
+            elif value.lower().startswith(f"{PLINTH_REPO}/"):
+                print(f"{p.name} {value.rpartition('@')[2]}")
+    return 0
+
+
 def moves_lines(d: dict) -> list[str]:
     """One line per file the update moves forward to the ci job's commit (#793)."""
     return [f"moves: {f} from {old} to {new}, the commit the ci job calls ({old} is an ancestor of it)"
@@ -3929,6 +3945,9 @@ def main() -> int:
                          "gh accounts, git helpers, ~/.netrc; and a production database URL in the environment, "
                          ".env* files or the env of .claude/settings*.json")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--print-plinth-pins", action="store_true",
+                    help="print each coolbress/plinth uses: of the workflow files as `<file> <ref>`, or `<file> unread "
+                         "line <n>` for a uses: this checker cannot read, and exit 0 (#793)")
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
     ap.add_argument("--plinth-pin", choices=("live", "tested"), default="live",
@@ -3955,6 +3974,8 @@ def main() -> int:
     root = Path(a.root).resolve()
     if a.plinth_pin != "live" and not a.print_update_command:
         ap.error("--plinth-pin needs --print-update-command")
+    if a.print_plinth_pins:
+        return print_plinth_pins(root)
     if a.print_update_command:
         return print_update_command(root, a.plinth_pin, not a.no_network, a.host,
                                     a.repo.split("/")[0] if a.repo else None)

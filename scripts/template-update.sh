@@ -434,18 +434,21 @@ echo "  $cmd"
 
 # When the pins disagreed at the base (#793), every plinth uses: that copier
 # did not leave in conflict must now name the pin the command carried: copier
-# applies a diff, and a hand-edited line is not what it rendered. Fails closed.
+# applies a diff, and a hand-edited line is not what it rendered. Read by the
+# checker, as the pin items read them (a `run: |` block's text is not a
+# uses:); a uses: it cannot read counts as not named. Fails closed.
 if [ -n "$moves" ]; then
   want_pin="$(sed -nE 's/.* --data plinth_sha=([0-9a-fA-F]{40})( .*)?$/\1/p' <<<"$cmd" | tr 'A-F' 'a-f')"
   left="$(conflicts_in "$wt" "$base")"; stale=""
-  for f in "$wt"/.github/workflows/*.yml "$wt"/.github/workflows/*.yaml; do
-    [ -f "$f" ] || continue
-    rel=".github/workflows/${f##*/}"
-    grep -qxF -- "$rel" <<<"$left" && continue
-    while IFS= read -r sha; do
-      [ "$(tr 'A-F' 'a-f' <<<"$sha")" = "$want_pin" ] || stale="$stale  $rel calls $sha, not $want_pin"$'\n'
-    done < <(grep -iE '^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*["'\'']?coolbress/plinth/' -- "$f" | sed -E 's/.*@([0-9a-fA-F]{40}).*/\1/')
-  done
+  found="$(python3 "$checker" --root "$wt" --print-plinth-pins)" || found="? the workflows could not be read"
+  while IFS=' ' read -r file ref; do
+    [ -n "$file" ] || continue
+    grep -qxF -- ".github/workflows/$file" <<<"$left" && continue
+    case "$ref" in
+      "unread line "*) stale="$stale  .github/workflows/$file has a uses: at ${ref#unread } that cannot be read"$'\n' ;;
+      *) [ "$(tr 'A-F' 'a-f' <<<"$ref")" = "$want_pin" ] || stale="$stale  .github/workflows/$file calls $ref, not $want_pin"$'\n' ;;
+    esac
+  done <<<"$found"
   if [ -n "$stale" ]; then
     printf 'template-update: after copier, a plinth uses: line does not name the pin the command carried:\n%s' "$stale" >&2
     die "nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $(q "$wt") && git branch -D $branch"

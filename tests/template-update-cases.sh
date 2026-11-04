@@ -82,8 +82,9 @@ printf 'template line\n' >> AGENTS.md
 # as they were.
 if [ "${MOCK_PINS:-}" = move ]; then
   pin=""; for a in "$@"; do case "$a" in plinth_sha=*) pin="${a#plinth_sha=}" ;; esac; done
-  for f in .github/workflows/*.yml; do
-    sed -E -i.bak "s|(coolbress/plinth/[^@]*)@[0-9a-fA-F]{40}|\1@$pin|" "$f" && rm "$f.bak"
+  for f in .github/workflows/ci.yml .github/workflows/label.yml; do   # the files the template renders
+    [ -f "$f" ] || continue
+    sed -E -i.bak "s|^([[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*coolbress/plinth/[^@]*)@[0-9a-fA-F]{40}|\1@$pin|" "$f" && rm "$f.bak"
   done
 fi
 # MOCK_GLOSSARY: the template names GLOSSARY.md too, whatever MOCK_COPIER does.
@@ -765,6 +766,16 @@ if [ "$rc" = 1 ] && grep -qF "  .github/workflows/label.yml calls $old_pin, not 
    && ! grep -q "pr create" "$work/gh.log" && ! git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
 then ok "copier leaving label.yml unmoved: the apply stops, names it, pushes and opens nothing"
 else bad "apply, stale pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A workflow whose `run: |` block writes a plinth uses: line as text (review
+# on #798): not a pin, so it does not stop the apply, while a real stale pin
+# beside it still does.
+two_fixture pins-runblock; reset_logs
+printf 'jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          cat > fixture.yml <<EOF\n          uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n          EOF\n' "$old_pin" > "$repo/.github/workflows/fixture.yml"
+git -C "$repo" add -A && git -C "$repo" commit -q -m runblock && git -C "$repo" push -q origin main
+out="$(cd "$repo" && MOCK_PINS=move FLOOR_CHECK_API_DIR="$work/api-behind" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -q "@$old_pin" "$(wt_of pins-runblock)/.github/workflows/fixture.yml"
+then ok "a plinth uses: inside a run: | block is text, not a pin: the apply goes on"
+else bad "apply, run block (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # The compare read at the plan but not at the apply (review on #798): the
 # apply stops before copier, never runs with the post-copier check skipped.
 two_fixture pins-unread; reset_logs
