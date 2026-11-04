@@ -28,6 +28,15 @@ pull requests and have no tag.
   saying only "done" is a `not yet confirmed` line, a warning on GitHub;
   the job stays green. No new check or job. plinth-template's pull-request
   and merge-request forms carry both fields from v1.38.0 (#810).
+- `/plinth:floor-check` reads `render.yaml` when a repository has one, made
+  from the template or not: a web service with no `healthCheckPath`, one
+  that does not wait for the checks (`autoDeployTrigger` other than
+  `checksPass`), a database on plan `free` or naming none (Render deletes a
+  free Postgres after 30 days, and it has no backups), and a secret-named
+  `envVars` key with a literal `value:` are each a WARN with one fix line.
+  A file in a form its reader does not read is a SKIP, never a pass,
+  naming the line number and never what the line holds. A repository
+  without the file reports nothing new (#811).
 
 ### Changed
 
@@ -68,6 +77,13 @@ pull requests and have no tag.
   stays opt-in, named as the more independent one. Guidance only: no check,
   hook or dependency. Projects get the matching `AGENTS.md` line from the
   plinth-template release that carries it.
+- `/plinth:floor-check`'s push protection lines say that anyone with write
+  access can still push a secret past the block by giving a reason: on the
+  PASS, and under the WARN's call that turns it on (#811).
+- A private repository that answers no security settings even to a login
+  that administers it is a push protection SKIP of its own: Secret
+  Protection not on its plan, or a token without the Administration
+  permission. It used to say only that the token does not read them (#811).
 
 ## [2.25.1] - 2026-11-04
 
