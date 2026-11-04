@@ -31,8 +31,13 @@ case "$*" in
     # Only the first add clones; a later one returns, so a script that goes
     # on after Ctrl-C reaches the end instead of hanging here.
     [ -e "$STUB_READY" ] && exit 0
-    # The clone: its arguments name the config dir, as git clone's do.
-    bash -c 'trap "" INT TERM; while :; do mkdir -p "$1"; sleep 0.1; done' \
+    # The clone: its arguments name the config dir, as git clone's do. With
+    # STUB_FORKS it also forks, every 5 ms, a child that names the dir and
+    # recreates it 0.3 s later: one forked while the cleanup's KILL goes down
+    # its list is not on it (#786).
+    body='mkdir -p "$1"; sleep 0.1'
+    [ -z "${STUB_FORKS:-}" ] || body='mkdir -p "$1"; (sleep 0.3; mkdir -p "$1") & sleep 0.005'
+    bash -c "trap '' INT TERM; while :; do $body; done" \
       clone "$CLAUDE_CONFIG_DIR/plugins/marketplaces/x..clone" &
     # Not this run's: a directory whose name starts with the config dir's.
     perl -e 'setpgrp(0,0); sleep 600' "${CLAUDE_CONFIG_DIR}x" &
@@ -84,6 +89,15 @@ for sig in TERM HUP; do
   alive "$decoy" && pass "$sig: a process naming ${dir}x survives" || fail "$sig: the trap killed a process naming ${dir}x"
   kill "$decoy" 2>/dev/null
 done
+
+# A clone that keeps forking children that name the dir: the cleanup kills
+# and removes again until nothing names it and it stays gone (#786).
+if STUB_FORKS=1 run fork TERM pid 2>/dev/null; then
+  dir="$(cat "$work/fork/dir")"
+  naming "$dir/" && fail "fork: a process still names $dir" || pass "fork: nothing names the dir"
+  [ -e "$dir" ] && fail "fork: $dir exists again" || pass "fork: the dir stays removed"
+  kill "$(cat "$work/fork/decoy")" 2>/dev/null
+fi
 
 # Ctrl-C: INT to the whole group. claude ends the add with status 0, as the
 # real one did; the script must stop rather than run the next README line.
