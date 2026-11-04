@@ -20,6 +20,14 @@ pull requests and have no tag.
   English term in brackets so it matches GitHub's screen. `GLOSSARY.md` and
   the README link it, `/plinth:guide` explains each term from it the first
   time it uses one, and `tests/term-table.sh` checks it (#809).
+- `ci / pr-title`, on GitHub and in GitLab's `pr-title`, reads two fields
+  of the description: a `What I checked myself` section (what the person
+  ran, opened or read and what they saw, or `Skipped: <reason>`) and a
+  `Review:` line (`fresh-context`, `third-party (<name>)`, `same-session
+  (not independent)` or `none (<reason>)`). Each one missing, empty or
+  saying only "done" is a `not yet confirmed` line, a warning on GitHub;
+  the job stays green. No new check or job. plinth-template's pull-request
+  and merge-request forms gain both fields in its next release (#810).
 - `/plinth:floor-check` reads `render.yaml` when a repository has one, made
   from the template or not: a web service with no `healthCheckPath`, one
   that does not wait for the checks (`autoDeployTrigger` other than

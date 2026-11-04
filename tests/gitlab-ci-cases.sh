@@ -136,12 +136,19 @@ def block(text, start):
     while b < len(lines) and (not lines[b].strip() or lines[b][0] in " )"):
         b += 1
     return "\n".join(lines[a:b]).rstrip()
-fails = [s for s in ("LINK_LINE = ", "TRAILER = ", "def closing_position(", "def own_paragraph(", "def excerpt(")
-         if not block(py, s) or block(py, s) != block(gl, s)]
-print("\n".join(f"{s.strip()} differs from scripts/closing-references.py" for s in fails)); sys.exit(1 if fails else 0)
+import os
+names = ("LINK_LINE = ", "TRAILER = ", "def closing_position(", "def own_paragraph(", "def excerpt(")
+if os.environ.get("FIELDS"):
+    names = ("COMMENT = ", "FENCE = ", "HEADING = ", "CHECKED = ", "REVIEW = ", "ENDING = ", "KINDS = ", "REVIEW_FORM = ",
+             "def unfenced(", "def bare(", "def checked_text(", "def review_values(", "def review_filled(", "def field_lines(")
+fails = [s for s in names if not block(py, s) or block(py, s) != block(gl, s)]
+print("\n".join(f"{s.strip()} differs from {sys.argv[1].rsplit('/', 1)[-1]}" for s in fails)); sys.exit(1 if fails else 0)
 PY
 if out="$(python3 "$tmp/closing.py" "$root/scripts/closing-references.py" "$gl" 2>&1)"; then ok "pr-title finds the closing line with closing-references.py's own definitions"
 else bad "pr-title's closing-line definitions drifted from scripts/closing-references.py" "$out"; fi
+# ... and reads the two fields (#810) with scripts/description-fields.py's text.
+if out="$(FIELDS=1 python3 "$tmp/closing.py" "$root/scripts/description-fields.py" "$gl" 2>&1)"; then ok "pr-title reads the two fields with description-fields.py's own definitions"
+else bad "pr-title's field definitions drifted from scripts/description-fields.py" "$out"; fi
 
 # A job's script, after the shared helpers: `.plinth`'s before_script, the
 # overrides given, then the job's script block.
@@ -251,7 +258,7 @@ desc() { # <description> [truncated]: a merge request pipeline of g/p !4
 desc "$what It is the second of the two fixes #65 decided to land."$'\n\n'"$by"
 expect "\"the two fixes #65 decided\" fails, the line quoted" 1 "fail: MR description, merging it would close" \
   "FAIL  #65: GitLab's default closing pattern closes it" "line 3: " "the two fixes #65 decided"
-refuse "... with no not yet confirmed line beside the fail" "not yet confirmed: MR description"
+refuse "... with no not yet confirmed line beside the fail" "not yet confirmed: MR description, no closing keyword"
 desc "$what"$'\n\nCloses #12\n\n'"$by"
 expect "a closing line alone: the job passes, and says GitLab's own list was not read" 0 \
   "pass: MR title" "not yet confirmed: MR description" "the closing line names #12"
@@ -310,6 +317,33 @@ desc "${what:0:20}" true
 expect "a truncated variable and an API that does not answer: fails, not a pass" 1 "fail: MR description, it could not be read"
 STUB_MR='{"title": "no description key"}' desc "${what:0:20}" true
 expect "an API answer without a description fails" 1 "fail: MR description, it could not be read"
+
+echo "-- pr-title: what the person checked and which review ran (#810): a warning, never a red"
+checked=$'## What I checked myself\n\nOpened the preview: the new heading shows, and `make check` printed 12 passed.'
+fields() { desc "$what"$'\n\n'"$1"$'\n\n'"$2"$'\n\nPart of #12\n\n'"$by"; }
+fields "$checked" 'Review: fresh-context'
+expect "filled: two pass lines, the job passes" 0 "pass: MR description, says what the person checked themselves" "pass: MR description, says which review ran"
+refuse "... and no warning for either field" "does not say"
+fields $'## What I checked myself\n\nSkipped: a typo fix in a comment, nothing to open.' 'Review: none (a one-word typo)'
+expect "Skipped: <reason> and none (<reason>): two pass lines" 0 "pass: MR description, says what the person checked themselves" "pass: MR description, says which review ran"
+refuse "... and no warning" "does not say"
+fields $'## What I checked myself\n\n<!-- What you ran, opened or read, and what you saw. -->' ''
+expect "empty: warns for both, says how to fill or skip, and the job passes" 0 \
+  "not yet confirmed: MR description, does not say what the person checked themselves" "Skipped: <reason>" \
+  "not yet confirmed: MR description, does not say which review ran" "none (<reason>)"
+fields $'## What I checked myself\n\nDone.' 'Review: done'
+expect "bare \"done\" in both: warns for both, and the job passes" 0 \
+  "does not say what the person checked themselves: its \`What I checked myself\` section says only \"Done.\"" \
+  "does not say which review ran: its \`Review:\` line says \"done\""
+fields $'## What I checked myself\n\n- [x] done' 'Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)'
+expect "\"- [x] done\" and the form's four answers copied: warns for both, and the job passes" 0 \
+  "says only \"- [x] done\"" "names none of the four answers"
+fields $'## What I checked myself:\n\nRan make check: 12 passed.' 'Review: third-party (Codex)'
+expect "a heading with a colon and a named third-party review: two pass lines" 0 "pass: MR description, says what the person checked themselves" "pass: MR description, says which review ran"
+desc "$what It is the second of the two fixes #65 decided."$'\n\n'"$checked"$'\n\nReview: fresh-context\n\n'"$by"
+expect "a red closing check still writes the fields' lines" 1 "fail: MR description, merging it would close" "pass: MR description, says which review ran"
+desc "${what:0:20}" true
+refuse "an unread description writes no field line" "says which review ran"
 
 echo "-- pr-title: closing chains led by a link, the title and the commit messages (#800)"
 desc "$what This closes https://gitlab.example/g/p/-/merge_requests/3 and #7 as well."$'\n\n'"$by"
