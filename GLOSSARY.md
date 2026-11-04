@@ -67,3 +67,8 @@ One meaning per term, in code, docs and issues.
 Terms not defined here (agent, session, context window, automated check,
 automated review, human review, skill) follow the
 [AI Coding Dictionary](https://github.com/mattpocock/dictionary-of-ai-coding).
+
+The everyday GitHub terms a beginner meets in the first project (repository,
+pull request, check, merge and the rest), each with a plain explanation and
+the rule for keeping the English term beside a translation, are in
+[docs/reference/terms.md](docs/reference/terms.md).
