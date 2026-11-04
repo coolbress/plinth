@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- GitLab's `pr-title` also reads the merge request's title and commit
+  messages, which GitLab reads too when it closes issues on a merge, and a
+  closing chain that starts with a link: a closing keyword before a merge
+  request URL, then `and` and an issue, closes that issue on GitLab. An
+  issue any of them closes that the description's closing line does not
+  name fails, with the commit and line quoted. The job now clones the whole history to list the commits. A
+  closing pattern with references written with no space between them
+  (`#11#11...`) no longer backtracks until the job's timeout (#800).
+
 ## [2.25.0] - 2026-11-04
 
 `/plinth:template-update` now counts its own diff before it pushes. Over the size limit it proposes a split instead of opening a pull request that `ci / diff-size` would fail. When `ci.yml`'s plinth pin was raised by hand ahead of the other files, the update now carries those files forward to that pin instead of stopping. GitLab's `pr-title` now reads the merge request description for prose that would close an issue. The install smoke test no longer races its own cleanup.
@@ -41,14 +52,6 @@ tested with plinth-template v1.37.0
   whose prose closes an issue fails its next pipeline once a project's
   include is raised. GitLab starts no pipeline on an edited description:
   the check runs on the next one (#782).
-- GitLab's `pr-title` also reads the merge request's title and commit
-  messages, which GitLab reads too when it closes issues on a merge, and a
-  closing chain that starts with a link: a closing keyword before a merge
-  request URL, then `and` and an issue, closes that issue on GitLab. An issue any of them closes that the
-  description's closing line does not name fails, with the commit and line
-  quoted. The job now clones the whole history to list the commits. A
-  closing pattern with references written with no space between them
-  (`#11#11...`) no longer backtracks until the job's timeout (#800).
 
 ### Fixed
 
