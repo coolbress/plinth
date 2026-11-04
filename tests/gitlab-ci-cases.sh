@@ -175,12 +175,21 @@ mkdir -p "$tmp/bin" "$tmp/job-tmp"
 # GNU mktemp reads TMPDIR, macOS's did not: a bare `mktemp -d` gets a template.
 printf '#!/usr/bin/env bash\n[ "$*" = -d ] && set -- -d "$TMPDIR/tmp.XXXXXXXXXX"\nexec %q "$@"\n' "$(command -v mktemp)" > "$tmp/bin/mktemp"
 chmod +x "$tmp/bin/mktemp"
+# <seconds> <command>...: runs the command in a process group of its own and
+# kills the whole group at <seconds> (exit 142). Killing bash alone left the
+# job's python3 running with the output pipe open, and the case never ended.
+limit() {
+  perl -e 'my $t = shift; my $pid = fork; die "fork: $!" unless defined $pid;
+    if (!$pid) { setpgrp(0, 0); exec @ARGV or exit 127 }
+    $SIG{ALRM} = sub { kill "KILL", -$pid; waitpid($pid, 0); exit 142 };
+    alarm $t; waitpid($pid, 0); exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' "$@"
+}
 # Runs a job in the current directory with the downloads stubbed; sets $out
-# and $rc.
+# and $rc. JOB_LIMIT=<seconds> kills it then (exit 142), so a hang fails a case.
 run_job() { # <job>
   rc=0
   out="$( { cat "$tmp/helpers.sh"; echo ": > \"\$PLINTH_TMP/$mark\"; plinth_uv() { :; }; plinth_osv() { :; }; plinth_gitleaks() { :; }"; cat "$tmp/$1.sh"; } \
-    | PATH="$tmp/bin:$PATH" TMPDIR="$tmp/job-tmp" bash -eo pipefail 2>&1)" || rc=$?
+    | PATH="$tmp/bin:$PATH" TMPDIR="$tmp/job-tmp" limit "${JOB_LIMIT:-600}" bash -eo pipefail 2>&1)" || rc=$?
 }
 expect() { # <label> <rc> <pattern in out>...
   local label="$1" want="$2"; shift 2
@@ -193,7 +202,20 @@ refuse() { # <label> <pattern that must not be in out>
 }
 
 echo "-- pr-title"
-title() { export CI_MERGE_REQUEST_TITLE="$1" CI_MERGE_REQUEST_DESCRIPTION=""; run_job pr-title; unset CI_MERGE_REQUEST_TITLE CI_MERGE_REQUEST_DESCRIPTION; }
+# The merge request's commits (#800): a repository whose branch is one
+# commit with no closing keyword above the merge base, unless a case adds one.
+crepo="$tmp/pr-commits"; mkdir -p "$crepo"
+git -C "$crepo" init -q -b main; git -C "$crepo" config user.email t@example.com; git -C "$crepo" config user.name t
+git -C "$crepo" config commit.gpgsign false; git -C "$crepo" remote add origin "$crepo"
+git -C "$crepo" commit -q --allow-empty -m "chore: the base, which fixes #90 on main already"; cbase="$(git -C "$crepo" rev-parse HEAD)"
+git -C "$crepo" commit -q --allow-empty -m "docs: a page" -m "The pin moves to v1.5.3."; cplain="$(git -C "$crepo" rev-parse HEAD)"
+chead="$cplain"
+commit() { # <message>...: a commit on top of the plain branch head; chead is it
+  git -C "$crepo" checkout -q --detach "$cplain"
+  local m args=(); for m in "$@"; do args+=(-m "$m"); done
+  git -C "$crepo" commit -q --allow-empty "${args[@]}"; chead="$(git -C "$crepo" rev-parse HEAD)"
+}
+title() { CI_MERGE_REQUEST_TITLE="$1" CI_MERGE_REQUEST_DESCRIPTION="" GIT_DIR="$crepo/.git" CI_MERGE_REQUEST_DIFF_BASE_SHA="$cbase" CI_COMMIT_SHA="$cplain" run_job pr-title; }
 title "feat: add a thing";            expect "a Conventional Commits title passes" 0 "pass: MR title follows the convention"
 title "Draft: fix(cli): exit code";   expect "a draft prefix is left out" 0 "pass: MR title follows the convention"
 title "[Draft] docs: a page";         expect "a [Draft] prefix is left out" 0 "pass: MR title follows the convention"
@@ -221,9 +243,9 @@ what=$'## What and why\n\nThe pin moves to v1.5.3.'
 by='Assisted-by: Claude:claude-opus-5-5'
 desc() { # <description> [truncated]: a merge request pipeline of g/p !4
   : > "$tmp_curl_log"
-  CI_MERGE_REQUEST_TITLE="docs: a page" CI_MERGE_REQUEST_DESCRIPTION="$1" CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED="${2:-false}" \
+  CI_MERGE_REQUEST_TITLE="${TITLE:-docs: a page}" CI_MERGE_REQUEST_DESCRIPTION="$1" CI_MERGE_REQUEST_DESCRIPTION_IS_TRUNCATED="${2:-false}" \
     CI_PROJECT_PATH=g/p CI_PROJECT_ID=9 CI_MERGE_REQUEST_IID=4 CI_API_V4_URL=https://gitlab.example/api/v4 CI_JOB_TOKEN=jt \
-    CI_SERVER_HOST=gitlab.example \
+    CI_SERVER_HOST=gitlab.example GIT_DIR="$crepo/.git" CI_MERGE_REQUEST_DIFF_BASE_SHA="${BASE-$cbase}" CI_COMMIT_SHA="$chead" \
     run_job pr-title
 }
 desc "$what It is the second of the two fixes #65 decided to land."$'\n\n'"$by"
@@ -288,6 +310,90 @@ desc "${what:0:20}" true
 expect "a truncated variable and an API that does not answer: fails, not a pass" 1 "fail: MR description, it could not be read"
 STUB_MR='{"title": "no description key"}' desc "${what:0:20}" true
 expect "an API answer without a description fails" 1 "fail: MR description, it could not be read"
+
+echo "-- pr-title: closing chains led by a link, the title and the commit messages (#800)"
+desc "$what This closes https://gitlab.example/g/p/-/merge_requests/3 and #7 as well."$'\n\n'"$by"
+expect "a closing keyword before a merge request URL, then \`and\` and an issue, fails, naming the issue" 1 \
+  "FAIL  #7: GitLab's default closing pattern closes it" "line 3: " "closes https://gitlab.example/g/p/-/merge_requests/3 and #7"
+refuse "... and the merge request URL is not read as an issue" "FAIL  g/p#3"
+refuse "... nor as #3" "FAIL  #3"
+desc "$what It fixes https://gitlab.example/g/p/-/merge_requests/3, https://gitlab.example/g/q/-/issues/9, #8."$'\n\n'"$by"
+expect "a link-led chain by commas: the issue URL and the issue after it both fail" 1 "FAIL  g/q#9" "FAIL  #8"
+desc "$what It fixes https://example.com/page#3 for the reader."$'\n\n'"$by"
+expect "a closing keyword before a page link with a #3 anchor closes nothing" 0 "not yet confirmed: MR description"
+desc "$what It resolves https://gitlab.example/g/q/-/issues/9."$'\n\n'"$by"
+expect "an issue URL ending a sentence (the full stop is not the link's) fails" 1 "FAIL  g/q#9"
+desc "$what"$'\n\nCloses https://gitlab.example/g/p/-/merge_requests/3 and #12\n\n'"$by"
+expect "a closing line led by a merge request URL names the issue after it" 0 "the closing line names #12"
+TITLE="fix: resolve #31 on start-up" desc "$what"$'\n\n'"$by"
+expect "a title whose keyword stands before an issue fails, quoting the title" 1 "FAIL  #31" "the title: fix: resolve #31 on start-up"
+TITLE="fix: resolve #31 on start-up" desc "$what"$'\n\nCloses #31\n\n'"$by"
+expect "... and passes when the closing line names that issue" 0 "the closing line names #31"
+desc "$what"$'\n\n'"$by"
+expect "a commit message with no closing keyword: the result is the description's" 0 "not yet confirmed: MR description" "or 1 commit message(s)"
+refuse "... the base's own message (fixes #90, below the merge base) is not read" "FAIL  #90"
+commit "fix(cli): exit code" "Fixes #21 at last, by checking the code."
+fsha="$(git -C "$crepo" rev-parse --short=12 HEAD)"
+desc "$what"$'\n\n'"$by"
+expect "a commit message with a closing keyword before an issue fails, quoting the commit and the line" 1 \
+  "FAIL  #21: GitLab's default closing pattern closes it" "commit $fsha (\"fix(cli): exit code\"), line 3: Fixes #21 at last" \
+  "fail: MR description, merging it would close" "git rebase -i"
+desc "$what"$'\n\nCloses #21\n\n'"$by"
+expect "... and passes when the description's closing line names that issue" 0 "the closing line names #21" "or 2 commit message(s)"
+commit "fix(cli): exit code" "Fixes #21 at last."
+c1="$chead"; commit "docs: a page"; git -C "$crepo" checkout -q --detach "$c1"; git -C "$crepo" commit -q --allow-empty -m "docs: a page"; chead="$(git -C "$crepo" rev-parse HEAD)"
+desc "$what"$'\n\n'"$by"
+expect "an older commit on the branch is read, not only the head" 1 "FAIL  #21"
+commit "fix: x" "closes #21"; merged="$chead"; chead="$cplain"
+CI_MERGE_REQUEST_SOURCE_BRANCH_SHA="$merged" desc "$what"$'\n\n'"$by"
+expect "a merged results pipeline reads the branch's head, CI_MERGE_REQUEST_SOURCE_BRANCH_SHA" 1 "FAIL  #21"
+BASE="" desc "$what"$'\n\n'"$by"
+expect "no CI_MERGE_REQUEST_DIFF_BASE_SHA and no target branch: fails, the commits not read, never a pass" 1 \
+  "fail: MR description, the merge request's commit messages could not be read"
+# GitLab left CI_MERGE_REQUEST_DIFF_BASE_SHA empty on a test project: the
+# commits not on the target branch, fetched from origin, are read instead.
+git -C "$crepo" update-ref refs/heads/main "$cbase"
+commit "fix(cli): exit code" "Fixes #21 at last."
+BASE="" CI_MERGE_REQUEST_TARGET_BRANCH_NAME=main desc "$what"$'\n\n'"$by"
+expect "an empty CI_MERGE_REQUEST_DIFF_BASE_SHA: the commits not on the target branch are read" 1 \
+  "is empty: reading the commits not on main ($cbase)" "FAIL  #21"
+refuse "... and not the target branch's own (fixes #90)" "FAIL  #90"
+BASE="" CI_MERGE_REQUEST_TARGET_BRANCH_NAME=gone desc "$what"$'\n\n'"$by"
+expect "... a target branch that cannot be fetched fails, the commits not read" 1 \
+  "the merge request's commit messages could not be read"
+BASE="0000000000000000000000000000000000000000" desc "$what"$'\n\n'"$by"
+expect "a merge base that is not in the clone fails the same way" 1 "the merge request's commit messages could not be read"
+chead="$cplain"
+grep -qF 'GIT_DEPTH: "0"' <<<"$(sed -n '/^pr-title:/,/^  script:/p' "$gl")" && ok "pr-title clones the whole history, so the merge base is in the clone" \
+  || bad "pr-title does not set GIT_DEPTH 0"
+
+# Timed: each closing reference, link and separator is atomic, the
+# separator's `?` inside it. Before #796's round 4, 20 spaced references took
+# 46 s; before #800, 18 references with no space between (#11#11...) took
+# 0.05 s and 200 did not finish in 10 s. A link that could end at any of
+# its characters would do the same. A line that is not a closing line (prose
+# after it) makes the regex try every way before it gives up, so each case
+# ends in prose. JOB_LIMIT kills a case at 30 s rather than stall the file.
+long_cases=(
+  "Closes $(for i in $(seq 1 60); do printf 'https://gitlab.example/g/p/-/merge_requests/%d ' "$i"; done)in this change."
+  "Closes $(for i in $(seq 1 60); do printf 'https://gitlab.example/g/p/-/merge_requests/%d, and #%d, ' "$i" "$i"; done)in this change."
+  "Closes https://gitlab.example/$(printf 'a%.0s' $(seq 1 700)) and #5 in this change."
+  "Closes $(printf '#11%.0s' $(seq 1 200)) in this change."
+  "Closes $(printf 'AB-11%.0s' $(seq 1 200)) in this change."
+  "Closes $(printf 'https://x/#1%.0s' $(seq 1 100)) in this change."
+  "Closes $(printf '1#1%.0s' $(seq 1 200)) in this change."
+  "Closes $(printf 'a/a#1%.0s' $(seq 1 200)) in this change."
+  "Closes $(printf '[issue:1]%.0s' $(seq 1 200)) in this change."
+  "Closes $(for i in $(seq 1 60); do printf 'issues https://gitlab.example/g/q/-/issues/%d ' "$i"; done)in this change."
+)
+for c in "${long_cases[@]}"; do
+  t0="$(python3 -c 'import time; print(time.monotonic())')"
+  JOB_LIMIT=30 desc "$what"$'\n\n'"$c"$'\n\n'"$by"
+  took="$(python3 -c 'import sys, time; print(f"{time.monotonic() - float(sys.argv[1]):.2f}")' "$t0")"
+  if [ "$rc" != 0 ] && [ "$rc" != 1 ]; then bad "a long closing chain (${#c} characters, ${c:0:40}...) did not finish with a verdict (exit $rc)" "$out"
+  elif python3 -c 'import sys; sys.exit(float(sys.argv[1]) >= 10)' "$took"; then ok "a long closing chain (${#c} characters, ${c:0:40}...) is judged in ${took} s, under 10 s"
+  else bad "a long closing chain (${#c} characters, ${c:0:40}...) took ${took} s: the closing pattern backtracks"; fi
+done
 
 echo "-- deps (osv-scanner stubbed: it answers per lockfile from fixtures)"
 cat > "$tmp/bin/osv-scanner" <<'SH'

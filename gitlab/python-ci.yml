@@ -383,6 +383,8 @@ secrets:
 pr-title:
   extends: .plinth
   timeout: 3m
+  variables:
+    GIT_DEPTH: "0"
   script:
     - |
       title="${CI_MERGE_REQUEST_TITLE:-}"
@@ -420,23 +422,52 @@ pr-title:
           answer="$PLINTH_TMP/unread"
         fi
       fi
+      # The merge request's commit messages: GitLab closes the issues they
+      # close as it closes the description's. On GitLab Free the pipeline's
+      # commit is the branch's head; a merged results pipeline names the
+      # branch's head in CI_MERGE_REQUEST_SOURCE_BRANCH_SHA. The commits are
+      # those after CI_MERGE_REQUEST_DIFF_BASE_SHA, or, when GitLab leaves it
+      # empty (measured on a merge request of empty commits, by hand as well),
+      # those not on the target branch, fetched from the project.
+      commits="$PLINTH_TMP/commits"
+      base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}"; head="${CI_MERGE_REQUEST_SOURCE_BRANCH_SHA:-${CI_COMMIT_SHA:-}}"
+      if [ -z "$base" ] && [ -n "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" ] &&
+          git fetch -q origin "refs/heads/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"; then
+        base="$(git rev-parse FETCH_HEAD)"
+        echo "  CI_MERGE_REQUEST_DIFF_BASE_SHA is empty: reading the commits not on ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME} ($base)"
+      fi
+      if [ -z "$base" ] || [ -z "$head" ] || ! git log -z --format='%H%n%B' "$base..$head" > "$commits"; then
+        echo "  could not list the merge request's commits from ${base:-<no CI_MERGE_REQUEST_DIFF_BASE_SHA>} to ${head:-<no head>}"
+        commits="$PLINTH_TMP/unread"
+      fi
       rc=0
-      ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
+      COMMITS="$commits" TITLE="$title" ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
       import json, os, re, sys
 
       # GitLab's default issue closing pattern ("Default closing pattern" in
-      # GitLab's docs on managing issues), %{issue_ref} filled with the forms
-      # an issue reference takes in GitLab's Issue.reference_pattern and
+      # GitLab's docs on managing issues). GitLab fills its %{issue_ref} with
+      # any http(s) link or an issue reference (ClosingIssueExtractor), then
+      # takes the issues out of the matched text: a chain led by a merge
+      # request URL closes the issue after its `and`. LINK is that link
+      # pattern, HTTP_LINK_PATTERN: up to 300 characters, not ending in
+      # ?!.,: (its look-behind, written as a last character). REF is an issue
+      # reference in GitLab's Issue.reference_pattern and
       # link_reference_pattern: #N, project#N, group/project#N, GL-N,
       # [issue:N], [issue:group/project/N], an issue, incident or work item
       # URL. Case matters as in GitLab's: Closes, closes, never CLOSES.
+      LINK = r"https?://[^\s>]{0,299}[^\s>?!.,:]"
       REF = (r"(?:(?:[\w.-]+/)*[\w.-]+#\d+|#\d+|\bGL-\d+|\[issue:(?:(?:[\w.-]+/)*[\w.-]+/)?\d+\]"
              r"|https?://[^\s/]+/(?:[\w.-]+/)+-/(?:issues(?:/incident)?|work_items)/\d+)")
+      ISSUE_URL = re.compile(r"https?://([^\s/]+)/(.+?)/-/(?:issues(?:/incident)?|work_items)/(\d+)(?:[?#]\S*?)?[)\]'\"*_]*$")
       KEYWORD = r"(?:[Cc]los(?:e[sd]?|ing)|\b[Ff]ix(?:e[sd]|ing)?|\b[Rr]esolv(?:e[sd]?|ing)|\b[Ii]mplement(?:s|ed|ing)?)"
-      # The separator between references is atomic (Python 3.11+): its two
-      # ` *` could split the same spaces between them, and a line of n
-      # references then backtracks 2**n ways when the line does not end there.
-      CLOSES = re.compile(rf"\b{KEYWORD}:? +(?:(?:issues? +)?{REF}(?>(?: *,? +and +| *,? *))?|[A-Z][A-Z0-9_]+-\d+)+")
+      # Each reference and each separator is atomic (Python 3.11+), the
+      # separator's `?` inside it: the separator's two ` *` could split the
+      # same spaces, an empty separator could be matched or skipped between
+      # references with no space (#11#11), a link could end at any of its
+      # characters, and a line of n references would then backtrack 2**n
+      # ways when the line does not end there. GitLab's own match is the
+      # first one found, which is the one these keep.
+      CLOSES = re.compile(rf"\b{KEYWORD}:? +(?:(?>(?:issues? +)?(?:{LINK}|{REF}))(?>(?: *,? +and +| *,? *)?)|(?>[A-Z][A-Z0-9_]+-\d+))+")
       # A line that is only closing phrases: GitLab closes every issue each one
       # chains, with or without a keyword of its own (`Closes #65, fixes #66`).
       CLOSING_LINE = re.compile(rf"^\s*(?:{CLOSES.pattern}\s*)+\.?\s*$")
@@ -453,17 +484,21 @@ pr-title:
       def refs(text, project):
           """Every issue the text names, as (project path in lower case, number).
 
-          A URL on another GitLab instance keeps its host: its issue is not this
-          instance's issue at the same path."""
+          As GitLab's extractor reads a link: an issue when the whole link is
+          an issue URL, and nothing inside another link (a merge request URL,
+          a page's `#3` anchor). A URL on another GitLab instance keeps its
+          host: its issue is not this instance's issue at the same path."""
           out = []
-          for ref in re.findall(REF, text):
-              url = re.match(r"https?://([^\s/]+)/(.+)/-/(?:issues(?:/incident)?|work_items)/(\d+)$", ref)
-              bracket = re.match(r"\[issue:(?:(.+)/)?(\d+)\]$", ref)
+          for link in re.findall(LINK, text):
+              url = ISSUE_URL.match(link)
               if url:
                   host, where, number = url.groups()
                   if host.lower() != server:
                       where = f"{host}/{where}"
-              elif bracket:
+                  out.append((where.lower(), int(number)))
+          for ref in re.findall(REF, re.sub(LINK, " ", text)):
+              bracket = re.match(r"\[issue:(?:(.+)/)?(\d+)\]$", ref)
+              if bracket:
                   where, number = bracket.groups()
               elif ref.startswith("GL-"):
                   where, number = "", ref[3:]
@@ -517,56 +552,85 @@ pr-title:
       except (OSError, ValueError, KeyError, TypeError) as e:
           print(f"  FAIL  could not read the merge request's description from GitLab ({type(e).__name__}: {e})")
           sys.exit(2)
-
+      # `git log -z --format=%H%n%B`: each commit is its hash, a newline, its message.
+      try:
+          with open(os.environ.get("COMMITS", ""), encoding="utf-8", errors="replace") as f:
+              commits = [c.split("\n", 1) + [""] for c in f.read().split("\0") if c.strip()]
+      except OSError as e:
+          print(f"  FAIL  could not read the merge request's commit messages ({type(e).__name__}: {e})")
+          sys.exit(3)
 
 
       def show(issue):
           return f"#{issue[1]}" if issue[0] == project else f"{issue[0]}#{issue[1]}"
 
 
-      lines = body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+      def split(text):
+          return text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+
+      lines = split(body)
       position = closing_position(lines)
       named = {issue for i in position for issue in refs(lines[i], project)}
+      # GitLab reads the title, the description and every commit message
+      # (MergeRequest#closes_issues); the description's closing line names
+      # what the merge request closes, so an issue any of them closes besides
+      # those fails. Where: (source, line index, the text of that line).
+      places = [("title", 0, os.environ.get("TITLE", ""))]
+      places += [("description", i, line) for i, line in enumerate(lines) if i not in position]
+      for sha, message, *_ in commits:
+          places += [(f"commit {sha[:12]}", i, line) for i, line in enumerate(split(message.rstrip("\n")))]
+      subject = {f"commit {sha[:12]}": split(message)[0] for sha, message, *_ in commits}
       outside = {}
-      for i, line in enumerate(lines):
-          if i in position:
-              continue
+      for where, i, line in places:
           for m in CLOSES.finditer(line):
               for issue in refs(m.group(0), project):
                   if issue not in named:
-                      outside.setdefault(issue, []).append((i, m))
+                      outside.setdefault(issue, []).append((where, i, line, m))
       if not outside:
           said = f", and the closing line names {', '.join(show(i) for i in sorted(named))}" if named else ""
-          print(f"  no closing keyword stands before an issue outside the closing line{said}")
+          print(f"  no closing keyword stands before an issue outside the closing line, in the title,"
+                f" the description or {len(commits)} commit message(s){said}")
           sys.exit(0)
-      misplaced = False
+      misplaced = in_title = in_commit = False
       for issue, hits in outside.items():
           print(f"  FAIL  {show(issue)}: GitLab's default closing pattern closes it when this merge request merges, and the closing line does not name it")
-          for i, m in hits:
-              if CLOSING_LINE.match(lines[i]):
+          for where, i, line, m in hits:
+              if where == "title":
+                  in_title = True
+                  print(f"        the title: {excerpt(line, m.start(), m.end())}")
+              elif where != "description":
+                  in_commit = True
+                  print(f'        {where} ("{subject[where][:72]}"), line {i + 1}: {excerpt(line, m.start(), m.end())}')
+              elif CLOSING_LINE.match(line):
                   misplaced = True
-                  print(f"        line {i + 1} is a closing line with text below it: {lines[i].strip()}")
+                  print(f"        line {i + 1} is a closing line with text below it: {line.strip()}")
               else:
-                  print(f"        line {i + 1}: {excerpt(lines[i], m.start(), m.end())}")
+                  print(f"        line {i + 1}: {excerpt(line, m.start(), m.end())}")
       example = show(next(iter(outside)))
       print()
       print("  A closing keyword (close, closes, closed, closing, fix, fixes, fixed, fixing, resolve,")
       print("  resolves, resolved, resolving, implement, implements, implemented, implementing) before")
       print("  an issue closes that issue when the merge request merges into the default branch, in a")
-      print("  sentence as much as on a line of its own.")
+      print("  sentence as much as on a line of its own, in the title, the description or a commit message.")
       print(f'  Reword the sentence so the keyword does not stand before the number: "the two fixes that {example}')
       print(f'  decided", or the issue first: "{example} decided two fixes".')
       print("  If this merge request does complete the issue, say so in a paragraph of its own, directly above")
       print(f"  the attribution (the last line, with no attribution): Closes {example}")
       if misplaced:
           print("  A closing line further up is not read as one: move it directly above the attribution.")
-      print("  GitLab starts no pipeline when a description is edited: after rewording, run a new pipeline")
-      print("  for the merge request, or push a commit.")
+      if in_commit:
+          print("  A commit message is reworded with git commit --amend (the last commit) or git rebase -i,")
+          print("  then a push with --force-with-lease, which runs a new pipeline.")
+      if in_title or not in_commit:
+          print("  GitLab starts no pipeline when a title or description is edited: after rewording, run a new")
+          print("  pipeline for the merge request, or push a commit.")
       sys.exit(1)
       PY
       case "$rc" in
-        0) say "not yet confirmed: MR description, no closing keyword stands before an issue outside its closing line by GitLab's default closing pattern; GitLab's own list of the issues the merge closes cannot be read with the job token, so a project's own closing pattern and the commit messages are not read" ;;
+        0) say "not yet confirmed: MR description, no closing keyword stands before an issue outside its closing line by GitLab's default closing pattern, in the title, the description or the commit messages; GitLab's own list of the issues the merge closes cannot be read with the job token, so a project's own closing pattern and a squash or merge commit message template of its own are not read" ;;
         1) say "fail: MR description, merging it would close an issue its closing line does not name (the lines are above)"; plinth_failed=1 ;;
+        3) say "fail: MR description, the merge request's commit messages could not be read, so they were not checked"; plinth_failed=1 ;;
         *) say "fail: MR description, it could not be read, so it was not checked"; plinth_failed=1 ;;
       esac
       verdict
