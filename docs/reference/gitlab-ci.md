@@ -96,29 +96,48 @@ its log under `Verdict`: GitLab has no job summary and no annotations, so a
 
 ### The description in `pr-title`
 
-GitLab closes an issue when a merge request whose description has a
-closing keyword before the issue merges into the default branch, in a
-sentence as much as on a line of its own. `pr-title` fails a description
-whose closing keyword stands before an issue that the closing line
-(`Closes #N` in a paragraph of its own, directly above the attribution)
-does not name, and quotes the line to reword. It decides as `ci / pr-title`
-does on GitHub, with two differences:
+GitLab closes an issue when a merge request whose title, description or
+commit messages have a closing keyword before the issue merges into the
+default branch, in a sentence as much as on a line of its own
+(`MergeRequest#closes_issues` reads all three). `pr-title` reads all three
+and fails when a closing keyword stands before an issue that the
+description's closing line (`Closes #N` in a paragraph of its own,
+directly above the attribution) does not name, and quotes the title, the
+description's line, or the commit and its line to reword. It decides as
+`ci / pr-title` does on GitHub, with these differences:
 
 - GitLab's own list of the issues a merge closes
   (`GET /projects/:id/merge_requests/:iid/closes_issues`) answers 404 to
   the job token (`CI_JOB_TOKEN`), measured below. So the job applies
-  GitLab's default closing pattern to the description: the keywords
-  `close`, `fix`, `resolve` and `implement` in every form GitLab lists, an
-  optional colon, then `#N`, `project#N`, `group/project#N`, `GL-N`,
-  `[issue:N]`, `[issue:group/project/N]`, or an issue, incident or work item
-  URL. A closing line may give each issue its own keyword
-  (`Closes #65, fixes #66`). What it cannot see is a `not yet confirmed` line on every run that
-  does not fail, never a pass: a project's or instance's own closing
-  pattern, and the issues the merge request's commit messages close, which
-  GitLab's list also counts (measured below).
+  GitLab's default closing pattern as GitLab's `ClosingIssueExtractor`
+  does: the keywords `close`, `fix`, `resolve` and `implement` in every
+  form GitLab lists, an optional colon, then a chain of references, each
+  any http(s) link (up to 300 characters, not ending in `?!.,:`) or `#N`,
+  `project#N`, `group/project#N`, `GL-N`, `[issue:N]` or
+  `[issue:group/project/N]`; the issues are then taken out of the matched
+  text. So `Closes <a merge request URL> and #7` closes #7, and the job
+  fails it, while a link that is not an issue, incident or work item URL
+  closes nothing, its `#3` anchor included. A closing line may give each
+  issue its own keyword (`Closes #65, fixes #66`).
+- What it cannot see is a `not yet confirmed` line on every run that does
+  not fail, never a pass: a project's or instance's own closing pattern,
+  and a squash or merge commit message template of the project's own.
+  GitLab's default templates add no issue the merge request does not
+  already close.
 - A project that turned off "Auto-close referenced issues on default
   branch", or changed the pattern, can see a fail for an issue GitLab
-  would not close. Rewording the sentence passes either way.
+  would not close. Rewording passes either way.
+
+The commit messages are the merge request's commits, from
+`CI_MERGE_REQUEST_DIFF_BASE_SHA` to the branch's head (`CI_COMMIT_SHA`, or
+`CI_MERGE_REQUEST_SOURCE_BRANCH_SHA` in a merged results pipeline), read
+with `git log`; the job clones the whole history for it. GitLab left
+`CI_MERGE_REQUEST_DIFF_BASE_SHA` empty for a merge request whose commits
+change no file (measured below); the job then reads the commits not on the
+target branch, fetched from the project. In a fork's pipeline that branch
+is the fork's, which is not measured. Commits that cannot be listed fail.
+A commit message is reworded with `git commit --amend` or `git rebase -i`
+and a forced push, which runs a new pipeline.
 
 The description is read whole: `CI_MERGE_REQUEST_DESCRIPTION` when GitLab
 did not cut it, and the merge request API with the job token when it did
@@ -163,4 +182,14 @@ other jobs turned off ([#782](https://github.com/coolbress/plinth/issues/782)):
 | The description edited to a closing line only, `Closes #1` | No pipeline started in the 90 seconds after the edit. A pipeline run by hand passed, with the description's `not yet confirmed` line |
 | The description edited to `Part of #1` and a reworded sentence | A pipeline run by hand passed, with the same line |
 | A 3162-character description whose "fixes #2" stands past the 2700-character cut | `pr-title` failed, naming #2: the description was read whole through the API |
-| A commit message on the merge request's branch with "fixes #2", and a description with no closing keyword | GitLab's list held #2, and a squash merge closed #2. The job reads the description only, so it does not see this |
+| A commit message on the merge request's branch with "fixes #2", and a description with no closing keyword | GitLab's list held #2, and a squash merge closed #2. The job then read the description only; since [#800](https://github.com/coolbress/plinth/issues/800) it reads the commit messages too |
+
+On 2026-11-04 (UTC), on test projects of the same kind, each deleted after
+its run, with this file's `pr-title` included as a local file
+([#800](https://github.com/coolbress/plinth/issues/800)):
+
+| Run | Result |
+| --- | --- |
+| A merge request with a file change, a description with no closing keyword, and a commit message "Fixes #2" | GitLab's own list held #2. `pr-title` failed, naming #2 and quoting the commit and its line |
+| A merge request of one empty commit, whose description says "closes" before the first merge request's URL, then "and #3" | GitLab's own list held #3. `pr-title` failed, naming #3 and quoting the line |
+| `CI_MERGE_REQUEST_DIFF_BASE_SHA` in those pipelines | Set for the merge request with a file change. Empty, with `CI_MERGE_REQUEST_DIFF_ID`, for merge requests of empty commits only, on the pipeline GitLab started and on one run by hand; the job read the commits not on `main` instead, which `git fetch origin main` fetched |
