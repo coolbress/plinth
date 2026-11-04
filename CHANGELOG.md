@@ -27,9 +27,20 @@ pull requests and have no tag.
   (not independent)` or `none (<reason>)`). Each one missing, empty or
   saying only "done" is a `not yet confirmed` line, a warning on GitHub;
   the job stays green. No new check or job. plinth-template's pull-request
-  and merge-request forms gain both fields in its next release (#810).
+  and merge-request forms carry both fields from v1.38.0 (#810).
 
 ### Changed
+
+- `/plinth:new-project` renders plinth-template v1.38.0. Its `AGENTS.md`
+  makes a fresh-context review the default (#808), explains the everyday
+  terms from the term table the first time it uses them (#809), and ends a
+  record in its `## Decision` (coolbress/plinth-template#188); its
+  pull-request and merge-request forms ask what the person checked and
+  which review ran, the two fields `ci / pr-title` reads (#810). No check,
+  job or question changes and no action is added, so the Actions allowlist
+  is unchanged and `copier update` needs no hands. An existing project gets
+  all of it through `/plinth:template-update`; `/plinth:floor-check` now
+  reports a repository on v1.37.0 or older as behind.
 
 - `docs/how-to/set-four-things-by-hand.md` step 2 no longer asks every paid
   service for a limit that stops the spending: Render's docs describe none
