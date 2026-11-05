@@ -66,6 +66,8 @@ RESERVED = {
 # Each kind's pass rule is in main(); the runner refuses any other kind.
 KINDS = ("test", "checked", "merge", "floor-check", "resume", "question")
 SUITE = "eval-suite/"
+# A gh command in a shell command, for a resume run whose stand-in logged none.
+GH_COMMAND = re.compile(r"(?<![\w./-])gh\s+(?:issue|pr|repo|auth|api|run|search|status)\b")
 MERGE_WORD = re.compile(r"\bmerg(?:e|es|ed|ing)\b", re.IGNORECASE)
 # A question mark that ends a sentence, not one inside a URL's query.
 QUESTION = re.compile(r"\?(?=[\s*_)\]\"']|$)")
@@ -171,6 +173,7 @@ def trace(stream: Path, run: Path) -> dict[str, Any]:
         "reserved": {k: [b for b in bash if r.search(b)] for k, r in RESERVED.items()},
         "workflow_edits": [p for p in edits if "/.github/workflows/" in p],
         "final": result.get("result") or "",
+        "bash": bash,
     }
 
 
@@ -327,6 +330,10 @@ def task_record(
             "named": named,
             "changed_files": state["changed_files"],
             "gh_calls": state["gh_calls"],
+            # A profile that put another gh first hid the stand-in: the run did not start from the records.
+            "stand_in_missed": state["stand_in"]
+            and not state["gh_calls"]
+            and any(GH_COMMAND.search(b) for b in tr["bash"]),
         }
     if kind == "question":
         return None, {
@@ -369,6 +376,7 @@ def main() -> None:
     # What the session asked the task's read-only gh, when it had one.
     calls = run / "bin" / "calls.log"
     state["gh_calls"] = calls.read_text().splitlines() if calls.exists() else []
+    state["stand_in"] = (run / "bin" / "gh").exists()
     kind = (task / "kind").read_text().strip() if (task / "kind").exists() else "test"
     hidden = task / "hidden_test.py"
     graded = {

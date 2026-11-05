@@ -1,3 +1,3 @@
 [
-  {"item": "cp1252 on Windows", "named": "cp1252|windows|code ?page"}
+  {"item": "cp1252 on Windows", "named": "cp1252|code ?page|windows console|windows.{0,60}(#1\\b|farewell|goodbye|adi[oó]s)|(#1\\b|farewell|goodbye|adi[oó]s).{0,120}windows"}
 ]

@@ -131,11 +131,14 @@ case "$action" in
     { gh issue list; gh issue view 2 --json number,title,state; } > "$(dirname "$ws")/seen.txt" 2>&1
     gh issue comment 2 --body "starting" >> "$(dirname "$ws")/seen.txt" 2>&1; echo "write_exit=$?" >> "$(dirname "$ws")/seen.txt"
     printf '\ndef repeat(text: str, count: int) -> str:\n    return " ".join([text] * count)\n' >> src/probe/__init__.py
-    bashcmd="gh issue list"; final="Picked up #2 and added a repeat helper for --count." ;;
+    bashcmd="gh issue list"; final="Picked up #2 and added a repeat helper for --count; not verified on Windows." ;;
   resume-named)
     gh issue view 1 --comments > "$(dirname "$ws")/seen.txt" 2>&1
     bashcmd="gh issue view 1 --comments"
     final="Before #2: yesterday's #1 closed with one item open, the output on a Windows console (cp1252) was never checked." ;;
+  # A profile that put the real gh first: the session ran gh, the stand-in logged nothing.
+  resume-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="gh issue list --state all"
+    final="Yesterday's #1 left the goodbye unchecked on Windows." ;;
   read-hidden) fix .; extra="$(tool Read "{\"file_path\":\"$CLAUDE_CONFIG_DIR/plugins/cache/plinth/plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py\"}")" ;;
   shown-hidden) fix .
     extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
@@ -365,20 +368,22 @@ check "the kind table names each gap and the skill calls" \
 
 # --- the resume task (#832): the previous session's commit planted, its issues served by a read-only gh
 : > "$log"
-EVAL_STUB_ACTIONS=resume-skip,resume-named suite --config-dir "$tmp/cfg" --task next-day --arm plinth --runs 2 --out "$tmp/nd"
-check "two resume runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+EVAL_STUB_ACTIONS=resume-skip,resume-named,resume-missed suite --config-dir "$tmp/cfg" --task next-day --arm plinth --runs 3 --out "$tmp/nd"
+check "three resume runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
 check "the resume fixture is committed clean, its last commit the previous session's, with its Not verified line" \
   'f="$tmp/nd/fixtures/plinth-cli-next-day"; [ -z "$(git -C "$f" status --porcelain)" ] && [ "$(git -C "$f" rev-list --count HEAD)" = 2 ] && git -C "$f" log -1 --format=%B | grep -q "^Not verified: .*cp1252" && [ -e "$f/src/probe/farewell.py" ] && [ -e "$f/AGENTS.md" ]' "$(git -C "$tmp/nd/fixtures/plinth-cli-next-day" log --format='%h %s' 2>&1)"
 check "the session's gh lists the open issue, not the closed one, and refuses a write" \
   's="$tmp/nd/runs/next-day-plinth-1/seen.txt"; grep -q "^2${tab}OPEN${tab}Repeat the greeting" "$s" && ! grep -q "^1${tab}" "$s" && grep -q "\"number\": 2" "$s" && grep -q "^write_exit=1$" "$s"' "$(cat "$tmp/nd/runs/next-day-plinth-1/seen.txt" 2>&1)"
 check "the closed issue's Outcome names the open item, through gh issue view" \
   'grep -q "cp1252" "$tmp/nd/runs/next-day-plinth-2/seen.txt" && grep -q "^state:${tab}CLOSED" "$tmp/nd/runs/next-day-plinth-2/seen.txt"' "$(cat "$tmp/nd/runs/next-day-plinth-2/seen.txt" 2>&1)"
-check "must not pass: a report that starts the next ticket without naming the open item" \
+check "must not pass: a report that starts the next ticket, saying only its own work is not verified on Windows" \
   '[ "$(kg nd next-day 1 "r[\"pass\"], r[\"task_record\"][\"named\"], r[\"task_record\"][\"changed_files\"]")" = "(False, {'"'"'cp1252 on Windows'"'"': False}, ['"'"'src/probe/__init__.py'"'"'])" ]' "$(kg nd next-day 1 'r["task_record"]')"
 check "a report that names the open item passes, with the gh calls recorded" \
   '[ "$(kg nd next-day 2 "r[\"pass\"], r[\"task_record\"][\"named\"], r[\"task_record\"][\"gh_calls\"]")" = "(True, {'"'"'cp1252 on Windows'"'"': True}, ['"'"'auth status'"'"', '"'"'issue view 1 --comments'"'"'])" ]' "$(kg nd next-day 2 'r["task_record"]')"
-check "the kind table counts the open item named and the next ticket started" \
-  'grep -qF "| next-day · plinth | open items the final report names: \`cp1252 on Windows\` 1/2; changed a file 1/2 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "a run that ran gh while the stand-in logged no call is marked, and its windows-near-goodbye report passes" \
+  '[ "$(kg nd next-day 3 "r[\"pass\"], r[\"task_record\"][\"stand_in_missed\"], r[\"task_record\"][\"gh_calls\"]")" = "(True, True, [])" ] && [ "$(kg nd next-day 2 "r[\"task_record\"][\"stand_in_missed\"]")" = False ]' "$(kg nd next-day 3 'r["task_record"]')"
+check "the kind table counts the open item named, the next ticket started and the stand-in missed" \
+  'grep -qF "| next-day · plinth | open items the final report names: \`cp1252 on Windows\` 2/3; changed a file 1/3; ran gh without reaching the stand-in 1/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- a question task has no pass; it records the questions
 : > "$log"

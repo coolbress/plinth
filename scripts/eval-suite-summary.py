@@ -55,7 +55,8 @@ def records(rs: list[Run]) -> str:
         named = ", ".join(f"`{i}` {sum(1 for x in k if x['named'][i])}/{n}" for i in items)
         return (
             f"open items the final report names: {named}; "
-            f"changed a file {sum(1 for x in k if x['changed_files'])}/{n}"
+            f"changed a file {sum(1 for x in k if x['changed_files'])}/{n}; "
+            f"ran gh without reaching the stand-in {sum(1 for x in k if x['stand_in_missed'])}/{n}"
         )
     if kind == "question":
         q = statistics.median(x["questions"] for x in k)

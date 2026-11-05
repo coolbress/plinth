@@ -123,13 +123,16 @@ task records every Skill call by name; its gaps and the words that count as
 naming each one are in its `gaps.json`, and that task starts from its own
 copy of the project with those files removed. The resume task measures
 whether a new session carries an open unverified item forward on its own;
-#163's resume task observes the same with a person. Its project starts with
+the resume task in #163 observes the same with a person. Its project starts with
 one more commit, the previous session's merged pull request, whose
 description says what was not verified. Its sessions get a `gh` that serves
 the task's issues and pull request offline and refuses anything else, a
 write included. The open item and the words that count as naming it are in
 its `open.json`. It records the files the session changed, so a reader can
-see whether it started the next ticket, and every `gh` call it made. A
+see whether it started the next ticket, and every `gh` call it made. A shell
+profile that puts another `gh` first on the PATH would hide the stand-in, so
+a run whose commands ran `gh` while the stand-in logged no call is counted
+as not reaching it: that run did not start from the task's records. A
 question task records the
 question marks in the final report, the `AskUserQuestion` calls and the
 files it changed.
