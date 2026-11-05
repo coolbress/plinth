@@ -19,8 +19,9 @@ pull requests and have no tag.
   GitLab's matching `pr-title` lines. `ci / floor-check` keeps each message and
   adds one next action and link to its FAIL, WARN and SKIP lines in CI, and any
   FAIL now gives one `::error::` with the first and the count, so a red no
-  longer opens on GitHub's exit code. Only the words change: no verdict, check
-  name or trigger does (#837). `tests/check-messages.sh` holds it.
+  longer opens on GitHub's exit code. Apart from that annotation, only the words
+  change: no verdict, check name or trigger does (#837).
+  `tests/check-messages.sh` holds it.
 - `/plinth:new-project` renders plinth-template v1.40.0: every project carries
   a how-to for undoing a merged change (coolbress/plinth-template#199), its
   agent keeps the person's computer out of public issues and pull requests
