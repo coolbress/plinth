@@ -13,6 +13,14 @@ pull requests and have no tag.
 
 ### Changed
 
+- The arsenal says what ships (#833). Its release-and-deploy row said a release
+  on a tag was planned, not built; it now says what each archetype does after
+  a merge, and `docs/how-to/run-a-project.md` points at it. That row and
+  step 9 name the monthly reminder issue and `/plinth:template-update`. The
+  skills only the person can start are on one list in the arsenal, and the
+  guide, the README and `run-a-project.md` point at it. `tests/arsenal-freshness.sh`
+  fails when a catalog cell contradicts the pinned template or what the plugin
+  installs, or names a closed issue as the plan.
 - Guidance facts that disagreed are corrected and each repeated one now has
   one source: the one-time update commands live in the README, the skill
   counts in the arsenal, and `tests/doc-pinned-facts.sh` and
