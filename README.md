@@ -145,6 +145,9 @@ Five skills, prefixed `/plinth:`:
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 | `guide` | Explains the whole workflow in plain words, in your language: the nine steps and four moments with their tools from the arsenal's table, where your repository is now, and the one command to type next; changes nothing | You only: type `/` and pick it |
 
+Every skill only you can start, these and the dependencies' together, is on
+[one list in the arsenal](skills/arsenal/SKILL.md#skills-only-the-person-can-start).
+
 Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
 [mattpocock-skills](https://github.com/mattpocock/skills) (fifteen skills,
