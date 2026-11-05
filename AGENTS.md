@@ -88,6 +88,8 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   ending. A closing keyword before `#N` anywhere in the description closes
   that issue too: "the two fixes #65 decided" closed #65 on merge (#284).
   Word the prose another way; `ci / docs` fails a description that would (#293).
+  A reference to another repository's issue or pull request is `owner/repo#N`;
+  a bare `#N`, or `plinth #N`, links to this repository's own `#N`.
 - Changing behaviour: verify the boundaries and partial failures of the inputs
   and states it touches, record which paths you exercised and which you did
   not, and do not widen a few cases into a guarantee about all of them.
