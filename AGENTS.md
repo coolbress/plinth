@@ -70,7 +70,9 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   noise (#184, #189). Describe it instead.
 - Issues and pull requests follow [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change)
   (the pull-request shape) and [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)
-  (what a record has to carry). Read the templates that actually apply first,
+  (what a record has to carry). Write them as public: no home path, account or
+  folder name from the owner's computer; the issue tracker page says what goes
+  in instead. Read the templates that actually apply first,
   the owner's `.github` defaults included; `gh --body` bypasses them. In a
   consumer repository their conventions win, and plinth's are the default only
   where they have none. Closing an issue writes its ending into the body:
