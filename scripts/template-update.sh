@@ -5,6 +5,8 @@
 #   template-update.sh
 #       The plan. Fetches and verifies origin/<default> against GitHub, then
 #       prints the tags, the command and where it will run. Writes nothing.
+#       Stops first, here and in --apply, when the installed plinth targets an
+#       older template tag than the latest release's or the CI pin's (#843).
 #   template-update.sh --apply <base-sha> [--plinth-pin live|tested] [--assisted-by <agent>:<model>]
 #       Branches a worktree beside the repository from <base-sha> (it must
 #       still be origin/<default>), requires it clean, runs the command and,
@@ -438,7 +440,7 @@ if [ "$from" = "$to" ]; then wt="$wt-owner-templates"; branch="$branch-owner-tem
 cmd_at() { # <dir> [live|tested]
   python3 "$checker" --root "$1" --repo "$repo" --print-update-command --plinth-pin "${2:-live}"
 }
-if [ "$mode" = plan ]; then
+at_base() { # sets $tmp: the files the checker reads, as they are at the base
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
   paths=()
   for p in .copier-answers.yml .github/workflows .github/ISSUE_TEMPLATE \
@@ -446,6 +448,25 @@ if [ "$mode" = plan ]; then
     git -C "$top" cat-file -e "$base:$p" 2>/dev/null && paths+=("$p")
   done
   [ ${#paths[@]} -gt 0 ] && git -C "$top" archive "$base" -- "${paths[@]}" | tar -x -C "$tmp"
+}
+# The installed plinth may target an older tag than the project could move to
+# (#843). Older is a stop before anything is written; the person types the
+# commands, since a running session does not load a new version. A comparison
+# that could not be made is said, and the update goes on with this target.
+plugin_gate() {
+  local says rc=0
+  says="$(python3 "$checker" --root "$tmp" --print-plugin-skew)" || rc=$?
+  case "$rc" in
+    0) ;;
+    3) printf '%s\n' "$says"
+       echo "Nothing has been written (the fetch moved only origin/$default)."
+       exit 1 ;;
+    *) echo "the installed plinth was not compared with the latest release (the check exited $rc); going on with the template tag this plinth targets, $to" >&2 ;;
+  esac
+}
+if [ "$mode" = plan ]; then
+  at_base
+  plugin_gate
   # Its stderr as before, but for the `moves:` lines (#793), which the plan
   # prints under the command.
   cmd="$(cmd_at "$tmp" 2>"$tmp/live-note")" || { cat "$tmp/live-note" >&2; exit 1; }
@@ -483,6 +504,8 @@ fi
 # ── apply ───────────────────────────────────────────────────────────────
 [ "$base_arg" = "$base" ] \
   || die "base moved: origin/$default is ${base:0:12} now, not the ${base_arg:0:12} the plan named; run the plan again"
+at_base
+plugin_gate
 
 [ -n "$from" ] && [ -n "$to" ] || die "no _commit in .copier-answers.yml at the base, or no template_ref beside this script"
 [ -e "$wt" ] && die "$wt already exists: finish it ($(q "$0") --finish $(q "$wt")) or discard it (git worktree remove --force $(q "$wt") && git branch -D $branch)"

@@ -13,6 +13,12 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:template-update` stops before it writes anything when the installed
+  plinth targets an older template tag than the latest release's or than the
+  tag the project's CI pin was tested with, and shows the commands to type, in
+  order; it never runs them. When the release cannot be read it warns, naming
+  the installed target, and goes on. `/plinth:floor-check` names the same skew
+  beside its template drift item; `ci / floor-check` does not (#843).
 - `/plinth:new-project` renders plinth-template v1.40.0: every project carries
   a how-to for undoing a merged change (coolbress/plinth-template#199), its
   agent keeps the person's computer out of public issues and pull requests

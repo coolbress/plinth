@@ -20,8 +20,22 @@ From the repository's own checkout:
 ${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh
 ```
 
-It fetches the default branch, checks it against GitHub's copy, and prints the
-two tags, the worktree and branch it would make, and the command. It writes
+It fetches the default branch, checks it against GitHub's copy, then compares
+the template tag this installed plinth targets with the latest plinth
+release's and the tag the project's CI pin was tested with. When the installed
+one is older it prints the commands and exits 1, having written nothing else.
+Show them and stop. The person types them, in this order:
+
+1. `claude plugin marketplace update plinth`
+2. `claude plugin update plinth@plinth`
+3. `/reload-plugins`, or a new session: a running session does not load a new
+   version
+4. `/plinth:template-update` again
+
+Never run them yourself. When the release cannot be read it warns, naming the
+tag it goes on with: pass that warning on, and carry on with the plan.
+
+Otherwise it prints the two tags, the worktree and branch it would make, and the command. It writes
 nothing. Show that output whole. Exit 1 means nothing to do or a stop (the
 recorded tag is the target, no pin to carry, a base it could not verify):
 show the message and stop there. When the workflows call plinth at two

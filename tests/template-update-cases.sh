@@ -903,5 +903,137 @@ if [ "$rc" = 0 ] && grep -qF "422 reviewable lines, within the limit of 500" <<<
 then ok "a project's own max-diff-lines is the limit counted against"
 else bad "own max (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
+# ── the installed plinth against the newest template tag (#843) ─────────
+# The person's plugin can be older than the latest release: the plan would
+# target an old tag and report nothing to do. Newer tags are literals far from
+# any real pin, so these stay true across a pin raise.
+release_says() { # <fixture dir> <release tag> <template_ref at that tag>
+  mkdir -p "$1/repos/coolbress/plinth/releases" "$1/repos/coolbress/plinth/contents/scripts"
+  printf '{"tag_name":"%s"}\n' "$2" > "$1/repos/coolbress/plinth/releases/latest.json"
+  ref_says "$1" "$2" "$3"
+}
+ref_says() { # <fixture dir> <plinth ref> <template_ref at that ref>
+  mkdir -p "$1/repos/coolbress/plinth/contents/scripts"
+  printf '{"content":"%s"}\n' "$(printf 'template_ref="%s"\n' "$3" | base64 | tr -d '\n')" \
+    > "$1/repos/coolbress/plinth/contents/scripts/new-project.sh?ref=$2.json"
+}
+cat > "$work/bin/claude" <<'MOCK'
+#!/usr/bin/env bash
+printf 'claude %s\n' "$*" >> "$GH_LOG"
+MOCK
+chmod +x "$work/bin/claude"
+skew_steps='  claude plugin marketplace update plinth
+  claude plugin update plinth@plinth
+  /reload-plugins (or start a new session)
+  /plinth:template-update'
+stopped_for() { # <description> <newer tag named> <what names it>: rc, words, order, nothing written
+  if [ "$rc" = 1 ] && grep -qF "this plinth targets template $target_ref, but $2 is out ($3)" <<<"$out" \
+     && grep -qF -- "$skew_steps" <<<"$out" && grep -q "Nothing has been written" <<<"$out" \
+     && [ ! -e "$(wt_of "$fx")" ] && [ ! -e "$work/uvx.log" ] \
+     && ! git -C "$repo" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null \
+     && ! grep -q '^claude ' "$work/gh.log"
+  then ok "$1"
+  else bad "$1 (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+}
+goes_on() { # <description>: the plan is printed
+  if [ "$rc" = 0 ] && grep -qF "Command:" <<<"$out" && ! grep -q "claude plugin" <<<"$out"
+  then ok "$1"
+  else bad "$1 (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+}
+newer_api="$work/api-newer"; tag_names "$newer_api" "$target_sha"; release_says "$newer_api" v98.0.0 v99.0.0
+fx=skew-older; fixture "$fx"; reset_logs
+FLOOR_CHECK_API_DIR="$newer_api" run
+stopped_for "an installed target older than the latest release's stops the plan: the commands in order, nothing written, none of them run" \
+  v99.0.0 "the latest plinth release, v98.0.0"
+base="$(git -C "$BARE" rev-parse main)"; reset_logs
+FLOOR_CHECK_API_DIR="$newer_api" run --apply "$base"
+stopped_for "--apply on the same older target stops the same way, before the worktree" v99.0.0 "the latest plinth release, v98.0.0"
+# What the person met: on the installed target already, so "nothing to do".
+fx=skew-current; fixture "$fx"; reset_logs
+sed -i.bak "s/^_commit: .*/_commit: $target_ref/" "$repo/.copier-answers.yml" && rm "$repo/.copier-answers.yml.bak"
+git -C "$repo" commit -q -am at-target && git -C "$repo" push -q origin main
+FLOOR_CHECK_API_DIR="$newer_api" run
+stopped_for "a project already on the installed target is told about the newer tag, not that there is nothing to do" \
+  v99.0.0 "the latest plinth release, v98.0.0"
+# The project itself is newer than the plugin.
+fx=skew-ahead; fixture "$fx"; reset_logs
+sed -i.bak "s/^_commit: .*/_commit: v99.0.0/" "$repo/.copier-answers.yml" && rm "$repo/.copier-answers.yml.bak"
+git -C "$repo" commit -q -am ahead && git -C "$repo" push -q origin main
+FLOOR_CHECK_API_DIR="$newer_api" run
+stopped_for "a project ahead of the installed target gets the same stop" v99.0.0 "the latest plinth release, v98.0.0"
+# The pin alone can be newer than the release.
+pin_api="$work/api-skew-pin"; tag_names "$pin_api" "$target_sha"; release_says "$pin_api" v98.0.0 "$target_ref"
+ref_says "$pin_api" "$sha40" v99.0.0
+fx=skew-pin; fixture "$fx"; reset_logs
+FLOOR_CHECK_API_DIR="$pin_api" run
+stopped_for "the CI pin's tag newer than the installed target stops too, and is the one named" \
+  v99.0.0 "the tag this repository's plinth pin $sha40 was tested with"
+
+same_api="$work/api-skew-same"; tag_names "$same_api" "$target_sha"; release_says "$same_api" v98.0.0 "$target_ref"; ref_says "$same_api" "$sha40" v0.0.1
+fx=skew-same; fixture "$fx"; reset_logs
+FLOOR_CHECK_API_DIR="$same_api" run
+goes_on "an installed target equal to the latest release's goes on to the plan"
+older_api="$work/api-skew-newer"; tag_names "$older_api" "$target_sha"; release_says "$older_api" v0.0.1 v0.0.1; ref_says "$older_api" "$sha40" v0.0.1
+fx=skew-installed-newer; fixture "$fx"; reset_logs
+FLOOR_CHECK_API_DIR="$older_api" run
+goes_on "an installed target newer than the latest release's goes on to the plan"
+# The pin's tag not read, the release's read: the release decides, and it says so.
+half_api="$work/api-skew-half"; tag_names "$half_api" "$target_sha"; release_says "$half_api" v98.0.0 "$target_ref"
+fx=skew-pin-unread; fixture "$fx"; reset_logs
+FLOOR_CHECK_API_DIR="$half_api" run
+goes_on "the pin's tag not read, the release's equal: goes on"
+grep -qF "the tag the plinth pin $sha40 was tested with was not read" <<<"$out" && ok "and it says the pin's tag was not read" \
+  || { bad "pin's tag unread is not said"; printf '%s\n' "$out" | sed 's/^/        /'; }
+
+unread() { # <description> <fixture dir> <why>
+  fx="skew-unread-$((pass+fail))"; fixture "$fx"; reset_logs
+  FLOOR_CHECK_API_DIR="$2" run
+  goes_on "$1: goes on"
+  if grep -qF "the latest plinth release was not read ($3); going on with the template tag this plinth targets, $target_ref" <<<"$out"
+  then ok "$1: the warning names why and the installed target"
+  else bad "$1: no named warning"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+}
+gone_api="$work/api-skew-404"; tag_names "$gone_api" "$target_sha"
+unread "no release found" "$gone_api" "not found"
+err_api="$work/api-skew-err"; tag_names "$err_api" "$target_sha"; mkdir -p "$err_api/repos/coolbress/plinth/releases"
+printf 'not json\n' > "$err_api/repos/coolbress/plinth/releases/latest.json"
+unread "an API error on the release" "$err_api" "offline or API error"
+odd_api="$work/api-skew-odd"; tag_names "$odd_api" "$target_sha"; mkdir -p "$odd_api/repos/coolbress/plinth/releases"
+printf '{"name":"no tag"}\n' > "$odd_api/repos/coolbress/plinth/releases/latest.json"
+unread "a release with no tag name" "$odd_api" "an unexpected release response"
+notag_api="$work/api-skew-noref"; tag_names "$notag_api" "$target_sha"; mkdir -p "$notag_api/repos/coolbress/plinth/releases"
+printf '{"tag_name":"v98.0.0"}\n' > "$notag_api/repos/coolbress/plinth/releases/latest.json"
+unread "the release's new-project.sh not read" "$notag_api" "scripts/new-project.sh at v98.0.0: not found"
+
+# The comparison itself failing is not a stop either, and not silence.
+cat > "$work/bin/python3" <<MOCK
+#!/usr/bin/env bash
+for a in "\$@"; do [ "\$a" = --print-plugin-skew ] && { echo "boom" >&2; exit 1; }; done
+exec "$(command -v python3)" "\$@"
+MOCK
+chmod +x "$work/bin/python3"
+fx=skew-crash; fixture "$fx"; reset_logs
+FLOOR_CHECK_API_DIR="$same_api" run
+rm -f "$work/bin/python3"
+goes_on "the comparison crashing goes on to the plan"
+grep -qF "the installed plinth was not compared with the latest release (the check exited 1); going on with the template tag this plinth targets, $target_ref" <<<"$out" \
+  && ok "and the warning says it was not compared and names the target" \
+  || { bad "a crashed comparison is not said"; printf '%s\n' "$out" | sed 's/^/        /'; }
+
+# A repository the door did not make: no comparison, the existing reason stands.
+fx=skew-foreign; fixture "$fx"; reset_logs
+sed -i.bak '/^_src_path/d' "$repo/.copier-answers.yml" && rm "$repo/.copier-answers.yml.bak"
+git -C "$repo" commit -q -am foreign && git -C "$repo" push -q origin main
+FLOOR_CHECK_API_DIR="$newer_api" run
+if [ "$rc" != 0 ] && ! grep -q "claude plugin" <<<"$out"; then ok "a repository the door did not make gets no plugin stop"
+else bad "foreign repository (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# The skill names the order once and leaves the typing to the person.
+skill="$root/skills/template-update/SKILL.md"
+if [ "$(grep -c 'claude plugin marketplace update plinth' "$skill")" = 1 ] && [ "$(grep -c 'claude plugin update plinth@plinth' "$skill")" = 1 ] \
+   && grep -q 'Never run them yourself' "$skill"
+then ok "the skill names the order once and says the agent never runs it"
+else bad "the skill's order"; fi
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
