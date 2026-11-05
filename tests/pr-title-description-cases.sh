@@ -64,7 +64,13 @@ cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$FX/calls"
 case "$1 $2" in
-  "api graphql") cat "$FX/response.json"; exit "$(cat "$FX/gh_rc" 2>/dev/null || echo 0)" ;;
+  # The highest issue and pull request numbers (#826): $FX/highest.json, or
+  # $FX/highest_rc failing the call; any other query is the description's.
+  "api graphql") if [[ "$*" == *"pullRequests(first: 1"* ]]; then
+      [ -f "$FX/highest_rc" ] && { echo "HTTP 403: Resource not accessible by integration" >&2; exit "$(cat "$FX/highest_rc")"; }
+      cat "$FX/highest.json"; exit 0
+    fi
+    cat "$FX/response.json"; exit "$(cat "$FX/gh_rc" 2>/dev/null || echo 0)" ;;
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
 esac
 EOF
@@ -85,6 +91,8 @@ setup() {
   jq -n --arg body "$1" --argjson refs "$refs" \
     '{data: {repository: {pullRequest: {body: $body, closingIssuesReferences: {nodes: $refs, pageInfo: {hasNextPage: false}}}}}}' \
     >"$FX/response.json"
+  # This repository's newest issue is #40 and its newest pull request #41.
+  echo '{"data":{"repository":{"issues":{"nodes":[{"number":40}]},"pullRequests":{"nodes":[{"number":41}]}}}}' >"$FX/highest.json"
   export EVENT_NAME="${3:-pull_request}" PR=7 FETCH=success
   PATH="$work/bin:$PATH" RUNNER_TEMP="$FX/temp" PLINTH_SHA="$SHA" GITHUB_STEP_SUMMARY="$FX/summary" \
     bash "$work/fetch.sh" >"$FX/fetch.out" 2>&1 || { no "the fetch step failed" "$FX/fetch.out"; return 1; }
@@ -206,6 +214,43 @@ run "a description without either field still passes" 0 "" "pass: PR description
 warns "without the section it warns" "does not say what the person checked themselves" "What I checked myself"
 setup "$what It is the second of the two fixes #65 decided."$'\n\n'"$checked"$'\n\nReview: fresh-context\n\n'"$by" "65"
 run "a red closing check still writes the fields' lines" 1 "" "pass: PR description, says which review ran"
+
+echo "-- a bare #N above the highest issue or pull request number (#826): a warning, never a red"
+filled="$checked"$'\n\nReview: fresh-context'
+numbers() { setup "$what $1"$'\n\n'"$filled"$'\n\nPart of #12\n\n'"$by" ""; run "$2" 0; }
+nowarn() { # <label>: no warning about a number, and the fields' two pass lines are there
+  if grep -q 'above the highest' "$FX/out" "$FX/summary"; then no "$1: it warned about a number" "$FX/out" "$FX/summary"
+  else quiet "$1"; fi
+}
+numbers "The pin follows #457 in the template." "a bare #457 above #41: the job passes"
+if grep -qF '::warning::not yet confirmed: PR description, #457 is above the highest issue or pull request number here (#41)' "$FX/out" \
+  && grep -qF 'owner/repo#N' "$FX/out"; then ok "... with a warning naming #457 and the owner/repo#N form"
+else no "no warning names #457 and owner/repo#N" "$FX/out" "$FX/summary"; fi
+grep -qF -- '- not yet confirmed: PR description, #457 is above' "$FX/summary" && ok "... and its line in the summary" || no "the summary has no line for #457" "$FX/summary"
+numbers "It follows #457, as #457 and #500 said." "two numbers above, one twice"
+[ "$(grep -c '::warning::not yet confirmed: PR description, #457 is above' "$FX/out")" = 1 ] && grep -qF '#500 is above' "$FX/out" \
+  && ok "one warning per reference: #457 once, #500 once" || no "not one warning per reference" "$FX/out"
+numbers "It follows coolbress/plinth-template#457 and plinth-template#81." "owner/repo#N and repo#N"
+nowarn "owner/repo#N and repo#N"
+numbers "Run \`gh issue view #457\` and see the fence."$'\n\n```\nCloses #500\n```' "inside a code span and a fenced block"
+nowarn "#457 in a code span, #500 in a fenced block"
+numbers "See [#457](https://github.com/coolbress/plinth-template/issues/457), <https://example.com/x#500> and https://example.com/a#600." "inside links"
+nowarn "#457 as a link's text, #500 and #600 in URLs"
+numbers "It follows #40 and #41, and &#457; is an entity." "the highest numbers themselves, and an HTML entity"
+nowarn "#40 and #41, which the repository has"
+numbers "Nothing to number here." "a description with no number"
+nowarn "a description with no number"
+numbers "<!-- #457 in a comment -->It follows #12." "a number in an HTML comment"
+nowarn "#457 in an HTML comment"
+setup "$what It follows #457."$'\n\n'"$filled"$'\n\nPart of #12\n\n'"$by" ""; echo 1 >"$FX/highest_rc"
+run "the highest number cannot be read: the job passes" 0 "the highest issue or pull request number could not be read"
+[ "$(grep -c 'could not be read' "$FX/out")" = 1 ] && ok "... saying why in one line" || no "not one line saying why" "$FX/out"
+nowarn "... and warning nothing about #457"
+setup "$what It follows #457."$'\n\n'"$filled"$'\n\nPart of #12\n\n'"$by" ""; echo '{"errors":[{"message":"x"}]}' >"$FX/highest.json"
+run "an answer without the numbers: the job passes" 0 "the highest issue or pull request number could not be read"
+nowarn "... and warning nothing"
+setup "$what It follows #457."$'\n\n'"$filled"$'\n\nPart of #12\n\n'"$by" ""
+echo 'raise SystemExit("boom")' >"$FX/temp/plinth-closing/description-fields.py"; run "a crashed fields script with a bare #457: the job still passes" 0
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

@@ -14,7 +14,7 @@ name: python-ci
 #     ci:
 #       permissions:
 #         contents: read
-#         issues: read          # floor-check's labels, pr-title's closed issues
+#         issues: read          # floor-check's labels, pr-title's closed issues and newest issue
 #         pull-requests: read   # diff-size reads the reviews, pr-title the description
 #         actions: write        # diff-size's approval re-runs the red run
 #       uses: coolbress/plinth/.github/workflows/python-ci.yml@<commit-sha>
@@ -836,8 +836,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
-      pull-requests: read   # the description and the issues its merge will close (#781)
-      issues: read          # those issues' numbers
+      pull-requests: read   # the description, the issues its merge will close (#781), the newest pull request (#826)
+      issues: read          # those issues' numbers, the newest issue's
     steps:
       - name: Check the title
         env:
@@ -963,9 +963,25 @@ jobs:
           # What the person checked themselves and which review ran (#810),
           # from the description just read: a missing, empty or bare "done"
           # field is a not yet confirmed line, so a warning, never a red.
+          # And a bare #N above this repository's highest number (#826), a
+          # reference to another repository's: issues and pull requests share
+          # one count, read with the job's own token. Unread, one log line says
+          # why and nothing is warned.
           fields="$RUNNER_TEMP/description-fields.txt"
+          highest="$RUNNER_TEMP/highest.json"; set -- "$highest"
+          # shellcheck disable=SC2016  # $owner and $name are GraphQL's variables
+          if [ -s "$answer" ] && ! gh api graphql -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f query='
+              query($owner: String!, $name: String!) {
+                repository(owner: $owner, name: $name) {
+                  issues(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number } }
+                  pullRequests(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number } }
+                }
+              }' > "$highest" 2> "$highest.err"; then
+            echo "bare #N not checked: the highest issue or pull request number could not be read ($(head -n 1 "$highest.err"))"
+            set --
+          fi
           if [ ! -s "$answer" ]; then :
-          elif python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer" > "$fields"; then
+          elif python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer" "$@" > "$fields"; then
             while IFS= read -r line; do [ -z "$line" ] || say "$line"; done < "$fields"
           else
             say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); a run where it finishes confirms them"

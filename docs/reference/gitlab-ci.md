@@ -157,6 +157,20 @@ bare ("done", `Skipped:` or `none` with no reason) is a `not yet confirmed` line
 the verdict, saying how to fill it or skip it with a reason; neither fails the job.
 The definitions are `scripts/description-fields.py`'s text.
 
+A bare `#N` above the project's highest issue number, or a bare `!N` above
+its highest merge request number, is a `not yet confirmed` line too, one for
+each reference, naming it and the `group/project#N` or `group/project!N`
+form a reference to another project's is written in (#826). Issues and merge
+requests are numbered apart, so each is compared with its own highest. A
+reference with a path before it, one inside a code span, a fenced block, an
+HTML comment or a link, and a number the project has are never named; it
+never fails the job. The highest numbers are read with the job token from the
+merge request's project (`GET /projects/:id/issues` and `/merge_requests`,
+newest first); whether GitLab lets the job token list them is not measured,
+and when it does not, the log says which could not be read and why, and
+nothing is named for that kind. A confidential issue the token cannot see
+lowers the highest issue number it reads.
+
 ## Inputs
 
 `working-directory`, `max-diff-lines`, `deps-fail-on-severity`,

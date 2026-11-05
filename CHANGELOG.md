@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `ci / pr-title` warns, without failing, on each bare `#N` in a pull
+  request's description above the repository's highest issue or pull
+  request number, naming it and saying to write `owner/repo#N`: a
+  reference to another repository's written without its name links to
+  this repository's own number. Code spans, fenced blocks, links,
+  `owner/repo#N` and numbers the repository has are never named; when
+  the highest number cannot be read with the job's token, the log says
+  why and nothing is warned. GitLab's `pr-title` does the same for `#N`
+  and `!N`, each against its own highest (#826).
+
 ### Changed
 
 - A reference to another repository's issue or pull request is written

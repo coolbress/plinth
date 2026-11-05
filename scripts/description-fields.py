@@ -9,7 +9,11 @@ It prints one verdict line per field: `pass:` when the field is filled, and
 job turns into a warning. It never fails: whether either field becomes
 required waits on the non-author trial (#163).
 
-    description-fields.py PR <GitHub GraphQL answer, as closing-references.sh read it>
+    description-fields.py PR <GitHub GraphQL answer, as closing-references.sh read it> [<the highest numbers' answer>]
+
+With the third argument, GitHub's answer for the newest issue and pull request,
+it also prints a `not yet confirmed:` line for each bare `#N` above the highest
+of them (#826): a reference to another repository written without its name.
 """
 import json
 import re
@@ -31,6 +35,11 @@ ENDING = re.compile(
 # their brackets, a placeholder such as `<name>` not counting.
 KINDS = re.compile(r"^(?:(?:fresh-context|same-session)\b|(?:third-party|none)\s*\(\s*[^\s<)][^)]*\))", re.IGNORECASE)
 REVIEW_FORM = "Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
+# A bare `#N`, or GitLab's `!N` (#826): what stands outside code spans and
+# links, with no path, name, `#`, `!` or `&` (an HTML entity) right before it.
+CODE_SPAN = re.compile(r"(`+).*?\1")
+LINKS = re.compile(r"!?\[[^\]]*\]\([^)]*\)|!?\[[^\]]*\]\[[^\]]*\]|^\s{0,3}\[[^\]]+\]:\s.*|<[a-z][a-z0-9+.-]*:[^>\s]*>|https?://\S+", re.IGNORECASE)
+BARE = re.compile(r"(?<![\w/#!&.-])([#!])(\d+)\b")
 
 
 def unfenced(body):
@@ -99,9 +108,37 @@ def field_lines(body, what):
     return out
 
 
+def unknown_numbers(body, highest, what):
+    """One line for each bare reference above the highest number of its kind (#826).
+
+    `highest` maps `#` (and on GitLab `!`) to that number, what it numbers, and
+    how another repository's is written; a kind that could not be read is left out."""
+    seen, out = set(), []
+    for line, fenced in unfenced(body or ""):
+        if fenced:
+            continue
+        for m in BARE.finditer(LINKS.sub(" ", CODE_SPAN.sub(" ", line))):
+            sigil, number = m.group(1), int(m.group(2))
+            if sigil not in highest or number <= highest[sigil][0] or (sigil, number) in seen:
+                continue
+            seen.add((sigil, number))
+            top, kind, form = highest[sigil]
+            out.append(f"not yet confirmed: {what} description, {sigil}{number} is above the highest {kind} number here"
+                       f" ({sigil}{top}), so it links to nothing; a reference to another repository's is written `{form}`;"
+                       " an edited description is read again on the next run")
+    return out
+
+
+def github_highest(path):
+    """The highest number GitHub's answer gives: issues and pull requests share one count."""
+    with open(path, encoding="utf-8") as f:
+        repo = json.load(f)["data"]["repository"]
+    return max([n["number"] for k in ("issues", "pullRequests") for n in repo[k]["nodes"]] + [0])
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit("usage: description-fields.py PR|MR <GitHub GraphQL answer>")
+    if len(sys.argv) not in (3, 4):
+        sys.exit("usage: description-fields.py PR|MR <GitHub GraphQL answer> [<the highest numbers' answer>]")
     try:
         with open(sys.argv[2], encoding="utf-8") as f:
             body = json.load(f)["data"]["repository"]["pullRequest"]["body"]
@@ -109,4 +146,12 @@ if __name__ == "__main__":
         print(f"not yet confirmed: {sys.argv[1]} description, its fields could not be read ({type(e).__name__});"
               " a run that reads the description confirms them")
         sys.exit(0)
-    print("\n".join(field_lines(body, sys.argv[1])))
+    lines = field_lines(body, sys.argv[1])
+    # The bare numbers: never the fields' verdict, never a red. Unread, the
+    # log says why and nothing is warned.
+    if len(sys.argv) == 4:
+        try:
+            lines += unknown_numbers(body, {"#": (github_highest(sys.argv[3]), "issue or pull request", "owner/repo#N")}, sys.argv[1])
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print(f"bare #N not checked: the highest issue or pull request number could not be read ({type(e).__name__})", file=sys.stderr)
+    print("\n".join(lines))
