@@ -1,0 +1,12 @@
+# Links the link check skips: a host that answers every automated request
+# with an error, whatever the page, while a person's browser opens it.
+# lychee reads this file from the directory it runs in, so ci / docs and
+# CONTRIBUTING's local command both use it. One host per entry, anchored to
+# the scheme and host, with the date it was measured; never a status code
+# (accepting 403 would pass a page that really is gone). Delete an entry once
+# the host answers the check again.
+
+# 2026-11-05: cisa.gov answers 403 to its home page, to existing pages and to
+# a page that does not exist alike, from GitHub's runners and elsewhere; it
+# passed on 2026-11-03 and 2026-11-04.
+^https://www[.]cisa[.]gov/
