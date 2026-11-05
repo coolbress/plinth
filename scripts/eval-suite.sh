@@ -14,7 +14,11 @@
 # off), repo-only (the render, plugins off), plinth (the render, plinth on).
 # Tasks: the directories under eval-suite/tasks/, run in the order below. A
 # task's `kind` file names how it is graded (eval-suite-grade.py); a task with
-# a gaps.json gets a fixture of its own, with those paths removed.
+# a gaps.json gets a fixture of its own, with those paths removed, and so does
+# one with a previous/ folder: its files, committed on top as the squash commit
+# of the merged pull request its issues.json names. A task with an issues.json
+# gives its sessions a read-only gh (eval-suite-gh.py) that serves those
+# records offline instead of the logged-out one.
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -40,7 +44,7 @@
 # whole for a person to look at. At the end the records' size is printed.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps friend-311 late-fee skip-mypy)
+all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
 session_timeout=900
@@ -70,7 +74,7 @@ done
 for t in "${tasks[@]}"; do
   [ -f "$root/eval-suite/tasks/$t/prompt.txt" ] || die "no task $t (tasks: ${all_tasks[*]})"
   k="test"; [ ! -f "$root/eval-suite/tasks/$t/kind" ] || k="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/kind")"
-  case "$k" in test|checked|merge|floor-check|question) ;; *) die "task $t: unknown kind $k" ;; esac
+  case "$k" in test|checked|merge|floor-check|resume|question) ;; *) die "task $t: unknown kind $k" ;; esac
 done
 for a in "${arms[@]}"; do case " ${all_arms[*]} " in *" $a "*) ;; *) die "no arm $a (arms: ${all_arms[*]})" ;; esac; done
 
@@ -170,12 +174,21 @@ gaps() { # <task>
   [ -f "$g" ] || return 0
   python3 -I -c 'import json, sys; print("\n".join(g["path"] for g in json.load(open(sys.argv[1]))))' "$g"
 }
-# The fixture a task runs on: its archetype's, or its own when it plants gaps.
+# Whether a task runs on a fixture of its own: it removes gaps or plants a previous session.
+own_fixture() { [ -f "$root/eval-suite/tasks/$1/gaps.json" ] || [ -d "$root/eval-suite/tasks/$1/previous" ]; }
+# The fixture a task runs on: its archetype's, or its own.
 fixture_of() { # <task> <arm>
   local a
   a="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$1/archetype")"
   printf '%s/fixtures/%s-%s%s' "$out" "$([ "$2" = none ] && echo none || echo plinth)" "$a" \
-    "$([ -f "$root/eval-suite/tasks/$1/gaps.json" ] && echo "-$1")"
+    "$(own_fixture "$1" && echo "-$1")"
+}
+# The squash commit message of the merged pull request in a task's issues.json.
+merged_message() { # <task>
+  python3 -I -c '
+import json, sys
+p = [p for p in json.load(open(sys.argv[1]))["pulls"] if p["state"] == "MERGED"][0]
+print("%s (#%d)\n\n%s" % (p["title"], p["number"], p["body"]))' "$root/eval-suite/tasks/$1/issues.json"
 }
 for a in "${needed[@]}"; do
   echo "== render $template_repo@$template_ref ($template_sha) as $a"
@@ -194,7 +207,7 @@ for a in "${needed[@]}"; do
 done
 for t in "${tasks[@]}"; do
   a="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/archetype")"
-  [ -f "$root/eval-suite/tasks/$t/gaps.json" ] || continue
+  own_fixture "$t" || continue
   for kind in plinth none; do
     f="$out/fixtures/$kind-$a-$t"
     mkdir -p "$f"; cp -R "$out/fixtures/$kind-$a/." "$f"
@@ -203,6 +216,11 @@ for t in "${tasks[@]}"; do
       rm -f "$f/$p"
     done < <(gaps "$t")
     commit_fixture "$f"
+    [ -d "$root/eval-suite/tasks/$t/previous" ] || continue
+    cp -R "$root/eval-suite/tasks/$t/previous/." "$f"
+    git -C "$f" add -A
+    merged_message "$t" | git -C "$f" -c user.name=trial -c user.email=trial@example.invalid \
+      -c commit.gpgsign=false commit -qF -
   done
 done
 for a in "${needed[@]}"; do
@@ -236,6 +254,14 @@ run_one() { # <task> <arm> <n> <budget>
   fx="$(fixture_of "$task" "$arm")"
   r="$out/runs/$task-$arm-$n"
   mkdir -p "$r/gh"
+  # A task with records gets the read-only gh, ahead of any other on the session's PATH.
+  local path="$PATH"
+  if [ -f "$root/eval-suite/tasks/$task/issues.json" ]; then
+    mkdir -p "$r/bin"
+    cp "$root/scripts/eval-suite-gh.py" "$r/bin/gh"; chmod +x "$r/bin/gh"
+    cp "$root/eval-suite/tasks/$task/issues.json" "$r/bin/issues.json"
+    path="$r/bin:$PATH"
+  fi
   git init -q --bare "$r/origin.git"
   git clone -q "$fx" "$r/repo"
   git -C "$r/repo" remote set-url origin "$r/origin.git"
@@ -256,7 +282,7 @@ run_one() { # <task> <arm> <n> <budget>
   (cd "$r/repo" && printf '%s' "$(cat "$root/eval-suite/tasks/$task/prompt.txt")" \
     | env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u GH_HOST \
         -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u VIRTUAL_ENV \
-        GH_CONFIG_DIR="$r/gh" CLAUDE_CONFIG_DIR="$cfg" DISABLE_AUTOUPDATER=1 \
+        GH_CONFIG_DIR="$r/gh" CLAUDE_CONFIG_DIR="$cfg" DISABLE_AUTOUPDATER=1 PATH="$path" \
         perl -e 'alarm shift; exec @ARGV or die "exec: $!"' "$session_timeout" \
         claude -p --model "$model" --permission-mode auto --output-format stream-json --verbose \
         --max-budget-usd "$budget" ${settings[@]+"${settings[@]}"}) > "$r/stream.jsonl" 2> "$r/stderr.txt"

@@ -22,6 +22,12 @@ pull requests and have no tag.
   the highest number cannot be read with the job's token, the log says
   why and nothing is warned. GitLab's `pr-title` does the same for `#N`
   and `!N`, each against its own highest (#826).
+- The eval suite has an eleventh task, `next-day` (#832): "carry on where
+  we left off" on a project whose last merged pull request and closed issue
+  leave one item unverified, with an unrelated issue open as the next ticket.
+  It passes only when the final report names that item. Its sessions get a
+  read-only `gh` that serves the planted issues and pull request offline;
+  it refuses writes. The full suite is now 99 runs.
 
 ### Changed
 

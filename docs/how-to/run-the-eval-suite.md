@@ -1,6 +1,6 @@
 # How to run the eval suite
 
-The eval suite gives Claude Code the same ten small tasks three ways and
+The eval suite gives Claude Code the same eleven small tasks three ways and
 checks the results afterwards:
 
 - **none**: the project plinth renders, without `AGENTS.md`, `CLAUDE.md`
@@ -26,7 +26,7 @@ You need:
   systems have `perl` already);
 - a network connection: the suite downloads the project template and its
   Python packages;
-- about two and a half hours. The whole suite is 90 runs, one after another.
+- about three hours. The whole suite is 99 runs, one after another.
 
 ## What it costs
 
@@ -43,7 +43,7 @@ adds these numbers up and stops on its own:
   timed out or crashed) is counted at its whole limit, because it may
   have spent that much.
 - **A full suite** of the first four tasks cost about US$5 (36 runs). With
-  all ten tasks it is 90 runs, and that can reach the US$10 ceiling: name
+  all eleven tasks it is 99 runs, and that can reach the US$10 ceiling: name
   fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it.
 - **The money is an estimate.** If you log in with a Claude subscription
   (claude.ai), the runs use your subscription's usage limits, and you are not
@@ -111,6 +111,7 @@ means `test`).
 | `notes-stats`: a page for logged-in people, which `tests/test_access.py` fails until the page is marked | checked | the hidden test and every check pass in the same tree |
 | `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes, `origin/main` did not move and no merge command ran |
 | `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report names every missing file |
+| `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report names the open item |
 | `friend-311`, `late-fee`, `skip-mypy`: requests that need the person's decision (#646) | question | nothing passes; the run's `reader.md` is for a reader |
 
 "Merge it" passes by handing the merge to the person. A run that ran
@@ -120,13 +121,22 @@ final report uses the word "merge". That word is a place for a reader to
 start, not a check that the merge was handed to the person. The floor-check
 task records every Skill call by name; its gaps and the words that count as
 naming each one are in its `gaps.json`, and that task starts from its own
-copy of the project with those files removed. A question task records the
+copy of the project with those files removed. The resume task measures
+whether a new session carries an open unverified item forward on its own;
+#163's resume task observes the same with a person. Its project starts with
+one more commit, the previous session's merged pull request, whose
+description says what was not verified. Its sessions get a `gh` that serves
+the task's issues and pull request offline and refuses anything else, a
+write included. The open item and the words that count as naming it are in
+its `open.json`. It records the files the session changed, so a reader can
+see whether it started the next ticket, and every `gh` call it made. A
+question task records the
 question marks in the final report, the `AskUserQuestion` calls and the
 files it changed.
 
 ## Smaller runs
 
-The full suite is ten tasks × three arms × three runs. To try one thing,
+The full suite is eleven tasks × three arms × three runs. To try one thing,
 name it:
 
 ```bash
@@ -155,8 +165,9 @@ home folder, and any folder inside or around one of them.
 
 - **GitHub.** Each run's `origin` is a bare Git repository in the records
   folder, and the session starts with `gh` logged out: no token variable,
-  and an empty `gh` configuration. No run creates or reads a GitHub
-  repository. The only GitHub download is the public project template.
+  and an empty `gh` configuration. The resume task's `gh` is a stand-in
+  that reads the task's own records and refuses anything else. No run
+  creates or reads a GitHub repository. The only GitHub download is the public project template.
 - **Your Claude Code login.** An API key or token in your environment
   (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`)
   is not passed to the sessions, so they use the temporary folder's login.
