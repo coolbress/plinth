@@ -316,6 +316,8 @@ jobs:
           # the checkout is not, so it still goes to github.com. The link text
           # stays absolute, since a CHANGELOG section becomes a Release body.
           remap=(--remap "^$repo/blob/main/([^#]*)(#.*)?\$ file://$PWD/\$1")
+          # A host that refuses every automated request is in .lycheeignore,
+          # which lychee reads from the checkout root, with the date measured.
           "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" \
             --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
           # The remap on two fixtures, offline: an existing file passes with no

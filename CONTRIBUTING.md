@@ -60,7 +60,8 @@ The link check is left out on purpose.
 (`.github/workflows/plinth-ci.yml`); a package manager installs whatever
 version it has, the check needs network, and the sites it asks can answer
 differently from one hour to the next, so a local pass does not promise a
-pass there. To look before pushing anyway, with a lychee of your own:
+pass there. Both skip the hosts in `.lycheeignore`, each of which refuses
+every automated request. To look before pushing anyway, with a lychee of your own:
 
 ```bash
 lychee --no-progress --exclude-path .scratch -- './**/*.md'   # network; not the pinned build
