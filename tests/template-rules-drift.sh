@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # plinth is not rendered from the template, so a template update never reaches
-# its own rules (#819). Each rule plinth shares with the template's AGENTS.md
-# and pull-request form is a named phrase below: the phrase must be in the
+# its own rules (#819). Each rule plinth shares with the template's AGENTS.md,
+# CONTRIBUTING.md and pull-request form is a named phrase below: the phrase must be in the
 # template at the tag scripts/new-project.sh pins, and its counterpart in
 # plinth's file. Not a file comparison: most of each file is its own. A pin
 # raise that rewords or drops a listed rule fails here; whoever raises the pin
@@ -20,7 +20,8 @@ bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 
 # name | template file | phrase in the template | plinth file | its counterpart
 # (fixed strings). Template files: agents = template/AGENTS.md.jinja,
-# form = template/.github/PULL_REQUEST_TEMPLATE.md. Plinth files are paths.
+# form = template/.github/PULL_REQUEST_TEMPLATE.md,
+# contributing = template/CONTRIBUTING.md.jinja. Plinth files are paths.
 rules=(
   "fresh-context default|agents|The default review is a fresh-context review, before the description is written|AGENTS.md|The default review is a fresh-context review, before the description is written"
   "fresh-context reads the review rules|agents|Read by the fresh-context review|AGENTS.md|Read by the fresh-context review"
@@ -32,6 +33,7 @@ rules=(
   "another repository's reference in the form|form|Any reference to another repository's issue or pull request, here or above: \`owner/repo#N\`.|.github/PULL_REQUEST_TEMPLATE.md|Any reference to another repository's issue or pull request, here or above: \`owner/repo#N\`."
   "public records|agents|Write them as public: no home path, account or folder name from the person's computer|AGENTS.md|Write them as public: no home path, account or folder name from the owner's computer"
   "public records in the form|form|A pasted output keeps home paths out: \`~/...\`, or the condition it shows.|.github/PULL_REQUEST_TEMPLATE.md|A pasted output keeps home paths out: \`~/...\`, or the condition it shows."
+  "squash-merge command|contributing|body=\"\$(gh pr view <n> --json body --jq .body)\" && gh pr merge <n> --squash --match-head-commit <sha> --body \"\$body\"|CONTRIBUTING.md|body=\"\$(gh pr view <n> --json body --jq .body)\" && gh pr merge <n> --squash --match-head-commit <sha> --body \"\$body\""
 )
 
 # has <file> <phrase>: the phrase is in the file, line breaks and runs of
@@ -76,12 +78,13 @@ mkdir -p "$work/real"
 base="https://raw.githubusercontent.com/$template/$ref/template"
 if curl -fsSL --retry 3 -o "$work/real/agents" "$base/AGENTS.md.jinja" 2>/dev/null \
    && curl -fsSL --retry 3 -o "$work/real/form" "$base/.github/PULL_REQUEST_TEMPLATE.md" 2>/dev/null \
-   && [ -s "$work/real/agents" ] && [ -s "$work/real/form" ]; then
+   && curl -fsSL --retry 3 -o "$work/real/contributing" "$base/CONTRIBUTING.md.jinja" 2>/dev/null \
+   && [ -s "$work/real/agents" ] && [ -s "$work/real/form" ] && [ -s "$work/real/contributing" ]; then
   if out="$(check_rules "$work/real" "$root")"
-  then ok "plinth's CLAUDE.md and pull-request template carry each rule shared with $template@$ref (${#rules[@]} listed)"
+  then ok "plinth's CLAUDE.md, CONTRIBUTING.md and pull-request template carry each rule shared with $template@$ref (${#rules[@]} listed)"
   else bad "rules shared with $template@$ref missing or stale:"; sed 's/^/        /' <<<"$out"; fi
 else
-  bad "could not read $template@$ref AGENTS.md.jinja and the pull-request form; cannot verify"
+  bad "could not read $template@$ref AGENTS.md.jinja, CONTRIBUTING.md.jinja and the pull-request form; cannot verify"
 fi
 
 echo "-- $pass passed, $fail failed"

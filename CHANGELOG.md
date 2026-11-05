@@ -13,6 +13,11 @@ pull requests and have no tag.
 
 ### Changed
 
+- Guidance facts that disagreed are corrected and each repeated one now has
+  one source: the one-time update commands live in the README, the skill
+  counts in the arsenal, and `tests/doc-pinned-facts.sh` and
+  `tests/template-rules-drift.sh` fail when the skill counts or the
+  squash-merge command differ (#835).
 - `/plinth:new-project` renders plinth-template v1.40.0: every project carries
   a how-to for undoing a merged change (coolbress/plinth-template#199), its
   agent keeps the person's computer out of public issues and pull requests
