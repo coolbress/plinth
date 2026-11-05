@@ -122,6 +122,8 @@ run_closing() { # <label> <PR>
   seen "$1" 1 "$?" "$FX/out"
 }
 fx "x" "65";       run_closing "closing-references.sh alone: an issue outside the closing line" 7
+fx "x" "65"; jq '.data.repository.pullRequest.closingIssuesReferences.nodes[0].repository.nameWithOwner = "an-organisation-with-a-long-name/a-repository-with-a-long-name-too"' "$FX/response.json" > "$FX/r.json"; mv "$FX/r.json" "$FX/response.json"
+run_closing "closing-references.sh alone: a long name from another repository" 7
 fx "x";            run_closing "closing-references.sh alone: the number is not a number" abc
 fx "x"; echo 1 > "$FX/gh_rc"; run_closing "closing-references.sh alone: GitHub cannot be read" 7
 python3 - "$work/many.json" <<'PY'
@@ -303,7 +305,7 @@ bad = n = 0
 for where, l in got:
     if l.lstrip().startswith("#") or not re.search(r"::(error|warning)::", l):
         continue
-    if "more not yet confirmed lines" in l or "say()" in l or "grep" in l or '"::error::$e"' in l:  # $e: the fixtures read it
+    if "more not yet confirmed lines" in l or "say()" in l or '"::error::$e"' in l or '"::error::$lead$first$tail"' in l:  # built above: the fixtures read them
         continue
     n += 1
     if "https://github.com/coolbress/plinth/blob/main/" not in l and "{HOW}" not in l and "$HOW" not in l:

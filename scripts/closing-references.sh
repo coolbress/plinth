@@ -65,6 +65,9 @@ if [ "$rc" != 0 ]; then
     *"more than 100"*) next="Reword the description so it closes fewer issues" ;;
     *) next="Re-run this job" ;;
   esac
-  echo "::error::#$PR's description: ${first:0:130}. $next: $HOW"
+  # At most 300 characters: what is cut is the first FAIL, never the action and link.
+  lead="#$PR's description: "; tail=". $next: $HOW"; room=$((300 - ${#lead} - ${#tail}))
+  [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
+  echo "::error::$lead$first$tail"
   exit 1
 fi

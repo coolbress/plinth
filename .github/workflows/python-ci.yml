@@ -947,7 +947,7 @@ jobs:
             exit 0
           fi
           if [ "${FETCH:-}" != success ]; then
-            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read"
+            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read; re-run this job: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
             exit 1
           fi
           # The verdict lines first, then the script's report.
@@ -1452,8 +1452,9 @@ jobs:
               r = subprocess.run(["git", "grep", "-h", "-I", "-E", r"[[:space:]]as[[:space:]]|=", head, "--", "*.py"],
                                  capture_output=True)
               if r.returncode not in (0, 1):   # 1 is no match; anything else is not an answer
-                  print(r.stderr.decode('utf-8', 'replace').strip())
-                  print("::error::" + fit(f"git grep failed at {head}: {r.stderr.decode('utf-8', 'replace').strip()}", f"; re-run this job: {HOW}"))
+                  err = " ".join(r.stderr.decode("utf-8", "replace").split())
+                  print(err)
+                  print("::error::" + fit(f"git grep failed at {head}: {err}", f"; re-run this job: {HOW}").replace("%", "%25"))
                   sys.exit(1)
               lines = r.stdout.decode("utf-8", "replace").split("\n")
               while True:
