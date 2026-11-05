@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.27.0] - 2026-11-05
+
+A reference to another repository's issue or pull request is now written `owner/repo#N` everywhere a project's agent writes one, and `ci / pr-title` warns, without failing, on a bare `#N` above the repository's highest number, which would link to nothing. `/plinth:new-project` renders plinth-template v1.39.0, which carries that rule and a monthly issue that tells a project when its template is behind; plinth's own drift test now holds the rule in both places. A consumer gets the CI change by raising every `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`), and the template's through `/plinth:template-update`.
+
+tested with plinth-template v1.39.0
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6655184212>
+
 ### Added
 
 - `ci / pr-title` warns, without failing, on each bare `#N` in a pull
@@ -4673,7 +4681,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.26.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.27.0...HEAD
+[2.27.0]: https://github.com/coolbress/plinth/releases/tag/v2.27.0
 [2.26.0]: https://github.com/coolbress/plinth/releases/tag/v2.26.0
 [2.25.1]: https://github.com/coolbress/plinth/releases/tag/v2.25.1
 [2.25.0]: https://github.com/coolbress/plinth/commit/3309912f41a6af31d9f91daf28708923377b8c4b
