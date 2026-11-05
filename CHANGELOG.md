@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.40.0: every project carries
+  a how-to for undoing a merged change (coolbress/plinth-template#199), its
+  agent keeps the person's computer out of public issues and pull requests
+  (coolbress/plinth-template#198), and the monthly template reminder closes
+  its issue once the project is current (coolbress/plinth-template#196).
+  plinth's own `AGENTS.md` and pull-request form adopt the public-records
+  rule, and `tests/template-rules-drift.sh` lists it in both.
+
 ## [2.27.0] - 2026-11-05
 
 A reference to another repository's issue or pull request is now written `owner/repo#N` everywhere a project's agent writes one, and `ci / pr-title` warns, without failing, on a bare `#N` above the repository's highest number, which would link to nothing. `/plinth:new-project` renders plinth-template v1.39.0, which carries that rule and a monthly issue that tells a project when its template is behind; plinth's own drift test now holds the rule in both places. A consumer gets the CI change by raising every `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`), and the template's through `/plinth:template-update`.

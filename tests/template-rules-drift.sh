@@ -30,6 +30,8 @@ rules=(
   "review field|form|Review: <!-- which review ran: fresh-context \| third-party (<name>) \| same-session (not independent) \| none (<reason>) -->|.github/PULL_REQUEST_TEMPLATE.md|Review: <!-- which review ran: fresh-context \| third-party (<name>) \| same-session (not independent) \| none (<reason>) -->"
   "another repository's reference|agents|A reference to another repository's issue or pull request is \`owner/repo#N\`; a bare \`#N\`, or \`plinth #N\`, links to this repository's own \`#N\`.|AGENTS.md|A reference to another repository's issue or pull request is \`owner/repo#N\`; a bare \`#N\`, or \`plinth #N\`, links to this repository's own \`#N\`."
   "another repository's reference in the form|form|Any reference to another repository's issue or pull request, here or above: \`owner/repo#N\`.|.github/PULL_REQUEST_TEMPLATE.md|Any reference to another repository's issue or pull request, here or above: \`owner/repo#N\`."
+  "public records|agents|Write them as public: no home path, account or folder name from the person's computer|AGENTS.md|Write them as public: no home path, account or folder name from the owner's computer"
+  "public records in the form|form|A pasted output keeps home paths out: \`~/...\`, or the condition it shows.|.github/PULL_REQUEST_TEMPLATE.md|A pasted output keeps home paths out: \`~/...\`, or the condition it shows."
 )
 
 # has <file> <phrase>: the phrase is in the file, line breaks and runs of
