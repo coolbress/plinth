@@ -152,6 +152,6 @@ if __name__ == "__main__":
     if len(sys.argv) == 4:
         try:
             lines += unknown_numbers(body, {"#": (github_highest(sys.argv[3]), "issue or pull request", "owner/repo#N")}, sys.argv[1])
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             print(f"bare #N not checked: the highest issue or pull request number could not be read ({type(e).__name__})", file=sys.stderr)
     print("\n".join(lines))
