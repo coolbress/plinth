@@ -152,6 +152,7 @@ entries = {p["name"]: p for p in market["plugins"]}
 n_matt, n_extra = len(entries["mattpocock-skills"]["skills"]), len(entries["mattpocock-skills-extra"]["skills"])
 arsenal_rel = "skills/arsenal/SKILL.md"
 arsenal = (docs / arsenal_rel).read_text(encoding="utf-8")
+notice = (docs / "NOTICE").read_text(encoding="utf-8")
 counted = {**words, **numbers, "fifteen": 15}
 def num(raw):
     return int(raw) if raw.isdigit() else counted.get(raw.lower(), -1)
@@ -170,6 +171,10 @@ facts = [
     (arsenal_rel, arsenal, r"`mattpocock-skills-extra` lists (\w+) more", n_extra, "listed"),
     (arsenal_rel, arsenal, r"\| `mattpocock-skills` \| (\w+) skills:", n_matt, "installed"),
     (arsenal_rel, arsenal, r"\| `mattpocock-skills-extra` \| The (\w+) other", n_extra, "listed"),
+    (arsenal_rel, arsenal, r"adds its\s+(\w+)\s+beside the default set's", n_extra, "listed"),
+    (arsenal_rel, arsenal, r"beside the default set's\s+(\w+)", n_matt, "installed"),
+    ("NOTICE", notice, r"(\w+) skills installed,", n_matt, "installed"),
+    ("NOTICE", notice, r"skills installed, (\w+) listed in mattpocock-skills-extra", n_extra, "listed"),
     (".claude-plugin/marketplace.json", entries["mattpocock-skills"]["description"], r"skills, (\w+) of the", n_matt, "installed"),
     (".claude-plugin/marketplace.json", entries["mattpocock-skills"]["description"], r"of the (\w+) upstream ships", total, "shipped upstream"),
     (".claude-plugin/marketplace.json", entries["mattpocock-skills-extra"]["description"], r"The (\w+) Matt Pocock skills", n_extra, "listed"),
@@ -195,6 +200,16 @@ for rel in ("CONTRIBUTING.md", "docs/tutorials/getting-started.md", "docs/how-to
         i = text.find("gh pr merge <n>")
         fail(f"{rel}:{text.count(chr(10), 0, i) + 1 if i >= 0 else 1} does not show the squash-merge command as: {squash}")
 
+# 7. The one-time update commands (#835): the README holds them, and
+# tests/install-smoke.sh reads them there; these pages link to it.
+for rel in ("docs/tutorials/getting-started.md", "docs/how-to/cut-a-release.md"):
+    text = (docs / rel).read_text(encoding="utf-8")
+    if "README.md#install-in-detail" in text and "taste-skill@plinth" not in text:
+        print(f"  PASS  {rel}: links the one-time update commands, repeats none")
+    else:
+        i = text.find("taste-skill@plinth")
+        fail(f"{rel}:{text.count(chr(10), 0, i) + 1 if i >= 0 else 1} must link README.md#install-in-detail and not repeat the one-time commands")
+
 print(f"  PASS  {stated} stated check count(s) read; expected "
       + ", ".join(f"{a or 'other'} {n}" for a, n in want.items()) if not fails else
       f"-- {fails} failed")
@@ -210,7 +225,7 @@ check "$root" || status=1
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 copy() {
   rm -rf "$tmp/docs"; mkdir -p "$tmp/docs"
-  cp "$root"/README.md "$root"/GLOSSARY.md "$root"/CONTRIBUTING.md "$tmp/docs/"
+  cp "$root"/README.md "$root"/GLOSSARY.md "$root"/CONTRIBUTING.md "$root"/NOTICE "$tmp/docs/"
   cp -R "$root/docs" "$root/skills" "$root/.claude-plugin" "$tmp/docs/"
 }
 expect_fail() {
@@ -263,6 +278,12 @@ copy; sed -i.bak 's/installs 15 of the 27 skills/installs 15 of the 25 skills/' 
 expect_fail_at "an upstream total other than the lists add to" "skills/arsenal/SKILL.md:$(tool_line 'installs 15 of the' skills/arsenal/SKILL.md)"
 copy; sed -i.bak 's/15 of the 27 upstream ships/14 of the 27 upstream ships/' "$tmp/docs/.claude-plugin/marketplace.json"
 expect_fail_at "a marketplace count other than its list" ".claude-plugin/marketplace.json:1"
+copy; sed -i.bak 's/15 skills installed, 6 listed/15 skills installed, 7 listed/' "$tmp/docs/NOTICE"
+expect_fail_at "a NOTICE count other than the manifest's" "NOTICE:$(tool_line '7 listed in' NOTICE)"
+copy; sed -i.bak "s/adds its six\$/adds its seven/" "$tmp/docs/skills/arsenal/SKILL.md"
+expect_fail_at "\"adds its seven\" for six" "skills/arsenal/SKILL.md:$(tool_line 'adds its seven' skills/arsenal/SKILL.md)"
+copy; printf '\nclaude plugin update taste-skill@plinth\n' >>"$tmp/docs/docs/how-to/cut-a-release.md"
+expect_fail "a one-time command repeated outside the README" docs/how-to/cut-a-release.md
 copy; sed -i.bak 's/--squash --match-head-commit <sha> --body/--squash --body/' "$tmp/docs/docs/how-to/run-a-project.md"
 expect_fail_at "a squash-merge command that differs" "docs/how-to/run-a-project.md:$(tool_line 'gh pr merge <n> --squash' docs/how-to/run-a-project.md)"
 exit "$status"

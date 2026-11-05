@@ -267,19 +267,17 @@ done
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
 # The docs name them in this order; the other order leaves no mattpocock-skills
 # skill until `install` runs.
-for doc in README.md docs/tutorials/getting-started.md; do
-  grep -qF "\`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/$doc")" \
-    || { echo "  FAIL  $doc does not name \`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`"; exit 1; }
-done
+# The README is their one source (#835); tests/doc-pinned-facts.sh holds the
+# pages that link to it.
+grep -qF "\`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/README.md")" \
+  || { echo "  FAIL  README.md does not name \`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`"; exit 1; }
 # A raised dependency pin is fetched by neither `update plinth` nor
 # `install plinth@plinth`: the entry's new skill list is read against the old
 # commit's files, and a skill the old commit keeps elsewhere goes missing
 # (measured for #714). Each entry is updated by name, as the docs say.
 dep_cmds=("claude plugin update mattpocock-skills@plinth" "claude plugin update mattpocock-skills-extra@plinth")
-for doc in README.md docs/tutorials/getting-started.md; do
-  for c in "${dep_cmds[@]}"; do
-    grep -qF "\`$c\`" "$root/$doc" || { echo "  FAIL  $doc does not name \`$c\`"; exit 1; }
-  done
+for c in "${dep_cmds[@]}"; do
+  grep -qF "\`$c\`" "$root/README.md" || { echo "  FAIL  README.md does not name \`$c\`"; exit 1; }
 done
 tag="$(git ls-remote --tags --refs https://github.com/coolbress/plinth.git 'v*' | sed 's|.*refs/tags/||' | sort -V | tail -1)"
 [ -n "$tag" ] || { echo "  FAIL  no release tag read from github.com/coolbress/plinth"; exit 1; }
