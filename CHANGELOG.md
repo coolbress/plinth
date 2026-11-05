@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- A reference to another repository's issue or pull request is written
+  `owner/repo#N` (#825): `AGENTS.md`, `docs/agents/issue-tracker.md` and the
+  pull-request form say so for every reference, not only the closing line. A
+  bare `#N`, or `plinth #N`, links to the repository the text is in.
+
 ## [2.26.0] - 2026-11-05
 
 A project's agent now reviews a change in a fresh context by default, explains the everyday terms the first time it uses them, and ends a research record in its `## Decision`; `ci / pr-title` warns, without failing, when a description does not say what the person checked or which review ran. `/plinth:new-project` renders plinth-template v1.38.0, which carries those rules and the two description fields; plinth's own rules follow the same template, and a test now fails a pin raise that leaves a shared rule behind. `/plinth:floor-check` reads `render.yaml`'s deploy settings and says who can push past push protection. The four-things how-to says which services can stop spending and adds an uptime monitor and an error tracker. A consumer gets the CI change by raising every `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`), and the template's through `/plinth:template-update`.
