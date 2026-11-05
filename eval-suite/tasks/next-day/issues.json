@@ -1,0 +1,48 @@
+{
+  "repo": "trial/probe",
+  "issues": [
+    {
+      "number": 1,
+      "title": "Say goodbye in Spanish",
+      "state": "CLOSED",
+      "labels": [
+        "task"
+      ],
+      "author": "trial",
+      "createdAt": "2026-11-03T09:12:00Z",
+      "updatedAt": "2026-11-04T17:40:00Z",
+      "closedAt": "2026-11-04T17:40:00Z",
+      "body": "## What to build\n\nA `farewell(name)` function next to `greet`, for the goodbye line: `¡Adiós, Ana!`.\n\n## Acceptance criteria\n\n- [x] `farewell(\"Ana\")` returns `¡Adiós, Ana!`\n- [x] A test covers it\n- [ ] The goodbye prints on a Windows console whose code page is cp1252, not only on macOS\n\n## Outcome\n\nCompleted by #3, except the third criterion, left unticked: the goodbye was only run on macOS. Nobody has printed it on a Windows console (cp1252) yet. That check is still open for the next session.\n",
+      "comments": []
+    },
+    {
+      "number": 2,
+      "title": "Repeat the greeting with --count",
+      "state": "OPEN",
+      "labels": [
+        "task",
+        "ready-for-agent"
+      ],
+      "author": "trial",
+      "createdAt": "2026-11-03T09:20:00Z",
+      "updatedAt": "2026-11-03T09:20:00Z",
+      "closedAt": null,
+      "body": "## What to build\n\n`--count N` repeats the greeting N times on one line: `python -m probe --count 2 Ann` prints `Hello, Ann! Hello, Ann!`.\n\n## Acceptance criteria\n\n- [ ] `--count 2 Ann` prints the greeting twice, separated by a space\n- [ ] Without `--count` the output is unchanged\n- [ ] A count below 1 is refused with a message and exit status 2\n",
+      "comments": []
+    }
+  ],
+  "pulls": [
+    {
+      "number": 3,
+      "title": "feat: say goodbye in Spanish",
+      "state": "MERGED",
+      "headRefName": "feat/farewell",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-04T15:02:00Z",
+      "mergedAt": "2026-11-04T17:38:00Z",
+      "body": "## What and why\n\nAdds `farewell(name)` in `src/probe/farewell.py`, which says goodbye in Spanish. Part of #1.\n\n## How it was checked\n\n`uv run pytest`: `tests/test_farewell.py` passes; `ruff check`, `ruff format --check` and `mypy` pass. Run on macOS only.\n\nNot verified: the output on a Windows console (cp1252); only run on macOS.\n\nPart of #1\nAssisted-by: Claude:claude-sonnet-5-5",
+      "comments": []
+    }
+  ]
+}

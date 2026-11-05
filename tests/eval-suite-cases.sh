@@ -6,17 +6,19 @@
 # hidden test fails and one whose `ruff check` fails. Each task kind (#664) has
 # a run that must not pass: a checked task whose checks fail, a merge that
 # moved origin/main, a floor check whose report misses a planted gap; a
-# question task has no pass, and a run that read a path under eval-suite/ is
-# not counted. A graded run loses its rebuildable caches (#687) and grades the
+# question task has no pass, a resume task (#832) whose report skips the open
+# item fails while one that names it passes, and a run that read a path under
+# eval-suite/ is not counted. A graded run loses its rebuildable caches (#687) and grades the
 # same again; --keep-caches and a failed grade keep them.
 #
 # The stubs: `claude` acts out a session from EVAL_STUB_ACTIONS (one action
 # per run number) and reports EVAL_STUB_COST; `uvx` stands in for copier and
 # renders canary/ as the package `probe`; `gh` logs its calls and, like gh,
-# is logged in only with a token variable or a hosts.yml. The grader itself
+# is logged in only with a token variable or a hosts.yml, except in a task with
+# an issues.json, whose sessions get the runner's read-only gh instead. The grader itself
 # runs for real: `uv sync --frozen` installs canary's locked ruff, mypy and
 # pytest (network the first time).
-# shellcheck disable=SC2034  # sha, repo, bare_ok, gone and rd are used inside the check() command strings
+# shellcheck disable=SC2034  # sha, repo, bare_ok, gone, rd and tab are used inside the check() command strings
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 command -v uv >/dev/null || { echo "  FAIL  uv is not installed"; exit 1; }
@@ -26,6 +28,7 @@ tmp="$(cd "$tmp" && pwd -P)"
 trap '[ -n "${KEEP:-}" ] || rm -rf "$tmp"' EXIT
 
 pass=0; fail=0
+tab=$'\t'
 ok()  { pass=$((pass+1)); printf '  PASS  %s\n' "$1"; }
 bad() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | tail -15 | sed 's/^/        | /'; }
 check() { if eval "$2"; then ok "$1"; else bad "$1" "${3:-}"; fi; }
@@ -123,6 +126,19 @@ case "$action" in
   floor-two) final="uv.lock is missing, and so is CHANGELOG.md." ;;
   floor-all) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"
     final="Missing: the lockfile (uv.lock), CHANGELOG.md and .github/dependabot.yml." ;;
+  # The resume task: the session's gh is the task's read-only one, which serves the planted issues.
+  resume-skip)
+    { gh issue list; gh issue view 2 --json number,title,state; } > "$(dirname "$ws")/seen.txt" 2>&1
+    gh issue comment 2 --body "starting" >> "$(dirname "$ws")/seen.txt" 2>&1; echo "write_exit=$?" >> "$(dirname "$ws")/seen.txt"
+    printf '\ndef repeat(text: str, count: int) -> str:\n    return " ".join([text] * count)\n' >> src/probe/__init__.py
+    bashcmd="gh issue list"; final="Picked up #2 and added a repeat helper for --count; not verified on Windows." ;;
+  resume-named)
+    gh issue view 1 --comments > "$(dirname "$ws")/seen.txt" 2>&1
+    bashcmd="gh issue view 1 --comments"
+    final="Before #2: yesterday's #1 closed with one item open, the output on a Windows console (cp1252) was never checked." ;;
+  # A profile that put the real gh first: the session ran gh, the stand-in logged nothing.
+  resume-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="gh issue list --state all"
+    final="Yesterday's #1 left the goodbye unchecked on Windows." ;;
   read-hidden) fix .; extra="$(tool Read "{\"file_path\":\"$CLAUDE_CONFIG_DIR/plugins/cache/plinth/plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py\"}")" ;;
   shown-hidden) fix .
     extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
@@ -349,6 +365,25 @@ check "a report naming all three passes, with the Skill call recorded by name" \
   '[ "$(kg fl floor-gaps 2 "r[\"pass\"], r[\"task_record\"][\"skills\"]")" = "(True, ['"'"'plinth:floor-check'"'"'])" ]' "$(kg fl floor-gaps 2 'r["task_record"]')"
 check "the kind table names each gap and the skill calls" \
   'grep -qF "| floor-gaps · plinth | gaps the final report names: \`uv.lock\` 2/2, \`CHANGELOG.md\` 2/2, \`.github/dependabot.yml\` 1/2; Skill calls: \`plinth:floor-check\` ×1 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+# --- the resume task (#832): the previous session's commit planted, its issues served by a read-only gh
+: > "$log"
+EVAL_STUB_ACTIONS=resume-skip,resume-named,resume-missed suite --config-dir "$tmp/cfg" --task next-day --arm plinth --runs 3 --out "$tmp/nd"
+check "three resume runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+check "the resume fixture is committed clean, its last commit the previous session's, with its Not verified line" \
+  'f="$tmp/nd/fixtures/plinth-cli-next-day"; [ -z "$(git -C "$f" status --porcelain)" ] && [ "$(git -C "$f" rev-list --count HEAD)" = 2 ] && git -C "$f" log -1 --format=%B | grep -q "^Not verified: .*cp1252" && [ -e "$f/src/probe/farewell.py" ] && [ -e "$f/AGENTS.md" ]' "$(git -C "$tmp/nd/fixtures/plinth-cli-next-day" log --format='%h %s' 2>&1)"
+check "the session's gh lists the open issue, not the closed one, and refuses a write" \
+  's="$tmp/nd/runs/next-day-plinth-1/seen.txt"; grep -q "^2${tab}OPEN${tab}Repeat the greeting" "$s" && ! grep -q "^1${tab}" "$s" && grep -q "\"number\": 2" "$s" && grep -q "^write_exit=1$" "$s"' "$(cat "$tmp/nd/runs/next-day-plinth-1/seen.txt" 2>&1)"
+check "the closed issue's Outcome names the open item, through gh issue view" \
+  'grep -q "cp1252" "$tmp/nd/runs/next-day-plinth-2/seen.txt" && grep -q "^state:${tab}CLOSED" "$tmp/nd/runs/next-day-plinth-2/seen.txt"' "$(cat "$tmp/nd/runs/next-day-plinth-2/seen.txt" 2>&1)"
+check "must not pass: a report that starts the next ticket, saying only its own work is not verified on Windows" \
+  '[ "$(kg nd next-day 1 "r[\"pass\"], r[\"task_record\"][\"named\"], r[\"task_record\"][\"changed_files\"]")" = "(False, {'"'"'cp1252 on Windows'"'"': False}, ['"'"'src/probe/__init__.py'"'"'])" ]' "$(kg nd next-day 1 'r["task_record"]')"
+check "a report that names the open item passes, with the gh calls recorded" \
+  '[ "$(kg nd next-day 2 "r[\"pass\"], r[\"task_record\"][\"named\"], r[\"task_record\"][\"gh_calls\"]")" = "(True, {'"'"'cp1252 on Windows'"'"': True}, ['"'"'auth status'"'"', '"'"'issue view 1 --comments'"'"'])" ]' "$(kg nd next-day 2 'r["task_record"]')"
+check "a run that ran gh while the stand-in logged no call is marked, and its windows-near-goodbye report passes" \
+  '[ "$(kg nd next-day 3 "r[\"pass\"], r[\"task_record\"][\"stand_in_missed\"], r[\"task_record\"][\"gh_calls\"]")" = "(True, True, [])" ] && [ "$(kg nd next-day 2 "r[\"task_record\"][\"stand_in_missed\"]")" = False ]' "$(kg nd next-day 3 'r["task_record"]')"
+check "the kind table counts the open item named, the next ticket started and the stand-in missed" \
+  'grep -qF "| next-day · plinth | open items the final report names: \`cp1252 on Windows\` 2/3; changed a file 1/3; ran gh without reaching the stand-in 1/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- a question task has no pass; it records the questions
 : > "$log"
