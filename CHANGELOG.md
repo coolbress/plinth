@@ -29,6 +29,12 @@ pull requests and have no tag.
   `owner/repo#N` (#825): `AGENTS.md`, `docs/agents/issue-tracker.md` and the
   pull-request form say so for every reference, not only the closing line. A
   bare `#N`, or `plinth #N`, links to the repository the text is in.
+- `/plinth:new-project` renders plinth-template v1.39.0. A project gets a
+  monthly issue when its template is behind, from a new workflow that is not
+  a check (coolbress/plinth-template#192), and its `AGENTS.md`, issue tracker
+  and forms write a reference to another repository as `owner/repo#N`
+  (#825). `tests/template-rules-drift.sh` now lists that rule in `AGENTS.md`
+  and in the pull-request form.
 
 ## [2.26.0] - 2026-11-05
 
