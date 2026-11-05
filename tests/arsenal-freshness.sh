@@ -103,7 +103,7 @@ stale_claims() {
 # missing_facts <arsenal> <run-a-project> <template dir>: what the template has
 # and the release row, the reminder row or step 9 does not say.
 missing_facts() {
-  local arsenal="$1" howto="$2" tdir="$3" row src arch archs dest rc=0 step9 reminder title
+  local arsenal="$1" howto="$2" tdir="$3" row src arch archs all_archs="" dest rc=0 step9 reminder title
   row="$(grep -F -- "$release_row" "$arsenal" | head -1)"
   [ -n "$row" ] || { echo "the arsenal has no row starting '$release_row'"; rc=1; }
   if [ -z "$(release_sources "$tdir")" ]; then
@@ -116,10 +116,17 @@ missing_facts() {
     else dest="GitHub release"; fi
     archs="$(basename "$src" | sed 's/{% endif.*//' | grep -oE "'[a-z-]+'" | tr -d "'")"
     [ -n "$archs" ] || { echo "no archetype in the workflow's file name, so the row cannot be checked: $(basename "$src")"; rc=1; }
+    all_archs="$all_archs $archs"
     for arch in $archs; do
       grep -qE "\`$arch\`[^,;]*$dest" <<<"$row" || { echo "the release row does not say \`$arch\` goes to $dest: $row"; rc=1; }
     done
   done < <(release_sources "$tdir")
+  # The other way round: the row's next-action cell names no archetype beyond
+  # those with a workflow (`web` deploys, `main` is the branch).
+  for arch in $(awk -F ' \\| ' '{ print $2 }' <<<"$row" | grep -oE '`[a-z-]+`' | tr -d '`'); do
+    case "$arch" in web|main) continue ;; esac
+    case " $(echo $all_archs) " in *" $arch "*) ;; *) echo "the release row names \`$arch\`, and the template has no release workflow for it"; rc=1 ;; esac
+  done
   if [ -f "$tdir/template/docs/how-to/publish-a-release.md.jinja" ]; then
     grep -qF 'docs/how-to/publish-a-release.md' <<<"$row" || { echo "the release row does not name docs/how-to/publish-a-release.md"; rc=1; }
   else
@@ -273,6 +280,8 @@ not_passing "a template that dropped the release how-to" missing_facts "$a" "$h"
 cp -R "$t" "$work/t4"; rm "$work/t4/template/.github/workflows/"*release.yml*
 printf 'uses: pypa/gh-action-pypi-publish\n' >"$work/t4/template/.github/workflows/release.yml.jinja"
 not_passing "a release workflow whose name carries no archetype" missing_facts "$a" "$h" "$work/t4"
+cp -R "$t" "$work/t5"; rm "$work/t5/template/.github/workflows/"*backend*release.yml*
+not_passing "a template that dropped one archetype's release workflow" missing_facts "$a" "$h" "$work/t5"
 
 cp -R "$p" "$work/p2"; sed -i.bak 's#/plinth:guide#/plinth:other#' "$work/p2/skills/arsenal/SKILL.md"
 not_passing "a user-only skill missing from the list" typed_list "$work/p2"
