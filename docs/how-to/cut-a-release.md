@@ -108,14 +108,12 @@ the move changes what a new project's agent reads, and then asks for
    version: a pull request merged after it stays unreleased. It does not read
    the why-file this time, so any clone at the merged `main` can run it.
 8. Tell installers to run `claude plugin update plinth`, then `/reload-plugins`,
-   plus any one-time command the version's `CHANGELOG.md` section names (the
-   first release after v1.10.0 names `claude plugin update taste-skill@plinth`;
-   the first after v1.11.0 names `claude plugin install plinth@plinth` and then
-   `claude plugin prune`, in that order). A release that raises a dependency's
-   pin names `claude plugin update <name>@plinth` for that entry: neither
+   plus any one-time command the version's `CHANGELOG.md` section names (those
+   so far are in [Install, in detail](../../README.md#install-in-detail)). A
+   release that raises a dependency's pin names
+   `claude plugin update <name>@plinth` for that entry: neither
    `update plinth` nor `install plinth@plinth` fetches the new commit
-   (measured for #714; the first after v2.18.0 names it for
-   `mattpocock-skills` and `mattpocock-skills-extra`).
+   (measured for #714).
 
 ## If the script refuses
 

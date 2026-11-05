@@ -281,7 +281,7 @@ at all. Type the skill.
 
 ### Skills plinth lists but does not install
 
-Six more of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
+More of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
 `/wait-what` among them, and `/ponytail-audit` are listed, not installed;
 `/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved them on
 [#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set

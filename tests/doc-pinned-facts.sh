@@ -4,8 +4,10 @@
 # template_ref; a per-archetype count of required checks a doc states must
 # be the count floor-check.py's ruleset gives that archetype; and the tools
 # README.md's supported box and the tutorial's "Before you start" list (and the
-# tutorial's count of them) must be the ones new-project.sh stops without. A doc
-# that states no count passes; a wrong one fails with its file and line. The
+# tutorial's count of them) must be the ones new-project.sh stops without; the
+# skill counts the arsenal and the marketplace state must be the manifest's
+# lists; the squash-merge command must read the same in the three pages that
+# show it (#835). A doc that states no count passes; a wrong one fails with its file and line. The
 # checker then runs on copies with one wrong line each, so it cannot pass
 # without looking.
 set -uo pipefail
@@ -143,6 +145,71 @@ else:
         if found and all(v == gf.group(1) for _, v in found):
             print(f"  PASS  {rel}: git {gf.group(1)} or newer, as the door checks")
 
+# 5. The skill counts (#835): the manifest's lists are the fact, and upstream's
+# total is those two plus the skills the arsenal names as in neither.
+market = json.loads((docs / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
+entries = {p["name"]: p for p in market["plugins"]}
+n_matt, n_extra = len(entries["mattpocock-skills"]["skills"]), len(entries["mattpocock-skills-extra"]["skills"])
+arsenal_rel = "skills/arsenal/SKILL.md"
+arsenal = (docs / arsenal_rel).read_text(encoding="utf-8")
+notice = (docs / "NOTICE").read_text(encoding="utf-8")
+counted = {**words, **numbers, "fifteen": 15}
+def num(raw):
+    return int(raw) if raw.isdigit() else counted.get(raw.lower(), -1)
+neither = re.search(r"The (\w+) in neither are ([^(]+)\(", arsenal)
+if not neither:
+    fail(f"{arsenal_rel} has no \"The <n> in neither are ...\": the skills upstream ships cannot be counted")
+    n_neither = -1
+else:
+    n_neither = len(re.findall(r"`[^`]+`", neither.group(2)))
+    if num(neither.group(1)) != n_neither:
+        fail(f"{arsenal_rel}:{arsenal.count(chr(10), 0, neither.start()) + 1} says {neither.group(1)} in neither and names {n_neither}")
+total = n_matt + n_extra + n_neither
+facts = [
+    (arsenal_rel, arsenal, r"`mattpocock-skills` installs (\w+) of the", n_matt, "installed"),
+    (arsenal_rel, arsenal, r"`mattpocock-skills` installs \w+ of the (\w+) skills", total, "shipped upstream"),
+    (arsenal_rel, arsenal, r"`mattpocock-skills-extra` lists (\w+) more", n_extra, "listed"),
+    (arsenal_rel, arsenal, r"\| `mattpocock-skills` \| (\w+) skills:", n_matt, "installed"),
+    (arsenal_rel, arsenal, r"\| `mattpocock-skills-extra` \| The (\w+) other", n_extra, "listed"),
+    (arsenal_rel, arsenal, r"adds its\s+(\w+)\s+beside the default set's", n_extra, "listed"),
+    (arsenal_rel, arsenal, r"beside the default set's\s+(\w+)", n_matt, "installed"),
+    ("NOTICE", notice, r"(\w+) skills installed,", n_matt, "installed"),
+    ("NOTICE", notice, r"skills installed, (\w+) listed in mattpocock-skills-extra", n_extra, "listed"),
+    (".claude-plugin/marketplace.json", entries["mattpocock-skills"]["description"], r"skills, (\w+) of the", n_matt, "installed"),
+    (".claude-plugin/marketplace.json", entries["mattpocock-skills"]["description"], r"of the (\w+) upstream ships", total, "shipped upstream"),
+    (".claude-plugin/marketplace.json", entries["mattpocock-skills-extra"]["description"], r"The (\w+) Matt Pocock skills", n_extra, "listed"),
+]
+for rel, text, pattern, want_n, what in facts:
+    found = list(re.finditer(pattern, text))
+    if not found:
+        fail(f"{rel} no longer says {pattern!r}: update this check")
+    for m in found:
+        if num(m.group(1)) != want_n:
+            fail(f"{rel}:{text.count(chr(10), 0, m.start()) + 1} states {m.group(1)} skills {what}; the lists give {want_n}")
+if not fails:
+    print(f"  PASS  skill counts: {n_matt} installed, {n_extra} listed, {n_neither} in neither, {total} upstream")
+
+# 6. The squash-merge command (#835), read with line breaks as one space.
+# tests/template-rules-drift.sh holds plinth's CONTRIBUTING.md to the template's.
+squash = 'body="$(gh pr view <n> --json body --jq .body)" && gh pr merge <n> --squash --match-head-commit <sha> --body "$body"'
+for rel in ("CONTRIBUTING.md", "docs/tutorials/getting-started.md", "docs/how-to/run-a-project.md"):
+    text = (docs / rel).read_text(encoding="utf-8")
+    if squash in " ".join(text.split()):
+        print(f"  PASS  {rel}: the squash-merge command")
+    else:
+        i = text.find("gh pr merge <n>")
+        fail(f"{rel}:{text.count(chr(10), 0, i) + 1 if i >= 0 else 1} does not show the squash-merge command as: {squash}")
+
+# 7. The one-time update commands (#835): the README holds them, and
+# tests/install-smoke.sh reads them there; these pages link to it.
+for rel in ("docs/tutorials/getting-started.md", "docs/how-to/cut-a-release.md"):
+    text = (docs / rel).read_text(encoding="utf-8")
+    if "README.md#install-in-detail" in text and "taste-skill@plinth" not in text:
+        print(f"  PASS  {rel}: links the one-time update commands, repeats none")
+    else:
+        i = text.find("taste-skill@plinth")
+        fail(f"{rel}:{text.count(chr(10), 0, i) + 1 if i >= 0 else 1} must link README.md#install-in-detail and not repeat the one-time commands")
+
 print(f"  PASS  {stated} stated check count(s) read; expected "
       + ", ".join(f"{a or 'other'} {n}" for a, n in want.items()) if not fails else
       f"-- {fails} failed")
@@ -158,8 +225,8 @@ check "$root" || status=1
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 copy() {
   rm -rf "$tmp/docs"; mkdir -p "$tmp/docs"
-  cp "$root"/README.md "$root"/GLOSSARY.md "$root"/CONTRIBUTING.md "$tmp/docs/"
-  cp -R "$root/docs" "$root/skills" "$tmp/docs/"
+  cp "$root"/README.md "$root"/GLOSSARY.md "$root"/CONTRIBUTING.md "$root"/NOTICE "$tmp/docs/"
+  cp -R "$root/docs" "$root/skills" "$root/.claude-plugin" "$tmp/docs/"
 }
 expect_fail() {
   local what="$1" where out line
@@ -205,4 +272,18 @@ copy; sed -i.bak 's/checks all five/checks all four/' "$tmp/docs/docs/tutorials/
 expect_fail_at "\"checks all four\" for five tools" "docs/tutorials/getting-started.md:$(tool_line '^- Tools: ' docs/tutorials/getting-started.md)"
 copy; printf '\nNeeds git 2.28 or newer.\n' >>"$tmp/docs/docs/tutorials/getting-started.md"
 expect_fail "a git floor other than the door's" docs/tutorials/getting-started.md
+copy; sed -i.bak 's/installs 15 of the 27 skills/installs 14 of the 27 skills/' "$tmp/docs/skills/arsenal/SKILL.md"
+expect_fail_at "an arsenal count other than the manifest's" "skills/arsenal/SKILL.md:$(tool_line 'installs 14 of the' skills/arsenal/SKILL.md)"
+copy; sed -i.bak 's/installs 15 of the 27 skills/installs 15 of the 25 skills/' "$tmp/docs/skills/arsenal/SKILL.md"
+expect_fail_at "an upstream total other than the lists add to" "skills/arsenal/SKILL.md:$(tool_line 'installs 15 of the' skills/arsenal/SKILL.md)"
+copy; sed -i.bak 's/15 of the 27 upstream ships/14 of the 27 upstream ships/' "$tmp/docs/.claude-plugin/marketplace.json"
+expect_fail_at "a marketplace count other than its list" ".claude-plugin/marketplace.json:1"
+copy; sed -i.bak 's/15 skills installed, 6 listed/15 skills installed, 7 listed/' "$tmp/docs/NOTICE"
+expect_fail_at "a NOTICE count other than the manifest's" "NOTICE:$(tool_line '7 listed in' NOTICE)"
+copy; sed -i.bak "s/adds its six\$/adds its seven/" "$tmp/docs/skills/arsenal/SKILL.md"
+expect_fail_at "\"adds its seven\" for six" "skills/arsenal/SKILL.md:$(tool_line 'adds its seven' skills/arsenal/SKILL.md)"
+copy; printf '\nclaude plugin update taste-skill@plinth\n' >>"$tmp/docs/docs/how-to/cut-a-release.md"
+expect_fail "a one-time command repeated outside the README" docs/how-to/cut-a-release.md
+copy; sed -i.bak 's/--squash --match-head-commit <sha> --body/--squash --body/' "$tmp/docs/docs/how-to/run-a-project.md"
+expect_fail_at "a squash-merge command that differs" "docs/how-to/run-a-project.md:$(tool_line 'gh pr merge <n> --squash' docs/how-to/run-a-project.md)"
 exit "$status"
