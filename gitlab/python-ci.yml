@@ -440,8 +440,18 @@ pr-title:
         echo "  could not list the merge request's commits from ${base:-<no CI_MERGE_REQUEST_DIFF_BASE_SHA>} to ${head:-<no head>}"
         commits="$PLINTH_TMP/unread"
       fi
+      # The newest issue and merge request (#826): their numbers are apart, #N
+      # and !N, and each is read with the job token from the merge request's
+      # project. Unread, the check says why and warns nothing of that kind.
+      highest_issues="$PLINTH_TMP/highest-issues.json"; highest_mrs="$PLINTH_TMP/highest-merge-requests.json"
+      for kind in issues merge_requests; do
+        f="$highest_issues"; [ "$kind" = issues ] || f="$highest_mrs"
+        curl -fsS --retry 3 -o "$f" --header "JOB-TOKEN: ${CI_JOB_TOKEN:-}" \
+          "${CI_API_V4_URL:-}/projects/${CI_MERGE_REQUEST_PROJECT_ID:-${CI_PROJECT_ID:-}}/$kind?scope=all&state=all&order_by=created_at&sort=desc&per_page=1" 2> "$f.err" \
+          || { head -n 1 "$f.err" > "$f.why"; rm -f "$f"; }
+      done
       rc=0; fields="$PLINTH_TMP/fields"; : > "$fields"
-      FIELDS="$fields" COMMITS="$commits" TITLE="$title" ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
+      HIGHEST_ISSUES="$highest_issues" HIGHEST_MRS="$highest_mrs" IID="${CI_MERGE_REQUEST_IID:-}" FIELDS="$fields" COMMITS="$commits" TITLE="$title" ANSWER="$answer" BODY="${CI_MERGE_REQUEST_DESCRIPTION:-}" PROJECT="${CI_MERGE_REQUEST_PROJECT_PATH:-${CI_PROJECT_PATH:-}}" SERVER="${CI_SERVER_HOST:-}" python3 - <<'PY' || rc=$?
       import json, os, re, sys
 
       # GitLab's default issue closing pattern ("Default closing pattern" in
@@ -497,6 +507,11 @@ pr-title:
       # their brackets, a placeholder such as `<name>` not counting.
       KINDS = re.compile(r"^(?:(?:fresh-context|same-session)\b|(?:third-party|none)\s*\(\s*[^\s<)][^)]*\))", re.IGNORECASE)
       REVIEW_FORM = "Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
+      # A bare `#N`, or GitLab's `!N` (#826): what stands outside code spans and
+      # links, with no path, name, `#`, `!` or `&` (an HTML entity) right before it.
+      CODE_SPAN = re.compile(r"(`+).*?\1")
+      LINKS = re.compile(r"!?\[[^\]]*\]\([^)]*\)|!?\[[^\]]*\]\[[^\]]*\]|^\s{0,3}\[[^\]]+\]:\s.*|<[a-z][a-z0-9+.-]*:[^>\s]*>|https?://\S+", re.IGNORECASE)
+      BARE = re.compile(r"(?<![\w/#!&.-])([#!])(\d+)\b")
 
 
       def unfenced(body):
@@ -562,6 +577,27 @@ pr-title:
                      else f'its `Review:` line says "{" ".join(values[-1].split())}", which names none of the four answers or gives no reason')
               out.append(f"not yet confirmed: {what} description, does not say which review ran: {why};"
                          f" write one line, `{REVIEW_FORM}`; an edited description is read again on the next run")
+          return out
+
+
+      def unknown_numbers(body, highest, what):
+          """One line for each bare reference above the highest number of its kind (#826).
+
+          `highest` maps `#` (and on GitLab `!`) to that number, what it numbers, and
+          how another repository's is written; a kind that could not be read is left out."""
+          seen, out = set(), []
+          for line, fenced in unfenced(body or ""):
+              if fenced:
+                  continue
+              for m in BARE.finditer(LINKS.sub(" ", CODE_SPAN.sub(" ", line))):
+                  sigil, number = m.group(1), int(m.group(2))
+                  if sigil not in highest or number <= highest[sigil][0] or (sigil, number) in seen:
+                      continue
+                  seen.add((sigil, number))
+                  top, kind, form = highest[sigil]
+                  out.append(f"not yet confirmed: {what} description, {sigil}{number} is above the highest {kind} number here"
+                             f" ({sigil}{top}), so it links to nothing; a reference to another repository's is written `{form}`;"
+                             " an edited description is read again on the next run")
           return out
 
       def refs(text, project):
@@ -640,6 +676,28 @@ pr-title:
           said = field_lines(body, "MR")
       except Exception as e:  # never the closing check's verdict
           said = [f"not yet confirmed: MR description, the fields were not read ({type(e).__name__}); a run where the check finishes confirms them"]
+      # A bare #N or !N above the highest of its kind (#826): never a red. This
+      # merge request is a number GitLab has, if its list does not show it yet.
+      highest = {}
+      for sigil, env, kind, form in (("#", "HIGHEST_ISSUES", "issue", "group/project#N"),
+                                     ("!", "HIGHEST_MRS", "merge request", "group/project!N")):
+          try:
+              with open(os.environ[env], encoding="utf-8") as f:
+                  top = max([int(i["iid"]) for i in json.load(f)] + [0])
+              if sigil == "!" and os.environ.get("IID", "").isdigit():
+                  top = max(top, int(os.environ["IID"]))
+              highest[sigil] = (top, kind, form)
+          except Exception as e:
+              try:
+                  with open(os.environ[env] + ".why", encoding="utf-8") as f:
+                      why = f.read().strip() or type(e).__name__
+              except OSError:
+                  why = type(e).__name__
+              print(f"  bare {sigil}N not checked: the highest {kind} number could not be read ({why})")
+      try:
+          said += unknown_numbers(body, highest, "MR")
+      except Exception as e:
+          print(f"  bare #N and !N not checked ({type(e).__name__})")
       with open(os.environ["FIELDS"], "w", encoding="utf-8") as f:
           f.write("\n".join(said) + "\n")
       # `git log -z --format=%H%n%B`: each commit is its hash, a newline, its message.

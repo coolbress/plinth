@@ -140,7 +140,8 @@ import os
 names = ("LINK_LINE = ", "TRAILER = ", "def closing_position(", "def own_paragraph(", "def excerpt(")
 if os.environ.get("FIELDS"):
     names = ("COMMENT = ", "FENCE = ", "HEADING = ", "CHECKED = ", "REVIEW = ", "ENDING = ", "KINDS = ", "REVIEW_FORM = ",
-             "def unfenced(", "def bare(", "def checked_text(", "def review_values(", "def review_filled(", "def field_lines(")
+             "def unfenced(", "def bare(", "def checked_text(", "def review_values(", "def review_filled(", "def field_lines(",
+             "CODE_SPAN = ", "LINKS = ", "BARE = ", "def unknown_numbers(")
 fails = [s for s in names if not block(py, s) or block(py, s) != block(gl, s)]
 print("\n".join(f"{s.strip()} differs from {sys.argv[1].rsplit('/', 1)[-1]}" for s in fails)); sys.exit(1 if fails else 0)
 PY
@@ -240,9 +241,16 @@ echo "-- pr-title: the description (#782)"
 cat > "$tmp/bin/curl" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$tmp_curl_log"
-out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
-[ -n "${STUB_MR:-}" ] || { echo "curl: (22) The requested URL returned error: 404" >&2; exit 22; }
-printf '%s' "$STUB_MR" > "$out"
+out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; https://*) url="$1"; shift ;; *) shift ;; esac; done
+# The newest issue and merge request (#826): $STUB_ISSUES and $STUB_MRS,
+# this project's #40 and !41 unless a case sets one to `fail`.
+case "$url" in
+  */issues\?*) body='[{"iid": 40}]'; [ -z "${STUB_ISSUES:-}" ] || body="$STUB_ISSUES" ;;
+  */merge_requests\?*) body='[{"iid": 41}]'; [ -z "${STUB_MRS:-}" ] || body="$STUB_MRS" ;;
+  *) body="${STUB_MR:-fail}" ;;
+esac
+[ "$body" != fail ] || { echo "curl: (22) The requested URL returned error: 403" >&2; exit 22; }
+printf '%s' "$body" > "$out"
 SH
 chmod +x "$tmp/bin/curl"
 export tmp_curl_log="$tmp/curl.log"
@@ -300,7 +308,7 @@ desc "$what"$'\n\nCloses #12\n\nMore text after it.\n\n'"$by"
 expect "a closing line with text below it fails and says to move it" 1 "is a closing line with text below it" "move it directly above the attribution"
 desc "$what"$'\n\nCloses #12, #13 and #14\n\n'"$by"
 expect "a closing line chaining three issues names all three" 0 "the closing line names #12, #13, #14"
-[ -s "$tmp_curl_log" ] && bad "a whole description still called the API" "$(cat "$tmp_curl_log")" || ok "a whole description is not fetched again"
+grep -qF -- "/merge_requests/4" "$tmp_curl_log" && bad "a whole description still called the API" "$(cat "$tmp_curl_log")" || ok "a whole description is not fetched again"
 STUB_MR="$(python3 -c 'import json,sys; print(json.dumps({"description": sys.argv[1]}))' "$what"$'\n\nCut here, but further on it fixes #66 too.\n\n'"$by")" \
   desc "${what:0:20}" true
 expect "a truncated variable: the description is read whole from the API, and judged on that" 1 "FAIL  #66"
@@ -344,6 +352,36 @@ desc "$what It is the second of the two fixes #65 decided."$'\n\n'"$checked"$'\n
 expect "a red closing check still writes the fields' lines" 1 "fail: MR description, merging it would close" "pass: MR description, says which review ran"
 desc "${what:0:20}" true
 refuse "an unread description writes no field line" "says which review ran"
+
+echo "-- pr-title: a bare #N or !N above the highest number of its kind (#826): a warning, never a red"
+numbers() { fields "$checked" 'Review: fresh-context'; desc "$what $1"$'\n\n'"$checked"$'\n\nReview: fresh-context\n\nPart of #12\n\n'"$by"; }
+numbers "It follows #457 and !300, as #457 said."
+expect "a bare #457 above issue #40 and !300 above merge request !41: the job passes, one line each" 0 \
+  "not yet confirmed: MR description, #457 is above the highest issue number here (#40)" "group/project#N" \
+  "not yet confirmed: MR description, !300 is above the highest merge request number here (!41)" "group/project!N"
+[ "$(printf '%s' "$out" | grep -c '#457 is above')" = 1 ] && ok "... #457 once, though named twice" || bad "#457 is not named once" "$out"
+grep -qF -- "https://gitlab.example/api/v4/projects/9/issues?" "$tmp_curl_log" && grep -qF -- "https://gitlab.example/api/v4/projects/9/merge_requests?" "$tmp_curl_log" \
+  && grep -qF -- "JOB-TOKEN: jt" "$tmp_curl_log" && ok "... both read with the job token, from this project" || bad "the highest numbers were not asked as expected" "$(cat "$tmp_curl_log")"
+numbers "It follows #41 and !40: the counts are apart."
+expect "#41 above the issues but !40 under the merge requests: only #41" 0 "#41 is above the highest issue number here (#40)"
+refuse "... and nothing for !40" "!40 is above"
+STUB_MRS='[]' numbers "It follows !4, this merge request, which the newest list may not show yet."
+refuse "this merge request's own !4 is never above" "!4 is above"
+numbers "It follows group/project#457, other/proj!300 and proj#457."
+refuse "group/project#N, group/project!N and project#N: no line" "is above the highest"
+numbers "Run \`glab issue view #457\`."$'\n\n```\nsee !300\n```'
+refuse "a code span and a fenced block: no line" "is above the highest"
+numbers "See [#457](https://gitlab.example/g/q/-/issues/457) and https://gitlab.example/g/q/-/merge_requests/300#note_1."
+refuse "a link's text and a URL: no line" "is above the highest"
+numbers "It follows #40 and !41, and nothing more!"
+refuse "the highest numbers themselves: no line" "is above the highest"
+STUB_ISSUES=fail numbers "It follows #457 and !300."
+expect "the issues cannot be read: the job passes, one line says why" 0 "bare #N not checked: the highest issue number could not be read" \
+  "!300 is above the highest merge request number here (!41)"
+refuse "... and nothing is said about #457" "#457 is above"
+STUB_ISSUES=fail STUB_MRS='{"message": "403 Forbidden"}' numbers "It follows #457 and !300."
+expect "neither can be read: the job passes" 0 "bare #N not checked" "bare !N not checked: the highest merge request number could not be read"
+refuse "... and nothing is warned" "is above the highest"
 
 echo "-- pr-title: closing chains led by a link, the title and the commit messages (#800)"
 desc "$what This closes https://gitlab.example/g/p/-/merge_requests/3 and #7 as well."$'\n\n'"$by"
