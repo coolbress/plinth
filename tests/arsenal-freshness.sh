@@ -103,7 +103,7 @@ stale_claims() {
 # missing_facts <arsenal> <run-a-project> <template dir>: what the template has
 # and the release row, the reminder row or step 9 does not say.
 missing_facts() {
-  local arsenal="$1" howto="$2" tdir="$3" row src arch dest rc=0 step9 reminder title
+  local arsenal="$1" howto="$2" tdir="$3" row src arch archs dest rc=0 step9 reminder title
   row="$(grep -F -- "$release_row" "$arsenal" | head -1)"
   [ -n "$row" ] || { echo "the arsenal has no row starting '$release_row'"; rc=1; }
   if [ -z "$(release_sources "$tdir")" ]; then
@@ -114,12 +114,16 @@ missing_facts() {
     if grep -qiE 'pypi' "$src"; then dest="PyPI"
     elif grep -q 'ghcr\.io' "$src"; then dest="GHCR"
     else dest="GitHub release"; fi
-    for arch in $(basename "$src" | sed 's/{% endif.*//' | grep -oE "'[a-z-]+'" | tr -d "'"); do
+    archs="$(basename "$src" | sed 's/{% endif.*//' | grep -oE "'[a-z-]+'" | tr -d "'")"
+    [ -n "$archs" ] || { echo "no archetype in the workflow's file name, so the row cannot be checked: $(basename "$src")"; rc=1; }
+    for arch in $archs; do
       grep -qE "\`$arch\`[^,;]*$dest" <<<"$row" || { echo "the release row does not say \`$arch\` goes to $dest: $row"; rc=1; }
     done
   done < <(release_sources "$tdir")
   if [ -f "$tdir/template/docs/how-to/publish-a-release.md.jinja" ]; then
     grep -qF 'docs/how-to/publish-a-release.md' <<<"$row" || { echo "the release row does not name docs/how-to/publish-a-release.md"; rc=1; }
+  else
+    echo "the template has no docs/how-to/publish-a-release.md.jinja; the release row names it"; rc=1
   fi
   grep -qE '`web`[^,;]*Render' <<<"$row" || { echo "the release row does not say \`web\` goes out on Render"; rc=1; }
   flat "$howto" | grep -qF 'A merged change to put out' || { echo "run-a-project.md does not point at the release row"; rc=1; }
@@ -135,6 +139,8 @@ missing_facts() {
       grep -qF "$title" <<<"$row" && grep -qF '/plinth:template-update' <<<"$row" || { echo "the 'Between pieces of work' row does not name the reminder issue and what to type"; rc=1; }
       grep -qF "$title" <<<"$step9" && grep -qF '/plinth:template-update' <<<"$step9" || { echo "run-a-project.md step 9 does not name the reminder issue and what to type"; rc=1; }
     fi
+  else
+    echo "the template has no template-reminder.yml; the 'Between pieces of work' row and step 9 name it"; rc=1
   fi
   return $rc
 }
@@ -258,6 +264,15 @@ grep -v 'A merged change' "$h" >"$work/hr.md"
 not_passing "a run-a-project.md without the release pointer" missing_facts "$a" "$work/hr.md" "$t"
 mkdir -p "$work/empty/template"
 not_passing "a template with no release workflow" missing_facts "$a" "$h" "$work/empty"
+# Each file the catalog names, gone from the template; and one workflow whose
+# name carries no archetype.
+cp -R "$t" "$work/t2"; rm "$work/t2/template/.github/workflows/template-reminder.yml"
+not_passing "a template that dropped the reminder" missing_facts "$a" "$h" "$work/t2"
+cp -R "$t" "$work/t3"; rm "$work/t3/template/docs/how-to/publish-a-release.md.jinja"
+not_passing "a template that dropped the release how-to" missing_facts "$a" "$h" "$work/t3"
+cp -R "$t" "$work/t4"; rm "$work/t4/template/.github/workflows/"*release.yml*
+printf 'uses: pypa/gh-action-pypi-publish\n' >"$work/t4/template/.github/workflows/release.yml.jinja"
+not_passing "a release workflow whose name carries no archetype" missing_facts "$a" "$h" "$work/t4"
 
 cp -R "$p" "$work/p2"; sed -i.bak 's#/plinth:guide#/plinth:other#' "$work/p2/skills/arsenal/SKILL.md"
 not_passing "a user-only skill missing from the list" typed_list "$work/p2"
@@ -273,7 +288,7 @@ if [ "$(real_state coolbress/plinth 703)" = closed ]; then ok "issue state reads
 else bad "could not read coolbress/plinth#703's state; a named plan cannot be verified"; fi
 
 mkdir -p "$work/real"
-if curl -fsSL --retry 3 "https://codeload.github.com/$template/tar.gz/$ref" | tar -xz --strip-components=1 -C "$work/real" 2>/dev/null \
+if curl -fsSL --retry 3 --max-time 120 "https://codeload.github.com/$template/tar.gz/$ref" | tar -xz --strip-components=1 -C "$work/real" 2>/dev/null \
    && [ -f "$work/real/copier.yml" ]; then
   if out="$(stale_claims "$root/skills/arsenal/SKILL.md" "$work/real" "$root")"
   then ok "no arsenal cell contradicts $template@$ref or what the plugin installs"

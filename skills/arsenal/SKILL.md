@@ -215,7 +215,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 
 | Concern | Problem | Tool | Who | How to use it | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Flow | A job too big for one session | `/to-spec`, `/to-tickets`; `/wayfinder` when the way is unclear | person | Ask for a plan issue cut into tickets, or type `/to-spec`, then `/to-tickets` on the spec | 0; no run needed it |
+| Flow | A job too big for one session | `/to-spec`, `/to-tickets`; `/wayfinder` when the way is unclear | person | Type `/to-spec`, then `/to-tickets` on the spec | 0; no run needed it |
 
 ### 4 Build
 
