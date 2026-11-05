@@ -1785,18 +1785,21 @@ def plugin_skew(root: Path, network: bool, host: str | None = None) -> dict:
     move to (#843): the latest release's template_ref, or the tag its CI's
     plinth pin was tested with, whichever is newer. A project behind the first
     hears "nothing to do" from an older plugin. `state` is skip (not a door-made
-    project), older (`newest`, `where`), same-or-newer or unread (`why`: the
-    release was not read and the pin named nothing newer); `note` says the
-    pin's tag was not read beside a release that was."""
+    project), older (`newest`, `where`; `unreleased` when only the pin carries
+    that tag, which updating the plugin cannot bring), same-or-newer or unread
+    (`why`: the release was not read and the pin named nothing newer); `note`
+    says the pin was not compared beside a release that was."""
     d = template_drift(root, host, network)
     if d["state"] == "skip":
         return {"state": "skip"}
-    out: dict = {"target": d["target"]}
+    gitlab = (host or (copier_answers(root) or {}).get("host")) == "gitlab"
+    out: dict = {"target": d["target"], "gitlab": gitlab}
 
     def key(tag: str) -> tuple[int, ...]:
         return tuple(int(x) for x in tag[1:].split("."))
 
     found: list[tuple[str, str]] = []
+    released = None
     release = api(f"repos/{PLINTH_REPO}/releases/latest", network)
     tag = release.get("tag_name") if isinstance(release, dict) else None
     why = None
@@ -1810,9 +1813,14 @@ def plugin_skew(root: Path, network: bool, host: str | None = None) -> dict:
         ref, why = template_ref_at(tag, network)
         if ref:
             found.append((ref, f"the latest plinth release, {tag}"))
+            released = (tag, ref)
 
-    gitlab = (host or (copier_answers(root) or {}).get("host")) == "gitlab"
-    pin = resolve_gitlab_pin(root)[0] if gitlab else resolve_plinth_pin(root)[0]
+    if gitlab:
+        pin, _, pin_unread = resolve_gitlab_pin(root)
+    else:
+        pin, pin_unread = resolve_plinth_pin(root)
+    if not pin and not why:
+        out["note"] = f"the CI pin was not compared ({pin_unread}); compared with the latest release alone"
     if pin:
         ref, pin_why = template_ref_at(pin, network)
         if ref:
@@ -1822,6 +1830,9 @@ def plugin_skew(root: Path, network: bool, host: str | None = None) -> dict:
 
     newest = max(found, key=lambda f: key(f[0]), default=None)
     if newest and key(newest[0]) > key(d["target"]):
+        if released and key(newest[0]) > key(released[1]):
+            out["unreleased"] = (f"{newest[0]} is in no release yet (the latest, {released[0]}, targets {released[1]}): "
+                                 "if these find no new version, run /plinth:template-update again after the next release")
         return {**out, "state": "older", "newest": newest[0], "where": newest[1]}
     if why:
         return {**out, "state": "unread", "why": why}
@@ -1844,8 +1855,11 @@ def check_plugin_skew(root: Path, network: bool, host: str | None = None) -> Non
     s = plugin_skew(root, network, host)
     if s["state"] == "older":
         result("WARN", f"template: {plugin_skew_head(s)}")
-        for step in PLUGIN_UPDATE_STEPS:
+        # template-update.sh has no GitLab path; this check prints the update line there.
+        for step in PLUGIN_UPDATE_STEPS[:-1] + (("/plinth:floor-check",) if s["gitlab"] else PLUGIN_UPDATE_STEPS[-1:]):
             result("INFO", f"  {step}")
+        if s.get("unreleased"):
+            result("INFO", f"  {s['unreleased']}")
     elif s["state"] == "unread":
         result("INFO", f"template: {plugin_skew_unread(s)}")
     if s.get("note"):
@@ -1861,6 +1875,8 @@ def print_plugin_skew(root: Path, network: bool = True, host: str | None = None)
         print(plugin_skew_head(s))
         for step in PLUGIN_UPDATE_STEPS:
             print(f"  {step}")
+        if s.get("unreleased"):
+            print(s["unreleased"])
         return 3
     if s["state"] == "unread":
         print(plugin_skew_unread(s), file=sys.stderr)

@@ -32,7 +32,9 @@ Show them and stop. The person types them, in this order:
    version
 4. `/plinth:template-update` again
 
-Never run them yourself. When the release cannot be read it warns, naming the
+Never run them yourself. When it says the tag is in no release yet, pass that
+on too: the commands may find nothing until a release carries it, and the plan
+stops until then. When the release cannot be read it warns, naming the
 tag it goes on with: pass that warning on, and carry on with the plan.
 
 Otherwise it prints the two tags, the worktree and branch it would make, and the command. It writes

@@ -968,6 +968,14 @@ fx=skew-pin; fixture "$fx"; reset_logs
 FLOOR_CHECK_API_DIR="$pin_api" run
 stopped_for "the CI pin's tag newer than the installed target stops too, and is the one named" \
   v99.0.0 "the tag this repository's plinth pin $sha40 was tested with"
+# Updating the plugin cannot bring a tag no release carries: the stop says so.
+if grep -qF "v99.0.0 is in no release yet (the latest, v98.0.0, targets $target_ref): if these find no new version, run /plinth:template-update again after the next release" <<<"$out"
+then ok "a pin past the latest release: the stop says the commands may find nothing until a release"
+else bad "pin past the release is not said"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+fx=skew-older-says; fixture "$fx"; reset_logs
+FLOOR_CHECK_API_DIR="$newer_api" run
+if grep -q "in no release yet" <<<"$out"; then bad "a tag a release carries is said to be in none"
+else ok "a tag the latest release carries: no such line"; fi
 
 same_api="$work/api-skew-same"; tag_names "$same_api" "$target_sha"; release_says "$same_api" v98.0.0 "$target_ref"; ref_says "$same_api" "$sha40" v0.0.1
 fx=skew-same; fixture "$fx"; reset_logs
@@ -984,6 +992,13 @@ FLOOR_CHECK_API_DIR="$half_api" run
 goes_on "the pin's tag not read, the release's equal: goes on"
 grep -qF "the tag the plinth pin $sha40 was tested with was not read" <<<"$out" && ok "and it says the pin's tag was not read" \
   || { bad "pin's tag unread is not said"; printf '%s\n' "$out" | sed 's/^/        /'; }
+# No one pin to read at all: the comparison is narrower, and it says so.
+fx=skew-two-pins; fixture "$fx"
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/label.yml@%s\n' "$(printf '%040d' 8)" > "$repo/.github/workflows/label.yml"
+says="$(FLOOR_CHECK_API_DIR="$same_api" python3 "$checker" --root "$repo" --print-plugin-skew 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "the CI pin was not compared (workflow pins disagree:" <<<"$says" && grep -qF "compared with the latest release alone" <<<"$says"
+then ok "pins that disagree: goes on, and says the pin was not compared"
+else bad "pins that disagree (rc=$rc)"; printf '%s\n' "$says" | sed 's/^/        /'; fi
 
 unread() { # <description> <fixture dir> <why>
   fx="skew-unread-$((pass+fail))"; fixture "$fx"; reset_logs
@@ -1030,7 +1045,12 @@ else bad "foreign repository (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        
 
 # The skill names the order once and leaves the typing to the person.
 skill="$root/skills/template-update/SKILL.md"
-if [ "$(grep -c 'claude plugin marketplace update plinth' "$skill")" = 1 ] && [ "$(grep -c 'claude plugin update plinth@plinth' "$skill")" = 1 ] \
+skill_steps="$(grep -E '^[1-4]\. `(claude plugin|/reload-plugins|/plinth:template-update)' "$skill" | sed -E 's/^[1-4]\. `([^`]*)`.*/\1/')"
+want_steps='claude plugin marketplace update plinth
+claude plugin update plinth@plinth
+/reload-plugins
+/plinth:template-update'
+if [ "$skill_steps" = "$want_steps" ] && [ "$(grep -c 'claude plugin update plinth@plinth' "$skill")" = 1 ] \
    && grep -q 'Never run them yourself' "$skill"
 then ok "the skill names the order once and says the agent never runs it"
 else bad "the skill's order"; fi

@@ -3510,6 +3510,19 @@ nocopy="$work/skew-foreign"; rm -rf "$nocopy"; cp -R "$good" "$nocopy"; rm "$noc
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$nocopy" 2>&1)"
 if ! grep -q "claude plugin" <<<"$out"; then ok "a repository the door did not make: no skew line, the drift item's SKIP stands"
 else bad "skew, not door-made"; fi
+# GitLab: template-update.sh has no GitLab path, so the last step is this check,
+# which prints the update line; the pin read is the include's.
+out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
+if grep -qF "$skew_head" <<<"$out" && grep -qF "  INFO    /plinth:floor-check" <<<"$out" && ! grep -qF "  INFO    /plinth:template-update" <<<"$out"
+then ok "GitLab: the skew's last step is /plinth:floor-check, not the skill with no GitLab path"
+else bad "skew, GitLab steps"; printf '%s\n' "$out" | grep -E 'plugin|/plinth:' | sed 's/^/        /'; fi
+gl_pin="$(sed -nE 's|.*coolbress/plinth/([0-9a-f]{40})/gitlab/python-ci\.yml.*|\1|p' "$glgood/.gitlab-ci.yml")"
+printf '{"content":"%s"}\n' "$(printf 'template_ref="v99.0.0"\n' | base64 | tr -d '\n')" \
+  > "$same_skew/repos/coolbress/plinth/contents/scripts/new-project.sh?ref=$gl_pin.json"
+out="$(FLOOR_CHECK_API_DIR="$same_skew" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
+if [ -n "$gl_pin" ] && grep -qF "but v99.0.0 is out (the tag this repository's plinth pin $gl_pin was tested with)" <<<"$out"
+then ok "GitLab: the include's pin is the one compared"
+else bad "skew, GitLab pin '$gl_pin'"; printf '%s\n' "$out" | grep -E 'plugin|plinth pin' | sed 's/^/        /'; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
