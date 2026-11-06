@@ -7,15 +7,21 @@
 # marketplace.json together, opens the `## [X.Y.Z]` section in CHANGELOG.md
 # with the why-file's text above the entries that were under Unreleased, moves
 # the link references at the end of the file, and commits on `release/vX.Y.Z`.
-# Push it, open the pull request, merge it; `main` takes no direct push, and a
-# squash merge changes the commit, so the tag cannot be made before that.
+# Push it, open the pull request, run `e2e` on the branch, then merge it: `main`
+# takes no direct push, and a squash merge changes the commit, so the tag cannot
+# be made before that. The merge is what reaches an installation with
+# auto-update on (the version moves on the default branch), so `e2e` comes
+# before it (#855).
 # Run 2, from the merged `main`: pushes the annotated tag `vX.Y.Z` and creates
 # the GitHub Release. Which run this is follows from the files, not a flag.
 # Run 2 first asks for a green `e2e` run (.github/workflows/e2e.yml: the real
-# repository journey, deletion included) on the very commit it is about to tag.
-# The nightly run or `gh workflow run e2e.yml --ref main` provides it. Not the
-# latest green run, not one on a later main, not a failed, skipped or running
-# one: the query is by head_sha and the conclusion is read.
+# repository journey, deletion included) on the very commit it is about to tag,
+# or on a commit with that commit's tree: the same files, which is what a squash
+# merge of an up-to-date release branch leaves. `gh workflow run e2e.yml --ref
+# release/vX.Y.Z` before the merge provides it; so do the nightly run and
+# `--ref main` on the commit itself. Not the latest green run, not one on other
+# files, not a failed, skipped or running one: the commit and the tree are
+# compared and the conclusion is read.
 #
 # The why is written by a person, and it must say which template tag this
 # release was tested with (`tested with <template> <tag>`, the constants in
@@ -142,12 +148,37 @@ PY
   runs="$(gh api -X GET "repos/{owner}/{repo}/actions/workflows/e2e.yml/runs" -f "head_sha=$release_commit" -F per_page=100 \
             --jq ".workflow_runs[] | select(.head_sha == \"$release_commit\") | \"\(.conclusion // .status) \(.html_url)\"" 2>&1)" \
     || stop "cannot query the e2e runs on ${release_commit:0:12}: $runs"
-  grep -q '^success ' <<<"$runs" \
-    || stop "no green e2e run on ${release_commit:0:12}, the commit being tagged; a release needs one (the real repository journey, deletion included):" \
-            "${runs:-  (no run on that commit)}" \
-            "  run it: gh workflow run e2e.yml --ref main   (while main is at that commit; if main has moved on, a branch at it)" \
-            "  then, once it is green, run this again"
-  echo "e2e green on ${release_commit:0:12}: $(grep -m1 '^success ' <<<"$runs" | cut -d' ' -f2)"
+  if grep -q '^success ' <<<"$runs"; then
+    e2e_line="e2e green on ${release_commit:0:12}: $(grep -m1 '^success ' <<<"$runs" | cut -d' ' -f2)"
+  else
+    # Or on the same files (#855): the release branch's run, whose commit the
+    # squash replaced. The tree holds every file the run used, e2e.yml and the
+    # door included, so an equal tree is the same proof on another commit. The
+    # commit is asked of GitHub: a merged branch is deleted, and its head is in
+    # no clone. The newest 100 runs only: an older green run asks for a new one.
+    # A commit whose tree cannot be read is passed over and named if nothing
+    # else matches: it can only cost a refusal, never make a run count.
+    listed="$(gh api -X GET "repos/{owner}/{repo}/actions/workflows/e2e.yml/runs" -F per_page=100 \
+                --jq '.workflow_runs[] | "\(.conclusion // .status) \(.head_sha) \(.html_url)"' 2>&1)" \
+      || stop "cannot list the e2e runs: $listed"
+    tree="$(git rev-parse "$release_commit^{tree}")"
+    e2e_line=""; unread=""
+    while read -r sha url; do
+      got="$(gh api "repos/{owner}/{repo}/git/commits/$sha" --jq .tree.sha 2>/dev/null)" \
+        || { unread="$unread ${sha:0:12}"; continue; }
+      [ "$got" = "$tree" ] || continue
+      e2e_line="e2e green on ${sha:0:12}, with the tree of ${release_commit:0:12}, the commit being tagged: $url"
+      break
+    done < <(sed -n 's/^success //p' <<<"$listed" | awk '!seen[$1]++')
+    [ -n "$e2e_line" ] \
+      || stop "no green e2e run on ${release_commit:0:12}, the commit being tagged, or on a commit with its tree; a release needs one (the real repository journey, deletion included):" \
+              "${runs:-  (no run on that commit)}" \
+              ${unread:+"  could not read the tree of:$unread"} \
+              "  run it: gh workflow run e2e.yml --ref main   (while main is at that commit; if main has moved on, a branch at it)" \
+              "  a run already started on the release branch counts once it is green, if the merge left its files unchanged" \
+              "  then, once it is green, run this again"
+  fi
+  echo "$e2e_line"
   if tag_on_origin; then
     # A push that succeeded before a release that did not: pick up from here.
     # Read the remote tag without creating a local one.
@@ -261,7 +292,10 @@ git commit -q -m "chore(release): $tag"
 cat <<MSG
 bumped $current -> $ver in plugin.json, marketplace.json and CHANGELOG.md, committed on release/$tag;
 the why is in the [$ver] section now, and nothing reads $why_file again.
-next: push the branch, open the pull request, merge it; then from the merged main run
+next: push the branch, open the pull request, and run e2e on the branch:
+  gh workflow run e2e.yml --ref release/$tag
+merge only once it is green: the merge is what reaches an installation with auto-update on.
+then from the merged main run
   scripts/make-release.sh $tag
 again to push the tag and create the release.
 MSG

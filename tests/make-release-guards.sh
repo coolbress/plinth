@@ -4,9 +4,10 @@
 # and `gh` is mocked; the verdict is what changed and what `gh` was asked.
 #
 # One property: no release goes out without its *why*, the template tag it
-# was tested with, and a green `e2e` run on the very commit being tagged. Run 1
-# writes the why into the version's CHANGELOG.md section; run 2 publishes that
-# section of the merged main and reads nothing else.
+# was tested with, and a green `e2e` run on the very commit being tagged or on
+# a commit with its tree (#855). Run 1 writes the why into the version's
+# CHANGELOG.md section; run 2 publishes that section of the merged main and
+# reads nothing else.
 # Everything else (tag format, both manifests moving together, main only, no
 # duplicate) is a wall around that property. One more input of run 1's why
 # (#700): when the template pin moved and the move touches what a new
@@ -36,11 +37,24 @@ case "$*" in
     exit 0 ;;
   # The e2e runs on one commit. GitHub filters on head_sha server-side; the
   # mock does the same, so a green run on another commit is simply not listed.
-  "api -X GET repos/"*"/actions/workflows/e2e.yml/runs "*)
+  "api -X GET repos/"*"/actions/workflows/e2e.yml/runs "*"head_sha="*)
     [ "${E2E_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$E2E_RC"; }
     all="$*"; sha="${all#*head_sha=}"; sha="${sha%% *}"
     [ "$sha" = "${E2E_SHA:-}" ] && [ -n "${E2E_RUNS:-}" ] && printf '%s\n' "$E2E_RUNS"
     exit 0 ;;
+  # The newest e2e runs on any commit, as the script's --jq prints them:
+  # `<conclusion> <head_sha> <url>`, one a line.
+  "api -X GET repos/"*"/actions/workflows/e2e.yml/runs "*)
+    [ "${E2E_LIST_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$E2E_LIST_RC"; }
+    [ -z "${E2E_LIST:-}" ] || printf '%s\n' "$E2E_LIST"
+    exit 0 ;;
+  # A commit's tree, read from a real repository: the mock answers with the
+  # tree that commit has, not with one a case says it has.
+  "api repos/"*"/git/commits/"*)
+    all="$*"; sha="${all#*/git/commits/}"; sha="${sha%% *}"
+    [ "$sha" != "${E2E_TREE_UNREADABLE:-}" ] || { echo "error connecting to api.github.com" >&2; exit 4; }
+    git -C "$E2E_TREES" rev-parse "$sha^{tree}"
+    exit ;;
 esac
 exit 0
 MOCK
@@ -244,6 +258,7 @@ is "CHANGELOG keeps Unreleased above it" bash -c 'grep -n "^## \[" "$1" | head -
 is "committed on release/v$next"   [ "$(g rev-parse --abbrev-ref HEAD)" = "release/v$next" ]
 is "the tree is clean after the commit" [ -z "$(g status --porcelain --untracked-files=no)" ]
 is "the commit title is chore(release): v$next" [ "$(g log -1 --format=%s)" = "chore(release): v$next" ]
+is "it says to run e2e on the branch before the merge" says "gh workflow run e2e.yml --ref release/v$next"
 is "no tag yet"                    [ -z "$(g tag -l)" ]
 is "no release yet"                not grep -q "release create" "$GH_LOG"
 is "the pin did not move, so the template's diff was not asked" not grep -q "compare/" "$GH_LOG"
@@ -297,7 +312,39 @@ export E2E_RUNS="success $e2e_url" E2E_RC=4
 run "v$next" "$work/why.md";       check "a failed e2e query is refused, not read as 'no run'" no $?
 is "no tag on a failed e2e query"  [ -z "$(git -C "$origin" tag -l)" ]
 unset E2E_RC
-export E2E_RUNS="failure $e2e_url"$'\n'"success $e2e_url"
+
+echo "-- the e2e gate: a green run on another commit counts only with the same tree (#855)"
+# The release branch's head as the squash leaves it: another commit, the same
+# files. It is in this repository only, as a deleted branch's head is on
+# GitHub and in no clone. The later main is another commit with other files.
+later_main="$(g rev-parse HEAD)"
+branch_head="$(g commit-tree "$release_commit^{tree}" -p "$release_commit^" -m "chore(release): the branch's head")"
+export E2E_TREES="$repo" E2E_RUNS="" E2E_SHA=""
+e2e_branch_url="https://github.com/o/r/actions/runs/2"
+is "the fixture's branch head is another commit" [ "$branch_head" != "$release_commit" ]
+is "  with the release commit's tree" [ "$(g rev-parse "$branch_head^{tree}")" = "$(g rev-parse "$release_commit^{tree}")" ]
+is "  and the later main has another tree" [ "$(g rev-parse "$later_main^{tree}")" != "$(g rev-parse "$release_commit^{tree}")" ]
+export E2E_LIST="success $later_main $e2e_url"
+run "v$next" "$work/why.md";       check "a green run on a different tree is refused" no $?
+is "  and the refusal names the command that dispatches e2e" says "gh workflow run e2e.yml --ref"
+is "  and no tag"                  [ -z "$(git -C "$origin" tag -l)" ]
+is "  and no release"              not grep -q "release create" "$GH_LOG"
+for verdict in failure cancelled skipped in_progress; do
+  export E2E_LIST="$verdict $branch_head $e2e_branch_url"
+  run "v$next" "$work/why.md";     check "a run on the same tree that is $verdict is refused" no $?
+done
+is "no tag on a same-tree run that is not green" [ -z "$(git -C "$origin" tag -l)" ]
+export E2E_LIST="success $branch_head $e2e_branch_url" E2E_LIST_RC=4
+run "v$next" "$work/why.md";       check "a failed list of the runs is refused, not read as 'no run'" no $?
+is "  and says the list could not be read" says "cannot list the e2e runs"
+is "  and no tag"                  [ -z "$(git -C "$origin" tag -l)" ]
+unset E2E_LIST_RC
+export E2E_TREE_UNREADABLE="$branch_head"
+run "v$next" "$work/why.md";       check "a tree that cannot be read is refused, not read as the same" no $?
+is "  and names the commit it could not read" says "${branch_head:0:12}"
+is "  and no tag"                  [ -z "$(git -C "$origin" tag -l)" ]
+unset E2E_TREE_UNREADABLE E2E_LIST
+export E2E_SHA="$release_commit" E2E_RUNS="failure $e2e_url"$'\n'"success $e2e_url"
 
 echo "-- run 2 reads the section of the merged main, not a file"
 # The e2e run is green from here on: only the section can refuse. Each case
@@ -348,6 +395,7 @@ rm -f "$work/deleted.md"
 run "v$next" "$work/deleted.md";   check "from the merged main, with a green e2e run on its commit, it tags and releases" ok $?
 is "  with the why-file deleted, and says it did not read it" says "not read"
 is "the green run is named"        grep -q "$e2e_url" "$work/out"
+is "  and a run on that very commit reads no other commit's tree" not grep -q "git/commits/" "$GH_LOG"
 is "the tag is on origin"          git -C "$origin" show-ref --verify --quiet "refs/tags/v$next"
 is "the tag points at the release commit" [ "$(git -C "$origin" rev-parse "v$next^{commit}")" = "$release_commit" ]
 is "not at the later main"         [ "$(git -C "$origin" rev-parse "v$next^{commit}")" != "$(git -C "$origin" rev-parse main)" ]
@@ -379,6 +427,28 @@ echo "-- run 2 from a fresh clone: nothing outside the merged main"
 git clone -q "$origin" "$work/fresh"
 run_in "$work/fresh" "v$next";     check "a fresh clone with no why-file anywhere releases" ok $?
 is "  with the section as the Release text" [ "$(cat "$GH_LOG.body")" = "$expected" ]
+
+echo "-- run 2 with the release branch's run: same tree, another commit (#855)"
+# No run on the release commit, and a fresh clone: the branch's head is on
+# GitHub alone, as it is once the merge deleted the branch.
+git -C "$origin" tag -d "v$next" >/dev/null
+git clone -q "$origin" "$work/fresh-tree"
+is "the fresh clone does not have the branch's head" not git -C "$work/fresh-tree" cat-file -e "$branch_head^{commit}"
+unset E2E_SHA E2E_RUNS
+export E2E_LIST="success $later_main $e2e_url"$'\n'"failure $branch_head $e2e_url"$'\n'"success $branch_head $e2e_branch_url"
+run_in "$work/fresh-tree" "v$next"; check "a green run on a commit with the tagged commit's tree tags and releases" ok $?
+is "  and names that run"          says "$e2e_branch_url"
+is "  and that commit"             says "${branch_head:0:12}"
+is "  and the different tree's commit was read first, not taken" grep -qF "git/commits/$later_main" "$GH_LOG"
+is "  and a commit is read once, whatever its number of runs" [ "$(grep -cF "git/commits/$branch_head" "$GH_LOG")" = 1 ]
+is "the tag is on the release commit, not on the run's" [ "$(git -C "$origin" rev-parse "v$next^{commit}")" = "$release_commit" ]
+is "the release was created"       grep -q "release create" "$GH_LOG"
+# One listed commit whose tree cannot be read does not hide the one that matches.
+git -C "$origin" tag -d "v$next" >/dev/null
+git clone -q "$origin" "$work/fresh-unread"
+export E2E_TREE_UNREADABLE="$later_main"
+run_in "$work/fresh-unread" "v$next"; check "an unreadable commit does not hide a same-tree run after it" ok $?
+unset E2E_TREE_UNREADABLE E2E_LIST
 
 echo "-- a shallow clone"
 git clone -q --depth 1 "file://$origin" "$work/shallow"

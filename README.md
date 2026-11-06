@@ -202,7 +202,7 @@ does neither, so check whether the repository exists (its failure paths run in C
 `gh`). It renders
 [plinth-template v1.41.0](https://github.com/coolbress/plinth-template/releases/tag/v1.41.0),
 whose CI reports every check the wall requires. Since the release gate (#62),
-each release is tagged only after `e2e`, run on its release commit, has
+each release is tagged only after `e2e`, run on its files, has
 created a repository on real GitHub, merged its first pull request and deleted
 it. When CodeQL has not analysed the first push after a while, the door
 pushes one empty commit to start it (#117). The owner ran three tasks on a generated

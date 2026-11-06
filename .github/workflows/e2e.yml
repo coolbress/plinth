@@ -5,11 +5,14 @@ name: e2e
 # instance, whose gate adds `ci / migrations` and `ci / deploy-check` and a
 # `ci / test` on a throwaway Postgres (#615). Nightly, and on
 # demand for a release candidate: scripts/make-release.sh run 2 accepts a
-# green run of this workflow on the very commit it tags, so the candidate is
-# `gh workflow run e2e.yml --ref main` once the release pull request has
-# merged. Not a merge condition on pull requests: it creates and deletes a
-# public repository under the owner, which a pull request from anyone must
-# not be able to trigger.
+# green run of this workflow on the very commit it tags or on a commit with its
+# tree, so the candidate is `gh workflow run e2e.yml --ref release/vX.Y.Z` before
+# the release pull request merges (#855). The checkout takes no ref: a dispatch
+# runs the door, the driver and this file as the dispatched ref has them. A
+# new repository's workflows still come from the template's plinth_sha, on any
+# ref. Not triggered by pull requests: it creates and deletes a public
+# repository under the owner, which a pull request from anyone must not be able
+# to trigger.
 #
 # Two jobs, and the run is green only when both are. `e2e` is the door's
 # journey, once per archetype: it creates. `upgrade` (scripts/e2e-upgrade.sh, #519) starts from a

@@ -96,7 +96,7 @@ fine-grained token: Actions, Administration, Contents, Pull requests,
 Workflows: write on all of the owner's repositories; registered by a person,
 once). A run that
 could not delete its repository names it in the job summary and is red. A
-release needs a green run on the commit it tags
+release needs a green run on the commit it tags, or on a commit with its tree
 ([How to cut a release](docs/how-to/cut-a-release.md)).
 
 ## Land a change
