@@ -140,7 +140,8 @@ clean='gsub("[\t\n]"; " ")'
 kind='def kind: [.labels[].name] as $l
   | if ((.body // "") | startswith("<!-- plinth:template-reminder -->")) or (.title | startswith("Template update available:")) then "reminder"
     elif ($l | index("ready-for-human")) then "person"
-    elif ($l | any(startswith("wayfinder:"))) then "wayfinder"
+    elif ($l | any(startswith("wayfinder:") and . != "wayfinder:task")) then "wayfinder"
+    elif ($l | index("spec")) then "spec"
     else "ticket" end;'
 
 # Each read on its own, so the line names the one that failed and its error.
@@ -184,7 +185,8 @@ fi
 # Every one of them, past the ten above: none is ever an /implement target.
 not_tickets="$(awk -F '\t' '$4 == "reminder" { printf "  #%s the monthly template reminder: a person types /plinth:template-update\n", $1 }
   $4 == "person" { printf "  #%s [%s] a person'"'"'s task: a person does it\n", $1, $2 }
-  $4 == "wayfinder" { printf "  #%s [%s] a wayfinder issue: a person does it\n", $1, $2 }' <<<"$issues")"
+  $4 == "wayfinder" { printf "  #%s [%s] a wayfinder record: a person does it\n", $1, $2 }
+  $4 == "spec" { printf "  #%s [%s] a spec, a record: a person does it\n", $1, $2 }' <<<"$issues")"
 if [ -n "$not_tickets" ]; then echo "open issues that are not tickets, never for /implement:"; printf '%s\n' "$not_tickets"; fi
 if [ -n "$merged" ]; then
   last="$(head -1 <<<"$merged")"
