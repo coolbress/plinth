@@ -68,8 +68,8 @@ workflow:
   timeout: 10m
   variables:
     PLINTH_WORKDIR: $[[ inputs.working-directory ]]
-    UV_VERSION: "0.12.9"
-    UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+    UV_VERSION: "0.13.7"
+    UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
   before_script:
     - |
       PLINTH_TMP="$(mktemp -d)"

@@ -1,0 +1,40 @@
+# A weekly reminder when plinth's uv pin is behind upstream (#841): Dependabot
+# raises `uses:` pins, never a version written in an environment variable. The
+# decision and the issue's text are scripts/uv-pin-reminder.sh.
+#
+# plinth's own workflow, and not a check: no pull request or push starts it and
+# nothing can call it, so a new uv release cannot turn anyone's required check
+# red. A consumer gets a raised pin by raising its `coolbress/plinth` pin. A
+# release or issue it cannot read fails this run, which GitHub reports to whoever
+# last changed the schedule; it is never read as up to date.
+name: uv-pin-reminder
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"   # 05:23 UTC on Mondays
+  workflow_dispatch:
+
+permissions: {}
+
+# A run by hand waits for the scheduled one: two runs never open two issues.
+concurrency:
+  group: uv-pin-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read  # the checkout of the default branch, for the script and the pin
+      issues: write   # to open, retitle or close the reminder issue
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes
+
+      - name: Open, retitle or close the reminder issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/uv-pin-reminder.sh
