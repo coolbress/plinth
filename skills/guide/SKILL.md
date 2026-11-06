@@ -40,7 +40,7 @@ parts, in this order:
 2. **Where the project is now**, from the state lines: what is open, what was
    merged last, and why that puts it at this step. A `web` project says where
    it runs. An issue listed as not a ticket is said as what its line says it
-   is. Then every line under `off by default:`: the feature, when it is worth
+   is. Then every item under `off by default:`: the feature, when it is worth
    turning on, where the steps are, and what the line says about whether it
    is on.
 3. **The one next step**, from `next:`, and the command from `command:`,
@@ -53,12 +53,15 @@ What to keep to:
 
 - Why something is installed, asked, started off or not there: give the reason
   on its `why:` line and no other reason, never one of your own about a tool,
-  its price or its plans. The line under `off by default:` is the rule
+  its price or its plans. The `why:` line under `off by default:` is the rule
   "How an item is sorted" in
-  `${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`. With no `why:` line
-  for it, or one that says `not read`, say you have no reason to give.
+  `${CLAUDE_PLUGIN_ROOT}/docs/reference/off-by-default.md`: give it when asked,
+  not otherwise. With no `why:` line for it, or one that says `not read`, say
+  you have no reason to give.
 - Name a step or tool only when it is in the table the script printed. A tool
   that is not there is not mentioned, however well known.
+- A tool the table marks listed is not installed: say so; `/plinth:arsenal`
+  has its install line.
 - The retrospective moment names `/retro`, from its row.
 - A skill on the list "Skills only the person can start", in
   `${CLAUDE_PLUGIN_ROOT}/skills/arsenal/SKILL.md`, is typed as `/` and picked

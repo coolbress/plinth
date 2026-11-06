@@ -163,6 +163,9 @@ expect "the reminder next to a ready-for-agent ticket: the ticket wins" "$d" "A 
 put "$d/open.json" "$(pr 13 'feat: export' false run)"
 expect "the reminder next to an open pull request: the pull request first" "$d" "A pull request with checks running (step 5)" "/run"
 printf '[]' > "$d/open.json"
+put "$d/issues.json" "$(issue 11 "$reminder" '')"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+expect "the reminder, one merge so far: the template update, before the first merge's pages" "$d" "Between pieces of work (step 9)" "/plinth:template-update" "note: issue #11"
 
 d="$(repo person-task)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
@@ -235,12 +238,11 @@ for line in \
   'why: A merged change to put out (release and deploy, after step 6): plinth does not deploy a `web` app that runs anywhere else' \
   "why: The project in use (operate): an uptime monitor and an error tracker with a free plan each. Neither is installed: the person sets them up in the service's own account" \
   'why: Looking back on a piece of work (retrospective): it reads the session and suggests rules and checks, most serious first, and changes nothing' \
-  'why: Ending the project, or handing it over (end): the table gives no reason' \
-  'why: listed: A tool marked listed is not installed'; do
+  'why: Ending the project, or handing it over (end): the table gives no reason'; do
   grep -qxF -- "$line" <<<"$out" || missing="$missing
 $line"
 done
-if [ -z "$missing" ]; then ok "a why: line for each moment and for a listed tool, each the table's words"
+if [ -z "$missing" ]; then ok "a why: line for each moment, each the table's words"
 else bad "why: lines missing:$missing"; fi
 d="$work/idle"
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
@@ -260,10 +262,6 @@ for r in "plinth does not deploy" "an uptime monitor" "it reads the session"; do
   [ "$rc" -eq 1 ] && grep -qF "no longer says '$r'" <<<"$out" && ! grep -q '^why:' <<<"$out" &&
     ok "a table that lost the words of a reason ($r): exit 1, named" || bad "lost reason '$r': exit $rc: $(head -2 <<<"$out")"
 done
-sed 's/^A tool marked listed is not installed/A listed tool is elsewhere/' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
-out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
-[ "$rc" -eq 1 ] && grep -qF "no longer says 'A tool marked listed is not installed'" <<<"$out" &&
-  ok "a catalog that lost what listed means: exit 1, named" || bad "lost listed: exit $rc"
 if grep -qF '`why:`' "$root/skills/guide/SKILL.md" && grep -qF 'no other reason' "$root/skills/guide/SKILL.md"
 then ok "the skill says to give the why: line's reason and no other"; else bad "the skill does not say to give the why: line's reason and no other"; fi
 

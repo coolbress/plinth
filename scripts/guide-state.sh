@@ -39,13 +39,10 @@ why_line() {
   reason="$2${tool#*"$2"}"
   echo "why: $(sed -n 1p <<<"$cells"): ${reason%%; *}"
 }
-listed="A tool marked listed is not installed"
 whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
   why_line "The project in use" "an uptime monitor" &&
   why_line "Looking back on a piece of work" "it reads the session" &&
-  cells="$(row "Ending the project")" && echo "why: $(sed -n 1p <<<"$cells"): the table gives no reason" &&
-  { grep -qF "$listed" "$arsenal" || { echo "guide-state: the arsenal no longer says '$listed'" >&2; false; }; } &&
-  echo "why: listed: $listed")" || exit 1
+  cells="$(row "Ending the project")" && echo "why: $(sed -n 1p <<<"$cells"): the table gives no reason")" || exit 1
 
 # say <row start> <command> [<then: row start>]: the verdict block. The
 # command is typed as printed; $before (typed first) and $note go with it.
