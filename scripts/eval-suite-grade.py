@@ -66,8 +66,9 @@ RESERVED = {
 # Each kind's pass rule is in main(); the runner refuses any other kind.
 KINDS = ("test", "checked", "merge", "floor-check", "resume", "question")
 SUITE = "eval-suite/"
-# A gh command in a shell command, for a resume run whose stand-in logged none.
-GH_COMMAND = re.compile(r"(?<![\w./-])gh\s+(?:issue|pr|repo|auth|api|run|search|status)\b")
+# A gh command in a shell command, for a resume run whose stand-in logged none;
+# the guide's script runs gh itself, so naming the script counts (#836).
+GH_COMMAND = re.compile(r"(?<![\w./-])gh\s+(?:issue|pr|repo|auth|api|run|search|status)\b|guide-state\.sh")
 MERGE_WORD = re.compile(r"\bmerg(?:e|es|ed|ing)\b", re.IGNORECASE)
 # A question mark that ends a sentence, not one inside a URL's query.
 QUESTION = re.compile(r"\?(?=[\s*_)\]\"']|$)")
