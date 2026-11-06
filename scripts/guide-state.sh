@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # What /plinth:guide reads (#710): the repository's state, what it started
 # with off (#763), the row of the arsenal's "Where you are, and what to do
-# next" table that state points to, and the table itself. Read-only: it runs
-# git and gh reads, nothing else.
+# next" table that state points to, the reasons it may give (#834), and the
+# table itself. Read-only: it runs git and gh reads, nothing else.
 #
 #   guide-state.sh [<dir>]     # default: the current directory
 #
@@ -28,6 +28,25 @@ row() {
   printf '%s\n' "$r" | awk -F ' \\| ' '{ sub(/^\| /, "", $1); sub(/ \|$/, "", $3); print $1; print $2; print $3 }'
 }
 
+# why_line <row start> <words>: "why:", the row's name and its tool cell from
+# those words up to the next "; ", so that the reason is the table's. Words the
+# table no longer has are an error, as a missing row is.
+why_line() {
+  local cells tool reason
+  cells="$(row "$1")" || return 1
+  tool="$(sed -n 3p <<<"$cells")"
+  case "$tool" in *"$2"*) ;; *) echo "guide-state: the arsenal's row '$1' no longer says '$2'" >&2; return 1 ;; esac
+  reason="$2${tool#*"$2"}"
+  echo "why: $(sed -n 1p <<<"$cells"): ${reason%%; *}"
+}
+listed="A tool marked listed is not installed"
+whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
+  why_line "The project in use" "an uptime monitor" &&
+  why_line "Looking back on a piece of work" "it reads the session" &&
+  cells="$(row "Ending the project")" && echo "why: $(sed -n 1p <<<"$cells"): the table gives no reason" &&
+  { grep -qF "$listed" "$arsenal" || { echo "guide-state: the arsenal no longer says '$listed'" >&2; false; }; } &&
+  echo "why: listed: $listed")" || exit 1
+
 # say <row start> <command> [<then: row start>]: the verdict block. The
 # command is typed as printed; $before (typed first) and $note go with it.
 before=""; note=""
@@ -47,6 +66,8 @@ say() {
 }
 
 finish() {
+  echo
+  printf '%s\n' "$whys"
   echo
   echo "table:"
   printf '%s\n' "$table"
@@ -93,7 +114,10 @@ fi
 # What the project started with off and does not have yet (#763), from the
 # one list new-project.sh prints at creation.
 if off="$("$plugin/scripts/off-by-default.sh" "${archetype:-none}" "$top" 2>&1)"; then
-  if [ -n "$off" ]; then echo "off by default:"; sed 's/^/  /' <<<"$off"
+  if [ -n "$off" ]; then
+    echo "off by default:"; sed 's/^/  /' <<<"$off"
+    if rule="$("$plugin/scripts/off-by-default.sh" --why 2>&1)"; then echo "  why: $rule"
+    else echo "  why: not read ($(head -1 <<<"$rule"))"; fi
   else echo "off by default: none left off"; fi
 else
   echo "off by default: not read ($(head -1 <<<"$off"))"
@@ -114,6 +138,13 @@ rollup='def checks: [.statusCheckRollup[]? | (.conclusion // .state // "") as $c
   | if length == 0 then "none" elif any(. == "fail") then "fail" elif any(. == "pending") then "pending" else "pass" end;'
 bot='(.author.is_bot // false) or (.author.login // "" | startswith("app/"))'
 clean='gsub("[\t\n]"; " ")'
+# What an issue is (#834). The reminder is the template's Template reminder
+# workflow's: its body starts with that marker, its title with those words.
+kind='def kind: [.labels[].name] as $l
+  | if ((.body // "") | startswith("<!-- plinth:template-reminder -->")) or (.title | startswith("Template update available:")) then "reminder"
+    elif ($l | index("ready-for-human")) then "person"
+    elif ($l | any(startswith("wayfinder:"))) then "wayfinder"
+    else "ticket" end;'
 
 # Each read on its own, so the line names the one that failed and its error.
 prs=""; merged=""; issues=""; failed=""
@@ -124,8 +155,8 @@ if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit 100 --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
-elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels \
-      --jq 'sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"')] | @tsv' 2>&1)"; then
+elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body \
+      --jq "$kind"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind] | @tsv' 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
 fi
 if [ -n "$failed" ]; then
@@ -153,6 +184,11 @@ if [ -n "$issues" ]; then
 else
   echo "open issues: none"
 fi
+# Every one of them, past the ten above: none is ever an /implement target.
+not_tickets="$(awk -F '\t' '$4 == "reminder" { printf "  #%s the monthly template reminder: a person types /plinth:template-update\n", $1 }
+  $4 == "person" { printf "  #%s [%s] a person'"'"'s task: a person does it\n", $1, $2 }
+  $4 == "wayfinder" { printf "  #%s [%s] a wayfinder issue: a person does it\n", $1, $2 }' <<<"$issues")"
+if [ -n "$not_tickets" ]; then echo "open issues that are not tickets, never for /implement:"; printf '%s\n' "$not_tickets"; fi
 if [ -n "$merged" ]; then
   last="$(head -1 <<<"$merged")"
   echo "last merge: #$(field 1 <<<"$last") on $(field 3 <<<"$last") by $(field 2 <<<"$last"): $(field 4 <<<"$last")"
@@ -162,7 +198,8 @@ fi
 echo "first pull request merged: $([ "$people_merged" -gt 0 ] && echo yes || echo no) ($people_merged merged by people)"
 echo
 
-labelled() { awk -F '\t' -v l="$1" '("," $2 ",") ~ ("," l ",")' <<<"$issues" | head -1 | field 1; }
+tickets="$(awk -F '\t' '$4 == "ticket"' <<<"$issues")"
+labelled() { awk -F '\t' -v l="$1" '("," $2 ",") ~ ("," l ",")' <<<"$tickets" | head -1 | field 1; }
 if [ "$people_merged" -eq 0 ]; then
   first="$(awk -F '\t' 'index($6, "docs: first pull request") == 1' <<<"$people_prs" | head -1)"
   [ -n "$first" ] || first="$(head -1 <<<"$people_prs")"
@@ -190,8 +227,10 @@ elif n="$(labelled ready-for-agent)" && [ -n "$n" ]; then
   before="/clear"; say "A ticket ready" "/implement #$n"
 elif n="$(labelled needs-triage)" && [ -n "$n" ]; then
   note="issue #$n"; say "Something broke" "/triage"
-elif [ -n "$issues" ]; then
-  before="/clear"; say "A ticket ready" "/implement #$(head -1 <<<"$issues" | field 1)"
+elif [ -n "$tickets" ]; then
+  before="/clear"; say "A ticket ready" "/implement #$(head -1 <<<"$tickets" | field 1)"
+elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
+  note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
 elif [ "$people_merged" -eq 1 ]; then
   say "First pull request merged" "none: three pages to follow, in order (the tool cell)" "An idea in your own words"
 elif [ -n "$bot_prs" ]; then

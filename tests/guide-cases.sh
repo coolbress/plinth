@@ -141,6 +141,52 @@ put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 put "$d/issues.json" "$(issue 9 'Export to CSV' '')"
 expect "an unlabelled issue: build it" "$d" "A ticket ready (step 4)" "/implement #9"
 
+# What is not a ticket (#834): the template's monthly reminder goes to its own
+# command; a person's task or a wayfinder issue is never an /implement target.
+# Each is told as what it is, and the row after it is still named.
+marked() { printf '{"number":%s,"title":"%s","labels":[],"body":"<!-- plinth:template-reminder -->\\nThis repository was made from template tag v1.38.0."}' "$1" "$2"; }
+two_labels() { printf '{"number":%s,"title":"%s","labels":[{"name":"%s"},{"name":"%s"}]}' "$1" "$2" "$3" "$4"; }
+reminder='Template update available: v1.38.0 to v1.39.0'
+
+d="$(repo reminder)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+put "$d/issues.json" "$(issue 11 "$reminder" '')"
+expect "the reminder alone, by its title: the template update, not /implement" "$d" "Between pieces of work (step 9)" "/plinth:template-update" "note: issue #11 is the monthly template reminder"
+put "$d/issues.json" "$(marked 11 'Retitled by hand')"
+expect "the reminder alone, retitled: its marker still says what it is" "$d" "Between pieces of work (step 9)" "/plinth:template-update" "note: issue #11 is the monthly template reminder"
+put "$d/issues.json" "$(issue 11 "$reminder" '')" "$(issue 12 'Export to CSV' '')"
+expect "the reminder next to an unlabelled issue: the issue is the ticket" "$d" "A ticket ready (step 4)" "/implement #12"
+put "$d/issues.json" "$(issue 11 "$reminder" '')" "$(issue 12 'It crashes' needs-triage)"
+expect "the reminder next to an issue to triage: triage first" "$d" "Something broke (step 7)" "/triage" "note: issue #12"
+put "$d/issues.json" "$(issue 11 "$reminder" '')" "$(issue 12 'Export to CSV' ready-for-agent)"
+expect "the reminder next to a ready-for-agent ticket: the ticket wins" "$d" "A ticket ready (step 4)" "/implement #12" "#11 the monthly template reminder"
+put "$d/open.json" "$(pr 13 'feat: export' false run)"
+expect "the reminder next to an open pull request: the pull request first" "$d" "A pull request with checks running (step 5)" "/run"
+printf '[]' > "$d/open.json"
+
+d="$(repo person-task)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+put "$d/issues.json" "$(issue 14 'Renew the domain' ready-for-human)"
+expect "a ready-for-human issue alone: said to be a person's, on to the next row" "$d" "An idea in your own words (step 2)" "/grilling" "#14 [ready-for-human] a person's task: a person does it"
+put "$d/issues.json" "$(issue 14 'Renew the domain' ready-for-human)" "$(issue 15 'Export to CSV' ready-for-agent)"
+expect "a ready-for-human issue next to a ready-for-agent ticket: the ticket wins" "$d" "A ticket ready (step 4)" "/implement #15" "#14 [ready-for-human] a person's task: a person does it"
+put "$d/issues.json" "$(two_labels 14 'Renew the domain' ready-for-agent ready-for-human)"
+expect "ready-for-human and ready-for-agent on one issue: never /implement" "$d" "An idea in your own words (step 2)" "/grilling" "#14 [ready-for-agent,ready-for-human] a person's task"
+put "$d/issues.json" "$(issue 14 'Renew the domain' ready-for-human)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+expect "a ready-for-human issue, one merge so far: the row after the first merge" "$d" "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "#14 [ready-for-human]"
+
+d="$(repo record)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+put "$d/issues.json" "$(issue 16 'Which queue?' wayfinder:grilling)"
+expect "a wayfinder record alone: said to be one, on to the next row" "$d" "An idea in your own words (step 2)" "/grilling" "#16 [wayfinder:grilling] a wayfinder issue: a person does it"
+put "$d/issues.json" "$(issue 16 'Which queue?' wayfinder:grilling)" "$(issue 17 'Export to CSV' ready-for-agent)"
+expect "a wayfinder record next to a ready-for-agent ticket: the ticket wins" "$d" "A ticket ready (step 4)" "/implement #17" "#16 [wayfinder:grilling] a wayfinder issue"
+put "$d/issues.json" "$(two_labels 16 'Which queue?' wayfinder:research ready-for-agent)"
+expect "a wayfinder record with the triage label: still never /implement" "$d" "An idea in your own words (step 2)" "/grilling" "#16 [wayfinder:research,ready-for-agent]"
+put "$d/issues.json" "$(issue 18 'Move the queue' wayfinder:task)"
+expect "every wayfinder label, wayfinder:task too, as the ticket's rule says" "$d" "An idea in your own words (step 2)" "/grilling" "#18 [wayfinder:task]"
+
 d="$(repo bots-only)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
 put "$d/open.json" "$(pr 10 'chore(deps): bump y' true SUCCESS)"
@@ -179,6 +225,47 @@ d="$work/idle"
 out="$(MOCK_DIR="$d" "$work/plugin/scripts/guide-state.sh" "$d" 2>&1)"; rc=$?
 [ "$rc" -eq 1 ] && grep -q "no row starting 'An idea in your own words'" <<<"$out" &&
   ok "a row missing from the arsenal's table: exit 1, named" || bad "missing row: exit $rc: $out"
+
+# The reasons (#834): copied from the table and the list, never the script's.
+# The moments' are on every path, a repository being read or not.
+d="$work/plain"
+out="$("$script" "$d" 2>&1)"
+missing=""
+for line in \
+  'why: A merged change to put out (release and deploy, after step 6): plinth does not deploy a `web` app that runs anywhere else' \
+  "why: The project in use (operate): an uptime monitor and an error tracker with a free plan each. Neither is installed: the person sets them up in the service's own account" \
+  'why: Looking back on a piece of work (retrospective): it reads the session and suggests rules and checks, most serious first, and changes nothing' \
+  'why: Ending the project, or handing it over (end): the table gives no reason' \
+  'why: listed: A tool marked listed is not installed'; do
+  grep -qxF -- "$line" <<<"$out" || missing="$missing
+$line"
+done
+if [ -z "$missing" ]; then ok "a why: line for each moment and for a listed tool, each the table's words"
+else bad "why: lines missing:$missing"; fi
+d="$work/idle"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qF "why: The project in use (operate): an uptime monitor" <<<"$out" && ok "the moments' why: lines on a repository that is read too" || bad "no moments' why: line on a read repository"
+# Off by default: the sorting rule, flattened, its links reduced to their words.
+rule="$(grep -E '^  why: ' <<<"$out")"
+if grep -qF 'A choice they cannot judge yet starts off and is told, in the list below, with when it is worth turning on and how (progressive disclosure).' <<<"$rule" &&
+   grep -qF 'because it needs an account outside the repository' <<<"$rule" && ! grep -q 'https://' <<<"$rule" && [ "$(grep -c . <<<"$rule")" = 1 ]
+then ok "one why: line under off by default, the list's sorting rule in its words"
+else bad "off-by-default why: got: $rule"; fi
+printf '# x\n\n## The list\n\n| Feature | Archetypes | Turn it on when | Steps | On when the project has | Listed only when the project has |\n| --- | --- | --- | --- | --- | --- |\n| A | all | b | `docs/how-to/turn-on-what-starts-off.md` | - | - |\n' > "$work/no-rule.md"
+out="$(PLINTH_OFF_BY_DEFAULT="$work/no-rule.md" MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qF '  why: not read (off-by-default: no text under ' <<<"$out" && ok "a list without its sorting rule: why: not read, no guess" || bad "no rule in the list: $(grep -F 'why:' <<<"$out" | head -3)"
+for r in "plinth does not deploy" "an uptime monitor" "it reads the session"; do
+  { sed '/^## Where you are, and what to do next/,/^A tool marked listed/ s/'"$r"'/something else/' "$arsenal"; } > "$work/plugin/skills/arsenal/SKILL.md"
+  out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
+  [ "$rc" -eq 1 ] && grep -qF "no longer says '$r'" <<<"$out" && ! grep -q '^why:' <<<"$out" &&
+    ok "a table that lost the words of a reason ($r): exit 1, named" || bad "lost reason '$r': exit $rc: $(head -2 <<<"$out")"
+done
+sed 's/^A tool marked listed is not installed/A listed tool is elsewhere/' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
+out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && grep -qF "no longer says 'A tool marked listed is not installed'" <<<"$out" &&
+  ok "a catalog that lost what listed means: exit 1, named" || bad "lost listed: exit $rc"
+if grep -qF '`why:`' "$root/skills/guide/SKILL.md" && grep -qF 'no other reason' "$root/skills/guide/SKILL.md"
+then ok "the skill says to give the why: line's reason and no other"; else bad "the skill does not say to give the why: line's reason and no other"; fi
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"
