@@ -63,6 +63,11 @@ jobs:
       - name: plinth's own rules carry each rule shared with the pinned template
         run: ./tests/template-rules-drift.sh
 
+      - name: The arsenal says what the pinned template and the plugin ship
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tests/arsenal-freshness.sh
+
       - name: The label list has one source, read by the door and the checker
         run: ./tests/labels-single-source.sh
 

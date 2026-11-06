@@ -115,7 +115,7 @@ load (#469). Moving from v1.11.0 or earlier also takes, once and in this order,
 `claude plugin install plinth@plinth` and then `claude plugin prune`, before
 `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace under the
 same name, and `update` does not install the moved copy. Without the two
-commands nothing is lost: the official copy keeps all 25 of its skills, and
+commands nothing is lost: the official copy keeps all of its skills, and
 plinth reports the missing dependency with the command to run. `prune` removes
 the official copy only where it arrived as plinth's dependency; one you
 installed yourself stays beside plinth's (#477). Moving from v2.1.0 or
@@ -145,15 +145,18 @@ Five skills, prefixed `/plinth:`:
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 | `guide` | Explains the whole workflow in plain words, in your language: the nine steps and four moments with their tools from the arsenal's table, where your repository is now, and the one command to type next; changes nothing | You only: type `/` and pick it |
 
+Every skill only you can start, these and the dependencies' together, is on
+[one list in the arsenal](skills/arsenal/SKILL.md#skills-only-the-person-can-start).
+
 Installed with plinth as dependencies, each pinned to a commit
 ([About pins](docs/explanation/concepts.md#about-pins)):
-[mattpocock-skills](https://github.com/mattpocock/skills) (fifteen skills,
+[mattpocock-skills](https://github.com/mattpocock/skills) (skills
 from `/implement` and `/grilling` to `code-review`, `/to-spec`, `/handoff` and
 `/retro`) and
 [taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
 `design-taste-frontend`: frontend design that does not look templated).
 Listed but not installed:
-`mattpocock-skills-extra`, six more Matt Pocock skills, such as
+`mattpocock-skills-extra`, more Matt Pocock skills, such as
 `/ask-matt`, `/grill-with-docs` and `wizard` (#520, #704, #714);
 `ponytail-skills`, one skill, `/ponytail-audit`: what to delete or replace
 with the standard library, repository-wide (#598);
