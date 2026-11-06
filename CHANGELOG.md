@@ -13,13 +13,14 @@ pull requests and have no tag.
 
 ### Changed
 
-- `/plinth:guide` sends only real tickets to `/implement`. The template's
-  monthly reminder issue, found by its marker or title, routes to
-  `/plinth:template-update`; an issue labelled `ready-for-human`, `spec` or
-  `wayfinder:*` other than `wayfinder:task` is said to be what it is, that a
-  person does it, and the guide goes on to the next row. It gives only the reasons `scripts/guide-state.sh`
-  prints on its new `why:` lines, copied from the arsenal's table and "How an
-  item is sorted" (#834).
+- `/plinth:guide` no longer sends the template's monthly reminder, a person's
+  task or a record to `/implement`. The reminder issue, found by its marker or
+  title, routes to `/plinth:template-update`; an issue labelled
+  `ready-for-human`, `spec` or `wayfinder:*` other than `wayfinder:task` is said
+  to be what it is, that a person does it, and the guide goes on to the next
+  row, or to `/triage` while it is labelled `needs-triage`. It gives only the
+  reasons `scripts/guide-state.sh` prints on its new `why:` lines, copied from
+  the arsenal's table and "How an item is sorted" (#834).
 - `/plinth:template-update` stops before it writes anything when the installed
   plinth targets an older template tag than the latest release's or than the
   tag the project's CI pin was tested with, and shows the commands to type, in

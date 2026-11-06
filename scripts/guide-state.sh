@@ -198,7 +198,7 @@ echo "first pull request merged: $([ "$people_merged" -gt 0 ] && echo yes || ech
 echo
 
 tickets="$(awk -F '\t' '$4 == "ticket"' <<<"$issues")"
-labelled() { awk -F '\t' -v l="$1" '("," $2 ",") ~ ("," l ",")' <<<"$tickets" | head -1 | field 1; }
+labelled() { awk -F '\t' -v l="$1" '("," $2 ",") ~ ("," l ",")' <<<"$2" | head -1 | field 1; }
 if [ "$people_merged" -eq 0 ]; then
   first="$(awk -F '\t' 'index($6, "docs: first pull request") == 1' <<<"$people_prs" | head -1)"
   [ -n "$first" ] || first="$(head -1 <<<"$people_prs")"
@@ -222,9 +222,9 @@ elif [ -n "$people_prs" ]; then
     note="pull request #$n, checks $(head -1 <<<"$people_prs" | field 4); /run once they are green"
     say "A pull request with checks running" "/run" "Green, and seen working"
   fi
-elif n="$(labelled ready-for-agent)" && [ -n "$n" ]; then
+elif n="$(labelled ready-for-agent "$tickets")" && [ -n "$n" ]; then
   before="/clear"; say "A ticket ready" "/implement #$n"
-elif n="$(labelled needs-triage)" && [ -n "$n" ]; then
+elif n="$(labelled needs-triage "$issues")" && [ -n "$n" ]; then
   note="issue #$n"; say "Something broke" "/triage"
 elif [ -n "$tickets" ]; then
   before="/clear"; say "A ticket ready" "/implement #$(head -1 <<<"$tickets" | field 1)"

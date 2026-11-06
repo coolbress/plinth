@@ -206,6 +206,13 @@ put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 20 'Export to 
 expect "a spec next to a ready-for-agent ticket: the ticket wins" "$d" "A ticket ready (step 4)" "/implement #20" "#19 [spec] a spec, a record"
 put "$d/issues.json" "$(two_labels 19 'The queue spec' spec ready-for-agent)"
 expect "a spec with the triage label: still never /implement" "$d" "An idea in your own words (step 2)" "/grilling" "#19 [spec,ready-for-agent]"
+# A record opens with needs-triage: evaluating it is still /triage's.
+put "$d/issues.json" "$(two_labels 19 'The queue spec' spec needs-triage)"
+expect "a spec to triage: /triage, not the next row" "$d" "Something broke (step 7)" "/triage" "note: issue #19"
+put "$d/issues.json" "$(two_labels 16 'Which queue?' wayfinder:research needs-triage)"
+expect "a wayfinder record to triage: /triage" "$d" "Something broke (step 7)" "/triage" "note: issue #16"
+put "$d/issues.json" "$(two_labels 14 'Renew the domain' ready-for-human needs-triage)"
+expect "a person's task to triage: /triage" "$d" "Something broke (step 7)" "/triage" "note: issue #14"
 
 d="$(repo bots-only)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
