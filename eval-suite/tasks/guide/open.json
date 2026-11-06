@@ -1,0 +1,18 @@
+[
+  {
+    "item": "names the release on a tag",
+    "named": "release\\.yml|publish-a-release|PyPI"
+  },
+  {
+    "item": "release not called planned or not built",
+    "named": "\\A(?![\\s\\S]*(?:(?:release|릴리[스즈]|\\btags?\\b|태그|publish|PyPI)[^\\n]*(?:\\bplanned\\b|not (?:yet )?(?:built|implemented)|not built yet|계획|아직 (?:없|안))|(?:\\bplanned\\b|not (?:yet )?(?:built|implemented)|not built yet|계획|아직 (?:없|안))[^\\n]*(?:release|릴리[스즈]|\\btags?\\b|태그|publish|PyPI)))"
+  },
+  {
+    "item": "monitor and tracker not called paid",
+    "named": "\\A(?![\\s\\S]*(?:(?:uptime|monitor|error[- ]track|모니터|(?:오류|에러) ?추적)[^\\n]*(?:\\bpaid\\b|유료)|(?:\\bpaid\\b|유료)[^\\n]*(?:uptime|monitor|error[- ]track|모니터|(?:오류|에러) ?추적)))"
+  },
+  {
+    "item": "one code block: /grilling",
+    "named": "\\A(?:(?!```)[\\s\\S])*```[a-z]*\\s*/grilling\\s*```(?:(?!```)[\\s\\S])*\\Z"
+  }
+]

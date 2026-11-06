@@ -7,7 +7,8 @@
 # a run that must not pass: a checked task whose checks fail, a merge that
 # moved origin/main, a floor check whose report misses a planted gap; a
 # question task has no pass, a resume task (#832) whose report skips the open
-# item fails while one that names it passes, and a run that read a path under
+# item fails while one that names it passes, the guide tasks (#836) fail a canned
+# report with the old false sentences and pass a correct one, and a run that read a path under
 # eval-suite/ is not counted. A graded run loses its rebuildable caches (#687) and grades the
 # same again; --keep-caches and a failed grade keep them.
 #
@@ -150,6 +151,17 @@ case "$action" in
       mkdir -p "$t/.venv/lib" "$t/src/probe/__pycache__" "$t/.mypy_cache" "$t/.ruff_cache" "$t/.pytest_cache"
       : > "$t/src/probe/__pycache__/x.pyc"
     done ;;
+  # The guide tasks: reports as /plinth:guide wrote them on 2026-11-05 (#799 F15), and right.
+  guide-right) final='On a version tag you push, a cli project publishes to PyPI: see .github/workflows/release.yml.\nAn uptime monitor and an error tracker have a free plan each; neither is installed.\n\nNext, type:\n\n```\n/grilling\n```' ;;
+  guide-old) final='A release on a tag is planned, not built yet (.github/workflows/release.yml).\nError tracking and uptime monitoring are not installed because they are paid.\n\n```bash\n/grilling\n```' ;;
+  guide-planned) final='release.yml: the release on a tag is planned.\n\n```\n/grilling\n```' ;;
+  guide-paid) final='PyPI on a tag: see release.yml.\nThe uptime monitor is paid.\n\n```\n/grilling\n```' ;;
+  guide-ko) final='릴리스는 아직 없고 계획만 있습니다 (release.yml).\n오류 추적과 업타임 모니터는 유료라 설치하지 않았습니다.\n\n```\n/grilling\n```' ;;
+  guide-two) final='See release.yml.\n\n```\n/clear\n```\n\n```\n/grilling\n```' ;;
+  guide-silent) final='The project is fine.\n\n```\n/grilling\n```' ;;
+  guide-not-read) final='I could not read the repository. Sign in first:\n\n```bash\ngh auth login\n```' ;;
+  reminder-right) final='Publishes on a tag: release.yml.\n\n```\n/plinth:template-update\n```' ;;
+  reminder-implement) final='Publishes on a tag: release.yml.\n\n```\n/clear\n```\n\n```\n/implement #4\n```' ;;
   ask) extra="$(tool AskUserQuestion '{"questions":[]}')"
     final="Which fee do you want? A flat fee, or a share of the amount (see https://example.invalid/?a=1)?" ;;
 esac
@@ -384,6 +396,66 @@ check "a run that ran gh while the stand-in logged no call is marked, and its wi
   '[ "$(kg nd next-day 3 "r[\"pass\"], r[\"task_record\"][\"stand_in_missed\"], r[\"task_record\"][\"gh_calls\"]")" = "(True, True, [])" ] && [ "$(kg nd next-day 2 "r[\"task_record\"][\"stand_in_missed\"]")" = False ]' "$(kg nd next-day 3 'r["task_record"]')"
 check "the kind table counts the open item named, the next ticket started and the stand-in missed" \
   'grep -qF "| next-day · plinth | open items the final report names: \`cp1252 on Windows\` 2/3; changed a file 1/3; ran gh without reaching the stand-in 1/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+# --- the guide tasks (#836): the real guide-state.sh, through the runner's stand-in, reaches a row
+guide_repo="$tmp/guide-repo"
+mkdir -p "$guide_repo"
+printf '_commit: v1.40.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' > "$guide_repo/.copier-answers.yml"
+git -C "$guide_repo" init -q -b main
+guide_state() { # <task>: guide-state.sh as a session on that task's stand-in would run it
+  local b="$tmp/guide-bin-$1"
+  mkdir -p "$b"
+  cp "$root/scripts/eval-suite-gh.py" "$b/gh"; chmod +x "$b/gh"
+  cp "$root/eval-suite/tasks/$1/issues.json" "$b/issues.json"
+  (cd "$guide_repo" && PATH="$b:$PATH" bash "$root/scripts/guide-state.sh" .) 2>&1
+}
+gs="$(guide_state guide)"
+check "guide: guide-state.sh reads the stand-in's records and reaches one row, with one command" \
+  'grep -qx "repository: trial/probe" <<<"$gs" && grep -qx "first pull request merged: yes (2 merged by people)" <<<"$gs" && grep -qx "command: /grilling" <<<"$gs" && ! grep -q "^before:" <<<"$gs" && ! grep -qx "where: not read" <<<"$gs"' "$gs"
+gs="$(guide_state guide-reminder)"
+check "guide-reminder: the reminder issue open alone routes to the template update, not /implement" \
+  'grep -qx "command: /plinth:template-update" <<<"$gs" && grep -q "^  #4 the monthly template reminder" <<<"$gs" && ! grep -q "^command: /implement" <<<"$gs"' "$gs"
+b="$tmp/guide-bin-guide"
+sf="$(PATH="$b:$PATH" gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"
+check "the stand-in applies --jq and prints a string raw, as gh does" '[ "$sf" = trial/probe ]' "$sf"
+sf="$(PATH="$b:$PATH" gh issue list --state all --jq '.[]' 2>&1)"; src=$?
+check "the stand-in refuses --jq without --json, as gh does" '[ "$src" = 1 ] && grep -q "needs --json" <<<"$sf"' "$sf"
+sf="$(PATH="$b:$PATH" gh api user --jq .login 2>&1)"; src=$?
+check "gh api with --jq is refused as not served: the output style asks a session for its account" \
+  '[ "$src" = 1 ] && grep -qF "\`gh api user\` is not served" <<<"$sf"' "$sf"
+sf="$(PATH="$b:$PATH" gh pr list --state merged --json number --jq 'no such filter' 2>&1)"; src=$?
+check "a --jq filter jq refuses fails the call" '[ "$src" != 0 ]' "$sf"
+nojq="$tmp/nojq"; mkdir -p "$nojq"
+ln -s "$(python3 -c 'import sys; print(sys.executable)')" "$nojq/python3"
+sf="$(PATH="$b:$nojq" gh repo view --json name --jq .name 2>&1)"; src=$?
+check "with no jq on the PATH the stand-in refuses, it does not print unfiltered JSON" '[ "$src" = 1 ] && grep -q "needs jq" <<<"$sf"' "$sf"
+
+# --- the guide tasks grade the words, both ways; no arm but plinth runs them
+: > "$log"
+EVAL_STUB_ACTIONS=guide-right,guide-old,guide-planned,guide-paid,guide-ko,guide-two,guide-silent,guide-not-read suite --config-dir "$tmp/cfg" --task guide --runs 8 --out "$tmp/gd"
+check "guide runs in the plinth arm only: eight sessions from the default three arms, 'run 8 of 8'" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 8 ] && [ ! -e "$tmp/gd/runs/guide-none-1" ] && [ ! -e "$tmp/gd/runs/guide-repo-only-1" ] && grep -q "== run 8 of 8: guide plinth 8" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+missed() { # <out> <task> <n>: its pass, then what the report did not meet
+  kg "$1" "$2" "$3" '"%s: %s" % (r["pass"], "; ".join(k for k, v in r["task_record"]["named"].items() if not v))'
+}
+rel="release not called planned or not built" mon="monitor and tracker not called paid" blk="one code block: /grilling" nam="names the release on a tag"
+check "a correct report passes" '[ "$(missed gd guide 1)" = "True: " ]' "$(missed gd guide 1)"
+check "must not pass: the report with the old false sentences fails on both" '[ "$(missed gd guide 2)" = "False: $rel; $mon" ]' "$(missed gd guide 2)"
+check "must not pass: the release called planned, alone" '[ "$(missed gd guide 3)" = "False: $rel" ]' "$(missed gd guide 3)"
+check "must not pass: the uptime monitor called paid, alone" '[ "$(missed gd guide 4)" = "False: $mon" ]' "$(missed gd guide 4)"
+check "must not pass: the same two false sentences in Korean" '[ "$(missed gd guide 5)" = "False: $rel; $mon" ]' "$(missed gd guide 5)"
+check "must not pass: two code blocks" '[ "$(missed gd guide 6)" = "False: $blk" ]' "$(missed gd guide 6)"
+check "must not pass: a report that never names the release" '[ "$(missed gd guide 7)" = "False: $nam" ]' "$(missed gd guide 7)"
+check "must not pass: the report of a guide that could not read the repository" '[ "$(missed gd guide 8)" = "False: $nam; $blk" ]' "$(missed gd guide 8)"
+check "the table counts each pattern" 'grep -qF "| guide · plinth | 1/8 |" "$tmp/out.txt" && grep -qF "\`$rel\` 5/8" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+: > "$log"
+EVAL_STUB_ACTIONS=reminder-right,reminder-implement suite --config-dir "$tmp/cfg" --task guide-reminder --arm plinth --runs 2 --out "$tmp/gr"
+check "guide-reminder passes on the template update and fails on /implement" \
+  '[ "$(kg gr guide-reminder 1 "r[\"pass\"]")" = True ] && [ "$(kg gr guide-reminder 2 "r[\"pass\"]")" = False ]' "$(kg gr guide-reminder 2 'r["task_record"]')"
+: > "$log"
+suite --config-dir "$tmp/cfg" --task guide --arm none --runs 1 --out "$tmp/gn"
+check "guide named in an arm it does not run in stops (exit 2), not an empty green table" \
+  '[ "$(rc)" = 2 ] && [ "$(sessions)" = 0 ] && grep -q "nothing to run" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- a question task has no pass; it records the questions
 : > "$log"

@@ -5,21 +5,27 @@ The eval suite copies this file into a run as `gh`, with the task's
 issues.json beside it: the repository's issues and pull requests as they stood
 when the session started. It serves `issue list`, `issue view`, `pr list`,
 `pr view`, `repo view` and `auth status`, shaped as gh prints them into a pipe
-(tab-separated), or as JSON with `--json`. Anything else, a write included,
-exits 1 and says so; nothing reaches GitHub. Every call is appended to
-calls.log beside it, for the grade.
+(tab-separated), or as JSON with `--json`, filtered with `--jq` as gh filters it
+(#836: scripts/guide-state.sh reads through it; jq does the filtering, so a
+call with `--jq` needs jq on the PATH). Anything else, a write included, exits 1
+and says so; nothing reaches GitHub. Every call is appended to calls.log beside
+it, for the grade.
 
 Python 3.9 and the standard library only: it runs on whatever python3 the
 session finds.
 """
 
+import contextlib
+import io
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SERVED = "issue list/view, pr list/view, repo view and auth status"
+CALLS = {("issue", "list"), ("issue", "view"), ("pr", "list"), ("pr", "view"), ("repo", "view"), ("auth", "status")}
 
 
 def refuse(why):
@@ -49,7 +55,7 @@ def options(args):
         else:
             pos.append(a)
         i += 1
-    for unserved in ("--jq", "--template", "--web"):
+    for unserved in ("--template", "--web"):
         if unserved in opts:
             refuse(f"{unserved} is not served")
     return pos, opts
@@ -107,11 +113,36 @@ def viewing(records, pos, opts, what):
             print(f"author:\t{c['author']}\n--\n{c['body']}\n--")
 
 
+def filtered(jq, group, verb, pos, opts):
+    """What `serve` prints, through jq -r: gh's --jq prints a string raw too."""
+    if "--json" not in opts:
+        refuse("--jq needs --json")
+    shown = io.StringIO()
+    with contextlib.redirect_stdout(shown):
+        serve(group, verb, pos, opts)
+    try:
+        done = subprocess.run(["jq", "-r", jq], input=shown.getvalue(), capture_output=True, text=True)
+    except FileNotFoundError:
+        refuse("--jq needs jq on the PATH, and there is none")
+    sys.stdout.write(done.stdout)
+    sys.stderr.write(done.stderr)
+    sys.exit(done.returncode)
+
+
 def main(args):
     with open(HERE / "calls.log", "a") as log:
-        log.write(" ".join(args) + "\n")
+        log.write(" ".join(args).replace("\n", " ") + "\n")
     group, verb = (args + ["", ""])[:2]
+    if (group, verb) not in CALLS:
+        refuse(f"`gh {group} {verb}` is not served")
     pos, opts = options(args[2:])
+    jq = opts.pop("--jq", None)
+    if jq:
+        filtered(jq[-1], group, verb, pos, opts)
+    serve(group, verb, pos, opts)
+
+
+def serve(group, verb, pos, opts):
     issues = [dict(r, kind="issues") for r in DATA["issues"]]
     pulls = [dict(r, kind="pull") for r in DATA["pulls"]]
     if (group, verb) == ("auth", "status"):
@@ -131,8 +162,6 @@ def main(args):
             [str(r["number"]), r["title"], r["headRefName"], r["state"], r["createdAt"]]))
     elif (group, verb) == ("pr", "view"):
         viewing(pulls, pos, opts, "pull request")
-    else:
-        refuse(f"`gh {' '.join(args[:2])}` is not served")
 
 
 DATA = json.loads((HERE / "issues.json").read_text())

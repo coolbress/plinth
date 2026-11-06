@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- The eval suite has two tasks that grade what `/plinth:guide` says (#836):
+  `guide` and `guide-reminder`, plinth arm only, three runs each. A report must
+  name the release on a tag, must not call it planned or not built, must not
+  call the uptime monitor or the error tracker paid, and must hold one code
+  block with the one command. These are the guide's false statements from real
+  use. The suite's read-only `gh` now serves `--jq`, which needs `jq` on the
+  PATH, and a task's new `arms` file limits the arms it runs in. Run them with
+  a release that touches the guide or the arsenal's table.
+
 ### Changed
 
 - `/plinth:guide` no longer sends the template's monthly reminder, a person's
