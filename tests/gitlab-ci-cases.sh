@@ -139,7 +139,7 @@ def block(text, start):
 import os
 names = ("LINK_LINE = ", "TRAILER = ", "def closing_position(", "def own_paragraph(", "def excerpt(")
 if os.environ.get("FIELDS"):
-    names = ("COMMENT = ", "FENCE = ", "HEADING = ", "CHECKED = ", "REVIEW = ", "ENDING = ", "KINDS = ", "REVIEW_FORM = ",
+    names = ("COMMENT = ", "FENCE = ", "HEADING = ", "CHECKED = ", "REVIEW = ", "ENDING = ", "KINDS = ", "REVIEW_FORM = ", "HOW = ",
              "def unfenced(", "def bare(", "def checked_text(", "def review_values(", "def review_filled(", "def field_lines(",
              "CODE_SPAN = ", "LINKS = ", "BARE = ", "def unknown_numbers(")
 fails = [s for s in names if not block(py, s) or block(py, s) != block(gl, s)]
@@ -345,7 +345,7 @@ expect "bare \"done\" in both: warns for both, and the job passes" 0 \
   "does not say which review ran: its \`Review:\` line says \"done\""
 fields $'## What I checked myself\n\n- [x] done' 'Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)'
 expect "\"- [x] done\" and the form's four answers copied: warns for both, and the job passes" 0 \
-  "says only \"- [x] done\"" "names none of the four answers"
+  "says only \"- [x] done\"" "line says \"fresh-context | thir\""
 fields $'## What I checked myself:\n\nRan make check: 12 passed.' 'Review: third-party (Codex)'
 expect "a heading with a colon and a named third-party review: two pass lines" 0 "pass: MR description, says what the person checked themselves" "pass: MR description, says which review ran"
 desc "$what It is the second of the two fixes #65 decided."$'\n\n'"$checked"$'\n\nReview: fresh-context\n\n'"$by"

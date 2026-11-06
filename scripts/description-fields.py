@@ -35,6 +35,7 @@ ENDING = re.compile(
 # their brackets, a placeholder such as `<name>` not counting.
 KINDS = re.compile(r"^(?:(?:fresh-context|same-session)\b|(?:third-party|none)\s*\(\s*[^\s<)][^)]*\))", re.IGNORECASE)
 REVIEW_FORM = "Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
+HOW = "https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
 # A bare `#N`, or GitLab's `!N` (#826): what stands outside code spans and
 # links, with no path, name, `#`, `!` or `&` (an HTML entity) right before it.
 CODE_SPAN = re.compile(r"(`+).*?\1")
@@ -92,19 +93,18 @@ def field_lines(body, what):
     else:
         why = ("there is no `What I checked myself` section" if checked is None
                else "its `What I checked myself` section is empty" if not checked.strip()
-               else f'its `What I checked myself` section says only "{" ".join(checked.split())}", and "done" or a bare "Skipped" records nothing')
+               else f'its `What I checked myself` section says only "{" ".join(checked.split())[:20]}"')
         out.append(f"not yet confirmed: {what} description, does not say what the person checked themselves: {why};"
-                   " under that heading write what you ran, opened or read and what you saw (a command's output,"
-                   " a page, a number), or `Skipped: <reason>`; an edited description is read again on the next run")
+                   f" edit it to say what you ran or read and saw, or `Skipped: <reason>`: {HOW}")
     values = review_values(lines)
     if any(review_filled(v) for v in values):
         out.append(f"pass: {what} description, says which review ran")
     else:
         why = ("there is no `Review:` line" if not values
                else "its `Review:` line is empty" if not values[-1].strip()
-               else f'its `Review:` line says "{" ".join(values[-1].split())}", which names none of the four answers or gives no reason')
+               else f'its `Review:` line says "{" ".join(values[-1].split())[:20]}"')
         out.append(f"not yet confirmed: {what} description, does not say which review ran: {why};"
-                   f" write one line, `{REVIEW_FORM}`; an edited description is read again on the next run")
+                   f" write `{REVIEW_FORM}`: {HOW}")
     return out
 
 
@@ -124,8 +124,7 @@ def unknown_numbers(body, highest, what):
             seen.add((sigil, number))
             top, kind, form = highest[sigil]
             out.append(f"not yet confirmed: {what} description, {sigil}{number} is above the highest {kind} number here"
-                       f" ({sigil}{top}), so it links to nothing; a reference to another repository's is written `{form}`;"
-                       " an edited description is read again on the next run")
+                       f" ({sigil}{top}), so it links to nothing; rewrite it as `{form}` if it is another repository's: {HOW}")
     return out
 
 
@@ -144,7 +143,7 @@ if __name__ == "__main__":
             body = json.load(f)["data"]["repository"]["pullRequest"]["body"]
     except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"not yet confirmed: {sys.argv[1]} description, its fields could not be read ({type(e).__name__});"
-              " a run that reads the description confirms them")
+              f" re-run this job: {HOW}")
         sys.exit(0)
     lines = field_lines(body, sys.argv[1])
     # The bare numbers: never the fields' verdict, never a red. Unread, the

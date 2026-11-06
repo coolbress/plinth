@@ -197,6 +197,13 @@ na = 0
 # docs/reference/required-checks.md, for --verdicts (#437).
 verdicts: list[str] = []
 LEFT_TO_SKILL = "; left to /plinth:floor-check"
+# The one next action a FAIL or WARN carries where CI shows it (#837); python-ci.yml's
+# floor-check step has the same words. Empty for a person's run, which is the skill.
+NEXT_ACTION = "run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+next_action = ""
+# The SKIP's next action; a line the job annotates stays within 300 characters
+# (the report beside it has the whole text).
+SKIP_NEXT = "; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
 
 
 def result(kind: str, msg: str, *, deferred: bool = False) -> None:
@@ -204,18 +211,20 @@ def result(kind: str, msg: str, *, deferred: bool = False) -> None:
     a login that administers the repository does (#436): outside the
     not-verified count (#303), counted on the summary line on its own."""
     global fails, skips, left, na
-    print(f"  {kind:5} {msg}")
+    shown = f"{msg}; {next_action}" if next_action and kind in ("FAIL", "WARN") else msg
+    print(f"  {kind:5} {shown}")
     if kind == "N/A":
         na += 1
     elif kind == "FAIL":
         fails += 1
-        verdicts.append(f"fail: {msg}")
+        verdicts.append(f"fail: {shown}")
     elif kind == "SKIP":
         skips += 1
         # The SKIP's own text says why; what reads it differs per item (an
         # admin login, the network, a file the door writes), so the line says
         # only what is true of all of them.
-        verdicts.append(f"not yet confirmed: {msg}; a run that can read it confirms it")
+        room = 300 - len("not yet confirmed: ") - len(SKIP_NEXT)
+        verdicts.append(f"not yet confirmed: {msg if len(msg) <= room else msg[:room - 3] + '...'}{SKIP_NEXT}")
     if deferred:
         left += 1
         # The fixed ending is how `ci / floor-check` tells these from the
@@ -4244,6 +4253,9 @@ def main() -> int:
                     help="with --print-ruleset: leave the code_scanning rule out, as the door does for a private "
                          "repository without GitHub Code Security")
     a = ap.parse_args()
+    if a.verdicts:
+        global next_action
+        next_action = NEXT_ACTION
 
     if a.print_conditional_archetypes:
         print(" ".join(CONDITIONAL_ARCHETYPES))

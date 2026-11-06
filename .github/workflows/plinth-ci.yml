@@ -45,6 +45,9 @@ jobs:
       - name: ci / pr-title fails a description that would close an issue outside its closing line
         run: ./tests/pr-title-description-cases.sh
 
+      - name: A red or warning check's annotations say what failed, one next action and a link that exists
+        run: ./tests/check-messages.sh
+
       - name: ci / diff-size names changes to the checks the description does not
         run: ./tests/weakened-checks-cases.sh
 

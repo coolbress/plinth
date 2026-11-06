@@ -863,7 +863,7 @@ jobs:
             # two: `fix: x (#349) (#359)`. The issue belongs on the
             # description's closing or `Part of` line instead.
             if printf '%s' "$TITLE" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
-              echo "::error::PR title ends in a number: ${TITLE}. The squash merge adds this pull request's own number; name the issue in the description instead."
+              echo "::error::PR title ends in a number: ${TITLE:0:100}. Remove the trailing (#N) and name the issue on the description's closing line: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
               say "fail: PR title, it ends in a number"
               {
                 echo "### PR title ends in a number"
@@ -883,7 +883,7 @@ jobs:
             exit 0
           fi
 
-          echo "::error::PR title is not Conventional Commits: ${TITLE}"
+          echo "::error::PR title is not Conventional Commits: ${TITLE:0:60}. Rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
           say "fail: PR title, it is not Conventional Commits"
           {
             echo "### PR title does not follow the convention"
@@ -947,7 +947,7 @@ jobs:
             exit 0
           fi
           if [ "${FETCH:-}" != success ]; then
-            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read"
+            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read; re-run this job: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
             exit 1
           fi
           # The verdict lines first, then the script's report.
@@ -984,7 +984,7 @@ jobs:
           elif python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer" "$@" > "$fields"; then
             while IFS= read -r line; do [ -z "$line" ] || say "$line"; done < "$fields"
           else
-            say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); a run where it finishes confirms them"
+            say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); re-run this job: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
           fi
           { echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
@@ -1168,7 +1168,7 @@ jobs:
           # Three dots (base...head): changes since the merge base, which is
           # what GitHub shows on the PR.
           if ! numstat="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "${spec[@]}")"; then
-            echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA})."
+            echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA}). Update the branch from its base and push again: https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
             say "fail: diff size, the diff could not be computed"
             exit 1
           fi
@@ -1208,7 +1208,7 @@ jobs:
           fi
 
           if [ "$total" -gt "$MAX_LINES" ]; then
-            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it."
+            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it into a stack of pull requests, each against the one below: https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
             {
               echo
               echo "**Over the limit.** Docs and lockfiles are already excluded from this number."
@@ -1249,6 +1249,12 @@ jobs:
         run: |
           import json, os, re, subprocess, sys
 
+          HOW = "https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+
+          def fit(head, tail):   # at most 300 characters; what is cut is the head, never the action and link
+              room = 300 - len(tail)
+              return (head if len(head) <= room else head[:room - 3] + "...") + tail
+
           base, head = os.environ.get("BASE_SHA", ""), os.environ.get("HEAD_SHA", "")
           body = os.environ.get("BODY") or ""
           summary = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
@@ -1266,7 +1272,8 @@ jobs:
               r = subprocess.run(["git", *args], capture_output=True)
               if r.returncode != 0:
                   err = r.stderr.decode("utf-8", "replace").strip().replace("\n", " ")
-                  print(f"::error::git {args[0]} failed (base={base} head={head}): {err}")
+                  print(err)
+                  print("::error::" + fit(f"git {args[0]} failed (base={base} head={head}): {err}", f"; re-run this job: {HOW}"))
                   sys.exit(1)
               return r.stdout.decode("utf-8", "surrogateescape")
 
@@ -1445,7 +1452,9 @@ jobs:
               r = subprocess.run(["git", "grep", "-h", "-I", "-E", r"[[:space:]]as[[:space:]]|=", head, "--", "*.py"],
                                  capture_output=True)
               if r.returncode not in (0, 1):   # 1 is no match; anything else is not an answer
-                  print(f"::error::git grep failed at {head}: {r.stderr.decode('utf-8', 'replace').strip()}")
+                  err = " ".join(r.stderr.decode("utf-8", "replace").split())
+                  print(err)
+                  print("::error::" + fit(f"git grep failed at {head}: {err}", f"; re-run this job: {HOW}").replace("%", "%25"))
                   sys.exit(1)
               lines = r.stdout.decode("utf-8", "replace").split("\n")
               while True:
@@ -1543,7 +1552,7 @@ jobs:
                   rows.append(f"| {cell(label)} | {why} | named |")
               else:
                   unnamed += 1
-                  print(command_safe(f"::warning::{label}: {why}, and the description does not name it."))
+                  print(command_safe("::warning::" + fit(f"{label}: {why}, and the description does not name it", f". Name the path in the description: {HOW}")))
                   rows.append(f"| {cell(label)} | {why} | **not named** |")
 
           print(f"{len(found)} change(s) to the checks, {unnamed} not named in the description.")
@@ -1590,6 +1599,12 @@ jobs:
           repo, number, head, event = E("REPO", ""), E("NUMBER", ""), E("HEAD_SHA", ""), E("EVENT", "")
           summary = E("GITHUB_STEP_SUMMARY") or os.devnull
           DEPENDABOT = 49699333   # dependabot[bot]'s account id; a login can be spelled alike
+          HOW = "https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+
+          def fit(head, tail):   # at most 300 characters; what is cut is the head, never the action and link
+              room = 300 - len(tail)
+              return (head if len(head) <= room else head[:room - 3] + "...") + tail
+
           WAY = ("If you agree with the change, approve the pull request on GitHub: Files changed, "
                  "Review changes, Approve. The approval re-runs the latest red run; if this check "
                  "does not turn green, use \"Re-run failed jobs\" on the latest red ci / diff-size.")
@@ -1631,14 +1646,14 @@ jobs:
                   listed = json.load(f)
           except (OSError, ValueError):
               say("fail: changes to the checks, the step that lists them did not finish, so whether "
-                  "this pull request needs an admin's approval is unknown; re-running the job may clear it")
+                  f"this pull request needs an admin's approval is unknown; re-run this job: {HOW}")
               sys.exit(1)
           if not listed:
               sys.exit(0)
 
           sha = head[:12]
-          rows = "; ".join(f"{r['path']}: {r['why']}" for r in listed[:5]) + (
-              f"; and {len(listed) - 5} more in the table above" if len(listed) > 5 else "")
+          rows = f"{listed[0]['path']}: {listed[0]['why']}" + (
+              f"; and {len(listed) - 1} more" if len(listed) > 1 else "")
           try:
               if E("HEAD_REPO", "") != repo:
                   why = "it comes from a fork"
@@ -1650,15 +1665,12 @@ jobs:
                       raise Unread("no push of this head in the branch's activity")
                   why = f"{actor['login']} pushed it and is not an admin"
                   if actor.get("id") == DEPENDABOT:
-                      say(f"not yet confirmed: changes to the checks, Dependabot pushed this head ({sha}), "
-                          "so no approval is asked; the change in the table above lowers or changes the "
-                          "checks and is the person's decision; reading the table before merging confirms it")
+                      say(fit(f"not yet confirmed: changes to the checks, Dependabot pushed this head ({sha}), so no approval is asked",
+                              f"; read the job summary's table before merging, it is your decision: {HOW}"))
                       sys.exit(0)
                   if permission(actor["login"]) == "admin":
-                      say(f"not yet confirmed: changes to the checks, {actor['login']}, an admin, pushed this "
-                          f"head ({sha}), so no approval is asked; the change in the table above lowers or "
-                          "changes the checks and is the person's decision; reading the table before "
-                          "merging confirms it")
+                      say(fit(f"not yet confirmed: changes to the checks, {actor['login']}, an admin, pushed this head ({sha}), so no approval is asked",
+                              f"; read the job summary's table before merging, it is your decision: {HOW}"))
                       sys.exit(0)
               reviews = [json.loads(l) for l in api(f"repos/{repo}/pulls/{number}/reviews",
                                                      "--paginate", "--jq", ".[] | tojson").splitlines() if l.strip()]
@@ -1670,15 +1682,14 @@ jobs:
                                if r["state"] == "APPROVED" and r.get("commit_id") == head
                                and permission(login) == "admin"), None)
           except Unread as e:
-              say(f"fail: changes to the checks, this pull request changes how strict the checks are and "
-                  f"what decides whether it needs an admin's approval could not be read ({e}); "
-                  "re-running the job may clear it")
+              say(fit(f"fail: changes to the checks, what decides whether this pull request needs an "
+                      f"admin's approval could not be read ({e})", f"; re-run this job: {HOW}"))
               sys.exit(1)
 
           if not approver:
-              say(f"fail: changes to the checks, this pull request changes how strict the checks are "
-                  f"({rows}) and {why}, so it needs an admin's approval on this head ({sha}); "
-                  f"it has none. {WAY}")
+              say(fit(f"fail: changes to the checks, {why}, so this head ({sha}) needs admin approval for {rows}",
+                      f"; ask an admin to approve it: {HOW}"))
+              emit("", WAY)
               sys.exit(1)
           say(f"pass: changes to the checks, approved by {approver}, an admin, on this head ({sha})")
           if event != "pull_request_review":
@@ -1847,6 +1858,20 @@ jobs:
           if [ ! -f "$t.verdicts" ]; then
             echo "fail: the floor, the checker wrote no verdicts (exit $rc); its report is below" > "$t.verdicts"
             [ "$rc" != 0 ] || rc=1
+          fi
+          # One ::error::, however many FAILs (#837): the first and the count, with
+          # the one next action, so a red's first annotation is not GitHub's exit
+          # code. Words only: the exit below is the checker's either way.
+          n=0; first=""
+          while IFS= read -r l || [ -n "$l" ]; do
+            case "$l" in "fail: "*) n=$((n + 1)); [ -n "$first" ] || first="${l#fail: }" ;; esac
+          done < "$t.verdicts"
+          if [ "$n" -gt 0 ]; then
+            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+            first="${first%"; $next"}"; lead="floor-check: $n FAIL, first: "
+            room=$((300 - ${#lead} - ${#next} - 2))
+            [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
+            e="$lead$first; $next"; e="${e//'%'/%25}"; echo "::error::$e"
           fi
           while IFS= read -r l || [ -n "$l" ]; do say "$l"; done < "$t.verdicts"
           { echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
