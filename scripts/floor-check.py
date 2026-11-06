@@ -89,6 +89,12 @@ the shared issue-template folder and each form in it, #726), true only
 while the repository has none of its own; without --repo, or with a read
 that fails, there is no line, here or from --print-update-command.
 
+Beside that item, outside `ci / floor-check` (--actions-token): two or three
+more reads compare the tag this plinth targets with the latest release's and
+the tag the CI pin was tested with (#843). Older is a WARN with the commands
+to type; a release not read is an INFO. --print-plugin-skew is the same
+comparison for the template-update skill, which stops on it.
+
 A GitLab checkout (--host gitlab, or `host: gitlab` in .copier-answers.yml)
 is read as one (#543): glab's token and config reads in the agent settings,
 .gitlab/ issue and merge request templates, and in place of the ci caller the
@@ -1759,6 +1765,133 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
     if choice["state"] == "tested-ahead":
         result("INFO", "  the line above keeps the live pin; this one moves it to the tested pin, if you choose it:")
         result("INFO", f"  {choice['cmd']}")
+
+
+PLUGIN_UPDATE_STEPS = ("claude plugin marketplace update plinth", "claude plugin update plinth@plinth",
+                       "/reload-plugins (or start a new session)", "/plinth:template-update")
+
+
+def template_ref_at(ref: str, network: bool) -> tuple[str | None, str | None]:
+    """The `template_ref` of scripts/new-project.sh at a plinth tag or commit,
+    read as tested_plinth_pin reads a file at a ref: (tag, None), or (None,
+    reason) when it is not read (#843)."""
+    where = f"scripts/new-project.sh at {ref}"
+    data = api(f"repos/{PLINTH_REPO}/contents/scripts/new-project.sh?ref={ref}", network)
+    if data is ABSENT:
+        return None, f"{where}: not found"
+    if data is ERROR:
+        return None, f"{where}: offline or API error"
+    try:
+        text = base64.b64decode(data["content"]).decode()
+    except (TypeError, KeyError, ValueError):
+        return None, f"{where}: an unexpected contents response"
+    m = re.search(r'^template_ref="(v\d+\.\d+\.\d+)"$', text, re.MULTILINE)
+    return (m.group(1), None) if m else (None, f"{where} has no template_ref that is a release tag")
+
+
+def plugin_skew(root: Path, network: bool, host: str | None = None) -> dict:
+    """The installed plinth against the newest template tag this project could
+    move to (#843): the latest release's template_ref, or the tag its CI's
+    plinth pin was tested with, whichever is newer. A project behind the first
+    hears "nothing to do" from an older plugin. `state` is skip (not a door-made
+    project), older (`newest`, `where`; `unreleased` when only the pin carries
+    that tag, which updating the plugin cannot bring), same-or-newer or unread
+    (`why`: the release was not read and the pin named nothing newer); `note`
+    says the pin was not compared beside a release that was."""
+    d = template_drift(root, host, network)
+    if d["state"] == "skip":
+        return {"state": "skip"}
+    gitlab = (host or (copier_answers(root) or {}).get("host")) == "gitlab"
+    out: dict = {"target": d["target"], "gitlab": gitlab}
+
+    def key(tag: str) -> tuple[int, ...]:
+        return tuple(int(x) for x in tag[1:].split("."))
+
+    found: list[tuple[str, str]] = []
+    released = None
+    release = api(f"repos/{PLINTH_REPO}/releases/latest", network)
+    tag = release.get("tag_name") if isinstance(release, dict) else None
+    why = None
+    if release is ABSENT:
+        why = "not found"
+    elif release is ERROR:
+        why = "offline or API error"
+    elif not isinstance(tag, str) or not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+        why = "an unexpected release response"
+    else:
+        ref, why = template_ref_at(tag, network)
+        if ref:
+            found.append((ref, f"the latest plinth release, {tag}"))
+            released = (tag, ref)
+
+    if gitlab:
+        pin, _, pin_unread = resolve_gitlab_pin(root)
+    else:
+        pin, pin_unread = resolve_plinth_pin(root)
+    if not pin and not why:
+        out["note"] = f"the CI pin was not compared ({pin_unread}); compared with the latest release alone"
+    if pin:
+        ref, pin_why = template_ref_at(pin, network)
+        if ref:
+            found.append((ref, f"the tag this repository's plinth pin {pin} was tested with"))
+        elif not why:
+            out["note"] = f"the tag the plinth pin {pin} was tested with was not read ({pin_why}); compared with the latest release alone"
+
+    newest = max(found, key=lambda f: key(f[0]), default=None)
+    if newest and key(newest[0]) > key(d["target"]):
+        if released and key(newest[0]) > key(released[1]):
+            out["unreleased"] = (f"{newest[0]} is in no release yet (the latest, {released[0]}, targets {released[1]}): "
+                                 "if these find no new version, run /plinth:template-update again after the next release")
+        return {**out, "state": "older", "newest": newest[0], "where": newest[1]}
+    if why:
+        return {**out, "state": "unread", "why": why}
+    return {**out, "state": "same-or-newer"}
+
+
+def plugin_skew_head(s: dict) -> str:
+    return (f"this plinth targets template {s['target']}, but {s['newest']} is out ({s['where']}): "
+            f"update the plugin first. Type these yourself, in order:")
+
+
+def plugin_skew_unread(s: dict) -> str:
+    return f"the latest plinth release was not read ({s['why']}); going on with the template tag this plinth targets, {s['target']}"
+
+
+def check_plugin_skew(root: Path, network: bool, host: str | None = None) -> None:
+    """Beside the template drift item: the same stop the template-update skill
+    makes (#843). Not in `ci / floor-check`, whose checker is the pin's, not a
+    plugin anyone installed."""
+    s = plugin_skew(root, network, host)
+    if s["state"] == "older":
+        result("WARN", f"template: {plugin_skew_head(s)}")
+        # template-update.sh has no GitLab path; this check prints the update line there.
+        for step in PLUGIN_UPDATE_STEPS[:-1] + (("/plinth:floor-check",) if s["gitlab"] else PLUGIN_UPDATE_STEPS[-1:]):
+            result("INFO", f"  {step}")
+        if s.get("unreleased"):
+            result("INFO", f"  {s['unreleased']}")
+    elif s["state"] == "unread":
+        result("INFO", f"template: {plugin_skew_unread(s)}")
+    if s.get("note"):
+        result("INFO", f"template: {s['note']}")
+
+
+def print_plugin_skew(root: Path, network: bool = True, host: str | None = None) -> int:
+    """--print-plugin-skew: for the template-update skill (#843). Exit 3 with
+    the stop on stdout when the installed plinth targets an older tag; exit 0
+    otherwise, a read that failed said on stderr."""
+    s = plugin_skew(root, network, host)
+    if s["state"] == "older":
+        print(plugin_skew_head(s))
+        for step in PLUGIN_UPDATE_STEPS:
+            print(f"  {step}")
+        if s.get("unreleased"):
+            print(s["unreleased"])
+        return 3
+    if s["state"] == "unread":
+        print(plugin_skew_unread(s), file=sys.stderr)
+    if s.get("note"):
+        print(s["note"], file=sys.stderr)
+    return 0
 
 
 def print_update_command(root: Path, plinth_pin: str = "live", network: bool = True, host: str | None = None,
@@ -4242,6 +4375,9 @@ def main() -> int:
     ap.add_argument("--print-plinth-pins", action="store_true",
                     help="print each coolbress/plinth uses: of the workflow files as `<file> <ref>`, or `<file> unread "
                          "line <n>` for a uses: this checker cannot read, and exit 0 (#793)")
+    ap.add_argument("--print-plugin-skew", action="store_true",
+                    help="compare the template tag this plinth targets with the latest release's and the CI pin's: exit 3 "
+                         "with what to type when it is older, else exit 0, a failed read said on stderr (#843)")
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
     ap.add_argument("--plinth-pin", choices=("live", "tested"), default="live",
@@ -4275,6 +4411,8 @@ def main() -> int:
         return print_plinth_pins(root)
     if a.print_diff_size:
         return print_diff_size(root)
+    if a.print_plugin_skew:
+        return print_plugin_skew(root, not a.no_network, a.host)
     if a.print_update_command:
         return print_update_command(root, a.plinth_pin, not a.no_network, a.host,
                                     a.repo.split("/")[0] if a.repo else None)
@@ -4303,6 +4441,8 @@ def main() -> int:
                        "Dependabot, tracked .env files, action pins and, with a repository name, the ruleset, push "
                        "protection and CodeQL")
     check_files(root, owner, network, host)
+    if not a.actions_token:
+        check_plugin_skew(root, network, host)
     check_answers(root, owner, network, host)
     archetype = archetype_of(project, a.archetype)
     if javascript:

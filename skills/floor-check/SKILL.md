@@ -511,6 +511,15 @@ never runs `copier update`; `/plinth:template-update` runs that line, the
 user's to start, and resolves a conflict only on a person's word for that
 file before it opens a draft pull request.
 
+Beside that item, a WARN when this installed plinth targets an older tag than
+the latest plinth release's, or than the tag the repository's CI pin was tested
+with: the same stop `/plinth:template-update` makes, with the commands the
+person types, in order; on GitLab, which that skill does not serve, the last
+is this check again. A tag only the pin carries is said to be in no release
+yet: the commands may find nothing until one ships. A release that cannot be
+read is an INFO naming the target. `ci / floor-check` says neither: its
+checker is the pin's (#843).
+
 A repository made before this item shipped hears about it two ways: an agent
 running an updated plugin's `/plinth:floor-check` by hand, or its own
 `ci / floor-check` once its workflow pin is raised (Dependabot proposes

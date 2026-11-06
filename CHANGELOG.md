@@ -13,6 +13,12 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:template-update` stops before it writes anything when the installed
+  plinth targets an older template tag than the latest release's or than the
+  tag the project's CI pin was tested with, and shows the commands to type, in
+  order; it never runs them. When the release cannot be read it warns, naming
+  the installed target, and goes on. `/plinth:floor-check` names the same skew
+  beside its template drift item; `ci / floor-check` does not (#843).
 - The first thing a red or warning check says now names what failed, gives one
   next action and links to the page that explains, in at most 300 characters:
   `ci / pr-title`, `ci / diff-size`, `ci / docs`'s closing-references line and

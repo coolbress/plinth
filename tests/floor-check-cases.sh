@@ -3467,5 +3467,62 @@ else bad "the door leaves out '$door_list' from the tag ruleset, the checker '$c
 answers "a repository's own code of conduct applies in place of the owner's" "^  PASS  CODE_OF_CONDUCT.md is the repository's own" \
   'owner_has_code_of_conduct: true\n' ": > CODE_OF_CONDUCT.md"
 
+# ── the installed plinth against the newest template tag (#843) ─────────
+skew_api="$work/api-plugin-skew"; tag_names "$skew_api" "$target_sha"
+mkdir -p "$skew_api/repos/coolbress/plinth/releases" "$skew_api/repos/coolbress/plinth/contents/scripts"
+printf '{"tag_name":"v98.0.0"}\n' > "$skew_api/repos/coolbress/plinth/releases/latest.json"
+printf '{"content":"%s"}\n' "$(printf 'template_ref="v99.0.0"\n' | base64 | tr -d '\n')" \
+  > "$skew_api/repos/coolbress/plinth/contents/scripts/new-project.sh?ref=v98.0.0.json"
+skew_head="WARN  template: this plinth targets template $target_ref, but v99.0.0 is out (the latest plinth release, v98.0.0): update the plugin first. Type these yourself, in order:"
+skew_steps='  INFO    claude plugin marketplace update plinth
+  INFO    claude plugin update plinth@plinth
+  INFO    /reload-plugins (or start a new session)
+  INFO    /plinth:template-update'
+out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$pcopy" --repo o/r 2>&1)"
+if grep -qF "$skew_head" <<<"$out" && grep -qF -- "$skew_steps" <<<"$out" && grep -q "WARN  template: v1.0.0 is behind $target_ref" <<<"$out"
+then ok "a behind repository with an older plinth: the drift line stays, and the skew is named with the commands in order"
+else bad "skew, behind"; printf '%s\n' "$out" | grep -E 'template|plugin' | sed 's/^/        /'; fi
+out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$good" 2>&1)"
+if grep -qF "$skew_head" <<<"$out" && grep -qF -- "$skew_steps" <<<"$out" && grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<<"$out"
+then ok "a repository on the installed target: the PASS stays, and the skew is named beside it"
+else bad "skew, current"; printf '%s\n' "$out" | grep -E 'template|plugin' | sed 's/^/        /'; fi
+out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$good" --actions-token 2>&1)"
+if ! grep -qE "claude plugin|latest plinth release" <<<"$out"
+then ok "ci / floor-check (--actions-token) says nothing: its checker is the pin's, not an installed plugin"
+else bad "skew under --actions-token"; printf '%s\n' "$out" | grep -E 'plugin|plinth release' | sed 's/^/        /'; fi
+out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$good" 2>&1)"
+if ! grep -q "FAIL.*plugin" <<<"$out"; then ok "the skew is never a FAIL"; else bad "skew failed the run"; fi
+same_skew="$work/api-plugin-same"; tag_names "$same_skew" "$target_sha"
+mkdir -p "$same_skew/repos/coolbress/plinth/releases" "$same_skew/repos/coolbress/plinth/contents/scripts"
+printf '{"tag_name":"v98.0.0"}\n' > "$same_skew/repos/coolbress/plinth/releases/latest.json"
+printf '{"content":"%s"}\n' "$(printf 'template_ref="%s"\n' "$target_ref" | base64 | tr -d '\n')" \
+  > "$same_skew/repos/coolbress/plinth/contents/scripts/new-project.sh?ref=v98.0.0.json"
+printf '{"content":"%s"}\n' "$(printf 'template_ref="%s"\n' "$target_ref" | base64 | tr -d '\n')" \
+  > "$same_skew/repos/coolbress/plinth/contents/scripts/new-project.sh?ref=$sha40.json"
+out="$(FLOOR_CHECK_API_DIR="$same_skew" python3 "$checker" --root "$good" 2>&1)"
+if ! grep -qE "claude plugin|plinth release|plinth pin $sha40 was tested" <<<"$out"; then ok "an installed target equal to the latest release's: no line"
+else bad "skew, equal"; printf '%s\n' "$out" | grep -E 'plugin|plinth release' | sed 's/^/        /'; fi
+out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
+if grep -q "INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, $target_ref" <<<"$out"
+then ok "the release not read: said beside the drift item, naming the installed target"
+else bad "skew, unread"; printf '%s\n' "$out" | grep -E 'template|plinth release' | sed 's/^/        /'; fi
+nocopy="$work/skew-foreign"; rm -rf "$nocopy"; cp -R "$good" "$nocopy"; rm "$nocopy/.copier-answers.yml"
+out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$nocopy" 2>&1)"
+if ! grep -q "claude plugin" <<<"$out"; then ok "a repository the door did not make: no skew line, the drift item's SKIP stands"
+else bad "skew, not door-made"; fi
+# GitLab: template-update.sh has no GitLab path, so the last step is this check,
+# which prints the update line; the pin read is the include's.
+out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
+if grep -qF "$skew_head" <<<"$out" && grep -qF "  INFO    /plinth:floor-check" <<<"$out" && ! grep -qF "  INFO    /plinth:template-update" <<<"$out"
+then ok "GitLab: the skew's last step is /plinth:floor-check, not the skill with no GitLab path"
+else bad "skew, GitLab steps"; printf '%s\n' "$out" | grep -E 'plugin|/plinth:' | sed 's/^/        /'; fi
+gl_pin="$(sed -nE 's|.*coolbress/plinth/([0-9a-f]{40})/gitlab/python-ci\.yml.*|\1|p' "$glgood/.gitlab-ci.yml")"
+printf '{"content":"%s"}\n' "$(printf 'template_ref="v99.0.0"\n' | base64 | tr -d '\n')" \
+  > "$same_skew/repos/coolbress/plinth/contents/scripts/new-project.sh?ref=$gl_pin.json"
+out="$(FLOOR_CHECK_API_DIR="$same_skew" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
+if [ -n "$gl_pin" ] && grep -qF "but v99.0.0 is out (the tag this repository's plinth pin $gl_pin was tested with)" <<<"$out"
+then ok "GitLab: the include's pin is the one compared"
+else bad "skew, GitLab pin '$gl_pin'"; printf '%s\n' "$out" | grep -E 'plugin|plinth pin' | sed 's/^/        /'; fi
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
