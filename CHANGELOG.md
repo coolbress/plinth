@@ -74,6 +74,18 @@ pull requests and have no tag.
   its issue once the project is current (coolbress/plinth-template#196).
   plinth's own `AGENTS.md` and pull-request form adopt the public-records
   rule, and `tests/template-rules-drift.sh` lists it in both.
+- `/plinth:new-project` renders plinth-template v1.41.0: every project carries
+  a how-to that gives its three updates in order, and the monthly reminder
+  gives the same order (coolbress/plinth-template#206); a new project calls
+  plinth v2.27.0, the commit the template's own CI calls, instead of v2.6.0
+  (coolbress/plinth-template#205); the release workflows install uv 0.13.7.
+  An existing project's plinth pin is not moved by `/plinth:template-update`:
+  when the tag's pin is newer, the plan offers it, `--plinth-pin tested`, and
+  only the person's confirmation applies it. `/plinth:floor-check` reports a
+  repository on v1.40.0 as behind. The README and the tutorial now update
+  plinth with `claude plugin marketplace update plinth` first, then
+  `claude plugin update plinth@plinth`: the plugin update alone stayed on the
+  old version in a measured run (coolbress/plinth-template#206).
 
 ## [2.27.0] - 2026-11-05
 
