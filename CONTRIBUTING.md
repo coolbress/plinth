@@ -114,7 +114,9 @@ release needs a green run on the commit it tags
 2. Commit with a Conventional Commits title, `type(scope): summary`, using one
    of the eleven standard types. The pull request title follows the same rule
    and does not end in `(#N)`: the squash merge adds the pull request's own
-   number, and `ci / pr-title` refuses a title that would carry two. A commit
+   number, and `ci / pr-title` refuses a title that would carry two. The title
+   GitHub gives a revert, `Revert "<title>"`, passes when `<title>` passes on
+   its own: `Revert "feat(x): y"` does, `Revert "fix stuff"` does not. A commit
    made with AI carries the trailer `Assisted-by: <agent>:<model>` (see
    `AGENTS.md`).
 3. Open a pull request as a draft; mark it ready when it is. The description

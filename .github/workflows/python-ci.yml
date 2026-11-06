@@ -829,6 +829,8 @@ jobs:
   # types on the spot, and both were really `docs:`. A model reaches for the
   # list it was trained on. The spec mandates only feat and fix, and scope is
   # free-form, so local meaning goes into the scope (`docs(research):`).
+  # `Revert "<title>"`, the title GitHub gives a revert, passes when <title>
+  # does (#839): it is the one form outside the convention that passes.
   # The title, and then the description: merging must not close an issue the
   # description's closing line does not name (#781). A closing keyword before
   # `#N` closes that issue in a sentence as much as on a line of its own.
@@ -857,13 +859,20 @@ jobs:
           fi
 
           types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
-          if printf '%s' "$TITLE" | grep -qE "^($types)(\([a-zA-Z0-9_.,/ -]+\))?!?: .+"; then
+          # GitHub's Revert button and `gh pr revert` title the new pull request
+          # `Revert "<title>"`, and undoing a revert nests it. Such a title
+          # passes when what it quotes does, so the rules read the quoted title.
+          subject="$TITLE"
+          while [[ "$subject" == 'Revert "'*'"' ]]; do subject="${subject#Revert \"}"; subject="${subject%\"}"; done
+          if printf '%s' "$subject" | grep -qE "^($types)(\([a-zA-Z0-9_.,/ -]+\))?!?: .+"; then
             # A squash merge appends the pull request's own number to its
             # title, so a title that already ends in one lands on main with
             # two: `fix: x (#349) (#359)`. The issue belongs on the
             # description's closing or `Part of` line instead.
-            if printf '%s' "$TITLE" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
-              echo "::error::PR title ends in a number: ${TITLE:0:100}. Remove the trailing (#N) and name the issue on the description's closing line: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
+            if printf '%s' "$subject" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
+              how='Remove the trailing (#N)'
+              [ "$subject" = "$TITLE" ] || how='Write it as Revert "type(scope): summary"'
+              echo "::error::PR title ends in a number: ${TITLE:0:100}. $how and name the issue on the description's closing line: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
               say "fail: PR title, it ends in a number"
               {
                 echo "### PR title ends in a number"
@@ -875,6 +884,7 @@ jobs:
                 echo "A squash merge appends this pull request's own number, so the commit on the"
                 echo "default branch would carry two. Drop the trailing \`(#N)\` and name the issue"
                 echo "in the description: \`Closes #N\` when this completes it, \`Part of #N\` otherwise."
+                [ "$subject" = "$TITLE" ] || { echo; echo "A revert passes as \`Revert \"type(scope): summary\"\`, with no \`(#N)\` inside the quotes."; }
               } >> "$GITHUB_STEP_SUMMARY"
               exit 1
             fi
@@ -883,7 +893,10 @@ jobs:
             exit 0
           fi
 
-          echo "::error::PR title is not Conventional Commits: ${TITLE:0:60}. Rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
+          case "$TITLE" in
+            'Revert "'*) echo "::error::PR title reverts a title that is not Conventional Commits: ${TITLE:0:60}. Rewrite it as Revert \"type(scope): summary\", with one of the eleven types: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change" ;;
+            *) echo "::error::PR title is not Conventional Commits: ${TITLE:0:60}. Rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change" ;;
+          esac
           say "fail: PR title, it is not Conventional Commits"
           {
             echo "### PR title does not follow the convention"
@@ -893,6 +906,8 @@ jobs:
             echo "\`\`\`"
             echo
             echo "**Format**: \`type(scope): summary\`, or \`type(scope)!: summary\` for a breaking change"
+            echo
+            echo "**A revert**: \`revert: summary\`, or the title GitHub writes, \`Revert \"type(scope): summary\"\`, when what it quotes follows this format"
             echo
             echo "**Types are these eleven only** (\`@commitlint/config-conventional\`):"
             echo "\`feat\` \`fix\` \`docs\` \`style\` \`refactor\` \`perf\` \`test\` \`build\` \`ci\` \`chore\` \`revert\`"

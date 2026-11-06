@@ -21,6 +21,13 @@ pull requests and have no tag.
   row, or to `/triage` while it is labelled `needs-triage`. It gives only the
   reasons `scripts/guide-state.sh` prints on its new `why:` lines, copied from
   the arsenal's table and "How an item is sorted" (#834).
+- `ci / pr-title` and GitLab's `pr-title` accept the title GitHub's Revert
+  button, `gh pr revert` and a merge request's Revert write: `Revert "<title>"`
+  passes when `<title>` passes on its own, nested reverts included, so undoing
+  a merged change no longer starts with a red check. A refused revert title
+  names the form that passes, and `pr-label.yml` labels such a pull request
+  `revert`. No other free-form title passes, and no check name, job or input
+  changes (#839).
 - `/plinth:template-update` stops before it writes anything when the installed
   plinth targets an older template tag than the latest release's or than the
   tag the project's CI pin was tested with, and shows the commands to type, in

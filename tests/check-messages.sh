@@ -72,6 +72,10 @@ run_title "a title that is not Conventional Commits" "Add a thing"
 run_title "a 256-character title that is not" "$long"
 run_title "a title ending in a number" "fix: a thing (#12)"
 run_title "a 256-character title ending in a number" "fix: $long (#12)"
+run_title "a revert of a title that is not" 'Revert "Add a thing"'
+run_title "a 256-character revert of a title that is not" "Revert \"$long\""
+run_title "a revert of a title ending in a number" 'Revert "fix: a thing (#12)"'
+run_title "a 256-character revert of a title ending in a number" "Revert \"fix: $long (#12)\""
 
 echo "-- ci / pr-title and ci / docs: the description"
 cat > "$work/bin/gh" <<'SH'
