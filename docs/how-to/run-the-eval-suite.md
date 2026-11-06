@@ -137,7 +137,7 @@ write included. The open item and the words that count as naming it are in
 its `open.json`. It records the files the session changed, so a reader can
 see whether it started the next ticket, and every `gh` call it made. A shell
 profile that puts another `gh` first on the PATH would hide the stand-in, so
-a run whose commands ran `gh` while the stand-in logged no call is counted
+a run whose commands ran `gh`, or the guide's script, which runs it, while the stand-in logged no call is counted
 as not reaching it: that run did not start from the task's records.
 
 The guide tasks come from what `/plinth:guide` wrongly said in real use
@@ -146,8 +146,10 @@ and removes no file. Their project has records in the same `gh` stand-in: with
 `gh` logged out the guide says only that it could not read the repository. Each
 pattern is in the task's `open.json`. A pattern that says what a report must not
 say looks for the two words on one line, in English or Korean, so it can miss
-the same claim put another way, and a report that leaves the moment out passes
-it. Read `reader.md` for what the patterns cannot judge. The guide's own script
+the same claim put another way or across two lines, and a report that leaves
+the moment out passes it. The pattern that says what a report must name looks
+for a file name or `PyPI`, so a correct sentence naming neither fails it. Read
+`reader.md` for what the patterns cannot judge. The guide's own script
 has its tests in `tests/guide-cases.sh`; these grade the words the model writes.
 
 A question task records the

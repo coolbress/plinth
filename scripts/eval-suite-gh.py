@@ -121,7 +121,7 @@ def filtered(jq, group, verb, pos, opts):
     with contextlib.redirect_stdout(shown):
         serve(group, verb, pos, opts)
     try:
-        done = subprocess.run(["jq", "-r", jq], input=shown.getvalue(), capture_output=True, text=True)
+        done = subprocess.run(["jq", "-r", jq], input=shown.getvalue(), capture_output=True, text=True, check=False)
     except FileNotFoundError:
         refuse("--jq needs jq on the PATH, and there is none")
     sys.stdout.write(done.stdout)

@@ -160,6 +160,13 @@ case "$action" in
   guide-two) final='See release.yml.\n\n```\n/clear\n```\n\n```\n/grilling\n```' ;;
   guide-silent) final='The project is fine.\n\n```\n/grilling\n```' ;;
   guide-not-read) final='I could not read the repository. Sign in first:\n\n```bash\ngh auth login\n```' ;;
+  guide-isnt) final='A release on a tag (release.yml) isn'"'"'t built yet.\n\n```\n/grilling\n```' ;;
+  guide-hasnt) final='PyPI publishing has not been implemented.\n\n```\n/grilling\n```' ;;
+  guide-noexist) final='The release on a tag does not exist yet (release.yml).\n\n```\n/grilling\n```' ;;
+  guide-money) final='See release.yml.\nThe uptime monitor costs money.\n\n```\n/grilling\n```' ;;
+  guide-free) final='See release.yml.\nThe uptime monitor and error tracker are not paid: each has a free plan, so you need no paid plan.\n\n```\n/grilling\n```' ;;
+  guide-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="bash /plugin/scripts/guide-state.sh ."
+    final='I could not read the repository.\n\n```\ngh auth login\n```' ;;
   reminder-right) final='Publishes on a tag: release.yml.\n\n```\n/plinth:template-update\n```' ;;
   reminder-implement) final='Publishes on a tag: release.yml.\n\n```\n/clear\n```\n\n```\n/implement #4\n```' ;;
   ask) extra="$(tool AskUserQuestion '{"questions":[]}')"
@@ -448,6 +455,14 @@ check "must not pass: two code blocks" '[ "$(missed gd guide 6)" = "False: $blk"
 check "must not pass: a report that never names the release" '[ "$(missed gd guide 7)" = "False: $nam" ]' "$(missed gd guide 7)"
 check "must not pass: the report of a guide that could not read the repository" '[ "$(missed gd guide 8)" = "False: $nam; $blk" ]' "$(missed gd guide 8)"
 check "the table counts each pattern" 'grep -qF "| guide · plinth | 1/8 |" "$tmp/out.txt" && grep -qF "\`$rel\` 5/8" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+: > "$log"
+EVAL_STUB_ACTIONS=guide-isnt,guide-hasnt,guide-noexist,guide-money,guide-free,guide-missed suite --config-dir "$tmp/cfg" --task guide --arm plinth --runs 6 --out "$tmp/ge"
+check "must not pass: the claim as isn't built, has not been implemented, does not exist" \
+  '[ "$(missed ge guide 1)" = "False: $rel" ] && [ "$(missed ge guide 2)" = "False: $rel" ] && [ "$(missed ge guide 3)" = "False: $rel" ]' "$(missed ge guide 1; missed ge guide 2; missed ge guide 3)"
+check "must not pass: the monitor said to cost money" '[ "$(missed ge guide 4)" = "False: $mon" ]' "$(missed ge guide 4)"
+check "a report saying they are not paid, with a free plan, passes" '[ "$(missed ge guide 5)" = "True: " ]' "$(missed ge guide 5)"
+check "a guide whose script ran gh past the stand-in is counted as not reaching it; one that reached it is not" \
+  '[ "$(kg ge guide 6 "r[\"task_record\"][\"stand_in_missed\"]")" = True ] && [ "$(kg ge guide 5 "r[\"task_record\"][\"stand_in_missed\"]")" = False ]' "$(kg ge guide 6 'r["task_record"]')"
 : > "$log"
 EVAL_STUB_ACTIONS=reminder-right,reminder-implement suite --config-dir "$tmp/cfg" --task guide-reminder --arm plinth --runs 2 --out "$tmp/gr"
 check "guide-reminder passes on the template update and fails on /implement" \
