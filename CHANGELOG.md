@@ -13,6 +13,14 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:guide` no longer sends the template's monthly reminder, a person's
+  task or a record to `/implement`. The reminder issue, found by its marker or
+  title, routes to `/plinth:template-update`; an issue labelled
+  `ready-for-human`, `spec` or `wayfinder:*` other than `wayfinder:task` is said
+  to be what it is, that a person does it, and the guide goes on to the next
+  row, or to `/triage` while it is labelled `needs-triage`. It gives only the
+  reasons `scripts/guide-state.sh` prints on its new `why:` lines, copied from
+  the arsenal's table and "How an item is sorted" (#834).
 - `ci / pr-title` and GitLab's `pr-title` accept the title GitHub's Revert
   button, `gh pr revert` and a merge request's Revert write: `Revert "<title>"`
   passes when `<title>` passes on its own, nested reverts included, so undoing

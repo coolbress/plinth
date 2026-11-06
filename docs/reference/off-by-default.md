@@ -4,6 +4,7 @@ What a project made by `/plinth:new-project` starts with turned off, when each
 is worth turning on, and where the steps are. `/plinth:new-project` prints
 these as its last lines and `/plinth:guide` says them, both from the table
 below through `scripts/off-by-default.sh`; an item added here reaches both.
+The guide gives "How an item is sorted" as its reason, in these words.
 
 ## How an item is sorted
 
