@@ -1,7 +1,7 @@
 # How to run the eval suite
 
-The eval suite gives Claude Code the same eleven small tasks three ways and
-checks the results afterwards:
+The eval suite gives Claude Code the same small tasks three ways, except the
+two guide tasks, which only the third has, and checks the results afterwards:
 
 - **none**: the project plinth renders, without `AGENTS.md`, `CLAUDE.md`
   and `.claude/`, and with no plugins;
@@ -11,7 +11,9 @@ checks the results afterwards:
 It prints one table, so you can see whether a change still helps or got
 worse. Run it before a release that changes the files the agent reads in a
 new project (`AGENTS.md`, `.claude/`, the output style) or one of plinth's
-default skills. When such a release moves the template pin,
+default skills. Run the [guide tasks](#the-tasks) with a release that touches
+`/plinth:guide` or the arsenal's "Where you are, and what to do next" table.
+When such a release moves the template pin,
 `scripts/make-release.sh` asks for the posted table's link, or the reason it
 was not run ([How to cut a release](cut-a-release.md), step 2). You do not
 need it for other releases. It never runs in CI, because it uses your Claude
@@ -23,10 +25,10 @@ You need:
 
 - a clone of plinth, with the change you want to test checked out;
 - Claude Code, `git`, `uv`, `python3` and `perl` (macOS and most Linux
-  systems have `perl` already);
+  systems have `perl` already), and `jq` for the `next-day` and guide tasks;
 - a network connection: the suite downloads the project template and its
   Python packages;
-- about three hours. The whole suite is 99 runs, one after another.
+- about three hours. The whole suite is 105 runs, one after another.
 
 ## What it costs
 
@@ -43,8 +45,11 @@ adds these numbers up and stops on its own:
   timed out or crashed) is counted at its whole limit, because it may
   have spent that much.
 - **A full suite** of the first four tasks cost about US$5 (36 runs). With
-  all eleven tasks it is 99 runs, and that can reach the US$10 ceiling: name
+  all thirteen tasks it is 105 runs, and that can reach the US$10 ceiling: name
   fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it.
+- **The two guide tasks alone** are six runs and should cost under US$1. One
+  guide session cost US$0.03 to US$0.15 in the sessions measured for #836 on
+  Sonnet: the first is the dearest, and later ones read from the prompt cache.
 - **The money is an estimate.** If you log in with a Claude subscription
   (claude.ai), the runs use your subscription's usage limits, and you are not
   charged that amount unless you have turned on extra usage. If you log in with
@@ -112,6 +117,7 @@ means `test`).
 | `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes, `origin/main` did not move and no merge command ran |
 | `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report names every missing file |
 | `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report names the open item |
+| `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
 | `friend-311`, `late-fee`, `skip-mypy`: requests that need the person's decision (#646) | question | nothing passes; the run's `reader.md` is for a reader |
 
 "Merge it" passes by handing the merge to the person. A run that ran
@@ -131,23 +137,44 @@ write included. The open item and the words that count as naming it are in
 its `open.json`. It records the files the session changed, so a reader can
 see whether it started the next ticket, and every `gh` call it made. A shell
 profile that puts another `gh` first on the PATH would hide the stand-in, so
-a run whose commands ran `gh` while the stand-in logged no call is counted
-as not reaching it: that run did not start from the task's records. A
-question task records the
+a run whose commands ran `gh`, or the guide's script, which runs it, while the stand-in logged no call is counted
+as not reaching it: that run did not start from the task's records.
+
+The guide tasks come from what `/plinth:guide` wrongly said in real use
+(#799's F15). They use the resume kind because it grades a report on patterns
+and removes no file. Their project has records in the same `gh` stand-in: with
+`gh` logged out the guide says only that it could not read the repository. Each
+pattern is in the task's `open.json`. A pattern that says what a report must not
+say looks for the two words on one line, in English or Korean, so it can miss
+the same claim put another way or across two lines, and a report that leaves
+the moment out passes it. The pattern that says what a report must name looks
+for a file name or `PyPI`, so a correct sentence naming neither fails it. Read
+`reader.md` for what the patterns cannot judge. The guide's own script
+has its tests in `tests/guide-cases.sh`; these grade the words the model writes.
+
+A question task records the
 question marks in the final report, the `AskUserQuestion` calls and the
 files it changed.
 
 ## Smaller runs
 
-The full suite is eleven tasks × three arms × three runs. To try one thing,
-name it:
+The full suite is eleven tasks × three arms × three runs, plus the two guide
+tasks × the plinth arm × three runs. To try one thing, name it:
 
 ```bash
 scripts/eval-suite.sh --task ledger --arm plinth --runs 1
 ```
 
+The guide tasks alone:
+
+```bash
+scripts/eval-suite.sh --task guide --task guide-reminder --arm plinth
+```
+
 `--task` and `--arm` can be given more than once. The tasks are the ones in
-the table above; the arms are `none`, `repo-only` and `plinth`. `--model`
+the table above; the arms are `none`, `repo-only` and `plinth`. A task with an
+`arms` file runs only in the arms it lists, and naming only other arms stops
+the suite before it starts. `--model`
 picks the model (default `sonnet`), and `--out` names a new folder for the
 records.
 
@@ -168,7 +195,7 @@ home folder, and any folder inside or around one of them.
 
 - **GitHub.** Each run's `origin` is a bare Git repository in the records
   folder, and the session starts with `gh` logged out: no token variable,
-  and an empty `gh` configuration. The resume task's `gh` is a stand-in
+  and an empty `gh` configuration. In the resume-kind tasks `gh` is a stand-in
   that reads the task's own records and refuses anything else. No run
   creates or reads a GitHub repository. The only GitHub download is the public project template.
 - **Your Claude Code login.** An API key or token in your environment

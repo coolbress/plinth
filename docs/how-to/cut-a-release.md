@@ -107,8 +107,8 @@ the move changes what a new project's agent reads, and then asks for
    version's `CHANGELOG.md` section. The tag goes on the commit that set the
    version: a pull request merged after it stays unreleased. It does not read
    the why-file this time, so any clone at the merged `main` can run it.
-8. Tell installers to run `claude plugin update plinth`, then `/reload-plugins`,
-   plus any one-time command the version's `CHANGELOG.md` section names (those
+8. Tell installers to run `claude plugin marketplace update plinth`, then
+   `claude plugin update plinth@plinth`, then `/reload-plugins`, plus any one-time command the version's `CHANGELOG.md` section names (those
    so far are in [Install, in detail](../../README.md#install-in-detail)). A
    release that raises a dependency's pin names
    `claude plugin update <name>@plinth` for that entry: neither

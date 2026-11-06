@@ -11,8 +11,27 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- The eval suite has two tasks that grade what `/plinth:guide` says (#836):
+  `guide` and `guide-reminder`, plinth arm only, three runs each. A report must
+  name the release on a tag, must not call it planned or not built, must not
+  call the uptime monitor or the error tracker paid, and must hold one code
+  block with the one command. These are the guide's false statements from real
+  use. The suite's read-only `gh` now serves `--jq`, which needs `jq` on the
+  PATH, and a task's new `arms` file limits the arms it runs in. Run them with
+  a release that touches the guide or the arsenal's table.
+
 ### Changed
 
+- `/plinth:guide` no longer sends the template's monthly reminder, a person's
+  task or a record to `/implement`. The reminder issue, found by its marker or
+  title, routes to `/plinth:template-update`; an issue labelled
+  `ready-for-human`, `spec` or `wayfinder:*` other than `wayfinder:task` is said
+  to be what it is, that a person does it, and the guide goes on to the next
+  row, or to `/triage` while it is labelled `needs-triage`. It gives only the
+  reasons `scripts/guide-state.sh` prints on its new `why:` lines, copied from
+  the arsenal's table and "How an item is sorted" (#834).
 - `ci / pr-title` and GitLab's `pr-title` accept the title GitHub's Revert
   button, `gh pr revert` and a merge request's Revert write: `Revert "<title>"`
   passes when `<title>` passes on its own, nested reverts included, so undoing
@@ -71,6 +90,18 @@ pull requests and have no tag.
   its issue once the project is current (coolbress/plinth-template#196).
   plinth's own `AGENTS.md` and pull-request form adopt the public-records
   rule, and `tests/template-rules-drift.sh` lists it in both.
+- `/plinth:new-project` renders plinth-template v1.41.0: every project carries
+  a how-to that gives its three updates in order, and the monthly reminder
+  gives the same order (coolbress/plinth-template#206); a new project calls
+  plinth v2.27.0, the commit the template's own CI calls, instead of v2.6.0
+  (coolbress/plinth-template#205); the release workflows install uv 0.13.7.
+  An existing project's plinth pin is not moved by `/plinth:template-update`:
+  when the tag's pin is newer, the plan offers it, `--plinth-pin tested`, and
+  only the person's confirmation applies it. `/plinth:floor-check` reports a
+  repository on v1.40.0 as behind. The README and the tutorial now update
+  plinth with `claude plugin marketplace update plinth` first, then
+  `claude plugin update plinth@plinth`: the plugin update alone stayed on the
+  old version in a measured run (coolbress/plinth-template#206).
 
 ## [2.27.0] - 2026-11-05
 

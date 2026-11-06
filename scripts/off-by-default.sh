@@ -11,6 +11,7 @@
 #                                          # "now:" for a step to take right away
 #   off-by-default.sh --check              # every docs/ Steps page, and its #anchor, exists (exit 1 if not)
 #   off-by-default.sh --project-phrases    # "<project file>\t<phrase>" per project-file item
+#   off-by-default.sh --why                # "How an item is sorted" on one line, links as their words
 #
 # A list with no rows, or a row this script cannot read, is an error (exit 1),
 # never an empty answer. A row whose last cell names a path is told only for
@@ -19,7 +20,7 @@ set -uo pipefail
 plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 list="${PLINTH_OFF_BY_DEFAULT:-$plugin/docs/reference/off-by-default.md}"
 docs_url="https://github.com/coolbress/plinth/blob/main"
-usage="usage: off-by-default.sh <archetype> [<project dir>] | --new <archetype> <project dir> | --check | --project-phrases"
+usage="usage: off-by-default.sh <archetype> [<project dir>] | --new <archetype> <project dir> | --check | --project-phrases | --why"
 [ $# -ge 1 ] || { echo "$usage" >&2; exit 2; }
 
 # The table's rows under "## The list", header and separator dropped; six
@@ -62,6 +63,12 @@ case "$1" in
     while IFS=$'\t' read -r _ _ _ cell _ _; do
       s="$(steps "$cell")"; [ "${s%% *}" = file ] && echo "${s#file }"
     done <<<"$rows"
+    exit 0 ;;
+  --why)
+    rule="$(awk '/^## How an item is sorted/{on=1; next} on && /^## /{exit} on' "$list" | paste -sd ' ' - |
+      sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/  +/ /g; s/^ //; s/ $//')"
+    [ -n "$rule" ] || { echo "off-by-default: no text under '## How an item is sorted' in $list" >&2; exit 1; }
+    echo "$rule"
     exit 0 ;;
   --new) [ $# -eq 3 ] || { echo "$usage" >&2; exit 2; }; new=1; shift ;;
   -*) echo "$usage" >&2; exit 2 ;;

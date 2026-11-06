@@ -66,7 +66,7 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.40.0 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.41.0 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
 ```
 
 Before any question, the generator checks the tools and your GitHub login
@@ -301,6 +301,7 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   through a credential that has it, pushed by you.
 - `cd my-app && claude`, then `/plinth:floor-check` to read the wall from
   the inside.
-- To move plinth to a new version later: `claude plugin update plinth`, then
-  `/reload-plugins`. A move from an older version can take one-time commands
-  first: [Install, in detail](../../README.md#install-in-detail).
+- To move plinth to a new version later: `claude plugin marketplace update
+  plinth`, then `claude plugin update plinth@plinth`, then `/reload-plugins`.
+  A move from an older version can take one-time commands first:
+  [Install, in detail](../../README.md#install-in-detail).

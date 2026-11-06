@@ -18,7 +18,9 @@
 # one with a previous/ folder: its files, committed on top as the squash commit
 # of the merged pull request its issues.json names. A task with an issues.json
 # gives its sessions a read-only gh (eval-suite-gh.py) that serves those
-# records offline instead of the logged-out one.
+# records offline instead of the logged-out one, and needs jq for its --jq. A
+# task with an `arms` file runs only in the arms it lists: guide and
+# guide-reminder grade what /plinth:guide says, which only the plinth arm has.
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -44,7 +46,7 @@
 # whole for a person to look at. At the end the records' size is printed.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day friend-311 late-fee skip-mypy)
+all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day guide guide-reminder friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
 session_timeout=900
@@ -77,6 +79,18 @@ for t in "${tasks[@]}"; do
   case "$k" in test|checked|merge|floor-check|resume|question) ;; *) die "task $t: unknown kind $k" ;; esac
 done
 for a in "${arms[@]}"; do case " ${all_arms[*]} " in *" $a "*) ;; *) die "no arm $a (arms: ${all_arms[*]})" ;; esac; done
+# Whether a task runs in an arm: all of them, unless its `arms` file lists fewer.
+task_in_arm() { # <task> <arm>
+  local f="$root/eval-suite/tasks/$1/arms"
+  [ ! -f "$f" ] || grep -qx "$2" "$f"
+}
+cells=0
+for t in "${tasks[@]}"; do
+  for a in "${arms[@]}"; do
+    if task_in_arm "$t" "$a"; then cells=$(( cells + 1 )); fi
+  done
+done
+[ "$cells" -gt 0 ] || die "nothing to run: no task named runs in the arms named (a task's arms file lists the arms it runs in)"
 
 # The person's own configuration, as it is before anything here changes it.
 home_real="$(cd "$HOME" && pwd -P)"
@@ -96,6 +110,9 @@ refuse_own() { # <dir>
 
 for tool in git uv uvx python3 perl claude; do
   command -v "$tool" >/dev/null || die "needs $tool on PATH"
+done
+for t in "${tasks[@]}"; do
+  [ ! -f "$root/eval-suite/tasks/$t/issues.json" ] || command -v jq >/dev/null || die "task $t needs jq on PATH: its read-only gh filters with it"
 done
 
 # Every pin the render needs, from the door; a missing one stops here.
@@ -317,11 +334,12 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
 }
 
 stopped=""
-total=$(( runs * ${#tasks[@]} * ${#arms[@]} ))
+total=$(( runs * cells ))
 i=0
 for n in $(seq 1 "$runs"); do
   for t in "${tasks[@]}"; do
     for a in "${arms[@]}"; do
+      task_in_arm "$t" "$a" || continue
       s="$(spent)"
       if over "$s" "$ceiling"; then
         stopped="ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n or the $(( total - i - 1 )) runs after it"
