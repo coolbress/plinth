@@ -11,7 +11,7 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, template-rules-drift and arsenal-freshness need network
+# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, template-rules-drift, arsenal-freshness and uv-pin need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```

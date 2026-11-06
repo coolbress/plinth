@@ -20,6 +20,22 @@ pull requests and have no tag.
   names the form that passes, and `pr-label.yml` labels such a pull request
   `revert`. No other free-form title passes, and no check name, job or input
   changes (#839).
+- plinth's CI installs uv 0.13.7, up from 0.12.9, in every job that installs it,
+  each with the release's own checksum. A consumer gets it by raising its
+  `coolbress/plinth` pin: `ci.yml` and `label.yml` on GitHub, the `include` in
+  `.gitlab-ci.yml` on GitLab. A project's own `release.yml` moves separately,
+  through `/plinth:template-update`. What a project may notice: since 0.13.0 uv
+  rejects a source archive with hard links or an unsupported tar extension
+  (`UV_LEGACY_TAR_BACKEND=1` opts out), `uv` downloads Python 3.15 by default
+  when a project pins no Python and none is installed (the template pins 3.12 in
+  `.python-version`), caches are rebuilt once, and a `uv_build` upper bound must
+  allow 0.13. uv also checks more downloads against recorded hashes, so a
+  `uv.lock` holding a wrong hash now fails. `tests/uv-pin.sh` fails when two
+  copies disagree, the template's at its pinned tag included, or when a checksum
+  is not the release's own. A weekly workflow on plinth's own repository,
+  `uv-pin-reminder`, keeps one issue open while the pinned release is 90 days old
+  or more and a newer one exists; it is not a check, and a new uv release cannot
+  turn a consumer's required check red (#841).
 - `/plinth:template-update` stops before it writes anything when the installed
   plinth targets an older template tag than the latest release's or than the
   tag the project's CI pin was tested with, and shows the commands to type, in

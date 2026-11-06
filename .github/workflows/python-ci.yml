@@ -148,8 +148,8 @@ jobs:
           persist-credentials: false
       - name: Install uv (official release, SHA256 verified)
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
@@ -239,8 +239,8 @@ jobs:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
       - name: Install uv (official release, SHA256 verified)
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
@@ -282,8 +282,8 @@ jobs:
           fetch-depth: 2
       - name: Install uv (official release, SHA256 verified)
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
@@ -561,8 +561,8 @@ jobs:
       - name: Install uv (official release, SHA256 verified)
         if: inputs.web
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
@@ -731,8 +731,8 @@ jobs:
       - name: Install uv (official release, SHA256 verified)
         if: inputs.web
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
@@ -1754,8 +1754,8 @@ jobs:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
       - name: Install uv (official release, SHA256 verified)
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
@@ -1922,8 +1922,8 @@ jobs:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
       - name: Install uv (official release, SHA256 verified)
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"

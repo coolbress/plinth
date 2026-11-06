@@ -89,8 +89,8 @@ jobs:
       # uv for the web checks' fixture projects, the release python-ci.yml pins.
       - name: Install uv (official release, SHA256 verified)
         env:
-          UV_VERSION: "0.12.9"
-          UV_SHA256: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
@@ -111,6 +111,12 @@ jobs:
       # with known violations.
       - name: ci / web-audit names a known violation, says what automated checks miss, and never fails
         run: ./tests/web-audit-cases.sh
+
+      - name: Every uv pin is one release and its checksum, the template's too
+        run: ./tests/uv-pin.sh
+
+      - name: A uv pin behind upstream opens one issue, and closes it with an ending once raised
+        run: ./tests/uv-pin-reminder-cases.sh
 
       # A stubbed `claude`: no model is called and no login is needed.
       - name: The eval suite refuses your own config, keeps GitHub out, stops at its ceiling, and its grader fails what it must
