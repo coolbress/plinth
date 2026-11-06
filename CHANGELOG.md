@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.28.0] - 2026-11-06
+
+Updating plinth now has one order wherever it is written: `claude plugin marketplace update plinth`, then `claude plugin update plinth@plinth`, then `/reload-plugins`, and `/plinth:template-update` stops before writing anything when the installed plinth is older than the template it would apply. `/plinth:new-project` renders plinth-template v1.41.0, whose projects carry a how-to giving their three updates in that order and call the plinth commit the template was tested with. `/plinth:guide` routes the template reminder, a person's task and a record away from `/implement` and states only facts its script read. A red or warning check's first message names what failed with one next action and a link. `ci / pr-title` accepts the title GitHub's Revert button writes. The reusable workflows install uv 0.13.7. A consumer gets the CI changes by raising every `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`), and the template's through `/plinth:template-update`.
+
+tested with plinth-template v1.41.0
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6682324587>
+
 ### Added
 
 - The eval suite has two tasks that grade what `/plinth:guide` says (#836):
@@ -4779,7 +4787,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.27.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.28.0...HEAD
+[2.28.0]: https://github.com/coolbress/plinth/releases/tag/v2.28.0
 [2.27.0]: https://github.com/coolbress/plinth/releases/tag/v2.27.0
 [2.26.0]: https://github.com/coolbress/plinth/releases/tag/v2.26.0
 [2.25.1]: https://github.com/coolbress/plinth/releases/tag/v2.25.1
