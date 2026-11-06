@@ -19,6 +19,28 @@ pull requests and have no tag.
   order; it never runs them. When the release cannot be read it warns, naming
   the installed target, and goes on. `/plinth:floor-check` names the same skew
   beside its template drift item; `ci / floor-check` does not (#843).
+- The first thing a red or warning check says now names what failed, gives one
+  next action and links to the page that explains, in at most 300 characters:
+  `ci / pr-title`, `ci / diff-size`, `ci / docs`'s closing-references line and
+  GitLab's matching `pr-title` lines. `ci / floor-check` keeps each message and
+  adds one next action and link to its FAIL, WARN and SKIP lines in CI, and any
+  FAIL now gives one `::error::` with the first and the count, so a red no
+  longer opens on GitHub's exit code. Apart from that annotation, only the words
+  change: no verdict, check name or trigger does (#837).
+  `tests/check-messages.sh` holds it.
+- The arsenal says what ships (#833). Its release-and-deploy row said a release
+  on a tag was planned, not built; it now says what each archetype does after
+  a merge, and `docs/how-to/run-a-project.md` points at it. That row and
+  step 9 name the monthly reminder issue and `/plinth:template-update`. The
+  skills only the person can start are on one list in the arsenal, and the
+  guide, the README and `run-a-project.md` point at it. `tests/arsenal-freshness.sh`
+  fails when a catalog cell contradicts the pinned template or what the plugin
+  installs, or names a closed issue as the plan.
+- Guidance facts that disagreed are corrected and each repeated one now has
+  one source: the one-time update commands live in the README, the skill
+  counts in the arsenal, and `tests/doc-pinned-facts.sh` and
+  `tests/template-rules-drift.sh` fail when the skill counts or the
+  squash-merge command differ (#835).
 - `/plinth:new-project` renders plinth-template v1.40.0: every project carries
   a how-to for undoing a merged change (coolbress/plinth-template#199), its
   agent keeps the person's computer out of public issues and pull requests

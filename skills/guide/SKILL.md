@@ -73,9 +73,9 @@ What to keep to:
 - The retrospective moment: say, in plain words, that `/retro` typed in the
   session being looked back on suggests rules and checks for the next run
   and changes nothing.
-- A skill typed only by the person (`/plinth:new-project`,
-  `/plinth:template-update`, `/implement`, `/triage`, `/retro`, this guide) is typed as
-  `/` and picked from the list, not pasted. Do not run the command yourself.
+- A skill on the list "Skills only the person can start", in
+  `${CLAUDE_PLUGIN_ROOT}/skills/arsenal/SKILL.md`, is typed as `/` and picked
+  from the list, not pasted. Do not run the command yourself.
 - `where: not read` means the script could not read the repository: say what
   was not read, from the line that says so, and the one thing that fixes it
   (for example, logging in with `gh auth login`); name no step.

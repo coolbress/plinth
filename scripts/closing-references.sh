@@ -18,13 +18,14 @@
 # afterwards starts no new run, and the title is not read.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOW="https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
 
 if [ "${EVENT:-}" != pull_request ]; then
   echo "not a pull request (${EVENT:-no event}): no description to read."
   exit 0
 fi
 case "${PR:-}" in
-  ''|*[!0-9]*) echo "::error::a pull_request event, but the pull request number reads '${PR:-}'"; exit 1 ;;
+  ''|*[!0-9]*) echo "::error::a pull_request event, but the pull request number reads '${PR:-}'. Re-run this job from the pull request: $HOW"; exit 1 ;;
 esac
 
 answer="$(mktemp)"; trap 'rm -f "$answer"' EXIT
@@ -41,7 +42,7 @@ if ! gh api graphql -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$PR" 
       }
     }
   }' >"$answer"; then
-  echo "::error::could not read #$PR's description and closing list from GitHub"
+  echo "::error::could not read #$PR's description and closing list from GitHub. Re-run this job; its token needs pull-requests: read and issues: read: $HOW"
   exit 1
 fi
 [ -z "${ANSWER_COPY:-}" ] || cp "$answer" "$ANSWER_COPY"
@@ -57,6 +58,16 @@ printf '%s\n' "$report"
   echo '```'
 } >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
 if [ "$rc" != 0 ]; then
-  echo "::error::#$PR's description would close an issue outside its closing line, or could not be read: see the lines above"
+  # The first FAIL names the issue, or what could not be read; the rest are in the log.
+  first="$(grep -m 1 '^  FAIL  ' <<<"$report" || true)"; first="${first#  FAIL  }"; first="${first:-it could not be read}"
+  case "$first" in
+    *"closes it when"*) next="Reword the sentence so the keyword does not stand before the number, or put it on the closing line" ;;
+    *"more than 100"*) next="Reword the description so it closes fewer issues" ;;
+    *) next="Re-run this job" ;;
+  esac
+  # At most 300 characters: what is cut is the first FAIL, never the action and link.
+  lead="#$PR's description: "; tail=". $next: $HOW"; room=$((300 - ${#lead} - ${#tail}))
+  [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
+  echo "::error::$lead$first$tail"
   exit 1
 fi

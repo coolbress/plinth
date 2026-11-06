@@ -45,6 +45,9 @@ jobs:
       - name: ci / pr-title fails a description that would close an issue outside its closing line
         run: ./tests/pr-title-description-cases.sh
 
+      - name: A red or warning check's annotations say what failed, one next action and a link that exists
+        run: ./tests/check-messages.sh
+
       - name: ci / diff-size names changes to the checks the description does not
         run: ./tests/weakened-checks-cases.sh
 
@@ -59,6 +62,11 @@ jobs:
 
       - name: plinth's own rules carry each rule shared with the pinned template
         run: ./tests/template-rules-drift.sh
+
+      - name: The arsenal says what the pinned template and the plugin ship
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tests/arsenal-freshness.sh
 
       - name: The label list has one source, read by the door and the checker
         run: ./tests/labels-single-source.sh

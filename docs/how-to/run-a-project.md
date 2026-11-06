@@ -246,7 +246,10 @@ see these: guidance only.
   one can pass the code-scan rule unscanned, which runs on `main` after the
   merge. After each plinth release, `/plinth:floor-check` says whether the
   repository is behind, and `/plinth:template-update` takes the update as a
-  draft pull request; a repository made before the merge ruleset gets
+  draft pull request. A project on GitHub rendered from template v1.39.0 or
+  later also gets a monthly reminder when it is behind: an issue titled
+  "Template update available: …". What to type for it is
+  `/plinth:template-update`. A repository made before the merge ruleset gets
   [the command that adds it](give-the-agent-its-own-account.md#a-repository-made-before-the-merge-ruleset).
   Every week or two, `/improve-codebase-architecture` finds what to deepen,
   and `/ponytail-audit`, [listed](#skills-plinth-lists-but-does-not-install),
@@ -259,11 +262,18 @@ see these: guidance only.
 - **If you forget:** the update pull requests are a default; taking them,
   and the template update you type, are guidance only.
 
+## After a merge: release and deploy
+
+What puts a merged change out depends on the kind of project: the row "A
+merged change to put out" in
+[the catalog's table](../../skills/arsenal/SKILL.md#where-you-are-and-what-to-do-next)
+says it for each.
+
 ## What you type, and what runs by itself
 
-These skills, among others, run only when you type them: `/implement #N`,
-`/triage`, `/retro`, `/plinth:new-project`, `/plinth:template-update` and
-`/plinth:guide`. Asking in your own words
+Some skills run only when you type them:
+[the list is in the catalog](../../skills/arsenal/SKILL.md#skills-only-the-person-can-start).
+Asking in your own words
 ("update the template") does not run them: the agent may do the work by hand,
 without their safeguards (`/plinth:new-project` tries to delete a repository
 it could not finish; `/plinth:template-update` asks before each step), or not
@@ -271,7 +281,7 @@ at all. Type the skill.
 
 ### Skills plinth lists but does not install
 
-Six more of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
+More of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
 `/wait-what` among them, and `/ponytail-audit` are listed, not installed;
 `/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved them on
 [#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set

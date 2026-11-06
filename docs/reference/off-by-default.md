@@ -65,5 +65,6 @@ The columns, as the script reads them:
   has to do: it reports from the first pull request and is not required
   (#765). Without a project directory these rows are left out.
 
-A GitLab project gets no list: the reviewer is a GitHub workflow, and `web`
-is made on GitHub only.
+A GitLab project gets no list: the reviewer and the release workflow are
+GitHub workflows, immutable releases a GitHub setting, and `web` is made on
+GitHub only.

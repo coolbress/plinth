@@ -115,7 +115,8 @@ you can type instead:
   and the usual choice for a small project.
 - `--archetype=<kind>`: `cli`, `library`, `backend`, `data-ml`, or `web` for
   a web app with a database, which costs money to run (about US $13 a month
-  on Render; [where else it can run](../how-to/choose-where-a-web-app-runs.md)).
+  on Render; [where else it can run](../how-to/choose-where-a-web-app-runs.md), named
+  with `--hosting=<place>`).
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.
@@ -301,25 +302,5 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
 - `cd my-app && claude`, then `/plinth:floor-check` to read the wall from
   the inside.
 - To move plinth to a new version later: `claude plugin update plinth`, then
-  `/reload-plugins`. From v1.10.0 or earlier, also run
-  `claude plugin update taste-skill@plinth` once before `/reload-plugins`
-  (plinth's issue [#469](https://github.com/coolbress/plinth/issues/469)). From v1.11.0 or earlier, also run, once and in this order,
-  `claude plugin install plinth@plinth` and then `claude plugin prune` before
-  `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace under
-  the same name, and `update` does not install the moved copy. Without the
-  two commands nothing is lost: the official copy keeps all 25 of its skills,
-  and plinth reports the missing dependency with the command to run. `prune`
-  removes the official copy only where it arrived as plinth's dependency; one
-  you installed yourself stays beside plinth's ([#477](https://github.com/coolbress/plinth/issues/477)). From v2.1.0 or earlier,
-  `claude plugin prune` after the update also removes `/ponytail-audit`,
-  which plinth now lists instead of installing; without it the skill keeps
-  working ([#598](https://github.com/coolbress/plinth/issues/598)). From v2.18.0 or earlier, also run
-  `claude plugin update mattpocock-skills@plinth` once, and
-  `claude plugin update mattpocock-skills-extra@plinth` if you installed it,
-  before `/reload-plugins`: until then `mattpocock-skills` reports an error
-  ("Path not found" for `retro`), `/retro` is missing and the other skills
-  still name `CONTEXT.md`
-  ([#714](https://github.com/coolbress/plinth/issues/714)).
-  `/plinth:floor-check` names a dependency left at an older commit than
-  plinth's marketplace pins, with the command that moves it
-  ([#743](https://github.com/coolbress/plinth/issues/743)).
+  `/reload-plugins`. A move from an older version can take one-time commands
+  first: [Install, in detail](../../README.md#install-in-detail).

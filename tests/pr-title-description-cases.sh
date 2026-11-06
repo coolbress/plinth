@@ -197,7 +197,7 @@ warns "\"Skipped:\" alone warns" "does not say what the person checked themselve
 warns "\"Review: none\" alone warns" "does not say which review ran" "none (<reason>)"
 fields "the form's four answers left as they are, \"third-party\" with no name" $'## What I checked myself\n\n- [x] done' 'Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)'
 warns "\"- [x] done\" warns" "does not say what the person checked themselves" "says only \"- [x] done\""
-warns "the four answers copied from the form warn" "does not say which review ran" "names none of the four answers"
+warns "the four answers copied from the form warn" "does not say which review ran" "line says \"fresh-context | thir\""
 for r in 'third-party' 'none (<reason>)' 'none of the findings were fixed'; do
   fields "Review: $r" "$checked" "Review: $r"; warns "\"Review: $r\" warns" "does not say which review ran" "Review:"
 done
@@ -208,7 +208,7 @@ if [ "$(grep -c 'does not say what the person checked' "$FX/summary")" = 1 ] && 
 else no "a quote over two lines split the verdict line" "$FX/summary"; fi
 fields "the fields script crashes" "$checked" 'Review: fresh-context'
 echo 'raise SystemExit("boom")' >"$FX/temp/plinth-closing/description-fields.py"; run "a crashed fields script: the job still passes" 0
-warns "... and says the fields were not read" "the fields were not read" "a run where it finishes"
+warns "... and says the fields were not read" "the fields were not read" "re-run this job"
 setup "$what"$'\n\n'"$how"$'\n\n'"$by" ""
 run "a description without either field still passes" 0 "" "pass: PR description, merging it closes"
 warns "without the section it warns" "does not say what the person checked themselves" "What I checked myself"
