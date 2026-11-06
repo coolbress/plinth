@@ -43,7 +43,12 @@ jobs:
             exit 0
           fi
 
-          type="$(printf '%s' "$TITLE" | sed -nE 's/^([a-z]+)(\([^)]*\))?!?:.*/\1/p')"
+          # `Revert "<title>"`, the title GitHub gives a revert, carries no type
+          # of its own (#839).
+          case "$TITLE" in
+            'Revert "'*) type=revert ;;
+            *) type="$(printf '%s' "$TITLE" | sed -nE 's/^([a-z]+)(\([^)]*\))?!?:.*/\1/p')" ;;
+          esac
           if [ -z "$type" ]; then
             echo "no type in the title; ci / pr-title reports that."
             exit 0

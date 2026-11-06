@@ -42,6 +42,8 @@ open(out, "w", encoding="utf-8").write("\n".join(body).rstrip() + "\n")
 open(out + ".step", "w", encoding="utf-8").write("\n".join(stp) + "\n")
 PY
 }
+step "Check the title" "$work/title.sh" \
+  || { echo "  FAIL  the title step is not in python-ci.yml's pr-title job"; exit 1; }
 step "Fetch the description check from the same plinth commit as this workflow" "$work/fetch.sh" \
   || { echo "  FAIL  the fetch step is not in python-ci.yml's pr-title job"; exit 1; }
 step "The description closes no issue outside its closing line" "$work/check.sh" \
@@ -111,6 +113,76 @@ run() {
 what=$'## What and why\n\nThe pin moves to v1.5.3.'
 how=$'## How it was verified\n\nRan the tests.'
 by='Assisted-by: Claude:claude-opus-5-5'
+
+echo "-- the title: GitHub's own revert title (#839)"
+# title_is <label> <want exit> <title> [the output has this] [the summary has this]
+title_is() {
+  local rc; : >"$work/title.sum"
+  GITHUB_STEP_SUMMARY="$work/title.sum" TITLE="$3" bash "$work/title.sh" >"$work/title.out" 2>&1; rc=$?
+  if [ "$rc" != "$2" ]; then no "$1: exit $rc, want $2" "$work/title.out"
+  elif [ -n "${4:-}" ] && ! grep -qF -- "$4" "$work/title.out"; then no "$1: no \"$4\" in the output" "$work/title.out"
+  elif [ -n "${5:-}" ] && ! grep -qF -- "$5" "$work/title.sum"; then no "$1: no \"$5\" in the summary" "$work/title.sum"
+  else ok "$1"; fi
+}
+form='Revert "type(scope): summary"'
+title_is "a revert of a valid title passes" 0 'Revert "feat(x): y"' "" "pass: PR title follows the convention"
+title_is "a revert of a breaking title passes" 0 'Revert "feat(api)!: y"'
+title_is "a revert of a revert of a valid title passes" 0 'Revert "Revert "feat: y""'
+title_is "three reverts deep passes" 0 'Revert "Revert "Revert "feat: y"""'
+title_is "a revert of a title with quotes in it passes" 0 'Revert "fix: say "hi" twice"'
+title_is "a revert of an invalid title fails, naming the form that passes" 1 'Revert "fix stuff"' "$form" "fail: PR title, it is not Conventional Commits"
+title_is "... and the summary names it too" 1 'Revert "fix stuff"' "" "$form"
+title_is "a revert of an invented type fails" 1 'Revert "research: a note"' "$form"
+title_is "a revert of a revert of an invalid title fails" 1 'Revert "Revert "fix stuff""' "$form"
+title_is "an empty revert fails" 1 'Revert ""' "$form"
+title_is "a revert of an empty revert fails" 1 'Revert "Revert """' "$form"
+title_is "no closing quote fails" 1 'Revert "feat: y' "$form"
+title_is "a closing quote missing inside a nested revert fails" 1 'Revert "Revert "feat: y"' "$form"
+title_is "words after the closing quote fail" 1 'Revert "feat: y" and more' "$form"
+title_is "the (#N) suffix rule still holds inside the quotes" 1 'Revert "fix: x (#12)"' "$form" "fail: PR title, it ends in a number"
+title_is "... and its summary names the form that passes" 1 'Revert "fix: x (#12)"' "" "$form"
+title_is "... and after them" 1 'Revert "fix: x" (#12)' "$form"
+title_is "\"Revert\" with no quotes is still free form" 1 'Revert feat: y' "Rewrite it as type(scope): summary"
+title_is "lowercase \"revert\" with quotes is still free form" 1 'revert "feat: y"' "Rewrite it as type(scope): summary"
+title_is "the conventional revert: title still passes" 0 'revert: undo the thing'
+title_is "a plain title that fails does not offer the revert form" 1 'fix stuff' "Rewrite it as type(scope): summary"
+
+echo "-- the label for a revert title (#839): pr-label.yml's step, run with a fake gh"
+python3 - "$root/.github/workflows/pr-label.yml" "$work/label.sh" <<'PY2'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+r = next(i for i, l in enumerate(lines) if l.strip() == "run: |")
+deep = len(lines[r]) - len(lines[r].lstrip())
+body = []
+for l in lines[r + 1:]:
+    if l.strip() and len(l) - len(l.lstrip()) <= deep:
+        break
+    body.append(l[deep + 2:])
+open(sys.argv[2], "w", encoding="utf-8").write("\n".join(body).rstrip() + "\n")
+PY2
+mkdir -p "$work/labelbin"
+cat >"$work/labelbin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "pr view") exit 0 ;;
+  "pr edit") printf '%s\n' "$*" >>"$LABEL_CALLS" ;;
+  *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$work/labelbin/gh"
+# labels <label> <title> <the label it adds, or nothing>
+labels() {
+  LABEL_CALLS="$work/label.calls"; export LABEL_CALLS; : >"$LABEL_CALLS"
+  if ! PATH="$work/labelbin:$PATH" TITLE="$2" NUMBER=7 REPO=o/r IS_FORK=false bash "$work/label.sh" >"$work/label.out" 2>&1; then no "$1: the step failed" "$work/label.out"
+  elif [ -z "$3" ] && [ -s "$LABEL_CALLS" ]; then no "$1: it added a label" "$LABEL_CALLS"
+  elif [ -n "$3" ] && ! grep -qF -- "--add-label $3" "$LABEL_CALLS"; then no "$1: no label $3" "$work/label.out" "$LABEL_CALLS"
+  else ok "$1"; fi
+}
+labels "a revert title GitHub writes is labelled revert" 'Revert "feat(x): y"' revert
+labels "a nested one too" 'Revert "Revert "feat: y""' revert
+labels "revert: summary still is" 'revert: undo it' revert
+labels "feat: summary still is feat" 'feat: y' feat
+labels "a free-form title gets none" 'Revert the thing' ""
 
 echo "-- the fetch step"
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12\n\n'"$by" "12"

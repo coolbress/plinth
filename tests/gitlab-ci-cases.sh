@@ -231,6 +231,19 @@ title "research: a corpus note";      expect "an invented type fails" 1 "fail: M
 title "Draft: research: a note";      expect "a draft with an invented type fails" 1 "fail: MR title"
 title "fix: x (#12)";                 expect "a trailing (#N) passes: GitLab's squash adds no number" 0 "pass: MR title"
 title "";                             expect "not a merge request: a pass that says so" 0 "pass: MR title, does not apply"
+# A merge request's Revert, titled by GitLab (#839).
+form='Revert "type(scope): summary"'
+title 'Revert "feat(x): y"';          expect "a revert of a valid title passes" 0 "pass: MR title follows the convention"
+title 'Revert "Revert "feat: y""';    expect "a revert of a revert of a valid title passes" 0 "pass: MR title follows the convention"
+title 'Draft: Revert "feat: y"';      expect "a draft prefix before a revert is left out" 0 "pass: MR title follows the convention"
+title 'Revert "fix: x (#12)"';        expect "a revert of a title ending in (#N) passes, as that title does here" 0 "pass: MR title follows the convention"
+title 'Revert "fix stuff"';           expect "a revert of an invalid title fails, naming the form that passes" 1 "fail: MR title, it is not Conventional Commits" "$form"
+title 'Revert "Revert "fix stuff""';  expect "a revert of a revert of an invalid title fails" 1 "fail: MR title" "$form"
+title 'Revert ""';                    expect "an empty revert fails" 1 "fail: MR title" "$form"
+title 'Revert "feat: y';              expect "no closing quote fails" 1 "fail: MR title" "$form"
+title 'Revert "feat: y" and more';    expect "words after the closing quote fail" 1 "fail: MR title" "$form"
+title 'fix stuff';                    expect "a plain title that fails" 1 "fail: MR title"
+refuse "... does not offer the revert form" "$form"
 CI_OPEN_MERGE_REQUESTS='g/p!3' run_job pr-title
 expect "a branch pipeline while a merge request is open fails, it is not a pass" 1 "fail: MR title, this is a branch pipeline while merge request g/p!3 is open"
 expect "... and says so for the description too" 1 "fail: MR description, this is a branch pipeline while merge request g/p!3 is open"
@@ -399,6 +412,8 @@ desc "$what"$'\n\nCloses https://gitlab.example/g/p/-/merge_requests/3 and #12\n
 expect "a closing line led by a merge request URL names the issue after it" 0 "the closing line names #12"
 TITLE="fix: resolve #31 on start-up" desc "$what"$'\n\n'"$by"
 expect "a title whose keyword stands before an issue fails, quoting the title" 1 "FAIL  #31" "the title: fix: resolve #31 on start-up"
+TITLE='Revert "fix: resolve #31 on start-up"' desc "$what"$'\n\n'"$by"
+expect "a revert title whose keyword stands before an issue fails too (#839)" 1 "FAIL  #31"
 TITLE="fix: resolve #31 on start-up" desc "$what"$'\n\nCloses #31\n\n'"$by"
 expect "... and passes when the closing line names that issue" 0 "the closing line names #31"
 desc "$what"$'\n\n'"$by"
