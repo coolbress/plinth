@@ -108,7 +108,9 @@ is in the arsenal's [Installed by default](skills/arsenal/SKILL.md#installed-by-
 table and the paragraph under it.
 
 Third-party marketplaces do not auto-update. To move to a new version, run
-`claude plugin update plinth`, then `/reload-plugins`. Moving from v1.10.0 or
+`claude plugin marketplace update plinth`, then
+`claude plugin update plinth@plinth`, then `/reload-plugins`: without the
+marketplace update, the plugin update can stay on the old version. Moving from v1.10.0 or
 earlier also takes `claude plugin update taste-skill@plinth` once, before
 `/reload-plugins`: the dependency's source changed, and until then it fails to
 load (#469). Moving from v1.11.0 or earlier also takes, once and in this order,
@@ -198,7 +200,7 @@ and otherwise prints the repository to delete; a step it can go on without,
 such as a label, is named and left. If the create's own answer is lost, it
 does neither, so check whether the repository exists (its failure paths run in CI against a mocked
 `gh`). It renders
-[plinth-template v1.40.0](https://github.com/coolbress/plinth-template/releases/tag/v1.40.0),
+[plinth-template v1.41.0](https://github.com/coolbress/plinth-template/releases/tag/v1.41.0),
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its release commit, has
 created a repository on real GitHub, merged its first pull request and deleted
