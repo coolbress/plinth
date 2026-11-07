@@ -26,6 +26,11 @@
 # (#423). What is written before the push is the judgement, as with `verify`.
 #
 # It stops, and merges nothing, when:
+#   - on coolbress/plinth, the pull request is titled `chore(release): vX.Y.Z`
+#     and the head has no green `e2e` run (#855): the merge is what reaches an
+#     installation with auto-update on, and it cannot be taken back. A
+#     dispatched run does not show in `gh pr checks`, so the checks below do not
+#     hold on it, and a ruleset cannot require it of release pull requests alone;
 #   - a check on the head is not SUCCESS once they have all finished;
 #   - the head has no `third-party / review` and --no-reviewer was not given:
 #     whether to merge without a reviewer is the person's call, not a default.
@@ -132,6 +137,29 @@ if [ "$only_round" = 1 ]; then
     exit 1
   fi
   exit 0
+fi
+
+# -- a release's e2e (#855) ----------------------------------------------------
+# By this repository's name, not by whether it has an e2e.yml: another repository
+# may use the title with no such workflow, and a 404 read as "nothing to wait
+# for" would turn this off the day the file were renamed here. Any read that
+# fails stops. The select repeats the head, as make-release.sh's does. Before the
+# checks, so a missing run is said without waiting for them.
+if [ "$(tr '[:upper:]' '[:lower:]' <<<"$repo")" = coolbress/plinth ]; then
+  title="$(gh pr view "$pr" -R "$repo" --json title --jq .title)" || stop "cannot read the title of $pr"
+  if [[ "$title" =~ ^chore\(release\):\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    runs="$(gh api -X GET "repos/$repo/actions/workflows/e2e.yml/runs" -f "head_sha=$head" -F per_page=100 \
+              --jq ".workflow_runs[] | select(.head_sha == \"$head\") | \"\(.conclusion // .status) \(.html_url)\"" 2>&1)" \
+      || stop "cannot read the e2e runs on $head: $runs"
+    if ! grep -q '^success ' <<<"$runs"; then
+      branch="$(gh pr view "$pr" -R "$repo" --json headRefName --jq .headRefName)" || stop "cannot read the branch of $pr"
+      stop "no green e2e run on $head; a release merges only after one, because the merge reaches every installation with auto-update on:" \
+           "${runs:-(no run on that commit)}" \
+           "run it: gh workflow run e2e.yml --ref $branch --repo $repo   (on HTTP 403, through scripts/with-admin-token.sh: docs/how-to/cut-a-release.md, step 5)" \
+           "then, once it is green, run this again"
+    fi
+    echo "e2e: green on this head: $(grep -m1 '^success ' <<<"$runs" | cut -d' ' -f2)"
+  fi
 fi
 
 # -- checks ----------------------------------------------------------------

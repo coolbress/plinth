@@ -18,8 +18,10 @@ pull requests and have no tag.
   minutes before its `e2e` passed, because merging is what moves the version
   on the default branch. `scripts/make-release.sh` run 2 now also accepts a
   green `e2e` run on a commit with the tagged commit's tree, which is what a
-  squash merge of an up-to-date branch leaves, and refuses any other. Nothing
-  refuses a merge made before the run: the order is in
+  squash merge of an up-to-date branch leaves, and refuses any other.
+  `scripts/merge-when-green.sh` refuses to merge a release pull request of this
+  repository until its head has a green `e2e` run, and prints the dispatch
+  command. The merge button and `gh pr merge` do not ask: the order is in
   [How to cut a release](docs/how-to/cut-a-release.md).
 - `README.md` and the getting-started tutorial give the optional auto-update
   step (#855): in a session outside any project, `/plugin`, Marketplaces,

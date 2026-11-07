@@ -138,19 +138,30 @@ run `/plugin`, and choose Marketplaces, plinth, Enable auto-update. Outside
 matters: pressed inside a project, the same choice rewrites that project's
 committed `.claude/settings.json`. The same menu turns it off.
 
-With it on, a new version arrives a few minutes after the first message of an
-interactive session, and a notice asks for `/reload-plugins`. It arrives once
-the release pull request has merged, which can be before the tag and the
-GitHub Release (#855). It also brings raised dependency pins, with no
-`claude plugin update <name>@plinth` and without asking. It applies in every
-project on the machine; a project whose own settings set `autoUpdate` wins over
-your choice, and plinth-template sets none.
+With it on, plinth moved about five to six and a half minutes after the first
+message of an interactive session in the measured runs, and a notice asked for
+`/reload-plugins`. A new version can arrive once the release pull request has
+merged, before the tag and the GitHub Release (#855). It also brings raised
+dependency pins, with no `claude plugin update <name>@plinth` and without
+asking. It is your setting, so it applies in every project on the machine. One
+limit was seen: a project whose own settings carry `autoUpdate: true` put the
+machine's record back to `true` over a `false` in user settings, so it can turn
+this on again after you turned it off. plinth-template's settings do not carry
+it; the opposite case, a project's `false` against your `true`, was not run.
 
-Measured on coolbress/plinth-template#208 with Claude Code 2.1.318: an older
-install moved with its dependency pin in 3 of 3 runs, and turning it off stopped
-updates in the 1 run that tried it. Not measured: whether it replaces the
-one-time commands above, so run any that a version's section of `CHANGELOG.md`
-names; and whether a pin raised on `main` before a release arrives on its own.
+Measured on coolbress/plinth-template#208 on macOS with Claude Code 2.1.318: an
+install at v2.18.0 moved to what `main` carried, with its dependency pin, in 3
+of 3 runs, and turning it off stopped updates in the 1 run that tried it. Not
+measured:
+
+- a new release arriving at an install on the version before it, under a
+  known first message (v2.28.0's arrival is in #855, without one);
+- a release that adds a dependency, or a dependency that carries a hook;
+- Linux, Windows, the desktop app, IDE extensions, cloud sessions and
+  `claude -p`;
+- whether it replaces the one-time commands above, so run any that a version's
+  section of `CHANGELOG.md` names;
+- whether a pin raised on `main` before a release arrives on its own.
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
