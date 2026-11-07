@@ -87,7 +87,10 @@ for name in checked:  # grows while it runs: a called file is read in its turn
             refuse(f"{shown}:{n}: {value}: {WHY}")
 for path in sorted(p for p in root.iterdir() if p.suffix in {".yml", ".yaml"}):
     shown = f".github/workflows/{path.name}"
-    if path.name in checked or not any(re.search(r"\bworkflow_call\b", line) for _, _, line in fc.yaml_lines(fc.read(path))):
+    # Every line but a comment: a trigger can sit in a block scalar (`on: >-`), so
+    # yaml_lines would skip it. A word in a run block asks for an exclusion; that fails closed.
+    if path.name in checked or not any(re.search(r"\bworkflow_call\b", line) and not line.lstrip().startswith("#")
+                                       for line in fc.read(path).splitlines()):
         continue
     if path.name not in excluded:
         refuse(f"{shown}: names workflow_call, so a consumer may call it, and is "
@@ -138,6 +141,7 @@ done
 
 # Spellings and near misses.
 f=python-ci.yml
+must_refuse "a third-party action in a block scalar" "$f" "$(printf '  seeded:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: >-\n          astral-sh/setup-uv@%s\n' "$sha")" ">-: every consumer"
 must_refuse "a quoted third-party action" "$f" "$(step "- uses: \"astral-sh/setup-uv@$sha\"")" "astral-sh/setup-uv@$sha"
 must_refuse "a third-party reusable workflow called by a job" "$f" "$(printf '  seeded:\n    uses: o/r/.github/workflows/w.yml@%s\n' "$sha")" "o/r/.github/workflows/w.yml@$sha"
 must_refuse "a uses the reader cannot parse" "$f" "$(step "- {uses: astral-sh/setup-uv@$sha}")" "cannot read"
@@ -172,7 +176,9 @@ must_refuse "a new reusable workflow, quoted flow form" new.yml '"on": {"workflo
 must_refuse "a new reusable workflow, .yaml" new.yaml "on: workflow_call" "$unread"
 must_allow "a new workflow that is not reusable" new.yml "on: [push]"
 must_allow "a new workflow naming workflow_call in a comment" new.yml "# on: workflow_call"
-must_allow "a new workflow naming workflow_call in a run block" new.yml "$(step "- run: |")"$'\n'"          echo workflow_call"
+must_refuse "a new reusable workflow, folded block scalar" new.yml "$(printf 'on: >-\n  workflow_call\n')" "$unread"
+must_refuse "a new reusable workflow, literal block scalar" new.yml "$(printf 'on: |-\n  workflow_call\n')" "$unread"
+must_refuse "a new workflow naming workflow_call in a run block, which cannot be told from a trigger" new.yml "$(step "- run: |")"$'\n'"          echo workflow_call" "$unread"
 
 # The one exclusion: named, with a reason, and not read.
 must_allow "a third-party action in the excluded file" plinth-ci.yml "$(step "- uses: astral-sh/setup-uv@$sha")"
