@@ -63,7 +63,6 @@ the move changes what a new project's agent reads, and then asks for
    the new version's heading with your why above them, and commits on
    `release/vX.Y.Z`.
 4. Push that branch and open a pull request titled `chore(release): vX.Y.Z`.
-   Land it as [CONTRIBUTING.md](../../CONTRIBUTING.md#land-a-change) says.
    It needs no third-party review: with `pass-release-pull-requests` on,
    `third-party / review` passes a pull request with exactly that title and
    a diff of run 1's shape (only the two manifests and `CHANGELOG.md`; each
@@ -73,18 +72,20 @@ the move changes what a new project's agent reads, and then asks for
    summoning the reviewer, and its log says
    `release pull request: not summoned`
    ([what it passes without summoning](configure-the-third-party-reviewer.md#pull-requests-it-passes-without-summoning)).
-   Merge when the checks are green; do not wait for a review that was not
+   Do not wait for a review that was not
    asked for. To have the release note read, a person posts the summons on
    the pull request; an agent does not write it (`AGENTS.md`).
-5. Update `main`: `git switch main && git pull --ff-only`.
-6. Start the `e2e` workflow on the merged commit, and wait for it to pass.
-   It runs two jobs: `e2e`, the door's journey on a backend and then on a
-   web repository, and `upgrade`, which updates
+5. Start the `e2e` workflow on the release branch, and wait for it to pass.
+   The merge is what reaches an installation with auto-update on: the version
+   moves on the default branch, which is what its marketplace follows (#855).
+   So this comes before the merge, and a failed run has reached no one.
+   The workflow runs two jobs: `e2e`, the door's journey on a backend and then
+   on a web repository, and `upgrade`, which updates
    a repository rendered at the template tag an earlier release pinned and
    checks that the tested plinth pin lands in it (#519). Both must pass:
 
    ```bash
-   gh workflow run e2e.yml --ref main
+   gh workflow run e2e.yml --ref release/vX.Y.Z
    ```
 
    If `gh` answers HTTP 403, your login cannot run workflows: run the same
@@ -93,11 +94,22 @@ the move changes what a new project's agent reads, and then asks for
    terminal:
 
    ```bash
-   scripts/with-admin-token.sh gh workflow run e2e.yml --ref main
+   scripts/with-admin-token.sh gh workflow run e2e.yml --ref release/vX.Y.Z
    ```
 
-   If a nightly run already passed on that exact commit, skip this step.
-7. Run the same command again:
+   Name the run in the pull request's description. If it fails, read its log.
+   When the fault was GitHub's or the run's, dispatch it again. When it needs
+   a fix, or when `main` moves before the merge, close the pull request, delete
+   `release/vX.Y.Z` on origin and locally, land the fix if there is one, and
+   start again from step 3 with the same number: nothing has used it yet, and
+   run 1 moves any new `Unreleased` entries. Updating the branch instead would
+   change its files, leave those entries under `Unreleased` and ask for another
+   run anyway.
+6. Merge the pull request once that run and the checks are green, as
+   [CONTRIBUTING.md](../../CONTRIBUTING.md#land-a-change) says. Nothing refuses
+   an earlier merge: this order is yours to keep.
+7. Update `main`: `git switch main && git pull --ff-only`.
+8. Run the same command again:
 
    ```bash
    scripts/make-release.sh vX.Y.Z "${TMPDIR:-/tmp}/why.md"
@@ -107,7 +119,10 @@ the move changes what a new project's agent reads, and then asks for
    version's `CHANGELOG.md` section. The tag goes on the commit that set the
    version: a pull request merged after it stays unreleased. It does not read
    the why-file this time, so any clone at the merged `main` can run it.
-8. Tell installers to run `claude plugin marketplace update plinth`, then
+   First it looks for the green `e2e` run: on the commit it tags, or on a
+   commit with that commit's tree. A squash merge of an up-to-date branch
+   leaves the same tree, so the release branch's run counts.
+9. Tell installers to run `claude plugin marketplace update plinth`, then
    `claude plugin update plinth@plinth`, then `/reload-plugins`, plus any one-time command the version's `CHANGELOG.md` section names (those
    so far are in [Install, in detail](../../README.md#install-in-detail)). A
    release that raises a dependency's pin names
@@ -132,7 +147,8 @@ the move changes what a new project's agent reads, and then asks for
 | `release/vX.Y.Z` already exists on origin | Finish that release, or delete the leftover branch |
 | Run this from `main` | `git switch main` |
 | Shallow clone | `git fetch --unshallow` |
-| A local tag points elsewhere (run 2) | `git tag -d vX.Y.Z`, then run step 7 again |
+| A local tag points elsewhere (run 2) | `git tag -d vX.Y.Z`, then run step 8 again |
 | `main` has uncommitted changes or differs from `origin/main` | Commit or discard them, then `git pull --ff-only` |
-| No green `e2e` run on the commit (run 2) | Wait for the run you started; if it failed, read its log and dispatch it again. If `main` moved past the release commit, dispatch it from a branch at that commit |
-| The section's why fails a check (run 2) | Fix the version's section of `CHANGELOG.md` in a pull request, merge it, and run step 7 again |
+| No green `e2e` run on the commit or its tree (run 2) | Wait for the run you started; if it failed, read its log and dispatch it again. The version has already moved on `main`, so do this first. If `main` is still at the release commit, dispatch with `--ref main`; if it moved past, from a branch at that commit |
+| Cannot list the `e2e` runs (run 2) | Check that `gh` is logged in and can reach GitHub, then run step 8 again |
+| The section's why fails a check (run 2) | Fix the version's section of `CHANGELOG.md` in a pull request, merge it, and run step 8 again |

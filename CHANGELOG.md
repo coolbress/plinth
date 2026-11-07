@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- A release runs `e2e` on its branch before its pull request merges (#855).
+  On 2026-11-06 v2.28.0 reached an installation with auto-update on eight
+  minutes before its `e2e` passed, because merging is what moves the version
+  on the default branch. `scripts/make-release.sh` run 2 now also accepts a
+  green `e2e` run on a commit with the tagged commit's tree, which is what a
+  squash merge of an up-to-date branch leaves, and refuses any other. Nothing
+  refuses a merge made before the run: the order is in
+  [How to cut a release](docs/how-to/cut-a-release.md).
+
 ## [2.28.0] - 2026-11-06
 
 Updating plinth now has one order wherever it is written: `claude plugin marketplace update plinth`, then `claude plugin update plinth@plinth`, then `/reload-plugins`, and `/plinth:template-update` stops before writing anything when the installed plinth is older than the template it would apply. `/plinth:new-project` renders plinth-template v1.41.0, whose projects carry a how-to giving their three updates in that order and call the plinth commit the template was tested with. `/plinth:guide` routes the template reminder, a person's task and a record away from `/implement` and states only facts its script read. A red or warning check's first message names what failed with one next action and a link. `ci / pr-title` accepts the title GitHub's Revert button writes. The reusable workflows install uv 0.13.7. A consumer gets the CI changes by raising every `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`), and the template's through `/plinth:template-update`.

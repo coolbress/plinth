@@ -44,7 +44,7 @@ calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. Run them all before o
   `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
 - The default review is a fresh-context review, before the description is written: a new subagent (not a fork of this session) or a new session, given only the diff (`git diff origin/main...HEAD`), the issue's acceptance criteria and this file's Code Review Rules, never this conversation; its findings go in the description as it reported them. A same-session `/code-review` helps but is not independent; say which review ran. `third-party / review` only records an accepted reviewer's signal on the commit.
   A release pull request (`chore(release): vX.Y.Z` whose diff has run 1's shape: the two manifests' `"version"` lines raised and `CHANGELOG.md` only adding lines, the replaced `[Unreleased]` link aside) is passed by that check without a summons or a review, by design
-  ([cut a release](docs/how-to/cut-a-release.md), step 4): merge it on green checks; do not wait for the reviewer, toggle draft, or post the summons for it.
+  ([cut a release](docs/how-to/cut-a-release.md), step 4): merge it on green checks and a green `e2e` on its branch (step 5); do not wait for the reviewer, toggle draft, or post the summons for it.
   Whoever opens or merges a pull request reads the reviewer's inline comments
   (`gh api repos/<owner>/<repo>/pulls/<n>/comments`; the check's log lists their
   URLs), not only its summary, and the description says what was done with

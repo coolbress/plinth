@@ -9,7 +9,8 @@
 # (floor-check.py), waits for every check on that pull request to be green,
 # squash-merges it, reads main back, and deletes the repository. The `e2e`
 # workflow runs it nightly and on demand; make-release.sh run 2 accepts a
-# green run on the commit it is about to tag, and nothing else.
+# green run on the commit it is about to tag or on a commit with its tree, and
+# nothing else.
 #
 # The instance is a backend, not the door's default cli: the archetype with
 # the most machinery. Only a service archetype shapes the ruleset with the
