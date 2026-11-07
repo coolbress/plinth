@@ -10,7 +10,9 @@
 # item fails while one that names it passes, the guide tasks (#836) fail a canned
 # report with the old false sentences and pass a correct one, and a run that read a path under
 # eval-suite/ is not counted. A graded run loses its rebuildable caches (#687) and grades the
-# same again; --keep-caches and a failed grade keep them.
+# same again; --keep-caches and a failed grade keep them. A session that did not run (the
+# usage limit) is not graded and stops the suite, an existing --out resumes unless a pinned
+# value changed, and an --out under a folder with rules a session would load is refused (#864).
 #
 # The stubs: `claude` acts out a session from EVAL_STUB_ACTIONS (one action
 # per run number) and reports EVAL_STUB_COST; `uvx` stands in for copier and
@@ -19,7 +21,7 @@
 # an issues.json, whose sessions get the runner's read-only gh instead. The grader itself
 # runs for real: `uv sync --frozen` installs canary's locked ruff, mypy and
 # pytest (network the first time).
-# shellcheck disable=SC2034  # sha, repo, bare_ok, gone, rd and tab are used inside the check() command strings
+# shellcheck disable=SC2034  # sha, repo, bare_ok, gone, nr, nr_why, rd, rr_named, up_name and tab are used inside the check() command strings
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 command -v uv >/dev/null || { echo "  FAIL  uv is not installed"; exit 1; }
@@ -35,7 +37,8 @@ bad() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf 
 check() { if eval "$2"; then ok "$1"; else bad "$1" "${3:-}"; fi; }
 
 mkdir -p "$tmp/bin" "$tmp/home/.claude" "$tmp/mine/sub" "$tmp/cfg/plugins"
-echo '{"version": 2, "plugins": {"plinth@plinth": []}}' > "$tmp/cfg/plugins/installed_plugins.json"
+mkdir -p "$tmp/cfg/plugins/plinth-copy"; echo one > "$tmp/cfg/plugins/plinth-copy/file"
+printf '{"version": 2, "plugins": {"plinth@plinth": [{"installPath": "%s"}]}}\n' "$tmp/cfg/plugins/plinth-copy" > "$tmp/cfg/plugins/installed_plugins.json"
 ln -s "$tmp/home/.claude" "$tmp/link"
 log="$tmp/stub.log"; : > "$log"
 
@@ -70,7 +73,7 @@ cat > "$tmp/bin/claude" <<'EOF'
 #!/usr/bin/env bash
 set -uo pipefail
 case "${1:-}" in
-  --version) echo "0.0.0 (stub claude)"; exit 0 ;;
+  --version) echo "${EVAL_STUB_VERSION:-0.0.0 (stub claude)}"; exit 0 ;;
   auth) [ "${2:-}" = status ] && [ -z "${EVAL_STUB_LOGGED_OUT:-}" ] && exit 0; exit 1 ;;
   -p) ;;
   plugin)
@@ -106,8 +109,21 @@ fix() { perl -pi -e 's/i\.due < today/i.due <= today/' "$1/src/probe/ledger.py";
 hi() { perl -pi -e 's/Hello, /Hi, /' "$1/src/probe/__init__.py"; }
 tool() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"%s","input":%s}]}}\n' "$1" "$2"; }
 bashcmd="" final="done" extra=""
+# A session's last line, as Claude Code wrote it on 2026-11-07 when the limit was hit (#864).
+canned() { # <is_error> <turns> <cost> <text>
+  printf '{"type":"system","subtype":"init","output_style":"default"}\n'
+  printf '{"type":"result","subtype":"success","is_error":%s,"num_turns":%s,"total_cost_usd":%s,"usage":{"input_tokens":0,"output_tokens":0},"result":"%s"}\n' "$1" "$2" "$3" "$4"
+}
+limit_text="You've hit your 5-hour limit · resets 5:20pm"
 case "$action" in
   nothing) ;;
+  limit) canned true 1 0 "$limit_text"; exit 1 ;;
+  limit-late) fix .; canned true 7 0.3 "$limit_text"; exit 1 ;;
+  first-turn-error) canned true 1 0.02 "API Error: 500 upstream"; exit 1 ;;
+  error-no-text) canned true 0 0 ""; exit 1 ;;
+  free) canned false 3 0 "All done."; exit 0 ;;
+  failed-with-cost) fix .; canned true 5 0.4 "API Error: 500 upstream"; exit 1 ;;
+  says-limit) fix .; canned false 3 0.25 "Documented the 5-hour limit: you have hit your usage limit when this shows."; exit 0 ;;
   stale-lock) fix .; perl -pi -e 's/^dependencies = \[\]/dependencies = ["iniconfig"]/' pyproject.toml ;;
   crash) echo "killed before its result" >&2; exit 142 ;;
   fix-ruff) fix .; printf 'import os\n' > src/probe/extra.py ;;
@@ -547,6 +563,182 @@ check "a session that reports no cost is charged its budget: US\$2, then US\$1, 
 suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 1 --ceiling 0 --out "$tmp/d"
 check "a ceiling of 0 starts no run (exit 3)" '[ "$(rc)" = 3 ] && [ "$(sessions)" = 0 ]' "$(cat "$tmp/out.txt")"
 
+# --- a session that did not run is not graded, and the suite stops there (#864)
+: > "$log"
+EVAL_STUB_ACTIONS=push-main,limit,nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/l"
+lr="$tmp/l/runs/ledger-plinth-2"
+check "the limit message, is_error, 1 turn and US\$0: not graded, the reason recorded, and the suite stops (exit 3)" \
+  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 2 ] && [ ! -e "$lr/grade.json" ] && grep -qF "5-hour limit · resets 5:20pm" "$lr/not-run.txt" && [ ! -e "$tmp/l/runs/ledger-plinth-3" ]' "$(cat "$tmp/out.txt")"
+check "the last lines count it apart: one graded, stopped at run 2 with the reason, one not started" \
+  'grep -qF "1 run graded; stopped at run 2 (ledger plinth 2): usage limit (You'"'"'ve hit your 5-hour limit · resets 5:20pm); 1 not started." "$tmp/out.txt"' "$(tail -12 "$tmp/out.txt")"
+check "the summary counts it apart from the graded runs" \
+  'grep -qF "Runs graded: 1 of 1 started." "$tmp/l/summary.md" && grep -qF "Not run, so in no table (\`not-run.txt\` says why): ledger-plinth-2." "$tmp/l/summary.md"' "$(cat "$tmp/l/summary.md")"
+check "no table includes it: the row is the graded run alone" \
+  'grep -qF "| ledger · plinth | 1/1 | 1/1 |" "$tmp/l/summary.md"' "$(cat "$tmp/l/summary.md")"
+check "a run not run loses its caches like a graded one" '[ ! -e "$lr/repo/.venv" ] && [ -s "$lr/stream.jsonl" ]' "$(ls -a "$lr" "$lr/repo")"
+: > "$log"
+EVAL_STUB_ACTIONS=limit suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/l0"
+check "a first run that did not run leaves no table row at all" \
+  '[ "$(rc)" = 3 ] && ! grep -q "| ledger · plinth |" "$tmp/l0/summary.md" && grep -qF "0 runs graded; stopped at run 1" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+notrun() { # <label> <action> <text in the reason>
+  : > "$log"
+  EVAL_STUB_ACTIONS="$2" suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --out "$tmp/nr-$2"
+  nr="$tmp/nr-$2/runs/ledger-plinth-1" nr_why="$3"
+  check "$1" '[ "$(rc)" = 3 ] && [ "$(sessions)" = 1 ] && [ ! -e "$nr/grade.json" ] && grep -qF "$nr_why" "$nr/not-run.txt"' "$(cat "$tmp/out.txt")"
+}
+notrun "a limit that ends a session after real turns is not run" limit-late "usage limit (You've hit"
+check "and its cost stays in the total" 'grep -qF "Model cost: \$0.30" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+notrun "an error with no turn past the first is not run, whatever it cost" first-turn-error "API Error: 500 upstream"
+notrun "an error with no text says what it read" error-no-text "the session reported an error"
+notrun "a cost of 0 with no error is not run" free "reported a cost of 0"
+still_graded() { # <label> <action>
+  : > "$log"
+  EVAL_STUB_ACTIONS="$2" suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/sg-$2"
+  nr="$tmp/sg-$2/runs/ledger-plinth-1"
+  check "$1" '[ "$(rc)" = 0 ] && [ -e "$nr/grade.json" ] && [ ! -e "$nr/not-run.txt" ]' "$(cat "$tmp/out.txt")"
+}
+still_graded "a run that failed with a cost above 0 is still graded" failed-with-cost
+still_graded "a final report that only mentions a usage limit, with no error, is still graded" says-limit
+still_graded "a crash with no result line is still graded" crash
+# --- resume: an existing --out runs only what is missing, and the tables cover both (#864)
+: > "$log"
+EVAL_STUB_ACTIONS=push-main,limit suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/re"
+cp "$tmp/re/runs/ledger-plinth-1/grade.json" "$tmp/re-first.json"
+mkdir -p "$tmp/re/runs/ledger-plinth-3/repo"; : > "$tmp/re/runs/ledger-plinth-3/stream.jsonl"
+: > "$log"
+EVAL_STUB_ACTIONS=push-main,worktree-branch,nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/re"
+check "a resume runs only the missing runs, and ends with exit 0" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 2 ] && ! grep -q "^session run=ledger-plinth-1 " "$log" && grep -q "== run 2 of 3: ledger plinth 2" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "it says how many runs it keeps, and renders nothing again" \
+  'grep -qF "== resuming: 1 graded run kept" "$tmp/out.txt" && ! grep -q "^uvx " "$log"' "$(cat "$tmp/out.txt"; cat "$log")"
+check "the graded run is not touched" 'cmp -s "$tmp/re-first.json" "$tmp/re/runs/ledger-plinth-1/grade.json"'
+check "the tables cover the runs of both invocations" \
+  'grep -qF "| ledger · plinth | 2/3 | 3/3 | 1/3 | 1/3 | 1/3 |" "$tmp/re/summary.md" && grep -qF "Runs graded: 3 of 3 started." "$tmp/re/summary.md" && ! grep -q "^Not run" "$tmp/re/summary.md"' "$(cat "$tmp/re/summary.md")"
+check "the run not run and the one cut short are kept aside, named in the summary" \
+  'grep -qF "limit" "$tmp/re/set-aside/ledger-plinth-2.1/not-run.txt" && [ -d "$tmp/re/set-aside/ledger-plinth-3.1/repo" ] && grep -qF "ledger-plinth-2.1, ledger-plinth-3.1." "$tmp/re/summary.md"' "$(cat "$tmp/re/summary.md"; ls "$tmp/re/set-aside")"
+: > "$log"
+suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/re"
+check "a resume with nothing missing starts no session, and prints the same row" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 0 ] && grep -qF "| ledger · plinth | 2/3 | 3/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+: > "$log"
+EVAL_STUB_ACTIONS=nothing,limit suite --config-dir "$tmp/cfg" --task ledger --arm none --arm plinth --runs 2 --out "$tmp/ro"
+: > "$log"
+EVAL_STUB_ACTIONS=nothing,nothing suite --config-dir "$tmp/cfg" --task ledger --arm none --arm plinth --runs 2 --out "$tmp/ro"
+check "it carries on in the same order, round by round" \
+  '[ "$(grep "^session " "$log" | sed -E "s/^session run=([^ ]+) .*/\1/" | tr "\n" " ")" = "ledger-none-2 ledger-plinth-2 " ]' "$(grep '^session' "$log")"
+
+refuse_resume() { # <label> <what the message names> <the command>
+  : > "$log"
+  local label="$1"
+  rr_named="$2"; shift 2
+  "$@"
+  check "$label" '[ "$(rc)" = 2 ] && [ "$(sessions)" = 0 ] && [ ! -s "$log" ] && grep -qF "$rr_named" "$tmp/out.txt" && grep -qF "refusing to resume" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; cat "$log")"
+}
+same=(--config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/re")
+refuse_resume "a changed model refuses to resume, naming the model" "model: recorded sonnet, now haiku" suite "${same[@]}" --model haiku
+EVAL_STUB_VERSION="9.9.9 (stub claude)" refuse_resume "a changed Claude Code version refuses, naming it" "Claude Code version: recorded 0.0.0 (stub claude), now 9.9.9 (stub claude)" suite "${same[@]}"
+cp "$tmp/re/conditions.txt" "$tmp/re-conditions.txt"
+perl -pi -e 's/^plinth commit=.*/plinth commit=0000000/' "$tmp/re/conditions.txt"
+refuse_resume "a changed plinth commit refuses, naming it" "plinth commit: recorded 0000000, now " suite "${same[@]}"
+cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
+perl -pi -e 's/^template SHA=.*/template SHA=1111111/' "$tmp/re/conditions.txt"
+refuse_resume "a changed template SHA refuses, naming it" "template SHA: recorded 1111111, now $sha" suite "${same[@]}"
+cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
+perl -pi -e 's/^model=.*/model=opus/; s/^template SHA=.*/template SHA=1111111/' "$tmp/re/conditions.txt"
+refuse_resume "every changed value is named, not only the first" "model: recorded opus, now sonnet" suite "${same[@]}"
+check "and the second of them too" 'grep -qF "template SHA: recorded 1111111" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
+perl -pi -e 's/^Claude Code version=.*/Claude Code version=unread/' "$tmp/re/conditions.txt"
+refuse_resume "a recorded value that could not be read refuses" "Claude Code version: recorded unread" suite "${same[@]}"
+cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
+refuse_resume "another --runs refuses: the tables would not be of one suite" "runs: recorded 3, now 4" suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 4 --out "$tmp/re"
+refuse_resume "another --task refuses" "tasks: recorded ledger, now cli-name" suite --config-dir "$tmp/cfg" --task cli-name --arm plinth --runs 3 --out "$tmp/re"
+mkdir -p "$tmp/plain"
+refuse_resume "a folder with no recorded conditions refuses" "$tmp/plain holds no conditions.txt" suite --config-dir "$tmp/cfg" --task ledger --out "$tmp/plain"
+: > "$log"
+EVAL_STUB_COST=0.6 suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 3 --ceiling 1 --out "$tmp/rceil"
+EVAL_STUB_COST=0.6 suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 3 --ceiling 1 --out "$tmp/rceil"
+check "a resume under the same ceiling stops again at once: the cost so far is all the directory's" \
+  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 2 ]' "$(cat "$tmp/out.txt")"
+EVAL_STUB_COST=0.6 suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 3 --ceiling 2 --out "$tmp/rceil"
+check "under a higher one it runs the rest, its budget what is left of it" \
+  '[ "$(rc)" = 0 ] && grep -q "^session run=ledger-none-3 .* budget=0.8000 " "$log" && grep -qF "| ledger · none | 0/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; grep '^session' "$log")"
+: > "$log"
+EVAL_STUB_ACTIONS=break-grade suite --config-dir "$tmp/cfg" --task late-fee --arm plinth --runs 1 --out "$tmp/rg"
+EVAL_STUB_ACTIONS=ask suite --config-dir "$tmp/cfg" --task late-fee --arm plinth --runs 1 --out "$tmp/rg"
+check "a run whose grade failed runs again, its folder kept whole and its cost still counted" \
+  '[ "$(rc)" = 0 ] && [ -e "$tmp/rg/runs/late-fee-plinth-1/grade.json" ] && [ -e "$tmp/rg/set-aside/late-fee-plinth-1.1/grade-error.txt" ] && [ -d "$tmp/rg/set-aside/late-fee-plinth-1.1/repo/.venv" ] && grep -qF "Model cost: \$0.50" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+check "a run cut short with no cost reported is charged its limit: the three sessions' US\$0.75 and US\$2" \
+  'grep -qF "Model cost: \$2.75" "$tmp/re/summary.md"' "$(cat "$tmp/re/summary.md")"
+: > "$log"
+EVAL_STUB_ACTIONS=break-grade,nothing,nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+EVAL_STUB_ACTIONS=limit suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+check "not started counts only what never started: run 1 again stopped, runs 2 and 3 already graded" \
+  '[ "$(rc)" = 3 ] && grep -qF "2 runs graded; stopped at run 1 (ledger plinth 1): usage limit" "$tmp/out.txt" && grep -qF "; 0 not started." "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+echo two > "$tmp/cfg/plugins/plinth-copy/file"
+refuse_resume "another plinth installed in the --config-dir refuses, the checkout unchanged" "plinth in --config-dir: recorded " suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+echo one > "$tmp/cfg/plugins/plinth-copy/file"
+mkdir -p "$tmp/cfg-no-path/plugins"; echo '{"plugins": {"plinth@plinth": []}}' > "$tmp/cfg-no-path/plugins/installed_plugins.json"
+refuse_resume "a --config-dir whose installed plinth cannot be read refuses" "plinth in --config-dir: recorded " suite --config-dir "$tmp/cfg-no-path" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+: > "$log"
+EVAL_STUB_ACTIONS=break-grade,nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --ceiling 1 --out "$tmp/rcut"
+rm "$tmp/rcut/runs/ledger-plinth-2/cost.txt" "$tmp/rcut/runs/ledger-plinth-2/grade.json"
+: > "$log"
+EVAL_STUB_ACTIONS=nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --ceiling 1 --out "$tmp/rcut"
+check "every run cut short counts before the ceiling is read, a later one too: US\$2.25 against US\$1 starts no session (exit 3)" \
+  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 0 ] && grep -qF "ceiling reached: spent \$2.2500 of \$1" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; grep '^session' "$log")"
+# The real checkout's state, on a copy: tests must pass from a dirty tree as well as a clean one.
+cl="$tmp/clone"; mkdir -p "$cl"
+cp -R "$root/scripts" "$root/eval-suite" "$root/.claude-plugin" "$cl/"
+git -C "$cl" init -q -b main; git -C "$cl" add -A; git -C "$cl" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm copy
+copy_suite() { "$cl/scripts/eval-suite.sh" --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --out "$tmp/rcopy" > "$tmp/out.txt" 2>&1; echo $? > "$tmp/rc"; }
+EVAL_STUB_ACTIONS=limit copy_suite
+echo "# changed" >> "$cl/scripts/new-project.sh"
+refuse_resume "an uncommitted change to a tracked file refuses, naming the plinth commit" "plinth commit: recorded " copy_suite
+git -C "$cl" checkout -q -- scripts/new-project.sh; echo x > "$cl/scripts/untracked"
+refuse_resume "and a new untracked file" "plinth commit: recorded " copy_suite
+rm "$cl/scripts/untracked"; git -C "$cl" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm next --allow-empty
+refuse_resume "and a new commit, on the real value" "plinth commit: recorded " copy_suite
+git -C "$cl" reset -q --hard HEAD~1
+: > "$log"
+EVAL_STUB_ACTIONS=nothing,nothing copy_suite
+check "back at the recorded commit it resumes" '[ "$(rc)" = 0 ] && [ "$(sessions)" = 2 ]' "$(cat "$tmp/out.txt")"
+
+# --- --out where the session would load rules of the folders above it (#864)
+above() { # <label> <what to plant, under $tmp/up> <named in the refusal>
+  rm -rf "$tmp/up"; mkdir -p "$tmp/up"
+  case "$2" in */) mkdir "$tmp/up/$2" ;; *) : > "$tmp/up/$2" ;; esac
+  : > "$log"
+  up_name="$3"
+  suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/up/new/records"
+  check "$1" '[ "$(rc)" = 2 ] && [ ! -s "$log" ] && [ ! -e "$tmp/up/new" ] && grep -qF "$tmp/up/$up_name" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; cat "$log")"
+}
+above "--out under a directory with a CLAUDE.md is refused before any run, naming it" CLAUDE.md CLAUDE.md
+above "and one with an AGENTS.md" AGENTS.md AGENTS.md
+above "and one with a CLAUDE.local.md" CLAUDE.local.md CLAUDE.local.md
+above "and one with a .claude/" .claude/ .claude
+up_name=.claude
+: > "$log"
+suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/home/records"
+check "the home directory's .claude counts: a session walks up to it" \
+  '[ "$(rc)" = 2 ] && [ ! -s "$log" ] && grep -qF "$tmp/home/.claude" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+mkdir -p "$tmp/up/real"; rm -rf "$tmp/up/.claude"; : > "$tmp/up/CLAUDE.md"; ln -s "$tmp/up/real" "$tmp/alias"
+: > "$log"
+suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/alias/records"
+check "a symlink is read through: the rules are above where the session really runs" \
+  '[ "$(rc)" = 2 ] && [ ! -s "$log" ] && grep -qF "$tmp/up/CLAUDE.md" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+rm -rf "$tmp/up" "$tmp/alias"
+mkdir -p "$tmp/sys"
+: > "$log"
+TMPDIR="$tmp/sys" suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1
+check "the default --out under the system temporary directory is not refused, and runs" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 1 ] && ls "$tmp/sys"/plinth-eval.*/runs/ledger-plinth-1/grade.json > /dev/null 2>&1' "$(cat "$tmp/out.txt")"
+: > "$tmp/sys/AGENTS.md"
+: > "$log"
+TMPDIR="$tmp/sys" suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1
+check "unless that directory carries one too" '[ "$(rc)" = 2 ] && [ ! -s "$log" ] && grep -qF "$tmp/sys/AGENTS.md" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
 # --- with no --config-dir: a temporary one, plinth installed from this checkout, deleted at exit
 made() { sed -nE 's/^claude plugin cfg=([^ ]+) args=plugin install .*/\1/p' "$log" | head -1; }
 : > "$log"
@@ -587,6 +779,14 @@ check "a run not graded, and one that read the hidden tests, are not passes: exi
 check "each says why" 'grep -q "floor-gaps-plinth-1 (not graded)" "$tmp/out.txt" && grep -q "floor-gaps-plinth-2 (read a path under eval-suite/, so not counted)" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,smoke-pass EVAL_STUB_COST=0.6 suite --smoke --ceiling 1 --out "$tmp/s4"
 check "a ceiling that stops it is exit 3, and not a pass" '[ "$(rc)" = 3 ] && grep -q "^smoke: 2 of $all_runs runs passed" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,limit suite --smoke --out "$tmp/s6"
+check "a smoke run stopped by the limit is exit 3, and names the run as not run" \
+  '[ "$(rc)" = 3 ] && grep -q "^smoke: 3 of $all_runs runs passed.*floor-gaps-plinth-2 (not run: usage limit" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,smoke-pass suite --smoke --out "$tmp/s6"
+check "a smoke run resumes: the rest run, and the verdict is over all of them" \
+  '[ "$(rc)" = 0 ] && grep -q "^smoke: $all_runs of $all_runs runs passed; run again by a resume: floor-gaps-plinth-2.1\.$" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/s6"
+check "records a smoke run made take only a smoke run" '[ "$(rc)" = 2 ] && grep -qF "smoke: recorded yes, now no" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 : > "$log"
 for clash in "--task ledger" "--arm none" "--runs 1" "--model haiku" "--config-dir $tmp/cfg"; do
   # shellcheck disable=SC2086  # the option and its value are two words
