@@ -107,7 +107,7 @@ plinth-template sets it. What each plugin costs and how the cap was measured
 is in the arsenal's [Installed by default](skills/arsenal/SKILL.md#installed-by-default)
 table and the paragraph under it.
 
-Third-party marketplaces do not auto-update. To move to a new version, run
+Third-party marketplaces do not auto-update by default. To move to a new version, run
 `claude plugin marketplace update plinth`, then
 `claude plugin update plinth@plinth`, then `/reload-plugins`: without the
 marketplace update, the plugin update can stay on the old version. Moving from v1.10.0 or
@@ -132,6 +132,25 @@ list but keeps its files at the old commit, so until then
 is missing and the other skills still name `CONTEXT.md` (#714). No `prune` is needed.
 `/plinth:floor-check` names a dependency left at an older commit than plinth's
 marketplace pins, with the command that moves it (#743).
+
+Auto-update is optional. To turn it on, start a session outside any project,
+run `/plugin`, and choose Marketplaces, plinth, Enable auto-update. Outside
+matters: pressed inside a project, the same choice rewrites that project's
+committed `.claude/settings.json`. The same menu turns it off.
+
+With it on, a new version arrives a few minutes after the first message of an
+interactive session, and a notice asks for `/reload-plugins`. It arrives once
+the release pull request has merged, which can be before the tag and the
+GitHub Release (#855). It also brings raised dependency pins, with no
+`claude plugin update <name>@plinth` and without asking. It applies in every
+project on the machine; a project whose own settings set `autoUpdate` wins over
+your choice, and plinth-template sets none.
+
+Measured on coolbress/plinth-template#208 with Claude Code 2.1.318: an older
+install moved with its dependency pin in 3 of 3 runs, and turning it off stopped
+updates in the 1 run that tried it. Not measured: whether it replaces the
+one-time commands above, so run any that a version's section of `CHANGELOG.md`
+names; and whether a pin raised on `main` before a release arrives on its own.
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 

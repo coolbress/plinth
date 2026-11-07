@@ -21,6 +21,12 @@ pull requests and have no tag.
   squash merge of an up-to-date branch leaves, and refuses any other. Nothing
   refuses a merge made before the run: the order is in
   [How to cut a release](docs/how-to/cut-a-release.md).
+- `README.md` and the getting-started tutorial give the optional auto-update
+  step (#855): in a session outside any project, `/plugin`, Marketplaces,
+  plinth, Enable auto-update. It also brings raised dependency pins, and the
+  same menu turns it off. Third-party marketplaces do not auto-update by
+  default; plinth-template's settings stay without it
+  (coolbress/plinth-template#208).
 
 ## [2.28.0] - 2026-11-06
 
