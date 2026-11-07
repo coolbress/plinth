@@ -107,6 +107,9 @@ jobs:
       - name: The door's Actions allowlist and SECURITY.md route agree with the template it renders
         run: ./tests/release-allowlist.sh
 
+      - name: plinth's reusable workflows use only actions every consumer's Actions allowlist allows
+        run: ./tests/reusable-workflow-allowlist.sh
+
       # The workflow's own Node and Chrome steps, then a real audit of a page
       # with known violations.
       - name: ci / web-audit names a known violation, says what automated checks miss, and never fails
