@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# scripts/template-update.sh (#232) on fixtures, offline. `gh` and `uvx` are
-# mocks; git is real, and `origin` is a bare repository on disk, so a push is
+# scripts/template-update.sh (#232) on fixtures. Offline but for one read, the
+# template's pull-request form at the pinned tag (#856); unreadable is a FAIL.
+# `gh` and `uvx` are mocks; git is real, and `origin` is a bare repository on disk, so a push is
 # a real push that can be read back. The mock copier acts out what copier
 # 9.18.2 was measured to do: a clean update rewrites the answers file and a
 # template file; a conflict leaves the file unmerged in the index (`UU`)
@@ -126,6 +127,51 @@ exec "$real_git" "\$@"
 MOCK
 chmod +x "$work/bin/gh" "$work/bin/uvx" "$work/bin/git"
 
+# ── the description against the form (#856) ─────────────────────────────
+# Every line of the form outside its comments is a field: a heading, or a
+# `Label:` line. Each must be in the description, in the form's order. A line
+# of the form that is neither, or a form with none, is a failure, not a pass.
+cat > "$work/form-fields.py" <<'PY'
+import re, sys
+form, description = (open(p, encoding="utf-8").read() for p in sys.argv[1:3])
+fields = [l.strip() for l in re.sub(r"<!--.*?-->", "", form, flags=re.S).splitlines() if l.strip()]
+lines = [l.strip() for l in description.splitlines()]
+failed = not fields
+if failed:
+    print("the form has no field")
+at = -1
+for field in fields:
+    if re.match(r"#{1,6} ", field):
+        hits = [i for i, l in enumerate(lines) if l == field]
+    elif re.fullmatch(r"[A-Z][\w -]*:", field):
+        hits = [i for i, l in enumerate(lines) if l.startswith(field + " ")]
+    else:
+        print(f"the form has a line this test does not read: {field}")
+        failed = True
+        continue
+    later = [i for i in hits if i > at]
+    if later:
+        at = later[0]
+    else:
+        print(f"{field}: {'out of the order of the form' if hits else 'not written'}")
+        failed = True
+sys.exit(1 if failed else 0)
+PY
+form_fields() { python3 "$work/form-fields.py" "$1" "$2"; } # <form> <description>
+# What ci / pr-title says about a description, by its own script at this commit.
+pr_title_says() { # <description file>
+  jq -n --rawfile b "$1" '{data:{repository:{pullRequest:{body:$b}}}}' > "$work/fields.json"
+  python3 "$root/scripts/description-fields.py" PR "$work/fields.json" 2>&1
+}
+fields_pass() { # <what the fixture is> <description file>
+  local says; says="$(pr_title_says "$2")"
+  if [ "$(grep -c '^pass:' <<<"$says")" = 2 ] && ! grep -q 'not yet confirmed' <<<"$says"
+  then ok "ci / pr-title's check warns about neither field on $1"
+  else bad "ci / pr-title's check on $1"; printf '%s\n' "$says" | sed 's/^/        /'; fi
+}
+# The text under one heading of a description, up to the next heading.
+section() { awk -v h="## $2" '$0 == h { f = 1; next } /^## / { f = 0 } f' "$1"; }
+
 # A consumer repository at an old template tag, pushed to a bare origin.
 fixture() { # <name> → sets $repo and $BARE, cleans up what an earlier case left
   repo="$work/$1"; BARE="$work/$1.git"
@@ -203,6 +249,40 @@ else bad "Assisted-by last line: '$(tail -n 1 <<<"$body")'"; fi
 if grep -q "task.yml" <<<"$body"; then bad "an untouched local issue form is listed as changed"
 else ok "a local issue form copier did not touch is not in the description"; fi
 if grep -qi "wait" "$work/gh.log"; then bad "something waited on checks"; else ok "nothing waits on the branch's checks"; fi
+# ── the description follows the form at the pinned tag (#856) ───────────
+cp "$work/gh.log.body" "$work/clean.body"
+fields_pass "the description of a clean update" "$work/clean.body"
+checked="$(section "$work/clean.body" "What I checked myself")"
+if grep -q "^Not a person's check" <<<"$checked" && ! grep -qi "no person" <<<"$checked" && tr '\n' ' ' <<<"$checked" | grep -q "conflict marker in a file the update changed" \
+   && grep -q "reviewable lines" <<<"$checked" && grep -qi "plinth pin" <<<"$checked" \
+   && grep -qF "own checks had not run" <<<"$checked"
+then ok "What I checked myself says what the script checked (conflicts, size, pin), that it is not a person's check, and that the project's checks had not run"
+else bad "What I checked myself"; printf '%s\n' "$checked" | sed 's/^/        /'; fi
+if grep -qx 'Review: none (no review had run when this pull request opened)' "$work/clean.body"
+then ok "the Review: line says no review has run"
+else bad "the Review: line"; sed 's/^/        /' "$work/clean.body"; fi
+form_url="https://raw.githubusercontent.com/coolbress/plinth-template/$target_ref/template/.github/PULL_REQUEST_TEMPLATE.md"
+if curl -fsSL --retry 3 -o "$work/form.md" "$form_url" 2>/dev/null && [ -s "$work/form.md" ]; then
+  if said="$(form_fields "$work/form.md" "$work/clean.body")"; then ok "the description writes every field of the form at $target_ref, in its order"
+  else bad "the description against the form at $target_ref"; printf '%s\n' "$said" | sed 's/^/        /'; fi
+  { cat "$work/form.md"; printf '\n## A field the form gained\n'; } > "$work/form-more.md"
+  if said="$(form_fields "$work/form-more.md" "$work/clean.body")"; then bad "a form that gained a heading passes"
+  else ok "a form that gained a heading the script does not write fails ($said)"; fi
+  { cat "$work/form.md"; printf '\nRisk: <!-- a label -->\n'; } > "$work/form-label.md"
+  if said="$(form_fields "$work/form-label.md" "$work/clean.body")"; then bad "a form that gained a label line passes"
+  else ok "a form that gained a label line the script does not write fails ($said)"; fi
+else
+  bad "could not read the form at $form_url; cannot verify the description against it"
+fi
+printf '## How it was verified\n\n## What and why\n' > "$work/form-order.md"
+if said="$(form_fields "$work/form-order.md" "$work/clean.body")"; then bad "a form in another order passes"
+else ok "a form whose fields run in another order fails ($said)"; fi
+printf '<!-- only a comment -->\n' > "$work/form-empty.md"
+if form_fields "$work/form-empty.md" "$work/clean.body" >/dev/null; then bad "a form with no field passes"
+else ok "a form with no field fails: nothing was compared"; fi
+printf '## What and why\n\nSome prose outside a comment.\n' > "$work/form-prose.md"
+if form_fields "$work/form-prose.md" "$work/clean.body" >/dev/null; then bad "a form line the test cannot read passes"
+else ok "a form line that is neither a heading nor a label fails"; fi
 reset_logs
 run --finish "$wt"
 if [ "$rc" = 0 ] && ! grep -q "pr create" "$work/gh.log" && grep -q "pull/9" <<<"$out"
@@ -264,6 +344,7 @@ else bad "finish after resolving (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | s
 if grep -qxF -- "- CONTRIBUTING.md: repository's side, applied by the agent on the person's word" <<<"$body"
 then ok "the description says how each conflict was resolved: which side, on whose word"
 else bad "resolution not in the description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+fields_pass "the description of a conflict resolved through --finish" "$work/gh.log.body"
 if grep -A2 -i "edited by a person" <<<"$body" | grep -q "^- AGENTS.md"
 then ok "a cleanly merged file a person changed afterwards is named as such, not as merged cleanly"
 else bad "edited-after list"; printf '%s\n' "$body" | sed 's/^/        /'; fi
@@ -342,6 +423,9 @@ for choice in tested live default; do
   if grep -qF -- "--plinth-pin $([ "$choice" = tested ] && echo tested || echo live)" <<<"$body" && grep -q "$sha40" <<<"$body" && grep -q "$tested" <<<"$body"
   then ok "the description says which pin was chosen ($choice) and names both SHAs"
   else bad "description for $choice"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+  if section "$work/gh.log.body" "What I checked myself" | grep -q "^- The plan's plinth pin line: .*$tested"
+  then ok "What I checked myself carries the plan's plinth pin line ($choice)"
+  else bad "the plan's pin line, $choice"; sed 's/^/        /' "$work/gh.log.body"; fi
 done
 
 # The live pin already the tested one: --plinth-pin tested runs the same
@@ -1054,6 +1138,17 @@ if [ "$skill_steps" = "$want_steps" ] && [ "$(grep -c 'claude plugin update plin
    && grep -q 'Never run them yourself' "$skill"
 then ok "the skill names the order once and says the agent never runs it"
 else bad "the skill's order"; fi
+
+# The skill names the four fields and the one edit it allows (#856).
+skill="$root/skills/template-update/SKILL.md"
+skill_text="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
+if grep -qF '`## What and why`, `## What I checked myself`, `## How it was verified` and a `Review:` line' <<<"$skill_text" \
+   && ! grep -qF 'two headings' <<<"$skill_text"
+then ok "the skill names the form's four fields, not two headings"
+else bad "the skill's fields"; fi
+if grep -qF "run the project's default review" <<<"$skill_text" && grep -qF 'replace the `Review:` line with what ran' <<<"$skill_text"
+then ok "the skill says the agent runs the default review and replaces the Review: line with what ran"
+else bad "the skill's review step"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
