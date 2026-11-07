@@ -636,6 +636,19 @@ else ok shared-pr-only "plinth's headings are not imposed over the owner's templ
 # the last argument of `gh pr create`, so the body's last line is the last line
 # before the next logged `gh` call.
 pr_last() { sed -n '/^gh pr create/,/^gh /p' "$work/home-$1/calls.log" | sed '$d' | tail -1; }
+# The first pull request's description, as the mock logged it.
+pr_body() { sed -n '/^gh pr create/,/^gh /p' "$work/home-$1/calls.log" | sed '$d' | sed '1s/^.*--body //'; }
+# holds_form <what> <description file> <case>: the four fields in the form's order, and ci / pr-title's own script warns about neither (#856).
+holds_form() {
+  local what="$1" file="$2" case_name="$3" fields says
+  fields="$(grep -E '^## (What and why|What I checked myself|How it was verified)$|^Review: none \(no review had run' "$file" | cut -c1-30)"
+  jq -n --rawfile b "$file" '{data:{repository:{pullRequest:{body:$b}}}}' > "$file.json"
+  says="$(python3 "$root/scripts/description-fields.py" PR "$file.json" 2>&1)"
+  if [ "$fields" = "$(printf '## What and why\n## What I checked myself\n## How it was verified\nReview: none (no review had ru')" ] \
+     && [ "$(grep -c '^pass:' <<<"$says")" = 2 ] && ! grep -q 'not yet confirmed' <<<"$says"
+  then ok "$case_name" "$what has the form's four fields in order, and ci / pr-title's check warns about neither"
+  else bad "$case_name" "$what against the form"; printf '%s\n%s\n' "$fields" "$says" | sed 's/^/        /'; fi
+}
 E="PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" run gh-assisted ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
 if [ "$(pr_last gh-assisted)" = "Assisted-by: Claude:claude-opus-5-5" ]
 then ok gh-assisted "an AI-assisted run ends the first pull request's description with its Assisted-by line"
@@ -655,6 +668,10 @@ run org-member     ok yes no "as member"                                        
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
 run backend        ok yes no "(public, MIT, backend, as owner)"                                -- probe --archetype=backend
 run web            ok yes no "(public, MIT, web on Render, as owner)"                          -- probe --archetype=web
+pr_body web > "$work/first-pr-web.md"
+holds_form "the first pull request of an archetype with no tag ruleset" "$work/first-pr-web.md" web
+if grep -q "tag ruleset" "$work/first-pr-web.md"; then bad web "the description claims a tag ruleset the archetype does not have"
+else ok web "the description claims no tag ruleset where the door posted none"; fi
 
 echo "the third-party reviewer (#765)"
 # Asked for: copier gets the answer, the plan line says it reports and is not
@@ -971,6 +988,10 @@ check "the first pull request body carries the two sections, not one sentence" \
   'grep -q "^gh pr create.*## What and why" "$log" && grep -q "^## How it was verified$" "$log"'
 check "the first pull request says what has not been verified yet" \
   'grep -q "the checks have not run" "$log"'
+pr_body none > "$work/first-pr.md"
+holds_form "the first pull request" "$work/first-pr.md" none
+check "What I checked myself says it is not a person's check, what the door read back (cli: the tag ruleset too), and that the checks had not run" \
+  'sed -n "/^## What I checked myself$/,/^## How it was verified$/p" "$work/first-pr.md" > "$work/first-pr-checked.md"; grep -q "^Not a person.s check" "$work/first-pr-checked.md" && grep -qF "default branch reads back as \`main\`" "$work/first-pr-checked.md" && grep -q "merge ruleset and the tag ruleset read back" "$work/first-pr-checked.md" && grep -q "own checks had not run on this pull request" "$work/first-pr-checked.md"'
 check "with PLINTH_ASSISTED_BY unset, the first pull request carries no Assisted-by line (#767)" \
   '[ -s "$log" ] && ! grep -q "Assisted-by" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
@@ -1634,6 +1655,10 @@ if grep -qF -- '-X POST projects/555/merge_requests -f source_branch=docs/first-
    && "$real_git" -C "$o/probe" show docs/first-mr:README.md | grep -qx '## First day'
 then ok gl-plan "opens one merge request from docs/first-mr, in the template's shape, with First day in README.md"
 else bad gl-plan "the first merge request is not what #534 says"; grep -E -- 'merge_requests|first-mr' "$o/calls.log" | cut -c1-200 | sed 's/^/        /'; sed 's/^/        desc: /' "$o/mr-description" 2>/dev/null | head -20; fi
+holds_form "the first merge request" "$o/mr-description" gl-plan
+if grep -q "^Not a person.s check" "$o/mr-description" && grep -q "protection and its merge settings read back as set" "$o/mr-description" && grep -q "pipeline had not run on this merge request" "$o/mr-description"
+then ok gl-plan "What I checked myself says it is not a person's check, what the door read back, and that the pipeline had not run"
+else bad gl-plan "What I checked myself"; sed 's/^/        /' "$o/mr-description"; fi
 want_tail='  first merge request: https://gitlab.com/tester/probe/-/merge_requests/1
   first pipeline on main: success: https://gitlab.com/tester/probe/-/pipelines/77'
 if grep -qF "done: https://gitlab.com/tester/probe (private, MIT, cli, coolbress/plinth-template@" "$o/out" \

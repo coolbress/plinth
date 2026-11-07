@@ -142,6 +142,18 @@ trap cleanup EXIT
 pr_url="$(sed -n 's/^  first pull request: //p' "$work/door.log")"
 [ -n "$pr_url" ] || fail "the door did not report a first pull request"
 
+# What ci / pr-title's check says about the description the door wrote (#856).
+# The repository is deleted below, so this log is where a run shows it. It
+# reports and never stops: both fields only warn, and an owner's own template
+# has fields the door does not fill.
+if gh pr view "$pr_url" --json body --jq '{data:{repository:{pullRequest:{body:.body}}}}' > "$work/first-pr.json" 2>/dev/null \
+   && verdict="$(python3 "$here/description-fields.py" PR "$work/first-pr.json" 2>/dev/null)"; then
+  sed "s/^/first pull request's description: /" <<<"$verdict"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || sed "s/^/first pull request's description: /" <<<"$verdict" >> "$GITHUB_STEP_SUMMARY"
+else
+  echo "first pull request's description: not read, so this run says nothing about its fields"
+fi
+
 # The record: which archetype (the log and the job summary: a reader of the
 # run must not have to open the door's line), which generator, which template
 # commit, which workflow pin.
