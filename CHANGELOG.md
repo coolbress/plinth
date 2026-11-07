@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The description `/plinth:template-update` writes follows the current
+  pull-request form, so `ci / pr-title` no longer warns about two missing
+  fields on it (#856). `## What I checked myself` says what the script checked
+  (no conflict left, the diff size, the plan's plinth pin line), that it is not
+  a person's check, and that the project's own checks had not run. `Review:` opens as
+  `none (...)`; the skill then has the agent run the project's default review
+  and replace that line with what ran. `tests/template-update-cases.sh` now
+  reads the form at the pinned template tag, and fails when the form has a
+  field the script does not write, so it needs network.
+
 ### Changed
 
 - A release runs `e2e` on its branch before its pull request merges (#855).

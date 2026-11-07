@@ -9,7 +9,8 @@ disable-model-invocation: true
 Runs the `copier update` line `/plinth:floor-check` prints under its template
 drift WARN, and turns the result into a draft pull request. One script does
 it in three steps, each started only on the user's word in this session; this
-skill runs it and relays what it says. The command is the checker's own line,
+skill runs it and relays what it says, then runs the project's review on the
+pull request it opened. The command is the checker's own line,
 read from it, never written out here or by you.
 
 ## 1. The plan
@@ -96,6 +97,15 @@ the plan; then show the plan again and ask again.
 - **Exit 0**: it made one commit in the worktree, pushed that branch, and
   opened a draft pull request. Show the URL. Its checks start now and nothing
   waited for them. Do not wait for them, mark it ready or merge it.
+  Its description says `Review: none (...)`, because no review has run yet.
+  In the worktree, run the project's default review, the one its `AGENTS.md`
+  names (on a project made with plinth, a fresh-context review given only the
+  diff), then replace the `Review:` line with what ran, for example
+  `Review: fresh-context`, with what it reported on the lines under it. If
+  none could run, the line stays `none`, with the reason why. That is the one
+  edit this skill makes to the description (`gh pr edit --body-file`, on the
+  body as `gh pr view` reads it). Show the user the findings, and change
+  nothing in the update for them without the user's word.
   An update often changes the agent's own rules (`AGENTS.md`, `CLAUDE.md`,
   `.claude/settings.json`, a file under `.claude/skills/` or
   `.claude/output-styles/`), which `ci / diff-size` lists. Tell the user:
@@ -159,9 +169,13 @@ repository's glossary is still `CONTEXT.md` (and `CONTEXT-MAP.md`), the
 script moves it to the new name with its content unchanged, after copier and
 before the commit, and the description lists the move; a `GLOSSARY.md` that
 already exists is kept and named as the reason. Tell the user in one line. It
-uses the two headings of the pull-request template plinth-template renders;
-it does not read a template this repository or its owner changed. If theirs
-differs, tell the user, and leave the rewording to them. The
+follows the fields of the pull-request template plinth-template renders:
+`## What and why`, `## What I checked myself`, `## How it was verified` and a
+`Review:` line, in that order. `What I checked myself` holds what the script
+checked and says it is not a person's check; the rest stays as the script
+wrote it, apart from the `Review:` line above. It does not read a template this
+repository or its owner changed. If theirs differs, tell the user, and leave
+the rewording to them. The
 worktree stays beside the repository (`<repository>-template-<tag>`) after the
 pull request opens. Nothing here pushes to the default branch, and nothing
 runs again on its own.
