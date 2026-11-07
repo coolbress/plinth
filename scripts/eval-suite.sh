@@ -8,7 +8,7 @@
 #
 #   scripts/eval-suite.sh [--config-dir DIR] [--ceiling USD] [--runs N]
 #                         [--task NAME]... [--arm NAME]... [--model NAME] [--out DIR]
-#                         [--keep-caches]
+#                         [--keep-caches] [--smoke]
 #
 # Arms: none (the render without AGENTS.md, CLAUDE.md and .claude/, plugins
 # off), repo-only (the render, plugins off), plinth (the render, plinth on).
@@ -40,6 +40,15 @@
 # list-price estimate each session reports (`total_cost_usd`); a session that
 # reports none (a timeout, a crash) is charged its whole budget.
 #
+# --smoke is the release smoke run (#862): the tasks with a `smoke` file (it says
+# why each was chosen), the plinth arm, two runs each, on the default model, with
+# plinth installed from this checkout. It takes no --task, --arm, --runs, --model
+# or --config-dir (a kept folder holds whichever plinth was installed in it), so
+# its result always means the same thing: exit 0 only when every one of those
+# runs was graded, passed and did not read the hidden tests, 1 otherwise, 3 when
+# the ceiling stopped it. Its summary names this checkout's branch and commit.
+# Without --smoke the exit says nothing about what passed.
+#
 # Once a run is graded, its checkout and worktrees lose the folders a re-grade
 # rebuilds (the grader's CACHES: .venv and the tool caches), so the records
 # stay small (#687); --keep-caches keeps them. A run whose grade failed is left
@@ -54,23 +63,31 @@ session_timeout=900
 die() { echo "eval-suite: $*" >&2; exit 2; }
 usage() { sed -n '9,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
-cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=() keep_caches=""
+cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=() keep_caches="" smoke="" runs_said="" model_said=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --config-dir) [ $# -ge 2 ] || usage; cfg="$2"; shift 2 ;;
     --ceiling)    [ $# -ge 2 ] || usage; ceiling="$2"; shift 2 ;;
-    --runs)       [ $# -ge 2 ] || usage; runs="$2"; shift 2 ;;
+    --runs)       [ $# -ge 2 ] || usage; runs="$2"; runs_said=1; shift 2 ;;
     --task)       [ $# -ge 2 ] || usage; tasks+=("$2"); shift 2 ;;
     --arm)        [ $# -ge 2 ] || usage; arms+=("$2"); shift 2 ;;
-    --model)      [ $# -ge 2 ] || usage; model="$2"; shift 2 ;;
+    --model)      [ $# -ge 2 ] || usage; model="$2"; model_said=1; shift 2 ;;
     --out)        [ $# -ge 2 ] || usage; out="$2"; shift 2 ;;
     --keep-caches) keep_caches=1; shift ;;
+    --smoke)      smoke=1; shift ;;
     -h|--help)    usage ;;
     *)            die "unknown argument: $1" ;;
   esac
 done
 [[ "$ceiling" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "--ceiling is an amount in US dollars, like 10 or 2.5 (got: $ceiling)"
 [[ "$runs" =~ ^[1-9][0-9]*$ ]] || die "--runs is a whole number from 1 (got: $runs)"
+if [ -n "$smoke" ]; then
+  [ "${#tasks[@]}" = 0 ] && [ "${#arms[@]}" = 0 ] && [ -z "$runs_said" ] && [ -z "$model_said" ] && [ -z "$cfg" ] \
+    || die "--smoke takes no --task, --arm, --runs, --model or --config-dir: it is always the same run, on plinth from this checkout"
+  for t in "${all_tasks[@]}"; do [ ! -f "$root/eval-suite/tasks/$t/smoke" ] || tasks+=("$t"); done
+  [ "${#tasks[@]}" -gt 0 ] || die "--smoke: no task has a smoke file"
+  arms=(plinth) runs=2
+fi
 [ "${#tasks[@]}" -gt 0 ] || tasks=("${all_tasks[@]}")
 [ "${#arms[@]}" -gt 0 ] || arms=("${all_arms[@]}")
 for t in "${tasks[@]}"; do
@@ -353,13 +370,46 @@ for n in $(seq 1 "$runs"); do
   done
 done
 
+# Every run the smoke run asked for, passed. A run not started, not graded or
+# not counted is not a pass.
+smoke_verdict() {
+  python3 -I - "$out/runs" "$total" <<'PY'
+import json, sys
+from pathlib import Path
+runs, want = Path(sys.argv[1]), int(sys.argv[2])
+good, bad = 0, []
+for d in sorted(p for p in runs.iterdir() if p.is_dir()):
+    g = d / "grade.json"
+    if not g.exists():
+        bad.append(f"{d.name} (not graded)")
+        continue
+    r = json.loads(g.read_text())
+    if r.get("suite_read"):
+        bad.append(f"{d.name} (read a path under eval-suite/, so not counted)")
+    elif r.get("pass") is not True:
+        bad.append(f"{d.name} (did not pass)")
+    else:
+        good += 1
+print(f"smoke: {good} of {want} runs passed" + (f"; not passed: {', '.join(bad)}" if bad else "") + ".")
+sys.exit(0 if good == want else 1)
+PY
+}
+verdict="" smoke_failed=""
+if [ -n "$smoke" ]; then
+  verdict="$(smoke_verdict)" || smoke_failed=1
+  dirty=""; [ -z "$(git -C "$root" status --porcelain 2>/dev/null)" ] || dirty=", with uncommitted changes"
+  verdict="$verdict
+plinth installed from: $(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unread) at $(git -C "$root" rev-parse HEAD 2>/dev/null || echo unread)$dirty."
+fi
 table="$(python3 -I "$root/scripts/eval-suite-summary.py" "$out/runs" "$(IFS=,; echo "${tasks[*]}")" "$(IFS=,; echo "${arms[*]}")")"
 {
   echo "Template $template_repo@$template_ref ($template_sha), model $model, $(claude --version 2>/dev/null | head -1)."
   echo
   echo "$table"
   [ -z "$stopped" ] || { echo; echo "Stopped: $stopped."; }
+  [ -z "$verdict" ] || { echo; echo "$verdict"; }
 } | tee "$out/summary.md"
 echo
 echo "Records (streams, final reports, grades): $out ($(du -sh "$out" | awk '{print $1}') on disk)"
 [ -z "$stopped" ] || exit 3
+[ -z "$smoke_failed" ] || exit 1

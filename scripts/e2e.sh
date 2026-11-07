@@ -24,6 +24,17 @@
 # `ci / deploy-check`, and whose `ci / test` runs on a throwaway Postgres;
 # the workflow runs it after the backend journey, not instead of it.
 #
+# A new repository calls plinth at the commit its template release pins, which
+# is older than the commit under test. On a release branch (GITHUB_REF is
+# refs/heads/release/v*) the run moves the first pull request's calls to its own
+# commit, GITHUB_SHA, and reads in the called floor-check job that
+# job.workflow_sha is that commit, and that label.yml's run called pr-label.yml
+# there and succeeded: a separate repository's call at the commit about to ship
+# (#862). label.yml is in no ruleset, so nothing else would notice it failing. The door has no part in this: it renders, tests and
+# pushes what a person gets, so the move is one commit on top of its pull
+# request, after its own waits. Every other ref keeps the template's pin, so the
+# nightly run covers what users get today.
+#
 # Exit 0 means the whole journey happened, deletion included. Before the door
 # runs, the token creates and deletes <name>-probe: a token that can create
 # but not delete would leave a repository behind on every run, and that is
@@ -50,6 +61,12 @@ case "$archetype" in
   backend) prefix=plinth-e2e ;;
   web)     prefix=plinth-e2e-web ;;
   *)       echo "PLINTH_E2E_ARCHETYPE is backend or web (got: $archetype)" >&2; exit 2 ;;
+esac
+release_sha=""
+case "${GITHUB_REF:-}" in
+  refs/heads/release/v*)
+    release_sha="${GITHUB_SHA:-}"
+    [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "on $GITHUB_REF, GITHUB_SHA is not a full commit (got: $release_sha)" >&2; exit 2; } ;;
 esac
 
 # A token GitHub refuses makes gh exit 1 with the error body on stdout, where
@@ -164,7 +181,22 @@ template_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$here/new-project.sh"
 template_sha="$(gh api "repos/$template_repo/commits/$template_ref" --jq .sha 2>/dev/null || echo unresolved)"
 echo "generator: $(git -C "$here" rev-parse HEAD 2>/dev/null || echo unknown) ($(git -C "$here" describe --tags --always 2>/dev/null || echo untagged))"
 echo "template: $template_repo@$template_ref ${template_sha:0:12}"
-echo "pins: $(grep -hE '^[[:space:]]*uses:' "$dir"/.github/workflows/*.yml | sed 's/^[[:space:]]*uses: //' | tr '\n' ' ')"
+pins() { echo "pins: $(grep -hE '^[[:space:]]*uses:' "$dir"/.github/workflows/*.yml | sed 's/^[[:space:]]*uses: //' | tr '\n' ' ')"; }
+pins
+
+# A release branch: plinth's calls, and only live ones, move to this run's commit.
+# A render with nothing to move would pass while testing the wrong commit, so it
+# fails. The token pushes workflow files already: the door's first push has them.
+if [ -n "$release_sha" ]; then
+  RELEASE_SHA="$release_sha" perl -pi -e 's{^(\s*(?:-\s+)?uses:\s*coolbress/plinth/[^@\s]+@)\S+}{$1$ENV{RELEASE_SHA}}' \
+    "$dir"/.github/workflows/*.yml
+  grep -qE "^[[:space:]]*(- +)?uses:[[:space:]]*coolbress/plinth/[^@[:space:]]+@$release_sha\$" "$dir"/.github/workflows/*.yml \
+    || fail "no coolbress/plinth call to move in $dir/.github/workflows: this run would not test its own commit"
+  git -C "$dir" commit -qam "ci: call plinth's workflows at the commit under test"
+  git -C "$dir" push -q
+  echo "moved plinth's calls to this run's commit, $release_sha"
+  pins
+fi
 
 # ── the wall, read back ──────────────────────────────────────────────────
 # The ruleset targets ~DEFAULT_BRANCH; the checker warns when that is not
@@ -246,6 +278,47 @@ done
 tip="$(gh api "repos/$repo/commits/main" --jq '"\(.sha[0:12]) \(.commit.message | split("\n")[0])"')"
 case "$tip" in *"docs: first pull request through the wall"*) ;; *) fail "main does not carry the squash commit; its tip is: $tip" ;; esac
 echo "merged: $tip"; merged=1
+
+# A release branch: the called run itself says which commit it came from. The
+# floor-check job echoes `plinth <job.workflow_sha>` when it fetches its checker
+# (python-ci.yml). Read with gh run view: `gh api .../logs` refuses a log with
+# terminal escape sequences (measured 2026-11-07). Nothing read fails,
+# as does anything but that one commit: the run's point is this line.
+called_sha() { # <head>
+  local run job
+  run="$(gh api -X GET "repos/$repo/actions/runs" -f "head_sha=$1" -f event=pull_request -F per_page=20 \
+    --jq 'first(.workflow_runs[] | select(.path == ".github/workflows/ci.yml")) | .id' 2>/dev/null)" || return 0
+  [ -n "$run" ] || return 0
+  job="$(gh api "repos/$repo/actions/runs/$run/jobs?per_page=100" --jq '.jobs[] | select(.name == "ci / floor-check") | .id' 2>/dev/null)" || return 0
+  [ -n "$job" ] || return 0
+  { gh run view "$run" --repo "$repo" --log --job "$job" 2>/dev/null || true; } \
+    | tr -d '\r' | { grep -E '[[:space:]]plinth [0-9a-f]{40}[[:space:]]*$' || true; } | awk '{print $NF}' | sort -u
+}
+# label.yml's run: its conclusion and the commit GitHub resolved pr-label.yml to.
+label_run() { # <head>
+  gh api -X GET "repos/$repo/actions/runs" -f "head_sha=$1" -f event=pull_request -F per_page=20 \
+    --jq 'first(.workflow_runs[] | select(.path == ".github/workflows/label.yml")) | "\(.conclusion) \(first(.referenced_workflows[]? | select(.path | startswith("coolbress/plinth/.github/workflows/pr-label.yml@"))) | .sha)"' 2>/dev/null || true
+}
+if [ -n "$release_sha" ]; then
+  called=""; label=""
+  # A finished job's log can lag behind its conclusion, and label.yml, which
+  # nothing waits for, can still be running.
+  for attempt in 1 2 3 4 5 6; do
+    head="$(gh pr view "$pr_url" --json headRefOid --jq .headRefOid 2>/dev/null || true)"
+    if [ -n "$head" ]; then
+      called="$(called_sha "$head")"
+      label="$(label_run "$head")"
+    fi
+    [ -z "$called" ] || [ "$label" != "success $release_sha" ] || break
+    [ "$attempt" = 6 ] || sleep $(( wait_s < 20 ? 0 : 10 ))
+  done
+  [ -n "$called" ] || fail "could not read the called job.workflow_sha from ci / floor-check on $pr_url; nothing shows that this run tested its own commit"
+  [ "$called" = "$release_sha" ] || fail "the called job.workflow_sha is ${called//$'\n'/ and }, not this run's commit $release_sha"
+  [ "$label" = "success $release_sha" ] || fail "label.yml's run on $pr_url reads \"${label:-nothing}\" (conclusion, then the commit it called pr-label.yml at), not success at this run's commit $release_sha"
+  echo "called job.workflow_sha: $called, this run's commit"
+  echo "called pr-label.yml: success at $release_sha"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf 'called job.workflow_sha: %s, this run'"'"'s commit\ncalled pr-label.yml: success at %s\n' "$called" "$release_sha" >> "$GITHUB_STEP_SUMMARY"
+fi
 
 # ── gone ─────────────────────────────────────────────────────────────────
 # The trap stays armed until the deletion returned: a cancellation or a

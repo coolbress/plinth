@@ -97,7 +97,32 @@ the move changes what a new project's agent reads, and then asks for
    scripts/with-admin-token.sh gh workflow run e2e.yml --ref release/vX.Y.Z
    ```
 
-   Name the run in the pull request's description. If it fails, read its log.
+   On this branch `e2e` also moves the test repository's calls to
+   `coolbress/plinth` from the template's pin to the run's own commit, and
+   fails unless the called `ci / floor-check` job's `job.workflow_sha` is that
+   commit and `label.yml`'s run called `pr-label.yml` there and succeeded
+   (#862). So it covers a call from another repository at the commit
+   about to ship, which a run on any other ref does not; a scheduled or `main`
+   run keeps the template's pin, what users get today. It does not cover
+   `pr-review.yml`, which is off in the repository it makes.
+
+   Beside that dispatch, the owner runs the
+   [smoke run](run-the-eval-suite.md#the-release-smoke-run) from a clone on this
+   branch. It needs the owner's Claude login, so an agent or CI does not run
+   it; it costs about US$0.90 of usage, and every run must pass. It checks
+   two skills, `/plinth:floor-check` and `/plinth:guide`, as an agent follows them:
+
+   ```bash
+   git switch release/vX.Y.Z
+   scripts/eval-suite.sh --smoke
+   ```
+
+   Post its table on #647. Name the `e2e` run and that comment in the pull
+   request's description. If the smoke run fails, read the failed runs'
+   `reader.md`. When a session timed out or crashed, run it again and say so in
+   the description. When a skill broke, that is a fix, handled as below.
+
+   If `e2e` fails, read its log.
    When the fault was GitHub's or the run's, dispatch it again. When it needs
    a fix, or when `main` moves before the merge, close the pull request, delete
    `release/vX.Y.Z` on origin and locally, land the fix if there is one, and
@@ -109,7 +134,8 @@ the move changes what a new project's agent reads, and then asks for
    and the checks are green. The script stops, and prints the command from
    step 5, while the head has no green `e2e` run (#855). The merge button and
    `gh pr merge` do not ask: a dispatched run is not among the checks a pull
-   request lists, so use the script.
+   request lists, so use the script. The script does not read the smoke run:
+   check that the description names it before you merge.
 7. Update `main`: `git switch main && git pull --ff-only`.
 8. Run the same command again:
 
