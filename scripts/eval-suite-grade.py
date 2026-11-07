@@ -354,7 +354,7 @@ def task_record(
 
 # How a session says it hit a limit, on an `is_error` result only: a final
 # report may discuss limits. Seen 2026-11-07: "You've hit your 5-hour limit".
-LIMIT = re.compile(r"\b(usage|session|weekly|\d+-hour|rate)[ -]limit\b|\bhit your\b.*\blimit\b|\blimit reached\b", re.I)
+LIMIT = re.compile(r"\b(usage|session|weekly|\d+-hour|rate)[ -]limit\b|\bhit your\b.*\blimit\b|\blimit reached\b", re.IGNORECASE)
 
 
 def not_run_reason(stream: Path) -> str | None:
