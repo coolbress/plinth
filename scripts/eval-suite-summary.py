@@ -5,7 +5,10 @@ Prints Markdown on stdout, with the columns of #647's first-run table, from
 every <runs dir>/*/grade.json, then a second table of what each task's kind
 records. A run that started and was not graded is counted under the tables,
 not in them; so is a run marked `suite_read` (its stream shows a path under
-the folder that holds the hidden tests), whose result is not counted.
+the folder that holds the hidden tests), whose result is not counted. A run
+with a `not-run.txt` never really ran (#864): it is in no table and no count of
+runs started, and is named on a line of its own. A resume moves a run it runs
+again to set-aside/, beside <runs dir>: only its cost and its name are read.
 """
 
 from __future__ import annotations
@@ -82,7 +85,11 @@ def main() -> None:
     runs = Path(sys.argv[1])
     tasks, arms = sys.argv[2].split(","), sys.argv[3].split(",")
     groups: dict[tuple[str, str], list[Run]] = defaultdict(list)
-    started = [d for d in sorted(runs.iterdir()) if d.is_dir()] if runs.is_dir() else []
+    dirs = [d for d in sorted(runs.iterdir()) if d.is_dir()] if runs.is_dir() else []
+    not_run = [d for d in dirs if (d / "not-run.txt").exists()]
+    started = [d for d in dirs if d not in not_run]
+    aside_dir = runs.parent / "set-aside"
+    aside = [d for d in sorted(aside_dir.iterdir()) if d.is_dir()] if aside_dir.is_dir() else []
     graded: list[Run] = []
     marked: list[Run] = []
     for d in started:
@@ -125,8 +132,8 @@ def main() -> None:
     counted = [r for rs in groups.values() for r in rs]
     # The same figure the ceiling adds up: a session that reported no cost
     # is counted at the budget it was given.
-    cost = sum(float((d / "cost.txt").read_text() or 0) for d in started if (d / "cost.txt").exists())
-    charged = sum(1 for d in started if (d / "cost-unknown.txt").exists())
+    cost = sum(float((d / "cost.txt").read_text() or 0) for d in dirs + aside if (d / "cost.txt").exists())
+    charged = sum(1 for d in dirs + aside if (d / "cost-unknown.txt").exists())
     reserved = sum(
         len(r["trace"]["reserved"][k])
         for r in counted
@@ -140,6 +147,13 @@ def main() -> None:
         print(
             "Not graded, so kept whole with their caches for a person to look at "
             f"(`grade-error.txt` says why): {', '.join(ungraded)}."
+        )
+    if not_run:
+        print(f"Not run, so in no table (`not-run.txt` says why): {', '.join(d.name for d in not_run)}.")
+    if aside:
+        print(
+            "Run again by a resume, the earlier attempt in no table and only its cost counted "
+            f"(`set-aside/`): {', '.join(d.name for d in aside)}."
         )
     names = ", ".join(f"{r['task']} {r['arm']} {r['n']}" for r in marked)
     print(

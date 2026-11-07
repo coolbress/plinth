@@ -49,6 +49,21 @@
 # the ceiling stopped it. Its summary names this checkout's branch and commit.
 # Without --smoke the exit says nothing about what passed.
 #
+# A session that did not really run (eval-suite-grade.py --not-run: the usage
+# limit, or an error on its first turn, or a cost of 0) is not graded: it gets a
+# not-run.txt with the reason it gave, is in no table, and the suite stops there,
+# exit 3, as at the ceiling. A crash or a timeout is graded.
+#
+# An --out that exists resumes it (#864): every run with a grade.json is kept, the
+# rest run in the same order, and the tables cover them all. A run there with no
+# grade.json moves to set-aside/ first, its cost still counted. conditions.txt
+# records what must not differ; a different value refuses, naming it. The ceiling
+# is not one of them, and counts the directory's whole cost.
+#
+# An --out under a folder with a CLAUDE.md, CLAUDE.local.md, AGENTS.md or .claude/
+# is refused before anything runs: Claude Code loads those from parent folders, so
+# every arm would read them and the arms would stop differing by the rules under test.
+#
 # Once a run is graded, its checkout and worktrees lose the folders a re-grade
 # rebuilds (the grader's CACHES: .venv and the tool caches), so the records
 # stay small (#687); --keep-caches keeps them. A run whose grade failed is left
@@ -140,6 +155,58 @@ for v in template_repo template_ref template_sha copier_version copier_newer; do
   [ -n "${!v}" ] || die "no $v in scripts/new-project.sh"
 done
 
+# The folders a session's Claude Code reads rules from are its workspace's parents.
+# Walks the real path of the nearest folder that exists, since --out may not yet.
+refuse_rules_above() { # <dir>
+  local d="$1" f
+  while [ ! -d "$d" ]; do d="$(dirname "$d")"; done
+  d="$(cd "$d" && pwd -P)"
+  while :; do
+    for f in CLAUDE.md CLAUDE.local.md AGENTS.md .claude; do
+      [ ! -e "$d/$f" ] && [ ! -L "$d/$f" ] \
+        || die "refusing records under $d/$f: every arm's session would load it from that parent folder, so the arms would stop differing by the rules under test. Name another --out, outside it"
+    done
+    [ "$d" != / ] || break
+    d="$(dirname "$d")"
+  done
+}
+refuse_rules_above "${out:-${TMPDIR:-/tmp}}"
+
+# What this suite is measuring: uncommitted changes count, by a hash of them.
+plinth_state() {
+  local head changes
+  head="$(git -C "$root" rev-parse HEAD 2>/dev/null)" && changes="$(git -C "$root" status --porcelain 2>/dev/null)" \
+    || { echo unread; return; }
+  [ -n "$changes" ] || { echo "$head"; return; }
+  echo "$head+uncommitted-$( { echo "$changes"; git -C "$root" diff HEAD
+    git -C "$root" ls-files -o --exclude-standard -z | xargs -0 -r git -C "$root" hash-object --; } | git hash-object --stdin)"
+}
+claude_version="$(claude --version 2>/dev/null | head -1 || true)"
+conditions() {
+  printf 'plinth commit=%s\n' "$(plinth_state)"
+  printf 'template SHA=%s\n' "$template_sha"
+  printf 'model=%s\n' "$model"
+  printf 'Claude Code version=%s\n' "${claude_version:-unread}"
+  printf 'tasks=%s\n' "$(IFS=,; echo "${tasks[*]}")"
+  printf 'arms=%s\n' "$(IFS=,; echo "${arms[*]}")"
+  printf 'runs=%s\n' "$runs"
+  printf 'smoke=%s\n' "$([ -n "$smoke" ] && echo yes || echo no)"
+}
+resuming=""
+if [ -n "$out" ] && [ -e "$out" ]; then
+  [ -f "$out/conditions.txt" ] \
+    || die "refusing to resume --out $out: $out holds no conditions.txt, so it is not a suite's records with its fixtures made; name a new directory"
+  changed=""
+  while IFS='=' read -r k v; do
+    was="$(sed -n "s/^$k=//p" "$out/conditions.txt")"
+    if [ "$was" != "$v" ] || [ "$v" = unread ]; then changed="$changed
+  $k: recorded ${was:-nothing}, now $v"; fi
+  done < <(conditions)
+  [ -z "$changed" ] || die "refusing to resume $out, because a run under other values is not the same measurement:$changed
+Run the original command, or name a new directory."
+  resuming=1
+fi
+
 made_cfg=""
 cleanup() { [ -z "$made_cfg" ] || rm -rf "$made_cfg"; }
 trap cleanup EXIT
@@ -182,13 +249,12 @@ PY
 )"
 
 if [ -n "$out" ]; then
-  [ ! -e "$out" ] || die "--out $out already exists; name a new directory"
   mkdir -p "$out"
 else
   out="$(mktemp -d "${TMPDIR:-/tmp}/plinth-eval.XXXXXX")"
 fi
 out="$(cd "$out" && pwd -P)"
-mkdir -p "$out/fixtures" "$out/runs"
+mkdir -p "$out/fixtures" "$out/runs" "$out/set-aside"
 echo "== records: $out"
 
 # Fixtures, rendered now from the pinned commit, the way the door renders.
@@ -224,47 +290,57 @@ import json, sys
 p = [p for p in json.load(open(sys.argv[1]))["pulls"] if p["state"] == "MERGED"][0]
 print("%s (#%d)\n\n%s" % (p["title"], p["number"], p["body"]))' "$root/eval-suite/tasks/$1/issues.json"
 }
-for a in "${needed[@]}"; do
-  echo "== render $template_repo@$template_ref ($template_sha) as $a"
-  r="$out/fixtures/render-$a"
-  env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
-    copier copy --defaults --quiet \
-    --data "project_name=probe" --data "license=MIT" --data "archetype=$a" \
-    --vcs-ref "$template_sha" "gh:$template_repo" "$r" < /dev/null
-  rm -rf "$r/.git"
-  for kind in plinth none; do
-    f="$out/fixtures/$kind-$a"
-    mkdir -p "$f"; cp -R "$r/." "$f"
-    [ ! -d "$root/eval-suite/plant/$a" ] || cp -R "$root/eval-suite/plant/$a/." "$f"
-    [ "$kind" = plinth ] || rm -rf "$f/AGENTS.md" "$f/CLAUDE.md" "$f/.claude"
+make_fixtures() {
+  for a in "${needed[@]}"; do
+    echo "== render $template_repo@$template_ref ($template_sha) as $a"
+    r="$out/fixtures/render-$a"
+    env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+      copier copy --defaults --quiet \
+      --data "project_name=probe" --data "license=MIT" --data "archetype=$a" \
+      --vcs-ref "$template_sha" "gh:$template_repo" "$r" < /dev/null
+    rm -rf "$r/.git"
+    for kind in plinth none; do
+      f="$out/fixtures/$kind-$a"
+      mkdir -p "$f"; cp -R "$r/." "$f"
+      [ ! -d "$root/eval-suite/plant/$a" ] || cp -R "$root/eval-suite/plant/$a/." "$f"
+      [ "$kind" = plinth ] || rm -rf "$f/AGENTS.md" "$f/CLAUDE.md" "$f/.claude"
+    done
   done
-done
-for t in "${tasks[@]}"; do
-  a="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/archetype")"
-  own_fixture "$t" || continue
-  for kind in plinth none; do
-    f="$out/fixtures/$kind-$a-$t"
-    mkdir -p "$f"; cp -R "$out/fixtures/$kind-$a/." "$f"
-    while IFS= read -r p; do
-      [ -e "$f/$p" ] || die "task $t: gaps.json names $p, which the $a render does not have"
-      rm -f "$f/$p"
-    done < <(gaps "$t")
-    commit_fixture "$f"
-    [ -d "$root/eval-suite/tasks/$t/previous" ] || continue
-    cp -R "$root/eval-suite/tasks/$t/previous/." "$f"
-    git -C "$f" add -A
-    merged_message "$t" | git -C "$f" -c user.name=trial -c user.email=trial@example.invalid \
-      -c commit.gpgsign=false commit -qF -
+  for t in "${tasks[@]}"; do
+    a="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/archetype")"
+    own_fixture "$t" || continue
+    for kind in plinth none; do
+      f="$out/fixtures/$kind-$a-$t"
+      mkdir -p "$f"; cp -R "$out/fixtures/$kind-$a/." "$f"
+      while IFS= read -r p; do
+        [ -e "$f/$p" ] || die "task $t: gaps.json names $p, which the $a render does not have"
+        rm -f "$f/$p"
+      done < <(gaps "$t")
+      commit_fixture "$f"
+      [ -d "$root/eval-suite/tasks/$t/previous" ] || continue
+      cp -R "$root/eval-suite/tasks/$t/previous/." "$f"
+      git -C "$f" add -A
+      merged_message "$t" | git -C "$f" -c user.name=trial -c user.email=trial@example.invalid \
+        -c commit.gpgsign=false commit -qF -
+    done
   done
-done
-for a in "${needed[@]}"; do
-  for kind in plinth none; do commit_fixture "$out/fixtures/$kind-$a"; done
-done
+  for a in "${needed[@]}"; do
+    for kind in plinth none; do commit_fixture "$out/fixtures/$kind-$a"; done
+  done
+}
+graded_runs() { find "$out/runs" -mindepth 2 -maxdepth 2 -name grade.json | wc -l | tr -d ' '; }
+plural() { [ "$1" = 1 ] && echo "$1 $2" || echo "$1 $3"; }
+if [ -n "$resuming" ]; then
+  echo "== resuming: $(plural "$(graded_runs)" "graded run" "graded runs") kept; the rest run in order, on the fixtures already here"
+else
+  make_fixtures
+  # Last: a folder without this file never finished its setup, and is not resumed.
+  conditions > "$out/conditions.txt"
+fi
 
 spent() {
-  set -- "$out/runs/"*/cost.txt
-  [ -e "$1" ] || { echo 0; return; }
-  awk '{s += $1} END {printf "%.4f", s + 0}' "$@"
+  find "$out/runs" "$out/set-aside" -mindepth 2 -maxdepth 2 -name cost.txt -exec cat {} + \
+    | awk '{s += $1} END {printf "%.4f", s + 0}'
 }
 over() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a >= b) }'; }
 
@@ -340,6 +416,13 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
     || { echo "charged its whole budget: the session reported no cost" > "$r/cost-unknown.txt"
          echo "   no cost reported; charged the run's budget, \$$budget"; }
   echo "   $task $arm $n: $(cat "$r/exit.txt") cost=\$$(cat "$r/cost.txt")"
+  python3 -I "$root/scripts/eval-suite-grade.py" --not-run "$r"
+  if [ -f "$r/not-run.txt" ]; then
+    echo "   not run, so not graded: $(cat "$r/not-run.txt")"
+    [ -n "$keep_caches" ] || python3 -I "$root/scripts/eval-suite-grade.py" --drop-caches "$r" 2> "$r/grade-error.txt" \
+      | sed 's/^/   /' || echo "   caches not dropped: $(tail -1 "$r/grade-error.txt")"
+    return 0
+  fi
   # A grade that fails leaves the run ungraded, counted under the table; the next run still starts.
   if python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" 2> "$r/grade-error.txt" \
     | sed 's/^/   /'; then
@@ -350,6 +433,13 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
   fi
 }
 
+# A run a resume runs again: what it left stays for a person, and its cost counted.
+set_aside() { # <run dir>
+  [ -e "$1" ] || return 0
+  local k=1
+  while [ -e "$out/set-aside/$(basename "$1").$k" ]; do k=$(( k + 1 )); done
+  mv "$1" "$out/set-aside/$(basename "$1").$k"
+}
 stopped=""
 total=$(( runs * cells ))
 i=0
@@ -357,15 +447,21 @@ for n in $(seq 1 "$runs"); do
   for t in "${tasks[@]}"; do
     for a in "${arms[@]}"; do
       task_in_arm "$t" "$a" || continue
+      if [ -f "$out/runs/$t-$a-$n/grade.json" ]; then i=$(( i + 1 )); continue; fi
       s="$(spent)"
       if over "$s" "$ceiling"; then
-        stopped="ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n or the $(( total - i - 1 )) runs after it"
+        stopped="Stopped: ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n or the $(( total - i - 1 )) runs after it"
         break 3
       fi
       budget="$(awk -v c="$ceiling" -v s="$s" -v m="$per_run_cap" 'BEGIN { l = c - s; printf "%.4f", (l < m ? l : m) }')"
       i=$(( i + 1 ))
+      set_aside "$out/runs/$t-$a-$n"
       echo "== run $i of $total: $t $a $n (budget \$$budget, spent \$$s)"
       run_one "$t" "$a" "$n" "$budget"
+      if [ -f "$out/runs/$t-$a-$n/not-run.txt" ]; then
+        stopped="$(plural "$(graded_runs)" run runs) graded; stopped at run $i ($t $a $n): $(cat "$out/runs/$t-$a-$n/not-run.txt"); $(( total - i )) not started"
+        break 3
+      fi
     done
   done
 done
@@ -380,6 +476,9 @@ runs, want = Path(sys.argv[1]), int(sys.argv[2])
 good, bad = 0, []
 for d in sorted(p for p in runs.iterdir() if p.is_dir()):
     g = d / "grade.json"
+    if (d / "not-run.txt").exists():
+        bad.append(f"{d.name} (not run: {(d / 'not-run.txt').read_text().strip()})")
+        continue
     if not g.exists():
         bad.append(f"{d.name} (not graded)")
         continue
@@ -406,10 +505,13 @@ table="$(python3 -I "$root/scripts/eval-suite-summary.py" "$out/runs" "$(IFS=,; 
   echo "Template $template_repo@$template_ref ($template_sha), model $model, $(claude --version 2>/dev/null | head -1)."
   echo
   echo "$table"
-  [ -z "$stopped" ] || { echo; echo "Stopped: $stopped."; }
+  [ -z "$stopped" ] || { echo; echo "$stopped."; }
   [ -z "$verdict" ] || { echo; echo "$verdict"; }
 } | tee "$out/summary.md"
 echo
 echo "Records (streams, final reports, grades): $out ($(du -sh "$out" | awk '{print $1}') on disk)"
-[ -z "$stopped" ] || exit 3
+if [ -n "$stopped" ]; then
+  echo "To carry on (after the reset, or with a higher --ceiling): the same command with --out '$out'."
+  exit 3
+fi
 [ -z "$smoke_failed" ] || exit 1
