@@ -146,19 +146,11 @@ jobs:
           # workspace as an artifact would ship it (zizmor `artipacked`).
           # Nothing here pushes, so it is turned off.
           persist-credentials: false
-      - name: Install uv (official release, SHA256 verified)
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
       # --locked fails when the lockfile is missing or disagrees with
       # pyproject. A committed lockfile is a precondition, not a check.
       - id: sync
@@ -237,19 +229,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
-      - name: Install uv (official release, SHA256 verified)
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
       - id: sync
         run: uv sync --locked
       - id: mypy
@@ -280,19 +264,11 @@ jobs:
           # first parent, HEAD^1, is the base the changed lines are judged
           # against.
           fetch-depth: 2
-      - name: Install uv (official release, SHA256 verified)
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
       - id: sync
         run: uv sync --locked
       # A web project's tests run against Postgres, not the SQLite its
@@ -558,20 +534,12 @@ jobs:
           # On a pull request the checkout is GitHub's merge commit, on a push
           # the branch's new tip: either way HEAD^1 is the base.
           fetch-depth: 2
-      - name: Install uv (official release, SHA256 verified)
+      - name: Install uv
         if: inputs.web
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
       # A disposable Postgres, pinned by digest: `empty` for the migrations
       # from nothing, `rows` for the base's rows carried forward.
       - name: Start Postgres
@@ -728,20 +696,12 @@ jobs:
         if: inputs.web
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
-      - name: Install uv (official release, SHA256 verified)
+      - name: Install uv
         if: inputs.web
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
       - id: sync
         if: inputs.web
         run: uv sync --locked
@@ -1752,19 +1712,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
-      - name: Install uv (official release, SHA256 verified)
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
       - id: sync
         run: uv sync --locked
       - id: build
@@ -1920,19 +1872,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
-      - name: Install uv (official release, SHA256 verified)
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
       - id: sync
         continue-on-error: true
         run: uv sync --locked

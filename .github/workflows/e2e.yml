@@ -84,19 +84,11 @@ jobs:
           chmod +x "$d/claude"
           echo "$d" >> "$GITHUB_PATH"
 
-      - name: Install uv (official release, SHA256 verified)
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
 
       # The token goes in through the same prompt a person uses, fed from
       # stdin: it never appears on a command line, and the door learns it was
@@ -129,19 +121,11 @@ jobs:
           # release's scripts/new-project.sh, read with git show.
           fetch-depth: 0
 
-      - name: Install uv (official release, SHA256 verified)
-        env:
-          UV_VERSION: "0.13.7"
-          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
-          f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
-          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
-          echo "$d" >> "$GITHUB_PATH"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
 
       # The token goes in as the e2e job's does, through the prompt, and git
       # asks gh for it through its environment.
