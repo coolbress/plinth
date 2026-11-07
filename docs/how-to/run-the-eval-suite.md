@@ -13,10 +13,11 @@ worse. Run it before a release that changes the files the agent reads in a
 new project (`AGENTS.md`, `.claude/`, the output style) or one of plinth's
 default skills. Run the [guide tasks](#the-tasks) with a release that touches
 `/plinth:guide` or the arsenal's "Where you are, and what to do next" table.
+Every release runs [the smoke run](#the-release-smoke-run), which is smaller.
 When such a release moves the template pin,
 `scripts/make-release.sh` asks for the posted table's link, or the reason it
 was not run ([How to cut a release](cut-a-release.md), step 2). You do not
-need it for other releases. It never runs in CI, because it uses your Claude
+need the whole suite for other releases. It never runs in CI, because it uses your Claude
 usage and needs a login.
 
 ## Before you start
@@ -177,6 +178,45 @@ the table above; the arms are `none`, `repo-only` and `plinth`. A task with an
 the suite before it starts. `--model`
 picks the model (default `sonnet`), and `--out` names a new folder for the
 records.
+
+## The release smoke run
+
+Before a release's merge, in a clone on the release branch (`git switch
+release/vX.Y.Z`), so that plinth is installed from what will ship:
+
+```bash
+scripts/eval-suite.sh --smoke
+```
+
+It runs the three tasks below in the `plinth` arm, two runs each, 6 runs in all,
+for about US$0.90 at the medians of #647's latest tables. It always installs
+plinth from the clone it runs in, on the default model, so it asks you to log in
+each time. The ceiling still applies. It takes no `--task`, `--arm`, `--runs`,
+`--model` or `--config-dir`, so its result always means the same thing. The
+repository's owner runs it, because it needs a login and spends that account's
+usage; CI does not.
+
+| Task | Why it was chosen | `plinth` arm on #647, before it was chosen |
+| --- | --- | --- |
+| `floor-gaps` | Runs `/plinth:floor-check` and must name every planted gap; with plinth off it fails | passed 14/14 |
+| `guide` | Runs `/plinth:guide` with nothing in flight and grades what it says against what it wrongly said in real use (#799) | passed 5/5 |
+| `guide-reminder` | Runs `/plinth:guide` with the template's reminder issue open, so it must route to `/plinth:template-update` | passed 5/5 |
+
+A task is in this list when a `smoke` file in its folder says why. `ledger` and
+`cli-name` passed every run too, but they pass with plinth off as well, so a
+broken skill would not fail them. `about` missed a check once, and
+`greeting-merge`, `greeting-push`, `notes-stats` and `next-day` each failed a run
+in that arm; the question tasks have no pass. No task here runs a default skill
+other than these two, so a break in another skill passes this run.
+
+The last lines under the table are the result: `smoke: 6 of 6 runs passed.`, then
+the branch and commit plinth was installed from. Every run must pass. A run that
+failed, was not graded or read the hidden tests is named there, and the script
+exits with status 1 (3 when the ceiling stopped it). Two runs of three tasks
+catch a skill that broke outright. They cannot show a small drop in how often a
+skill works: #647's Decision of 2026-11-07 says how many runs that takes. Post
+the table on #647, and name the comment in the release pull request's
+description.
 
 ## Reusing a logged-in folder
 

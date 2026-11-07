@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `e2e` on a `release/v*` branch moves the test repository's calls to plinth's
+  reusable workflows to the run's own commit, and fails unless the called
+  `ci / floor-check` job's `job.workflow_sha` is that commit and `label.yml`'s
+  run called `pr-label.yml` there and succeeded (#862). A scheduled or `main`
+  run keeps the template's pin, so `scripts/merge-when-green.sh` now counts only
+  an `e2e` run on a `release/v*` branch for a release pull request. `pr-review.yml`
+  stays uncovered: the repository `e2e` makes does not turn it on.
+- `scripts/eval-suite.sh --smoke` runs three marked tasks (`floor-gaps`, `guide`,
+  `guide-reminder`) in the `plinth` arm, two runs each, about US$0.90, with
+  plinth installed from the clone it runs in, and exits 1 unless every run passed
+  (#862). The owner runs it before a release's merge, beside the `e2e` dispatch
+  ([How to cut a release](docs/how-to/cut-a-release.md), step 5).
+
 ### Fixed
 
 - The description `/plinth:template-update` writes follows the current

@@ -36,7 +36,15 @@ echo "create $1 (public, MIT, cli, as owner) from coolbress/plinth-template@v0.0
 [ "${DOOR_RC:-0}" = 0 ] || { echo "the wall did not go up; deleting https://github.com/$1 (the local copy stays)" >&2
   if [ "${EXISTS_RC:-0}" != 0 ]; then echo "deleted https://github.com/$1" >&2; else echo "!! ROLLBACK FAILED: https://github.com/$1 EXISTS WITHOUT A WALL" >&2; fi; exit "$DOOR_RC"; }
 all="$*"; dir="${all##*--dir=}"; dir="${dir%% *}"; mkdir -p "$dir/.github/workflows"
-echo "    uses: coolbress/plinth/.github/workflows/python-ci.yml@stub-sha" > "$dir/.github/workflows/ci.yml"
+# Two calling files and a commented call, as the template renders them. DOOR_NO_PINS: none.
+if [ "${DOOR_NO_PINS:-0}" = 0 ]; then
+  { echo "    uses: coolbress/plinth/.github/workflows/python-ci.yml@stub-sha"
+    echo "#       uses: coolbress/plinth/.github/workflows/pr-review.yml@<the full commit SHA the ci job calls>"
+    echo "      - uses: actions/checkout@stub-action-sha"; } > "$dir/.github/workflows/ci.yml"
+  echo "    uses: coolbress/plinth/.github/workflows/pr-label.yml@stub-sha" > "$dir/.github/workflows/label.yml"
+else
+  echo "      - uses: actions/checkout@stub-action-sha" > "$dir/.github/workflows/ci.yml"
+fi
 printf 'done: https://github.com/%s\n  first pull request: https://github.com/%s/pull/1\n' "$1" "$1"
 DOOR
 cat > "$work/scripts/floor-check.py" <<'CHK'
@@ -76,6 +84,19 @@ case "$*" in
   "api repos/"*"/commits/main --jq "*) echo "${MAIN_TIP:-0123456789ab docs: first pull request through the wall (#1)}" ;;   # GitHub appends the number (measured)
   "api repos/"*"/commits/"*)          echo "feedfacefeedfacefeedfacefeedfacefeedface" ;;
   "api repos/"*" --jq .default_branch") echo "${DEFAULT_BRANCH:-main}" ;;
+  # A release branch's run (#862): the pull request's head, its CI run, the
+  # floor-check job, and that job's log as gh prints it (measured on a real
+  # run: name, step, the runner's timestamp; the script's own text and the
+  # step's env come before the line the job echoes).
+  "pr view "*"headRefOid"*)           printf '%s\n' "${PR_HEAD-feedfacefeedfacefeedfacefeedfacefeedface}" ;;
+  "api -X GET repos/"*"/actions/runs "*"head_sha="*"label.yml"*) printf '%s\n' "${LABEL_RUN-success $GITHUB_SHA}" ;;
+  "api -X GET repos/"*"/actions/runs "*"head_sha="*) printf '%s' "${CI_RUN-77}" ;;
+  "api repos/"*"/actions/runs/"*"/jobs"*) printf '%s' "${FLOOR_JOB-88}" ;;
+  "run view "*"--log"*)               [ "${LOG_EMPTY:-0}" = 0 ] || exit 0
+                                      called="${CALLED_SHA-$GITHUB_SHA}"
+                                      printf 'ci / floor-check\tUNKNOWN STEP\t2026-11-07T07:32:21.5Z \033[36;1mecho "plinth ${PLINTH_SHA}"\033[0m\r\n'
+                                      printf 'ci / floor-check\tUNKNOWN STEP\t2026-11-07T07:32:21.5Z   PLINTH_SHA: %s\r\n' "$called"
+                                      printf 'ci / floor-check\tUNKNOWN STEP\t2026-11-07T07:32:23.1Z plinth %s\r\n' "$called" ;;
   "pr checks "*"select(.bucket == \"fail\")"*) printf '%s' "${FAILED_CHECKS:-}" ;;
   # The record line after the merge (#164), required checks only: RECORD_RC makes every read fail with that exit.
   "pr checks "*"--required --json name,bucket "*) [ -z "${RECORD_RC:-}" ] || { echo "HTTP 502: Bad Gateway" >&2; exit "$RECORD_RC"; }; printf 'ci / test=pass\nimage=pass\n' ;;
@@ -99,7 +120,9 @@ real_git="$(command -v git)"
 cat > "$work/bin/git" <<STUB
 #!/usr/bin/env bash
 case "\$*" in
-  "-C "*" commit "*|"-C "*" push"*) printf 'git %s\\n' "\$*" >> "\$GH_LOG"; [[ "\$*" == *" push"* ]] && : > "\$GH_LOG.pushed"; exit 0 ;;
+  "-C "*" commit "*) printf 'git %s\\n' "\$*" >> "\$GH_LOG"; cat "\$2"/.github/workflows/*.yml > "\$GH_LOG.committed"; exit 0 ;;
+  "-C "*" push"*) [ "\${PUSH_RC:-0}" = 0 ] || { echo "remote: refusing to allow a token to update a workflow" >&2; exit "\$PUSH_RC"; }
+    printf 'git %s\\n' "\$*" >> "\$GH_LOG"; : > "\$GH_LOG.pushed"; exit 0 ;;
 esac
 exec "$real_git" "\$@"
 STUB
@@ -133,7 +156,7 @@ run() { # <env assignments...> [-- <arguments to e2e.sh...>]
   while [ $# -gt 0 ]; do [ "$1" = -- ] && { shift; args=("$@"); break; }; envs+=("$1"); shift; done
   set -- ${envs[@]+"${envs[@]}"}
   runs=$((runs + 1)); export GH_LOG="$work/log.$runs"; : > "$GH_LOG"
-  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY MERGE_IDS MERGE_READBACK PLINTH_E2E_ARCHETYPE
+  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY MERGE_IDS MERGE_READBACK PLINTH_E2E_ARCHETYPE GITHUB_REF GITHUB_SHA DOOR_NO_PINS PUSH_RC PR_HEAD CI_RUN FLOOR_JOB LOG_EMPTY CALLED_SHA LABEL_RUN
   env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" ${args[@]+"${args[@]}"} >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -290,6 +313,72 @@ run DELETE_KILL=1 DELETE_RC3=1 GITHUB_STEP_SUMMARY="$work/summary2"
 check "a cancellation, then a deletion that fails" no $?
 is "the repository is named loudly" said "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42 may EXIST"
 is "and in the job summary"  grep -q "plinth-e2e-42" "$work/summary2"
+
+echo "-- a release branch calls plinth at its own commit (#862)"
+rel=0123456789abcdef0123456789abcdef01234567
+other=fedcba9876543210fedcba9876543210fedcba98
+release=(GITHUB_REF=refs/heads/release/v9.9.9 "GITHUB_SHA=$rel")
+committed() { grep -q -- "$1" "$GH_LOG.committed"; }
+before_merge() { [ "$(grep -n "$1" "$GH_LOG" | head -1 | cut -d: -f1)" -lt "$(grep -n '^gh pr merge ' "$GH_LOG" | head -1 | cut -d: -f1)" ]; }
+run "${release[@]}" GITHUB_STEP_SUMMARY="$work/summary-rel"; check "the release journey: merged and deleted" ok $?
+is "ci.yml's call moved to the run's commit" committed "^    uses: coolbress/plinth/.github/workflows/python-ci.yml@$rel\$"
+is "label.yml's call moved too" committed "^    uses: coolbress/plinth/.github/workflows/pr-label.yml@$rel\$"
+is "no call stays at the template's pin" not committed "plinth/.*@stub-sha"
+is "the commented call is left as the template wrote it" committed "^#       uses: coolbress/plinth/.github/workflows/pr-review.yml@<the full"
+is "another action's pin is left alone" committed "actions/checkout@stub-action-sha"
+is "one commit, pushed before the merge" bash -c '[ "$(grep -c "^git -C .* commit " "$1")" = 1 ] && [ "$(grep -c "^git -C .* push" "$1")" = 1 ]' _ "$GH_LOG"
+is "the push comes before the merge" before_merge "^git -C .* push"
+is "the pins line shows the run's commit" said "^pins: .*python-ci.yml@$rel"
+is "the log shows the called job.workflow_sha equal to it" said "^called job.workflow_sha: $rel, this run's commit\$"
+is "and so does the job summary" grep -q "^called job.workflow_sha: $rel" "$work/summary-rel"
+is "the log shows the label run at it too" said "^called pr-label.yml: success at $rel\$"
+is "the head's run was asked for" saw "^gh api -X GET repos/tester/plinth-e2e-42/actions/runs .*head_sha=feedface"
+is "deleted" deletes 2
+run "${release[@]}" PLINTH_E2E_ARCHETYPE=web; check "the web journey on a release branch too" ok $?
+is "its calls moved" committed "python-ci.yml@$rel"
+
+run "${release[@]}" "CALLED_SHA=$other"; check "a called run at another commit fails the journey" no $?
+is "both commits are named" said "the called job.workflow_sha is $other, not this run's commit $rel"
+is "deleted" deletes 2
+run "${release[@]}" LOG_EMPTY=1; check "a log with no plinth line fails: nothing read is not a pass" no $?
+is "it says it could not read one" said "could not read the called job.workflow_sha"
+is "deleted" deletes 2
+for gone in PR_HEAD= CI_RUN= FLOOR_JOB=; do
+  run "${release[@]}" "$gone"; check "no answer for $gone fails the journey" no $?
+  is "it says it could not read one" said "could not read the called job.workflow_sha"
+  is "the log is not read" not saw "^gh run view "
+  is "deleted" deletes 2
+done
+for got in "startup_failure null" "null null" "success $other" ""; do
+  run "${release[@]}" "LABEL_RUN=$got"; check "a label run that reads \"$got\" fails: it is in no ruleset, so nothing else would" no $?
+  is "it says what it read" said "label.yml's run on .* reads \"${got:-nothing}\""
+  is "deleted" deletes 2
+done
+run "${release[@]}" PUSH_RC=1; check "a push of the moved calls that fails stops the journey" no $?
+is "no merge" not saw "^gh pr merge"
+is "deleted" deletes 2
+run "${release[@]}" DOOR_NO_PINS=1; check "a render that calls plinth nowhere fails: nothing moved is not a pass" no $?
+is "it says so" said "no coolbress/plinth call to move"
+is "nothing pushed" not saw "^git -C .* push"
+is "no merge" not saw "^gh pr merge"
+is "deleted" deletes 2
+run GITHUB_REF=refs/heads/release/v9.9.9 GITHUB_SHA=abc123; check "a release branch with no full commit stops before anything" no $?
+is "it says what it got" said "GITHUB_SHA is not a full commit (got: abc123)"
+is "nothing created" not saw "^gh repo "
+run GITHUB_REF=refs/heads/release/v9.9.9; check "a release branch with no commit at all stops too" no $?
+is "nothing created" not saw "^gh repo "
+
+echo "-- every other ref keeps the template's pin (#862)"
+for ref in refs/heads/main refs/heads/fix/e2e refs/heads/release/notes refs/tags/release/v9.9.9 refs/tags/v9.9.9; do
+  run "GITHUB_REF=$ref" "GITHUB_SHA=$rel"; check "$ref: merged and deleted" ok $?
+  is "nothing committed or pushed" not saw "^git -C "
+  is "the pins line keeps the template's pin" said "^pins: .*python-ci.yml@stub-sha"
+  is "no called run is read" not saw "^gh run view "
+  is "no called line" not said "called job.workflow_sha"
+done
+run; check "no ref at all (a person's run): merged and deleted" ok $?
+is "nothing committed or pushed" not saw "^git -C "
+is "the pins line keeps the template's pin" said "^pins: .*python-ci.yml@stub-sha"
 
 echo
 echo "-- $pass passed, $fail failed"

@@ -294,11 +294,11 @@ release_pr() {
   setup "$1"
   jq --arg t "${2:-chore(release): v9.9.9}" '.title = $t | .headRefName = "release/v9.9.9"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
 }
-e2e_runs() { # one `<conclusion|-:status> <head_sha>` per argument, oldest first; GitHub's own order is not relied on
-  local a c s i=0
-  { for a in "$@"; do c="${a%% *}"; s="${a##* }"; i=$((i+1)); t="2026-11-07T10:00:0${i}Z"
-      if [ "${c#-:}" = "$c" ]; then jq -n --arg c "$c" --arg s "$s" --arg t "$t" '{status:"completed",conclusion:$c,head_sha:$s,run_started_at:$t,html_url:"https://example.test/runs/\($c)"}'
-      else jq -n --arg st "${c#-:}" --arg s "$s" --arg t "$t" '{status:$st,conclusion:null,head_sha:$s,run_started_at:$t,html_url:"https://example.test/runs/\($st)"}'; fi
+e2e_runs() { # one `<conclusion|-:status> <head_sha> [head_branch]` per argument, oldest first; GitHub's own order is not relied on. The branch defaults to the release's; `null` is none
+  local a c s b i=0
+  { for a in "$@"; do read -r c s b <<<"$a"; b="${b:-release/v9.9.9}"; i=$((i+1)); t="2026-11-07T10:00:0${i}Z"
+      if [ "${c#-:}" = "$c" ]; then jq -n --arg c "$c" --arg s "$s" --arg t "$t" --arg b "$b" '{status:"completed",conclusion:$c,head_sha:$s,head_branch:(if $b == "null" then null else $b end),run_started_at:$t,html_url:"https://example.test/runs/\($c)"}'
+      else jq -n --arg st "${c#-:}" --arg s "$s" --arg t "$t" --arg b "$b" '{status:$st,conclusion:null,head_sha:$s,head_branch:(if $b == "null" then null else $b end),run_started_at:$t,html_url:"https://example.test/runs/\($st)"}'; fi
     done; } | jq -s '{workflow_runs:.}' >"$FX/e2e.json"
 }
 P="--repo coolbress/plinth"
@@ -339,6 +339,25 @@ run stop "the repository's name in another case is the same repository" --repo C
 release_pr e2e-still-red; e2e_runs "success $H"
 printf '[{"name":"ci / install","state":"FAILURE"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks.json"
 run stop "a green e2e run does not excuse a red check" $P
+
+echo "-- only a run on a release/v* branch counts: elsewhere it never moved the calls to its own commit (#862)"
+for b in main fix/e2e release/notes release-v9.9.9 my/release/v9.9.9 null; do
+  release_pr "e2e-on-$(tr '/' '-' <<<"$b")"; e2e_runs "success $H $b"
+  run stop "a green run at the head on $b" $P
+  says_cmd; check "  and it prints the dispatch command for the release branch" $?
+  grep -qF '(no run on a release/v* branch at that commit)' "$FX/out"; check "  and it says none counts, not that the commit has no run" $?
+done
+release_pr e2e-probe; e2e_runs "success $H release/v0.0.0-probe"
+run merge "a green run at the head on another release/v* branch" $P
+release_pr e2e-main-then-release; e2e_runs "success $H main" "success $H"
+run merge "a green run on main, then a green one on the release branch" $P
+release_pr e2e-release-then-main; e2e_runs "success $H" "failure $H main"
+run merge "a green release run is not spoken over by a later run elsewhere" $P
+release_pr e2e-red-then-main; e2e_runs "failure $H" "success $H main"
+run stop "a red release run is not excused by a later green run elsewhere" $P
+grep -qF 'failure https://example.test/runs/failure' "$FX/out"; check "  and it names the red run" $?
+release_pr e2e-going-then-main; e2e_runs "-:in_progress $H" "success $H main"
+run stop "a release run still going is not excused by a green run elsewhere" $P
 
 echo "-- everything else is unchanged"
 release_pr e2e-round; e2e_runs

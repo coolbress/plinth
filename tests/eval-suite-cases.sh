@@ -91,6 +91,14 @@ cat > /dev/null
 ws="$(pwd -P)"; run="$(basename "$(dirname "$ws")")"; n="${run##*-}"
 IFS=, read -r -a actions <<< "${EVAL_STUB_ACTIONS:-nothing}"
 action="${actions[$((n-1))]:-nothing}"
+# The action that passes whichever smoke task this run is.
+if [ "$action" = smoke-pass ]; then
+  case "$run" in
+    floor-gaps-*) action=floor-all ;;
+    guide-reminder-*) action=reminder-right ;;
+    guide-*) action=guide-right ;;
+  esac
+fi
 cfg_empty=no; [ -d "${GH_CONFIG_DIR:-/nonexistent}" ] && [ -z "$(ls -A "$GH_CONFIG_DIR")" ] && cfg_empty=yes
 EVAL_STUB_IN_SESSION=1 gh auth status >/dev/null 2>&1; ghs=$?
 echo "session run=$run action=$action budget=$budget cfg=$CLAUDE_CONFIG_DIR gh_token=${GH_TOKEN-unset} github_token=${GITHUB_TOKEN-unset} gh_config=${GH_CONFIG_DIR-unset} gh_config_empty=$cfg_empty gh_auth=$ghs origin=$(git remote get-url origin) agents_md=$([ -e AGENTS.md ] && echo yes || echo no) settings=$settings" >> "$EVAL_STUB_LOG"
@@ -551,6 +559,41 @@ TMPDIR="$tmp" EVAL_STUB_INSTALL_FAILS=1 suite --task ledger --arm none --runs 1 
 gone="$(sed -nE 's/^claude plugin cfg=([^ ]+) .*/\1/p' "$log" | head -1)"
 check "and when the install fails, before any run" \
   '[ "$(rc)" != 0 ] && [ -n "$gone" ] && [ ! -e "$gone" ] && [ "$(sessions)" = 0 ]' "$(cat "$log" "$tmp/out.txt")"
+
+# --- the release smoke run (#862): the marked tasks, plinth arm, two runs each, every run passes
+marked="$(cd "$root/eval-suite/tasks" && for t in *; do [ ! -f "$t/smoke" ] || echo "$t"; done)"
+n_marked="$(grep -c . <<<"$marked")"
+all_runs=$((n_marked * 2))
+check "3 to 6 tasks are marked smoke" '[ "$n_marked" -ge 3 ] && [ "$n_marked" -le 6 ]' "$marked"
+check "each marked task says why it was chosen" '! (cd "$root/eval-suite/tasks" && for t in $marked; do [ -s "$t/smoke" ] || echo "$t"; done) | grep -q .'
+check "no marked task is a question task, which has no pass" '! (cd "$root/eval-suite/tasks" && for t in $marked; do cat "$t/kind" 2>/dev/null; echo; done) | grep -q question'
+check "the how-to names every marked task" '! for t in $marked; do grep -qF "\`$t\`" "$root/docs/how-to/run-the-eval-suite.md" || echo "$t"; done | grep -q .'
+: > "$log"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,smoke-pass suite --smoke --out "$tmp/s1"
+check "every run passing: exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+check "only the marked tasks, plinth arm, two runs each" \
+  '[ "$(sessions)" = "$all_runs" ] && [ "$(ls "$tmp/s1/runs" | grep -c -- "-plinth-[12]$")" = "$all_runs" ] && [ "$(ls "$tmp/s1/runs" | wc -l | tr -d " ")" = "$all_runs" ]' "$(ls "$tmp/s1/runs")"
+check "plinth is installed from this checkout" 'grep -q "^claude plugin .* marketplace add $root$" "$log"' "$(cat "$log")"
+check "the verdict line counts them" 'grep -q "^smoke: $all_runs of $all_runs runs passed\.$" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+here="$(git -C "$root" rev-parse HEAD)"
+check "the summary to post has the verdict and the commit it ran on" \
+  'grep -q "^smoke: " "$tmp/s1/summary.md" && grep -q "^plinth installed from: .* at $here" "$tmp/s1/summary.md"' "$(cat "$tmp/s1/summary.md")"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,guide-old suite --smoke --out "$tmp/s2"
+check "one failed run fails the smoke run: exit 1" '[ "$(rc)" = 1 ]' "$(cat "$tmp/out.txt")"
+check "the failed runs are named" 'grep -q "^smoke: $n_marked of $all_runs runs passed.*guide-plinth-2 (did not pass)" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "the table is printed all the same" 'grep -qF "| Task · arm |" "$tmp/out.txt"'
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=break-grade,read-hidden suite --smoke --out "$tmp/s3"
+check "a run not graded, and one that read the hidden tests, are not passes: exit 1" '[ "$(rc)" = 1 ] && grep -q "^smoke: 0 of " "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "each says why" 'grep -q "floor-gaps-plinth-1 (not graded)" "$tmp/out.txt" && grep -q "floor-gaps-plinth-2 (read a path under eval-suite/, so not counted)" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,smoke-pass EVAL_STUB_COST=0.6 suite --smoke --ceiling 1 --out "$tmp/s4"
+check "a ceiling that stops it is exit 3, and not a pass" '[ "$(rc)" = 3 ] && grep -q "^smoke: 2 of $all_runs runs passed" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+: > "$log"
+for clash in "--task ledger" "--arm none" "--runs 1" "--model haiku" "--config-dir $tmp/cfg"; do
+  # shellcheck disable=SC2086  # the option and its value are two words
+  suite --smoke $clash --out "$tmp/s5"
+  check "--smoke with ${clash%% *} is refused: the result means one thing (exit 2)" \
+    '[ "$(rc)" = 2 ] && grep -q "smoke" "$tmp/out.txt" && [ "$(sessions)" = 0 ] && [ ! -e "$tmp/s5" ]' "$(cat "$tmp/out.txt")"
+done
 
 echo "  $pass passed, $fail failed"
 [ "$fail" = 0 ]
