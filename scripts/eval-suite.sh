@@ -461,14 +461,14 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
   fi
 }
 
-# Cut short (Ctrl-C, a closed terminal): it reported no cost, so it is charged a run's
-# limit. Before the ceiling is read, which must count it.
-charge_cut_short() { # <run dir>
-  if [ -e "$1/stream.jsonl" ] && [ ! -e "$1/cost.txt" ]; then
-    echo "$per_run_cap" > "$1/cost.txt"
-    echo "charged a run's limit: the session was cut short before it reported a cost" > "$1/cost-unknown.txt"
+# A run cut short (Ctrl-C, a closed terminal) reported no cost, so it is charged a
+# run's limit: all of them now, since the ceiling read before any later run must count them.
+for d in "$out/runs/"*/; do
+  if [ -e "$d/stream.jsonl" ] && [ ! -e "$d/cost.txt" ]; then
+    echo "$per_run_cap" > "$d/cost.txt"
+    echo "charged a run's limit: the session was cut short before it reported a cost" > "$d/cost-unknown.txt"
   fi
-}
+done
 # A run a resume runs again: what it left stays for a person, and its cost counted.
 set_aside() { # <run dir>
   [ -e "$1" ] || return 0
@@ -484,7 +484,6 @@ for n in $(seq 1 "$runs"); do
     for a in "${arms[@]}"; do
       task_in_arm "$t" "$a" || continue
       if [ -f "$out/runs/$t-$a-$n/grade.json" ]; then i=$(( i + 1 )); continue; fi
-      charge_cut_short "$out/runs/$t-$a-$n"
       s="$(spent)"
       if over "$s" "$ceiling"; then
         stopped="Stopped: ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n; $(not_started) not started"

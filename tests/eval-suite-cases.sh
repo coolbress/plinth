@@ -682,12 +682,12 @@ echo one > "$tmp/cfg/plugins/plinth-copy/file"
 mkdir -p "$tmp/cfg-no-path/plugins"; echo '{"plugins": {"plinth@plinth": []}}' > "$tmp/cfg-no-path/plugins/installed_plugins.json"
 refuse_resume "a --config-dir whose installed plinth cannot be read refuses" "plinth in --config-dir: recorded " suite --config-dir "$tmp/cfg-no-path" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
 : > "$log"
-EVAL_STUB_ACTIONS=limit suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --ceiling 1 --out "$tmp/rcut"
-rm "$tmp/rcut/runs/ledger-plinth-1/cost.txt" "$tmp/rcut/runs/ledger-plinth-1/not-run.txt"
+EVAL_STUB_ACTIONS=break-grade,nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --ceiling 1 --out "$tmp/rcut"
+rm "$tmp/rcut/runs/ledger-plinth-2/cost.txt" "$tmp/rcut/runs/ledger-plinth-2/grade.json"
 : > "$log"
 EVAL_STUB_ACTIONS=nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --ceiling 1 --out "$tmp/rcut"
-check "a run cut short counts before the ceiling is read: its US\$2 against US\$1 starts no session (exit 3)" \
-  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 0 ] && grep -qF "ceiling reached: spent \$2.0000 of \$1" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; grep '^session' "$log")"
+check "every run cut short counts before the ceiling is read, a later one too: US\$2.25 against US\$1 starts no session (exit 3)" \
+  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 0 ] && grep -qF "ceiling reached: spent \$2.2500 of \$1" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; grep '^session' "$log")"
 # The real checkout's state, on a copy: tests must pass from a dirty tree as well as a clean one.
 cl="$tmp/clone"; mkdir -p "$cl"
 cp -R "$root/scripts" "$root/eval-suite" "$root/.claude-plugin" "$cl/"
