@@ -1,3 +1,4 @@
+# Rule: a caller's Actions allowlist covers this file; a third-party action stops every consumer's checks (#867).
 name: pr-review
 #
 # Did a third party look at this commit? Reusable workflow; the check is

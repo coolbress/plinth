@@ -1,3 +1,4 @@
+# Rule: a caller's Actions allowlist covers this file; a third-party action stops every consumer's checks (#867).
 # Copies the type from the pull request title onto a label. Reusable workflow.
 #
 # Why: GitHub's generated release notes (`.github/release.yml`) group by label,

@@ -13,6 +13,12 @@ pull requests and have no tag.
 
 ### Added
 
+- `tests/reusable-workflow-allowlist.sh` fails on an action in `python-ci.yml`,
+  `pr-label.yml` or `pr-review.yml` that the door's allowlist for every
+  archetype refuses (#867). A calling repository's allowlist also applies inside
+  a reusable workflow, so such an action would end every consumer's run in
+  `startup_failure` with no job, at its next pin raise (measured on #861). Each
+  of the three files now states the rule on its first line.
 - `e2e` on a `release/v*` branch moves the test repository's calls to plinth's
   reusable workflows to the run's own commit, and fails unless the called
   `ci / floor-check` job's `job.workflow_sha` is that commit and `label.yml`'s
