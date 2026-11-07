@@ -27,8 +27,8 @@
 #
 # It stops, and merges nothing, when:
 #   - on coolbress/plinth, the pull request is titled `chore(release): vX.Y.Z`
-#     and the `e2e` run started last on the head is not green, or there is none
-#     (#855): the merge is what reaches an
+#     and the `e2e` run started last on the head, of those on a `release/v*`
+#     branch, is not green, or there is none (#855, #862): the merge is what reaches an
 #     installation with auto-update on, and it cannot be taken back. A
 #     dispatched run does not show in `gh pr checks`, so the checks below do not
 #     hold on it, and a ruleset cannot require it of release pull requests alone;
@@ -145,26 +145,30 @@ fi
 # may use the title with no such workflow, and a 404 read as "nothing to wait
 # for" would turn this off the day the file were renamed here. Any read that
 # fails stops. The select repeats the head, as make-release.sh's does. Before the
-# checks, so a missing run is said without waiting for them.
+# checks, so a missing run is said without waiting for them. Only a run on a
+# release/v* branch counts, whichever way it ended: on any other ref scripts/e2e.sh
+# keeps the template's pin, so a green run there never called this commit's
+# workflows from another repository (#862). A run's head_branch is also the name
+# of a tag it ran on; nothing here tells a tag named release/v* from a branch.
 if [ "$(tr '[:upper:]' '[:lower:]' <<<"$repo")" = coolbress/plinth ]; then
   title="$(gh pr view "$pr" -R "$repo" --json title --jq .title)" || stop "cannot read the title of $pr"
   if [[ "$title" =~ ^chore\(release\):\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     # Newest first. The run started last speaks, as it does for a check name
     # below: a green run does not excuse a later red one, or one still going.
     runs="$(gh api -X GET "repos/$repo/actions/workflows/e2e.yml/runs" -f "head_sha=$head" -F per_page=100 \
-              --jq ".workflow_runs | map(select(.head_sha == \"$head\")) | sort_by(.run_started_at // .created_at) | reverse | .[] | \"\(.conclusion // .status) \(.html_url)\"" 2>&1)" \
+              --jq ".workflow_runs | map(select(.head_sha == \"$head\" and ((.head_branch // \"\") | startswith(\"release/v\")))) | sort_by(.run_started_at // .created_at) | reverse | .[] | \"\(.conclusion // .status) \(.html_url)\"" 2>&1)" \
       || stop "cannot read the e2e runs on $head: $runs"
     newest="${runs%%$'\n'*}"
     case "$newest" in
       "success "*) ;;
       *)
         branch="$(gh pr view "$pr" -R "$repo" --json headRefName --jq .headRefName)" || stop "cannot read the branch of $pr"
-        stop "the e2e run started last on $head is not green; a release merges only after a green one, because the merge reaches every installation with auto-update on:" \
-             "${runs:-(no run on that commit)}" \
+        stop "the e2e run started last on $head on a release/v* branch is not green; a release merges only after a green one, because the merge reaches every installation with auto-update on:" \
+             "${runs:-(no run on a release/v* branch at that commit)}" \
              "run it, unless the newest run above is still going, then wait for it: gh workflow run e2e.yml --ref $branch --repo $repo   (on HTTP 403, through scripts/with-admin-token.sh: docs/how-to/cut-a-release.md, step 5)" \
              "then, once it is green, run this again" ;;
     esac
-    echo "e2e: green on this head: ${newest#success }"
+    echo "e2e: green on this head, on a release/v* branch: ${newest#success }"
   fi
 fi
 
