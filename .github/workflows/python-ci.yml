@@ -1,3 +1,4 @@
+# Rule: a caller's Actions allowlist covers this file; a third-party action stops every consumer's checks (#867).
 name: python-ci
 #
 # Reusable workflow. A consumer repository calls it like this:
