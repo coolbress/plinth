@@ -141,7 +141,7 @@ dependency pins, with no `claude plugin update <name>@plinth` and without
 asking. A new version can arrive right after the release pull request merges,
 before the tag and the GitHub Release (#855).
 
-What was measured: coolbress/plinth-template#208.
+What was measured: [coolbress/plinth-template#208](https://github.com/coolbress/plinth-template/issues/208).
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
