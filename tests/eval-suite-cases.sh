@@ -21,7 +21,7 @@
 # an issues.json, whose sessions get the runner's read-only gh instead. The grader itself
 # runs for real: `uv sync --frozen` installs canary's locked ruff, mypy and
 # pytest (network the first time).
-# shellcheck disable=SC2034  # sha, repo, bare_ok, gone, nr, nr_why, rd, rr_label, rr_named, up_name and tab are used inside the check() command strings
+# shellcheck disable=SC2034  # sha, repo, bare_ok, gone, nr, nr_why, rd, rr_named, up_name and tab are used inside the check() command strings
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 command -v uv >/dev/null || { echo "  FAIL  uv is not installed"; exit 1; }
@@ -37,7 +37,8 @@ bad() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf 
 check() { if eval "$2"; then ok "$1"; else bad "$1" "${3:-}"; fi; }
 
 mkdir -p "$tmp/bin" "$tmp/home/.claude" "$tmp/mine/sub" "$tmp/cfg/plugins"
-echo '{"version": 2, "plugins": {"plinth@plinth": []}}' > "$tmp/cfg/plugins/installed_plugins.json"
+mkdir -p "$tmp/cfg/plugins/plinth-copy"; echo one > "$tmp/cfg/plugins/plinth-copy/file"
+printf '{"version": 2, "plugins": {"plinth@plinth": [{"installPath": "%s"}]}}\n' "$tmp/cfg/plugins/plinth-copy" > "$tmp/cfg/plugins/installed_plugins.json"
 ln -s "$tmp/home/.claude" "$tmp/link"
 log="$tmp/stub.log"; : > "$log"
 
@@ -603,7 +604,7 @@ still_graded "a crash with no result line is still graded" crash
 : > "$log"
 EVAL_STUB_ACTIONS=push-main,limit suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/re"
 cp "$tmp/re/runs/ledger-plinth-1/grade.json" "$tmp/re-first.json"
-mkdir -p "$tmp/re/runs/ledger-plinth-3/repo"
+mkdir -p "$tmp/re/runs/ledger-plinth-3/repo"; : > "$tmp/re/runs/ledger-plinth-3/stream.jsonl"
 : > "$log"
 EVAL_STUB_ACTIONS=push-main,worktree-branch,nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/re"
 check "a resume runs only the missing runs, and ends with exit 0" \
@@ -626,42 +627,34 @@ EVAL_STUB_ACTIONS=nothing,nothing suite --config-dir "$tmp/cfg" --task ledger --
 check "it carries on in the same order, round by round" \
   '[ "$(grep "^session " "$log" | sed -E "s/^session run=([^ ]+) .*/\1/" | tr "\n" " ")" = "ledger-none-2 ledger-plinth-2 " ]' "$(grep '^session' "$log")"
 
-refuse_resume() { # <label> <what the message names> <suite args and env as a command>
+refuse_resume() { # <label> <what the message names> <the command>
   : > "$log"
+  local label="$1"
   rr_named="$2"; shift 2
   "$@"
-  check "$rr_label" '[ "$(rc)" = 2 ] && [ "$(sessions)" = 0 ] && [ ! -s "$log" ] && grep -qF "$rr_named" "$tmp/out.txt" && grep -qF "refusing to resume" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; cat "$log")"
+  check "$label" '[ "$(rc)" = 2 ] && [ "$(sessions)" = 0 ] && [ ! -s "$log" ] && grep -qF "$rr_named" "$tmp/out.txt" && grep -qF "refusing to resume" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; cat "$log")"
 }
 same=(--config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/re")
-rr_label="a changed model refuses to resume, naming the model"
-refuse_resume x "model: recorded sonnet, now haiku" suite "${same[@]}" --model haiku
-rr_label="a changed Claude Code version refuses, naming it"
-EVAL_STUB_VERSION="9.9.9 (stub claude)" refuse_resume x "Claude Code version: recorded 0.0.0 (stub claude), now 9.9.9 (stub claude)" suite "${same[@]}"
+refuse_resume "a changed model refuses to resume, naming the model" "model: recorded sonnet, now haiku" suite "${same[@]}" --model haiku
+EVAL_STUB_VERSION="9.9.9 (stub claude)" refuse_resume "a changed Claude Code version refuses, naming it" "Claude Code version: recorded 0.0.0 (stub claude), now 9.9.9 (stub claude)" suite "${same[@]}"
 cp "$tmp/re/conditions.txt" "$tmp/re-conditions.txt"
 perl -pi -e 's/^plinth commit=.*/plinth commit=0000000/' "$tmp/re/conditions.txt"
-rr_label="a changed plinth commit refuses, naming it"
-refuse_resume x "plinth commit: recorded 0000000, now " suite "${same[@]}"
+refuse_resume "a changed plinth commit refuses, naming it" "plinth commit: recorded 0000000, now " suite "${same[@]}"
 cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
 perl -pi -e 's/^template SHA=.*/template SHA=1111111/' "$tmp/re/conditions.txt"
-rr_label="a changed template SHA refuses, naming it"
-refuse_resume x "template SHA: recorded 1111111, now $sha" suite "${same[@]}"
+refuse_resume "a changed template SHA refuses, naming it" "template SHA: recorded 1111111, now $sha" suite "${same[@]}"
 cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
 perl -pi -e 's/^model=.*/model=opus/; s/^template SHA=.*/template SHA=1111111/' "$tmp/re/conditions.txt"
-rr_label="every changed value is named, not only the first"
-refuse_resume x "model: recorded opus, now sonnet" suite "${same[@]}"
+refuse_resume "every changed value is named, not only the first" "model: recorded opus, now sonnet" suite "${same[@]}"
 check "and the second of them too" 'grep -qF "template SHA: recorded 1111111" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
 perl -pi -e 's/^Claude Code version=.*/Claude Code version=unread/' "$tmp/re/conditions.txt"
-rr_label="a recorded value that could not be read refuses"
-refuse_resume x "Claude Code version: recorded unread" suite "${same[@]}"
+refuse_resume "a recorded value that could not be read refuses" "Claude Code version: recorded unread" suite "${same[@]}"
 cp "$tmp/re-conditions.txt" "$tmp/re/conditions.txt"
-rr_label="another --runs refuses: the tables would not be of one suite"
-refuse_resume x "runs: recorded 3, now 4" suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 4 --out "$tmp/re"
-rr_label="another --task refuses"
-refuse_resume x "tasks: recorded ledger, now cli-name" suite --config-dir "$tmp/cfg" --task cli-name --arm plinth --runs 3 --out "$tmp/re"
-rr_label="a folder with no recorded conditions refuses"
+refuse_resume "another --runs refuses: the tables would not be of one suite" "runs: recorded 3, now 4" suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 4 --out "$tmp/re"
+refuse_resume "another --task refuses" "tasks: recorded ledger, now cli-name" suite --config-dir "$tmp/cfg" --task cli-name --arm plinth --runs 3 --out "$tmp/re"
 mkdir -p "$tmp/plain"
-refuse_resume x "$tmp/plain holds no conditions.txt" suite --config-dir "$tmp/cfg" --task ledger --out "$tmp/plain"
+refuse_resume "a folder with no recorded conditions refuses" "$tmp/plain holds no conditions.txt" suite --config-dir "$tmp/cfg" --task ledger --out "$tmp/plain"
 : > "$log"
 EVAL_STUB_COST=0.6 suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 3 --ceiling 1 --out "$tmp/rceil"
 EVAL_STUB_COST=0.6 suite --config-dir "$tmp/cfg" --task ledger --arm none --runs 3 --ceiling 1 --out "$tmp/rceil"
@@ -675,6 +668,35 @@ EVAL_STUB_ACTIONS=break-grade suite --config-dir "$tmp/cfg" --task late-fee --ar
 EVAL_STUB_ACTIONS=ask suite --config-dir "$tmp/cfg" --task late-fee --arm plinth --runs 1 --out "$tmp/rg"
 check "a run whose grade failed runs again, its folder kept whole and its cost still counted" \
   '[ "$(rc)" = 0 ] && [ -e "$tmp/rg/runs/late-fee-plinth-1/grade.json" ] && [ -e "$tmp/rg/set-aside/late-fee-plinth-1.1/grade-error.txt" ] && [ -d "$tmp/rg/set-aside/late-fee-plinth-1.1/repo/.venv" ] && grep -qF "Model cost: \$0.50" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+check "a run cut short with no cost reported is charged its limit: the three sessions' US\$0.75 and US\$2" \
+  'grep -qF "Model cost: \$2.75" "$tmp/re/summary.md"' "$(cat "$tmp/re/summary.md")"
+: > "$log"
+EVAL_STUB_ACTIONS=break-grade,nothing,nothing suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+EVAL_STUB_ACTIONS=limit suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+check "not started counts only what never started: run 1 again stopped, runs 2 and 3 already graded" \
+  '[ "$(rc)" = 3 ] && grep -qF "2 runs graded; stopped at run 1 (ledger plinth 1): usage limit" "$tmp/out.txt" && grep -qF "; 0 not started." "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+echo two > "$tmp/cfg/plugins/plinth-copy/file"
+refuse_resume "another plinth installed in the --config-dir refuses, the checkout unchanged" "plinth in --config-dir: recorded " suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+echo one > "$tmp/cfg/plugins/plinth-copy/file"
+mkdir -p "$tmp/cfg-no-path/plugins"; echo '{"plugins": {"plinth@plinth": []}}' > "$tmp/cfg-no-path/plugins/installed_plugins.json"
+refuse_resume "a --config-dir whose installed plinth cannot be read refuses" "plinth in --config-dir: recorded " suite --config-dir "$tmp/cfg-no-path" --task ledger --arm plinth --runs 3 --out "$tmp/rn"
+# The real checkout's state, on a copy: tests must pass from a dirty tree as well as a clean one.
+cl="$tmp/clone"; mkdir -p "$cl"
+cp -R "$root/scripts" "$root/eval-suite" "$root/.claude-plugin" "$cl/"
+git -C "$cl" init -q -b main; git -C "$cl" add -A; git -C "$cl" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm copy
+copy_suite() { "$cl/scripts/eval-suite.sh" --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --out "$tmp/rcopy" > "$tmp/out.txt" 2>&1; echo $? > "$tmp/rc"; }
+EVAL_STUB_ACTIONS=limit copy_suite
+echo "# changed" >> "$cl/scripts/new-project.sh"
+refuse_resume "an uncommitted change to a tracked file refuses, naming the plinth commit" "plinth commit: recorded " copy_suite
+git -C "$cl" checkout -q -- scripts/new-project.sh; echo x > "$cl/scripts/untracked"
+refuse_resume "and a new untracked file" "plinth commit: recorded " copy_suite
+rm "$cl/scripts/untracked"; git -C "$cl" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm next --allow-empty
+refuse_resume "and a new commit, on the real value" "plinth commit: recorded " copy_suite
+git -C "$cl" reset -q --hard HEAD~1
+: > "$log"
+EVAL_STUB_ACTIONS=nothing,nothing copy_suite
+check "back at the recorded commit it resumes" '[ "$(rc)" = 0 ] && [ "$(sessions)" = 2 ]' "$(cat "$tmp/out.txt")"
 
 # --- --out where the session would load rules of the folders above it (#864)
 above() { # <label> <what to plant, under $tmp/up> <named in the refusal>
@@ -755,7 +777,7 @@ check "a smoke run stopped by the limit is exit 3, and names the run as not run"
   '[ "$(rc)" = 3 ] && grep -q "^smoke: 3 of $all_runs runs passed.*floor-gaps-plinth-2 (not run: usage limit" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,smoke-pass suite --smoke --out "$tmp/s6"
 check "a smoke run resumes: the rest run, and the verdict is over all of them" \
-  '[ "$(rc)" = 0 ] && grep -q "^smoke: $all_runs of $all_runs runs passed\.$" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+  '[ "$(rc)" = 0 ] && grep -q "^smoke: $all_runs of $all_runs runs passed; run again by a resume: floor-gaps-plinth-2.1\.$" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$tmp/s6"
 check "records a smoke run made take only a smoke run" '[ "$(rc)" = 2 ] && grep -qF "smoke: recorded yes, now no" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 : > "$log"

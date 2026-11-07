@@ -71,15 +71,14 @@ every table, and stops with exit status 3. The last lines read like this:
 57 runs graded; stopped at run 58 (ledger plinth 2): usage limit (You've hit your 5-hour limit · resets 5:20pm); 47 not started.
 ```
 
-Then it prints the command that carries on. After the reset, run the same
-command again with the records folder as `--out`:
+After the reset, run the command you started with again, every option as it was,
+with the records folder as `--out`. With no options, that is:
 
 ```bash
 scripts/eval-suite.sh --out /path/to/the/records
 ```
 
-Add the same `--task`, `--arm` and `--runs` if you gave them. The suite keeps
-every graded run, runs the rest in the same order, and prints tables that cover
+The suite keeps every graded run, runs the rest in the same order, and prints tables that cover
 all of them. It does not wait for the reset itself. Without `--config-dir` it
 asks you to log in again.
 
@@ -88,15 +87,17 @@ after its first turn that names no limit.
 
 **A run with no grade** (not run, cut short, or its grade failed) runs again. What
 it left moves to `set-aside/` in the records folder. It is in no table, the line
-under them names it, and its cost stays in the total.
+under them names it, and its cost stays in the total. A run cut short (Ctrl-C, a
+closed terminal) reported no cost, so it is counted at the US$2 limit. A smoke
+run's result line names the runs a resume ran again.
 
 **A changed value refuses.** The folder's `conditions.txt` records the plinth
 commit (with a hash of any uncommitted changes), the template SHA, the model, the
 Claude Code version, and the tasks, arms and runs asked for. If one differs, the
 suite says which, and starts nothing: runs under another version are not the same
 measurement. Claude Code updating itself during the wait refuses too, so name a
-new folder then. With `--config-dir` the suite cannot see which plinth is
-installed in that folder, so do not update it between the two commands.
+new folder then. With `--config-dir` it also records a hash of the plinth installed
+in that folder.
 
 **The ceiling counts the whole folder.** A suite stopped by the ceiling stops again
 at once under the same ceiling; give a higher `--ceiling` to carry on.

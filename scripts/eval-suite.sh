@@ -181,9 +181,31 @@ plinth_state() {
   echo "$head+uncommitted-$( { echo "$changes"; git -C "$root" diff HEAD
     git -C "$root" ls-files -o --exclude-standard -z | xargs -0 -r git -C "$root" hash-object --; } | git hash-object --stdin)"
 }
+# A --config-dir keeps whichever plinth is installed in it, whatever is checked out
+# here, so its installed files are pinned too. No readable installed plinth: unread.
+cfg_named="$cfg"  # Below, a temporary one takes its place.
+installed_plinth() {
+  [ -n "$cfg_named" ] || { echo "none (installed from this checkout)"; return; }
+  python3 -I - "$cfg_named/plugins/installed_plugins.json" 2>/dev/null <<'PY' || echo unread
+import hashlib, json, os, sys
+d = json.load(open(sys.argv[1]))
+h = hashlib.sha256()
+for e in d.get("plugins", d)["plinth@plinth"] or sys.exit(1):
+    top = e["installPath"]
+    if not os.path.isdir(top):
+        sys.exit(1)
+    for at, dirs, files in os.walk(top):
+        dirs.sort()
+        for f in sorted(files):
+            h.update(os.path.relpath(os.path.join(at, f), top).encode())
+            h.update(open(os.path.join(at, f), "rb").read())
+print(h.hexdigest())
+PY
+}
 claude_version="$(claude --version 2>/dev/null | head -1 || true)"
 conditions() {
   printf 'plinth commit=%s\n' "$(plinth_state)"
+  printf 'plinth in --config-dir=%s\n' "$(installed_plinth)"
   printf 'template SHA=%s\n' "$template_sha"
   printf 'model=%s\n' "$model"
   printf 'Claude Code version=%s\n' "${claude_version:-unread}"
@@ -329,6 +351,8 @@ make_fixtures() {
   done
 }
 graded_runs() { find "$out/runs" -mindepth 2 -maxdepth 2 -name grade.json | wc -l | tr -d ' '; }
+# Every run folder is a run that started, in this invocation or an earlier one.
+not_started() { echo "$(( total - $(find "$out/runs" -mindepth 1 -maxdepth 1 -type d | wc -l) ))"; }
 plural() { [ "$1" = 1 ] && echo "$1 $2" || echo "$1 $3"; }
 if [ -n "$resuming" ]; then
   echo "== resuming: $(plural "$(graded_runs)" "graded run" "graded runs") kept; the rest run in order, on the fixtures already here"
@@ -357,6 +381,12 @@ with open(tmp, "w") as f:
     json.dump(d, f, indent=2)
 os.replace(tmp, path)
 PY
+}
+
+drop_caches() { # <run dir>
+  [ -z "$keep_caches" ] || return 0
+  python3 -I "$root/scripts/eval-suite-grade.py" --drop-caches "$1" 2>> "$1/grade-error.txt" \
+    | sed 's/^/   /' || echo "   caches not dropped: $(tail -1 "$1/grade-error.txt")"
 }
 
 run_one() { # <task> <arm> <n> <budget>
@@ -419,15 +449,13 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
   python3 -I "$root/scripts/eval-suite-grade.py" --not-run "$r"
   if [ -f "$r/not-run.txt" ]; then
     echo "   not run, so not graded: $(cat "$r/not-run.txt")"
-    [ -n "$keep_caches" ] || python3 -I "$root/scripts/eval-suite-grade.py" --drop-caches "$r" 2> "$r/grade-error.txt" \
-      | sed 's/^/   /' || echo "   caches not dropped: $(tail -1 "$r/grade-error.txt")"
+    drop_caches "$r"
     return 0
   fi
   # A grade that fails leaves the run ungraded, counted under the table; the next run still starts.
   if python3 -I "$root/scripts/eval-suite-grade.py" "$r" "$fx" "$root/eval-suite/tasks/$task" 2> "$r/grade-error.txt" \
     | sed 's/^/   /'; then
-    [ -n "$keep_caches" ] || python3 -I "$root/scripts/eval-suite-grade.py" --drop-caches "$r" 2>> "$r/grade-error.txt" \
-      | sed 's/^/   /' || echo "   caches not dropped: $(tail -1 "$r/grade-error.txt")"
+    drop_caches "$r"
   else
     echo "   not graded: $(tail -1 "$r/grade-error.txt"); its folder is kept whole"
   fi
@@ -436,6 +464,11 @@ sys.exit(3 if cost is None else 0)' "$r/stream.jsonl" "$budget" > "$r/cost.txt" 
 # A run a resume runs again: what it left stays for a person, and its cost counted.
 set_aside() { # <run dir>
   [ -e "$1" ] || return 0
+  # Cut short (Ctrl-C, a closed terminal): it reported no cost, so it is charged a run's limit.
+  if [ -e "$1/stream.jsonl" ] && [ ! -e "$1/cost.txt" ]; then
+    echo "$per_run_cap" > "$1/cost.txt"
+    echo "charged a run's limit: the session was cut short before it reported a cost" > "$1/cost-unknown.txt"
+  fi
   local k=1
   while [ -e "$out/set-aside/$(basename "$1").$k" ]; do k=$(( k + 1 )); done
   mv "$1" "$out/set-aside/$(basename "$1").$k"
@@ -450,7 +483,7 @@ for n in $(seq 1 "$runs"); do
       if [ -f "$out/runs/$t-$a-$n/grade.json" ]; then i=$(( i + 1 )); continue; fi
       s="$(spent)"
       if over "$s" "$ceiling"; then
-        stopped="Stopped: ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n or the $(( total - i - 1 )) runs after it"
+        stopped="Stopped: ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n; $(not_started) not started"
         break 3
       fi
       budget="$(awk -v c="$ceiling" -v s="$s" -v m="$per_run_cap" 'BEGIN { l = c - s; printf "%.4f", (l < m ? l : m) }')"
@@ -459,7 +492,7 @@ for n in $(seq 1 "$runs"); do
       echo "== run $i of $total: $t $a $n (budget \$$budget, spent \$$s)"
       run_one "$t" "$a" "$n" "$budget"
       if [ -f "$out/runs/$t-$a-$n/not-run.txt" ]; then
-        stopped="$(plural "$(graded_runs)" run runs) graded; stopped at run $i ($t $a $n): $(cat "$out/runs/$t-$a-$n/not-run.txt"); $(( total - i )) not started"
+        stopped="$(plural "$(graded_runs)" run runs) graded; stopped at run $i ($t $a $n): $(cat "$out/runs/$t-$a-$n/not-run.txt"); $(not_started) not started"
         break 3
       fi
     done
@@ -489,7 +522,13 @@ for d in sorted(p for p in runs.iterdir() if p.is_dir()):
         bad.append(f"{d.name} (did not pass)")
     else:
         good += 1
-print(f"smoke: {good} of {want} runs passed" + (f"; not passed: {', '.join(bad)}" if bad else "") + ".")
+again = sorted(p.name for p in (runs.parent / "set-aside").iterdir())
+print(
+    f"smoke: {good} of {want} runs passed"
+    + (f"; not passed: {', '.join(bad)}" if bad else "")
+    + (f"; run again by a resume: {', '.join(again)}" if again else "")
+    + "."
+)
 sys.exit(0 if good == want else 1)
 PY
 }
