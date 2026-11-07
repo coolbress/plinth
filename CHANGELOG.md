@@ -20,8 +20,10 @@ pull requests and have no tag.
   `startup_failure` with no job, at its next pin raise (measured on #861). Each
   of the three files now states the rule on its first line. The list fails
   closed (#870): any other `workflow_call` file fails the test unless it is named
-  as excluded with its reason (today only `plinth-ci.yml`), and a checked file
-  calling another workflow of this repository has that file read too.
+  as excluded with its reason (today only `plinth-ci.yml`), an exclusion naming a
+  file that is not there fails, a checked file calling another workflow of this
+  repository has that file read too, and one using anything else of this
+  repository (a composite action, say) fails, because that is not read.
 - `e2e` on a `release/v*` branch moves the test repository's calls to plinth's
   reusable workflows to the run's own commit, and fails unless the called
   `ci / floor-check` job's `job.workflow_sha` is that commit and `label.yml`'s

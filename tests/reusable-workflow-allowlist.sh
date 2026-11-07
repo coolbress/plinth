@@ -16,8 +16,9 @@
 # excluded, with its reason, or the test fails naming it. A uses: in a checked
 # file that calls another workflow of this repository makes that file checked
 # too, at the copy in this checkout: a call pinned to another commit is not read
-# at that commit, and neither workflows of other repositories nor composite
-# actions are read at all.
+# at that commit, and workflows of other repositories are not read at all. A
+# uses: of anything else in this repository (a composite action, say) is not
+# read either, so it fails.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 door="$root/scripts/new-project.sh"
@@ -55,7 +56,8 @@ def refuse(text):
     global refused
     refused += 1
     print(text)
-THIS_REPO = re.compile(r"(?:\./|coolbress/plinth/)\.github/workflows/([^@]+)", re.I)
+THIS_REPO = r"\./|coolbress/plinth/"
+THIS_REPO_WORKFLOW = re.compile(rf"(?:{THIS_REPO})\.github/workflows/([^@/]+)(?:@.*)?$", re.I)
 checked = list(names)
 for name in checked:  # grows while it runs: a called file is read in its turn
     path, shown = root / name, f".github/workflows/{name}"
@@ -67,9 +69,15 @@ for name in checked:  # grows while it runs: a called file is read in its turn
             refuse(f"{shown}:{n}: a uses this checker cannot read, so it may name a refused action; "
                    "write it as a plain `uses: owner/repo@sha` line")
             continue
-        called = THIS_REPO.match(value)
-        if called and called.group(1) not in checked:
-            checked.append(called.group(1))
+        called = THIS_REPO_WORKFLOW.match(value)
+        if called:
+            if called.group(1) not in checked:
+                checked.append(called.group(1))
+        elif re.match(THIS_REPO, value, re.I):
+            refuse(f"{shown}:{n}: {value}: an action this test does not read (composite or other), so its own "
+                   "actions would meet every consumer's allowlist unchecked; use a workflow in .github/workflows, "
+                   "or teach this test to read it first")
+            continue
         if value.startswith("./"):
             continue
         elif value.startswith("docker://"):
@@ -86,6 +94,9 @@ for path in sorted(p for p in root.iterdir() if p.suffix in {".yml", ".yaml"}):
                "neither checked nor excluded: add it to files, or to excluded with its reason")
     elif not excluded[path.name].strip():
         refuse(f"{shown}: excluded with no reason: state why no consumer calls it")
+for name in excluded:
+    if not (root / name).is_file():
+        refuse(f".github/workflows/{name}: excluded, but not found: remove it from excluded")
 sys.exit(1 if refused else 0)
 PY
 }
@@ -136,10 +147,17 @@ must_refuse "another only some archetypes allow" "$f" "$(step "- uses: docker/bu
 must_refuse "a name that only starts like plinth's" "$f" "$(step "- uses: coolbress/plinth-x/a@$sha")" "coolbress/plinth-x/a@$sha"
 must_refuse "a name that only starts like GitHub's" "$f" "$(step "- uses: actions-x/a@$sha")" "actions-x/a@$sha"
 
+# An action of this repository is not read (a composite action, say), so it fails.
+unread_action="an action this test does not read (composite or other)"
+must_refuse "an action under coolbress/plinth" "$f" "$(step "- uses: coolbress/plinth/.github/actions/a@$sha")" "coolbress/plinth/.github/actions/a@$sha: $unread_action"
+must_refuse "the same, with owner and repo in another case" "$f" "$(step "- uses: CoolBress/Plinth/.github/actions/a@$sha")" "CoolBress/Plinth/.github/actions/a@$sha: $unread_action"
+must_refuse "a local ./ action" "$f" "$(step "- uses: ./.github/actions/a")" "./.github/actions/a: $unread_action"
+must_refuse "an action at the root, by ./" "$f" "$(step "- uses: ./")" "./: $unread_action"
+must_refuse "a path that leaves and re-enters .github" "$f" "$(step "- uses: ./.github/../.github/workflows/plinth-ci.yml")" "$unread_action"
+must_refuse "a path that leaves .github/workflows" "$f" "$(step "- uses: ./.github/workflows/../actions/a")" "$unread_action"
+
 # What must keep passing.
 must_allow "a GitHub-owned action" "$f" "$(step "- uses: github/codeql-action/init@$sha")"
-must_allow "an action under coolbress/plinth" "$f" "$(step "- uses: coolbress/plinth/.github/actions/a@$sha")"
-must_allow "a local ./ action" "$f" "$(step "- uses: ./.github/actions/a")"
 must_allow "a third-party name in a comment" "$f" "# uses: astral-sh/setup-uv@$sha"
 must_allow "a third-party name inside a run block" "$f" "$(step "- run: |")"$'\n'"          uses: astral-sh/setup-uv@$sha"
 
@@ -160,6 +178,10 @@ out="$(excluded=(); check "$root/.github/workflows" 2>&1)" && bad "plinth-ci.yml
   grep -qF "plinth-ci.yml: names workflow_call" <<<"$out" && ok "plinth-ci.yml without its exclusion fails" || bad "plinth-ci.yml failed without being named: $out"; }
 out="$(excluded=("plinth-ci.yml| "); check "$root/.github/workflows" 2>&1)" && bad "an exclusion with no reason passed" || {
   grep -qF "plinth-ci.yml: excluded with no reason" <<<"$out" && ok "an exclusion with no reason fails" || bad "an exclusion with no reason failed without saying so: $out"; }
+
+seed "$f" ""; rm "$work/w/plinth-ci.yml"
+out="$(check "$work/w" 2>&1)" && bad "an exclusion naming a file that is not there passed" || {
+  grep -qF ".github/workflows/plinth-ci.yml: excluded, but not found" <<<"$out" && ok "an exclusion naming a file that is not there fails" || bad "a stale exclusion failed without naming it: $out"; }
 
 # A checked file calling another workflow of this repository checks that file too.
 job_calls() { printf '  seeded:\n    uses: %s\n' "$1"; }
@@ -195,13 +217,11 @@ if out="$(check "$work/w" 2>&1)"; then ok "two files calling each other end and 
 # Fails closed: a file it cannot read, a door it cannot read.
 seed "$f" ""; rm "$work/w/$f"
 out="$(check "$work/w" 2>&1)" && bad "a missing workflow passed" || { grep -qF "$f: not found" <<<"$out" && ok "a missing workflow fails" || bad "a missing workflow failed without naming it: $out"; }
-seed "$f" "$(step "- uses: coolbress/plinth/.github/actions/a@$sha")"
-grep -v '^allow_args=(' "$door" > "$work/door-no-patterns"
-out="$(check "$work/w" "$work/door-no-patterns" 2>&1)" && bad "a door with no allow_args line still allowed plinth's action" ||
-  ok "a door with no allow_args line allows no pattern"
 seed "$f" "$(job_calls "coolbress/plinth/.github/workflows/pr-label.yml@$sha")"
-out="$(check "$work/w" "$work/door-no-patterns" 2>&1)" && bad "a door with no allow_args line still allowed a call to plinth's workflow" ||
-  ok "a door with no allow_args line refuses a call to plinth's workflow"
+grep -v '^allow_args=(' "$door" > "$work/door-no-patterns"
+out="$(check "$work/w" "$work/door-no-patterns" 2>&1)" && bad "a door with no allow_args line still allowed a call to plinth's workflow" || {
+  grep -qF "pr-label.yml@$sha: every consumer" <<<"$out" && ok "a door with no allow_args line allows no pattern, so a call to plinth's workflow fails" ||
+    bad "a door with no allow_args line failed for another reason: $out"; }
 sed 's/-F github_owned_allowed=true/-F github_owned_allowed=false/' "$door" > "$work/door-not-owned"
 out="$(check "$root/.github/workflows" "$work/door-not-owned" 2>&1)" && bad "a door without GitHub-owned actions still allowed actions/checkout" ||
   ok "a door that does not allow GitHub-owned actions refuses them"
