@@ -105,9 +105,11 @@ the move changes what a new project's agent reads, and then asks for
    run 1 moves any new `Unreleased` entries. Updating the branch instead would
    change its files, leave those entries under `Unreleased` and ask for another
    run anyway.
-6. Merge the pull request once that run and the checks are green, as
-   [CONTRIBUTING.md](../../CONTRIBUTING.md#land-a-change) says. Nothing refuses
-   an earlier merge: this order is yours to keep.
+6. Merge the pull request with `scripts/merge-when-green.sh <n>` once that run
+   and the checks are green. The script stops, and prints the command from
+   step 5, while the head has no green `e2e` run (#855). The merge button and
+   `gh pr merge` do not ask: a dispatched run is not among the checks a pull
+   request lists, so use the script.
 7. Update `main`: `git switch main && git pull --ff-only`.
 8. Run the same command again:
 

@@ -107,7 +107,7 @@ plinth-template sets it. What each plugin costs and how the cap was measured
 is in the arsenal's [Installed by default](skills/arsenal/SKILL.md#installed-by-default)
 table and the paragraph under it.
 
-Third-party marketplaces do not auto-update. To move to a new version, run
+Third-party marketplaces do not auto-update by default. To move to a new version, run
 `claude plugin marketplace update plinth`, then
 `claude plugin update plinth@plinth`, then `/reload-plugins`: without the
 marketplace update, the plugin update can stay on the old version. Moving from v1.10.0 or
@@ -132,6 +132,16 @@ list but keeps its files at the old commit, so until then
 is missing and the other skills still name `CONTEXT.md` (#714). No `prune` is needed.
 `/plinth:floor-check` names a dependency left at an older commit than plinth's
 marketplace pins, with the command that moves it (#743).
+
+Auto-update is optional. To turn it on, start a session outside any project,
+run `/plugin`, and choose Marketplaces, plinth, Enable auto-update. Do not press
+it inside a project: there the same choice rewrites that project's committed
+`.claude/settings.json`. The same menu turns it off. It also brings raised
+dependency pins, with no `claude plugin update <name>@plinth` and without
+asking. A new version can arrive right after the release pull request merges,
+before the tag and the GitHub Release (#855).
+
+What was measured: [coolbress/plinth-template#208](https://github.com/coolbress/plinth-template/issues/208).
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 

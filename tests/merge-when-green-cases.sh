@@ -32,6 +32,7 @@ case "$1 $2" in
     exit "$rc" ;;
   api*)
     case "$*" in
+      *"/actions/workflows/e2e.yml/runs"*) [ -f "$fx/e2e.json" ] || { echo "HTTP 502" >&2; exit 1; }; out "$fx/e2e.json" ;;
       *"/pulls/"*"/comments"*) out "$fx/comments.json" ;;
       *"/pulls/"*"/reviews"*) [ -f "$fx/reviews.json" ] || exit 1; out "$fx/reviews.json" ;;
       *"/issues/"*"/comments"*) [ -f "$fx/icomments.json" ] || exit 1; out "$fx/icomments.json" ;;
@@ -286,6 +287,71 @@ printf '{"state":"OPEN","mergeCommit":null}' >"$FX/after.json"
 run merge "a merge queue takes it: gh pr merge succeeds, the state is still OPEN"
 grep -q '^Not merged yet (OPEN null)' "$FX/out" && ! grep -q 'issues/12' "$FX/calls" && ! grep -q '^o/r#12' "$FX/out"
 check "not merged yet: says so and reads no issue" $?
+
+echo "-- a release pull request of coolbress/plinth waits for its e2e (#855)"
+# release_pr <case> [title]: everything green; only the e2e runs differ.
+release_pr() {
+  setup "$1"
+  jq --arg t "${2:-chore(release): v9.9.9}" '.title = $t | .headRefName = "release/v9.9.9"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
+}
+e2e_runs() { # one `<conclusion|-:status> <head_sha>` per argument, oldest first; GitHub's own order is not relied on
+  local a c s i=0
+  { for a in "$@"; do c="${a%% *}"; s="${a##* }"; i=$((i+1)); t="2026-11-07T10:00:0${i}Z"
+      if [ "${c#-:}" = "$c" ]; then jq -n --arg c "$c" --arg s "$s" --arg t "$t" '{status:"completed",conclusion:$c,head_sha:$s,run_started_at:$t,html_url:"https://example.test/runs/\($c)"}'
+      else jq -n --arg st "${c#-:}" --arg s "$s" --arg t "$t" '{status:$st,conclusion:null,head_sha:$s,run_started_at:$t,html_url:"https://example.test/runs/\($st)"}'; fi
+    done; } | jq -s '{workflow_runs:.}' >"$FX/e2e.json"
+}
+P="--repo coolbress/plinth"
+says_cmd() { grep -qF 'gh workflow run e2e.yml --ref release/v9.9.9' "$FX/out"; }
+
+release_pr e2e-none; e2e_runs
+run stop "no e2e run on the head" $P
+says_cmd; check "and it prints the dispatch command for the release branch" $?
+grep -q 'head_sha='"$H" "$FX/calls"; check "and the runs were asked by head_sha" $?
+! grep -q 'pr checks' "$FX/calls"; check "and it stops before waiting on the checks" $?
+release_pr e2e-red; e2e_runs "failure $H"
+run stop "a red e2e run on the head" $P
+says_cmd; check "and it prints the dispatch command" $?
+grep -qF 'failure https://example.test/runs/failure' "$FX/out"; check "and it names the red run" $?
+release_pr e2e-running; e2e_runs "-:in_progress $H"
+run stop "an e2e run still going on the head" $P
+grep -qF 'in_progress https://example.test/runs/in_progress' "$FX/out"; check "and it names the run going" $?
+for verdict in cancelled skipped; do
+  release_pr "e2e-$verdict"; e2e_runs "$verdict $H"
+  run stop "a $verdict e2e run on the head" $P
+done
+release_pr e2e-other; e2e_runs "success 2222222222222222222222222222222222222222"
+run stop "a green e2e run answered for another commit" $P
+release_pr e2e-unread
+run stop "the e2e runs cannot be read" $P
+grep -q 'cannot read the e2e runs' "$FX/out"; check "and it says so, not 'no run'" $?
+release_pr e2e-green; e2e_runs "success $H"
+run merge "a green e2e run on the head" $P
+grep -qF 'https://example.test/runs/success' "$FX/out"; check "and it names the green run" $?
+release_pr e2e-again; e2e_runs "failure $H" "success $H"
+run merge "a red run, then a green one dispatched again on the same head" $P
+release_pr e2e-later-red; e2e_runs "success $H" "failure $H"
+run stop "a green run, then a red one on the same head: the run started last speaks" $P
+release_pr e2e-later-running; e2e_runs "success $H" "-:in_progress $H"
+run stop "a green run, then one still going on the same head" $P
+release_pr e2e-case; e2e_runs
+run stop "the repository's name in another case is the same repository" --repo CoolBress/Plinth
+release_pr e2e-still-red; e2e_runs "success $H"
+printf '[{"name":"ci / install","state":"FAILURE"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks.json"
+run stop "a green e2e run does not excuse a red check" $P
+
+echo "-- everything else is unchanged"
+release_pr e2e-round; e2e_runs
+PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 $P --round >"$FX/out" 2>&1; check "--round only reads, and does not stop on the e2e runs" $?
+! grep -q 'e2e.yml' "$FX/calls"; check "  and does not ask for them" $?
+for title in 'fix(release): run e2e before the merge' 'chore(release): prepare the notes' 'chore(release): v9.9.9 and more'; do
+  release_pr e2e-title "$title"; e2e_runs; rm -f "$FX/merged" "$FX/calls"
+  run merge "the title '$title' is not a release's" $P
+  ! grep -q 'e2e.yml' "$FX/calls"; check "  and no e2e run is asked for" $?
+done
+release_pr e2e-elsewhere; rm -f "$FX/merged" "$FX/calls"
+run merge "the same title on another repository, which has no e2e.yml to ask"
+! grep -q 'e2e.yml' "$FX/calls"; check "  and no e2e run is asked for" $?
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

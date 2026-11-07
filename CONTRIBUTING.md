@@ -220,7 +220,9 @@ release needs a green run on the commit it tags, or on a commit with its tree
 
    `scripts/merge-when-green.sh <n>` prints the review round line first, then
    runs that command once nothing is left to read, and stops otherwise: every check on the head green, and a reply
-   under every top-level inline comment, on any commit. A green
+   under every top-level inline comment, on any commit. On this repository a
+   pull request titled `chore(release): vX.Y.Z` also needs a green `e2e` run on
+   its head (#855). A green
    `third-party / review` is the reviewer's verdict, since the check already
    binds it to the head and its push; on a repository with no such check it
    stops unless you pass `--no-reviewer`, since merging without a reviewer is

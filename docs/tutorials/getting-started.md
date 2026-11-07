@@ -305,3 +305,10 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   plinth`, then `claude plugin update plinth@plinth`, then `/reload-plugins`.
   A move from an older version can take one-time commands first:
   [Install, in detail](../../README.md#install-in-detail).
+- Optional, to have new versions arrive by themselves, since third-party
+  marketplaces do not auto-update by default: start a session outside any
+  project, run `/plugin`, and choose Marketplaces, plinth, Enable auto-update.
+  It also brings raised dependency pins, and the same menu turns it off.
+  Inside a project the same choice rewrites that project's committed
+  `.claude/settings.json`. You still type `/reload-plugins` when the notice
+  asks: [what it does and what was measured](../../README.md#install-in-detail).
