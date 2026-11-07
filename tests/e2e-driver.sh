@@ -18,7 +18,7 @@ export TMPDIR="$work/tmp"
 
 # The driver finds the door and the checker beside itself; copies of the stubs
 # sit there, the real ruleset.json one level up (it is only passed along).
-cp "$root/scripts/e2e.sh" "$work/scripts/"
+cp "$root/scripts/e2e.sh" "$root/scripts/description-fields.py" "$work/scripts/"
 mkdir -p "$work/scripts/lib"; cp "$root/scripts/lib/rulesets.sh" "$work/scripts/lib/"
 cp "$root/ruleset.json" "$root/ruleset-merge.json" "$work/"
 cat > "$work/scripts/new-project.sh" <<'DOOR'
@@ -85,6 +85,8 @@ case "$*" in
   "pr checks "*".[].name")            n="$(count names)"
                                       [ "${CODEQL:-1}" = 1 ] || [ -e "$GH_LOG.pushed" ] && printf 'ci / test\nCodeQL\n' || printf 'ci / test\n'
                                       [ -z "${CHECKS_RC:-}" ] || [ "$n" -gt "${CHECKS_FAILS:-999}" ] || { echo "HTTP 502: Bad Gateway" >&2; exit "$CHECKS_RC"; } ;;
+  "pr view "*"--json body "*)         [ -z "${BODY_RC:-}" ] || { echo "HTTP 502: Bad Gateway" >&2; exit "$BODY_RC"; }
+                                      printf '{"data":{"repository":{"pullRequest":{"body":"%s"}}}}\n' "${FIRST_BODY:-## What I checked myself\\n\\nread\\n\\nReview: none (not yet)}" ;;
   "pr view "*)                        if [ -e "$GH_LOG.pushed" ] && [ -n "${STATE_AFTER_PUSH:-}" ]; then echo "$STATE_AFTER_PUSH"; else echo "${STATE:-CLEAN}"; fi ;;
   "pr merge "*)                       [ "${MERGE_RC:-0}" = 0 ] || { echo "Pull request is not mergeable" >&2; exit "$MERGE_RC"; } ;;
 esac
@@ -135,6 +137,14 @@ run() { # <env assignments...> [-- <arguments to e2e.sh...>]
   env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" ${args[@]+"${args[@]}"} >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
+
+echo "-- the first pull request's description, as ci / pr-title reads it (#856)"
+run;                       check "a filled description: the journey goes on" ok $?
+is "the log says the check warns about neither field" said "first pull request's description: pass: PR description, says which review ran"
+run 'FIRST_BODY=## What and why\n\nx'; check "a description missing both: a line in the log, and the journey goes on" ok $?
+is "the log names what is missing" said "first pull request's description: not yet confirmed: PR description, does not say which review ran"
+run BODY_RC=1;             check "a description that cannot be read does not stop the journey" ok $?
+is "the log says it was not read" said "first pull request's description: not read"
 
 echo "-- the token's user, before anything is created"
 run USER_401=1;            check "a token GitHub refuses stops at the user lookup" no $?

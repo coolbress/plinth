@@ -958,8 +958,9 @@ git -C "$dir" push -q -u origin "$branch"
 head_sha="$(git -C "$dir" rev-parse HEAD)"
 # The body follows the shape the new repository actually ends up with, rather
 # than one sentence: the door would otherwise honour the convention it just
-# installed for every pull request except the one it writes itself. Where the
-# owner publishes their own template the two headings are dropped, because
+# installed for every pull request except the one it writes itself. Each field
+# says only what is true as it opens, and the door is not a person (#856).
+# Where the owner publishes their own template the fields are dropped, because
 # theirs is the convention and this is not the place to impose ours.
 if [ "$has_pr" = yes ]; then
   # Your template's own fields are not filled in here, and cannot be: the box
@@ -973,13 +974,26 @@ $first_day
 
 This body does not follow $owner/.github's pull-request template, which this repository inherits: the box cannot answer fields it has not read. Rewrite it with \`gh pr edit $repo --body-file -\` if you want the record to match, or merge it as it is."
 else
+  read_back="the merge ruleset reads back as the file the door posts"
+  [ "$tag_ruleset" = 0 ] || read_back="the merge ruleset and the tag ruleset read back as the files the door posts"
   first_pr_body="## What and why
 
 Opened by /plinth:new-project to prove the wall. Every required check must be green before the merge button enables, so merging this is the proof that the wall stands and can be opened. It adds a First day section to README.md and changes nothing else.
 
+## What I checked myself
+
+Not a person's check: this is only what /plinth:new-project read as it opened this pull request.
+
+- The default branch reads back as \`main\`.
+- GitHub accepted each ruleset, and $read_back.
+
+Not checked yet: this repository's own checks had not run on this pull request when this was written.
+
 ## How it was verified
 
-Nothing yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+Nothing yet: at the moment this is written the checks have not run on this pull request. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+
+Review: none (no review had run when this pull request opened)
 
 ## First day
 

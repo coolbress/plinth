@@ -22,6 +22,10 @@ pull requests and have no tag.
   and replace that line with what ran. `tests/template-update-cases.sh` now
   reads the form at the pinned template tag, and fails when the form has a
   field the script does not write, so it needs network.
+- The first pull request `/plinth:new-project` opens, and the GitLab door's
+  first merge request, have the same four fields (#856). Where an owner's own
+  pull-request template applies, the description stays as it was. `e2e` prints
+  what `ci / pr-title`'s check says about the first pull request's description.
 
 ### Changed
 

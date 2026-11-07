@@ -438,9 +438,19 @@ mr_body="## What and why
 
 Opened by /plinth:new-project to prove the wall. A merge request merges only when its pipeline succeeds, so merging this one shows the wall stands and can be passed. It adds a First day section to README.md and changes nothing else.
 
+## What I checked myself
+
+Not a person's check: this is only what /plinth:new-project read as it opened this merge request.
+
+- main's protection and its merge settings read back as set: no push, Maintainers merge, no force push; pipeline must succeed, skipped not counted, squash, fast-forward.
+
+Not checked yet: this project's own pipeline had not run on this merge request when this was written.
+
 ## How it was verified
 
-Nothing yet: when this was written the pipeline had not run, and running it is what this merge request is for. A failed job: open it and read the last lines of its log.
+Nothing yet: when this was written the pipeline had not run on this merge request, and running it is what this merge request is for. A failed job: open it and read the last lines of its log.
+
+Review: none (no review had run when this merge request opened)
 
 ## First day
 
