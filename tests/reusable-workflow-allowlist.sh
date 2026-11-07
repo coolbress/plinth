@@ -57,7 +57,7 @@ def refuse(text):
     refused += 1
     print(text)
 THIS_REPO = r"\./|coolbress/plinth/"
-THIS_REPO_WORKFLOW = re.compile(rf"(?:{THIS_REPO})\.github/workflows/([^@/]+)(?:@.*)?$", re.I)
+THIS_REPO_WORKFLOW = re.compile(rf"(?:{THIS_REPO})\.github/workflows/([^@/]+\.ya?ml)(?:@.*)?$", re.I)
 checked = list(names)
 for name in checked:  # grows while it runs: a called file is read in its turn
     path, shown = root / name, f".github/workflows/{name}"
@@ -155,6 +155,8 @@ must_refuse "a local ./ action" "$f" "$(step "- uses: ./.github/actions/a")" "./
 must_refuse "an action at the root, by ./" "$f" "$(step "- uses: ./")" "./: $unread_action"
 must_refuse "a path that leaves and re-enters .github" "$f" "$(step "- uses: ./.github/../.github/workflows/plinth-ci.yml")" "$unread_action"
 must_refuse "a path that leaves .github/workflows" "$f" "$(step "- uses: ./.github/workflows/../actions/a")" "$unread_action"
+must_refuse "a file in .github/workflows that is not a workflow" "$f" "$(step "- uses: ./.github/workflows/notes.txt")" "$unread_action"
+must_refuse "a directory in .github/workflows" "$f" "$(step "- uses: coolbress/plinth/.github/workflows/a@$sha")" "$unread_action"
 
 # What must keep passing.
 must_allow "a GitHub-owned action" "$f" "$(step "- uses: github/codeql-action/init@$sha")"
