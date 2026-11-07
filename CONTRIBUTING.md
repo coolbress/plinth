@@ -11,7 +11,7 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, template-rules-drift, arsenal-freshness and uv-pin need network
+# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, template-rules-drift, template-update-cases, arsenal-freshness and uv-pin need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
@@ -34,6 +34,8 @@ version whose standard library parses TOML, as the runner's does.
 `tests/install-smoke-interrupt.sh` needs `perl`, `pkill` and `pgrep` and takes
 about 20 seconds. `tests/gitlab-ci-cases.sh` installs the GitLab
 `floor-check` job's PyYAML from PyPI, pinned by hash, so it needs network.
+`tests/template-update-cases.sh` reads the template's pull-request form at the
+pinned tag, so it does too, and takes minutes rather than seconds.
 Everything else runs offline in seconds.
 
 That list is every step of `ci / install`, `ci / docs` and `ci / tools` but

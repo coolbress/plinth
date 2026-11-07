@@ -316,7 +316,6 @@ finish() { # <worktree>
     else
       echo "The plinth pin: kept at the one the workflows called before the update (\`--plinth-pin live\`)."
     fi
-    [ -z "$pin_note" ] || { echo; echo "Before the update: ${pin_note#plinth pin: }"; }
     if grep -q '^moves=' "$sf"; then
       echo
       echo "Before the update the workflows called plinth at two commits; each file below called an"
@@ -352,19 +351,30 @@ finish() { # <worktree>
         echo
       fi
     fi
+    # The fields of the form plinth-template renders, in its order (#856):
+    # each says only what is true as this opens, and a script is not a person.
+    echo "## What I checked myself"
+    echo
+    echo "Not a person's check: this is only what \`/plinth:template-update\`'s script"
+    echo "checked as it opened the pull request."
+    echo
+    echo "- Opened as a draft once no conflict was left: no unmerged path, and no \`.rej\` file or conflict marker in a file the update changed (files unchanged since $(printf '%.12s' "$base") were not read)."
+    echo "- $size_line"
+    if [ -n "$pin_note" ]; then echo "- The plan's plinth pin line: ${pin_note#plinth pin: }"
+    else echo "- The plan's plinth pin line: the plan printed none."; fi
+    echo
+    echo "Not checked yet: this repository's own checks had not run when it was opened, and the script waits for none of them."
+    echo
     echo "## How it was verified"
     echo
-    echo "Opened as a draft once no conflict was left: no unmerged path, and no"
-    echo "\`.rej\` file or conflict marker in a file the update changed (files unchanged"
-    echo "since $(printf '%.12s' "$base") were not read). This repository's own checks had not run"
-    echo "when it was opened; they run on it now. This script resolved no conflict;"
-    echo "how each was resolved is what \`--resolved\` stated, which the script does"
-    echo "not check, and \"not stated\" where nothing was."
+    echo "This script resolved no conflict; how each was resolved is what \`--resolved\`"
+    echo "stated, which the script does not check, and \"not stated\" where nothing was."
     echo "copier's questions were answered with \`--defaults\`: each takes this"
     echo "repository's recorded answer, and a question it never answered takes the"
     echo "template's default (\`.copier-answers.yml\` in the diff shows any)."
+    echo "Not verified here: that this repository still works after the update, which is what its own checks are for."
     echo
-    echo "$size_line"
+    echo "Review: none (no review had run when this pull request opened)"
     if [ -n "$assisted" ]; then echo; echo "Assisted-by: $assisted"; fi
   } > "$body"
   { echo "$title"; echo; cat "$body"; } > "$msg"
