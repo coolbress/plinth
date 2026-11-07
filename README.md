@@ -138,13 +138,14 @@ run `/plugin`, and choose Marketplaces, plinth, Enable auto-update. Outside
 matters: pressed inside a project, the same choice rewrites that project's
 committed `.claude/settings.json`. The same menu turns it off.
 
-With it on, plinth moved about five to six and a half minutes after the first
-message of an interactive session in the measured runs, and a notice asked for
-`/reload-plugins`. A new version can arrive once the release pull request has
-merged, before the tag and the GitHub Release (#855). It also brings raised
+With it on, plinth moved about 5 and 6.5 minutes after the first message of an
+interactive session in the two runs with no sleep logged, and a notice asked
+for `/reload-plugins`. A new version can arrive once the release pull request
+has merged, before the tag and the GitHub Release (#855). It also brings raised
 dependency pins, with no `claude plugin update <name>@plinth` and without
-asking. It is your setting, so it applies in every project on the machine. One
-limit was seen: a project whose own settings carry `autoUpdate: true` put the
+asking. The choice is stored for your user, not in a project, and it brought
+updates into a project whose settings do not mention it. One limit
+was seen: a project whose own settings carry `autoUpdate: true` put the
 machine's record back to `true` over a `false` in user settings, so it can turn
 this on again after you turned it off. plinth-template's settings do not carry
 it; the opposite case, a project's `false` against your `true`, was not run.

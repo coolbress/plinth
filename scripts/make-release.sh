@@ -294,7 +294,7 @@ bumped $current -> $ver in plugin.json, marketplace.json and CHANGELOG.md, commi
 the why is in the [$ver] section now, and nothing reads $why_file again.
 next: push the branch, open the pull request, and run e2e on the branch:
   gh workflow run e2e.yml --ref release/$tag
-merge with scripts/merge-when-green.sh <n>, which waits for that run: the merge is what reaches an installation with auto-update on.
+once it is green, merge with scripts/merge-when-green.sh <n>, which stops until then: the merge is what reaches an installation with auto-update on.
 then from the merged main run
   scripts/make-release.sh $tag
 again to push the tag and create the release.

@@ -294,11 +294,11 @@ release_pr() {
   setup "$1"
   jq --arg t "${2:-chore(release): v9.9.9}" '.title = $t | .headRefName = "release/v9.9.9"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
 }
-e2e_runs() { # one `<conclusion|-:status> <head_sha>` per argument
-  local a c s
-  { for a in "$@"; do c="${a%% *}"; s="${a##* }"
-      if [ "${c#-:}" = "$c" ]; then jq -n --arg c "$c" --arg s "$s" '{status:"completed",conclusion:$c,head_sha:$s,html_url:"https://example.test/runs/\($c)"}'
-      else jq -n --arg st "${c#-:}" --arg s "$s" '{status:$st,conclusion:null,head_sha:$s,html_url:"https://example.test/runs/\($st)"}'; fi
+e2e_runs() { # one `<conclusion|-:status> <head_sha>` per argument, oldest first; GitHub's own order is not relied on
+  local a c s i=0
+  { for a in "$@"; do c="${a%% *}"; s="${a##* }"; i=$((i+1)); t="2026-11-07T10:00:0${i}Z"
+      if [ "${c#-:}" = "$c" ]; then jq -n --arg c "$c" --arg s "$s" --arg t "$t" '{status:"completed",conclusion:$c,head_sha:$s,run_started_at:$t,html_url:"https://example.test/runs/\($c)"}'
+      else jq -n --arg st "${c#-:}" --arg s "$s" --arg t "$t" '{status:$st,conclusion:null,head_sha:$s,run_started_at:$t,html_url:"https://example.test/runs/\($st)"}'; fi
     done; } | jq -s '{workflow_runs:.}' >"$FX/e2e.json"
 }
 P="--repo coolbress/plinth"
@@ -330,6 +330,10 @@ run merge "a green e2e run on the head" $P
 grep -qF 'https://example.test/runs/success' "$FX/out"; check "and it names the green run" $?
 release_pr e2e-again; e2e_runs "failure $H" "success $H"
 run merge "a red run, then a green one dispatched again on the same head" $P
+release_pr e2e-later-red; e2e_runs "success $H" "failure $H"
+run stop "a green run, then a red one on the same head: the run started last speaks" $P
+release_pr e2e-later-running; e2e_runs "success $H" "-:in_progress $H"
+run stop "a green run, then one still going on the same head" $P
 release_pr e2e-case; e2e_runs
 run stop "the repository's name in another case is the same repository" --repo CoolBress/Plinth
 release_pr e2e-still-red; e2e_runs "success $H"
