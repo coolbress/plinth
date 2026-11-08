@@ -3,6 +3,12 @@
 `eval-suite-grade.py --drop-caches <run dir>` instead removes CACHES from
 every working tree of a graded run; a re-grade rebuilds them.
 
+`eval-suite-grade.py --not-run <run dir>` instead writes <run dir>/not-run.txt
+when the session did not really run (#864): its result has `is_error` with no
+turn past the first, is an error that names a usage limit, or reports a cost of
+0. An untouched fixture passes its checks, so grading such a run would read as a
+measurement. A session with no result line (a crash, a timeout) is graded.
+
 Writes <run dir>/grade.json, and <run dir>/reader.md: the final report with
 the AGENTS.md and output style the session loaded, for whoever judges it.
 Reads the stream for what the agent did, then copies every working tree it
@@ -346,9 +352,46 @@ def task_record(
     raise SystemExit(f"unknown kind {kind!r} (kinds: {', '.join(KINDS)})")
 
 
+# How a session says it hit a limit, on an `is_error` result only: a final
+# report may discuss limits. Seen 2026-11-07: "You've hit your 5-hour limit".
+LIMIT = re.compile(r"\b(usage|session|weekly|\d+-hour|rate)[ -]limit\b|\bhit your\b.*\blimit\b|\blimit reached\b", re.IGNORECASE)
+
+
+def not_run_reason(stream: Path) -> str | None:
+    """Why the session did not really run, in its own words; None when it did."""
+    result: dict[str, Any] = {}
+    for line in stream.read_text(errors="replace").splitlines() if stream.exists() else []:
+        if line.startswith("{"):
+            try:
+                m = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if m.get("type") == "result":
+                result = m
+    if not result:
+        return None
+    error = result.get("is_error") is True
+    said = result.get("result")
+    text = " ".join(said.split())[:300] if isinstance(said, str) else ""
+    turns, cost = result.get("num_turns"), result.get("total_cost_usd")
+    if error and LIMIT.search(text):
+        return f"usage limit ({text})"
+    if error and (not isinstance(turns, int) or turns <= 1):
+        return text or f"the session reported an error ({result.get('subtype')}) and no text"
+    if cost == 0:
+        return "the session reported a cost of 0" + (f": {text}" if text else "")
+    return None
+
+
 def main() -> None:
     if sys.argv[1:2] == ["--drop-caches"]:
         print(f"dropped {drop_caches(Path(sys.argv[2]))} cache folders")
+        return
+    if sys.argv[1:2] == ["--not-run"]:
+        run = Path(sys.argv[2])
+        reason = not_run_reason(run / "stream.jsonl")
+        if reason:
+            (run / "not-run.txt").write_text(reason + "\n")
         return
     run, fixture, task = (Path(a) for a in sys.argv[1:4])
     repo = run / "repo"
@@ -408,7 +451,9 @@ def main() -> None:
     (run / "reader.md").write_text(
         reader_packet((task / "prompt.txt").read_text(), rules, record["trace"]["final"])
     )
-    (run / "grade.json").write_text(json.dumps(record, indent=2) + "\n")
+    # All at once: a resume skips any run with a grade.json, so half of one must not exist.
+    (run / "grade.json.partial").write_text(json.dumps(record, indent=2) + "\n")
+    os.replace(run / "grade.json.partial", run / "grade.json")
     shutil.rmtree(run / "grade", ignore_errors=True)
     print(
         f"graded {task_name} {arm} {n}: passed={record['pass']} checks={record['checks_pass']} "
