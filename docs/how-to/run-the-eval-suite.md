@@ -56,6 +56,52 @@ adds these numbers up and stops on its own:
   charged that amount unless you have turned on extra usage. If you log in with
   an API key, the estimate is close to what is billed.
 
+## If it stops at the usage limit
+
+With a Claude subscription, a long suite can hit the subscription's usage limit.
+Every session after that ends at once, without doing anything. An untouched
+project still passes its checks, so the suite does not grade such a session.
+
+A run is **not run** when its session's result is an error with no turn past the
+first, is an error that names a usage limit, or reports a cost of 0. The suite
+writes the session's reason to that run's `not-run.txt`, leaves the run out of
+every table, and stops with exit status 3. The last lines read like this:
+
+```text
+57 runs graded; stopped at run 58 (ledger plinth 2): usage limit (You've hit your 5-hour limit · resets 5:20pm); 47 not started.
+```
+
+After the reset, run the command you started with again, every option as it was,
+with the records folder as `--out`. With no options, that is:
+
+```bash
+scripts/eval-suite.sh --out /path/to/the/records
+```
+
+The suite keeps every graded run, runs the rest in the same order, and prints tables that cover
+all of them. It does not wait for the reset itself. Without `--config-dir` it
+asks you to log in again.
+
+A run that failed some other way is still graded: a crash, a timeout, or an error
+after its first turn that names no limit.
+
+**A run with no grade** (not run, cut short, or its grade failed) runs again. What
+it left moves to `set-aside/` in the records folder. It is in no table, the line
+under them names it, and its cost stays in the total. A run cut short (Ctrl-C, a
+closed terminal) reported no cost, so it is counted at the US$2 limit. A smoke
+run's result line names the runs a resume ran again.
+
+**A changed value refuses.** The folder's `conditions.txt` records the plinth
+commit (with a hash of any uncommitted changes), the template SHA, the model, the
+Claude Code version, and the tasks, arms and runs asked for. If one differs, the
+suite says which, and starts nothing: runs under another version are not the same
+measurement. Claude Code updating itself during the wait refuses too, so name a
+new folder then. With `--config-dir` it also records a hash of the plinth installed
+in that folder.
+
+**The ceiling counts the whole folder.** A suite stopped by the ceiling stops again
+at once under the same ceiling; give a higher `--ceiling` to carry on.
+
 ## Steps
 
 1. From the top folder of your plinth clone, run:
@@ -176,8 +222,14 @@ scripts/eval-suite.sh --task guide --task guide-reminder --arm plinth
 the table above; the arms are `none`, `repo-only` and `plinth`. A task with an
 `arms` file runs only in the arms it lists, and naming only other arms stops
 the suite before it starts. `--model`
-picks the model (default `sonnet`), and `--out` names a new folder for the
-records.
+picks the model (default `sonnet`), and `--out` names the folder for the
+records: a new one, or one to [carry on in](#if-it-stops-at-the-usage-limit).
+The default is a new folder under the system's temporary directory.
+
+The suite refuses an `--out` when a folder above it has a `CLAUDE.md`,
+`CLAUDE.local.md`, `AGENTS.md` or `.claude/`, your home folder's `.claude` included,
+and names the file. Claude Code loads those from parent folders, so all three arms
+would read them and stop differing by the rules under test.
 
 ## The release smoke run
 
@@ -211,8 +263,8 @@ other than these two, so a break in another skill passes this run.
 
 The last lines under the table are the result: `smoke: 6 of 6 runs passed.`, then
 the branch and commit plinth was installed from. Every run must pass. A run that
-failed, was not graded or read the hidden tests is named there, and the script
-exits with status 1 (3 when the ceiling stopped it). Two runs of three tasks
+failed, was not graded, was not run or read the hidden tests is named there, and
+the script exits with status 1 (3 when the ceiling or the usage limit stopped it). Two runs of three tasks
 catch a skill that broke outright. They cannot show a small drop in how often a
 skill works: #647's Decision of 2026-11-07 says how many runs that takes. Post
 the table on #647, and name the comment in the release pull request's

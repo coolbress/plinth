@@ -39,6 +39,23 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `scripts/eval-suite.sh` no longer grades a session that did not run (#864). On
+  2026-11-07 a suite hit the subscription's usage limit at its 58th run, and the
+  48 runs from there read as results, because an untouched project passes its checks.
+  A result that is an error with no turn past the first, an error naming a usage
+  limit, or a cost of 0 is now recorded in the run's `not-run.txt` with the session's
+  reason and left out of every table, and the suite stops there with exit status 3.
+  A crash, a timeout or a later error is still graded.
+- An existing `--out` now resumes (#864): graded runs are kept, the rest run in the
+  same order, and the tables cover both. A changed plinth commit, template SHA,
+  model, Claude Code version, `--config-dir` plinth, or task, arm or run selection
+  refuses and says which. A run with no grade moves to `set-aside/`, its cost still
+  counted (a run cut short, at its limit), and a smoke run's result line names it. Records made
+  before this have no `conditions.txt` and are refused.
+- `scripts/eval-suite.sh` refuses an `--out` under a folder with a `CLAUDE.md`,
+  `CLAUDE.local.md`, `AGENTS.md` or `.claude/`, naming it (#864): every arm would
+  load it, and the arms would stop differing by the rules under test.
+
 - The description `/plinth:template-update` writes follows the current
   pull-request form, so `ci / pr-title` no longer warns about two missing
   fields on it (#856). `## What I checked myself` says what the script checked
