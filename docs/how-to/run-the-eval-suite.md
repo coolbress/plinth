@@ -16,7 +16,8 @@ default skills. Run the [guide tasks](#the-tasks) with a release that touches
 Every release runs [the smoke run](#the-release-smoke-run), which is smaller.
 When such a release moves the template pin,
 `scripts/make-release.sh` asks for the posted table's link, or the reason it
-was not run ([How to cut a release](cut-a-release.md), step 2). You do not
+was not run ([How to cut a release](cut-a-release.md), step 2); that table is
+[the release run](#the-release-run)'s, which leaves out the `none` arm. You do not
 need the whole suite for other releases. It never runs in CI, because it uses your Claude
 usage and needs a login.
 
@@ -47,7 +48,11 @@ adds these numbers up and stops on its own:
   have spent that much.
 - **A full suite** of the first four tasks cost about US$5 (36 runs). With
   all thirteen tasks it is 105 runs, and that can reach the US$10 ceiling: name
-  fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it.
+  fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it. For
+  v2.29.0 it stopped at that ceiling at run 78, and a resume with
+  `--ceiling 14` finished it at US$13.41 (posted on #647).
+- **The release run** is 72 runs, about US$10.70 at v2.29.0's medians, under a
+  US$15 ceiling of its own (see [The release run](#the-release-run)).
 - **The two guide tasks alone** are six runs and should cost under US$1. One
   guide session cost US$0.03 to US$0.15 in the sessions measured for #836 on
   Sonnet: the first is the dearest, and later ones read from the prompt cache.
@@ -230,6 +235,31 @@ The suite refuses an `--out` when a folder above it has a `CLAUDE.md`,
 `CLAUDE.local.md`, `AGENTS.md` or `.claude/`, your home folder's `.claude` included,
 and names the file. Claude Code loads those from parent folders, so all three arms
 would read them and stop differing by the rules under test.
+
+## The release run
+
+When a release must run the eval suite ([How to cut a release](cut-a-release.md),
+step 2), run this from the top folder of your plinth clone:
+
+```bash
+scripts/eval-suite.sh --release
+```
+
+It runs every task in the `repo-only` and `plinth` arms only, three runs each,
+72 runs in all, under a US$15 ceiling. It leaves out the `none` arm: that arm
+has no `AGENTS.md`, `CLAUDE.md`, `.claude/` or plugins, so nothing a plinth or
+template release changes reaches it, and it cannot show that a release made the
+agent worse. Three runs a cell stay, because two cannot tell a 1/2 from chance.
+[#647's Decision of 2026-11-09](https://github.com/coolbress/plinth/issues/647#issuecomment-6734852683) sets this shape; the
+`none` arm stays in the default suite, for comparisons that ask whether plinth
+helps at all.
+
+It takes no `--task`, `--arm`, `--runs`, `--model` or `--config-dir`, so its
+result always means the same thing; `--ceiling` and `--out` still work. The
+first line of its summary says it is a release run, and its last line names the
+branch and commit plinth was installed from, as the smoke run's does. Records it made resume only
+with `--release`, and records made without it do not resume with it. Post the
+table on #647 and put the comment's link in the why-file.
 
 ## The release smoke run
 

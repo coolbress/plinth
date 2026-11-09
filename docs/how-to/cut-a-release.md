@@ -47,9 +47,12 @@ the move changes what a new project's agent reads, and then asks for
    eval suite not run: <the reason>
    ```
 
-   For the first, run [the eval suite](run-the-eval-suite.md) and post its
-   table on #647; the link is that comment's, in angle brackets (a bare link
-   fails `ci / docs`). The line stays in the release's section and its
+   For the first, run [the release run](run-the-eval-suite.md#the-release-run),
+   `scripts/eval-suite.sh --release`, and post its table on #647; the link is
+   that comment's, in angle brackets (a bare link fails `ci / docs`). It runs
+   the `repo-only` and `plinth` arms, three runs each, under a US$15 ceiling;
+   it leaves out the `none` arm, which nothing a release changes reaches
+   ([#647's Decision of 2026-11-09](https://github.com/coolbress/plinth/issues/647#issuecomment-6734852683)). The line stays in the release's section and its
    GitHub Release, so whoever reads the release sees the table or the reason.
    A release whose pin did not move, or whose move touches none of those
    files, needs neither.

@@ -8,7 +8,7 @@
 #
 #   scripts/eval-suite.sh [--config-dir DIR] [--ceiling USD] [--runs N]
 #                         [--task NAME]... [--arm NAME]... [--model NAME] [--out DIR]
-#                         [--keep-caches] [--smoke]
+#                         [--keep-caches] [--smoke | --release]
 #
 # Arms: none (the render without AGENTS.md, CLAUDE.md and .claude/, plugins
 # off), repo-only (the render, plugins off), plinth (the render, plinth on).
@@ -49,6 +49,14 @@
 # the ceiling stopped it. Its summary names this checkout's branch and commit.
 # Without --smoke the exit says nothing about what passed.
 #
+# --release is the run a release that must run the suite uses (#876, #647's
+# Decision of 2026-11-09): every task, the repo-only and plinth arms, three runs
+# each, on the default model, under a US$15 ceiling unless --ceiling names
+# another. The none arm is left out: nothing a plinth or template release
+# changes reaches it. Like --smoke it takes no --task, --arm, --runs, --model or
+# --config-dir, and its summary says it is a release run and names this
+# checkout's branch and commit; its exit is the default suite's.
+#
 # A session that did not really run (eval-suite-grade.py --not-run: the usage
 # limit, or an error on its first turn, or a cost of 0) is not graded: it gets a
 # not-run.txt with the reason it gave, is in no table, and the suite stops there,
@@ -78,11 +86,11 @@ session_timeout=900
 die() { echo "eval-suite: $*" >&2; exit 2; }
 usage() { sed -n '9,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
-cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=() keep_caches="" smoke="" runs_said="" model_said=""
+cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=() keep_caches="" smoke="" release="" runs_said="" model_said="" ceiling_said=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --config-dir) [ $# -ge 2 ] || usage; cfg="$2"; shift 2 ;;
-    --ceiling)    [ $# -ge 2 ] || usage; ceiling="$2"; shift 2 ;;
+    --ceiling)    [ $# -ge 2 ] || usage; ceiling="$2"; ceiling_said=1; shift 2 ;;
     --runs)       [ $# -ge 2 ] || usage; runs="$2"; runs_said=1; shift 2 ;;
     --task)       [ $# -ge 2 ] || usage; tasks+=("$2"); shift 2 ;;
     --arm)        [ $# -ge 2 ] || usage; arms+=("$2"); shift 2 ;;
@@ -90,10 +98,18 @@ while [ $# -gt 0 ]; do
     --out)        [ $# -ge 2 ] || usage; out="$2"; shift 2 ;;
     --keep-caches) keep_caches=1; shift ;;
     --smoke)      smoke=1; shift ;;
+    --release)    release=1; shift ;;
     -h|--help)    usage ;;
     *)            die "unknown argument: $1" ;;
   esac
 done
+if [ -n "$release" ]; then
+  [ -z "$smoke" ] || die "--release and --smoke are two different runs; name one"
+  [ "${#tasks[@]}" = 0 ] && [ "${#arms[@]}" = 0 ] && [ -z "$runs_said" ] && [ -z "$model_said" ] && [ -z "$cfg" ] \
+    || die "--release takes no --task, --arm, --runs, --model or --config-dir: it is always the same run, on plinth from this checkout"
+  arms=(repo-only plinth) runs=3
+  [ -n "$ceiling_said" ] || ceiling=15
+fi
 [[ "$ceiling" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "--ceiling is an amount in US dollars, like 10 or 2.5 (got: $ceiling)"
 [[ "$runs" =~ ^[1-9][0-9]*$ ]] || die "--runs is a whole number from 1 (got: $runs)"
 if [ -n "$smoke" ]; then
@@ -213,6 +229,7 @@ conditions() {
   printf 'arms=%s\n' "$(IFS=,; echo "${arms[*]}")"
   printf 'runs=%s\n' "$runs"
   printf 'smoke=%s\n' "$([ -n "$smoke" ] && echo yes || echo no)"
+  printf 'release=%s\n' "$([ -n "$release" ] && echo yes || echo no)"
 }
 resuming=""
 if [ -n "$out" ] && [ -e "$out" ]; then
@@ -536,14 +553,16 @@ sys.exit(0 if good == want else 1)
 PY
 }
 verdict="" smoke_failed=""
-if [ -n "$smoke" ]; then
-  verdict="$(smoke_verdict)" || smoke_failed=1
+[ -z "$smoke" ] || verdict="$(smoke_verdict)" || smoke_failed=1
+# Both release runs install plinth from this checkout; their summary names which commit.
+if [ -n "$smoke$release" ]; then
   dirty=""; [ -z "$(git -C "$root" status --porcelain 2>/dev/null)" ] || dirty=", with uncommitted changes"
-  verdict="$verdict
-plinth installed from: $(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unread) at $(git -C "$root" rev-parse HEAD 2>/dev/null || echo unread)$dirty."
+  verdict="${verdict:+$verdict
+}plinth installed from: $(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unread) at $(git -C "$root" rev-parse HEAD 2>/dev/null || echo unread)$dirty."
 fi
 table="$(python3 -I "$root/scripts/eval-suite-summary.py" "$out/runs" "$(IFS=,; echo "${tasks[*]}")" "$(IFS=,; echo "${arms[*]}")")"
 {
+  [ -z "$release" ] || { echo "Release run: every task, the repo-only and plinth arms, three runs each, ceiling \$$ceiling. The none arm is left out: nothing a release changes reaches it (#647's Decision of 2026-11-09)."; echo; }
   echo "Template $template_repo@$template_ref ($template_sha), model $model, $(claude --version 2>/dev/null | head -1)."
   echo
   echo "$table"

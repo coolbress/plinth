@@ -44,6 +44,16 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6734595
   plinth installed from the clone it runs in, and exits 1 unless every run passed
   (#862). The owner runs it before a release's merge, beside the `e2e` dispatch
   ([How to cut a release](docs/how-to/cut-a-release.md), step 5).
+- `scripts/eval-suite.sh --release` is the run a release that must run the eval
+  suite uses (#876): every task in the `repo-only` and `plinth` arms, three runs
+  each (72 runs), under a US$15 ceiling. It leaves out the `none` arm, which
+  nothing a release changes reaches, as
+  [#647's Decision of 2026-11-09](https://github.com/coolbress/plinth/issues/647#issuecomment-6734852683)
+  sets. Like `--smoke` it takes no `--task`, `--arm`, `--runs`, `--model` or
+  `--config-dir`; `--ceiling` and `--out` still apply, its records resume
+  only with `--release`, and its summary names the branch and commit plinth was
+  installed from. `scripts/make-release.sh` names it where it asks for
+  the suite's table.
 
 ### Fixed
 
