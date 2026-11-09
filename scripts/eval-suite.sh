@@ -54,8 +54,8 @@
 # each, on the default model, under a US$15 ceiling unless --ceiling names
 # another. The none arm is left out: nothing a plinth or template release
 # changes reaches it. Like --smoke it takes no --task, --arm, --runs, --model or
-# --config-dir, and its summary says it is a release run; its exit is the
-# default suite's.
+# --config-dir, and its summary says it is a release run and names this
+# checkout's branch and commit; its exit is the default suite's.
 #
 # A session that did not really run (eval-suite-grade.py --not-run: the usage
 # limit, or an error on its first turn, or a cost of 0) is not graded: it gets a
@@ -553,11 +553,12 @@ sys.exit(0 if good == want else 1)
 PY
 }
 verdict="" smoke_failed=""
-if [ -n "$smoke" ]; then
-  verdict="$(smoke_verdict)" || smoke_failed=1
+[ -z "$smoke" ] || verdict="$(smoke_verdict)" || smoke_failed=1
+# Both release runs install plinth from this checkout; their summary names which commit.
+if [ -n "$smoke$release" ]; then
   dirty=""; [ -z "$(git -C "$root" status --porcelain 2>/dev/null)" ] || dirty=", with uncommitted changes"
-  verdict="$verdict
-plinth installed from: $(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unread) at $(git -C "$root" rev-parse HEAD 2>/dev/null || echo unread)$dirty."
+  verdict="${verdict:+$verdict
+}plinth installed from: $(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unread) at $(git -C "$root" rev-parse HEAD 2>/dev/null || echo unread)$dirty."
 fi
 table="$(python3 -I "$root/scripts/eval-suite-summary.py" "$out/runs" "$(IFS=,; echo "${tasks[*]}")" "$(IFS=,; echo "${arms[*]}")")"
 {

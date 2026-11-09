@@ -816,6 +816,8 @@ check "its records say what it ran" \
   'grep -qx "arms=repo-only,plinth" "$tmp/rel/conditions.txt" && grep -qx "runs=3" "$tmp/rel/conditions.txt" && grep -qx "model=sonnet" "$tmp/rel/conditions.txt" && grep -qx "release=yes" "$tmp/rel/conditions.txt" && grep -q "^tasks=cli-name,ledger," "$tmp/rel/conditions.txt"' "$(cat "$tmp/rel/conditions.txt")"
 check "the summary says it is a release run, and why the none arm is not in it" \
   'grep -q "^Release run: every task, the repo-only and plinth arms, three runs each" "$tmp/rel/summary.md" && grep -qF "The none arm is left out" "$tmp/rel/summary.md"' "$(cat "$tmp/rel/summary.md")"
+check "and, as the smoke run's does, the branch and commit plinth was installed from" \
+  'grep -q "^plinth installed from: $(git -C "$root" rev-parse --abbrev-ref HEAD) at $here" "$tmp/rel/summary.md"' "$(cat "$tmp/rel/summary.md")"
 : > "$log"
 TMPDIR="$tmp" suite --release --ceiling 1 --out "$tmp/rel"
 check "--ceiling still applies, and a --release folder resumes with --release" \

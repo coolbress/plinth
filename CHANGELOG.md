@@ -42,8 +42,9 @@ pull requests and have no tag.
   nothing a release changes reaches, as
   [#647's Decision of 2026-11-09](https://github.com/coolbress/plinth/issues/647#issuecomment-6734852683)
   sets. Like `--smoke` it takes no `--task`, `--arm`, `--runs`, `--model` or
-  `--config-dir`; `--ceiling` and `--out` still apply, and its records resume
-  only with `--release`. `scripts/make-release.sh` names it where it asks for
+  `--config-dir`; `--ceiling` and `--out` still apply, its records resume
+  only with `--release`, and its summary names the branch and commit plinth was
+  installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
 
 ### Fixed

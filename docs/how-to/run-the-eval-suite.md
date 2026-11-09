@@ -256,7 +256,8 @@ helps at all.
 
 It takes no `--task`, `--arm`, `--runs`, `--model` or `--config-dir`, so its
 result always means the same thing; `--ceiling` and `--out` still work. The
-first line of its summary says it is a release run. Records it made resume only
+first line of its summary says it is a release run, and its last line names the
+branch and commit plinth was installed from, as the smoke run's does. Records it made resume only
 with `--release`, and records made without it do not resume with it. Post the
 table on #647 and put the comment's link in the why-file.
 
