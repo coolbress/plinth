@@ -232,6 +232,18 @@ release needs a green run on the commit it tags, or on a commit with its tree
    by the run started last; one still running holds the merge. Merging on a count that was printed but not checked
    let two unread findings through once (#306); this is the check.
 
+   One check state is not green and still passes: a neutral `CodeQL` on a
+   pull request whose author is `dependabot[bot]` and whose head has no
+   `Analyze (...)` run (#872). Code scanning's default setup starts no
+   analysis for an event Dependabot causes, so every Dependabot pull request
+   carries one, and the push to `main` runs the analysis. After such a merge
+   the script waits for the `Analyze (...)` jobs on the merge commit and says
+   whether they passed, failed (exit 1: the failure is on `main` now, and it
+   says what to do next), or did not start or finish in time. A neutral
+   `CodeQL` on any other pull request, a person's included, stops: it means
+   code scanning could not tell which alerts the change adds, often because no
+   analysis ran for that head.
+
    After the merge it prints, for each issue the pull request closes or names
    on a `Part of #N` line, the acceptance criteria still unticked and, for an issue
    it closed, a body with no `## Outcome` (`## Decision` for a record). Tick

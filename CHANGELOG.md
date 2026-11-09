@@ -39,6 +39,16 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `scripts/merge-when-green.sh` no longer stops on every Dependabot pull request
+  for a neutral `CodeQL` (#872). Code scanning's default setup starts no analysis
+  for an event Dependabot causes, so that check is neutral there whatever the
+  change. A neutral `CodeQL` now passes only when the author is `dependabot[bot]`
+  and no `Analyze (...)` job exists in any Actions run on the head, and the line
+  says why. After that merge the script waits up to 20 minutes
+  (`MERGE_ANALYZE_WAIT`) for the `Analyze (...)` jobs on the merge commit and
+  reports passed, failed (exit 1, with what to do next) or not started, not
+  finished or not read. A neutral `CodeQL` anywhere else, a person's pull
+  request included, still stops, and now says what neutral means.
 - `scripts/eval-suite.sh` no longer grades a session that did not run (#864). On
   2026-11-07 a suite hit the subscription's usage limit at its 58th run, and the
   48 runs from there read as results, because an untouched project passes its checks.

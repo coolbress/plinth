@@ -32,7 +32,15 @@
 #     installation with auto-update on, and it cannot be taken back. A
 #     dispatched run does not show in `gh pr checks`, so the checks below do not
 #     hold on it, and a ruleset cannot require it of release pull requests alone;
-#   - a check on the head is not SUCCESS once they have all finished;
+#   - a check on the head is not SUCCESS once they have all finished, with one
+#     exception (#872): a NEUTRAL `CodeQL` on a pull request whose author is
+#     dependabot[bot] and whose head has no `Analyze (...)` job in any Actions
+#     run. Code scanning's default setup starts no analysis for an event
+#     Dependabot causes, so that check is neutral on every such pull request;
+#     the push to the base branch runs the analysis, and after the merge this
+#     script waits for it and reports passed, failed (exit 1: a failure on the
+#     base branch now), or not started, not finished or not read (not
+#     confirmed). A neutral `CodeQL` anywhere else stops, saying what it means;
 #   - the head has no `third-party / review` and --no-reviewer was not given:
 #     whether to merge without a reviewer is the person's call, not a default.
 #     Where it is there, its green is the reviewer's verdict: the check binds
@@ -75,6 +83,24 @@ done
 [ -n "$repo" ] || repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || stop "cannot tell the repository; pass --repo owner/name"
 
 poll="${MERGE_POLL:-20}"
+
+# Code scanning's analyses at a commit, read from its Actions runs (the token
+# that runs this can read those; the check-runs API needs Checks access it may
+# lack): one line per `Analyze (...)` job of any run there, and one for a
+# default-setup run that lists no such job yet, each
+# "<status>\t<conclusion>\t<name>\t<url>". Returns 1 when a read fails.
+analyses() {
+  local sha="$1" runs id path st co url name jobs
+  runs="$(gh api -X GET "repos/$repo/actions/runs" -f "head_sha=$sha" -F per_page=100 \
+    --jq ".workflow_runs[] | select(.head_sha == \"$sha\") | [.id, .path, .status, (.conclusion // \"-\"), .html_url, .name] | @tsv")" || return 1
+  while IFS=$'\t' read -r id path st co url name; do
+    [ -n "$id" ] || continue
+    jobs="$(gh api --paginate "repos/$repo/actions/runs/$id/jobs" \
+      --jq '.jobs[] | select(.name | startswith("Analyze (")) | [.status, (.conclusion // "-"), .name, .html_url] | @tsv')" || return 1
+    if [ -n "$jobs" ]; then printf '%s\n' "$jobs"
+    elif [ "$path" = dynamic/github-code-scanning/codeql ]; then printf '%s\t%s\t%s\t%s\n' "$st" "$co" "$name (no Analyze job listed yet)" "$url"; fi
+  done <<<"$runs"
+}
 
 state="$(gh pr view "$pr" -R "$repo" --json state --jq .state)" || stop "cannot read pull request $pr in $repo"
 [ "$state" = OPEN ] || stop "pull request $pr is $state"
@@ -186,8 +212,39 @@ checks="$(gh pr checks "$pr" -R "$repo" --json name,state,startedAt,completedAt 
   | .[] | "\(.state)\t\(.name)"')" || stop "cannot read the checks"
 [ -n "$checks" ] || stop "no checks reported on $head"
 bad="$(awk -F'\t' '$1!="SUCCESS"' <<<"$checks")"
+# A neutral `CodeQL` (#872): code scanning could not compare this pull
+# request's alerts with the base branch's, usually because no analysis ran
+# for this head. Default setup starts none for an event Dependabot causes, so
+# every Dependabot pull request carries one; there alone, and only while no
+# analysis exists on the head, it passes, and the push to the base branch runs
+# the analysis this script then waits for. Anywhere else it stops.
+neutral_codeql=no
+if grep -qxF "NEUTRAL	CodeQL" <<<"$bad"; then
+  rest="$(grep -vxF "NEUTRAL	CodeQL" <<<"$bad")"
+  why_not=""
+  if [ -n "$rest" ]; then
+    why_not="other checks are not green either"
+  elif ! author="$(gh api "repos/$repo/pulls/$pr" --jq .user.login)"; then
+    stop "cannot read the author of $pr, so the neutral CodeQL cannot be judged"
+  elif [ "$author" != "dependabot[bot]" ]; then
+    why_not="the author is $author, not dependabot[bot]"
+  elif ! found="$(analyses "$head")"; then
+    stop "cannot read the Actions runs on $head, so whether an analysis ran there is unknown"
+  elif [ -n "$found" ]; then
+    why_not="an analysis exists on this head, so its result speaks, not the exception:"$'\n'"$found"
+  else
+    neutral_codeql=dependabot
+    bad=""
+  fi
+  [ "$neutral_codeql" = dependabot ] || stop "checks not green:" "$bad" \
+    "A neutral CodeQL is not a pass: code scanning could not tell which alerts this pull request adds (open the check for why; often no analysis ran for this head). It passes only on a Dependabot pull request with no analysis on its head; here $why_not"
+fi
 [ -z "$bad" ] || stop "checks not green:" "$bad"
-echo "checks: $(wc -l <<<"$checks" | tr -d ' ') green"
+if [ "$neutral_codeql" = dependabot ]; then
+  echo "checks: $(($(wc -l <<<"$checks") - 1)) green, and CodeQL neutral on a Dependabot pull request with no analysis on its head: default setup does not analyse Dependabot's pull requests, and the push to the base branch runs the analysis, which this script waits for after the merge"
+else
+  echo "checks: $(wc -l <<<"$checks" | tr -d ' ') green"
+fi
 
 # -- the reviewer ----------------------------------------------------------
 if grep -qxF "SUCCESS	third-party / review" <<<"$checks"; then
@@ -282,4 +339,45 @@ case "$after" in
   MERGED*) named ;;
   *) echo "Not merged yet (${after:-state not read}): read its issues' criteria once it has." ;;
 esac
+
+# -- the base branch's analysis, after a neutral CodeQL passed (#872) ----------
+# The analysis the pull request never had runs on the push to the base branch.
+# Wait for its `Analyze (...)` jobs on the merge commit (MERGE_ANALYZE_WAIT
+# seconds, 20 minutes by default) and say how they ended. A failure is the base
+# branch's now, and exits 1; not started, not finished or not read is said as
+# not confirmed, and leaves the exit status as it was.
+base_analysis() {
+  local sha="$1" base wait="${MERGE_ANALYZE_WAIT:-1200}" t0=$SECONDS lines where
+  base="$(gh pr view "$pr" -R "$repo" --json baseRefName --jq .baseRefName 2>/dev/null)" && [ -n "$base" ] || base="the base branch"
+  where="code scanning on $base at $sha"
+  while :; do
+    if ! lines="$(analyses "$sha")"; then
+      echo "$where: not read (the Actions runs could not be read), so this merge's analysis is not confirmed: https://github.com/$repo/security/code-scanning"
+      return 0
+    fi
+    [ -n "$lines" ] && ! awk -F'\t' '$1 != "completed" {f = 1} END {exit !f}' <<<"$lines" && break
+    [ $((SECONDS - t0)) -lt "$wait" ] || break
+    sleep "$poll"
+  done
+  if [ -z "$lines" ]; then
+    echo "$where: not started within $((wait / 60)) minute(s), so this merge's analysis is not confirmed. Look for a run named 'Push on $base' in https://github.com/$repo/actions, and at the tool status under https://github.com/$repo/security/code-scanning"
+  elif awk -F'\t' '$1 != "completed" {f = 1} END {exit !f}' <<<"$lines"; then
+    echo "$where: not finished within $((wait / 60)) minute(s), so this merge's analysis is not confirmed; read it there once it ends:"
+    printf '%s\n' "$lines"
+  elif awk -F'\t' '$2 != "success" {f = 1} END {exit !f}' <<<"$lines"; then
+    echo "FAIL: code scanning failed on $base at $sha, after this merge. The pull request is merged, so the failure is on $base now:"
+    printf '%s\n' "$lines"
+    echo "Read the failed job's log. If it reports alerts (https://github.com/$repo/security/code-scanning?query=is%3Aopen+ref%3Arefs%2Fheads%2F$base), fix them, or revert this merge, in a new pull request. If the job itself broke, run it again: gh run rerun <run id from the URL> --failed --repo $repo"
+    return 1
+  else
+    echo "$where: passed"
+    printf '%s\n' "$lines"
+  fi
+}
+if [ "$neutral_codeql" = dependabot ]; then
+  case "$after" in
+    MERGED*) base_analysis "${after#MERGED }" || after_rc=1 ;;
+    *) echo "Not merged yet: once it has, read the analysis on the base branch's merge commit, since this pull request had none." ;;
+  esac
+fi
 exit "$after_rc"
