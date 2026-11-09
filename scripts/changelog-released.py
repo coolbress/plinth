@@ -49,7 +49,7 @@ VERSION = re.compile(r"\d+\.\d+\.\d+")
 
 
 def git(*args):
-    return subprocess.run(["git", *args], capture_output=True, text=True)
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=False)
 
 
 def sections(text):

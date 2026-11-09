@@ -215,6 +215,7 @@ release needs a green run on the commit it tags, or on a commit with its tree
    ```text
    Corrects released section: 2.28.0
    ```
+
 5. Merge when green. Squash is the only merge method, the commit is the pull
    request title and description, and the branch is deleted on merge. The
    description is the commit only when the merge passes it: without a body,
