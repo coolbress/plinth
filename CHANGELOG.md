@@ -24,6 +24,18 @@ pull requests and have no tag.
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
 
+### Changed
+
+- `python-ci.yml`, `plinth-ci.yml` and `e2e.yml` send the job's own token when
+  they download uv, gitleaks, actionlint and lychee from a GitHub release
+  (#878), so an outage that sheds anonymous requests, like GitHub's 504s on
+  2026-11-09, no longer stops a consumer's required checks. curl sends it to
+  `github.com` only, not to the storage host it redirects to; with no token the
+  download is anonymous as before, and the checksums are verified as before.
+  `tests/release-download-token.sh` fails on a release download without it.
+  `gitlab/python-ci.yml` stays anonymous, as a GitLab pipeline has no GitHub
+  token, and its header says what such an outage does there.
+
 ## [2.29.0] - 2026-11-09
 
 A release now reaches installations only after it has been proved: `e2e` runs on the release branch, calling the reusable workflows at the release commit, before the pull request merges, and a short skill smoke run goes with it. `/plinth:new-project` renders plinth-template v1.42.0, whose projects carry a 51-line `AGENTS.md`, a "Coming back" list that reads the recent commits and the last squash commit's body, and an undo how-to whose conflict path uses the form; a new project calls plinth v2.28.0. The pull requests `/plinth:new-project` and `/plinth:template-update` open fill the form's four fields, so their own checks no longer warn. The README gives the optional auto-update step. A consumer gets the template's changes through `/plinth:template-update`; the reusable workflows change only by a comment line at their top, so raising the pin is optional.

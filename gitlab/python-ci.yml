@@ -29,6 +29,13 @@
 # The image is pinned by digest; uv, gitleaks and osv-scanner come from their
 # official releases with SHA-256 checksums, and floor-check's PyYAML from PyPI
 # with every wheel's hash.
+#
+# Those downloads from github.com are anonymous, unlike python-ci.yml's: a
+# GitLab pipeline has no GitHub token to send (#878). When GitHub sheds
+# anonymous requests, as on 2026-11-09 when it answered them with 504 for about
+# two hours, every job here stops at its tool install and the pipeline is red
+# until GitHub recovers; re-run the pipeline then. Nothing is checked and
+# nothing passes in the meantime.
 
 spec:
   inputs:
