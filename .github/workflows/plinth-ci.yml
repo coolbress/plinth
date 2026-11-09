@@ -244,6 +244,9 @@ jobs:
       - name: An interrupted install smoke leaves nothing writing into the dir it removes, and Ctrl-C stops it
         run: ./tests/install-smoke-interrupt.sh
 
+      - name: A pull request that changes a released CHANGELOG.md section fails, unless it names it or puts it back
+        run: ./tests/changelog-released-cases.sh
+
       # Official release binary, checksum verified: rhysd/actionlint has no
       # action of its own, and a third-party wrapper would need allowlisting.
       # The version and the checksum are read from tests/workflow-lint.sh, the
@@ -285,6 +288,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The merge commit and its parents: HEAD^1 is the base that the
+          # released-section step compares CHANGELOG.md with.
+          fetch-depth: 2
 
       # First, so a description that would close the wrong issue is red
       # before the link check's download. A keyword in a sentence closes an
@@ -297,6 +303,22 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
         run: ./scripts/closing-references.sh
+
+      # A pull request open across a release can merge main in and keep its
+      # new line inside the section the release just tagged (#877, #881). The
+      # tags are fetched here; reading none fails the script rather than
+      # finding every section unreleased. Not a pull request: a pass, reported
+      # by the script.
+      - name: The pull request changes no released section of CHANGELOG.md
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = pull_request ]; then
+            git fetch --no-tags --depth=1 origin '+refs/tags/v*:refs/tags/v*'
+          fi
+          ./scripts/changelog-released.py
 
       # The version is pinned in the test, so a local run lints with what runs here.
       - name: markdownlint

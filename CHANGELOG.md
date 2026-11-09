@@ -13,6 +13,18 @@ pull requests and have no tag.
 
 ### Added
 
+- `ci / docs` fails a pull request that changes the text of a `CHANGELOG.md`
+  section whose version has a `vX.Y.Z` tag (#881), naming the section and
+  saying to move the line under `[Unreleased]`. A pull request open across
+  a release could merge `main` in and keep its line inside the section the
+  release had just tagged, and nothing failed (#877). A section is compared
+  with the pull request's base: one put back as its tag has it passes, and
+  a deliberate correction passes when the description names its version on a
+  `Corrects released section: X.Y.Z` line
+  ([CONTRIBUTING.md](https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change), step 4).
+  `[Unreleased]` and untagged sections are not compared, so release run 1
+  passes.
+
 - `scripts/eval-suite.sh --release` is the run a release that must run the eval
   suite uses (#876): every task in the `repo-only` and `plinth` arms, three runs
   each (72 runs), under a US$15 ceiling. It leaves out the `none` arm, which
