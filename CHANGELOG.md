@@ -82,6 +82,14 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.42.0: a project's
+  `AGENTS.md` is 51 lines instead of 60 (coolbress/plinth-template#201); its
+  "Coming back" list reads the last ten commits and the last squash commit's
+  body, and an item still owed when an issue closes goes into an open
+  follow-up (coolbress/plinth-template#215); the undo how-to's conflict path
+  uses the form (coolbress/plinth-template#212); a new project calls plinth
+  v2.28.0 instead of v2.27.0. `docs/how-to/turn-a-correction-into-a-rule.md`
+  no longer says a new `cli` project's `AGENTS.md` is already 60 lines.
 - A release runs `e2e` on its branch before its pull request merges (#855).
   On 2026-11-06 v2.28.0 reached an installation with auto-update on eight
   minutes before its `e2e` passed, because merging is what moves the version
