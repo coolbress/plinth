@@ -364,10 +364,15 @@ def task_record(
 
 
 def closes(n: int) -> re.Pattern[str]:
-    """A gh call that closes issue n: `issue close`, the API's state, or a closing word in a pull request."""
+    """A gh call that closes issue n: `issue close`, the API's state, or a closing word in a pull request.
+
+    The number may stand anywhere after `issue close`: the stand-in logs a flag's
+    value of several words without its quotes. A comment word equal to n counts
+    too, which fails closed. A GraphQL closeIssue counts whatever it names.
+    """
     return re.compile(
-        rf"^issue close\s+(?:-\S+\s+\S+\s+)*(?:#?{n}|\S*/issues/{n})(?!\d)"
-        rf"|^api\b.*/issues/{n}(?!\d).*\bclosed\b"
+        rf"^issue close\b.*?(?:\s)(?:#?{n}|\S*/issues/{n})(?![\d\w])"
+        rf"|^api\b.*/issues/{n}(?!\d).*\bclosed\b|^api graphql\b.*\bcloseIssue\b"
         rf"|^pr (?:create|edit|merge)\b.*\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#{n}(?!\d)",
         re.IGNORECASE,
     )
@@ -379,8 +384,11 @@ def owed(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> t
     # What the stand-in logged, and the gh commands the shell ran, in case it logged none.
     asked = state["gh_calls"] + [m.group(1) for b in tr["bash"] for m in GH_ARGS.finditer(b)]
     closed = sorted({a for a in asked if closes(o["issue"]).search(a)})
-    # A body from a heredoc or a file is not in the logged call; the shell command holding it is.
-    created = [a for a in asked if a.startswith("issue create")] + [b for b in tr["bash"] if "gh issue create" in b]
+    # A body from a heredoc is not in the logged call; the shell command holding it is, cut at
+    # `&&`, `||` and `;` so another command's words do not count for the create.
+    created = [a for a in asked if a.startswith("issue create")] + [
+        part for b in tr["bash"] for part in re.split(r"&&|\|\||;", b) if "gh issue create" in part
+    ]
     follow_up = any(re.search(o["follow_up"], c, re.IGNORECASE) for c in created)
     named = bool(re.search(o["named"], final, re.IGNORECASE))
     says = bool(re.search(o["which"], final, re.IGNORECASE))
