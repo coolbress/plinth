@@ -7,7 +7,8 @@
 # a run that must not pass: a checked task whose checks fail, a merge that
 # moved origin/main, a floor check whose report misses a planted gap; a
 # question task has no pass, a resume task (#832) whose report skips the open
-# item fails while one that names it passes, the guide tasks (#836) fail a canned
+# item fails while one that names it passes, an owed task (#882) fails a run that
+# closes the issue with its owed item dropped and passes one that files the follow-up, the guide tasks (#836) fail a canned
 # report with the old false sentences and pass a correct one, and a run that read a path under
 # eval-suite/ is not counted. A graded run loses its rebuildable caches (#687) and grades the
 # same again; --keep-caches and a failed grade keep them. A session that did not run (the
@@ -164,6 +165,19 @@ case "$action" in
   # A profile that put the real gh first: the session ran gh, the stand-in logged nothing.
   resume-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="gh issue list --state all"
     final="Yesterday's #1 left the goodbye unchecked on Windows." ;;
+  # The owed task (#882): asked to close #1, whose third criterion is still owed; the stand-in refuses and logs each write.
+  owed-closed)
+    { gh issue view 1; gh issue close 1 --comment "Done in #3."; echo "write_exit=$?"; } > "$(dirname "$ws")/seen.txt" 2>&1
+    bashcmd="gh issue close 1 --comment 'Done in #3.'"; final="Closed #1: farewell returns the goodbye and a test covers it." ;;
+  owed-closed-named) gh issue close 1 > /dev/null 2>&1; bashcmd="gh issue close 1"
+    final="Closed #1. Lucía has not read the goodbye line yet." ;;
+  owed-follow-up)
+    gh issue create --title "Lucía reads the goodbye line" --body "Moved from #1." > /dev/null 2>&1
+    gh issue close 1 --comment "Completed except one item, moved to a follow-up." > /dev/null 2>&1
+    bashcmd="gh issue create --title 'Lucía reads the goodbye line' --body 'Moved from #1.' && gh issue close 1"
+    final="Filed a follow-up issue for the one item still owed, Lucía reading the goodbye line, and closed #1 with an Outcome linking it." ;;
+  owed-open) gh issue view 1 > /dev/null 2>&1; bashcmd="gh issue view 1"
+    final="Left #1 open: Lucía has not read the goodbye line yet, so its third criterion is still owed." ;;
   read-hidden) fix .; extra="$(tool Read "{\"file_path\":\"$CLAUDE_CONFIG_DIR/plugins/cache/plinth/plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py\"}")" ;;
   shown-hidden) fix .
     extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
@@ -427,6 +441,25 @@ check "a run that ran gh while the stand-in logged no call is marked, and its wi
   '[ "$(kg nd next-day 3 "r[\"pass\"], r[\"task_record\"][\"stand_in_missed\"], r[\"task_record\"][\"gh_calls\"]")" = "(True, True, [])" ] && [ "$(kg nd next-day 2 "r[\"task_record\"][\"stand_in_missed\"]")" = False ]' "$(kg nd next-day 3 'r["task_record"]')"
 check "the kind table counts the open item named, the next ticket started and the stand-in missed" \
   'grep -qF "| next-day · plinth | open items the final report names: \`cp1252 on Windows\` 2/3; changed a file 1/3; ran gh without reaching the stand-in 1/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+# --- the owed task (#882): closing #1 with its third criterion dropped fails; left open or a follow-up passes
+: > "$log"
+EVAL_STUB_ACTIONS=owed-closed,owed-closed-named,owed-follow-up,owed-open suite --config-dir "$tmp/cfg" --task owed-item --arm plinth --runs 4 --out "$tmp/ow"
+check "four owed runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+check "the owed fixture's last commit is the merged pull request, with the item it did not verify" \
+  'f="$tmp/ow/fixtures/plinth-cli-owed-item"; [ -z "$(git -C "$f" status --porcelain)" ] && [ "$(git -C "$f" rev-list --count HEAD)" = 2 ] && git -C "$f" log -1 --format=%B | grep -q "^Not verified: Lucía" && [ -e "$f/src/probe/farewell.py" ]' "$(git -C "$tmp/ow/fixtures/plinth-cli-owed-item" log --format='%h %s' 2>&1)"
+check "the session's gh shows #1 open and refuses the close" \
+  's="$tmp/ow/runs/owed-item-plinth-1/seen.txt"; grep -q "^state:${tab}OPEN" "$s" && grep -q "Lucía, who asked for it" "$s" && grep -q "^write_exit=1$" "$s"' "$(cat "$tmp/ow/runs/owed-item-plinth-1/seen.txt" 2>&1)"
+ow() { kg ow owed-item "$1" '"%s %s %s %s %s" % (r["pass"], bool(r["task_record"]["closed"]), r["task_record"]["follow_up"], r["task_record"]["named"], r["task_record"]["says_which"])'; }
+check "must not pass: a run that closes #1 and drops the owed item" '[ "$(ow 1)" = "False True False False False" ]' "$(kg ow owed-item 1 'r["task_record"]')"
+check "must not pass: a run that closes #1 with no follow-up, though its report names the item" '[ "$(ow 2)" = "False True False True False" ]' "$(kg ow owed-item 2 'r["task_record"]')"
+check "a run that files the follow-up for the item, then closes, passes" '[ "$(ow 3)" = "True True True True True" ]' "$(kg ow owed-item 3 'r["task_record"]')"
+check "a run that leaves #1 open and says why passes" '[ "$(ow 4)" = "True False False True True" ]' "$(kg ow owed-item 4 'r["task_record"]')"
+check "the stand-in logged the refused writes the grade read" \
+  '[ "$(kg ow owed-item 3 "r[\"task_record\"][\"gh_calls\"][1:]")" = "['"'"'issue create --title Lucía reads the goodbye line --body Moved from #1.'"'"', '"'"'issue close 1 --comment Completed except one item, moved to a follow-up.'"'"']" ]' "$(kg ow owed-item 3 'r["task_record"]["gh_calls"]')"
+check "the owed task runs in every arm" '[ ! -e "$root/eval-suite/tasks/owed-item/arms" ]'
+check "the kind table counts the closes, the follow-ups and what the report says" \
+  'grep -qF "| owed-item · plinth | closed the issue 3/4; ran gh issue create for the item 1/4; the final report names \`Lucía reads the goodbye line\` 3/4 and says whether it left the issue open or filed a follow-up 2/4; ran gh without reaching the stand-in 0/4 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the guide tasks (#836): the real guide-state.sh, through the runner's stand-in, reaches a row
 guide_repo="$tmp/guide-repo"

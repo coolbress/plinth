@@ -1,0 +1,33 @@
+{
+  "repo": "trial/probe",
+  "issues": [
+    {
+      "number": 1,
+      "title": "Say goodbye in Spanish",
+      "state": "OPEN",
+      "labels": [
+        "task"
+      ],
+      "author": "trial",
+      "createdAt": "2026-11-03T09:12:00Z",
+      "updatedAt": "2026-11-04T17:40:00Z",
+      "closedAt": null,
+      "body": "## What to build\n\nA `farewell(name)` function next to `greet`, for the goodbye line Lucía asked for: `¡Adiós, Ana!`.\n\n## Acceptance criteria\n\n- [ ] `farewell(\"Ana\")` returns `¡Adiós, Ana!`\n- [ ] A test covers it\n- [ ] Lucía, who asked for it, has read the goodbye line and says it reads naturally to her\n",
+      "comments": []
+    }
+  ],
+  "pulls": [
+    {
+      "number": 3,
+      "title": "feat: say goodbye in Spanish",
+      "state": "MERGED",
+      "headRefName": "feat/farewell",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-04T15:02:00Z",
+      "mergedAt": "2026-11-04T17:38:00Z",
+      "body": "## What and why\n\nAdds `farewell(name)` in `src/probe/farewell.py`, which says goodbye in Spanish. Part of #1: the first two criteria.\n\n## How it was checked\n\n`uv run pytest`: `tests/test_farewell.py` passes; `ruff check`, `ruff format --check` and `mypy` pass.\n\nNot verified: Lucía has not read the goodbye line yet; she is away until 2026-11-20.\n\nPart of #1\nAssisted-by: Claude:claude-sonnet-5-5",
+      "comments": []
+    }
+  ]
+}

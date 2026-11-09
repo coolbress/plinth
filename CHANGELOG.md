@@ -15,7 +15,7 @@ pull requests and have no tag.
 
 - `scripts/eval-suite.sh --release` is the run a release that must run the eval
   suite uses (#876): every task in the `repo-only` and `plinth` arms, three runs
-  each (72 runs), under a US$15 ceiling. It leaves out the `none` arm, which
+  each (78 runs), under a US$15 ceiling. It leaves out the `none` arm, which
   nothing a release changes reaches, as
   [#647's Decision of 2026-11-09](https://github.com/coolbress/plinth/issues/647#issuecomment-6734852683)
   sets. Like `--smoke` it takes no `--task`, `--arm`, `--runs`, `--model` or
@@ -23,6 +23,13 @@ pull requests and have no tag.
   only with `--release`, and its summary names the branch and commit plinth was
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
+- The eval suite has an `owed-item` task (#882), in all three arms: asked to
+  finish and close an issue whose last criterion still waits on a person, a
+  session passes when it leaves the issue open or files a follow-up issue for
+  the item, and its final report says which. Its new grading kind, `owed`,
+  reads the closes and new issues the read-only `gh` stand-in refused and
+  logged. It measures the follow-up half of the template's "Coming back" rule,
+  which `next-day` does not.
 
 ## [2.29.0] - 2026-11-09
 
