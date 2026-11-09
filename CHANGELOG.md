@@ -26,8 +26,9 @@ pull requests and have no tag.
 - The eval suite has two plain-question tasks, `guide-plain` and
   `guide-reminder-plain` (#883): the guide tasks' projects, records and
   patterns, asked in plain words without `/plinth:guide`, in the `plinth` arm
-  only. They compare plinth with the guide against plinth without it, and add
-  six runs to the release run (78).
+  only. They compare plinth with the guide against plinth without it. They stay
+  in the release run on purpose, so each release shows whether the guide still
+  does better than a plain question; that run is now 78 runs.
 
 ## [2.29.0] - 2026-11-09
 

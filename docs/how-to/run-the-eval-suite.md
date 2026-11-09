@@ -52,8 +52,8 @@ adds these numbers up and stops on its own:
   v2.29.0 it stopped at that ceiling at run 78, and a resume with
   `--ceiling 14` finished it at US$13.41 (posted on #647).
 - **The release run** is 78 runs: the 72 that cost about US$10.70 at v2.29.0's
-  medians, and the two plain-question tasks' 6, about US$0.75 more at the guide
-  tasks' medians. It has a US$15 ceiling of its own (see [The release run](#the-release-run)).
+  medians, and the two plain-question tasks' 6, not yet measured (about US$0.75
+  if they cost what the guide tasks do). It has a US$15 ceiling of its own (see [The release run](#the-release-run)).
 - **The two guide tasks alone** are six runs and should cost under US$1. One
   guide session cost US$0.03 to US$0.15 in the sessions measured for #836 on
   Sonnet: the first is the dearest, and later ones read from the prompt cache.
@@ -209,11 +209,16 @@ has its tests in `tests/guide-cases.sh`; these grade the words the model writes.
 The two plain-question tasks are the guide tasks with the guide taken out
 (#883). Their records and patterns are the same files as `guide`'s and
 `guide-reminder`'s, and their request names no command: a beginner asks, in
-plain words, what steps the project goes through until people can install it,
-where it is now, and the one thing to type next. They run in the `plinth`
-arm, where the arsenal and every other skill are still installed, so the
-difference between a guide task and its plain one is the guide alone. The
-guide is user-only, so a plain session cannot call it.
+plain words, what steps the project goes through from start to finish, where
+it is now, and the one thing to type next. They run in the `plinth` arm, where
+the arsenal and every other skill are still installed, so a guide task and its
+plain one differ by the guide and by the wording of the request. The guide is
+user-only, so a plain session cannot call it as a skill, but it could still
+read the guide's files or run `scripts/guide-state.sh`; read a plain run's
+`reader.md` before counting it. The one-code-block pattern grades the guide's
+own format: a plain report that gives the right command inline, or names
+`/plinth:guide` as the arsenal's table says to, fails it, so read that
+pattern's count apart from the others.
 
 A question task records the
 question marks in the final report, the `AskUserQuestion` calls and the
