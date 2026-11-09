@@ -45,9 +45,8 @@ Two things you may run into:
   that keeps the `AGENTS.md` it renders at 60 lines or fewer, but that test
   lives in the template's own repository, outside the folder copied into a new
   project. Your repository does not have it, so an extra line fails nothing.
-  A new `cli` project's `AGENTS.md` is already 60 lines (plinth-template
-  v1.25.0), so keep each line short and remove one that no longer earns its
-  place. When `/plinth:template-update` later brings a template change to the
+  A new `cli` project's `AGENTS.md` is 51 lines (plinth-template v1.42.0),
+  so keep each line short and remove one that no longer earns its place. When `/plinth:template-update` later brings a template change to the
   same lines, it shows the conflict and asks which side to keep.
 
 ## 2. The third time: a rule for the reviewer
