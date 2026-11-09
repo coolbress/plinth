@@ -40,7 +40,8 @@
 # moved since the release before (that section's tested line) and the
 # template's diff between the two tags touches a file a new project's agent
 # reads: template/AGENTS.md.jinja, template/CLAUDE.md.jinja, anything under
-# template/.claude/ (settings, the output style, the default skills). The why
+# template/.claude/ (settings, the output style, the default skills). The run
+# it names is scripts/eval-suite.sh --release (#876). The why
 # then carries one of two lines, which stay in the section and the Release:
 #   eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>
 #   eval suite not run: <the reason>
@@ -251,7 +252,8 @@ if [ "$prev_ref" != "$template_ref" ]; then
       *)
         stop "the template pin moved from $prev_ref to $template_ref, which changes what a new project's agent reads:" \
              "$(sed 's/^/  /' <<<"$reads")" \
-             "run the eval suite (docs/how-to/run-the-eval-suite.md), post its table, and add to the why-file one line:" \
+             "run the eval suite's release run, scripts/eval-suite.sh --release (docs/how-to/run-the-eval-suite.md)," \
+             "post its table, and add to the why-file one line:" \
              "  eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>" \
              "or, if it is not run, the reason, which the release section then carries:" \
              "  eval suite not run: <why>" ;;

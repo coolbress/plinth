@@ -795,5 +795,46 @@ for clash in "--task ledger" "--arm none" "--runs 1" "--model haiku" "--config-d
     '[ "$(rc)" = 2 ] && grep -q "smoke" "$tmp/out.txt" && [ "$(sessions)" = 0 ] && [ ! -e "$tmp/s5" ]' "$(cat "$tmp/out.txt")"
 done
 
+# --- the release run (#876): every task, the repo-only and plinth arms, three runs, a US$15 ceiling
+release_cells=0
+for t in "$root/eval-suite/tasks"/*/; do
+  for a in repo-only plinth; do
+    if [ ! -f "$t/arms" ] || grep -qx "$a" "$t/arms"; then release_cells=$((release_cells + 1)); fi
+  done
+done
+release_runs=$((release_cells * 3))
+: > "$log"
+# Each session reports US$8, so the second one takes the folder to US$16, over US$15 and not over US$20.
+TMPDIR="$tmp" EVAL_STUB_COST=8 suite --release --out "$tmp/rel"
+check "--release stops at a US\$15 ceiling: two sessions at US\$8, then exit 3" \
+  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 2 ] && grep -qF "ceiling reached: spent \$16.0000 of \$15;" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "it runs the repo-only arm, then plinth, of the first task, with plinth off in repo-only" \
+  '[ "$(grep "^session " "$log" | sed -E "s/^session run=([^ ]+) .* settings=(.).*/\1:\2/" | tr "\n" " ")" = "cli-name-repo-only-1:{ cli-name-plinth-1:n " ]' "$(grep '^session' "$log")"
+check "every task, both arms, three runs: the rest are counted as not started" \
+  'grep -qF "; $((release_runs - 2)) not started." "$tmp/out.txt" && grep -q "^== run 1 of $release_runs: " "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "its records say what it ran" \
+  'grep -qx "arms=repo-only,plinth" "$tmp/rel/conditions.txt" && grep -qx "runs=3" "$tmp/rel/conditions.txt" && grep -qx "model=sonnet" "$tmp/rel/conditions.txt" && grep -qx "release=yes" "$tmp/rel/conditions.txt" && grep -q "^tasks=cli-name,ledger," "$tmp/rel/conditions.txt"' "$(cat "$tmp/rel/conditions.txt")"
+check "the summary says it is a release run, and why the none arm is not in it" \
+  'grep -q "^Release run: every task, the repo-only and plinth arms, three runs each" "$tmp/rel/summary.md" && grep -qF "The none arm is left out" "$tmp/rel/summary.md" && ! grep -q "^| [a-z-]* · none |" "$tmp/rel/summary.md"' "$(cat "$tmp/rel/summary.md")"
+: > "$log"
+TMPDIR="$tmp" suite --release --ceiling 1 --out "$tmp/rel"
+check "--ceiling still applies, and a --release folder resumes with --release" \
+  '[ "$(rc)" = 3 ] && [ "$(sessions)" = 0 ] && grep -qF "== resuming: 2 graded runs kept" "$tmp/out.txt" && grep -qF "ceiling reached: spent \$16.0000 of \$1;" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+TMPDIR="$tmp" refuse_resume "a --release folder resumed without --release refuses, naming it" "release: recorded yes, now no" \
+  suite --arm repo-only --arm plinth --out "$tmp/rel"
+check "and nothing but that differs" '[ "$(grep -c ": recorded " "$tmp/out.txt")" = 1 ]' "$(cat "$tmp/out.txt")"
+: > "$log"
+TMPDIR="$tmp" suite --arm repo-only --arm plinth --ceiling 0 --out "$tmp/rel-not"
+TMPDIR="$tmp" refuse_resume "a folder made without --release, resumed with it, refuses, naming it" "release: recorded no, now yes" \
+  suite --release --out "$tmp/rel-not"
+check "and nothing but that differs" '[ "$(grep -c ": recorded " "$tmp/out.txt")" = 1 ]' "$(cat "$tmp/out.txt")"
+: > "$log"
+for clash in "--task ledger" "--arm none" "--runs 1" "--model haiku" "--config-dir $tmp/cfg" "--smoke"; do
+  # shellcheck disable=SC2086  # the option and its value are two words
+  suite --release $clash --out "$tmp/rel5"
+  check "--release with ${clash%% *} is refused: the result means one thing (exit 2)" \
+    '[ "$(rc)" = 2 ] && grep -qE -- "--release (takes no|and --smoke are)" "$tmp/out.txt" && [ "$(sessions)" = 0 ] && [ ! -e "$tmp/rel5" ]' "$(cat "$tmp/out.txt")"
+done
+
 echo "  $pass passed, $fail failed"
 [ "$fail" = 0 ]

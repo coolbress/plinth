@@ -213,6 +213,7 @@ run "v$next" "$work/moved.md";     check "a moved pin that changes what the agen
 is "  and the refusal names the files" says "template/AGENTS.md.jinja"
 is "  and the old name of a renamed one" says "beginner-or-non-engineer.md.jinja"
 is "  and the two lines it takes" bash -c 'grep -qF "eval suite: <https://" "$1" && grep -qF "eval suite not run: <why>" "$1"' _ "$work/out"
+is "  and the run a release uses, the release run (#876)" grep -qF "scripts/eval-suite.sh --release" "$work/out"
 is "  after asking the template's diff between the two tags" grep -qF "compare/$prev_ref...$moved_ref" "$GH_LOG"
 is "  and nothing changed" untouched
 run "v$next" "$work/moved-bare-link.md";  check "a bare link (markdownlint's MD034 in the section) is refused" no $?
