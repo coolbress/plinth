@@ -209,7 +209,8 @@ release needs a green run on the commit it tags, or on a commit with its tree
    section, naming it; move the line under `[Unreleased]`. A change that puts
    a section back as its tag has it passes. To correct a released section on
    purpose (a typo, a wrong link), add one line to the description naming
-   each version it corrects, and only those pass:
+   each version it corrects, and only those pass. The line counts outside
+   HTML comments and code blocks, written as plain text:
 
    ```text
    Corrects released section: 2.28.0

@@ -127,6 +127,22 @@ run "the line names versions, and only those pass: naming 1.1.0 fails 1.0.0" 1 '
 run "the line inside an HTML comment does not count" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD '<!-- Corrects released section: 1.0.0 -->'
 run "two versions on one line both pass" 0 'PASS' main HEAD 'Corrects released section: 1.1.0, 1.0.0'
 
+run "the line inside a code fence (a quoted example) does not count" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD $'```text\nCorrects released section: 1.0.0\n```'
+
+# A heading or link line that is not a version's, inside a released section,
+# does not hide the lines below it.
+fresh
+g checkout -qb inner main
+changelog '' "$s110
+${s100/- the first thing./- the first thing.
+
+## A note
+
+[x]: https://example.invalid/x
+
+- a line added below them.}" "$l110"; g commit -qam inner
+run "a line added below an inner heading and link line in tagged [1.0.0] fails" 1 '::error::CHANGELOG.md [1.0.0]'
+
 # 5. #880's shape: main carries the slip, and the fix puts the section back
 # as the tag has it.
 fresh
