@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.29.0] - 2026-11-09
+
+A release now reaches installations only after it has been proved: `e2e` runs on the release branch, calling the reusable workflows at the release commit, before the pull request merges, and a short skill smoke run goes with it. `/plinth:new-project` renders plinth-template v1.42.0, whose projects carry a 51-line `AGENTS.md`, a "Coming back" list that reads the recent commits and the last squash commit's body, and an undo how-to whose conflict path uses the form; a new project calls plinth v2.28.0. The pull requests `/plinth:new-project` and `/plinth:template-update` open fill the form's four fields, so their own checks no longer warn. The README gives the optional auto-update step. A consumer gets the template's changes through `/plinth:template-update`; the reusable workflows change only by a comment line at their top, so raising the pin is optional.
+
+tested with plinth-template v1.42.0
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6734595124>
+
 ### Added
 
 - `tests/reusable-workflow-allowlist.sh` fails on an action in `python-ci.yml`,
@@ -4883,7 +4891,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.28.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.29.0...HEAD
+[2.29.0]: https://github.com/coolbress/plinth/releases/tag/v2.29.0
 [2.28.0]: https://github.com/coolbress/plinth/releases/tag/v2.28.0
 [2.27.0]: https://github.com/coolbress/plinth/releases/tag/v2.27.0
 [2.26.0]: https://github.com/coolbress/plinth/releases/tag/v2.26.0
