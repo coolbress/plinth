@@ -139,7 +139,11 @@ it inside a project: there the same choice rewrites that project's committed
 `.claude/settings.json`. The same menu turns it off. It also brings raised
 dependency pins, with no `claude plugin update <name>@plinth` and without
 asking. A new version can arrive right after the release pull request merges,
-before the tag and the GitHub Release (#855).
+before the tag and the GitHub Release (#855). The pass runs in a session after
+its first message, within about ten minutes: not when a session opens, and not
+in `claude -p` ([When auto-update runs](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)).
+The session then shows `Plugin updated: plinth · Run /reload-plugins to apply`,
+and keeps the old skills until `/reload-plugins` or a new session.
 
 What was measured: [coolbress/plinth-template#208](https://github.com/coolbress/plinth-template/issues/208).
 

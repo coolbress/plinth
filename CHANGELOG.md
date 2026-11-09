@@ -24,6 +24,15 @@ pull requests and have no tag.
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
 
+### Changed
+
+- `README.md`'s auto-update paragraph and the getting-started tutorial say when
+  the pass runs (in a session after its first message, within about ten
+  minutes; not on opening a session, not in `claude -p`) and that the new
+  version applies after `/reload-plugins` or in a new session, linking
+  Claude Code's [When auto-update runs](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)
+  (#879).
+
 ## [2.29.0] - 2026-11-09
 
 A release now reaches installations only after it has been proved: `e2e` runs on the release branch, calling the reusable workflows at the release commit, before the pull request merges, and a short skill smoke run goes with it. `/plinth:new-project` renders plinth-template v1.42.0, whose projects carry a 51-line `AGENTS.md`, a "Coming back" list that reads the recent commits and the last squash commit's body, and an undo how-to whose conflict path uses the form; a new project calls plinth v2.28.0. The pull requests `/plinth:new-project` and `/plinth:template-update` open fill the form's four fields, so their own checks no longer warn. The README gives the optional auto-update step. A consumer gets the template's changes through `/plinth:template-update`; the reusable workflows change only by a comment line at their top, so raising the pin is optional.
