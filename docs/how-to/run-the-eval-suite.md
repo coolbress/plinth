@@ -49,7 +49,8 @@ adds these numbers up and stops on its own:
 - **A full suite** of the first four tasks cost about US$5 (36 runs). With
   all thirteen tasks it is 105 runs, and that can reach the US$10 ceiling: name
   fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it. For
-  v2.29.0 it stopped at run 78 and finished at US$13.41.
+  v2.29.0 it stopped at that ceiling at run 78, and a resume with
+  `--ceiling 14` finished it at US$13.41 (posted on #647).
 - **The release run** is 72 runs, about US$10.70 at v2.29.0's medians, under a
   US$15 ceiling of its own (see [The release run](#the-release-run)).
 - **The two guide tasks alone** are six runs and should cost under US$1. One
