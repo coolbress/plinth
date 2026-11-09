@@ -20,7 +20,9 @@
 # gives its sessions a read-only gh (eval-suite-gh.py) that serves those
 # records offline instead of the logged-out one, and needs jq for its --jq. A
 # task with an `arms` file runs only in the arms it lists: guide and
-# guide-reminder grade what /plinth:guide says, which only the plinth arm has.
+# guide-reminder grade what /plinth:guide says, which only the plinth arm has;
+# guide-plain and guide-reminder-plain ask the same in plain words, in that arm,
+# so plinth without the guide is graded on the same patterns (#883).
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -78,7 +80,7 @@
 # whole for a person to look at. At the end the records' size is printed.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day guide guide-reminder friend-311 late-fee skip-mypy)
+all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day guide guide-reminder guide-plain guide-reminder-plain friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
 session_timeout=900

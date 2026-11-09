@@ -23,6 +23,11 @@ pull requests and have no tag.
   only with `--release`, and its summary names the branch and commit plinth was
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
+- The eval suite has two plain-question tasks, `guide-plain` and
+  `guide-reminder-plain` (#883): the guide tasks' projects, records and
+  patterns, asked in plain words without `/plinth:guide`, in the `plinth` arm
+  only. They compare plinth with the guide against plinth without it, and add
+  six runs to the release run (78).
 
 ## [2.29.0] - 2026-11-09
 

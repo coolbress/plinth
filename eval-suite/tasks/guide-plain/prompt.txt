@@ -1,0 +1,1 @@
+I'm new to this and not an engineer. In plain words: what steps does this project go through from here until people can install it, where is it now, and what is the one thing I should type next?
