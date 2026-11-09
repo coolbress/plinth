@@ -272,7 +272,7 @@ named_pr settled "12 13" $'Closes #12\nCloses #13\nPart of #12'; issue settled 1
 issue settled 13 $'## Acceptance criteria\n\n- [x] one\n\n## Decision\n\nDecided.'
 run merge "a merge closing two settled issues"
 ! grep -q '^o/r#\|Whoever merged' "$FX/out"; check "every criterion ticked and an ending: nothing printed (must not print)" $?
-[ "$(grep -c 'issues/12 ' "$FX/calls")" = 1 ]; check "an issue both closed and Part of is read once" $?
+[ "$(grep -c 'issues/12 ' "$FX/calls")" = 1 ] && s=0 || s=1; check "an issue both closed and Part of is read once" $s
 
 named_pr nobody "" $'## What and why\n\nKept apart of #9 on purpose; #489 merged with Part of #485 in prose.\nPart of #485 is quoted here as an example, not a link.'
 run merge "a merge naming no issue"
@@ -392,7 +392,7 @@ runs() { # <sha> <run lines "id path status conclusion name"...>: the Actions ru
         '{id:($id|tonumber),path:$p,status:$st,conclusion:(if $co == "null" then null else $co end),name:$n,head_sha:$s,html_url:"https://example.test/runs/\($id)"}'
     done; } | jq -s '{workflow_runs:.}' >"$FX/runs-$sha.json"
 }
-jobs() { # <run id> <job lines "status conclusion name...">
+run_jobs() { # <run id> <job lines "status conclusion name...">
   local id="$1" a st co nm; shift
   { for a in "$@"; do read -r st co nm <<<"$a"
       jq -n --arg st "$st" --arg co "$co" --arg n "$nm" --arg id "$id" \
@@ -404,22 +404,22 @@ dependabot() { # <case>: neutral CodeQL, author Dependabot, CI runs on the head 
   setup "$1"; printf '%s' "$neutral" >"$FX/checks.json"
   printf '{"user":{"login":"dependabot[bot]","type":"Bot"}}' >"$FX/pull.json"
   runs "$H" "11 .github/workflows/ci.yml completed success CI"
-  jobs 11 "completed success build"
+  run_jobs 11 "completed success build"
   runs abc "21 $CS completed success Push" "22 .github/workflows/ci.yml completed success CI"
-  jobs 21 "completed success Analyze (actions)" "completed success Analyze (python)"
+  run_jobs 21 "completed success Analyze (actions)" "completed success Analyze (python)"
 }
 dependabot dep-ok
 run merge "Dependabot, CodeQL neutral, no Analyze run on the head"
 grep -q "default setup does not analyse Dependabot's pull requests" "$FX/out"; check "  and it says why it passed the neutral CodeQL" $?
 says_neutral() { grep -q "A neutral CodeQL is not a pass" "$FX/out" && grep -qF -- "$1" "$FX/out"; }
 dependabot dep-analyzed; runs "$H" "11 .github/workflows/ci.yml completed success CI" "12 $CS completed success PR"
-jobs 12 "completed success Analyze (python)"
+run_jobs 12 "completed success Analyze (python)"
 run stop "Dependabot, CodeQL neutral, an Analyze run on the head"
 says_neutral "an analysis exists on this head"; check "  and it says what neutral means and why the exception does not apply" $?
 grep -qF "Analyze (python)" "$FX/out"; check "  and it names the analysis" $?
 dependabot dep-queued; runs "$H" "12 $CS queued null PR"
 run stop "Dependabot, CodeQL neutral, a code-scanning run on the head that lists no job yet"
-dependabot dep-advanced; jobs 11 "completed success Analyze (javascript)"
+dependabot dep-advanced; run_jobs 11 "completed success Analyze (javascript)"
 run stop "Dependabot, CodeQL neutral, an Analyze job in a workflow of the repository's own"
 dependabot dep-person; printf '{"user":{"login":"someone","type":"User"}}' >"$FX/pull.json"
 run stop "a person's pull request with CodeQL neutral and no Analyze run"
@@ -445,17 +445,17 @@ after_case() { # <case> <want-exit> <label>
 dependabot main-pass; after_case main-pass 0 "both Analyze jobs pass on the merge commit: merged, exit 0"
 grep -q '^code scanning on main at abc: passed' "$FX/out" && grep -qF 'Analyze (python)' "$FX/out"; check "  and it reports the pass, job by job" $?
 [ "$(grep -n -m1 '^MERGED' "$FX/out" | cut -d: -f1)" -lt "$(grep -n -m1 '^code scanning on main' "$FX/out" | cut -d: -f1)" ] && s=0 || s=1; check "  after the merge" $s
-dependabot main-fail; jobs 21 "completed success Analyze (actions)" "completed failure Analyze (python)"
+dependabot main-fail; run_jobs 21 "completed success Analyze (actions)" "completed failure Analyze (python)"
 after_case main-fail 1 "an Analyze job fails on the merge commit: merged, exit 1"
 grep -q '^FAIL: code scanning failed on main at abc' "$FX/out" && grep -qF 'failure	Analyze (python)' "$FX/out" \
   && grep -q 'new pull request' "$FX/out" && grep -q 'gh run rerun' "$FX/out"; check "  and it says it failed on main, which job, and what to do next" $?
 dependabot main-none; runs abc "22 .github/workflows/ci.yml completed success CI"
 after_case main-none 0 "no Analyze run on the merge commit: merged, exit 0"
 grep -q '^code scanning on main at abc: not started' "$FX/out" && grep -q 'not confirmed' "$FX/out" && ! grep -q passed "$FX/out"; check "  and it says not started, not confirmed" $?
-dependabot main-running; jobs 21 "completed success Analyze (actions)" "in_progress null Analyze (python)"
+dependabot main-running; run_jobs 21 "completed success Analyze (actions)" "in_progress null Analyze (python)"
 after_case main-running 0 "an Analyze job still running when the wait ends: merged, exit 0"
 grep -q '^code scanning on main at abc: not finished' "$FX/out" && grep -q 'not confirmed' "$FX/out"; check "  and it says not finished, not confirmed" $?
-dependabot main-waits; jobs 21 "in_progress null Analyze (python)"
+dependabot main-waits; run_jobs 21 "in_progress null Analyze (python)"
 PATH="$work/bin:$PATH" MERGE_POLL=1 MERGE_ANALYZE_WAIT=2 bash "$script" 7 --repo o/r >"$FX/out" 2>&1
 [ "$(grep -c 'runs -f head_sha=abc' "$FX/calls")" -ge 2 ] && grep -q '^code scanning on main at abc: not finished' "$FX/out"
 check "  with a wait, it reads again until the wait ends" $?

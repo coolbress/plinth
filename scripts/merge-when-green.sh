@@ -91,7 +91,7 @@ poll="${MERGE_POLL:-20}"
 # "<status>\t<conclusion>\t<name>\t<url>". Returns 1 when a read fails.
 analyses() {
   local sha="$1" runs id path st co url name jobs
-  runs="$(gh api -X GET "repos/$repo/actions/runs" -f "head_sha=$sha" -F per_page=100 \
+  runs="$(gh api --paginate -X GET "repos/$repo/actions/runs" -f "head_sha=$sha" -F per_page=100 \
     --jq ".workflow_runs[] | select(.head_sha == \"$sha\") | [.id, .path, .status, (.conclusion // \"-\"), .html_url, .name] | @tsv")" || return 1
   while IFS=$'\t' read -r id path st co url name; do
     [ -n "$id" ] || continue
