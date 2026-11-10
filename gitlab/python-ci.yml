@@ -1154,16 +1154,69 @@ build:
       plinth_uv || exit 1
       cd "$PLINTH_WORKDIR" || exit 1
       step "uv sync --locked" uv sync --locked
-      step "uv build" uv build
+      # A uv workspace (#889): a root whose dependencies include its own
+      # members builds every package (`--all-packages`); the plan, empty
+      # without a workspace, names the root and the members that are packages.
+      plan="$PLINTH_TMP/build-plan"
+      build() {
+        uv run python - > "$plan" <<'PY' || return 1
+      # The build plan of a uv workspace: nothing without one; else the
+      # root's normalised name, then "<member name><TAB><src module dir>"
+      # for each member uv packages, in members and not in exclude.
+      import glob, pathlib, re, tomllib
+      def load(d):
+          return tomllib.loads(pathlib.Path(d, "pyproject.toml").read_text(encoding="utf-8"))
+      def packaged(p):
+          # uv packages a project with a [build-system] unless
+          # tool.uv.package is false, and one without if it is true.
+          package = p.get("tool", {}).get("uv", {}).get("package")
+          return package is True or (package is None and "build-system" in p)
+      root = load(".")
+      ws = root.get("tool", {}).get("uv", {}).get("workspace")
+      if ws is not None:
+          print(re.sub(r"[-_.]+", "_", root["project"]["name"]).lower())
+          out = {p for g in ws.get("exclude", []) for p in glob.glob(g)}
+          for d in sorted({p for g in ws.get("members", []) for p in glob.glob(g)} - out):
+              if pathlib.Path(d).resolve() == pathlib.Path(".").resolve() or not pathlib.Path(d, "pyproject.toml").is_file():
+                  continue
+              m = load(d)
+              if not packaged(m):
+                  continue
+              for s in sorted(pathlib.Path(d, "src").glob("*")):
+                  if s.is_dir():
+                      print(f"{m['project']['name']}\t{s}")
+      PY
+        if [ -s "$plan" ]; then uv build --all-packages; else uv build; fi
+      }
+      step "uv build" build
       # `uv build` proves the files were produced; whether they install and
-      # import in a clean environment is a different sentence.
+      # import in a clean environment is a different sentence. In a
+      # workspace only the root's two files are installed, each with
+      # `--find-links dist` and each built member pinned to its version there,
+      # so a same-named package on the index is not taken instead; a
+      # member's modules are imported when the root installed that member.
       smoke() {
-        local name art m
+        local name art m root dist arts links f n v
         name="$(uv run python -c 'import tomllib,pathlib;print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["name"])')" || return 1
-        for art in dist/*.whl dist/*.tar.gz; do
+        if [ -s "$plan" ]; then
+          root="$(head -n 1 "$plan")"
+          arts=(); : > "$plan.pins"
+          for f in dist/*.whl dist/*.tar.gz; do
+            n="${f#dist/}"; n="$(printf '%s' "${n%%-[0-9]*}" | tr '[:upper:]' '[:lower:]' | tr -s '._-' '___')"
+            if [ "$n" = "$root" ]; then arts+=("$f")
+            elif [ "${f%.whl}" != "$f" ]; then v="${f#dist/*-}"; echo "$n==${v%%-*}" >> "$plan.pins"; fi
+          done
+          # A root uv does not package is not built; its sdist never
+          # installed in a workspace before either (#889).
+          [ "${#arts[@]}" -gt 0 ] || { echo "no wheel or sdist of $name in dist/: uv builds a workspace's root only when it is a package, with a [build-system] or tool.uv.package = true"; return 1; }
+          links=(--find-links dist --constraint "$plan.pins")
+        else
+          arts=(dist/*.whl dist/*.tar.gz); links=()
+        fi
+        for art in "${arts[@]}"; do
           rm -rf .smoke
           uv venv --quiet .smoke &&
-            uv pip install --quiet --python .smoke/bin/python "$art" &&
+            uv pip install --quiet --python .smoke/bin/python ${links[@]+"${links[@]}"} "$art" &&
             .smoke/bin/python -c 'import importlib.metadata as md,sys; print(sys.argv[1], md.version(sys.argv[1]))' "$name" || return 1
           if [ -d src ]; then
             for m in src/*/; do
@@ -1171,6 +1224,17 @@ build:
               .smoke/bin/python -c 'import importlib,sys; importlib.import_module(sys.argv[1])' "$m" || return 1
               echo "  import $m ok"
             done
+          fi
+          if [ -s "$plan" ]; then
+            while IFS=$'\t' read -r dist m; do
+              m="$(basename "$m")"
+              if .smoke/bin/python -c 'import importlib.metadata as md,sys; md.distribution(sys.argv[1])' "$dist" 2>/dev/null; then
+                .smoke/bin/python -c 'import importlib,sys; importlib.import_module(sys.argv[1])' "$m" || return 1
+                echo "  import $m ok"
+              else
+                echo "  $m not imported: $name does not depend on $dist"
+              fi
+            done < <(tail -n +2 "$plan")
           fi
           echo "  OK $art"
         done

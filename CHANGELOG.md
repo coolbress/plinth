@@ -13,6 +13,21 @@ pull requests and have no tag.
 
 ### Added
 
+- `ci / build` passes a uv workspace whose root package depends on a member
+  (#889). It ran `uv build`, which builds the root only, then installed the
+  root from the package index alone, so the member was "not found in the
+  package registry" and a required check could not pass. With
+  `[tool.uv.workspace]` in the root `pyproject.toml` it now runs
+  `uv build --all-packages`, installs the root's wheel and sdist each with
+  `--find-links dist`, every built member pinned to its version there so a
+  package of the same name on PyPI is not installed instead, and imports
+  the `src/` packages of the members the root installed. A root that is not a
+  package fails with a line saying so; its sdist did not install before. A
+  repository without a workspace runs the same build and install commands as
+  before, after one added read of `pyproject.toml`. GitLab's `build` job does
+  the same. A project gets it by raising its pin of `python-ci.yml` (on
+  GitLab, of `gitlab/python-ci.yml`).
+
 - `ci / docs` fails a pull request that changes the text of a `CHANGELOG.md`
   section whose version has a `vX.Y.Z` tag (#881), naming the section and
   saying to move the line under `[Unreleased]`. A pull request open across
