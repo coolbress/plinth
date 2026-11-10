@@ -445,6 +445,18 @@ def commands(text: str) -> list[str]:
     return out
 
 
+ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
+PREFIXES = frozenset({"command", "env", "exec", "sudo", "time", "xargs"})
+
+
+def command_position(before: list[str]) -> bool:
+    """Whether a word after `before` runs as a command: first, after a pipe, after variable
+    assignments or a prefix such as `env`. A `gh` that `echo` prints is not run (#891)."""
+    if not before or before[-1] == "|":
+        return True
+    return before[-1] in PREFIXES or bool(ASSIGNMENT.match(before[-1])) and command_position(before[:-1])
+
+
 def gh_calls(state: dict[str, Any], tr: dict[str, Any]) -> list[tuple[str, tuple[str, str, list[str]], str]]:
     """Every gh call the run made, parsed once: (as written, (command, subcommand, words), heredoc body).
 
@@ -460,12 +472,15 @@ def gh_calls(state: dict[str, Any], tr: dict[str, Any]) -> list[tuple[str, tuple
     for b in tr["bash"]:
         for c in commands(b):
             head, _, body = c.partition("\n")
+            if head.lstrip().startswith("#"):
+                continue
             try:
-                words = shlex.split(head)
+                words = shlex.split(head, comments=True)
             except ValueError:  # a quote closed on a later line
                 words = head.split()
             for k, w in enumerate(words):
-                parsed = gh_parse(words[k + 1 :]) if w == "gh" or w.endswith("/gh") else None
+                is_gh = (w == "gh" or w.endswith("/gh")) and command_position(words[:k])
+                parsed = gh_parse(words[k + 1 :]) if is_gh else None
                 if parsed:
                     out.append((head.strip(), parsed, body))
     return out

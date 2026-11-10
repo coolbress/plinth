@@ -228,7 +228,10 @@ pull request whose words have a closing word before `#1` counts as a close. An
 the follow-up, whether the stand-in refused it or not, unless it carries
 `--dry-run`. A shell text is cut into
 commands at line breaks, `&&`, `||` and `;`, so another command's words never
-count for the create. A body written to a file by an earlier command, or a
+count for the create. In a shell command, `gh` counts only where it runs: first,
+after a pipe, after variable assignments or a prefix such as `env`. A create
+that `echo` prints, or that sits in a `#` comment, is not an attempt; one inside
+`$(...)` is read only from the stand-in's log. A body written to a file by an earlier command, or a
 quoted body past its first line break, is not read, and that run fails. A word
 `1` anywhere after `issue close` counts, so a close of another issue whose
 comment says `1` reads as a close of #1. A flag the grade does not know to take

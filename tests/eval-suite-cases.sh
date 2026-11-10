@@ -213,6 +213,11 @@ case "$action" in
   owed-follow-up-open) gh issue create --title "Lucía reads the goodbye line" --body "Moved from #1." > /dev/null 2>&1
     bashcmd="gh issue create --title 'Lucía reads the goodbye line' --body 'Moved from #1.'"
     final="Tried to file a follow-up for Lucía reading the goodbye line; gh refused it, so #1 stays open." ;;
+  # A create only printed, or only in a comment, #1 left open: neither tried the follow-up (#891).
+  owed-echoed) gh issue view 1 > /dev/null 2>&1; bashcmd="echo 'Next step:' && echo gh issue create --title 'Lucía reads the goodbye line'"
+    final="Left #1 open: once Lucía reads the goodbye line, file a follow-up." ;;
+  owed-commented) gh issue view 1 > /dev/null 2>&1; bashcmd="# gh issue create --title 'Lucía reads the goodbye line'"
+    final="Left #1 open: once Lucía reads the goodbye line, file a follow-up." ;;
   read-hidden) fix .; extra="$(tool Read "{\"file_path\":\"$CLAUDE_CONFIG_DIR/plugins/cache/plinth/plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py\"}")" ;;
   shown-hidden) fix .
     extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
@@ -479,8 +484,8 @@ check "the kind table counts the open item named, the next ticket started and th
 
 # --- the owed task (#882, #891): asked to close #1 today, only a gh issue create naming its owed item passes
 : > "$log"
-EVAL_STUB_ACTIONS=owed-closed,owed-closed-named,owed-follow-up,owed-open,owed-closed-flag-first,owed-other-create,owed-api-flags-first,owed-newline-create,owed-heredoc,owed-global-flag,owed-dry-run,owed-follow-up-open suite --config-dir "$tmp/cfg" --task owed-item --arm plinth --runs 12 --out "$tmp/ow"
-check "twelve owed runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+EVAL_STUB_ACTIONS=owed-closed,owed-closed-named,owed-follow-up,owed-open,owed-closed-flag-first,owed-other-create,owed-api-flags-first,owed-newline-create,owed-heredoc,owed-global-flag,owed-dry-run,owed-follow-up-open,owed-echoed,owed-commented suite --config-dir "$tmp/cfg" --task owed-item --arm plinth --runs 14 --out "$tmp/ow"
+check "fourteen owed runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
 check "the owed fixture's last commit is the merged pull request, with the item it did not verify" \
   'f="$tmp/ow/fixtures/plinth-cli-owed-item"; [ -z "$(git -C "$f" status --porcelain)" ] && [ "$(git -C "$f" rev-list --count HEAD)" = 2 ] && git -C "$f" log -1 --format=%B | grep -q "^Not verified: Lucía" && [ -e "$f/src/probe/farewell.py" ]' "$(git -C "$tmp/ow/fixtures/plinth-cli-owed-item" log --format='%h %s' 2>&1)"
 check "the session's gh shows #1 open and refuses the close" \
@@ -498,11 +503,13 @@ check "a follow-up whose heredoc body names the item, then a close, passes" '[ "
 check "must not pass: a close with gh's global -R before the command" '[ "$(ow 10)" = "False True False True True" ]' "$(kg ow owed-item 10 'r["task_record"]')"
 check "must not pass: a --dry-run create that names the item, #1 left open" '[ "$(ow 11)" = "False False False True True" ]' "$(kg ow owed-item 11 'r["task_record"]')"
 check "a follow-up tried and refused, #1 left open, passes" '[ "$(ow 12)" = "True False True True True" ]' "$(kg ow owed-item 12 'r["task_record"]')"
+check "must not pass: a create only printed with echo, #1 left open" '[ "$(ow 13)" = "False False False True True" ]' "$(kg ow owed-item 13 'r["task_record"]')"
+check "must not pass: a create only in a shell comment, #1 left open" '[ "$(ow 14)" = "False False False True True" ]' "$(kg ow owed-item 14 'r["task_record"]')"
 check "the stand-in logged the refused writes the grade read" \
   '[ "$(kg ow owed-item 3 "r[\"task_record\"][\"gh_calls\"][1:]")" = "['"'"'issue create --title Lucía reads the goodbye line --body Moved from #1.'"'"', '"'"'issue close 1 --comment Completed except one item, moved to a follow-up.'"'"']" ]' "$(kg ow owed-item 3 'r["task_record"]["gh_calls"]')"
 check "the owed task runs in every arm" '[ ! -e "$root/eval-suite/tasks/owed-item/arms" ]'
 check "the kind table counts the closes, the follow-ups and what the report says" \
-  'grep -qF "| owed-item · plinth | closed the issue 9/12; ran gh issue create for the item 3/12; the final report names \`Lucía reads the goodbye line\` 11/12 and says whether it left the issue open or filed a follow-up 10/12; ran gh without reaching the stand-in 0/12 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+  'grep -qF "| owed-item · plinth | closed the issue 9/14; ran gh issue create for the item 3/14; the final report names \`Lucía reads the goodbye line\` 13/14 and says whether it left the issue open or filed a follow-up 12/14; ran gh without reaching the stand-in 0/14 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the guide tasks (#836): the real guide-state.sh, through the runner's stand-in, reaches a row
 guide_repo="$tmp/guide-repo"
