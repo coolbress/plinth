@@ -13,6 +13,18 @@ pull requests and have no tag.
 
 ### Added
 
+- `ci / docs` fails a pull request that changes the text of a `CHANGELOG.md`
+  section whose version has a `vX.Y.Z` tag (#881), naming the section and
+  saying to move the line under `[Unreleased]`. A pull request open across
+  a release could merge `main` in and keep its line inside the section the
+  release had just tagged, and nothing failed (#877). A section is compared
+  with the pull request's base: one put back as its tag has it passes, and
+  a deliberate correction passes when the description names its version on a
+  `Corrects released section: X.Y.Z` line
+  ([CONTRIBUTING.md](https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change), step 4).
+  `[Unreleased]` and untagged sections are not compared, so release run 1
+  passes.
+
 - `scripts/eval-suite.sh --release` is the run a release that must run the eval
   suite uses (#876): every task in the `repo-only` and `plinth` arms, three runs
   each (72 runs), under a US$15 ceiling. It leaves out the `none` arm, which
@@ -29,6 +41,39 @@ pull requests and have no tag.
   only. They compare plinth with the guide against plinth without it. They stay
   in the release run on purpose, so each release shows whether the guide still
   does better than a plain question; that run is now 78 runs.
+
+### Changed
+
+- `python-ci.yml`, `plinth-ci.yml` and `e2e.yml` send the job's own token when
+  they download uv, gitleaks, actionlint and lychee from a GitHub release
+  (#878). On 2026-11-09 GitHub answered anonymous requests with 504 for about
+  two hours and said authenticated ones were unaffected; these downloads are
+  now in the authenticated class. Whether they get through the next such
+  outage is not tested. curl sends the token to
+  `github.com` only, not to the storage host it redirects to; with no token the
+  download is anonymous as before, and the checksums are verified as before.
+  `tests/release-download-token.sh` fails on a release download without it.
+  `gitlab/python-ci.yml` stays anonymous, as a GitLab pipeline has no GitHub
+  token, and its header says what such an outage does there.
+- `README.md`'s auto-update paragraph and the getting-started tutorial say when
+  the pass runs (in a session after its first message, within about ten
+  minutes; not on opening a session, not in `claude -p`) and that the new
+  version applies after `/reload-plugins` or in a new session, linking
+  Claude Code's [When auto-update runs](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)
+  (#879).
+
+### Fixed
+
+- `scripts/make-release.sh`'s run 1 now names the smoke run in its `next:`
+  steps, in [How to cut a release](https://github.com/coolbress/plinth/blob/main/docs/how-to/cut-a-release.md)'s
+  order: beside the `e2e` dispatch, from a clone on the release branch, its
+  table posted on #647 and named in the description, before
+  `scripts/merge-when-green.sh`, which does not read it.
+- The `next-day` eval task's entry (#832, landed by #840) moves from the
+  2.27.0 section to 2.28.0, the first release that carried it: it had landed
+  inside the already-tagged 2.27.0 section, the slip `ci / docs` now fails.
+  The v2.28.0 tag and its Release text, cut while the entry sat under 2.27.0,
+  stay as they are.
 
 ## [2.29.0] - 2026-11-09
 
@@ -144,6 +189,12 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6682324
 
 ### Added
 
+- The eval suite has an eleventh task, `next-day` (#832): "carry on where
+  we left off" on a project whose last merged pull request and closed issue
+  leave one item unverified, with an unrelated issue open as the next ticket.
+  It passes only when the final report names that item. Its sessions get a
+  read-only `gh` that serves the planted issues and pull request offline;
+  it refuses writes. The full suite is now 99 runs.
 - The eval suite has two tasks that grade what `/plinth:guide` says (#836):
   `guide` and `guide-reminder`, plinth arm only, three runs each. A report must
   name the release on a tag, must not call it planned or not built, must not
@@ -253,12 +304,6 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6655184
   the highest number cannot be read with the job's token, the log says
   why and nothing is warned. GitLab's `pr-title` does the same for `#N`
   and `!N`, each against its own highest (#826).
-- The eval suite has an eleventh task, `next-day` (#832): "carry on where
-  we left off" on a project whose last merged pull request and closed issue
-  leave one item unverified, with an unrelated issue open as the next ticket.
-  It passes only when the final report names that item. Its sessions get a
-  read-only `gh` that serves the planted issues and pull request offline;
-  it refuses writes. The full suite is now 99 runs.
 
 ### Changed
 

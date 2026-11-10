@@ -37,6 +37,12 @@ name: python-ci
 # allowlist entry, `coolbress/plinth/*`, for this call itself. Without it the
 # run dies at startup and no check name ever reports.
 #
+# Each release download sends the job's own token (`GITHUB_TOKEN`, the
+# `${GITHUB_TOKEN:+-H ...}` form): GitHub sheds anonymous requests first, as on
+# 2026-11-09 (#878). curl sends that header to github.com only, not to the
+# storage host it redirects to; an empty token leaves the request anonymous.
+# tests/release-download-token.sh holds both.
+#
 # A job that runs to its checking step writes one verdict line per standard
 # it covers in its summary: `pass:`, `fail:` or `not yet confirmed:`, the
 # last also a `::warning::` (#405, #437; the forms are in
@@ -149,13 +155,14 @@ jobs:
           persist-credentials: false
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -240,13 +247,14 @@ jobs:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -283,13 +291,14 @@ jobs:
           fetch-depth: 2
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -562,13 +571,14 @@ jobs:
       - name: Install uv (official release, SHA256 verified)
         if: inputs.web
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -732,13 +742,14 @@ jobs:
       - name: Install uv (official release, SHA256 verified)
         if: inputs.web
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -792,13 +803,14 @@ jobs:
       # allowlist. Bump the version and the checksum together.
       - name: Install gitleaks (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_VERSION: "8.30.1"
           GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/gitleaks"; mkdir -p "$d"
           f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$f"
           echo "${GITLEAKS_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" gitleaks
@@ -1755,13 +1767,14 @@ jobs:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -1923,13 +1936,14 @@ jobs:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
