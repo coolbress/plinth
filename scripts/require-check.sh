@@ -36,9 +36,6 @@ done
 name="$1"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "require-check: needs a login that administers the repository; an agent's token cannot run it." >&2
-echo "  run it as: scripts/with-admin-token.sh scripts/require-check.sh '<check name>'" >&2
-
 if [ -z "$repo" ]; then
   repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" \
     || { echo "no repository here: run it inside the repository's checkout, or name it with --repo <owner/name>." >&2; exit 2; }
@@ -46,7 +43,9 @@ fi
 
 stop() { echo "$1" >&2; echo "  nothing was changed." >&2; exit 1; }
 
-# Administration first, before anything else is read. The repository's
+# Administration first, before anything else is read. Its notice is printed
+# only when this login is refused, never before the run: a successful run that
+# opened with it was read as a refusal (#896). The repository's
 # `permissions` says what the login's role allows; the Actions permissions
 # read needs Administration on the token itself (a fine-grained token can
 # lack it with an admin role behind it). A token that reads both and still
@@ -55,7 +54,8 @@ info="$(gh api "repos/$repo" --jq '[(.permissions.admin // false), .default_bran
   || stop "could not read $repo with this login: it does not exist, or this login cannot see it."
 admin="${info%%$'\t'*}"; branch="${info#*$'\t'}"
 if [ "$admin" != true ] || ! gh api "repos/$repo/actions/permissions" >/dev/null 2>&1; then
-  stop "this login does not administer $repo, so it cannot change the ruleset.
+  stop "require-check: needs a login that administers $repo; an agent's token cannot run it.
+  this login does not, so it cannot change the ruleset.
   run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh --repo $repo '$name'"
 fi
 
@@ -143,7 +143,7 @@ if [ "$dry" = 1 ]; then
 fi
 if ! err="$(printf '%s' "$new" | gh api "repos/$repo/rulesets/$id" -X PUT --input - 2>&1 >/dev/null)"; then
   stop "GitHub refused the change: ${err:-no reason given}.
-  this login cannot change rulesets on $repo; run it with an admin token."
+  this login cannot change rulesets on $repo; run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh --repo $repo '$name'"
 fi
 # The list as GitHub now holds it, read back, not as sent.
 back="$(gh api "repos/$repo/rulesets/$id" 2>/dev/null)" \
