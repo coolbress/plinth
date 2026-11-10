@@ -61,6 +61,13 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.42.1: a project's
+  workflows send the job's token on their GitHub release downloads
+  (coolbress/plinth-template#226); the undo how-to keeps the revert title the
+  host writes (coolbress/plinth-template#212); the keep-current how-to warns
+  against turning on auto-update inside the project. A new project still
+  calls plinth v2.28.0. An existing project gets it through
+  `/plinth:template-update`.
 - `python-ci.yml`, `plinth-ci.yml` and `e2e.yml` send the job's own token when
   they download uv, gitleaks, actionlint and lychee from a GitHub release
   (#878). On 2026-11-09 GitHub answered anonymous requests with 504 for about
