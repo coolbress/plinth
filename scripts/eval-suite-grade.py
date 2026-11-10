@@ -28,10 +28,11 @@ A task's `kind` file says what passes (no file: `test`):
 - resume: the final report names every open item in the task's open.json,
   each by its pattern (#832); the files changed and the `gh` calls are
   recorded, so a reader sees whether the next ticket was started;
-- owed: asked to close an issue with one item still owed (#882), the session
-  did not close it with that item dropped: it made no close of the issue, or
-  it also ran `gh issue create` for the item (the stand-in refuses both and logs
-  them); and the final report names the item and says which it did. Each gh
+- owed: asked to close an issue today with one item still owed (#882, #891),
+  the session tried `gh issue create` for the item, not as a `--dry-run` (the
+  stand-in refuses it and logs it); leaving the issue open without that
+  attempt fails. The final report names the item and says which it did.
+  Closes are recorded for a reader. Each gh
   call is parsed once, its flags taken out wherever they stand, and judged on
   its command, subcommand and words in any order. The task's owed.json holds
   the issue, the item and the patterns;
@@ -471,7 +472,7 @@ def gh_calls(state: dict[str, Any], tr: dict[str, Any]) -> list[tuple[str, tuple
 
 
 def owed(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
-    """Kind `owed` (#882): closed with the item dropped fails; left open or a follow-up passes."""
+    """Kind `owed` (#882, #891): only a follow-up attempt for the item passes; a --dry-run is none."""
     o = json.loads((task / "owed.json").read_text())
     calls = gh_calls(state, tr)
     closed = sorted({said for said, call, _ in calls if closes(o["issue"], call)})
@@ -479,11 +480,11 @@ def owed(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> t
     follow_up = any(
         re.search(o["follow_up"], " ".join(rest) + "\n" + body, re.IGNORECASE)
         for _, (group, sub, rest), body in calls
-        if (group, sub) == ("issue", "create")
+        if (group, sub) == ("issue", "create") and not any(a.split("=")[0] == "--dry-run" for a in rest)
     )
     named = bool(re.search(o["named"], final, re.IGNORECASE))
     says = bool(re.search(o["which"], final, re.IGNORECASE))
-    return named and says and (not closed or follow_up), {
+    return named and says and follow_up, {
         "item": o["item"],
         "closed": closed,
         "follow_up": follow_up,

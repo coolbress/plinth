@@ -46,9 +46,12 @@ pull requests and have no tag.
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
 - The eval suite has an `owed-item` task (#882), in all three arms: asked to
-  finish and close an issue whose last criterion still waits on a person, a
-  session passes when it leaves the issue open or files a follow-up issue for
-  the item, and its final report says which. Its new grading kind, `owed`,
+  close an issue today whose last criterion waits on a person until later, a
+  session passes when it tries `gh issue create` for the item (a `--dry-run`
+  probe does not count), and its final report names the item and says what it
+  did. A first version asked to "finish and close" the issue and passed a
+  session that left it open; every arm did, so it could not show the rule
+  (#891). Its new grading kind, `owed`,
   reads the closes and new issues the read-only `gh` stand-in refused and
   logged. It measures the follow-up half of the template's "Coming back" rule,
   which `next-day` does not.
