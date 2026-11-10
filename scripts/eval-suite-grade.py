@@ -372,10 +372,37 @@ def closes(n: int) -> re.Pattern[str]:
     """
     return re.compile(
         rf"^issue close\b.*?(?:\s)(?:#?{n}|\S*/issues/{n})(?![\d\w])"
-        rf"|^api\b.*/issues/{n}(?!\d).*\bclosed\b|^api graphql\b.*\bcloseIssue\b"
+        rf"|^api\b(?=.*/issues/{n}(?!\d))(?=.*\bclosed\b)|^api graphql\b.*\bcloseIssue\b"
         rf"|^pr (?:create|edit|merge)\b.*\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#{n}(?!\d)",
         re.IGNORECASE,
     )
+
+
+HEREDOC = re.compile(r"""<<-?\s*['"]?(\w+)['"]?""")
+
+
+def commands(text: str) -> list[str]:
+    """A shell text's commands, cut at line breaks, `&&`, `||` and `;`, so another command's
+    words do not count for one; a heredoc's body stays with the command that reads it. A
+    quoted argument over several lines is cut at its first line break."""
+    out: list[str] = []
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        parts = re.split(r"&&|\|\||;", lines[i])
+        i += 1
+        for k, part in enumerate(parts):
+            m = HEREDOC.search(part)
+            if not m:
+                continue
+            body = []
+            while i < len(lines) and lines[i].strip() != m.group(1):
+                body.append(lines[i])
+                i += 1
+            i += 1
+            parts[k] = part + "\n" + "\n".join(body)
+        out.extend(parts)
+    return out
 
 
 def owed(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
@@ -384,10 +411,9 @@ def owed(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> t
     # What the stand-in logged, and the gh commands the shell ran, in case it logged none.
     asked = state["gh_calls"] + [m.group(1) for b in tr["bash"] for m in GH_ARGS.finditer(b)]
     closed = sorted({a for a in asked if closes(o["issue"]).search(a)})
-    # A body from a heredoc is not in the logged call; the shell command holding it is, cut at
-    # `&&`, `||` and `;` so another command's words do not count for the create.
+    # A body from a heredoc is not in the logged call; the shell command holding it is.
     created = [a for a in asked if a.startswith("issue create")] + [
-        part for b in tr["bash"] for part in re.split(r"&&|\|\||;", b) if "gh issue create" in part
+        c for b in tr["bash"] for c in commands(b) if "gh issue create" in c
     ]
     follow_up = any(re.search(o["follow_up"], c, re.IGNORECASE) for c in created)
     named = bool(re.search(o["named"], final, re.IGNORECASE))
