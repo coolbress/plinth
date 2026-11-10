@@ -32,6 +32,10 @@ case "$1 $2" in
     exit "$rc" ;;
   api*)
     case "$*" in
+      *"/actions/jobs/"*"/rerun"*)
+        rc="$(cat "$fx/rerun_rc" 2>/dev/null || echo 0)"
+        [ "$rc" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$rc"; }
+        [ ! -f "$fx/checks-after-rerun.json" ] || cp "$fx/checks-after-rerun.json" "$fx/checks.json" ;;
       *"/actions/workflows/e2e.yml/runs"*) [ -f "$fx/e2e.json" ] || { echo "HTTP 502" >&2; exit 1; }; out "$fx/e2e.json" ;;
       *"/actions/runs/"*"/jobs"*)
         [[ "$*" =~ runs/([0-9]+)/jobs ]]; f="$fx/jobs-${BASH_REMATCH[1]}.json"
@@ -348,6 +352,46 @@ run stop "the repository's name in another case is the same repository" --repo C
 release_pr e2e-still-red; e2e_runs "success $H"
 printf '[{"name":"ci / install","state":"FAILURE"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks.json"
 run stop "a green e2e run does not excuse a red check" $P
+
+echo "-- a red ci / release-gate is re-run once the e2e run is green, then waited for (#863)"
+gate_red='[{"name":"ci / install","state":"SUCCESS"},{"name":"third-party / review","state":"SUCCESS"},{"name":"ci / release-gate","state":"FAILURE","startedAt":"2026-11-07T09:00:00Z","link":"https://github.com/coolbress/plinth/actions/runs/5/job/99"}]'
+gate_green='[{"name":"ci / install","state":"SUCCESS"},{"name":"third-party / review","state":"SUCCESS"},{"name":"ci / release-gate","state":"FAILURE","startedAt":"2026-11-07T09:00:00Z","link":"https://github.com/coolbress/plinth/actions/runs/5/job/99"},{"name":"ci / release-gate","state":"SUCCESS","startedAt":"2026-11-07T11:00:00Z","link":"https://github.com/coolbress/plinth/actions/runs/5/job/100"}]'
+release_pr gate-rerun; e2e_runs "success $H"
+printf '%s' "$gate_red" >"$FX/checks.json"; printf '%s' "$gate_green" >"$FX/checks-after-rerun.json"
+run merge "a red gate, a green e2e: the gate is re-run and its pass merges" $P
+grep -qF 'actions/jobs/99/rerun' "$FX/calls"; check "and the re-run names the gate's job" $?
+grep -qF 're-ran ci / release-gate' "$FX/out"; check "and it says it re-ran the gate" $?
+release_pr gate-rerun-refused; e2e_runs "success $H"
+printf '%s' "$gate_red" >"$FX/checks.json"; echo 1 >"$FX/rerun_rc"
+run stop "a re-run GitHub refuses stops" $P
+grep -qF 'cannot re-run ci / release-gate' "$FX/out"; check "and it says so, with GitHub's answer" $?
+release_pr gate-rerun-still-red; e2e_runs "success $H"
+printf '%s' "$gate_red" >"$FX/checks.json"
+run stop "a gate still red after its re-run stops on the red check" $P
+release_pr gate-green-already; e2e_runs "success $H"
+printf '%s' "$gate_green" >"$FX/checks.json"
+run merge "a gate already green is not re-run" $P
+! grep -qF '/rerun' "$FX/calls"; check "and nothing is re-run" $?
+release_pr gate-e2e-red; e2e_runs "failure $H"
+printf '%s' "$gate_red" >"$FX/checks.json"; printf '%s' "$gate_green" >"$FX/checks-after-rerun.json"
+run stop "a red gate and a red e2e: the #855 hold stops first" $P
+! grep -qF '/rerun' "$FX/calls"; check "and the gate is not re-run" $?
+release_pr gate-other-title "fix: the hotfix"; e2e_runs "success $H"
+printf '%s' "$gate_red" >"$FX/checks.json"; printf '%s' "$gate_green" >"$FX/checks-after-rerun.json"
+run merge "a title the #855 hold does not read, a red gate, a green e2e: the gate is re-run too" $P
+grep -qF 'actions/jobs/99/rerun' "$FX/calls"; check "and the re-run names the gate's job" $?
+release_pr gate-other-title-no-e2e "fix: the hotfix"; e2e_runs
+printf '%s' "$gate_red" >"$FX/checks.json"; printf '%s' "$gate_green" >"$FX/checks-after-rerun.json"
+run stop "a red gate with no green e2e is not re-run, and stops on the red check" $P
+! grep -qF '/rerun' "$FX/calls"; check "and nothing is re-run" $?
+release_pr gate-e2e-unread "fix: the hotfix"
+printf '%s' "$gate_red" >"$FX/checks.json"
+run stop "a red gate whose e2e runs cannot be read stops" $P
+grep -qF 'cannot read the e2e runs' "$FX/out"; check "and it says so" $?
+setup gate-not-release
+printf '%s' "$gate_red" >"$FX/checks.json"; printf '%s' "$gate_green" >"$FX/checks-after-rerun.json"
+run stop "not a release: a red gate is a red check, never re-run here" $P
+! grep -qF '/rerun' "$FX/calls"; check "and nothing is re-run" $?
 
 echo "-- only a run on a release/v* branch counts: elsewhere it never moved the calls to its own commit (#862)"
 for b in main fix/e2e release/notes release-v9.9.9 my/release/v9.9.9 null; do
