@@ -125,6 +125,9 @@ run "a correction to tagged [1.0.0] without the line fails" 1 '::error::CHANGELO
 run "a correction named on a 'Corrects released section: 1.0.0' line passes" 0 'PASS' main HEAD $'Fixes a typo.\n\nCorrects released section: 1.0.0\n'
 run "the line names versions, and only those pass: naming 1.1.0 fails 1.0.0" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD 'Corrects released section: 1.1.0'
 run "the line inside an HTML comment does not count" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD '<!-- Corrects released section: 1.0.0 -->'
+run "the line in an indented code block (four spaces or a tab) does not count" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD $'Example only:\n\n    Corrects released section: 1.0.0\n'
+run "  nor after a tab" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD $'Example only:\n\n\tCorrects released section: 1.0.0\n'
+run "  nor in a quote" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD '> Corrects released section: 1.0.0'
 run "two versions on one line both pass" 0 'PASS' main HEAD 'Corrects released section: 1.1.0, 1.0.0'
 
 run "the line inside a code fence (a quoted example) does not count" 1 '::error::CHANGELOG.md [1.0.0]' main HEAD $'```text\nCorrects released section: 1.0.0\n```'

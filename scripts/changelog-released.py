@@ -13,9 +13,9 @@ base (BASE, default HEAD^1: the base branch the merge commit sits on). A
 section that is unchanged passes, whatever it says. A changed one passes when
 it now equals the section at its tag (a slip moved back, #880), or when the
 description (PR_BODY) has a line `Corrects released section: X.Y.Z[, ...]`
-naming it, outside HTML comments and code fences; otherwise it fails. [Unreleased] and
-sections without a tag are never compared, so release run 1's new section
-passes. The link lines at the foot of the file belong to no section.
+naming it as plain text, outside HTML comments, code blocks and quotes;
+otherwise it fails. [Unreleased] and sections without a tag are never
+compared, so release run 1's new section passes. The link lines at the foot of the file belong to no section.
 Putting a section back as its tag has it needs no line, even when that undoes
 a correction made after the tag.
 
@@ -44,7 +44,9 @@ UNRELEASED = re.compile(r"^## \[Unreleased\]", re.IGNORECASE)
 FENCED = re.compile(r"^\s{0,3}(```|~~~).*?^\s{0,3}\1[^\n]*$", re.DOTALL | re.MULTILINE)
 TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
-CORRECTS = re.compile(r"^\s*corrects released sections?:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+# Plain text only: at most three spaces before it, as Markdown reads a
+# paragraph; four spaces or a tab make an indented code block, `>` a quote.
+CORRECTS = re.compile(r"^ {0,3}corrects released sections?:[ \t]*(.+?)[ \t]*$", re.IGNORECASE | re.MULTILINE)
 VERSION = re.compile(r"\d+\.\d+\.\d+")
 
 
