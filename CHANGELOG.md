@@ -37,6 +37,12 @@ pull requests and have no tag.
   `tests/release-download-token.sh` fails on a release download without it.
   `gitlab/python-ci.yml` stays anonymous, as a GitLab pipeline has no GitHub
   token, and its header says what such an outage does there.
+- `README.md`'s auto-update paragraph and the getting-started tutorial say when
+  the pass runs (in a session after its first message, within about ten
+  minutes; not on opening a session, not in `claude -p`) and that the new
+  version applies after `/reload-plugins` or in a new session, linking
+  Claude Code's [When auto-update runs](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)
+  (#879).
 
 ## [2.29.0] - 2026-11-09
 
