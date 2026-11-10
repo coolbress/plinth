@@ -296,7 +296,10 @@ bumped $current -> $ver in plugin.json, marketplace.json and CHANGELOG.md, commi
 the why is in the [$ver] section now, and nothing reads $why_file again.
 next: push the branch, open the pull request, and run e2e on the branch:
   gh workflow run e2e.yml --ref release/$tag
-once it is green, merge with scripts/merge-when-green.sh <n>, which stops until then: the merge is what reaches an installation with auto-update on.
+beside it, the owner runs the smoke run from a clone on this branch (it needs the owner's Claude login, about US\$0.90, every run must pass) and posts its table on #647:
+  git switch release/$tag && scripts/eval-suite.sh --smoke
+name the e2e run and that comment in the pull request's description.
+once e2e is green, merge with scripts/merge-when-green.sh <n>, which stops until then but does not read the smoke run: the merge is what reaches an installation with auto-update on.
 then from the merged main run
   scripts/make-release.sh $tag
 again to push the tag and create the release.

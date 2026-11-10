@@ -11,7 +11,7 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, template-rules-drift, template-update-cases, arsenal-freshness and uv-pin need network
+# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, template-rules-drift, template-update-cases, arsenal-freshness, uv-pin and release-download-token need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
@@ -200,6 +200,23 @@ release needs a green run on the commit it tags, or on a commit with its tree
    Put user-facing explanation and history where it belongs — `README.md`,
    `CHANGELOG.md`, or the page under `docs/` that covers it. Not every change
    needs a README edit.
+
+   A `CHANGELOG.md` line goes under `## [Unreleased]`. A section whose
+   version has a `vX.Y.Z` tag is released: its text is that version's
+   Release. A pull request open across a release can merge `main` in and
+   keep its line where it sat, now inside the section the release just
+   tagged (#877). `ci / docs` fails when a pull request changes a released
+   section, naming it; move the line under `[Unreleased]`. A change that puts
+   a section back as its tag has it passes. To correct a released section on
+   purpose (a typo, a wrong link), add one line to the description naming
+   each version it corrects, and only those pass. The line counts as plain
+   text at the start of a line, not inside an HTML comment, a code block or a
+   quote:
+
+   ```text
+   Corrects released section: 2.28.0
+   ```
+
 5. Merge when green. Squash is the only merge method, the commit is the pull
    request title and description, and the branch is deleted on merge. The
    description is the commit only when the merge passes it: without a body,
