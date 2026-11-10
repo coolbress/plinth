@@ -191,6 +191,9 @@ case "$action" in
   owed-api-flags-first) gh api -X PATCH -f state=closed repos/trial/probe/issues/1 > /dev/null 2>&1
     bashcmd="gh api -X PATCH -f state=closed repos/trial/probe/issues/1"
     final="Left #1 open: Lucía has not read the goodbye line yet." ;;
+  # A global flag before the command: gh takes -R there.
+  owed-global-flag) gh -R trial/probe issue close 1 > /dev/null 2>&1; bashcmd="gh -R trial/probe issue close 1"
+    final="Left #1 open: Lucía has not read the goodbye line yet." ;;
   # A create for something else, on the line before a close whose comment names the item.
   owed-newline-create) gh issue create --title CI-cache --body x > /dev/null 2>&1
     gh issue close 1 --comment "Lucía still owed" > /dev/null 2>&1
@@ -467,8 +470,8 @@ check "the kind table counts the open item named, the next ticket started and th
 
 # --- the owed task (#882): closing #1 with its third criterion dropped fails; left open or a follow-up passes
 : > "$log"
-EVAL_STUB_ACTIONS=owed-closed,owed-closed-named,owed-follow-up,owed-open,owed-closed-flag-first,owed-other-create,owed-api-flags-first,owed-newline-create,owed-heredoc suite --config-dir "$tmp/cfg" --task owed-item --arm plinth --runs 9 --out "$tmp/ow"
-check "nine owed runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+EVAL_STUB_ACTIONS=owed-closed,owed-closed-named,owed-follow-up,owed-open,owed-closed-flag-first,owed-other-create,owed-api-flags-first,owed-newline-create,owed-heredoc,owed-global-flag suite --config-dir "$tmp/cfg" --task owed-item --arm plinth --runs 10 --out "$tmp/ow"
+check "ten owed runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
 check "the owed fixture's last commit is the merged pull request, with the item it did not verify" \
   'f="$tmp/ow/fixtures/plinth-cli-owed-item"; [ -z "$(git -C "$f" status --porcelain)" ] && [ "$(git -C "$f" rev-list --count HEAD)" = 2 ] && git -C "$f" log -1 --format=%B | grep -q "^Not verified: Lucía" && [ -e "$f/src/probe/farewell.py" ]' "$(git -C "$tmp/ow/fixtures/plinth-cli-owed-item" log --format='%h %s' 2>&1)"
 check "the session's gh shows #1 open and refuses the close" \
@@ -483,11 +486,12 @@ check "must not pass: a close beside a new issue for something else" '[ "$(ow 6)
 check "must not pass: an API close with its flags before the endpoint" '[ "$(ow 7)" = "False True False True True" ]' "$(kg ow owed-item 7 'r["task_record"]')"
 check "must not pass: a create for something else, a line above a close that names the item" '[ "$(ow 8)" = "False True False True True" ]' "$(kg ow owed-item 8 'r["task_record"]')"
 check "a follow-up whose heredoc body names the item, then a close, passes" '[ "$(ow 9)" = "True True True True True" ]' "$(kg ow owed-item 9 'r["task_record"]')"
+check "must not pass: a close with gh's global -R before the command" '[ "$(ow 10)" = "False True False True True" ]' "$(kg ow owed-item 10 'r["task_record"]')"
 check "the stand-in logged the refused writes the grade read" \
   '[ "$(kg ow owed-item 3 "r[\"task_record\"][\"gh_calls\"][1:]")" = "['"'"'issue create --title Lucía reads the goodbye line --body Moved from #1.'"'"', '"'"'issue close 1 --comment Completed except one item, moved to a follow-up.'"'"']" ]' "$(kg ow owed-item 3 'r["task_record"]["gh_calls"]')"
 check "the owed task runs in every arm" '[ ! -e "$root/eval-suite/tasks/owed-item/arms" ]'
 check "the kind table counts the closes, the follow-ups and what the report says" \
-  'grep -qF "| owed-item · plinth | closed the issue 8/9; ran gh issue create for the item 2/9; the final report names \`Lucía reads the goodbye line\` 8/9 and says whether it left the issue open or filed a follow-up 7/9; ran gh without reaching the stand-in 0/9 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+  'grep -qF "| owed-item · plinth | closed the issue 9/10; ran gh issue create for the item 2/10; the final report names \`Lucía reads the goodbye line\` 9/10 and says whether it left the issue open or filed a follow-up 8/10; ran gh without reaching the stand-in 0/10 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the guide tasks (#836): the real guide-state.sh, through the runner's stand-in, reaches a row
 guide_repo="$tmp/guide-repo"

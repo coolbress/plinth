@@ -207,15 +207,21 @@ by running something. It runs in all three arms, so the table shows whether the
 rule, not the model, keeps the item.
 
 Its `gh` is the same read-only stand-in, so a close or a new issue is refused,
-but each call is logged, and the grade reads the log: `gh issue close 1`, an
-API call setting #1 to `closed` (its flags in any order), or a pull request whose text has a closing
-word before `#1`, or a GraphQL `closeIssue`, counts as a close, and a `gh issue
-create` whose title or body names the item counts as the follow-up, whether the
-stand-in refused it or not. The create's words are read from its own command, cut
-at line breaks, `&&`, `||` and `;`, with a heredoc's body kept; a body written to a
-file by an earlier command, or a quoted body past its first line break, is not
-read, and that run fails. Any word `1` after `gh issue close` counts, so a
-close of another issue whose comment says `1` reads as a close of #1.
+but each call is logged. The grade reads every `gh` call, from that log and from
+the shell commands the session ran, and parses each once: its flags come out
+wherever they stand (a global one such as `-R` before the command included),
+and what is left is judged on the command, the subcommand and the other words,
+in any order. `issue close` with a word `1` or `#1` or a link to issue 1, an
+`api` call on `issues/1` with a word `closed`, a GraphQL `closeIssue`, or a
+pull request whose words have a closing word before `#1` counts as a close. An
+`issue create` whose own words, or its heredoc's body, name the item counts as
+the follow-up, whether the stand-in refused it or not. A shell text is cut into
+commands at line breaks, `&&`, `||` and `;`, so another command's words never
+count for the create. A body written to a file by an earlier command, or a
+quoted body past its first line break, is not read, and that run fails. A word
+`1` anywhere after `issue close` counts, so a close of another issue whose
+comment says `1` reads as a close of #1. A flag the grade does not know to take
+a value is read as taking none.
 A close tried and refused still fails without the follow-up: the session meant
 to close. A close another way, such as a commit with `Closes #1` pushed to
 `main`, is not seen. The words in the report that count are in the task's
