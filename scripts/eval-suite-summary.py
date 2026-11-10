@@ -61,6 +61,14 @@ def records(rs: list[Run]) -> str:
             f"changed a file {sum(1 for x in k if x['changed_files'])}/{n}; "
             f"ran gh without reaching the stand-in {sum(1 for x in k if x['stand_in_missed'])}/{n}"
         )
+    if kind == "owed":
+        return (
+            f"closed the issue {sum(1 for x in k if x['closed'])}/{n}; "
+            f"ran gh issue create for the item {sum(1 for x in k if x['follow_up'])}/{n}; "
+            f"the final report names `{k[0]['item']}` {sum(1 for x in k if x['named'])}/{n} "
+            f"and says whether it left the issue open or filed a follow-up {sum(1 for x in k if x['says_which'])}/{n}; "
+            f"ran gh without reaching the stand-in {sum(1 for x in k if x['stand_in_missed'])}/{n}"
+        )
     if kind == "question":
         q = statistics.median(x["questions"] for x in k)
         return (

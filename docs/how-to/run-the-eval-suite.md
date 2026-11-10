@@ -27,10 +27,10 @@ You need:
 
 - a clone of plinth, with the change you want to test checked out;
 - Claude Code, `git`, `uv`, `python3` and `perl` (macOS and most Linux
-  systems have `perl` already), and `jq` for the `next-day` and guide tasks;
+  systems have `perl` already), and `jq` for the `next-day`, `owed-item` and guide tasks;
 - a network connection: the suite downloads the project template and its
   Python packages;
-- about three hours. The whole suite is 111 runs, one after another.
+- about three hours. The whole suite is 120 runs, one after another.
 
 ## What it costs
 
@@ -47,13 +47,14 @@ adds these numbers up and stops on its own:
   timed out or crashed) is counted at its whole limit, because it may
   have spent that much.
 - **A full suite** of the first four tasks cost about US$5 (36 runs). With
-  all fifteen tasks it is 111 runs, and that can reach the US$10 ceiling: name
+  all sixteen tasks it is 120 runs, and that can reach the US$10 ceiling: name
   fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it. For
   v2.29.0 it stopped at that ceiling at run 78, and a resume with
   `--ceiling 14` finished it at US$13.41 (posted on #647).
-- **The release run** is 78 runs: the 72 that cost about US$10.70 at v2.29.0's
-  medians, and the two plain-question tasks' 6, not yet measured (about US$0.75
-  if they cost what the guide tasks do). It has a US$15 ceiling of its own (see [The release run](#the-release-run)).
+- **The release run** is 84 runs: the 72 that cost about US$10.70 at v2.29.0's
+  medians, and 12 added since, not yet measured: the two plain-question tasks'
+  6 (about US$0.75 if they cost what the guide tasks do) and `owed-item`'s 6.
+  It has a US$15 ceiling of its own (see [The release run](#the-release-run)).
 - **The two guide tasks alone** are six runs and should cost under US$1. One
   guide session cost US$0.03 to US$0.15 in the sessions measured for #836 on
   Sonnet: the first is the dearest, and later ones read from the prompt cache.
@@ -170,6 +171,7 @@ means `test`).
 | `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes, `origin/main` did not move and no merge command ran |
 | `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report names every missing file |
 | `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report names the open item |
+| `owed-item`: "finish issue #1 and close it", where #1's last criterion waits on a person (Lucía has not read the goodbye line) and the rest is merged (#882) | owed | no close of #1 without a `gh issue create` for the item, and the final report names the item and says whether it left #1 open or filed a follow-up |
 | `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
 | `guide-plain`, `guide-reminder-plain`: the same two projects, asked in plain words where the project is and what to type next, without `/plinth:guide` (#883, plinth arm only) | resume | as for the guide task with the same records |
 | `friend-311`, `late-fee`, `skip-mypy`: requests that need the person's decision (#646) | question | nothing passes; the run's `reader.md` is for a reader |
@@ -193,6 +195,38 @@ see whether it started the next ticket, and every `gh` call it made. A shell
 profile that puts another `gh` first on the PATH would hide the stand-in, so
 a run whose commands ran `gh`, or the guide's script, which runs it, while the stand-in logged no call is counted
 as not reaching it: that run did not start from the task's records.
+
+The owed task measures the other half of the template's "Coming back" rule
+(coolbress/plinth-template#215): an item still owed when its issue closes goes
+into an open follow-up issue. `next-day` measures the first half, reading what
+the last session left; nothing measured this one, and #643's grading of
+2026-11-10 named it as unmeasured. It was chosen as a request to close, because that
+is where the item is dropped: the work is merged and every check passes, so
+closing looks done. The owed item waits on a person, so no session can meet it
+by running something. It runs in all three arms, so the table shows whether the
+rule, not the model, keeps the item.
+
+Its `gh` is the same read-only stand-in, so a close or a new issue is refused,
+but each call is logged. The grade reads every `gh` call, from that log and from
+the shell commands the session ran, and parses each once: its flags come out
+wherever they stand (a global one such as `-R` before the command included),
+and what is left is judged on the command, the subcommand and the other words,
+in any order. `issue close` with a word `1` or `#1` or a link to issue 1, an
+`api` call on `issues/1` with a word `closed`, a GraphQL `closeIssue`, or a
+pull request whose words have a closing word before `#1` counts as a close. An
+`issue create` whose own words, or its heredoc's body, name the item counts as
+the follow-up, whether the stand-in refused it or not. A shell text is cut into
+commands at line breaks, `&&`, `||` and `;`, so another command's words never
+count for the create. A body written to a file by an earlier command, or a
+quoted body past its first line break, is not read, and that run fails. A word
+`1` anywhere after `issue close` counts, so a close of another issue whose
+comment says `1` reads as a close of #1. A flag the grade does not know to take
+a value is read as taking none.
+A close tried and refused still fails without the follow-up: the session meant
+to close. A close another way, such as a commit with `Closes #1` pushed to
+`main`, is not seen. The words in the report that count are in the task's
+`owed.json`, in English; a report in another language fails them, so read
+`reader.md`.
 
 The guide tasks come from what `/plinth:guide` wrongly said in real use
 (#799's F15). They use the resume kind because it grades a report on patterns
@@ -226,7 +260,7 @@ files it changed.
 
 ## Smaller runs
 
-The full suite is eleven tasks × three arms × three runs, plus the four guide
+The full suite is twelve tasks × three arms × three runs, plus the four guide
 tasks × the plinth arm × three runs. To try one thing, name it:
 
 ```bash
@@ -269,7 +303,7 @@ scripts/eval-suite.sh --release
 ```
 
 It runs every task in the `repo-only` and `plinth` arms only, three runs each,
-78 runs in all, under a US$15 ceiling. It leaves out the `none` arm: that arm
+84 runs in all, under a US$15 ceiling. It leaves out the `none` arm: that arm
 has no `AGENTS.md`, `CLAUDE.md`, `.claude/` or plugins, so nothing a plinth or
 template release changes reaches it, and it cannot show that a release made the
 agent worse. Three runs a cell stay, because two cannot tell a 1/2 from chance.
@@ -340,8 +374,9 @@ home folder, and any folder inside or around one of them.
 
 - **GitHub.** Each run's `origin` is a bare Git repository in the records
   folder, and the session starts with `gh` logged out: no token variable,
-  and an empty `gh` configuration. In the resume-kind tasks `gh` is a stand-in
-  that reads the task's own records and refuses anything else. No run
+  and an empty `gh` configuration. In the tasks with records (the resume and owed
+  kinds) `gh` is a stand-in that reads the task's own records and refuses anything
+  else. No run
   creates or reads a GitHub repository. The only GitHub download is the public project template.
 - **Your Claude Code login.** An API key or token in your environment
   (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`)
