@@ -121,3 +121,77 @@ command-line repository, plinth's issue [#403](https://github.com/coolbress/plin
 new dependency, a failing check, a review round, the agent attempting the
 merge. That Contents, Issues and Pull requests are enough for every step of
 [Run a project](run-a-project.md) is not verified.
+
+## Cloud and scheduled sessions
+
+Everything above is about the `gh` login on your machine. A Claude Code
+session that runs in the cloud (claude.ai/code, `claude --cloud`, a scheduled
+task, formerly a routine) does not use it. It reaches GitHub through
+Anthropic's proxy with the GitHub access you connected to your Claude
+account, and acts as you. The door's `administration:` line and
+`/plinth:floor-check` read the local login and say nothing about it.
+
+What one run measured (2026-11-10, plinth's issue
+[#304](https://github.com/coolbress/plinth/issues/304)): a scheduled task,
+started with nobody watching, on a public repository made by
+`/plinth:new-project`, with the Claude GitHub App installed on that
+repository only. In the session `gh api user` answered with the owner's
+login and `gh api repos/<owner>/<name>` gave `permissions.admin: true`,
+while `gh auth status` called the session's `GH_TOKEN` invalid: the proxy
+attaches the credential outside the session. GraphQL was refused, so
+`gh pr create` failed and the session opened the pull request with the
+platform's GitHub tool. Asked to get a change onto `main`, it opened a pull
+request, waited for green checks and did not merge, because the project's
+`AGENTS.md` says to merge only on a person's word. Neither a merge nor a
+ruleset change was attempted, so the run shows that the instructions held,
+not that GitHub would have refused. GitHub was connected in the browser,
+not with `/web-setup`, and the record's correction withdraws its "it could
+also have edited the rulesets": that was read from the role, not tried, and
+the app's permissions, below, do not allow it.
+
+So, for these sessions:
+
+1. Install the Claude GitHub App on **Only select repositories**, the ones a
+   cloud session should work in. A browser connection reaches a private
+   repository only where the app is installed.
+2. On those repositories the wall is the ruleset plus the agent's
+   instructions. The ruleset is applied to your account: where it lets an
+   admin merge a green pull request, a session acting as you is let through
+   too. Anthropic's documentation says the same of pushes: "a rule that
+   access can bypass doesn't block a run's push".
+3. If you connected with `/web-setup`, the sessions use the token
+   `gh auth token` printed at that moment. Run before the pasted token of
+   the first list's step 2, that is the browser login, with `workflow` and
+   administration, on every repository it reaches, app or no app: with it
+   an admin role can change the ruleset itself, not only pass it.
+
+Can the access be narrowed below your role? Not the role, while the session
+is connected as your account: it acts as you, and nothing found in
+Anthropic's or GitHub's settings makes it a lesser collaborator (read, not
+run; a connection as another account is in "Not checked" below). The
+permissions can, in two ways, neither of which has been run in a cloud
+session:
+
+- **The browser connection is capped by the app's own permissions.** It
+  authorizes the Claude GitHub App, and GitHub
+  limits a token an app holds for a user to what both the app and the user
+  may do, and the person installing chooses repositories, not permissions.
+  Read on 2026-11-10 with `gh api apps/claude --jq .permissions`, the app
+  holds Administration at **read**, and Contents, Pull requests and
+  **Workflows** at **write**. By that list a session cannot edit or delete a
+  ruleset, and can merge and can push a change under `.github/workflows/`,
+  which is the thing this page's token exists to stop. The list is
+  Anthropic's and can change; read it again before relying on it.
+- **`/web-setup` sends whatever token `gh` holds.** Run after the first
+  list's step 2, that is the fine-grained token, without Workflows and Administration, and
+  it replaces the browser connection for your cloud sessions. This is what
+  Anthropic's documentation describes
+  ([connect from your terminal](https://code.claude.com/docs/en/web-quickstart#connect-from-your-terminal));
+  no cloud session has been run on such a token here, and the merge stays
+  open to it, since Contents at write is what a merge needs.
+
+Not checked: what `permissions.admin: true` lets a cloud session do in
+practice (it is your account's role, as the first list's step 3 says, not
+the credential's), which connection wins when both exist beyond the
+documentation's "replaces", and a Claude account connected to
+[the agent's own GitHub account](give-the-agent-its-own-account.md).
