@@ -1,0 +1,7 @@
+{
+  "issue": 1,
+  "item": "Lucía reads the goodbye line",
+  "named": "Luc[ií]a|reads? naturally|native speaker",
+  "follow_up": "Luc[ií]a|wording|reads? naturally|native speaker|read(?:s|ing)? the goodbye",
+  "which": "follow[- ]?up|new issue|\\b(?:left|leave|leaving|keep|keeping|kept|stays?|remains?|still)\\b.{0,40}\\bopen\\b|\\bopen\\b.{0,30}\\buntil\\b|not (?:yet )?(?:been )?closed|(?:did ?n['’]?t|won['’]?t|will not|have ?n['’]?t|have not|can ?not|can['’]?t|could ?n['’]?t) .{0,20}\\bclose"
+}
