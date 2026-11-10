@@ -11,8 +11,36 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.43.0: a `cli` or
+  `library` release publishes every package of a uv workspace, each at its
+  own version, the tag matching the root's (coolbress/plinth-template#225).
+  A new project still calls plinth v2.28.0. An existing project gets it
+  through `/plinth:template-update`.
+
+## [2.30.0] - 2026-11-10
+
+The checks a project calls now get through an outage of GitHub's anonymous downloads, and build a uv workspace: `python-ci.yml` sends the job's token on its GitHub release downloads, after 2026-11-09's two hours of 504s for anonymous requests, and `ci / build` builds and installs a workspace whose root package depends on a member instead of looking for the member on PyPI. `/plinth:new-project` renders plinth-template v1.42.1, whose workflows send the token too and whose undo how-to keeps the revert title the host writes; a new project still calls plinth v2.28.0. plinth's own CI adds `ci / release-gate` and fails a pull request that edits a released `CHANGELOG.md` section; the eval suite gains a release run and three tasks. To get the download and workspace fixes, a project raises every `coolbress/plinth` `uses:` line to this release together: `ci.yml`, `label.yml`, and `third-party.yml` where it has one (Dependabot's pull request does this).
+
+tested with plinth-template v1.42.1
+
 ### Added
 
+- `ci / build` passes a uv workspace whose root package depends on a member
+  (#889). It ran `uv build`, which builds the root only, then installed the
+  root from the package index alone, so the member was "not found in the
+  package registry" and a required check could not pass. With
+  `[tool.uv.workspace]` in the root `pyproject.toml` it now runs
+  `uv build --all-packages`, installs the root's wheel and sdist each with
+  `--find-links dist`, every built member pinned to its version there so a
+  package of the same name on PyPI is not installed instead, and imports
+  the `src/` packages of the members the root installed. A root that is not a
+  package fails with a line saying so; its sdist did not install before. A
+  repository without a workspace runs the same build and install commands as
+  before, after one added read of `pyproject.toml`. GitLab's `build` job does
+  the same. A project gets it by raising its pin of `python-ci.yml` (on
+  GitLab, of `gitlab/python-ci.yml`).
 - `ci / release-gate`, a job of plinth's own CI, fails a release pull
   request (head branch `release/v*`, a `chore(release):` title, or a changed
   `"version"` line in either manifest) until its head has a green `e2e` run
@@ -64,6 +92,13 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.42.1: a project's
+  workflows send the job's token on their GitHub release downloads
+  (coolbress/plinth-template#226); the undo how-to keeps the revert title the
+  host writes (coolbress/plinth-template#212); the keep-current how-to warns
+  against turning on auto-update inside the project. A new project still
+  calls plinth v2.28.0. An existing project gets it through
+  `/plinth:template-update`.
 - `python-ci.yml`, `plinth-ci.yml` and `e2e.yml` send the job's own token when
   they download uv, gitleaks, actionlint and lychee from a GitHub release
   (#878). On 2026-11-09 GitHub answered anonymous requests with 504 for about
@@ -4975,7 +5010,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.29.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.30.0...HEAD
+[2.30.0]: https://github.com/coolbress/plinth/releases/tag/v2.30.0
 [2.29.0]: https://github.com/coolbress/plinth/releases/tag/v2.29.0
 [2.28.0]: https://github.com/coolbress/plinth/releases/tag/v2.28.0
 [2.27.0]: https://github.com/coolbress/plinth/releases/tag/v2.27.0

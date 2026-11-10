@@ -70,7 +70,7 @@ for k in ("UV_VERSION", "UV_SHA256", "GITLEAKS_VERSION", "GITLEAKS_SHA256"):
 def heredocs(text, tag):
     return [textwrap.dedent(m) for m in re.findall(rf"<<'{tag}'[^\n]*\n(.*?)\n[ \t]*{tag}\n", text, re.S)]
 for tag, mark in (("REQ", "coverage==7"), ("REQ", "diff-cover=="), ("PY", "diff-cover did not finish"),
-                  ("PY", "run:source_pkgs")):
+                  ("PY", "run:source_pkgs"), ("PY", "build plan of a uv workspace")):
     a = [h for h in heredocs(gh, tag) if mark in h]; b = [h for h in heredocs(gl, tag) if mark in h]
     if len(a) != 1 or len(b) != 1 or a[0] != b[0]:
         fails.append(f"the {tag} block holding {mark!r} differs ({len(a)} in python-ci.yml, {len(b)} in gitlab)")
