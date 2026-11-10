@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.31.0] - 2026-11-10
+
+A new project renders plinth-template v1.43.1, whose `cli` or `library` release publishes every package of a uv workspace and whose third-party reviewer question says Codex's reviewer is the only one verified; a new project still calls plinth v2.28.0. The token how-to says what a cloud or scheduled Claude Code session can do on GitHub, the eval suite's `owed-item` task grades the follow-up attempt, and the owner's ruleset scripts stop reading as refusals. No workflow a project calls changed, so a project's `coolbress/plinth` pins need no raise for this release.
+
+tested with plinth-template v1.43.1
+
 ### Added
 
 - The token how-to has a section for cloud and scheduled Claude Code
@@ -5044,7 +5050,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.30.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.31.0...HEAD
+[2.31.0]: https://github.com/coolbress/plinth/releases/tag/v2.31.0
 [2.30.0]: https://github.com/coolbress/plinth/releases/tag/v2.30.0
 [2.29.0]: https://github.com/coolbress/plinth/releases/tag/v2.29.0
 [2.28.0]: https://github.com/coolbress/plinth/releases/tag/v2.28.0
