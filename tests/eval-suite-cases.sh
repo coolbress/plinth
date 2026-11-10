@@ -7,7 +7,8 @@
 # a run that must not pass: a checked task whose checks fail, a merge that
 # moved origin/main, a floor check whose report misses a planted gap; a
 # question task has no pass, a resume task (#832) whose report skips the open
-# item fails while one that names it passes, the guide tasks (#836) fail a canned
+# item fails while one that names it passes, an owed task (#882) fails a run that
+# closes the issue with its owed item dropped and passes one that files the follow-up, the guide tasks (#836) fail a canned
 # report with the old false sentences and pass a correct one, and a run that read a path under
 # eval-suite/ is not counted. A graded run loses its rebuildable caches (#687) and grades the
 # same again; --keep-caches and a failed grade keep them. A session that did not run (the
@@ -164,6 +165,45 @@ case "$action" in
   # A profile that put the real gh first: the session ran gh, the stand-in logged nothing.
   resume-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="gh issue list --state all"
     final="Yesterday's #1 left the goodbye unchecked on Windows." ;;
+  # The owed task (#882): asked to close #1, whose third criterion is still owed; the stand-in refuses and logs each write.
+  owed-closed)
+    { gh issue view 1; gh issue close 1 --comment "Done in #3."; echo "write_exit=$?"; } > "$(dirname "$ws")/seen.txt" 2>&1
+    bashcmd="gh issue close 1 --comment 'Done in #3.'"; final="Closed #1: farewell returns the goodbye and a test covers it." ;;
+  owed-closed-named) gh issue close 1 > /dev/null 2>&1; bashcmd="gh issue close 1"
+    final="Closed #1. Lucía has not read the goodbye line yet." ;;
+  owed-follow-up)
+    gh issue create --title "Lucía reads the goodbye line" --body "Moved from #1." > /dev/null 2>&1
+    gh issue close 1 --comment "Completed except one item, moved to a follow-up." > /dev/null 2>&1
+    bashcmd="gh issue create --title 'Lucía reads the goodbye line' --body 'Moved from #1.' && gh issue close 1"
+    final="Filed a follow-up issue for the one item still owed, Lucía reading the goodbye line, and closed #1 with an Outcome linking it." ;;
+  owed-open) gh issue view 1 > /dev/null 2>&1; bashcmd="gh issue view 1"
+    final="Left #1 open: Lucía has not read the goodbye line yet, so its third criterion is still owed." ;;
+  # A flag's value of several words before the number: the stand-in logs it without its quotes.
+  owed-closed-flag-first) gh issue close --comment "Done in #3, Lucía still owed." 1 > /dev/null 2>&1
+    bashcmd="gh issue close --comment 'Done in #3; Lucía still owed.' 1"
+    final="Closed #1. Lucía still has to read it; nothing else is open." ;;
+  # A create for something else, in the same shell command as a close.
+  owed-other-create) gh issue create --title "Add a CI cache" --body "x" > /dev/null 2>&1
+    gh issue close 1 --comment "farewell shipped" > /dev/null 2>&1
+    bashcmd="gh issue create --title 'Add a CI cache' --body x && gh issue close 1 --comment 'farewell shipped'"
+    final="Closed #1 and filed a follow-up; Lucía has not read the goodbye line yet." ;;
+  # An API close with its flags before the endpoint.
+  owed-api-flags-first) gh api -X PATCH -f state=closed repos/trial/probe/issues/1 > /dev/null 2>&1
+    bashcmd="gh api -X PATCH -f state=closed repos/trial/probe/issues/1"
+    final="Left #1 open: Lucía has not read the goodbye line yet." ;;
+  # A global flag before the command: gh takes -R there.
+  owed-global-flag) gh -R trial/probe issue close 1 > /dev/null 2>&1; bashcmd="gh -R trial/probe issue close 1"
+    final="Left #1 open: Lucía has not read the goodbye line yet." ;;
+  # A create for something else, on the line before a close whose comment names the item.
+  owed-newline-create) gh issue create --title CI-cache --body x > /dev/null 2>&1
+    gh issue close 1 --comment "Lucía still owed" > /dev/null 2>&1
+    bashcmd="gh issue create --title CI-cache --body x\\ngh issue close 1 --comment 'Lucía still owed'"
+    final="Closed #1 and filed a follow-up for Lucía's reading." ;;
+  # The follow-up's body in a heredoc: only the shell command holds the words that name the item.
+  owed-heredoc) gh issue create --title Follow-up --body-file - <<< "Lucía reads the goodbye line" > /dev/null 2>&1
+    gh issue close 1 > /dev/null 2>&1
+    bashcmd="gh issue create --title Follow-up --body-file - <<'EOF'\\nLucía reads the goodbye line\\nEOF\\ngh issue close 1"
+    final="Filed a follow-up issue for Lucía reading the goodbye line, then closed #1." ;;
   read-hidden) fix .; extra="$(tool Read "{\"file_path\":\"$CLAUDE_CONFIG_DIR/plugins/cache/plinth/plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py\"}")" ;;
   shown-hidden) fix .
     extra="$(printf '{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"plinth/9.9.9/eval-suite/tasks/ledger/hidden_test.py:5: def test_hidden"}]}]}}')" ;;
@@ -428,6 +468,31 @@ check "a run that ran gh while the stand-in logged no call is marked, and its wi
 check "the kind table counts the open item named, the next ticket started and the stand-in missed" \
   'grep -qF "| next-day · plinth | open items the final report names: \`cp1252 on Windows\` 2/3; changed a file 1/3; ran gh without reaching the stand-in 1/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
+# --- the owed task (#882): closing #1 with its third criterion dropped fails; left open or a follow-up passes
+: > "$log"
+EVAL_STUB_ACTIONS=owed-closed,owed-closed-named,owed-follow-up,owed-open,owed-closed-flag-first,owed-other-create,owed-api-flags-first,owed-newline-create,owed-heredoc,owed-global-flag suite --config-dir "$tmp/cfg" --task owed-item --arm plinth --runs 10 --out "$tmp/ow"
+check "ten owed runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+check "the owed fixture's last commit is the merged pull request, with the item it did not verify" \
+  'f="$tmp/ow/fixtures/plinth-cli-owed-item"; [ -z "$(git -C "$f" status --porcelain)" ] && [ "$(git -C "$f" rev-list --count HEAD)" = 2 ] && git -C "$f" log -1 --format=%B | grep -q "^Not verified: Lucía" && [ -e "$f/src/probe/farewell.py" ]' "$(git -C "$tmp/ow/fixtures/plinth-cli-owed-item" log --format='%h %s' 2>&1)"
+check "the session's gh shows #1 open and refuses the close" \
+  's="$tmp/ow/runs/owed-item-plinth-1/seen.txt"; grep -q "^state:${tab}OPEN" "$s" && grep -q "Lucía, who asked for it" "$s" && grep -q "^write_exit=1$" "$s"' "$(cat "$tmp/ow/runs/owed-item-plinth-1/seen.txt" 2>&1)"
+ow() { kg ow owed-item "$1" '"%s %s %s %s %s" % (r["pass"], bool(r["task_record"]["closed"]), r["task_record"]["follow_up"], r["task_record"]["named"], r["task_record"]["says_which"])'; }
+check "must not pass: a run that closes #1 and drops the owed item" '[ "$(ow 1)" = "False True False False False" ]' "$(kg ow owed-item 1 'r["task_record"]')"
+check "must not pass: a run that closes #1 with no follow-up, though its report names the item" '[ "$(ow 2)" = "False True False True False" ]' "$(kg ow owed-item 2 'r["task_record"]')"
+check "a run that files the follow-up for the item, then closes, passes" '[ "$(ow 3)" = "True True True True True" ]' "$(kg ow owed-item 3 'r["task_record"]')"
+check "a run that leaves #1 open and says why passes" '[ "$(ow 4)" = "True False False True True" ]' "$(kg ow owed-item 4 'r["task_record"]')"
+check "must not pass: a close whose comment of several words comes before the number" '[ "$(ow 5)" = "False True False True True" ]' "$(kg ow owed-item 5 'r["task_record"]')"
+check "must not pass: a close beside a new issue for something else" '[ "$(ow 6)" = "False True False True True" ]' "$(kg ow owed-item 6 'r["task_record"]')"
+check "must not pass: an API close with its flags before the endpoint" '[ "$(ow 7)" = "False True False True True" ]' "$(kg ow owed-item 7 'r["task_record"]')"
+check "must not pass: a create for something else, a line above a close that names the item" '[ "$(ow 8)" = "False True False True True" ]' "$(kg ow owed-item 8 'r["task_record"]')"
+check "a follow-up whose heredoc body names the item, then a close, passes" '[ "$(ow 9)" = "True True True True True" ]' "$(kg ow owed-item 9 'r["task_record"]')"
+check "must not pass: a close with gh's global -R before the command" '[ "$(ow 10)" = "False True False True True" ]' "$(kg ow owed-item 10 'r["task_record"]')"
+check "the stand-in logged the refused writes the grade read" \
+  '[ "$(kg ow owed-item 3 "r[\"task_record\"][\"gh_calls\"][1:]")" = "['"'"'issue create --title Lucía reads the goodbye line --body Moved from #1.'"'"', '"'"'issue close 1 --comment Completed except one item, moved to a follow-up.'"'"']" ]' "$(kg ow owed-item 3 'r["task_record"]["gh_calls"]')"
+check "the owed task runs in every arm" '[ ! -e "$root/eval-suite/tasks/owed-item/arms" ]'
+check "the kind table counts the closes, the follow-ups and what the report says" \
+  'grep -qF "| owed-item · plinth | closed the issue 9/10; ran gh issue create for the item 2/10; the final report names \`Lucía reads the goodbye line\` 9/10 and says whether it left the issue open or filed a follow-up 8/10; ran gh without reaching the stand-in 0/10 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
 # --- the guide tasks (#836): the real guide-state.sh, through the runner's stand-in, reaches a row
 guide_repo="$tmp/guide-repo"
 mkdir -p "$guide_repo"
@@ -491,6 +556,25 @@ check "a guide whose script ran gh past the stand-in is counted as not reaching 
 EVAL_STUB_ACTIONS=reminder-right,reminder-implement suite --config-dir "$tmp/cfg" --task guide-reminder --arm plinth --runs 2 --out "$tmp/gr"
 check "guide-reminder passes on the template update and fails on /implement" \
   '[ "$(kg gr guide-reminder 1 "r[\"pass\"]")" = True ] && [ "$(kg gr guide-reminder 2 "r[\"pass\"]")" = False ]' "$(kg gr guide-reminder 2 'r["task_record"]')"
+# --- the plain-question tasks (#883): the guide's records and patterns, asked without the guide
+for pair in guide:guide-plain guide-reminder:guide-reminder-plain; do
+  g="$root/eval-suite/tasks/${pair%%:*}" p="$root/eval-suite/tasks/${pair##*:}"
+  same=yes; for f in archetype arms issues.json kind open.json; do cmp -s "$g/$f" "$p/$f" || same="no: $f"; done
+  check "${pair##*:} grades the same records on the same patterns as ${pair%%:*}" '[ "$same" = yes ]' "$same"
+  check "${pair##*:} asks in plain words: its prompt types no command" '! grep -q "/" "$p/prompt.txt"' "$(cat "$p/prompt.txt")"
+done
+: > "$log"
+EVAL_STUB_ACTIONS=guide-right,guide-old suite --config-dir "$tmp/cfg" --task guide-plain --task guide-reminder-plain --runs 2 --out "$tmp/gp"
+check "the plain-question tasks run in the plinth arm only, four sessions from the default three arms" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 4 ] && [ ! -e "$tmp/gp/runs/guide-plain-repo-only-1" ] && [ ! -e "$tmp/gp/runs/guide-plain-none-1" ]' "$(cat "$tmp/out.txt")"
+check "guide-plain passes a correct report and fails the old false sentences, as guide does" \
+  '[ "$(missed gp guide-plain 1)" = "True: " ] && [ "$(missed gp guide-plain 2)" = "False: $rel; $mon" ]' "$(missed gp guide-plain 1; missed gp guide-plain 2)"
+check "must not pass: guide-reminder-plain on a report whose one command is /grilling" \
+  '[ "$(kg gp guide-reminder-plain 1 "r[\"pass\"]")" = False ]' "$(kg gp guide-reminder-plain 1 'r["task_record"]')"
+: > "$log"
+EVAL_STUB_ACTIONS=reminder-right suite --config-dir "$tmp/cfg" --task guide-reminder-plain --runs 1 --out "$tmp/gq"
+check "guide-reminder-plain passes on the template update" \
+  '[ "$(kg gq guide-reminder-plain 1 "r[\"pass\"]")" = True ]' "$(kg gq guide-reminder-plain 1 'r["task_record"]')"
 : > "$log"
 suite --config-dir "$tmp/cfg" --task guide --arm none --runs 1 --out "$tmp/gn"
 check "guide named in an arm it does not run in stops (exit 2), not an empty green table" \

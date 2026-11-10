@@ -20,7 +20,9 @@
 # gives its sessions a read-only gh (eval-suite-gh.py) that serves those
 # records offline instead of the logged-out one, and needs jq for its --jq. A
 # task with an `arms` file runs only in the arms it lists: guide and
-# guide-reminder grade what /plinth:guide says, which only the plinth arm has.
+# guide-reminder grade what /plinth:guide says, which only the plinth arm has;
+# guide-plain and guide-reminder-plain ask the same in plain words, in that arm,
+# so plinth without the guide is graded on the same patterns (#883).
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -78,7 +80,7 @@
 # whole for a person to look at. At the end the records' size is printed.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day guide guide-reminder friend-311 late-fee skip-mypy)
+all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day owed-item guide guide-reminder guide-plain guide-reminder-plain friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
 session_timeout=900
@@ -124,7 +126,7 @@ fi
 for t in "${tasks[@]}"; do
   [ -f "$root/eval-suite/tasks/$t/prompt.txt" ] || die "no task $t (tasks: ${all_tasks[*]})"
   k="test"; [ ! -f "$root/eval-suite/tasks/$t/kind" ] || k="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/kind")"
-  case "$k" in test|checked|merge|floor-check|resume|question) ;; *) die "task $t: unknown kind $k" ;; esac
+  case "$k" in test|checked|merge|floor-check|resume|owed|question) ;; *) die "task $t: unknown kind $k" ;; esac
 done
 for a in "${arms[@]}"; do case " ${all_arms[*]} " in *" $a "*) ;; *) die "no arm $a (arms: ${all_arms[*]})" ;; esac; done
 # Whether a task runs in an arm: all of them, unless its `arms` file lists fewer.

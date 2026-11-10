@@ -1,0 +1,43 @@
+{
+  "repo": "trial/probe",
+  "issues": [
+    {
+      "number": 4,
+      "title": "Template update available: v1.40.0 to v1.41.0",
+      "state": "OPEN",
+      "labels": [],
+      "author": "github-actions",
+      "createdAt": "2026-11-05T06:00:00Z",
+      "updatedAt": "2026-11-05T06:00:00Z",
+      "closedAt": null,
+      "body": "<!-- plinth:template-reminder -->\nThis repository was made from template tag v1.40.0. Tag v1.41.0 is the latest.\n",
+      "comments": []
+    }
+  ],
+  "pulls": [
+    {
+      "number": 2,
+      "title": "docs: first pull request",
+      "state": "MERGED",
+      "headRefName": "docs/first",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-03T08:40:00Z",
+      "mergedAt": "2026-11-03T09:01:00Z",
+      "body": "## What and why\n\nThe project's first pull request.\n",
+      "comments": []
+    },
+    {
+      "number": 3,
+      "title": "feat: say goodbye in Spanish",
+      "state": "MERGED",
+      "headRefName": "feat/farewell",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-04T15:02:00Z",
+      "mergedAt": "2026-11-04T17:38:00Z",
+      "body": "## What and why\n\nAdds `farewell(name)`.\n",
+      "comments": []
+    }
+  ]
+}
