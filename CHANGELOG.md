@@ -17,7 +17,8 @@ pull requests and have no tag.
   that administers the repository; an agent's token cannot run it" and the
   `with-admin-token.sh` hint: a successful run started with them and was read
   as a refusal (#896). The notice is now part of the stop for a login that
-  does not administer the repository.
+  does not administer the repository, and the stop for a write GitHub refuses
+  names the `with-admin-token.sh` command too.
 - `scripts/check-ruleset.sh --own` reads its file once, so
   `--own <(gh api repos/coolbress/plinth/rulesets/<id>)` gives the same result
   as a saved file; a process substitution failed every line before.

@@ -326,6 +326,7 @@ run 0 "--dry-run adds nothing" --dry-run --repo r/r 'slow check'
 unwritten "dry run"
 PUT_FAIL=1 run 1 "a write GitHub refuses is reported in plain words" --repo r/r 'slow check'
 said "it says GitHub refused and nothing changed" "GitHub refused the change"
+said "it names the admin-token wrapper" "scripts/with-admin-token.sh scripts/require-check.sh --repo r/r 'slow check'"
 
 run 0 "a job with no if: is added" --repo r/r 'slow check'
 if [ -e "$work/put.json" ] && jq -e '

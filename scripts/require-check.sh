@@ -143,7 +143,7 @@ if [ "$dry" = 1 ]; then
 fi
 if ! err="$(printf '%s' "$new" | gh api "repos/$repo/rulesets/$id" -X PUT --input - 2>&1 >/dev/null)"; then
   stop "GitHub refused the change: ${err:-no reason given}.
-  this login cannot change rulesets on $repo; run it with an admin token."
+  this login cannot change rulesets on $repo; run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh --repo $repo '$name'"
 fi
 # The list as GitHub now holds it, read back, not as sent.
 back="$(gh api "repos/$repo/rulesets/$id" 2>/dev/null)" \
