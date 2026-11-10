@@ -164,7 +164,8 @@ release needs a green run on the commit it tags, or on a commit with its tree
    yourself. Remove its guidance comments — GitHub keeps HTML comments in the
    squash message.
 
-   CI runs `ci / install`, `ci / tools`, `ci / docs` and `CodeQL`; the canary
+   CI runs `ci / install`, `ci / tools`, `ci / docs`, `ci / release-gate` and
+   `CodeQL`; the canary
    job runs the reusable workflow against `canary/`. `third-party / review`
    waits for a review by the Codex reviewer once the pull request is ready,
    and it is required on `main`: a pull request without an accepted review on

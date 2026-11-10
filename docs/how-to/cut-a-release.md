@@ -136,10 +136,14 @@ the move changes what a new project's agent reads, and then asks for
 6. Merge the pull request with `scripts/merge-when-green.sh <n>` once that run
    and the checks are green. The script stops, and prints the command from
    step 5, while the head has no green `e2e` run on a `release/v*` branch (#855,
-   #862): a run on any other ref did not call the workflows at this commit. The merge button and
-   `gh pr merge` do not ask: a dispatched run is not among the checks a pull
-   request lists, so use the script. The script does not read the smoke run:
-   check that the description names it before you merge.
+   #862): a run on any other ref did not call the workflows at this commit.
+   The merge button and `gh pr merge` refuse too: `ci / release-gate`, a check
+   the ruleset requires, fails on a release pull request whose head has no
+   such run (#863). It ran when the branch was pushed, before the `e2e` run
+   existed, so it is red until something runs it again: the script re-runs it
+   once the `e2e` run is green and waits for it, or use "Re-run" on it in the
+   pull request's Checks tab. The script does not read the smoke run: check
+   that the description names it before you merge.
 7. Update `main`: `git switch main && git pull --ff-only`.
 8. Run the same command again:
 

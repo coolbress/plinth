@@ -75,6 +75,14 @@ if listed == want:
 else:
     fail(f"the web table lists {listed}, floor-check.py adds {want}")
 
+own = re.search(r"^own_checks='(\[[^']*\])'$", (root / "scripts/check-ruleset.sh").read_text(encoding="utf-8"), re.M)
+want = json.loads(own.group(1)) if own else None
+listed = names("Required on plinth's own repository")
+if want is not None and sorted(listed) == sorted(want):
+    print(f"  PASS  the own-repository table lists check-ruleset.sh's {len(want)} checks for coolbress/plinth")
+else:
+    fail(f"the own-repository table lists {listed}, check-ruleset.sh's own_checks is {want}")
+
 if not fails:
     print("  PASS  the page is headings and tables only")
 print(f"-- {fails} failed")

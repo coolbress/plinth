@@ -260,6 +260,12 @@ jobs:
       - name: A pull request that changes a released CHANGELOG.md section fails, unless it names it or puts it back
         run: ./tests/changelog-released-cases.sh
 
+      - name: ci / release-gate passes what is not a release, and a release only on a green e2e on its head
+        run: ./tests/release-gate-cases.sh
+
+      - name: plinth's own ruleset, read back, requires its five checks, enforced, with no bypass
+        run: ./tests/check-ruleset-own.sh
+
       # Official release binary, checksum verified: rhysd/actionlint has no
       # action of its own, and a third-party wrapper would need allowlisting.
       # The version and the checksum are read from tests/workflow-lint.sh, the
@@ -288,6 +294,38 @@ jobs:
 
       - name: ci / code-growth warns above the conventions, passes below them, and never fails
         run: ./tests/code-growth-cases.sh
+
+  # A release pull request merges only after a green `e2e` on its head (#863).
+  # The ruleset requires this check, so the merge button and a bare
+  # `gh pr merge` are held too, not only scripts/merge-when-green.sh (#855).
+  # A ruleset cannot require a check of release pull requests alone, so it
+  # runs on every pull request and every push, and decides in the script:
+  # anything that is not a release passes at once. plinth's own: it is not in
+  # python-ci.yml, so no consumer sees it. merge-when-green.sh re-runs it once
+  # the e2e run is green.
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read   # the e2e runs on the head
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent, the base: the diff that
+          # says whether a manifest's "version" line changes.
+          fetch-depth: 2
+
+      - name: A release pull request has a green e2e run on its head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./scripts/release-gate.sh
 
   # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
   # the README install block is the one the tutorial shows, and the pull
