@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/require-check.sh` no longer opens every run with "needs a login
+  that administers the repository; an agent's token cannot run it" and the
+  `with-admin-token.sh` hint: a successful run started with them and was read
+  as a refusal (#896). The notice is now part of the stop for a login that
+  does not administer the repository.
+- `scripts/check-ruleset.sh --own` reads its file once, so
+  `--own <(gh api repos/coolbress/plinth/rulesets/<id>)` gives the same result
+  as a saved file; a process substitution failed every line before.
+- The canary's two `floor-check-required-checks` lists include
+  `ci / release-gate`, which `main protection` requires since #863.
+
 ## [2.30.0] - 2026-11-10
 
 The checks a project calls now get through an outage of GitHub's anonymous downloads, and build a uv workspace: `python-ci.yml` sends the job's token on its GitHub release downloads, after 2026-11-09's two hours of 504s for anonymous requests, and `ci / build` builds and installs a workspace whose root package depends on a member instead of looking for the member on PyPI. `/plinth:new-project` renders plinth-template v1.42.1, whose workflows send the token too and whose undo how-to keeps the revert title the host writes; a new project still calls plinth v2.28.0. plinth's own CI adds `ci / release-gate` and fails a pull request that edits a released `CHANGELOG.md` section; the eval suite gains a release run and three tasks. To get the download and workspace fixes, a project raises every `coolbress/plinth` `uses:` line to this release together: `ci.yml`, `label.yml`, and `third-party.yml` where it has one (Dependabot's pull request does this).

@@ -43,7 +43,8 @@ own_checks='["ci / docs","ci / install","ci / tools","ci / release-gate","third-
 # Offline, on every run: each `ci / <job>` of the list is a job of
 # plinth-ci.yml and not of python-ci.yml. `--own <file>` also checks a ruleset
 # as GitHub returns it (gh api repos/coolbress/plinth/rulesets/<id>), the read
-# back after a change to plinth's own `main protection`.
+# back after a change to plinth's own `main protection`; a saved file and
+# `--own <(gh api …)` give the same result.
 own_invariants() { # [<live ruleset file>]
   local fail=0 c job
   echo "plinth's own required checks: $own_checks"
@@ -58,20 +59,23 @@ own_invariants() { # [<live ruleset file>]
     echo "  FAIL  ruleset.json, every consumer's wall, requires one of plinth's own checks"; fail=1
   else echo "  PASS  ruleset.json requires none of plinth's own checks"; fi
   if [ -n "${1:-}" ]; then
-    local f="$1" got
-    jq empty "$f" 2>/dev/null || { echo "  FAIL  $f is not valid JSON"; return 1; }
-    got="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|.context]|sort' "$f")"
+    # Read once: `--own <(gh api …)` is a pipe, and a pipe has nothing left
+    # for a second read (#896). Every jq below reads the variable.
+    local f="$1" got live
+    live="$(cat -- "$f" 2>/dev/null)" || { echo "  FAIL  $f could not be read"; return 1; }
+    [ -n "$live" ] && jq empty <<<"$live" 2>/dev/null || { echo "  FAIL  $f is empty or not valid JSON"; return 1; }
+    got="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|.context]|sort' <<<"$live")"
     if [ "$got" = "$(jq -c sort <<<"$own_checks")" ]; then echo "  PASS  the live ruleset requires exactly these"
     else printf '  FAIL  the live ruleset requires %s\n' "$got"; fail=1; fi
-    got="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].integration_id]|unique' "$f")"
+    got="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].integration_id]|unique' <<<"$live")"
     if [ "$got" = '[15368]' ]; then echo "  PASS  each from the GitHub Actions app (15368)"
     else printf '  FAIL  integration ids %s, not [15368]\n' "$got"; fail=1; fi
     # An exclusion can take the default branch back out (refs/heads/main), so
     # none is allowed, as for ruleset-merge.json.
-    got="$(jq -c '{enforcement, include: .conditions.ref_name.include, exclude: (.conditions.ref_name.exclude // [])}' "$f")"
+    got="$(jq -c '{enforcement, include: .conditions.ref_name.include, exclude: (.conditions.ref_name.exclude // [])}' <<<"$live")"
     if [ "$got" = '{"enforcement":"active","include":["~DEFAULT_BRANCH"],"exclude":[]}' ]; then echo "  PASS  enforced, on the default branch, nothing excluded"
     else printf '  FAIL  not enforced on the default branch: %s\n' "$got"; fail=1; fi
-    got="$(jq -c '.bypass_actors' "$f")"
+    got="$(jq -c '.bypass_actors' <<<"$live")"
     if [ "$got" = '[]' ]; then echo "  PASS  no bypass actors"
     else printf '  FAIL  bypass actors %s\n' "$got"; fail=1; fi
   fi

@@ -54,7 +54,7 @@ jobs:
     with:
       working-directory: canary
       extra-python-versions: "3.13"
-      floor-check-required-checks: "ci / install, ci / tools, ci / docs"   # CodeQL is a code_scanning rule; floor-check sees it either way
+      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"   # CodeQL is a code_scanning rule; floor-check sees it either way
 
   # The same call on the `web` archetype as plinth-template renders it, a
   # Django project (#614): the checks every archetype runs, on a project whose
@@ -71,4 +71,4 @@ jobs:
     with:
       working-directory: canary-web
       web: true
-      floor-check-required-checks: "ci / install, ci / tools, ci / docs"
+      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"
