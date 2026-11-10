@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.43.0: a `cli` or
+  `library` release publishes every package of a uv workspace, each at its
+  own version, the tag matching the root's (coolbress/plinth-template#225).
+  A new project still calls plinth v2.28.0. An existing project gets it
+  through `/plinth:template-update`.
+
 ## [2.30.0] - 2026-11-10
 
 The checks a project calls now get through an outage of GitHub's anonymous downloads, and build a uv workspace: `python-ci.yml` sends the job's token on its GitHub release downloads, after 2026-11-09's two hours of 504s for anonymous requests, and `ci / build` builds and installs a workspace whose root package depends on a member instead of looking for the member on PyPI. `/plinth:new-project` renders plinth-template v1.42.1, whose workflows send the token too and whose undo how-to keeps the revert title the host writes; a new project still calls plinth v2.28.0. plinth's own CI adds `ci / release-gate` and fails a pull request that edits a released `CHANGELOG.md` section; the eval suite gains a release run and three tasks. To get the download and workspace fixes, a project raises every `coolbress/plinth` `uses:` line to this release together: `ci.yml`, `label.yml`, and `third-party.yml` where it has one (Dependabot's pull request does this).
