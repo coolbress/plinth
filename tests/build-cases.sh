@@ -8,7 +8,8 @@
 # Fixtures: a project without a workspace, and a uv workspace whose root
 # depends on a member, beside a packaged member it does not depend on, a
 # member with no [build-system], one with `tool.uv.package = false` and one
-# excluded, each of whose modules exits on import, and a member named like a
+# excluded (one by a `**` exclude), each of whose modules exits on import;
+# members found through `**`, one through a hidden directory; a member named like a
 # PyPI package; and a workspace whose root uv does not package.
 #
 # Needs uv and python3, and the network: the build backend (hatchling) comes
@@ -91,9 +92,10 @@ pkg "$single" plinth-fixture-plain "" "$backend"
 echo 'X = 1' > "$single/src/plinth_fixture_plain/__init__.py"
 
 ws="$tmp/fixture-workspace"
-pkg "$ws" plinth-fixture-app '"plinth-fixture-core", "six"' "$backend" \
+pkg "$ws" plinth-fixture-app '"plinth-fixture-core", "six", "plinth-fixture-deep", "plinth-fixture-hidden"' "$backend" \
   '[tool.uv.sources]' 'plinth-fixture-core = { workspace = true }' 'six = { workspace = true }' \
-  '[tool.uv.workspace]' 'members = ["packages/*"]' 'exclude = ["packages/skipped"]'
+  'plinth-fixture-deep = { workspace = true }' 'plinth-fixture-hidden = { workspace = true }' \
+  '[tool.uv.workspace]' 'members = ["packages/*", "nested/**/member"]' 'exclude = ["packages/skipped", "nested/**/off/*"]'
 printf 'from plinth_fixture_core import X\nfrom six import WORKSPACE\n' > "$ws/src/plinth_fixture_app/__init__.py"
 # Named as a package on PyPI (six 1.17.0 there): the root must get this one.
 pkg "$ws/packages/six" six "" "$backend"
@@ -108,6 +110,14 @@ echo 'raise SystemExit("plinth_fixture_unpackaged was imported")' > "$ws/package
 # Packaged, but not a dependency of the root: built, not installed, not imported.
 pkg "$ws/packages/extra" plinth-fixture-extra "" "$backend"
 echo 'raise SystemExit("plinth_fixture_extra was imported")' > "$ws/packages/extra/src/plinth_fixture_extra/__init__.py"
+# Members uv finds through `**`: two directories deep, and through a hidden
+# one (uv matches hidden directories); and one a `**` exclude removes.
+pkg "$ws/nested/a/b/member" plinth-fixture-deep "" "$backend"
+echo 'X = 1' > "$ws/nested/a/b/member/src/plinth_fixture_deep/__init__.py"
+pkg "$ws/nested/.hidden/member" plinth-fixture-hidden "" "$backend"
+echo 'X = 1' > "$ws/nested/.hidden/member/src/plinth_fixture_hidden/__init__.py"
+pkg "$ws/nested/x/off/member" plinth-fixture-off "" "$backend"
+echo 'raise SystemExit("plinth_fixture_off was imported")' > "$ws/nested/x/off/member/src/plinth_fixture_off/__init__.py"
 # Packaged, but excluded from the workspace.
 pkg "$ws/packages/skipped" plinth-fixture-skipped "" "$backend"
 echo 'raise SystemExit("plinth_fixture_skipped was imported")' > "$ws/packages/skipped/src/plinth_fixture_skipped/__init__.py"
@@ -186,13 +196,14 @@ for side in gh gl; do
   "${side}_run" "$ws"
   expect "$side: passes, the member installed from dist/ beside the root" 0 \
     "import plinth_fixture_app ok" "import plinth_fixture_core ok" "import six ok" \
+    "import plinth_fixture_deep ok" "import plinth_fixture_hidden ok" \
     "OK dist/plinth_fixture_app-0.1.0-py3-none-any.whl" "OK dist/plinth_fixture_app-0.1.0.tar.gz"
   expect "$side: a packaged member the root does not depend on is named, not imported" 0 \
     "plinth_fixture_extra not imported: plinth-fixture-app does not depend on plinth-fixture-extra"
   refuse "$side: neither the unpackaged members nor the excluded one is imported" \
-    "was imported" "import plinth_fixture_virtual" "import plinth_fixture_unpackaged" "import plinth_fixture_skipped" "import plinth_fixture_extra"
+    "was imported" "import plinth_fixture_virtual" "import plinth_fixture_unpackaged" "import plinth_fixture_skipped" "import plinth_fixture_extra" "plinth_fixture_off"
   in_dist "$side: --all-packages builds the root and the packaged members only" \
-    "plinth_fixture_app-0.1.0-py3-none-any.whl plinth_fixture_app-0.1.0.tar.gz plinth_fixture_core-0.1.0-py3-none-any.whl plinth_fixture_core-0.1.0.tar.gz plinth_fixture_extra-0.1.0-py3-none-any.whl plinth_fixture_extra-0.1.0.tar.gz six-0.1.0-py3-none-any.whl six-0.1.0.tar.gz "
+    "plinth_fixture_app-0.1.0-py3-none-any.whl plinth_fixture_app-0.1.0.tar.gz plinth_fixture_core-0.1.0-py3-none-any.whl plinth_fixture_core-0.1.0.tar.gz plinth_fixture_deep-0.1.0-py3-none-any.whl plinth_fixture_deep-0.1.0.tar.gz plinth_fixture_extra-0.1.0-py3-none-any.whl plinth_fixture_extra-0.1.0.tar.gz plinth_fixture_hidden-0.1.0-py3-none-any.whl plinth_fixture_hidden-0.1.0.tar.gz six-0.1.0-py3-none-any.whl six-0.1.0.tar.gz "
   if [ "$("$tmp/run/.smoke/bin/python" -c 'import importlib.metadata as md; print(md.version("six"))' 2>&1)" = 0.1.0 ]; then
     ok "$side: the member named like a PyPI package is the one built in dist/"
   else bad "$side: six came from the index, not dist/" "$("$tmp/run/.smoke/bin/python" -m pip --version 2>&1; ls "$tmp/run/.smoke/lib"/*/site-packages)"; fi

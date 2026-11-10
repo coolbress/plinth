@@ -1163,6 +1163,7 @@ build:
       # The build plan of a uv workspace: nothing without one; else the
       # root's normalised name, then "<member name><TAB><src module dir>"
       # for each member uv packages, in members and not in exclude.
+      # Globs expand as uv's do: `**` spans any depth, hidden dirs match.
       import glob, pathlib, re, tomllib
       def load(d):
           return tomllib.loads(pathlib.Path(d, "pyproject.toml").read_text(encoding="utf-8"))
@@ -1175,8 +1176,8 @@ build:
       ws = root.get("tool", {}).get("uv", {}).get("workspace")
       if ws is not None:
           print(re.sub(r"[-_.]+", "_", root["project"]["name"]).lower())
-          out = {p for g in ws.get("exclude", []) for p in glob.glob(g)}
-          for d in sorted({p for g in ws.get("members", []) for p in glob.glob(g)} - out):
+          out = {p for g in ws.get("exclude", []) for p in glob.glob(g, recursive=True, include_hidden=True)}
+          for d in sorted({p for g in ws.get("members", []) for p in glob.glob(g, recursive=True, include_hidden=True)} - out):
               if pathlib.Path(d).resolve() == pathlib.Path(".").resolve() or not pathlib.Path(d, "pyproject.toml").is_file():
                   continue
               m = load(d)
