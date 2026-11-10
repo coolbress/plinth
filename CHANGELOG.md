@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- The token how-to has a section for cloud and scheduled Claude Code
+  sessions (#897): they act as the person, through the GitHub access
+  connected to the Claude account, not the local `gh` login the rest of the
+  page narrows. It records what #304's run measured on 2026-11-10 (the
+  owner's login and `permissions.admin: true` inside a scheduled session,
+  and a merge held back by `AGENTS.md`, not by the host), says to install the
+  Claude GitHub App on selected repositories only, and answers whether the
+  access can be narrowed below the person's role: not the role, while the
+  session is connected as the person's account; the permissions are capped by the app's list (read with `gh api apps/claude`:
+  Administration read, Workflows write) or by the token `/web-setup` sends.
+  Neither cap has been run in a cloud session.
+
 ### Changed
 
 - The eval suite's `owed-item` task now asks to close issue #1 today and
