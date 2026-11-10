@@ -31,7 +31,9 @@
 #     branch, is not green, or there is none (#855, #862): the merge is what reaches an
 #     installation with auto-update on, and it cannot be taken back. A
 #     dispatched run does not show in `gh pr checks`, so the checks below do not
-#     hold on it, and a ruleset cannot require it of release pull requests alone;
+#     hold on it. The ruleset's `ci / release-gate` (#863) holds it too; that
+#     check ran before the dispatch, so on coolbress/plinth a red one is
+#     re-run once the e2e run on the head is green, and the checks wait for it;
 #   - a check on the head is not SUCCESS once they have all finished, with one
 #     exception (#872): a NEUTRAL `CodeQL` on a pull request whose author is
 #     dependabot[bot] and whose head has no `Analyze (...)` job in any Actions
@@ -176,14 +178,17 @@ fi
 # keeps the template's pin, so a green run there never called this commit's
 # workflows from another repository (#862). A run's head_branch is also the name
 # of a tag it ran on; nothing here tells a tag named release/v* from a branch.
-if [ "$(tr '[:upper:]' '[:lower:]' <<<"$repo")" = coolbress/plinth ]; then
+# Newest first. The run started last speaks, as it does for a check name
+# below: a green run does not excuse a later red one, or one still going.
+e2e_runs_on_head() {
+  gh api -X GET "repos/$repo/actions/workflows/e2e.yml/runs" -f "head_sha=$head" -F per_page=100 \
+    --jq ".workflow_runs | map(select(.head_sha == \"$head\" and ((.head_branch // \"\") | startswith(\"release/v\")))) | sort_by(.run_started_at // .created_at) | reverse | .[] | \"\(.conclusion // .status) \(.html_url)\"" 2>&1
+}
+plinth=no; [ "$(tr '[:upper:]' '[:lower:]' <<<"$repo")" = coolbress/plinth ] && plinth=yes
+if [ "$plinth" = yes ]; then
   title="$(gh pr view "$pr" -R "$repo" --json title --jq .title)" || stop "cannot read the title of $pr"
   if [[ "$title" =~ ^chore\(release\):\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    # Newest first. The run started last speaks, as it does for a check name
-    # below: a green run does not excuse a later red one, or one still going.
-    runs="$(gh api -X GET "repos/$repo/actions/workflows/e2e.yml/runs" -f "head_sha=$head" -F per_page=100 \
-              --jq ".workflow_runs | map(select(.head_sha == \"$head\" and ((.head_branch // \"\") | startswith(\"release/v\")))) | sort_by(.run_started_at // .created_at) | reverse | .[] | \"\(.conclusion // .status) \(.html_url)\"" 2>&1)" \
-      || stop "cannot read the e2e runs on $head: $runs"
+    runs="$(e2e_runs_on_head)" || stop "cannot read the e2e runs on $head: $runs"
     newest="${runs%%$'\n'*}"
     case "$newest" in
       "success "*) ;;
@@ -196,6 +201,43 @@ if [ "$(tr '[:upper:]' '[:lower:]' <<<"$repo")" = coolbress/plinth ]; then
     esac
     echo "e2e: green on this head, on a release/v* branch: ${newest#success }"
   fi
+fi
+
+# -- ci / release-gate (#863) ------------------------------------------------
+# On coolbress/plinth the ruleset requires `ci / release-gate`, which fails a
+# release (a release/v* branch, a chore(release): title, a changed manifest
+# version: wider than the title above) until its head has a green e2e run. It
+# ran when the head was pushed, before a dispatched e2e run existed, and a
+# dispatched run starts no check of the pull request, so nothing re-runs it
+# but this: when it is red and the e2e run started last on the head, from a
+# release/v* branch, is green, once, by its job; then the checks below wait
+# for the new attempt. Red with no green e2e run: the checks below stop on it,
+# and its log says what to run. The name's run started last speaks, as below.
+if [ "$plinth" = yes ]; then
+  gate_jq='def pending: .state | IN("PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED");
+    [.[] | select(.name == "ci / release-gate")]
+    | if length == 0 then empty elif any(.[]; pending) then (map(select(pending)) | .[0]) else max_by(.startedAt // .completedAt // "") end
+    | "\(.state)\t\(.link // "")"'
+  gate="$(gh pr checks "$pr" -R "$repo" --json name,state,link,startedAt,completedAt --jq "$gate_jq")" \
+    || stop "cannot read the checks, so whether ci / release-gate needs a re-run is unknown"
+  case "${gate%%$'\t'*}" in
+    FAILURE|CANCELLED|TIMED_OUT)
+      runs="$(e2e_runs_on_head)" || stop "cannot read the e2e runs on $head, so whether ci / release-gate can pass now is unknown: $runs"
+      case "${runs%%$'\n'*}" in
+        "success "*)
+          link="${gate#*$'\t'}"
+          [[ "$link" =~ /job/([0-9]+) ]] || stop "ci / release-gate is red and its job cannot be read from its link '$link'; re-run it from the pull request's Checks tab, then run this again"
+          out="$(gh api -X POST "repos/$repo/actions/jobs/${BASH_REMATCH[1]}/rerun" 2>&1)" \
+            || stop "cannot re-run ci / release-gate (job ${BASH_REMATCH[1]}): $out" \
+                    "re-run it from the pull request's Checks tab with a login that can write to the repository's Actions, then run this again"
+          echo "re-ran ci / release-gate (job ${BASH_REMATCH[1]}), red from before the e2e run: $link"
+          # Until the new attempt shows, the old red one is the newest.
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            gate="$(gh pr checks "$pr" -R "$repo" --json name,state,link,startedAt,completedAt --jq "$gate_jq")" || gate=""
+            case "${gate%%$'\t'*}" in FAILURE|CANCELLED|TIMED_OUT) sleep "$poll" ;; *) break ;; esac
+          done ;;
+      esac ;;
+  esac
 fi
 
 # -- checks ----------------------------------------------------------------

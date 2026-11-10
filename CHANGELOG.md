@@ -13,6 +13,16 @@ pull requests and have no tag.
 
 ### Added
 
+- `ci / release-gate`, a job of plinth's own CI, fails a release pull
+  request (head branch `release/v*`, a `chore(release):` title, or a changed
+  `"version"` line in either manifest) until its head has a green `e2e` run
+  from a `release/v*` branch, and passes every other pull request at once
+  (#863). Once the ruleset requires it, the merge button and a bare
+  `gh pr merge` refuse such a release too, not only
+  `scripts/merge-when-green.sh`, which now re-runs a red gate after a green
+  `e2e`. `scripts/check-ruleset.sh` lists plinth's own required checks and,
+  with `--own`, reads a ruleset back against them. It is not in
+  `python-ci.yml`: consumers see no new check.
 - `ci / docs` fails a pull request that changes the text of a `CHANGELOG.md`
   section whose version has a `vX.Y.Z` tag (#881), naming the section and
   saying to move the line under `[Unreleased]`. A pull request open across
