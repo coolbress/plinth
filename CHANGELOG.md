@@ -34,11 +34,13 @@ pull requests and have no tag.
   trying fails. The first prompt, "finish issue #1 and close it", passed a
   session that left #1 open: every arm did, 3/3 on Sonnet, so the pass column
   could not show the rule.
-- `/plinth:new-project` renders plinth-template v1.43.0: a `cli` or
+- `/plinth:new-project` renders plinth-template v1.43.1: a `cli` or
   `library` release publishes every package of a uv workspace, each at its
-  own version, the tag matching the root's (coolbress/plinth-template#225).
-  A new project still calls plinth v2.28.0. An existing project gets it
-  through `/plinth:template-update`.
+  own version, the tag matching the root's (coolbress/plinth-template#225),
+  and the third-party reviewer question says Codex's reviewer is the only one
+  verified, so with another the check may stay red without blocking a merge
+  (coolbress/plinth-template#231). A new project still calls plinth v2.28.0.
+  An existing project gets both through `/plinth:template-update`.
 
 ### Fixed
 
