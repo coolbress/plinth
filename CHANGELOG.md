@@ -28,8 +28,10 @@ pull requests and have no tag.
 
 - `python-ci.yml`, `plinth-ci.yml` and `e2e.yml` send the job's own token when
   they download uv, gitleaks, actionlint and lychee from a GitHub release
-  (#878), so an outage that sheds anonymous requests, like GitHub's 504s on
-  2026-11-09, no longer stops a consumer's required checks. curl sends it to
+  (#878). On 2026-11-09 GitHub answered anonymous requests with 504 for about
+  two hours and said authenticated ones were unaffected; these downloads are
+  now in the authenticated class. Whether they get through the next such
+  outage is not tested. curl sends the token to
   `github.com` only, not to the storage host it redirects to; with no token the
   download is anonymous as before, and the checksums are verified as before.
   `tests/release-download-token.sh` fails on a release download without it.
