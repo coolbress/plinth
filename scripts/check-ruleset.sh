@@ -33,13 +33,62 @@ merge_invariants() { # <file>
   [ "$fail" = 0 ] && { echo "RESULT PASS"; return 0; }
   echo "RESULT FAIL"; return 1
 }
+# plinth's own repository (coolbress/plinth) requires its own checks, not
+# ruleset.json's nine: the jobs of .github/workflows/plinth-ci.yml under the
+# caller `ci`, and the reviewer. `ci / release-gate` (#863) holds a release
+# pull request's merge until a green e2e on its head. Consumers are
+# unaffected: none of these is a job of python-ci.yml, and ruleset.json, the
+# wall every repository the door creates gets, names none of them.
+own_checks='["ci / docs","ci / install","ci / tools","ci / release-gate","third-party / review"]'
+# Offline, on every run: each `ci / <job>` of the list is a job of
+# plinth-ci.yml and not of python-ci.yml. `--own <file>` also checks a ruleset
+# as GitHub returns it (gh api repos/coolbress/plinth/rulesets/<id>), the read
+# back after a change to plinth's own `main protection`.
+own_invariants() { # [<live ruleset file>]
+  local fail=0 c job
+  echo "plinth's own required checks: $own_checks"
+  for c in $(jq -r '.[]|select(startswith("ci / "))|sub("^ci / ";"")' <<<"$own_checks"); do
+    job="^  $c:\$"
+    if grep -qE "$job" .github/workflows/plinth-ci.yml; then printf '  PASS  ci / %s is a job of plinth-ci.yml\n' "$c"
+    else printf '  FAIL  ci / %s is not a job of plinth-ci.yml\n' "$c"; fail=1; fi
+    if grep -qE "$job" .github/workflows/python-ci.yml; then printf '  FAIL  ci / %s is a job of python-ci.yml: every consumer would report it\n' "$c"; fail=1
+    else printf '  PASS  ci / %s is not in python-ci.yml, so consumers are unaffected\n' "$c"; fi
+  done
+  if jq -e --argjson own "$own_checks" '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].context] | any(IN($own[]))' ruleset.json >/dev/null; then
+    echo "  FAIL  ruleset.json, every consumer's wall, requires one of plinth's own checks"; fail=1
+  else echo "  PASS  ruleset.json requires none of plinth's own checks"; fi
+  if [ -n "${1:-}" ]; then
+    local f="$1" got
+    jq empty "$f" 2>/dev/null || { echo "  FAIL  $f is not valid JSON"; return 1; }
+    got="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[]|.context]|sort' "$f")"
+    if [ "$got" = "$(jq -c sort <<<"$own_checks")" ]; then echo "  PASS  the live ruleset requires exactly these"
+    else printf '  FAIL  the live ruleset requires %s\n' "$got"; fail=1; fi
+    got="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].integration_id]|unique' "$f")"
+    if [ "$got" = '[15368]' ]; then echo "  PASS  each from the GitHub Actions app (15368)"
+    else printf '  FAIL  integration ids %s, not [15368]\n' "$got"; fail=1; fi
+    # An exclusion can take the default branch back out (refs/heads/main), so
+    # none is allowed, as for ruleset-merge.json.
+    got="$(jq -c '{enforcement, include: .conditions.ref_name.include, exclude: (.conditions.ref_name.exclude // [])}' "$f")"
+    if [ "$got" = '{"enforcement":"active","include":["~DEFAULT_BRANCH"],"exclude":[]}' ]; then echo "  PASS  enforced, on the default branch, nothing excluded"
+    else printf '  FAIL  not enforced on the default branch: %s\n' "$got"; fail=1; fi
+    got="$(jq -c '.bypass_actors' "$f")"
+    if [ "$got" = '[]' ]; then echo "  PASS  no bypass actors"
+    else printf '  FAIL  bypass actors %s\n' "$got"; fail=1; fi
+  fi
+  [ "$fail" = 0 ] && { echo "RESULT PASS"; return 0; }
+  echo "RESULT FAIL"; return 1
+}
 if [ "${1:-}" = "--merge" ]; then
   merge_invariants "${2:-ruleset-merge.json}"; exit
+fi
+if [ "${1:-}" = "--own" ]; then
+  own_invariants "${2:?usage: check-ruleset.sh --own <ruleset as gh api returns it>}"; exit
 fi
 if [ $# = 0 ]; then
   rc=0
   "$0" ruleset.json || rc=1
   merge_invariants ruleset-merge.json || rc=1
+  own_invariants || rc=1
   exit "$rc"
 fi
 
