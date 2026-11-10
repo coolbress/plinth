@@ -66,8 +66,10 @@ own_invariants() { # [<live ruleset file>]
     got="$(jq -c '[.rules[]|select(.type=="required_status_checks").parameters.required_status_checks[].integration_id]|unique' "$f")"
     if [ "$got" = '[15368]' ]; then echo "  PASS  each from the GitHub Actions app (15368)"
     else printf '  FAIL  integration ids %s, not [15368]\n' "$got"; fail=1; fi
-    got="$(jq -c '{enforcement, include: .conditions.ref_name.include}' "$f")"
-    if [ "$got" = '{"enforcement":"active","include":["~DEFAULT_BRANCH"]}' ]; then echo "  PASS  enforced, on the default branch"
+    # An exclusion can take the default branch back out (refs/heads/main), so
+    # none is allowed, as for ruleset-merge.json.
+    got="$(jq -c '{enforcement, include: .conditions.ref_name.include, exclude: (.conditions.ref_name.exclude // [])}' "$f")"
+    if [ "$got" = '{"enforcement":"active","include":["~DEFAULT_BRANCH"],"exclude":[]}' ]; then echo "  PASS  enforced, on the default branch, nothing excluded"
     else printf '  FAIL  not enforced on the default branch: %s\n' "$got"; fail=1; fi
     got="$(jq -c '.bypass_actors' "$f")"
     if [ "$got" = '[]' ]; then echo "  PASS  no bypass actors"

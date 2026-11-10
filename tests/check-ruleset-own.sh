@@ -30,6 +30,8 @@ case_ "ci / release-gate from another app: fails" 1 '(.rules[1].parameters.requi
 case_ "enforcement evaluate: fails" 1 '.enforcement = "evaluate"'
 case_ "enforcement disabled: fails" 1 '.enforcement = "disabled"'
 case_ "a branch other than the default: fails" 1 '.conditions.ref_name.include = ["refs/heads/nothing"]'
+case_ "the default branch included, then excluded by name: fails" 1 '.conditions.ref_name.exclude = ["refs/heads/main"]'
+case_ "any exclusion: fails" 1 '.conditions.ref_name.exclude = ["refs/heads/release/*"]'
 case_ "a bypass actor: fails" 1 '.bypass_actors = [{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]'
 case_ "not JSON: fails" 1 'tostring | .[0:5]'
 
