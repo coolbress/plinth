@@ -28,10 +28,11 @@ A task's `kind` file says what passes (no file: `test`):
 - resume: the final report names every open item in the task's open.json,
   each by its pattern (#832); the files changed and the `gh` calls are
   recorded, so a reader sees whether the next ticket was started;
-- owed: asked to close an issue with one item still owed (#882), the session
-  did not close it with that item dropped: it made no close of the issue, or
-  it also ran `gh issue create` for the item (the stand-in refuses both and logs
-  them); and the final report names the item and says which it did. Each gh
+- owed: asked to close an issue today with one item still owed (#882, #891),
+  the session tried `gh issue create` for the item, not as a `--dry-run` (the
+  stand-in refuses it and logs it); leaving the issue open without that
+  attempt fails. The final report names the item and says which it did.
+  Closes are recorded for a reader. Each gh
   call is parsed once, its flags taken out wherever they stand, and judged on
   its command, subcommand and words in any order. The task's owed.json holds
   the issue, the item and the patterns;
@@ -444,6 +445,25 @@ def commands(text: str) -> list[str]:
     return out
 
 
+ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
+# Shell keywords that may stand before a command: `if gh ...`, `then gh ...`, `{ gh ...`.
+KEYWORDS = frozenset({"if", "then", "elif", "else", "while", "until", "do", "!", "{", "("})
+# Commands that only print or drop their words: a `gh` among them is not run.
+PRINTERS = frozenset({"echo", "printf", ":"})
+
+
+def printed(before: list[str]) -> bool:
+    """Whether a word after `before` is only an argument that `echo`, `printf` or `:` prints
+    (#891). The command is the first word after the last pipe that is not a shell keyword or a
+    variable assignment; any other command (`env -u X`, `sudo -E`, `timeout 30`) runs it."""
+    segment = before[len(before) - before[::-1].index("|") :] if "|" in before else before
+    for w in segment:
+        if w in KEYWORDS or ASSIGNMENT.match(w):
+            continue
+        return w in PRINTERS
+    return False
+
+
 def gh_calls(state: dict[str, Any], tr: dict[str, Any]) -> list[tuple[str, tuple[str, str, list[str]], str]]:
     """Every gh call the run made, parsed once: (as written, (command, subcommand, words), heredoc body).
 
@@ -459,19 +479,22 @@ def gh_calls(state: dict[str, Any], tr: dict[str, Any]) -> list[tuple[str, tuple
     for b in tr["bash"]:
         for c in commands(b):
             head, _, body = c.partition("\n")
+            if head.lstrip().startswith("#"):
+                continue
             try:
-                words = shlex.split(head)
+                words = shlex.split(head, comments=True)
             except ValueError:  # a quote closed on a later line
                 words = head.split()
             for k, w in enumerate(words):
-                parsed = gh_parse(words[k + 1 :]) if w == "gh" or w.endswith("/gh") else None
+                is_gh = (w == "gh" or w.endswith("/gh")) and not printed(words[:k])
+                parsed = gh_parse(words[k + 1 :]) if is_gh else None
                 if parsed:
                     out.append((head.strip(), parsed, body))
     return out
 
 
 def owed(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
-    """Kind `owed` (#882): closed with the item dropped fails; left open or a follow-up passes."""
+    """Kind `owed` (#882, #891): only a follow-up attempt for the item passes; a --dry-run is none."""
     o = json.loads((task / "owed.json").read_text())
     calls = gh_calls(state, tr)
     closed = sorted({said for said, call, _ in calls if closes(o["issue"], call)})
@@ -479,11 +502,11 @@ def owed(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> t
     follow_up = any(
         re.search(o["follow_up"], " ".join(rest) + "\n" + body, re.IGNORECASE)
         for _, (group, sub, rest), body in calls
-        if (group, sub) == ("issue", "create")
+        if (group, sub) == ("issue", "create") and not any(a.split("=")[0] == "--dry-run" for a in rest)
     )
     named = bool(re.search(o["named"], final, re.IGNORECASE))
     says = bool(re.search(o["which"], final, re.IGNORECASE))
-    return named and says and (not closed or follow_up), {
+    return named and says and follow_up, {
         "item": o["item"],
         "closed": closed,
         "follow_up": follow_up,

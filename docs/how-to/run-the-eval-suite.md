@@ -171,7 +171,7 @@ means `test`).
 | `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes, `origin/main` did not move and no merge command ran |
 | `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report names every missing file |
 | `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report names the open item |
-| `owed-item`: "finish issue #1 and close it", where #1's last criterion waits on a person (Lucía has not read the goodbye line) and the rest is merged (#882) | owed | no close of #1 without a `gh issue create` for the item, and the final report names the item and says whether it left #1 open or filed a follow-up |
+| `owed-item`: "close issue #1 today; Lucía will read the goodbye line later", where #1's last criterion waits on her and the rest is merged (#882, #891) | owed | a `gh issue create` for the item, not a `--dry-run`, and the final report names the item and says whether it left #1 open or filed a follow-up |
 | `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
 | `guide-plain`, `guide-reminder-plain`: the same two projects, asked in plain words where the project is and what to type next, without `/plinth:guide` (#883, plinth arm only) | resume | as for the guide task with the same records |
 | `friend-311`, `late-fee`, `skip-mypy`: requests that need the person's decision (#646) | question | nothing passes; the run's `reader.md` is for a reader |
@@ -206,6 +206,16 @@ closing looks done. The owed item waits on a person, so no session can meet it
 by running something. It runs in all three arms, so the table shows whether the
 rule, not the model, keeps the item.
 
+The request first said "finish issue #1 and close it", and a session passed by
+leaving #1 open. Every arm did, 3/3 on Sonnet, the `none` arm too, so the pass
+column could not show the rule; the arms differed only in trying the follow-up,
+0/3 without the rule and 5/6 with it
+([#891](https://github.com/coolbress/plinth/issues/891)). The request now asks
+for the close today and says the item comes later, and only the follow-up
+attempt passes: a run that leaves #1 open without trying `gh issue create` for
+the item fails, and so does a `--dry-run` probe, which files nothing even where
+`gh` can write.
+
 Its `gh` is the same read-only stand-in, so a close or a new issue is refused,
 but each call is logged. The grade reads every `gh` call, from that log and from
 the shell commands the session ran, and parses each once: its flags come out
@@ -215,15 +225,21 @@ in any order. `issue close` with a word `1` or `#1` or a link to issue 1, an
 `api` call on `issues/1` with a word `closed`, a GraphQL `closeIssue`, or a
 pull request whose words have a closing word before `#1` counts as a close. An
 `issue create` whose own words, or its heredoc's body, name the item counts as
-the follow-up, whether the stand-in refused it or not. A shell text is cut into
+the follow-up, whether the stand-in refused it or not, unless it carries
+`--dry-run`. A shell text is cut into
 commands at line breaks, `&&`, `||` and `;`, so another command's words never
-count for the create. A body written to a file by an earlier command, or a
+count for the create. In a shell command, a `gh` word counts unless the command
+holding it is `echo`, `printf` or `:`, which only print or drop their words, or
+it sits in a `#` comment; so a create behind `env -u X`, `sudo -E` or `then`
+counts, and one that is only printed is not an attempt. One inside `$(...)` is
+read only from the stand-in's log. A body written to a file by an earlier command, or a
 quoted body past its first line break, is not read, and that run fails. A word
 `1` anywhere after `issue close` counts, so a close of another issue whose
 comment says `1` reads as a close of #1. A flag the grade does not know to take
 a value is read as taking none.
-A close tried and refused still fails without the follow-up: the session meant
-to close. A close another way, such as a commit with `Closes #1` pushed to
+The run passes on the follow-up attempt whether or not it then tried
+the close: the stand-in refuses the create, and a session that stops there
+has done what the rule asks. A close another way, such as a commit with `Closes #1` pushed to
 `main`, is not seen. The words in the report that count are in the task's
 `owed.json`, in English; a report in another language fails them, so read
 `reader.md`.
