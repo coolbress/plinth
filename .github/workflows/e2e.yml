@@ -29,6 +29,9 @@ name: e2e
 # selectable), or a classic one with repo, workflow and delete_repo. Without
 # it the job fails at the token prompt: an empty token is refused, so a
 # missing secret is red, never a pass. No job is skipped with `if:`.
+#
+# A release download sends the job's token, as python-ci.yml's do (#878);
+# tests/release-download-token.sh holds the form.
 
 on:
   schedule:
@@ -86,13 +89,14 @@ jobs:
 
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -131,13 +135,14 @@ jobs:
 
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
