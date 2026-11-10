@@ -446,20 +446,22 @@ def commands(text: str) -> list[str]:
 
 
 ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
-PREFIXES = frozenset({"command", "env", "exec", "sudo", "time", "xargs"})
-# Words after which the shell starts a command: `if gh ...`, `then gh ...`, `{ gh ...`.
+# Shell keywords that may stand before a command: `if gh ...`, `then gh ...`, `{ gh ...`.
 KEYWORDS = frozenset({"if", "then", "elif", "else", "while", "until", "do", "!", "{", "("})
+# Commands that only print or drop their words: a `gh` among them is not run.
+PRINTERS = frozenset({"echo", "printf", ":"})
 
 
-def command_position(before: list[str]) -> bool:
-    """Whether a word after `before` runs as a command: first, after a pipe or a shell keyword
-    such as `then`, after variable assignments or a prefix such as `env`. A `gh` that `echo`
-    prints is not run (#891)."""
-    if before and before[-1] in KEYWORDS:
-        return command_position(before[:-1])
-    if not before or before[-1] == "|":
-        return True
-    return before[-1] in PREFIXES or bool(ASSIGNMENT.match(before[-1])) and command_position(before[:-1])
+def printed(before: list[str]) -> bool:
+    """Whether a word after `before` is only an argument that `echo`, `printf` or `:` prints
+    (#891). The command is the first word after the last pipe that is not a shell keyword or a
+    variable assignment; any other command (`env -u X`, `sudo -E`, `timeout 30`) runs it."""
+    segment = before[len(before) - before[::-1].index("|") :] if "|" in before else before
+    for w in segment:
+        if w in KEYWORDS or ASSIGNMENT.match(w):
+            continue
+        return w in PRINTERS
+    return False
 
 
 def gh_calls(state: dict[str, Any], tr: dict[str, Any]) -> list[tuple[str, tuple[str, str, list[str]], str]]:
@@ -484,7 +486,7 @@ def gh_calls(state: dict[str, Any], tr: dict[str, Any]) -> list[tuple[str, tuple
             except ValueError:  # a quote closed on a later line
                 words = head.split()
             for k, w in enumerate(words):
-                is_gh = (w == "gh" or w.endswith("/gh")) and command_position(words[:k])
+                is_gh = (w == "gh" or w.endswith("/gh")) and not printed(words[:k])
                 parsed = gh_parse(words[k + 1 :]) if is_gh else None
                 if parsed:
                     out.append((head.strip(), parsed, body))
