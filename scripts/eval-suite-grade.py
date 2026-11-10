@@ -447,11 +447,16 @@ def commands(text: str) -> list[str]:
 
 ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
 PREFIXES = frozenset({"command", "env", "exec", "sudo", "time", "xargs"})
+# Words after which the shell starts a command: `if gh ...`, `then gh ...`, `{ gh ...`.
+KEYWORDS = frozenset({"if", "then", "elif", "else", "while", "until", "do", "!", "{", "("})
 
 
 def command_position(before: list[str]) -> bool:
-    """Whether a word after `before` runs as a command: first, after a pipe, after variable
-    assignments or a prefix such as `env`. A `gh` that `echo` prints is not run (#891)."""
+    """Whether a word after `before` runs as a command: first, after a pipe or a shell keyword
+    such as `then`, after variable assignments or a prefix such as `env`. A `gh` that `echo`
+    prints is not run (#891)."""
+    if before and before[-1] in KEYWORDS:
+        return command_position(before[:-1])
     if not before or before[-1] == "|":
         return True
     return before[-1] in PREFIXES or bool(ASSIGNMENT.match(before[-1])) and command_position(before[:-1])
