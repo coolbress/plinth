@@ -32,7 +32,7 @@ cat >"$work/check.py" <<'PY'
 import re, sys
 FRAG = '${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"}'
 ENV = re.compile(r'^\s+GITHUB_TOKEN: \$\{\{ (github\.token|secrets\.GITHUB_TOKEN) \}\}\s*$')
-URL = re.compile(r'https://github\.com/[^/\s"]+/[^/\s"]+/releases/download/')
+URL = re.compile(r'https://github\.com/[^/\s"]+/[^/\s"]+/releases/(latest/)?download/')
 STEP = re.compile(r'^(\s*)- (name|uses|id|run|env|if|with):')
 problems, empty = [], []
 for path in sys.argv[1:]:
@@ -96,6 +96,12 @@ done
 must_refuse "a token in a step with no GITHUB_TOKEN in its env" e2e.yml \
   '          GITHUB_TOKEN: ${{ github.token }}'$'\n' "" "the step's env has no GITHUB_TOKEN"
 must_refuse "--location-trusted" python-ci.yml "$frag" "$frag--location-trusted " "--location-trusted"
+seed e2e.yml "" ""
+python3 -c 'import sys; p, frag = sys.argv[1:]; t = open(p).read(); open(p, "w").write(t.replace(frag, "", 1).replace("/releases/download/${UV_VERSION}/", "/releases/latest/download/", 1))' \
+  "$work/w/e2e.yml" "$frag"
+out="$(check "$work/w/"*.yml 2>&1)"; rc=$?
+[ "$rc" = 1 ] && grep -qF "curl to a github.com release without" <<<"$out" && ok "a releases/latest/download URL without the token fails (must not pass)" ||
+  bad "a releases/latest/download URL without the token passed (exit $rc)"
 must_refuse "a release download by wget" plinth-ci.yml "curl -fsSL --retry 3 $frag" "wget -q " "not curl"
 seed e2e.yml "" ""  # then every release URL in it moved off github.com
 python3 -c 'import sys; p = sys.argv[1]; t = open(p).read(); open(p, "w").write(t.replace("https://github.com/", "https://example.invalid/"))' "$work/w/e2e.yml"
@@ -105,7 +111,7 @@ check "$work/w/"*.yml >/dev/null 2>&1; rc=$?
 
 echo "the workflows:"
 if out="$(check "${files[@]/#/$root/.github/workflows/}" 2>&1)"; then
-  n="$(cat "${files[@]/#/$root/.github/workflows/}" | grep -cE 'https://github\.com/[^/]+/[^/]+/releases/download/')"
+  n="$(cat "${files[@]/#/$root/.github/workflows/}" | grep -cE 'https://github\.com/[^/]+/[^/]+/releases/(latest/)?download/')"
   ok "every github.com release download sends the token ($n: ${files[*]})"
 else bad "a release download is anonymous:"; printf '%s\n' "$out"; fi
 
@@ -139,9 +145,10 @@ for t in "$token" ""; do
   else bad "$label: uv $v downloaded but its checksum is not $sum"; fi
   got="$(hosts "$work/log" | paste -sd, -)"
   if [ -n "$t" ]; then
-    [[ "$got" =~ ^github\.com\ auth,[^,]+\ none$ ]] && [[ "$got" != *",github.com "* ]] &&
-      ok "$label: the header went to github.com and not to the redirect host ($got)" ||
-      bad "$label: expected the header on github.com only, then one redirect without it; got $got"
+    # The first request, to github.com, with it; every redirect after it without.
+    if [[ "$got" =~ ^github\.com\ auth,.+$ ]] && [[ "${got#*,}" != *auth* ]]; then
+      ok "$label: the header went to github.com and not to the redirect host ($got)"
+    else bad "$label: expected the header on github.com only and on no redirect after it; got $got"; fi
   else
     [[ "$got" != *auth* ]] && ok "$label: no header on any request ($got)" || bad "$label: a header was sent ($got)"
   fi
