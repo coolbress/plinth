@@ -36,6 +36,15 @@ pull requests and have no tag.
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
 
+### Changed
+
+- `README.md`'s auto-update paragraph and the getting-started tutorial say when
+  the pass runs (in a session after its first message, within about ten
+  minutes; not on opening a session, not in `claude -p`) and that the new
+  version applies after `/reload-plugins` or in a new session, linking
+  Claude Code's [When auto-update runs](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)
+  (#879).
+
 ### Fixed
 
 - `scripts/make-release.sh`'s run 1 now names the smoke run in its `next:`

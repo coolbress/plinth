@@ -310,5 +310,9 @@ plan ([about GitLab](../explanation/concepts.md#about-gitlab)):
   project, run `/plugin`, and choose Marketplaces, plinth, Enable auto-update.
   It also brings raised dependency pins, and the same menu turns it off.
   Inside a project the same choice rewrites that project's committed
-  `.claude/settings.json`. You still type `/reload-plugins` when the notice
-  asks: [what it does and what was measured](../../README.md#install-in-detail).
+  `.claude/settings.json`. The pass runs in a session after its first message,
+  within about ten minutes, not when a session opens and not in `claude -p`
+  ([When auto-update runs](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)).
+  The session then shows `Plugin updated: plinth · Run /reload-plugins to apply`
+  and keeps the old skills until `/reload-plugins` or a new session:
+  [what it does and what was measured](../../README.md#install-in-detail).
