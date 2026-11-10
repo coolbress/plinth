@@ -13,6 +13,13 @@ pull requests and have no tag.
 
 ### Changed
 
+- The eval suite's `owed-item` task now asks to close issue #1 today and
+  says the owed item comes later, and passes only a session that tries
+  `gh issue create` for the item (#891). A `--dry-run` probe, or a create that
+  `echo` prints, does not count, and a session that leaves #1 open without
+  trying fails. The first prompt, "finish issue #1 and close it", passed a
+  session that left #1 open: every arm did, 3/3 on Sonnet, so the pass column
+  could not show the rule.
 - `/plinth:new-project` renders plinth-template v1.43.0: a `cli` or
   `library` release publishes every package of a uv workspace, each at its
   own version, the tag matching the root's (coolbress/plinth-template#225).
@@ -74,12 +81,9 @@ tested with plinth-template v1.42.1
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
 - The eval suite has an `owed-item` task (#882), in all three arms: asked to
-  close an issue today whose last criterion waits on a person until later, a
-  session passes when it tries `gh issue create` for the item (a `--dry-run`
-  probe does not count), and its final report names the item and says what it
-  did. A first version asked to "finish and close" the issue and passed a
-  session that left it open; every arm did, so it could not show the rule
-  (#891). Its new grading kind, `owed`,
+  finish and close an issue whose last criterion still waits on a person, a
+  session passes when it leaves the issue open or files a follow-up issue for
+  the item, and its final report says which. Its new grading kind, `owed`,
   reads the closes and new issues the read-only `gh` stand-in refused and
   logged. It measures the follow-up half of the template's "Coming back" rule,
   which `next-day` does not.
