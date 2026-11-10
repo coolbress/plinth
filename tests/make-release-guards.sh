@@ -260,7 +260,7 @@ is "committed on release/v$next"   [ "$(g rev-parse --abbrev-ref HEAD)" = "relea
 is "the tree is clean after the commit" [ -z "$(g status --porcelain --untracked-files=no)" ]
 is "the commit title is chore(release): v$next" [ "$(g log -1 --format=%s)" = "chore(release): v$next" ]
 is "it says to run e2e on the branch before the merge" says "gh workflow run e2e.yml --ref release/v$next"
-is "it names the smoke run, run from a clone on the branch" says "scripts/eval-suite.sh --smoke"
+is "it names the smoke run, run from a clone on the branch" says "git switch release/v$next && scripts/eval-suite.sh --smoke"
 # In cut-a-release.md's order: the e2e dispatch, the smoke run beside it
 # (step 5), then the merge (step 6).
 line_of() { grep -nF -m1 -- "$1" "$work/out" | cut -d: -f1; }

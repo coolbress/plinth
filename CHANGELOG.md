@@ -163,6 +163,12 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6682324
 
 ### Added
 
+- The eval suite has an eleventh task, `next-day` (#832): "carry on where
+  we left off" on a project whose last merged pull request and closed issue
+  leave one item unverified, with an unrelated issue open as the next ticket.
+  It passes only when the final report names that item. Its sessions get a
+  read-only `gh` that serves the planted issues and pull request offline;
+  it refuses writes. The full suite is now 99 runs.
 - The eval suite has two tasks that grade what `/plinth:guide` says (#836):
   `guide` and `guide-reminder`, plinth arm only, three runs each. A report must
   name the release on a tag, must not call it planned or not built, must not
@@ -171,12 +177,6 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6682324
   use. The suite's read-only `gh` now serves `--jq`, which needs `jq` on the
   PATH, and a task's new `arms` file limits the arms it runs in. Run them with
   a release that touches the guide or the arsenal's table.
-- The eval suite has an eleventh task, `next-day` (#832): "carry on where
-  we left off" on a project whose last merged pull request and closed issue
-  leave one item unverified, with an unrelated issue open as the next ticket.
-  It passes only when the final report names that item. Its sessions get a
-  read-only `gh` that serves the planted issues and pull request offline;
-  it refuses writes. The full suite is now 99 runs.
 
 ### Changed
 
