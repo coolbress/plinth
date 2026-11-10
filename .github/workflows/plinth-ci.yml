@@ -1,6 +1,9 @@
 name: plinth-ci
 # plinth's own checks. Called from ci.yml so the names come out as `ci / <job>`.
 # No job is skipped with `if:`; a skipped job has no check name.
+#
+# A release download sends the job's token, as python-ci.yml's do (#878);
+# tests/release-download-token.sh holds the form.
 
 on:
   workflow_call:
@@ -89,13 +92,14 @@ jobs:
       # uv for the web checks' fixture projects, the release python-ci.yml pins.
       - name: Install uv (official release, SHA256 verified)
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           UV_VERSION: "0.13.7"
           UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/uv"; mkdir -p "$d"
           f="uv-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
           echo "${UV_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
@@ -117,6 +121,12 @@ jobs:
 
       - name: Every uv pin is one release and its checksum, the template's too
         run: ./tests/uv-pin.sh
+
+      # The token is the job's, so the log's `curl -v` lines show it masked.
+      - name: Every github.com release download sends the token, to github.com only
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./tests/release-download-token.sh
 
       - name: A uv pin behind upstream opens one issue, and closes it with an ending once raised
         run: ./tests/uv-pin-reminder-cases.sh
@@ -252,6 +262,8 @@ jobs:
       # The version and the checksum are read from tests/workflow-lint.sh, the
       # one pin; that script fails here when another version ends up on PATH.
       - name: Install actionlint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           v="$(sed -n 's/^actionlint_version="\(.*\)"$/\1/p' tests/workflow-lint.sh)"
@@ -259,7 +271,7 @@ jobs:
           if [ -z "$v" ] || [ -z "$sum" ]; then echo "actionlint pin not found in tests/workflow-lint.sh"; exit 1; fi
           d="$RUNNER_TEMP/actionlint"; mkdir -p "$d"
           f="actionlint_${v}_linux_amd64.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/rhysd/actionlint/releases/download/v${v}/$f"
           echo "${sum}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" actionlint
@@ -336,7 +348,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/lychee"; mkdir -p "$d"
           f="lychee-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 -o "$d/$f" \
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
             "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/$f"
           echo "${LYCHEE_SHA256}  $d/$f" | sha256sum -c -
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/lychee"
