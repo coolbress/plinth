@@ -552,6 +552,25 @@ check "a guide whose script ran gh past the stand-in is counted as not reaching 
 EVAL_STUB_ACTIONS=reminder-right,reminder-implement suite --config-dir "$tmp/cfg" --task guide-reminder --arm plinth --runs 2 --out "$tmp/gr"
 check "guide-reminder passes on the template update and fails on /implement" \
   '[ "$(kg gr guide-reminder 1 "r[\"pass\"]")" = True ] && [ "$(kg gr guide-reminder 2 "r[\"pass\"]")" = False ]' "$(kg gr guide-reminder 2 'r["task_record"]')"
+# --- the plain-question tasks (#883): the guide's records and patterns, asked without the guide
+for pair in guide:guide-plain guide-reminder:guide-reminder-plain; do
+  g="$root/eval-suite/tasks/${pair%%:*}" p="$root/eval-suite/tasks/${pair##*:}"
+  same=yes; for f in archetype arms issues.json kind open.json; do cmp -s "$g/$f" "$p/$f" || same="no: $f"; done
+  check "${pair##*:} grades the same records on the same patterns as ${pair%%:*}" '[ "$same" = yes ]' "$same"
+  check "${pair##*:} asks in plain words: its prompt types no command" '! grep -q "/" "$p/prompt.txt"' "$(cat "$p/prompt.txt")"
+done
+: > "$log"
+EVAL_STUB_ACTIONS=guide-right,guide-old suite --config-dir "$tmp/cfg" --task guide-plain --task guide-reminder-plain --runs 2 --out "$tmp/gp"
+check "the plain-question tasks run in the plinth arm only, four sessions from the default three arms" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 4 ] && [ ! -e "$tmp/gp/runs/guide-plain-repo-only-1" ] && [ ! -e "$tmp/gp/runs/guide-plain-none-1" ]' "$(cat "$tmp/out.txt")"
+check "guide-plain passes a correct report and fails the old false sentences, as guide does" \
+  '[ "$(missed gp guide-plain 1)" = "True: " ] && [ "$(missed gp guide-plain 2)" = "False: $rel; $mon" ]' "$(missed gp guide-plain 1; missed gp guide-plain 2)"
+check "must not pass: guide-reminder-plain on a report whose one command is /grilling" \
+  '[ "$(kg gp guide-reminder-plain 1 "r[\"pass\"]")" = False ]' "$(kg gp guide-reminder-plain 1 'r["task_record"]')"
+: > "$log"
+EVAL_STUB_ACTIONS=reminder-right suite --config-dir "$tmp/cfg" --task guide-reminder-plain --runs 1 --out "$tmp/gq"
+check "guide-reminder-plain passes on the template update" \
+  '[ "$(kg gq guide-reminder-plain 1 "r[\"pass\"]")" = True ]' "$(kg gq guide-reminder-plain 1 'r["task_record"]')"
 : > "$log"
 suite --config-dir "$tmp/cfg" --task guide --arm none --runs 1 --out "$tmp/gn"
 check "guide named in an arm it does not run in stops (exit 2), not an empty green table" \

@@ -1,0 +1,43 @@
+{
+  "repo": "trial/probe",
+  "issues": [
+    {
+      "number": 1,
+      "title": "Say goodbye in Spanish",
+      "state": "CLOSED",
+      "labels": ["task"],
+      "author": "trial",
+      "createdAt": "2026-11-03T09:12:00Z",
+      "updatedAt": "2026-11-04T17:40:00Z",
+      "closedAt": "2026-11-04T17:40:00Z",
+      "body": "## What to build\n\nA `farewell(name)` function next to `greet`.\n\n## Outcome\n\nCompleted by #3.\n",
+      "comments": []
+    }
+  ],
+  "pulls": [
+    {
+      "number": 2,
+      "title": "docs: first pull request",
+      "state": "MERGED",
+      "headRefName": "docs/first",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-03T08:40:00Z",
+      "mergedAt": "2026-11-03T09:01:00Z",
+      "body": "## What and why\n\nThe project's first pull request.\n",
+      "comments": []
+    },
+    {
+      "number": 3,
+      "title": "feat: say goodbye in Spanish",
+      "state": "MERGED",
+      "headRefName": "feat/farewell",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-04T15:02:00Z",
+      "mergedAt": "2026-11-04T17:38:00Z",
+      "body": "## What and why\n\nAdds `farewell(name)`.\n\nCloses #1\n",
+      "comments": []
+    }
+  ]
+}

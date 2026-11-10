@@ -27,7 +27,7 @@ pull requests and have no tag.
 
 - `scripts/eval-suite.sh --release` is the run a release that must run the eval
   suite uses (#876): every task in the `repo-only` and `plinth` arms, three runs
-  each (78 runs), under a US$15 ceiling. It leaves out the `none` arm, which
+  each (84 runs), under a US$15 ceiling. It leaves out the `none` arm, which
   nothing a release changes reaches, as
   [#647's Decision of 2026-11-09](https://github.com/coolbress/plinth/issues/647#issuecomment-6734852683)
   sets. Like `--smoke` it takes no `--task`, `--arm`, `--runs`, `--model` or
@@ -42,6 +42,12 @@ pull requests and have no tag.
   reads the closes and new issues the read-only `gh` stand-in refused and
   logged. It measures the follow-up half of the template's "Coming back" rule,
   which `next-day` does not.
+- The eval suite has two plain-question tasks, `guide-plain` and
+  `guide-reminder-plain` (#883): the guide tasks' projects, records and
+  patterns, asked in plain words without `/plinth:guide`, in the `plinth` arm
+  only. They compare plinth with the guide against plinth without it. They stay
+  in the release run on purpose, so each release shows whether the guide still
+  does better than a plain question; that run is now 84 runs, with `owed-item`.
 
 ### Changed
 
