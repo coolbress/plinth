@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.43.0: a `cli` or
+  `library` release publishes every package of a uv workspace, each at its
+  own version, the tag matching the root's (coolbress/plinth-template#225).
+  A new project still calls plinth v2.28.0. An existing project gets it
+  through `/plinth:template-update`.
+
 ### Fixed
 
 - `scripts/require-check.sh` no longer opens every run with "needs a login
