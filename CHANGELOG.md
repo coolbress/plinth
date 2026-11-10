@@ -36,6 +36,19 @@ pull requests and have no tag.
   installed from. `scripts/make-release.sh` names it where it asks for
   the suite's table.
 
+### Fixed
+
+- `scripts/make-release.sh`'s run 1 now names the smoke run in its `next:`
+  steps, in [How to cut a release](https://github.com/coolbress/plinth/blob/main/docs/how-to/cut-a-release.md)'s
+  order: beside the `e2e` dispatch, from a clone on the release branch, its
+  table posted on #647 and named in the description, before
+  `scripts/merge-when-green.sh`, which does not read it.
+- The `next-day` eval task's entry (#832, landed by #840) moves from the
+  2.27.0 section to 2.28.0, the first release that carried it: it had landed
+  inside the already-tagged 2.27.0 section, the slip `ci / docs` now fails.
+  The v2.28.0 tag and its Release text, cut while the entry sat under 2.27.0,
+  stay as they are.
+
 ## [2.29.0] - 2026-11-09
 
 A release now reaches installations only after it has been proved: `e2e` runs on the release branch, calling the reusable workflows at the release commit, before the pull request merges, and a short skill smoke run goes with it. `/plinth:new-project` renders plinth-template v1.42.0, whose projects carry a 51-line `AGENTS.md`, a "Coming back" list that reads the recent commits and the last squash commit's body, and an undo how-to whose conflict path uses the form; a new project calls plinth v2.28.0. The pull requests `/plinth:new-project` and `/plinth:template-update` open fill the form's four fields, so their own checks no longer warn. The README gives the optional auto-update step. A consumer gets the template's changes through `/plinth:template-update`; the reusable workflows change only by a comment line at their top, so raising the pin is optional.
@@ -158,6 +171,12 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6682324
   use. The suite's read-only `gh` now serves `--jq`, which needs `jq` on the
   PATH, and a task's new `arms` file limits the arms it runs in. Run them with
   a release that touches the guide or the arsenal's table.
+- The eval suite has an eleventh task, `next-day` (#832): "carry on where
+  we left off" on a project whose last merged pull request and closed issue
+  leave one item unverified, with an unrelated issue open as the next ticket.
+  It passes only when the final report names that item. Its sessions get a
+  read-only `gh` that serves the planted issues and pull request offline;
+  it refuses writes. The full suite is now 99 runs.
 
 ### Changed
 
@@ -259,12 +278,6 @@ eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6655184
   the highest number cannot be read with the job's token, the log says
   why and nothing is warned. GitLab's `pr-title` does the same for `#N`
   and `!N`, each against its own highest (#826).
-- The eval suite has an eleventh task, `next-day` (#832): "carry on where
-  we left off" on a project whose last merged pull request and closed issue
-  leave one item unverified, with an unrelated issue open as the next ticket.
-  It passes only when the final report names that item. Its sessions get a
-  read-only `gh` that serves the planted issues and pull request offline;
-  it refuses writes. The full suite is now 99 runs.
 
 ### Changed
 

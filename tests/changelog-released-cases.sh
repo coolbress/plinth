@@ -156,6 +156,34 @@ changelog '
 $s100" "$l110"; g commit -qam move-back
 run "putting a section back as its tag has it passes" 0 'as v1.1.0 has it'
 
+# #840's shape: a line landed inside the already-tagged [1.0.0], the next
+# release (1.2.0) was tagged with it there, and the fix moves it to [1.2.0].
+fresh
+g checkout -qb slip main
+changelog '' "$s110
+${s100/- the first thing./- the first thing.
+- the late line.}" "$l110"; g commit -qam slip
+run "#840's shape: the line landing inside tagged [1.0.0] fails, naming it" 1 '::error::CHANGELOG.md [1.0.0]' main slip
+g checkout -q main; g merge -q --ff-only slip
+s120='## [1.2.0] - 2026-03-01
+
+### Added
+
+- a 1.2.0 line.
+'
+changelog '' "$s120
+$s110
+${s100/- the first thing./- the first thing.
+- the late line.}" "$l110"; g commit -qam 'chore(release): v1.2.0'; g tag v1.2.0
+g checkout -qb move-to-120 main
+changelog '' "${s120/- a 1.2.0 line./- a 1.2.0 line.
+- the late line.}
+$s110
+$s100" "$l110"; g commit -qam move
+run "#840's fix: moving the line to [1.2.0] without the line fails, naming [1.2.0]" 1 '::error::CHANGELOG.md [1.2.0]'
+run "  while [1.0.0], back as v1.0.0 has it, passes" 1 'PASS  [1.0.0] changed, back as v1.0.0 has it'
+run "  and with 'Corrects released section: 1.2.0' it passes" 0 'named on the description' main HEAD 'Corrects released section: 1.2.0'
+
 # 6. Removing a tagged section is a change too.
 fresh
 g checkout -qb drop main
