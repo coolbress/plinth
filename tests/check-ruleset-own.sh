@@ -35,5 +35,16 @@ case_ "any exclusion: fails" 1 '.conditions.ref_name.exclude = ["refs/heads/rele
 case_ "a bypass actor: fails" 1 '.bypass_actors = [{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]'
 case_ "not JSON: fails" 1 'tostring | .[0:5]'
 
+# #896: the ruleset through a process substitution, as `--own <(gh api …)`
+# passes it. A pipe can be read once, so the script must read it once.
+(cd "$root" && ./scripts/check-ruleset.sh --own <(cat "$work/good.json")) >"$work/out" 2>&1; rc=$?
+if [ "$rc" = 0 ]; then echo "  PASS  the good ruleset through <(…): passes"; pass=$((pass + 1))
+else echo "  FAIL  the good ruleset through <(…): exit $rc, want 0" >&2; sed 's/^/        /' "$work/out" >&2; fail=$((fail + 1)); fi
+jq '.bypass_actors = [{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]' "$work/good.json" >"$work/bad.json"
+(cd "$root" && ./scripts/check-ruleset.sh --own <(cat "$work/bad.json")) >"$work/out" 2>&1; rc=$?
+if [ "$rc" = 1 ] && grep -qF 'FAIL  bypass actors' "$work/out" && [ "$(grep -c FAIL "$work/out")" = 2 ]; then
+  echo "  PASS  a bypass actor through <(…): fails on that line alone"; pass=$((pass + 1))
+else echo "  FAIL  a bypass actor through <(…): exit $rc, want 1 with one FAIL line" >&2; sed 's/^/        /' "$work/out" >&2; fail=$((fail + 1)); fi
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

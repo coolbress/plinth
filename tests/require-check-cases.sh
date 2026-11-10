@@ -219,10 +219,12 @@ said()    { if grep -qF -- "$2" "$work/out"; then ok "$1"; else bad "$1: output 
 unwritten() { if [ ! -e "$work/put.json" ]; then ok "$1: the ruleset was not written"; else bad "$1: the ruleset was written"; fi; }
 
 ADMIN=false run 1 "a login whose role is not admin is stopped" --repo r/r 'slow check'
-said "the first line says an agent's token cannot run it" "an agent's token cannot run it"
+said "the stop says what login it needs" "needs a login that administers r/r; an agent's token cannot run it"
+said "the stop names the admin-token wrapper" "scripts/with-admin-token.sh scripts/require-check.sh --repo r/r 'slow check'"
 said "the stop says it changed nothing" "nothing was changed"
 unwritten "not admin"
 ADMIN=true ACTIONS_PERM=0 run 1 "an admin role behind a token without Administration is stopped" --repo r/r 'slow check'
+said "that stop says what login it needs too" "needs a login that administers r/r"
 unwritten "no Administration"
 
 run 1 "a name that never reported on the default branch is refused" --repo r/r 'never seen'
@@ -324,6 +326,7 @@ run 0 "--dry-run adds nothing" --dry-run --repo r/r 'slow check'
 unwritten "dry run"
 PUT_FAIL=1 run 1 "a write GitHub refuses is reported in plain words" --repo r/r 'slow check'
 said "it says GitHub refused and nothing changed" "GitHub refused the change"
+said "it names the admin-token wrapper" "scripts/with-admin-token.sh scripts/require-check.sh --repo r/r 'slow check'"
 
 run 0 "a job with no if: is added" --repo r/r 'slow check'
 if [ -e "$work/put.json" ] && jq -e '
@@ -335,6 +338,10 @@ then ok "the write adds the name and keeps every other rule, entry and the stric
 else bad "the write is not the old ruleset plus one entry"; fi
 said "the new list is printed as read back" "requires: slow check"
 said "the old entry is in the printed list" "requires: base"
+# #896: a run that succeeds prints no refusal-shaped line, so it is not read as one.
+for line in "an agent's token cannot run it" "with-admin-token" "needs a login" "refused" "nothing was changed"; do
+  if grep -qiF -- "$line" "$work/out"; then bad "a successful run says '$line'"; else ok "a successful run does not say '$line'"; fi
+done
 run 0 "a called job in a local reusable workflow is added" --repo r/r 'wrap / inner'
 said "it names the chain of jobs" 'inner.yml: job `inner`'
 run 0 "a called job in a pinned remote workflow is added" --repo r/r 'remote / lib'
