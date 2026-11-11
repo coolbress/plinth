@@ -21,7 +21,8 @@ pull requests and have no tag.
   line that reads its log, and how many comments people left in the
   conversation (reviews are not counted). When a plinth
   job failed, the note says the fault may be in the plinth version the project
-  calls and no longer tells the agent to fix the code; a failing check of the
+  calls, names `/plinth:floor-check` for comparing its pin with the latest
+  release, and no longer tells the agent to fix the code; a failing check of the
   project's own keeps that note. The skill reads the newest comment and the
   failed log before it names a cause, and says the cause is not known yet when
   neither names one.

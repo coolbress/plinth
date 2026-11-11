@@ -284,7 +284,7 @@ elif [ -n "$people_prs" ]; then
   if [ -n "$broken" ] && [ -n "$plinth_failing" ]; then
     # A plinth job (#903): nothing in the pull request may need to change.
     n="$(field 1 <<<"$broken")"
-    note="pull request #$n has a failing check that is a plinth job ($plinth_failing); the fault may be in the plinth version the project calls, not in this pull request, so the cause is read from the newest comment and the failed log first; what to do when it is plinth's: https://github.com/coolbress/plinth/issues/904 (pin and template behind)"
+    note="pull request #$n has a failing check that is a plinth job ($plinth_failing); the fault may be in the plinth version the project calls, not in this pull request, so the cause is read from the newest comment and the failed log first; /plinth:floor-check compares the project's plinth pin with the latest release"
     [ -z "$own_failing" ] || note="$note; $own_failing: the project's own, where the agent fixes the code, not the check"
     say "Something broke" "diagnose this: pull request #$n has a failing check in a job plinth runs; read its log and the comments before changing any code"
   elif [ -n "$broken" ]; then

@@ -175,8 +175,8 @@ state "only ci / build failing: named, a plinth job, and the note does not say t
   "command: diagnose this: pull request #6 has a failing check in a job plinth runs; read its log and the comments before changing any code" \
   "!fixes the code" "!ci / test"
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
-grep -E '^note: ' <<<"$out" | grep -qF 'the fault may be in the plinth version the project calls' && grep -E '^note: ' <<<"$out" | grep -qF 'https://github.com/coolbress/plinth/issues/904' &&
-  ok "the plinth job's note: maybe the plinth version the project calls, and where what to do then is" || bad "the plinth job's note: $(grep -E '^note: ' <<<"$out")"
+grep -E '^note: ' <<<"$out" | grep -qF 'the fault may be in the plinth version the project calls' && grep -E '^note: ' <<<"$out" | grep -qF "/plinth:floor-check compares the project's plinth pin with the latest release" && ! grep -qE '#[0-9]+|/issues/[0-9]' <<<"$(grep -E '^note: ' <<<"$out" | sed 's/pull request #6//g')" &&
+  ok "the plinth job's note: maybe the plinth version the project calls, floor-check compares the pin, and no issue number of plinth's" || bad "the plinth job's note: $(grep -E '^note: ' <<<"$out")"
 put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'label / label' FAILURE 458)")"
 state "label / label failing, its pin with no version comment: a plinth job, at the commit" "$d" \
   "  label / label: a plinth job (the project calls coolbress/plinth's pr-label.yml at $(printf '%040d' 8))" "!fixes the code"
