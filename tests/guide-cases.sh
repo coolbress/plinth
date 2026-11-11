@@ -48,14 +48,18 @@ repo() {
   printf '[]' > "$d/open.json"; printf '[]' > "$d/merged.json"; printf '[]' > "$d/issues.json"
   echo "$d"
 }
+# ago <seconds>: that long before now, in GitHub's form.
+ago() { jq -nr --argjson s "$1" 'now - $s | floor | todate'; }
 pr() { # <number> <title> <bot:true|false> <check conclusion or "-" for none, "run" for in progress>
+       # [<head commit's age in seconds, default a day>] [<pull request's age, default a day>]
   local checks='[]'
   case "$4" in
     -) ;; run) checks='[{"status":"IN_PROGRESS","conclusion":""}]' ;;
     *) checks="[{\"status\":\"COMPLETED\",\"conclusion\":\"$4\"},{\"state\":\"SUCCESS\"}]" ;;
   esac
-  printf '{"number":%s,"title":"%s","isDraft":false,"author":{"login":"%s","is_bot":%s},"headRefOid":"%040d","statusCheckRollup":%s,"mergedAt":"2026-10-2%sT00:00:00Z"}' \
-    "$1" "$2" "$([ "$3" = true ] && echo app/dependabot || echo someone)" "$3" "$1" "$checks" "$(( $1 % 10 ))"
+  printf '{"number":%s,"title":"%s","isDraft":false,"author":{"login":"%s","is_bot":%s},"headRefOid":"%040d","statusCheckRollup":%s,"mergedAt":"2026-10-2%sT00:00:00Z","createdAt":"%s","commits":[{"oid":"%040d","committedDate":"2026-01-01T00:00:00Z"},{"oid":"%040d","committedDate":"%s"}]}' \
+    "$1" "$2" "$([ "$3" = true ] && echo app/dependabot || echo someone)" "$3" "$1" "$checks" "$(( $1 % 10 ))" \
+    "$(ago "${6:-86400}")" 0 "$1" "$(ago "${5:-86400}")"
 }
 put() { local f="$1"; shift; local IFS=,; printf '[%s]' "$*" > "$f"; }
 issue() { local l=""; [ -z "$3" ] || l="{\"name\":\"$3\"}"; printf '{"number":%s,"title":"%s","labels":[%s]}' "$1" "$2" "$l"; }
@@ -133,6 +137,24 @@ expect "a pull request open comes before the issue it closes" "$d" "A pull reque
 put "$d/open.json" "$(pr 6 'feat: monthly totals' false FAILURE)"
 expect "a pull request with a failing check: something broke, not wait" "$d" "Something broke (step 7)" \
   "diagnose this: pull request #6 has a failing check" "#6 ready, checks fail"
+# An empty rollup (#906): just pushed is checks starting, not a broken wall;
+# an hour on, no check ran. Neither is "Something broke".
+put "$d/open.json" "$(pr 6 'feat: monthly totals' false - 60)"
+expect "an empty rollup a minute after the push: checks not started yet" "$d" "A pull request with checks running (step 5)" "/run" \
+  "#6 ready, checks not started yet (last change 1 min ago): feat: monthly totals"
+grep -qF "note: pull request #6, checks not started yet (last change 1 min ago); look again in a minute" <<<"$(MOCK_DIR="$d" "$script" "$d")" &&
+  ok "the note says to look again in a minute" || bad "no look-again note for checks not started yet"
+put "$d/open.json" "$(pr 6 'feat: monthly totals' false - 3600)"
+expect "an empty rollup an hour after the push: no checks ran" "$d" "A pull request with checks running (step 5)" "/run" \
+  "#6 ready, no checks ran: feat: monthly totals"
+grep -qF "note: pull request #6: no checks ran on it; find out why before /run" <<<"$(MOCK_DIR="$d" "$script" "$d")" &&
+  ok "the note says to look into why no check ran" || bad "no look-into-it note for no checks ran"
+put "$d/open.json" "$(pr 6 'feat: monthly totals' false - 3600 120)"
+expect "an hour-old commit in a pull request opened two minutes ago: not started yet" "$d" "A pull request with checks running (step 5)" "/run" \
+  "#6 ready, checks not started yet (last change 2 min ago)"
+put "$d/open.json" "$(pr 6 'feat: monthly totals' false - 3600)" "$(pr 7 'feat: other' false - 60)"
+grep -qF "#7 ready, checks not started yet (last change 1 min ago)" <<<"$(MOCK_DIR="$d" "$script" "$d")" &&
+  ok "each pull request reads its own head" || bad "two pull requests: the second one's head not read"
 
 d="$(repo triage)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
@@ -332,6 +354,9 @@ for r in "plinth does not deploy" "an uptime monitor" "it reads the session"; do
 done
 if grep -qF '`why:`' "$root/skills/guide/SKILL.md" && grep -qF 'no other reason' "$root/skills/guide/SKILL.md"
 then ok "the skill says to give the why: line's reason and no other"; else bad "the skill does not say to give the why: line's reason and no other"; fi
+
+if grep -qF 'look again in a minute' "$root/skills/guide/SKILL.md" && grep -qF '`no checks ran`: no' "$root/skills/guide/SKILL.md"
+then ok "the skill says checks not started yet and no checks ran in plain words"; else bad "the skill does not say what an empty rollup means"; fi
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"
