@@ -319,6 +319,8 @@ put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump the actions
 state "a grouped Dependabot pull request naming the pin in its body: the same merge" "$d" "command: merge #9"
 put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump actions/checkout' SUCCESS)"
 state "Dependabot's pull request raising something else: not the one to merge" "$d" "!command: merge"
+put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump coolbress/plinth-template-action' SUCCESS 'Bumps coolbress/plinth-template-action.')"
+state "a name that only starts with coolbress/plinth: not the pin" "$d" "!command: merge"
 cat > "$d/docs/how-to/keep-this-project-current.md" <<'HOWTO'
 # Keep this project current
 

@@ -163,9 +163,10 @@ rollup='def state: (.conclusion // .state // "") as $c | (.status // "COMPLETED"
     | [((.name // .context // "unnamed") | gsub("[\t\n\u001e\u001f]"; " ")),
        ((.detailsUrl // "") | (capture("/actions/runs/[0-9]+/job/(?<j>[0-9]+)") | .j) // "")] | join("\u001f")] | join("\u001e");'
 # Dependabot's pull request that raises the plinth pin (#904): its title or
-# body names coolbress/plinth, as the template's how-to searches for it.
+# body names coolbress/plinth, as the template's how-to searches for it, and
+# not coolbress/plinth-template.
 raises='def raises: if ((.author.login // "") | IN("app/dependabot", "dependabot[bot]", "dependabot"))
-    and (((.title // "") + " " + (.body // "")) | ascii_downcase | contains("coolbress/plinth")) then "plinth" else "" end;'
+    and (((.title // "") + " " + (.body // "")) | ascii_downcase | test("coolbress/plinth([^-_.a-z0-9]|$)")) then "plinth" else "" end;'
 bot='(.author.is_bot // false) or (.author.login // "" | startswith("app/"))'
 clean='gsub("[\t\n]"; " ")'
 # What an issue is (#834). The reminder is the template's Template reminder
