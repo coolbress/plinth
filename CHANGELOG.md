@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:guide` no longer names "Something broke" from the check colour
+  alone (#903). For the pull request it names, `scripts/guide-state.sh` prints
+  each failing check, whether it is a plinth job (a job of a workflow the
+  project's own workflow files call from `coolbress/plinth`, with the version
+  they call) or the project's own, the `gh run view --job <id> --log-failed`
+  line that reads its log, and how many comments people left in the
+  conversation (reviews are not counted). When a plinth
+  job failed, the note says the fault may be in the plinth version the project
+  calls and no longer tells the agent to fix the code; a failing check of the
+  project's own keeps that note. The skill reads the newest comment and the
+  failed log before it names a cause, and says the cause is not known yet when
+  neither names one.
+
 ## [2.31.0] - 2026-11-10
 
 A new project renders plinth-template v1.43.1, whose `cli` or `library` release publishes every package of a uv workspace and whose third-party reviewer question says Codex's reviewer is the only one verified; a new project still calls plinth v2.28.0. The token how-to says what a cloud or scheduled Claude Code session can do on GitHub, the eval suite's `owed-item` task grades the follow-up attempt, and the owner's ruleset scripts stop reading as refusals. No workflow a project calls changed, so a project's `coolbress/plinth` pins need no raise for this release.
