@@ -48,6 +48,16 @@ pull requests and have no tag.
   total, as before. A project with 100 or more merged is taken as past its
   first merge, so one whose newest 100 are all Dependabot's no longer goes
   back to the first pull request.
+- `/plinth:guide` no longer says `checks none` for a pull request whose
+  checks have not been created yet (#906). An empty check rollup within ten
+  minutes of the later of the head commit's time and the pull request's
+  opening reads `checks not started yet (last change <n> min ago)`, and the
+  guide says to look again in a minute; later it reads `no checks ran`,
+  something to look into. Neither is "Something broke". GitHub gives no push
+  time, so a commit made more than ten minutes before it was pushed to an
+  older pull request reads as `no checks ran`. The head commit's time is one
+  more `gh api` read for each such pull request; when it fails, the line says
+  that time was not read.
 
 ## [2.31.0] - 2026-11-10
 

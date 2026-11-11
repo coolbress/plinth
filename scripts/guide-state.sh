@@ -184,8 +184,8 @@ kind='def kind: [.labels[].name] as $l
 read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
-      --json number,title,body,isDraft,author,headRefOid,statusCheckRollup \
-      --jq "$rollup$raises"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), failing, raises] | @tsv' 2>&1)"; then
+      --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt \
+      --jq "$rollup$raises"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
@@ -202,7 +202,34 @@ if [ -n "$failed" ]; then
 fi
 
 field() { cut -f"$1"; }
-people_prs="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
+# Column 9 of the list is whether Dependabot's pull request raises the plinth
+# pin (#904): never so for a person's, so their rows end at 8 and take the
+# checks line below as 9.
+people_prs="$(awk -F '\t' '$2 == "person"' <<<"$prs" | cut -f1-8)"
+# An empty rollup (#906) is checks not created yet, seconds after a push, or
+# none that will run. GitHub gives no push time: the later of the head
+# commit's time and the pull request's opening stands in for it, so a commit
+# made over ten minutes before it was pushed to an older pull request reads as
+# no checks ran. The head's time is one call per such pull request: asking
+# the list above for `commits` makes GitHub refuse the whole query (over its
+# 500,000-node limit at --limit 100). Column 9 is what is said of the checks.
+checks_line() {
+  local row checks sha created line t
+  while IFS= read -r row; do
+    checks="$(cut -f4 <<<"$row")"; sha="$(cut -f5 <<<"$row")"; created="$(cut -f7 <<<"$row")"
+    line="checks $checks"
+    if [ "$checks" = none ]; then
+      line="no checks yet; when its head was pushed was not read"
+      [[ "$created" =~ ^[0-9T:Z-]+$ ]] &&
+        t="$(cd "$top" && gh api "repos/$repo/commits/$sha" --jq '[.commit.committer.date, "'"$created"'"]
+          | map(fromdate) | max | ([now - ., 0] | max) as $a
+          | if $a < 600 then "checks not started yet (last change \($a / 60 | floor) min ago)" else "no checks ran" end' 2>/dev/null)" &&
+        [ -n "$t" ] && line="$t"
+    fi
+    printf '%s\t%s\n' "$row" "$line"
+  done
+}
+[ -z "$people_prs" ] || people_prs="$(checks_line <<<"$people_prs")"
 bot_prs="$(awk -F '\t' '$2 == "bot"' <<<"$prs")"
 people_merged="$(awk -F '\t' '$2 == "person"' <<<"$merged" | grep -c . || true)"
 counted="$people_merged merged by people"
@@ -215,7 +242,7 @@ fi
 
 if [ -n "$people_prs" ]; then
   echo "open pull requests:"
-  awk -F '\t' '{ printf "  #%s %s, checks %s: %s\n", $1, $3, $4, $6 }' <<<"$people_prs"
+  awk -F '\t' '{ printf "  #%s %s, %s: %s\n", $1, $3, $9, $6 }' <<<"$people_prs"
 else
   echo "open pull requests: none"
 fi
@@ -292,7 +319,7 @@ if [ -n "$broken" ]; then
       own_failing="${own_failing:+$own_failing, }$check"
     fi
     [ -z "$job" ] || echo "    log: gh run view --job $job --log-failed"
-  done < <(field 7 <<<"$broken" | tr '\036' '\n')
+  done < <(field 8 <<<"$broken" | tr '\036' '\n')
   # By people, not bots: the REST read says which an author is.
   if said="$(cd "$top" && gh api "repos/$repo/issues/$n/comments" --paginate --jq '.[] | select(.user.type != "Bot") | .id' 2>&1)"; then
     echo "comments by people on pull request #$n: $(grep -c . <<<"$said" || true)"
@@ -337,7 +364,7 @@ elif [ -n "$people_prs" ]; then
     # A plinth job failing on a plinth older than the latest release (#904):
     # the newer plinth comes first, then this pull request's checks again.
     n="$(field 1 <<<"$broken")"
-    raise="$(awk -F '\t' '$8 == "plinth"' <<<"$bot_prs" | head -1)"
+    raise="$(awk -F '\t' '$9 == "plinth"' <<<"$bot_prs" | head -1)"
     again="after it merges, pull request #$n's checks are run again on the newer plinth (\`gh pr update-branch $n\` brings main into it and starts them), and only a check still failing then is diagnosed"
     [ -z "$own_failing" ] || again="$again; $own_failing: the project's own, where the agent fixes the code, not the check"
     if [ -n "$raise" ] && [ "$(field 4 <<<"$raise")" = pass ]; then
@@ -364,8 +391,12 @@ elif [ -n "$people_prs" ]; then
     note="pull request #$n has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
     say "Something broke" "diagnose this: pull request #$n has a failing check"
   else
-    n="$(head -1 <<<"$people_prs" | field 1)"
-    note="pull request #$n, checks $(head -1 <<<"$people_prs" | field 4); /run once they are green"
+    n="$(head -1 <<<"$people_prs" | field 1)"; checks="$(head -1 <<<"$people_prs" | field 9)"
+    case "$checks" in
+      "no checks ran") note="pull request #$n: no checks ran on it; find out why before /run" ;;
+      "checks not started yet"*) note="pull request #$n, $checks; look again in a minute, then /run once they are green" ;;
+      *) note="pull request #$n, $checks; /run once they are green" ;;
+    esac
     say "A pull request with checks running" "/run" "Green, and seen working"
   fi
 elif n="$(labelled ready-for-agent "$tickets")" && [ -n "$n" ]; then
