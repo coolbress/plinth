@@ -132,17 +132,7 @@ echo "repository: $repo"
 rollup='def checks: [.statusCheckRollup[]? | (.conclusion // .state // "") as $c | (.status // "COMPLETED") as $s
   | if $s != "COMPLETED" or ($c | IN("PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "")) then "pending"
     elif ($c | IN("SUCCESS", "NEUTRAL", "SKIPPED")) then "pass" else "fail" end]
-  | if length == 0 then "none" elif any(. == "fail") then "fail" elif any(. == "pending") then "pending" else "pass" end;
-# An empty rollup (#906) is checks not created yet, seconds after a push, or
-# none that will run. GitHub gives no push time: the later of the head
-# commit'"'"'s time and the pull request'"'"'s opening stands in for it, so a commit
-# made earlier and pushed just now with no pull request opened since reads
-# as no checks ran. Within ten minutes of it, not started yet.
-def said: .headRefOid as $h | checks as $c
-  | if $c != "none" then "checks \($c)"
-    else ([.createdAt, ([.commits[]? | select(.oid == $h) | .committedDate] | first)] | map(select(. != null) | fromdate) | max) as $t
-      | if $t != null and (now - $t) < 600 then "checks not started yet (last change \((now - $t) / 60 | floor) min ago)"
-        else "no checks ran" end end;'
+  | if length == 0 then "none" elif any(. == "fail") then "fail" elif any(. == "pending") then "pending" else "pass" end;'
 bot='(.author.is_bot // false) or (.author.login // "" | startswith("app/"))'
 clean='gsub("[\t\n]"; " ")'
 # What an issue is (#834). The reminder is the template's Template reminder
@@ -161,8 +151,8 @@ kind='def kind: [.labels[].name] as $l
 read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
-      --json number,title,isDraft,author,headRefOid,statusCheckRollup,createdAt,commits \
-      --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), said, .headRefOid, (.title | '"$clean"')] | @tsv' 2>&1)"; then
+      --json number,title,isDraft,author,headRefOid,statusCheckRollup,createdAt \
+      --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
@@ -180,6 +170,29 @@ fi
 
 field() { cut -f"$1"; }
 people_prs="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
+# An empty rollup (#906) is checks not created yet, seconds after a push, or
+# none that will run. GitHub gives no push time: the later of the head
+# commit's time and the pull request's opening stands in for it, so a commit
+# made over ten minutes before it was pushed to an older pull request reads as
+# no checks ran. The head's time is one call per such pull request: asking
+# the list above for `commits` makes GitHub refuse the whole query (over its
+# 500,000-node limit at --limit 100). Column 8 is what is said of the checks.
+said() {
+  local n draft checks sha title created line t
+  while IFS=$'\t' read -r n _ draft checks sha title created; do
+    line="checks $checks"
+    if [ "$checks" = none ]; then
+      line="no checks yet; when its head was pushed was not read"
+      [[ "$created" =~ ^[0-9T:Z-]+$ ]] &&
+        t="$(cd "$top" && gh api "repos/$repo/commits/$sha" --jq '[.commit.committer.date, "'"$created"'"]
+          | map(fromdate) | max | ([now - ., 0] | max) as $a
+          | if $a < 600 then "checks not started yet (last change \($a / 60 | floor) min ago)" else "no checks ran" end' 2>/dev/null)" &&
+        [ -n "$t" ] && line="$t"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$n" person "$draft" "$checks" "$sha" "$title" "$created" "$line"
+  done
+}
+[ -z "$people_prs" ] || people_prs="$(said <<<"$people_prs")"
 bot_prs="$(awk -F '\t' '$2 == "bot"' <<<"$prs")"
 people_merged="$(awk -F '\t' '$2 == "person"' <<<"$merged" | grep -c . || true)"
 counted="$people_merged merged by people"
@@ -192,7 +205,7 @@ fi
 
 if [ -n "$people_prs" ]; then
   echo "open pull requests:"
-  awk -F '\t' '{ printf "  #%s %s, %s: %s\n", $1, $3, $4, $6 }' <<<"$people_prs"
+  awk -F '\t' '{ printf "  #%s %s, %s: %s\n", $1, $3, $8, $6 }' <<<"$people_prs"
 else
   echo "open pull requests: none"
 fi
@@ -233,13 +246,13 @@ if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   fi
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
-  pr="$(awk -F '\t' '$4 == "checks fail"' <<<"$people_prs" | head -1)"
+  pr="$(awk -F '\t' '$4 == "fail"' <<<"$people_prs" | head -1)"
   if [ -n "$pr" ]; then
     n="$(field 1 <<<"$pr")"
     note="pull request #$n has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
     say "Something broke" "diagnose this: pull request #$n has a failing check"
   else
-    n="$(head -1 <<<"$people_prs" | field 1)"; checks="$(head -1 <<<"$people_prs" | field 4)"
+    n="$(head -1 <<<"$people_prs" | field 1)"; checks="$(head -1 <<<"$people_prs" | field 8)"
     case "$checks" in
       "no checks ran") note="pull request #$n: no checks ran on it; find out why before /run" ;;
       "checks not started yet"*) note="pull request #$n, $checks; look again in a minute, then /run once they are green" ;;

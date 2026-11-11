@@ -27,7 +27,9 @@ pull requests and have no tag.
   guide says to look again in a minute; later it reads `no checks ran`,
   something to look into. Neither is "Something broke". GitHub gives no push
   time, so a commit made more than ten minutes before it was pushed to an
-  older pull request reads as `no checks ran`.
+  older pull request reads as `no checks ran`. The head commit's time is one
+  more `gh api` read for each such pull request; when it fails, the line says
+  that time was not read.
 
 ## [2.31.0] - 2026-11-10
 

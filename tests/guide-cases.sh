@@ -23,9 +23,20 @@ cat > "$work/bin/gh" <<'MOCK'
 # every call fail as an unauthenticated gh does. A list is cut at --limit.
 set -u
 [ -n "${MOCK_GH_FAIL:-}" ] && { echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 4; }
-jqf="."; limit=30; prev=""
-for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; [ "$prev" = --limit ] && limit="$a"; prev="$a"; done
+jqf="."; limit=30; fields=""; prev=""
+for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; [ "$prev" = --limit ] && limit="$a"; [ "$prev" = --json ] && fields="$a"; prev="$a"; done
 [ -n "${MOCK_FAIL_ON:-}" ] && [ "$1 $2 ${4:-}" = "$MOCK_FAIL_ON" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+# GET repos/<o>/<r>/commits/<sha>: the commit by that oid in open.json's
+# pull requests, in the REST shape. MOCK_API_FAIL fails it.
+if [ "$1" = api ]; then
+  [ -n "${MOCK_API_FAIL:-}" ] && { echo "HTTP 404: Not Found" >&2; exit 1; }
+  set -o pipefail
+  jq --arg s "${2##*/}" '[.[].commits[]? | select(.oid == $s)] | first | {commit: {committer: {date: .committedDate}}}' "$MOCK_DIR/open.json" | jq -r "$jqf"
+  exit
+fi
+# As GitHub does (#906): a list asking for each pull request's commits asks
+# for more nodes than GraphQL allows, so the whole read fails.
+case ",$fields," in *,commits,*) [ "$1" = pr ] && { echo "GraphQL: By the time this query traverses to the authors connection, it is requesting up to 1,000,000 possible nodes which exceeds the maximum limit of 500,000." >&2; exit 1; } ;; esac
 case "$1 $2 ${4:-}" in
   "repo view"*)        echo o/r; exit 0 ;;
   "pr list open")      f=open.json ;;
@@ -36,7 +47,9 @@ esac
 # As gh does: the --limit highest numbers (30 unless said), then the filter.
 # They stay in the fixture's order, so the script's own sorting is what sorts.
 set -o pipefail
-jq --argjson n "$limit" '(map(.number) | sort | reverse | .[:$n]) as $keep | map(select(.number as $x | $keep | index($x)))' "$MOCK_DIR/$f" | jq -r "$jqf"
+# Only the --json fields asked for, as gh gives.
+jq --argjson n "$limit" --arg f "$fields" '(map(.number) | sort | reverse | .[:$n]) as $keep | map(select(.number as $x | $keep | index($x)))
+  | if $f == "" then . else map(with_entries(select(.key as $k | $f | split(",") | index($k)))) end' "$MOCK_DIR/$f" | jq -r "$jqf"
 MOCK
 chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
@@ -155,6 +168,13 @@ expect "an hour-old commit in a pull request opened two minutes ago: not started
 put "$d/open.json" "$(pr 6 'feat: monthly totals' false - 3600)" "$(pr 7 'feat: other' false - 60)"
 grep -qF "#7 ready, checks not started yet (last change 1 min ago)" <<<"$(MOCK_DIR="$d" "$script" "$d")" &&
   ok "each pull request reads its own head" || bad "two pull requests: the second one's head not read"
+put "$d/open.json" "$(pr 6 'feat: monthly totals' false - 3600)"
+out="$(MOCK_API_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qF "#6 ready, no checks yet; when its head was pushed was not read" <<<"$out" && grep -qF "where: A pull request with checks running (step 5)" <<<"$out" &&
+  ok "the head's time not read: said so, not guessed, and not Something broke" || { bad "the head's time not read"; sed 's/^/        /' <<<"$out" | head -14; }
+put "$d/open.json" "$(pr 6 'feat: monthly totals' false - -1200)"
+expect "a head commit dated ahead of the clock: not started yet, never a negative age" "$d" "A pull request with checks running (step 5)" "/run" \
+  "#6 ready, checks not started yet (last change 0 min ago)"
 
 d="$(repo triage)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
