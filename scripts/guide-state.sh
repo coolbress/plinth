@@ -4,6 +4,8 @@
 # next" table that state points to, the reasons it may give (#834), and the
 # table itself. For a pull request with a failing check it names the checks
 # that failed, whose each one is, and how many comments people left (#903).
+# It says whether the template tag and the plinth pin are behind, from
+# floor-check's own reads (#904).
 # Read-only: it runs git and gh reads, nothing else.
 #
 #   guide-state.sh [<dir>]     # default: the current directory
@@ -48,7 +50,7 @@ whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
 
 # say <row start> <command> [<then: row start>]: the verdict block. The
 # command is typed as printed; $before (typed first) and $note go with it.
-before=""; note=""
+before=""; note=""; said=""
 say() {
   local cells after
   cells="$(row "$1")" || exit 1
@@ -57,6 +59,7 @@ say() {
   echo "tool: $(sed -n 3p <<<"$cells")"
   [ -z "$before" ] || echo "before: $before"
   echo "command: $2"
+  said="$2"
   [ -z "$note" ] || echo "note: $note"
   if [ -n "${3:-}" ]; then
     after="$(row "$3")" || exit 1
@@ -103,7 +106,23 @@ echo "made by plinth: yes, template $(answer _commit)"
 echo "archetype: ${archetype:-not recorded}"
 [ "$archetype" = web ] && echo "hosting: ${hosting:-render (no answer recorded)}${place:+ ($place)}"
 
+# behind [--no-network]: the template tag against the one this plinth targets,
+# the plinth pin against plinth's latest release, as floor-check reads them.
+behind() {
+  local out
+  if out="$(python3 "$plugin/scripts/floor-check.py" --root "$top" --print-behind "$@" 2>&1)" &&
+     grep -q '^template: ' <<<"$out" && grep -q '^plinth pin: ' <<<"$out"; then
+    behind_lines="$(grep -E '^(template|plinth pin): ' <<<"$out")"
+  else
+    behind_lines="template: not read (floor-check: $(tail -1 <<<"$out"))
+plinth pin: not read (floor-check: $(tail -1 <<<"$out"))"
+  fi
+  printf '%s\n' "$behind_lines"
+}
+behind_lines=""
+
 if [ "$(answer host)" = gitlab ]; then
+  behind
   echo "repository: GitLab; the guide reads GitHub only, so issues and merge requests were not read"
   echo
   echo "where: not read"
@@ -124,11 +143,13 @@ fi
 
 if ! repo="$(cd "$top" && gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
   echo "repository: not read ($(head -1 <<<"$repo"))"
+  behind --no-network
   echo
   echo "where: not read"
   finish
 fi
 echo "repository: $repo"
+behind
 
 # A check run has status and conclusion; a commit status has only state.
 rollup='def state: (.conclusion // .state // "") as $c | (.status // "COMPLETED") as $s
@@ -141,6 +162,10 @@ rollup='def state: (.conclusion // .state // "") as $c | (.status // "COMPLETED"
   def failing: [.statusCheckRollup[]? | select(state == "fail")
     | [((.name // .context // "unnamed") | gsub("[\t\n\u001e\u001f]"; " ")),
        ((.detailsUrl // "") | (capture("/actions/runs/[0-9]+/job/(?<j>[0-9]+)") | .j) // "")] | join("\u001f")] | join("\u001e");'
+# Dependabot's pull request that raises the plinth pin (#904): its title or
+# body names coolbress/plinth, as the template's how-to searches for it.
+raises='def raises: if ((.author.login // "") | IN("app/dependabot", "dependabot[bot]", "dependabot"))
+    and (((.title // "") + " " + (.body // "")) | ascii_downcase | contains("coolbress/plinth")) then "plinth" else "" end;'
 bot='(.author.is_bot // false) or (.author.login // "" | startswith("app/"))'
 clean='gsub("[\t\n]"; " ")'
 # What an issue is (#834). The reminder is the template's Template reminder
@@ -159,8 +184,8 @@ kind='def kind: [.labels[].name] as $l
 read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
-      --json number,title,isDraft,author,headRefOid,statusCheckRollup \
-      --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), failing] | @tsv' 2>&1)"; then
+      --json number,title,body,isDraft,author,headRefOid,statusCheckRollup \
+      --jq "$rollup$raises"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), failing, raises] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
@@ -278,6 +303,22 @@ fi
 echo
 
 tickets="$(awk -F '\t' '$4 == "ticket"' <<<"$issues")"
+pin_behind="$(sed -nE 's/^plinth pin: [^,]+, behind (v[0-9.]+), .*/\1/p' <<<"$behind_lines")"
+template_behind="$(sed -nE 's/^template: ([^,]+), behind (v[0-9.]+), .*/\1 is behind \2/p' <<<"$behind_lines")"
+# pin_howto: the project's own how-to step that raises the plinth pin, as
+# the template renders it: its heading, the first line of its command block,
+# and its "Done when" in one line. Not found is exit 1 with why.
+howto_file="docs/how-to/keep-this-project-current.md"
+pin_howto() {
+  local f="$top/$howto_file" sec head cmd done_when
+  [ -f "$f" ] || { echo "no such file"; return 1; }
+  sec="$(awk '/^## /{ on = ($0 ~ /^## [0-9]+\. .*plinth pin/) } on' "$f")"
+  head="$(sed -n '1s/^## //p' <<<"$sec")"
+  cmd="$(awk '/^```/{ if (inb) exit; inb = 1; next } inb && NF { print; exit }' <<<"$sec")"
+  done_when="$(awk '/^\*\*Done when:\*\*/{ on = 1 } on && !NF { exit } on' <<<"$sec" | tr '\n' ' ' | sed -E 's/\*\*//g; s/ +$//')"
+  [ -n "$head" ] && [ -n "$cmd" ] && [ -n "$done_when" ] || { echo "no step whose heading names the plinth pin, with a command and its Done when"; return 1; }
+  printf '%s\n%s\n%s\n' "$head" "$cmd" "$done_when"
+}
 labelled() { awk -F '\t' -v l="$1" '("," $2 ",") ~ ("," l ",")' <<<"$2" | head -1 | field 1; }
 if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   first="$(awk -F '\t' 'index($6, "docs: first pull request") == 1' <<<"$people_prs" | head -1)"
@@ -292,7 +333,27 @@ if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   fi
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
-  if [ -n "$broken" ] && [ -n "$plinth_failing" ]; then
+  if [ -n "$broken" ] && [ -n "$plinth_failing" ] && [ -n "$pin_behind" ]; then
+    # A plinth job failing on a plinth older than the latest release (#904):
+    # the newer plinth comes first, then this pull request's checks again.
+    n="$(field 1 <<<"$broken")"
+    raise="$(awk -F '\t' '$8 == "plinth"' <<<"$bot_prs" | head -1)"
+    again="after it merges, pull request #$n's checks are run again on the newer plinth (\`gh pr update-branch $n\` brings main into it and starts them), and only a check still failing then is diagnosed"
+    [ -z "$own_failing" ] || again="$again; $own_failing: the project's own, where the agent fixes the code, not the check"
+    if [ -n "$raise" ] && [ "$(field 4 <<<"$raise")" = pass ]; then
+      note="pull request #$n's failing check ($plinth_failing) is a plinth job, and the project calls a plinth older than $pin_behind, the latest release; Dependabot's pull request #$(field 1 <<<"$raise") raises the pin and its checks are green; merging it is the person's word for that pull request; $again"
+      say "Green, and seen working" "merge #$(field 1 <<<"$raise")"
+    elif howto="$(pin_howto)"; then
+      note="pull request #$n's failing check ($plinth_failing) is a plinth job, and the project calls a plinth older than $pin_behind, the latest release; "
+      if [ -n "$raise" ]; then note="${note}Dependabot's pull request #$(field 1 <<<"$raise") raises the pin, its checks $(field 4 <<<"$raise"): it is merged once they are green; "
+      else note="${note}no Dependabot pull request raising the pin is open; "; fi
+      note="${note}from $howto_file, \"$(sed -n 1p <<<"$howto")\": $(sed -n 3p <<<"$howto"); $again"
+      say "Between pieces of work" "$(sed -n 2p <<<"$howto")"
+    else
+      note="pull request #$n's failing check ($plinth_failing) is a plinth job, and the project calls a plinth older than $pin_behind, the latest release; $howto_file has no step that raises the pin ($howto), so /plinth:floor-check names the pin to raise; $again"
+      say "Something broke" "/plinth:floor-check"
+    fi
+  elif [ -n "$broken" ] && [ -n "$plinth_failing" ]; then
     # A plinth job (#903): nothing in the pull request may need to change.
     n="$(field 1 <<<"$broken")"
     note="pull request #$n has a failing check that is a plinth job ($plinth_failing); the fault may be in the plinth version the project calls, not in this pull request, so the cause is read from the newest comment and the failed log first; /plinth:floor-check compares the project's plinth pin with the latest release"
@@ -321,5 +382,10 @@ elif [ -n "$bot_prs" ]; then
   say "Between pieces of work" "/plinth:floor-check (then the Dependabot pull requests, one at a time, on green)"
 else
   say "An idea in your own words" "/grilling"
+fi
+# The template behind (#904): step 9's line names the update; the step the
+# project is at stays the one above.
+if [ -n "$template_behind" ] && [ "$said" != /plinth:template-update ]; then
+  echo "step 9: template $template_behind, the tag this plinth targets: /plinth:template-update, typed"
 fi
 finish

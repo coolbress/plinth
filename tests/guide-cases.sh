@@ -42,6 +42,9 @@ jq --argjson n "$limit" '(map(.number) | sort | reverse | .[:$n]) as $keep | map
 MOCK
 chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
+# floor-check's reads (#904) come from fixtures here, never the network: an
+# empty folder is a 404 for each, which it says as not read.
+export FLOOR_CHECK_API_DIR="$work/api"; mkdir -p "$FLOOR_CHECK_API_DIR"
 
 # repo <name> [answers]: a git checkout, with .copier-answers.yml unless "none".
 repo() {
@@ -224,6 +227,117 @@ if grep -qF 'gh run view' "$root/skills/guide/SKILL.md" && grep -qiF 'newest com
    grep -qF 'before you name a cause' "$root/skills/guide/SKILL.md" && grep -qF 'not known yet' "$root/skills/guide/SKILL.md"
 then ok "the skill says to read the comment and the failed log before naming a cause, and 'not known yet' when neither names one"
 else bad "the skill does not say to read the comment and the failed log before naming a cause"; fi
+
+# Behind (#904): the template tag against the one this plinth targets, the
+# plinth pin against plinth's latest release, read by floor-check.py
+# --print-behind. A plinth job failing on a pin behind takes the newer plinth
+# first: Dependabot's green pull request is merged on the person's word, or
+# the project's how-to says how the pin is raised.
+target="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+pin="$(printf 'a%039d' 28)"
+api="$FLOOR_CHECK_API_DIR/repos/coolbress/plinth"; mkdir -p "$api/compare"
+release() { printf '{"tag_name":"%s"}' "$1" > "$api/releases/latest.json"; }
+mkdir -p "$api/releases"; release v2.31.0
+printf '{"status":"ahead","ahead_by":28,"behind_by":0}' > "$api/compare/$pin...v2.31.0?per_page=1&page=2.json"
+d="$(repo behind)"
+mkdir -p "$d/.github/workflows" "$d/docs/how-to"
+printf 'name: CI\non: pull_request\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s # v2.28.0\n' "$pin" > "$d/.github/workflows/ci.yml"
+printf 'name: Label\non: pull_request_target\njobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s # v2.28.0\n' "$pin" > "$d/.github/workflows/label.yml"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+put "$d/issues.json" "$(issue 5 'Show monthly totals' ready-for-agent)"
+state "the template tag behind: the gap and the tag it is behind; step 9 names the update, the step stays" "$d" \
+  "template: v1.28.0, behind $target, the tag this plinth targets" \
+  "step 9: template v1.28.0 is behind $target, the tag this plinth targets: /plinth:template-update, typed" \
+  "where: A ticket ready (step 4)" "command: /implement #5"
+state "the plinth pin behind: the gap and the release it is behind" "$d" \
+  "plinth pin: $pin, behind v2.31.0, the latest plinth release, 28 commit(s) behind"
+printf '_commit: %s\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' "$target" > "$d/.copier-answers.yml"
+state "the template at the tag this plinth targets: said, no step 9 line" "$d" \
+  "template: $target, the tag this plinth targets" "!step 9:"
+put "$d/issues.json" "$(issue 11 "Template update available: v1.28.0 to $target" '')"
+printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' > "$d/.copier-answers.yml"
+state "the reminder's own step is the update already: no second step 9 line" "$d" \
+  "command: /plinth:template-update" "!step 9:"
+put "$d/issues.json" "$(issue 5 'Show monthly totals' ready-for-agent)"
+
+dependabot() { # <number> <title> <conclusion> [<body>]: Dependabot's open pull request
+  printf '{"number":%s,"title":"%s","body":"%s","isDraft":false,"author":{"login":"app/dependabot","is_bot":true},"headRefOid":"%040d","statusCheckRollup":[%s]}' \
+    "$1" "$2" "${4:-}" "$1" "$(run 'ci / build' "$3")"
+}
+build_fails="$(prc 6 'feat: monthly totals' "$(run 'ci / build' FAILURE 456)")"
+printf '[]' > "$d/comments.json"
+put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump coolbress/plinth from 2.28.0 to 2.31.0' SUCCESS)"
+state "pin behind, Dependabot's green pull request raising it, a plinth job failing: merge #9, then #6's checks again" "$d" \
+  "where: Green, and seen working (step 6)" "command: merge #9" "!command: diagnose" "!fixes the code"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -E '^note: ' <<<"$out" | grep -qF "Dependabot's pull request #9 raises the pin and its checks are green" &&
+  grep -E '^note: ' <<<"$out" | grep -qF "after it merges, pull request #6's checks are run again on the newer plinth" &&
+  ok "the merge note: #9 raises the pin, green; #6's checks are run again after it" || bad "the merge note: $(grep -E '^note: ' <<<"$out")"
+put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump the actions group with 2 updates' SUCCESS 'Bumps coolbress/plinth from 2.28.0 to 2.31.0.')"
+state "a grouped Dependabot pull request naming the pin in its body: the same merge" "$d" "command: merge #9"
+put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump actions/checkout' SUCCESS)"
+state "Dependabot's pull request raising something else: not the one to merge" "$d" "!command: merge"
+cat > "$d/docs/how-to/keep-this-project-current.md" <<'HOWTO'
+# Keep this project current
+
+## 2. Update the template
+
+```text
+/plinth:template-update
+```
+
+## 3. Merge the plinth pin pull request
+
+**What to run:** in a terminal in this repository:
+
+```bash
+gh pr list --author app/dependabot --search coolbress/plinth
+```
+
+**Done when:** that command lists nothing. That does not prove the pin is the
+newest: Dependabot looks once a week and waits three days after a release.
+HOWTO
+put "$d/open.json" "$build_fails"
+state "pin behind, no Dependabot pull request: the command and note are the how-to's" "$d" \
+  "where: Between pieces of work (step 9)" "command: gh pr list --author app/dependabot --search coolbress/plinth" "!command: diagnose"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -E '^note: ' <<<"$out" | grep -qF 'no Dependabot pull request raising the pin is open; from docs/how-to/keep-this-project-current.md, "3. Merge the plinth pin pull request": Done when: that command lists nothing. That does not prove the pin is the newest: Dependabot looks once a week and waits three days after a release.' &&
+  grep -E '^note: ' <<<"$out" | grep -qF "pull request #6's checks are run again" &&
+  ok "the how-to's note: none open, its Done when, then #6's checks again" || bad "the how-to's note: $(grep -E '^note: ' <<<"$out")"
+put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump coolbress/plinth from 2.28.0 to 2.31.0' FAILURE)"
+state "Dependabot's pull request raising the pin, its checks failing: not merged; the how-to, and #9 named" "$d" \
+  "command: gh pr list --author app/dependabot --search coolbress/plinth" "!command: merge"
+grep -qF "Dependabot's pull request #9 raises the pin, its checks fail: it is merged once they are green" <<<"$(MOCK_DIR="$d" "$script" "$d" 2>&1)" &&
+  ok "the failing Dependabot pull request is named in the note" || bad "the failing Dependabot pull request is not named"
+rm "$d/docs/how-to/keep-this-project-current.md"
+put "$d/open.json" "$build_fails"
+state "pin behind, none open, no how-to in the project: floor-check, and why" "$d" \
+  "command: /plinth:floor-check" "!command: diagnose"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'smoke' FAILURE 459)")"
+state "pin behind, only the project's own check failing: the fix-the-code note stays" "$d" \
+  "command: diagnose this: pull request #6 has a failing check" \
+  "note: pull request #6 has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
+put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump coolbress/plinth from 2.28.0 to 2.31.0' SUCCESS)"
+# Not read: never a guess, and never "behind".
+out="$(MOCK_GH_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "plinth pin: $pin, not read against the latest release (no network read)" <<<"$out" && grep -qxF 'where: not read' <<<"$out" &&
+  ! grep -qE '^command: |, behind v2' <<<"$out" &&
+  ok "unauthenticated gh: plinth pin not read, where not read" || bad "unauthenticated: $(grep -E '^(plinth pin|where|template): ' <<<"$out")"
+printf 'not json' > "$api/releases/latest.json"
+state "the release read fails: not read, and the plinth job note of #903" "$d" \
+  "plinth pin: $pin, not read against the latest release (the release: offline or API error)" \
+  "command: diagnose this: pull request #6 has a failing check in a job plinth runs; read its log and the comments before changing any code"
+release v2.32.0
+state "the compare not there: not read against that release" "$d" \
+  "plinth pin: $pin, not read against v2.32.0, the latest plinth release (offline or API error)" "!command: merge"
+release v2.31.0
+printf '{"status":"identical","ahead_by":0,"behind_by":0}' > "$api/compare/$pin...v2.31.0?per_page=1&page=2.json"
+state "the pin at the latest release: said, and a plinth job failing is diagnosed" "$d" \
+  "plinth pin: $pin, at v2.31.0, the latest plinth release" "command: diagnose this: pull request #6 has a failing check in a job plinth runs; read its log and the comments before changing any code"
+printf '{"status":"ahead","ahead_by":28,"behind_by":0}' > "$api/compare/$pin...v2.31.0?per_page=1&page=2.json"
+printf 'name: Label\non: pull_request_target\njobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%040d\n' 8 > "$d/.github/workflows/label.yml"
+state "two pins that disagree: not read, with floor-check's reason" "$d" "!plinth pin: $pin, behind" "!command: merge"
+grep -q '^plinth pin: not read (workflow pins disagree' <<<"$(MOCK_DIR="$d" "$script" "$d" 2>&1)" && ok "two pins: floor-check's reason" || bad "two pins: no reason"
 
 d="$(repo triage)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
