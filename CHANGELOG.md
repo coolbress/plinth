@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:guide` counts every merged pull request a person opened, up to
+  the 1000 newest (#905). `scripts/guide-state.sh` read the newest 100 and
+  printed the people's share of them as the total, so a project with 203
+  merged said 98; and when those 100 were all Dependabot's, the guide went
+  back to the first pull request. At 1000 or more read, the line says
+  `of the last 1000 read; older ones not read`, and the project is taken as
+  past its first merge.
+
 ## [2.31.0] - 2026-11-10
 
 A new project renders plinth-template v1.43.1, whose `cli` or `library` release publishes every package of a uv workspace and whose third-party reviewer question says Codex's reviewer is the only one verified; a new project still calls plinth v2.28.0. The token how-to says what a cloud or scheduled Claude Code session can do on GitHub, the eval suite's `owed-item` task grades the follow-up attempt, and the owner's ruleset scripts stop reading as refusals. No workflow a project calls changed, so a project's `coolbress/plinth` pins need no raise for this release.

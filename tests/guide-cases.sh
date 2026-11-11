@@ -20,11 +20,11 @@ mkdir -p "$work/bin"
 cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 # MOCK_DIR holds open.json, merged.json and issues.json; MOCK_GH_FAIL makes
-# every call fail as an unauthenticated gh does.
+# every call fail as an unauthenticated gh does. A list is cut at --limit.
 set -u
 [ -n "${MOCK_GH_FAIL:-}" ] && { echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 4; }
-jqf="."; prev=""
-for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; prev="$a"; done
+jqf="."; limit=30; prev=""
+for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; [ "$prev" = --limit ] && limit="$a"; prev="$a"; done
 [ -n "${MOCK_FAIL_ON:-}" ] && [ "$1 $2 ${4:-}" = "$MOCK_FAIL_ON" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
 case "$1 $2 ${4:-}" in
   "repo view"*)        echo o/r; exit 0 ;;
@@ -33,7 +33,10 @@ case "$1 $2 ${4:-}" in
   "issue list open")   f=issues.json ;;
   *) echo "mock gh: unexpected $*" >&2; exit 1 ;;
 esac
-jq -r "$jqf" "$MOCK_DIR/$f"
+# As gh does: the --limit highest numbers (30 unless said), then the filter.
+# They stay in the fixture's order, so the script's own sorting is what sorts.
+set -o pipefail
+jq --argjson n "$limit" '(map(.number) | sort | reverse | .[:$n]) as $keep | map(select(.number as $x | $keep | index($x)))' "$MOCK_DIR/$f" | jq -r "$jqf"
 MOCK
 chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
@@ -224,6 +227,37 @@ d="$(repo idle)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
 expect "nothing open, past the first merge: shape the next idea" "$d" "An idea in your own words (step 2)" "/grilling" \
   "last merge: #7"
+
+# More merged pull requests than one page (#905). The count is the total, not
+# the people's share of the newest 100, and the step does not fall back to
+# the first pull request when the newest 100 are all Dependabot's.
+# many <count> <people's are #1..#n>: merged pull requests, the rest a bot's.
+many() {
+  jq -n --argjson c "$1" --argjson p "$2" '[range(1; $c + 1) | {number: ., title: "feat: change \(.)",
+    author: (if . <= $p then {login: "someone", is_bot: false} else {login: "app/dependabot", is_bot: true} end),
+    mergedAt: (1700000000 + . * 3600 | todate)}]'
+}
+d="$(repo many-merged)"
+many 203 83 > "$d/merged.json"
+expect "203 merged, the newest 120 a bot's: the people's total, and past the first merge" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (83 merged by people)"
+d="$(repo many-merged-one)"
+many 203 1 > "$d/merged.json"
+expect "203 merged, one by a person 202 merges ago: still counted as the one" "$d" \
+  "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "first pull request merged: yes (1 merged by people)"
+d="$(repo many-merged-all)"
+many 150 150 > "$d/merged.json"
+expect "150 merged, all by people: 150, not 100" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (150 merged by people)"
+# Past what is read, the line says how many it read and no total is claimed.
+d="$(repo past-the-read)"
+many 1003 3 > "$d/merged.json"
+expect "1003 merged, the people's older than the 1000 read: says so, and is past the first merge" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (0 merged by people of the last 1000 read; older ones not read)"
+d="$(repo at-the-read)"
+many 1000 1000 > "$d/merged.json"
+expect "exactly 1000 merged: read as cut, since a 1001st cannot be told apart" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "(1000 merged by people of the last 1000 read; older ones not read)"
 
 d="$(repo no-login)"
 out="$(MOCK_GH_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"

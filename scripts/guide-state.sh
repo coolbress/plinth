@@ -145,12 +145,15 @@ kind='def kind: [.labels[].name] as $l
     else "ticket" end;'
 
 # Each read on its own, so the line names the one that failed and its error.
+# Merged pull requests are read up to $read; at that many the read was cut,
+# the count is of those only and the line says so (#905).
+read=1000
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --json number,title,isDraft,author,headRefOid,statusCheckRollup \
       --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"')] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
-elif ! merged="$(cd "$top" && gh pr list --state merged --limit 100 --json number,title,mergedAt,author \
+elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
 elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body \
@@ -168,6 +171,13 @@ field() { cut -f"$1"; }
 people_prs="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
 bot_prs="$(awk -F '\t' '$2 == "bot"' <<<"$prs")"
 people_merged="$(awk -F '\t' '$2 == "person"' <<<"$merged" | grep -c . || true)"
+counted="$people_merged merged by people"
+# Cut: the older ones are unread, so neither "none" nor "exactly one" is
+# known. A project with that many merges is taken as past its first.
+past_first=""
+if [ "$(grep -c . <<<"$merged" || true)" -ge "$read" ]; then
+  past_first=yes; counted="$counted of the last $read read; older ones not read"
+fi
 
 if [ -n "$people_prs" ]; then
   echo "open pull requests:"
@@ -194,12 +204,12 @@ if [ -n "$merged" ]; then
 else
   echo "last merge: none"
 fi
-echo "first pull request merged: $([ "$people_merged" -gt 0 ] && echo yes || echo no) ($people_merged merged by people)"
+echo "first pull request merged: $([ "$people_merged" -gt 0 ] || [ -n "$past_first" ] && echo yes || echo no) ($counted)"
 echo
 
 tickets="$(awk -F '\t' '$4 == "ticket"' <<<"$issues")"
 labelled() { awk -F '\t' -v l="$1" '("," $2 ",") ~ ("," l ",")' <<<"$2" | head -1 | field 1; }
-if [ "$people_merged" -eq 0 ]; then
+if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   first="$(awk -F '\t' 'index($6, "docs: first pull request") == 1' <<<"$people_prs" | head -1)"
   [ -n "$first" ] || first="$(head -1 <<<"$people_prs")"
   if [ -n "$first" ]; then
@@ -230,7 +240,7 @@ elif [ -n "$tickets" ]; then
   before="/clear"; say "A ticket ready" "/implement #$(head -1 <<<"$tickets" | field 1)"
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
-elif [ "$people_merged" -eq 1 ]; then
+elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
   say "First pull request merged" "none: three pages to follow, in order (the tool cell)" "An idea in your own words"
 elif [ -n "$bot_prs" ]; then
   say "Between pieces of work" "/plinth:floor-check (then the Dependabot pull requests, one at a time, on green)"
