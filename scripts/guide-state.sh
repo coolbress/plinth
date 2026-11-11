@@ -50,7 +50,7 @@ whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
 
 # say <row start> <command> [<then: row start>]: the verdict block. The
 # command is typed as printed; $before (typed first) and $note go with it.
-before=""; note=""; said=""
+before=""; note=""; said_cmd=""
 say() {
   local cells after
   cells="$(row "$1")" || exit 1
@@ -59,7 +59,7 @@ say() {
   echo "tool: $(sed -n 3p <<<"$cells")"
   [ -z "$before" ] || echo "before: $before"
   echo "command: $2"
-  said="$2"
+  said_cmd="$2"
   [ -z "$note" ] || echo "note: $note"
   if [ -n "${3:-}" ]; then
     after="$(row "$3")" || exit 1
@@ -385,7 +385,7 @@ else
 fi
 # The template behind (#904): step 9's line names the update; the step the
 # project is at stays the one above.
-if [ -n "$template_behind" ] && [ "$said" != /plinth:template-update ]; then
+if [ -n "$template_behind" ] && [ "$said_cmd" != /plinth:template-update ]; then
   echo "step 9: template $template_behind, the tag this plinth targets: /plinth:template-update, typed"
 fi
 finish

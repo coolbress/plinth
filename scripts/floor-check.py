@@ -1947,8 +1947,8 @@ def print_behind(root: Path, network: bool = True, host: str | None = None) -> i
     elif status == "behind":
         print(f"plinth pin: {pin}, ahead of {tag}, the latest plinth release")
     else:
-        why = ("the two have diverged" if status == "diverged"
-               else "offline or API error" if cmp in (ABSENT, ERROR) else "an unexpected compare response")
+        why = ("the two have diverged" if status == "diverged" else "the compare was not found" if cmp is ABSENT
+               else "offline or API error" if cmp is ERROR else "an unexpected compare response")
         print(f"plinth pin: {pin}, not read against {tag}, the latest plinth release ({why})")
     return 0
 

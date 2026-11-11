@@ -329,7 +329,7 @@ state "the release read fails: not read, and the plinth job note of #903" "$d" \
   "command: diagnose this: pull request #6 has a failing check in a job plinth runs; read its log and the comments before changing any code"
 release v2.32.0
 state "the compare not there: not read against that release" "$d" \
-  "plinth pin: $pin, not read against v2.32.0, the latest plinth release (offline or API error)" "!command: merge"
+  "plinth pin: $pin, not read against v2.32.0, the latest plinth release (the compare was not found)" "!command: merge"
 release v2.31.0
 printf '{"status":"identical","ahead_by":0,"behind_by":0}' > "$api/compare/$pin...v2.31.0?per_page=1&page=2.json"
 state "the pin at the latest release: said, and a plinth job failing is diagnosed" "$d" \
