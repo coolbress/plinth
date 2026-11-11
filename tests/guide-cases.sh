@@ -21,11 +21,11 @@ cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 # MOCK_DIR holds open.json, merged.json and issues.json, and comments.json
 # when a case reads a pull request's comments; MOCK_GH_FAIL makes every call
-# fail as an unauthenticated gh does.
+# fail as an unauthenticated gh does. A list is cut at --limit.
 set -u
 [ -n "${MOCK_GH_FAIL:-}" ] && { echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 4; }
-jqf="."; prev=""
-for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; prev="$a"; done
+jqf="."; limit=30; prev=""
+for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; [ "$prev" = --limit ] && limit="$a"; prev="$a"; done
 [ -n "${MOCK_FAIL_ON:-}" ] && [ "$1 $2 ${4:-}" = "$MOCK_FAIL_ON" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
 case "$1 $2 ${4:-}" in
   "repo view"*)        echo o/r; exit 0 ;;
@@ -35,7 +35,10 @@ case "$1 $2 ${4:-}" in
   "api repos/o/r/issues/"*"/comments "*) f=comments.json ;;
   *) echo "mock gh: unexpected $*" >&2; exit 1 ;;
 esac
-jq -r "$jqf" "$MOCK_DIR/$f"
+# As gh does: the --limit highest numbers (30 unless said), then the filter.
+# They stay in the fixture's order, so the script's own sorting is what sorts.
+set -o pipefail
+jq --argjson n "$limit" '(map(.number) | sort | reverse | .[:$n]) as $keep | map(select(.number as $x | $keep | index($x)))' "$MOCK_DIR/$f" | jq -r "$jqf"
 MOCK
 chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
@@ -315,6 +318,53 @@ d="$(repo idle)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
 expect "nothing open, past the first merge: shape the next idea" "$d" "An idea in your own words (step 2)" "/grilling" \
   "last merge: #7"
+
+# More merged pull requests than the 100 read (#905). A read that came back
+# full says it counts the last 100 only, and the step does not fall back to
+# the first pull request when those 100 are all Dependabot's.
+# many <count> <people's are #1..#n>: merged pull requests, the rest a bot's.
+many() {
+  jq -n --argjson c "$1" --argjson p "$2" '[range(1; $c + 1) | {number: ., title: "feat: change \(.)",
+    author: (if . <= $p then {login: "someone", is_bot: false} else {login: "app/dependabot", is_bot: true} end),
+    mergedAt: (1700000000 + . * 3600 | todate)}]'
+}
+d="$(repo many-merged)"
+many 203 83 > "$d/merged.json"
+expect "203 merged, the newest 120 a bot's: of the last 100, and past the first merge" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (0 merged by people of the last 100 read; older ones not read)"
+# With a failing check there (#903), that project is at "Something broke" and
+# its failing checks are named, though none of the 100 read is a person's.
+put "$d/open.json" "$(prc 300 'feat: totals' "$(run 'smoke' FAILURE 470)")"
+state "203 merged, none of the last 100 a person's, a failing check: named, something broke" "$d" \
+  "where: Something broke (step 7)" "failing checks on pull request #300:" "  smoke: the project's own" \
+  "command: diagnose this: pull request #300 has a failing check"
+d="$(repo many-merged-all)"
+many 150 150 > "$d/merged.json"
+expect "150 merged, all by people: 100 of the last 100, not a total" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (100 merged by people of the last 100 read; older ones not read)"
+d="$(repo many-merged-one)"
+many 203 1 > "$d/merged.json"
+expect "203 merged, the one by a person unread: not taken for the first merge" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "of the last 100 read"
+d="$(repo at-the-read)"
+many 100 100 > "$d/merged.json"
+expect "exactly 100 merged: read as cut, since a 101st cannot be told apart" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "(100 merged by people of the last 100 read; older ones not read)"
+d="$(repo at-the-read-one)"
+many 100 1 > "$d/merged.json"
+expect "100 merged, one by a person among them: not taken for the only one" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "(1 merged by people of the last 100 read; older ones not read)"
+# Under 100 the read is everything: the count is the total and exact.
+d="$(repo under-the-read)"
+many 99 1 > "$d/merged.json"
+expect "99 merged, one by a person 98 merges ago: the total, and still the one" "$d" \
+  "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "first pull request merged: yes (1 merged by people)"
+d="$(repo under-the-read-bots)"
+many 99 0 > "$d/merged.json"; put "$d/open.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+expect "99 merged, all a bot's, the first pull request open: still the first merge" "$d" \
+  "Repository made, its first pull request open (step 1)" \
+  "body=\"\$(gh pr view 2 --json body --jq .body)\" && gh pr merge 2 --squash --match-head-commit $(printf '%040d' 2) --body \"\$body\"" \
+  "first pull request merged: no (0 merged by people)"
 
 d="$(repo no-login)"
 out="$(MOCK_GH_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
