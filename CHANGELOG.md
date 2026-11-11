@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:guide` no longer names "Something broke" from the check colour
+  alone (#903). For the pull request it names, `scripts/guide-state.sh` prints
+  each failing check, whether it is a plinth job (a job of a workflow the
+  project's own workflow files call from `coolbress/plinth`, with the version
+  they call) or the project's own, the `gh run view --job <id> --log-failed`
+  line that reads its log, and how many comments people left in the
+  conversation (reviews are not counted). When a plinth
+  job failed, the note says the fault may be in the plinth version the project
+  calls, names `/plinth:floor-check` for comparing its pin with the latest
+  release, and no longer tells the agent to fix the code; a failing check of the
+  project's own keeps that note. The skill reads the newest comment and the
+  failed log before it names a cause, and says the cause is not known yet when
+  neither names one.
+
 ### Fixed
 
 - `/plinth:guide` no longer states the people's share of the newest 100

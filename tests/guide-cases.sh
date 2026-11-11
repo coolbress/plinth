@@ -19,8 +19,9 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$work/bin"
 cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
-# MOCK_DIR holds open.json, merged.json and issues.json; MOCK_GH_FAIL makes
-# every call fail as an unauthenticated gh does. A list is cut at --limit.
+# MOCK_DIR holds open.json, merged.json and issues.json, and comments.json
+# when a case reads a pull request's comments; MOCK_GH_FAIL makes every call
+# fail as an unauthenticated gh does. A list is cut at --limit.
 set -u
 [ -n "${MOCK_GH_FAIL:-}" ] && { echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 4; }
 jqf="."; limit=30; fields=""; prev=""
@@ -28,7 +29,7 @@ for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; [ "$prev" = --limit ] && limit
 [ -n "${MOCK_FAIL_ON:-}" ] && [ "$1 $2 ${4:-}" = "$MOCK_FAIL_ON" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
 # GET repos/<o>/<r>/commits/<sha>: the commit by that oid in open.json's
 # pull requests, in the REST shape. MOCK_API_FAIL fails it.
-if [ "$1" = api ]; then
+if [ "$1" = api ] && [[ "$2" == repos/*/commits/* ]]; then
   [ -n "${MOCK_API_FAIL:-}" ] && { echo "HTTP 404: Not Found" >&2; exit 1; }
   set -o pipefail
   jq --arg s "${2##*/}" '[.[].commits[]? | select(.oid == $s)] | first | {commit: {committer: {date: .committedDate}}}' "$MOCK_DIR/open.json" | jq -r "$jqf"
@@ -42,6 +43,7 @@ case "$1 $2 ${4:-}" in
   "pr list open")      f=open.json ;;
   "pr list merged")    f=merged.json ;;
   "issue list open")   f=issues.json ;;
+  "api repos/o/r/issues/"*"/comments "*) f=comments.json ;;
   *) echo "mock gh: unexpected $*" >&2; exit 1 ;;
 esac
 # As gh does: the --limit highest numbers (30 unless said), then the filter.
@@ -176,6 +178,95 @@ put "$d/open.json" "$(pr 6 'feat: monthly totals' false - -1200)"
 expect "a head commit dated ahead of the clock: not started yet, never a negative age" "$d" "A pull request with checks running (step 5)" "/run" \
   "#6 ready, checks not started yet (last change 0 min ago)"
 
+# Which check failed, and whose it is (#903). A job of a workflow the project
+# calls from coolbress/plinth is plinth's: the fault may be in the version it
+# calls, so the note does not send the agent to fix the code. The project's
+# own keeps the note above.
+run() { # <name> <conclusion> [<job id>]: a check run as gh's statusCheckRollup has it
+  printf '{"__typename":"CheckRun","name":"%s","status":"COMPLETED","conclusion":"%s","detailsUrl":"%s"}' "$1" "$2" \
+    "${3:+https://github.com/o/r/actions/runs/900/job/$3}"
+}
+prc() { # <number> <title> <check>...: a person's open pull request with those checks
+  local n="$1" t="$2"; shift 2; local IFS=,
+  printf '{"number":%s,"title":"%s","isDraft":false,"author":{"login":"someone","is_bot":false},"headRefOid":"%040d","statusCheckRollup":[%s]}' "$n" "$t" "$n" "$*"
+}
+comment() { printf '{"id":%s,"user":{"login":"%s","type":"%s"},"body":"x"}' "$1" "$2" "$3"; }
+# state <case> <dir> <line>...: every line is in the output, whole; a line
+# starting with "!" must be in no line of it.
+state() {
+  local name="$1" out miss="" l; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"; shift 2
+  for l in "$@"; do
+    case "$l" in
+      '!'*) grep -qF -- "${l#!}" <<<"$out" && miss="$miss
+        has: ${l#!}" ;;
+      *) grep -qxF -- "$l" <<<"$out" || miss="$miss
+        no line: $l" ;;
+    esac
+  done
+  if [ -z "$miss" ]; then ok "$name"; else bad "$name:$miss"; sed 's/^/        /' <<<"$out" | head -24; fi
+}
+mkdir -p "$d/.github/workflows"
+printf 'name: CI\non:\n  pull_request:\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d # v2.28.0\n    with:\n      archetype: cli\n' 7 > "$d/.github/workflows/ci.yml"
+printf 'name: Label\non:\n  pull_request_target:\njobs:\n  label:\n    uses: "coolbress/plinth/.github/workflows/pr-label.yml@%040d"\n' 8 > "$d/.github/workflows/label.yml"
+printf 'name: Own\non: pull_request\njobs:\n  smoke:\n    runs-on: ubuntu-latest\n    steps:\n      - run: "true"\n  local:\n    name: ci-local\n    uses: ./.github/workflows/reused.yml\n' > "$d/.github/workflows/own.yml"
+put "$d/comments.json" "$(comment 1 someone User)" "$(comment 2 'github-actions[bot]' Bot)" "$(comment 3 another User)"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'ci / build' FAILURE 456)" "$(run 'ci / test' SUCCESS 457)")"
+state "only ci / build failing: named, a plinth job, and the note does not say to fix the code" "$d" \
+  "where: Something broke (step 7)" \
+  "failing checks on pull request #6:" \
+  "  ci / build: a plinth job (the project calls coolbress/plinth's python-ci.yml at v2.28.0)" \
+  "    log: gh run view --job 456 --log-failed" \
+  "comments by people on pull request #6: 2" \
+  "command: diagnose this: pull request #6 has a failing check in a job plinth runs; read its log and the comments before changing any code" \
+  "!fixes the code" "!ci / test"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -E '^note: ' <<<"$out" | grep -qF 'the fault may be in the plinth version the project calls' && grep -E '^note: ' <<<"$out" | grep -qF "/plinth:floor-check compares the project's plinth pin with the latest release" && ! grep -qE '#[0-9]+|/issues/[0-9]' <<<"$(grep -E '^note: ' <<<"$out" | sed 's/pull request #6//g')" &&
+  ok "the plinth job's note: maybe the plinth version the project calls, floor-check compares the pin, and no issue number of plinth's" || bad "the plinth job's note: $(grep -E '^note: ' <<<"$out")"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'label / label' FAILURE 458)")"
+state "label / label failing, its pin with no version comment: a plinth job, at the commit" "$d" \
+  "  label / label: a plinth job (the project calls coolbress/plinth's pr-label.yml at $(printf '%040d' 8))" "!fixes the code"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'smoke' FAILURE 459)")"
+state "a failing check of the project's own: the fix-the-code note stays" "$d" \
+  "  smoke: the project's own" "    log: gh run view --job 459 --log-failed" \
+  "command: diagnose this: pull request #6 has a failing check" \
+  "note: pull request #6 has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'ci-local / test' FAILURE 460)")"
+state "a job of a workflow the project calls from itself: the project's own" "$d" \
+  "  ci-local / test: the project's own" \
+  "note: pull request #6 has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
+mv "$d/.github/workflows/ci.yml" "$d/ci.yml.away"
+printf 'name: CI\non: pull_request\njobs:\n  ci:\n    uses: ./.github/workflows/reused.yml\n' > "$d/.github/workflows/ci.yml"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'ci / test' FAILURE 461)")"
+state "ci / test from a local workflow: the name alone does not make it plinth's" "$d" \
+  "  ci / test: the project's own" \
+  "note: pull request #6 has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
+mv "$d/ci.yml.away" "$d/.github/workflows/ci.yml"
+printf 'name: M\non: pull_request\njobs:\n    mx:\n        strategy:\n            matrix:\n                kind: [cli]\n        uses: Coolbress/Plinth/.github/workflows/python-ci.yml@v2.30.0\n' > "$d/.github/workflows/matrix.yml"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'mx (cli) / build' FAILURE 462)")"
+state "a matrix on the caller job, four-space indent, the repository in another case: a plinth job" "$d" \
+  "  mx (cli) / build: a plinth job (the project calls coolbress/plinth's python-ci.yml at v2.30.0)" "!fixes the code"
+rm "$d/.github/workflows/matrix.yml"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'ci / build' FAILURE 456)" "$(run 'smoke' TIMED_OUT 459)" '{"__typename":"StatusContext","context":"deploy/preview","state":"FAILURE","targetUrl":"https://example.com/x"}')"
+state "a plinth job and two of the project's own failing: each named, the note says both" "$d" \
+  "  ci / build: a plinth job (the project calls coolbress/plinth's python-ci.yml at v2.28.0)" \
+  "  smoke: the project's own" "  deploy/preview: the project's own" \
+  "command: diagnose this: pull request #6 has a failing check in a job plinth runs; read its log and the comments before changing any code"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -E '^note: ' <<<"$out" | grep -qF 'smoke, deploy/preview: the project'"'"'s own, where the agent fixes the code, not the check' && [ "$(grep -c '^    log: ' <<<"$out")" = 2 ] &&
+  ok "the mixed note keeps fix-the-code for the project's own; a commit status has no log line" || bad "the mixed note: $(grep -E '^note: |log:' <<<"$out")"
+put "$d/open.json" "$(prc 6 'feat: monthly totals' "$(run 'ci / build' FAILURE 456)")"
+out="$(MOCK_FAIL_ON="api repos/o/r/issues/6/comments --jq" MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF 'comments by people on pull request #6: not read (HTTP 502: Bad Gateway)' <<<"$out" && grep -qxF 'where: Something broke (step 7)' <<<"$out" &&
+  ok "the comments not read: said so with gh's error, the step still named" || bad "comments not read: $(grep -F comments <<<"$out")"
+printf '[]' > "$d/comments.json"
+state "no comment by a person: 0" "$d" "comments by people on pull request #6: 0"
+put "$d/open.json" "$(pr 6 'feat: monthly totals' false run)"
+state "no failing check: no failing-checks lines, no comments read" "$d" "where: A pull request with checks running (step 5)" "!failing checks on" "!comments by people"
+if grep -qF 'gh run view' "$root/skills/guide/SKILL.md" && grep -qiF 'newest comment' "$root/skills/guide/SKILL.md" &&
+   grep -qF 'before you name a cause' "$root/skills/guide/SKILL.md" && grep -qF 'not known yet' "$root/skills/guide/SKILL.md"
+then ok "the skill says to read the comment and the failed log before naming a cause, and 'not known yet' when neither names one"
+else bad "the skill does not say to read the comment and the failed log before naming a cause"; fi
+
 d="$(repo triage)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
 put "$d/issues.json" "$(issue 8 'It crashes on an empty file' needs-triage)"
@@ -283,6 +374,12 @@ d="$(repo many-merged)"
 many 203 83 > "$d/merged.json"
 expect "203 merged, the newest 120 a bot's: of the last 100, and past the first merge" "$d" \
   "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (0 merged by people of the last 100 read; older ones not read)"
+# With a failing check there (#903), that project is at "Something broke" and
+# its failing checks are named, though none of the 100 read is a person's.
+put "$d/open.json" "$(prc 300 'feat: totals' "$(run 'smoke' FAILURE 470)")"
+state "203 merged, none of the last 100 a person's, a failing check: named, something broke" "$d" \
+  "where: Something broke (step 7)" "failing checks on pull request #300:" "  smoke: the project's own" \
+  "command: diagnose this: pull request #300 has a failing check"
 d="$(repo many-merged-all)"
 many 150 150 > "$d/merged.json"
 expect "150 merged, all by people: 100 of the last 100, not a total" "$d" \

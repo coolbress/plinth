@@ -2,7 +2,9 @@
 # What /plinth:guide reads (#710): the repository's state, what it started
 # with off (#763), the row of the arsenal's "Where you are, and what to do
 # next" table that state points to, the reasons it may give (#834), and the
-# table itself. Read-only: it runs git and gh reads, nothing else.
+# table itself. For a pull request with a failing check it names the checks
+# that failed, whose each one is, and how many comments people left (#903).
+# Read-only: it runs git and gh reads, nothing else.
 #
 #   guide-state.sh [<dir>]     # default: the current directory
 #
@@ -129,10 +131,16 @@ fi
 echo "repository: $repo"
 
 # A check run has status and conclusion; a commit status has only state.
-rollup='def checks: [.statusCheckRollup[]? | (.conclusion // .state // "") as $c | (.status // "COMPLETED") as $s
+rollup='def state: (.conclusion // .state // "") as $c | (.status // "COMPLETED") as $s
   | if $s != "COMPLETED" or ($c | IN("PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "")) then "pending"
-    elif ($c | IN("SUCCESS", "NEUTRAL", "SKIPPED")) then "pass" else "fail" end]
-  | if length == 0 then "none" elif any(. == "fail") then "fail" elif any(. == "pending") then "pending" else "pass" end;'
+    elif ($c | IN("SUCCESS", "NEUTRAL", "SKIPPED")) then "pass" else "fail" end;
+  def checks: [.statusCheckRollup[]? | state]
+  | if length == 0 then "none" elif any(. == "fail") then "fail" elif any(. == "pending") then "pending" else "pass" end;
+  # The failing ones (#903): name, then the Actions job its log is read by
+  # (none for a commit status); \u001f inside one, \u001e between them.
+  def failing: [.statusCheckRollup[]? | select(state == "fail")
+    | [((.name // .context // "unnamed") | gsub("[\t\n\u001e\u001f]"; " ")),
+       ((.detailsUrl // "") | (capture("/actions/runs/[0-9]+/job/(?<j>[0-9]+)") | .j) // "")] | join("\u001f")] | join("\u001e");'
 bot='(.author.is_bot // false) or (.author.login // "" | startswith("app/"))'
 clean='gsub("[\t\n]"; " ")'
 # What an issue is (#834). The reminder is the template's Template reminder
@@ -152,7 +160,7 @@ read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --json number,title,isDraft,author,headRefOid,statusCheckRollup,createdAt \
-      --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt] | @tsv' 2>&1)"; then
+      --jq "$rollup"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
@@ -176,10 +184,11 @@ people_prs="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
 # made over ten minutes before it was pushed to an older pull request reads as
 # no checks ran. The head's time is one call per such pull request: asking
 # the list above for `commits` makes GitHub refuse the whole query (over its
-# 500,000-node limit at --limit 100). Column 8 is what is said of the checks.
-said() {
-  local n draft checks sha title created line t
-  while IFS=$'\t' read -r n _ draft checks sha title created; do
+# 500,000-node limit at --limit 100). Column 9 is what is said of the checks.
+checks_line() {
+  local row checks sha created line t
+  while IFS= read -r row; do
+    checks="$(cut -f4 <<<"$row")"; sha="$(cut -f5 <<<"$row")"; created="$(cut -f7 <<<"$row")"
     line="checks $checks"
     if [ "$checks" = none ]; then
       line="no checks yet; when its head was pushed was not read"
@@ -189,10 +198,10 @@ said() {
           | if $a < 600 then "checks not started yet (last change \($a / 60 | floor) min ago)" else "no checks ran" end' 2>/dev/null)" &&
         [ -n "$t" ] && line="$t"
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$n" person "$draft" "$checks" "$sha" "$title" "$created" "$line"
+    printf '%s\t%s\n' "$row" "$line"
   done
 }
-[ -z "$people_prs" ] || people_prs="$(said <<<"$people_prs")"
+[ -z "$people_prs" ] || people_prs="$(checks_line <<<"$people_prs")"
 bot_prs="$(awk -F '\t' '$2 == "bot"' <<<"$prs")"
 people_merged="$(awk -F '\t' '$2 == "person"' <<<"$merged" | grep -c . || true)"
 counted="$people_merged merged by people"
@@ -205,7 +214,7 @@ fi
 
 if [ -n "$people_prs" ]; then
   echo "open pull requests:"
-  awk -F '\t' '{ printf "  #%s %s, %s: %s\n", $1, $3, $8, $6 }' <<<"$people_prs"
+  awk -F '\t' '{ printf "  #%s %s, %s: %s\n", $1, $3, $9, $6 }' <<<"$people_prs"
 else
   echo "open pull requests: none"
 fi
@@ -229,6 +238,67 @@ else
   echo "last merge: none"
 fi
 echo "first pull request merged: $([ "$people_merged" -gt 0 ] || [ -n "$past_first" ] && echo yes || echo no) ($counted)"
+
+# The pull request "Something broke" names (#903): which checks failed, and
+# whose each one is. A check named "<job> / <anything>" is plinth's when <job>
+# is a job of the project's workflows that calls a workflow of coolbress/plinth:
+# read from the checkout's files, so a job that calls the project's own
+# workflow under the same name is the project's. "<job> (" is a matrix on the
+# caller job. Not read: a caller name written as an expression, a quoted job
+# id, a job written on one line; such a check is said to be the project's own.
+plinth_jobs() { # <name of the caller job>\t<plinth workflow file>\t<the version comment, or the ref>
+  local f
+  for f in "$top"/.github/workflows/*.yml "$top"/.github/workflows/*.yaml; do
+    [ -f "$f" ] || continue
+    awk '
+      function flush() { if (uses != "") print (name != "" ? name : id) "\t" uses "\t" at; id = ""; name = ""; uses = ""; at = "" }
+      function value(s) { sub(/^[^:]*:[ \t]*/, "", s); sub(/[ \t]+#.*$/, "", s); gsub(/^["\047]|["\047]$/, "", s); return s }
+      /^[ \t]*(#|$)/ { next }
+      { match($0, /^ */); ind = RLENGTH }
+      ind == 0 { flush(); jobs = ($0 ~ /^jobs:/); ji = -1; next }
+      !jobs { next }
+      ji < 0 { ji = ind }
+      ind == ji { flush(); id = $0; sub(/^ */, "", id); sub(/:.*$/, "", id); pi = -1; next }
+      id == "" { next }
+      pi < 0 { pi = ind }
+      ind != pi { next }
+      /^ *name:/ { name = value($0) }
+      /^ *uses:/ {
+        u = value($0)
+        if (tolower(u) ~ /^coolbress\/plinth\/\.github\/workflows\/[^@]+@/) {
+          uses = u; sub(/^[^\/]+\/[^\/]+\/\.github\/workflows\//, "", uses); at = uses
+          sub(/@.*$/, "", uses); sub(/^[^@]*@/, "", at)
+          if (match($0, /#[ \t]*v[0-9][^ \t]*/)) { at = substr($0, RSTART, RLENGTH); sub(/^#[ \t]*/, "", at) }
+        }
+      }
+      END { flush() }' "$f"
+  done
+}
+broken=""; plinth_failing=""; own_failing=""
+{ [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && broken="$(awk -F '\t' '$4 == "fail"' <<<"$people_prs" | head -1)"
+if [ -n "$broken" ]; then
+  n="$(field 1 <<<"$broken")"
+  callers="$(plinth_jobs)"
+  echo "failing checks on pull request #$n:"
+  while IFS=$'\037' read -r check job; do
+    [ -n "$check" ] || continue
+    whose="$(awk -F '\t' -v c="$check" 'index(c, $1 " / ") == 1 || index(c, $1 " (") == 1 { print $2 " at " $3; exit }' <<<"$callers")"
+    if [ -n "$whose" ]; then
+      echo "  $check: a plinth job (the project calls coolbress/plinth's $whose)"
+      plinth_failing="${plinth_failing:+$plinth_failing, }$check"
+    else
+      echo "  $check: the project's own"
+      own_failing="${own_failing:+$own_failing, }$check"
+    fi
+    [ -z "$job" ] || echo "    log: gh run view --job $job --log-failed"
+  done < <(field 8 <<<"$broken" | tr '\036' '\n')
+  # By people, not bots: the REST read says which an author is.
+  if said="$(cd "$top" && gh api "repos/$repo/issues/$n/comments" --paginate --jq '.[] | select(.user.type != "Bot") | .id' 2>&1)"; then
+    echo "comments by people on pull request #$n: $(grep -c . <<<"$said" || true)"
+  else
+    echo "comments by people on pull request #$n: not read ($(tail -1 <<<"$said"))"
+  fi
+fi
 echo
 
 tickets="$(awk -F '\t' '$4 == "ticket"' <<<"$issues")"
@@ -246,13 +316,18 @@ if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   fi
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
-  pr="$(awk -F '\t' '$4 == "fail"' <<<"$people_prs" | head -1)"
-  if [ -n "$pr" ]; then
-    n="$(field 1 <<<"$pr")"
+  if [ -n "$broken" ] && [ -n "$plinth_failing" ]; then
+    # A plinth job (#903): nothing in the pull request may need to change.
+    n="$(field 1 <<<"$broken")"
+    note="pull request #$n has a failing check that is a plinth job ($plinth_failing); the fault may be in the plinth version the project calls, not in this pull request, so the cause is read from the newest comment and the failed log first; /plinth:floor-check compares the project's plinth pin with the latest release"
+    [ -z "$own_failing" ] || note="$note; $own_failing: the project's own, where the agent fixes the code, not the check"
+    say "Something broke" "diagnose this: pull request #$n has a failing check in a job plinth runs; read its log and the comments before changing any code"
+  elif [ -n "$broken" ]; then
+    n="$(field 1 <<<"$broken")"
     note="pull request #$n has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
     say "Something broke" "diagnose this: pull request #$n has a failing check"
   else
-    n="$(head -1 <<<"$people_prs" | field 1)"; checks="$(head -1 <<<"$people_prs" | field 8)"
+    n="$(head -1 <<<"$people_prs" | field 1)"; checks="$(head -1 <<<"$people_prs" | field 9)"
     case "$checks" in
       "no checks ran") note="pull request #$n: no checks ran on it; find out why before /run" ;;
       "checks not started yet"*) note="pull request #$n, $checks; look again in a minute, then /run once they are green" ;;
