@@ -145,8 +145,9 @@ kind='def kind: [.labels[].name] as $l
     else "ticket" end;'
 
 # Each read on its own, so the line names the one that failed and its error.
-# Merged pull requests are read up to $read; at that many the read was cut,
-# the count is of those only and the line says so (#905).
+# Merged pull requests are read up to $read. A read that comes back full may
+# have been cut (one more cannot be told apart), so the count is of those
+# only and the line says so (#905).
 read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \

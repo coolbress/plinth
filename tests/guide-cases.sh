@@ -253,6 +253,10 @@ d="$(repo at-the-read)"
 many 100 100 > "$d/merged.json"
 expect "exactly 100 merged: read as cut, since a 101st cannot be told apart" "$d" \
   "An idea in your own words (step 2)" "/grilling" "(100 merged by people of the last 100 read; older ones not read)"
+d="$(repo at-the-read-one)"
+many 100 1 > "$d/merged.json"
+expect "100 merged, one by a person among them: not taken for the only one" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "(1 merged by people of the last 100 read; older ones not read)"
 # Under 100 the read is everything: the count is the total and exact.
 d="$(repo under-the-read)"
 many 99 1 > "$d/merged.json"
