@@ -147,7 +147,7 @@ kind='def kind: [.labels[].name] as $l
 # Each read on its own, so the line names the one that failed and its error.
 # Merged pull requests are read up to $read; at that many the read was cut,
 # the count is of those only and the line says so (#905).
-read=1000
+read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --json number,title,isDraft,author,headRefOid,statusCheckRollup \

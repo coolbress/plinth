@@ -13,13 +13,13 @@ pull requests and have no tag.
 
 ### Fixed
 
-- `/plinth:guide` counts every merged pull request a person opened, up to
-  the 1000 newest (#905). `scripts/guide-state.sh` read the newest 100 and
-  printed the people's share of them as the total, so a project with 203
-  merged said 98; and when those 100 were all Dependabot's, the guide went
-  back to the first pull request. At 1000 or more read, the line says
-  `of the last 1000 read; older ones not read`, and the project is taken as
-  past its first merge.
+- `/plinth:guide` no longer states the people's share of the newest 100
+  merged pull requests as a total (#905): a project with 203 merged said 98.
+  When `scripts/guide-state.sh` reads a full 100, the line says
+  `of the last 100 read; older ones not read`; under 100 the count is the
+  total, as before. A project with 100 or more merged is taken as past its
+  first merge, so one whose newest 100 are all Dependabot's no longer goes
+  back to the first pull request.
 
 ## [2.31.0] - 2026-11-10
 

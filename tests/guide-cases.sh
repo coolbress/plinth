@@ -228,9 +228,9 @@ put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' fal
 expect "nothing open, past the first merge: shape the next idea" "$d" "An idea in your own words (step 2)" "/grilling" \
   "last merge: #7"
 
-# More merged pull requests than one page (#905). The count is the total, not
-# the people's share of the newest 100, and the step does not fall back to
-# the first pull request when the newest 100 are all Dependabot's.
+# More merged pull requests than the 100 read (#905). A read that came back
+# full says it counts the last 100 only, and the step does not fall back to
+# the first pull request when those 100 are all Dependabot's.
 # many <count> <people's are #1..#n>: merged pull requests, the rest a bot's.
 many() {
   jq -n --argjson c "$1" --argjson p "$2" '[range(1; $c + 1) | {number: ., title: "feat: change \(.)",
@@ -239,25 +239,31 @@ many() {
 }
 d="$(repo many-merged)"
 many 203 83 > "$d/merged.json"
-expect "203 merged, the newest 120 a bot's: the people's total, and past the first merge" "$d" \
-  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (83 merged by people)"
-d="$(repo many-merged-one)"
-many 203 1 > "$d/merged.json"
-expect "203 merged, one by a person 202 merges ago: still counted as the one" "$d" \
-  "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "first pull request merged: yes (1 merged by people)"
+expect "203 merged, the newest 120 a bot's: of the last 100, and past the first merge" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (0 merged by people of the last 100 read; older ones not read)"
 d="$(repo many-merged-all)"
 many 150 150 > "$d/merged.json"
-expect "150 merged, all by people: 150, not 100" "$d" \
-  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (150 merged by people)"
-# Past what is read, the line says how many it read and no total is claimed.
-d="$(repo past-the-read)"
-many 1003 3 > "$d/merged.json"
-expect "1003 merged, the people's older than the 1000 read: says so, and is past the first merge" "$d" \
-  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (0 merged by people of the last 1000 read; older ones not read)"
+expect "150 merged, all by people: 100 of the last 100, not a total" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "first pull request merged: yes (100 merged by people of the last 100 read; older ones not read)"
+d="$(repo many-merged-one)"
+many 203 1 > "$d/merged.json"
+expect "203 merged, the one by a person unread: not taken for the first merge" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "of the last 100 read"
 d="$(repo at-the-read)"
-many 1000 1000 > "$d/merged.json"
-expect "exactly 1000 merged: read as cut, since a 1001st cannot be told apart" "$d" \
-  "An idea in your own words (step 2)" "/grilling" "(1000 merged by people of the last 1000 read; older ones not read)"
+many 100 100 > "$d/merged.json"
+expect "exactly 100 merged: read as cut, since a 101st cannot be told apart" "$d" \
+  "An idea in your own words (step 2)" "/grilling" "(100 merged by people of the last 100 read; older ones not read)"
+# Under 100 the read is everything: the count is the total and exact.
+d="$(repo under-the-read)"
+many 99 1 > "$d/merged.json"
+expect "99 merged, one by a person 98 merges ago: the total, and still the one" "$d" \
+  "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "first pull request merged: yes (1 merged by people)"
+d="$(repo under-the-read-bots)"
+many 99 0 > "$d/merged.json"; put "$d/open.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+expect "99 merged, all a bot's, the first pull request open: still the first merge" "$d" \
+  "Repository made, its first pull request open (step 1)" \
+  "body=\"\$(gh pr view 2 --json body --jq .body)\" && gh pr merge 2 --squash --match-head-commit $(printf '%040d' 2) --body \"\$body\"" \
+  "first pull request merged: no (0 merged by people)"
 
 d="$(repo no-login)"
 out="$(MOCK_GH_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
