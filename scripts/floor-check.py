@@ -94,6 +94,9 @@ more reads compare the tag this plinth targets with the latest release's and
 the tag the CI pin was tested with (#843). Older is a WARN with the commands
 to type; a release not read is an INFO. --print-plugin-skew is the same
 comparison for the template-update skill, which stops on it.
+--print-behind is for /plinth:guide (#904): the drift item's template
+comparison and the CI's plinth pin against plinth's latest release (two reads:
+the release, and GitHub's compare), one line each, `not read` when not read.
 
 A GitLab checkout (--host gitlab, or `host: gitlab` in .copier-answers.yml)
 is read as one (#543): glab's token and config reads in the agent settings,
@@ -1891,6 +1894,62 @@ def print_plugin_skew(root: Path, network: bool = True, host: str | None = None)
         print(plugin_skew_unread(s), file=sys.stderr)
     if s.get("note"):
         print(s["note"], file=sys.stderr)
+    return 0
+
+
+def print_behind(root: Path, network: bool = True, host: str | None = None) -> int:
+    """--print-behind: for /plinth:guide (#904), two lines, exit 0. The
+    template line is the drift item's comparison (template_drift): the
+    recorded tag against the tag this plinth targets, read from files. The
+    pin line is the plinth commit the CI calls (resolve_plinth_pin, or the
+    GitLab include) against plinth's latest release, by GitHub's compare. A
+    read that fails, or a run without the network, is `not read (<why>)`,
+    never a guess."""
+    d = template_drift(root, host, network)
+    target = d.get("target")
+    if d["state"] == "skip":
+        print(f"template: not read ({d['reason']})")
+    elif d["state"] == "behind":
+        print(f"template: {d['recorded']}, behind {target}, the tag this plinth targets")
+    elif d["state"] == "ahead":
+        print(f"template: {d['recorded']}, ahead of {target}, the tag this plinth targets")
+    else:
+        print(f"template: {d['recorded']}, the tag this plinth targets")
+
+    if (host or (copier_answers(root) or {}).get("host")) == "gitlab":
+        pin, _, why = resolve_gitlab_pin(root)
+    else:
+        pin, why = resolve_plinth_pin(root)
+    if pin is None:
+        print(f"plinth pin: not read ({why})")
+        return 0
+    pin = pin.lower()
+    if not network:
+        print(f"plinth pin: {pin}, not read against the latest release (no network read)")
+        return 0
+    release = api(f"repos/{PLINTH_REPO}/releases/latest", network)
+    tag = release.get("tag_name") if isinstance(release, dict) else None
+    if not isinstance(tag, str) or not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+        why = ("not found" if release is ABSENT else "offline or API error" if release is ERROR
+               else "an unexpected release response")
+        print(f"plinth pin: {pin}, not read against the latest release (the release: {why})")
+        return 0
+    # Page 2 of one commit: the status and counts without the file list,
+    # which page 1 carries (half a megabyte across a few releases, measured).
+    cmp = api(f"repos/{PLINTH_REPO}/compare/{pin}...{tag}?per_page=1&page=2", network)
+    status = cmp.get("status") if isinstance(cmp, dict) else None
+    if status == "ahead":
+        n = cmp.get("ahead_by")
+        by = f", {n} commit(s) behind" if isinstance(n, int) else ""
+        print(f"plinth pin: {pin}, behind {tag}, the latest plinth release{by}")
+    elif status == "identical":
+        print(f"plinth pin: {pin}, at {tag}, the latest plinth release")
+    elif status == "behind":
+        print(f"plinth pin: {pin}, ahead of {tag}, the latest plinth release")
+    else:
+        why = ("the two have diverged" if status == "diverged" else "the compare was not found" if cmp is ABSENT
+               else "offline or API error" if cmp is ERROR else "an unexpected compare response")
+        print(f"plinth pin: {pin}, not read against {tag}, the latest plinth release ({why})")
     return 0
 
 
@@ -4378,6 +4437,9 @@ def main() -> int:
     ap.add_argument("--print-plugin-skew", action="store_true",
                     help="compare the template tag this plinth targets with the latest release's and the CI pin's: exit 3 "
                          "with what to type when it is older, else exit 0, a failed read said on stderr (#843)")
+    ap.add_argument("--print-behind", action="store_true",
+                    help="print whether the template tag is behind the one this plinth targets and whether the plinth "
+                         "pin is behind plinth's latest release, one line each, `not read` when not read; exit 0 (#904)")
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
     ap.add_argument("--plinth-pin", choices=("live", "tested"), default="live",
@@ -4413,6 +4475,8 @@ def main() -> int:
         return print_diff_size(root)
     if a.print_plugin_skew:
         return print_plugin_skew(root, not a.no_network, a.host)
+    if a.print_behind:
+        return print_behind(root, not a.no_network, a.host)
     if a.print_update_command:
         return print_update_command(root, a.plinth_pin, not a.no_network, a.host,
                                     a.repo.split("/")[0] if a.repo else None)

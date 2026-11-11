@@ -26,6 +26,18 @@ pull requests and have no tag.
   project's own keeps that note. The skill reads the newest comment and the
   failed log before it names a cause, and says the cause is not known yet when
   neither names one.
+- `/plinth:guide` says when the project is behind (#904). Its state prints
+  whether the template tag is behind the one this plinth targets and whether
+  the `coolbress/plinth` pin is behind plinth's latest release, from a new
+  read-only `scripts/floor-check.py --print-behind` that uses the drift item's
+  comparison and GitHub's compare; offline or unauthenticated it prints
+  `not read`. When a plinth job fails on a pin that is behind, the command takes
+  the newer plinth first: `merge #N` for Dependabot's open pull request raising
+  the pin with green checks, said as the person's word, or else the command and
+  "Done when" of the project's `docs/how-to/keep-this-project-current.md` step
+  that raises the pin; the note says the failing pull request's checks are run
+  again after it. A template behind adds a `step 9:` line naming
+  `/plinth:template-update`, and the step the project is at does not change.
 
 ### Fixed
 
