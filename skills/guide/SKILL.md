@@ -89,6 +89,11 @@ What to keep to:
 - A skill on the list "Skills only the person can start", in
   `${CLAUDE_PLUGIN_ROOT}/skills/arsenal/SKILL.md`, is typed as `/` and picked
   from the list, not pasted. Do not run the command yourself.
+- A pull request with `checks not started yet`: the checks are starting; say
+  to look again in a minute, nothing is wrong. One with `no checks ran`: no
+  check has run on it, which is something to look into before going on, not
+  a broken check; say it in those plain words. One with `no checks yet; when
+  its head was pushed was not read`: say both halves, and guess neither.
 - `where: not read` means the script could not read the repository: say what
   was not read, from the line that says so, and the one thing that fixes it
   (for example, logging in with `gh auth login`); name no step.
