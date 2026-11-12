@@ -38,6 +38,14 @@ A task's `kind` file says what passes (no file: `test`):
   the issue, the item and the patterns;
 - question: nothing; the grade records the questions and changes for a reader.
 
+Every run records its final report's length: `report.lines`, the lines that are
+not blank (#907). A task with a report.json records two more things, by rule
+checks with no model judge, and neither changes the pass: `tool_use`, whether
+the report names how to use the tool of the step the project is at, what to
+type (its `types` pattern) and what that leaves behind (its `leaves` pattern),
+with `tool_use_named` true when both are found; and `recorded`, each of its
+items named or not, as open.json's are.
+
 A run whose stream shows a path under `eval-suite/` (in a tool call's input
 or in what a tool call returned) is marked `suite_read`: the hidden tests live
 there, inside the plugin a `plinth`-arm session can read, so the summary does
@@ -323,6 +331,27 @@ def stand_in_missed(state: dict[str, Any], tr: dict[str, Any]) -> bool:
     return state["stand_in"] and not state["gh_calls"] and any(GH_COMMAND.search(b) for b in tr["bash"])
 
 
+def report_record(task: Path, final: str) -> dict[str, Any]:
+    """What every run records of its final report, and what report.json asks (#907)."""
+    out: dict[str, Any] = {
+        "lines": sum(1 for line in final.splitlines() if line.strip()),
+        "tool_use_named": None,
+        "tool_use": None,
+        "recorded": {},
+    }
+    spec = task / "report.json"
+    if not spec.exists():
+        return out
+    r = json.loads(spec.read_text())
+    tool = r.get("tool")
+    if tool:
+        found = {k: bool(re.search(tool[k], final, re.IGNORECASE)) for k in ("types", "leaves")}
+        out["tool_use"] = {"step": tool["step"], **found}
+        out["tool_use_named"] = all(found.values())
+    out["recorded"] = {i["item"]: bool(re.search(i["named"], final, re.IGNORECASE)) for i in r.get("recorded", [])}
+    return out
+
+
 def task_record(
     kind: str, task: Path, final: str, best: dict[str, Any], state: dict[str, Any], tr: dict[str, Any]
 ) -> tuple[bool | None, dict[str, Any]]:
@@ -598,6 +627,7 @@ def main() -> None:
     best = max(graded.values(), key=lambda g: (bool(g["hidden"]), g["checks_pass"]))
     tr = trace(run / "stream.jsonl", run)
     passed, kind_record = task_record(kind, task, tr["final"], best, state, tr)
+    report = report_record(task, tr["final"])
     record = {
         "task": task_name,
         "arm": arm,
@@ -609,6 +639,7 @@ def main() -> None:
         "assisted_by": any(t.lower().startswith("assisted-by") for t in state["trailers"]),
         "state": state,
         "task_record": kind_record,
+        "report": report,
         "trees": graded,
         "trace": tr,
     }
@@ -623,7 +654,8 @@ def main() -> None:
     shutil.rmtree(run / "grade", ignore_errors=True)
     print(
         f"graded {task_name} {arm} {n}: passed={record['pass']} checks={record['checks_pass']} "
-        f"cost={record['trace']['cost_usd']}"
+        f"cost={record['trace']['cost_usd']} lines={report['lines']}"
+        + ("" if report["tool_use_named"] is None else f" tool_use_named={report['tool_use_named']}")
         + (" read-eval-suite=yes (not counted)" if record["suite_read"] else "")
     )
 

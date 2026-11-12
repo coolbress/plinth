@@ -1,0 +1,32 @@
+{
+  "repo": "trial/probe",
+  "about": "#907: a project just made. Its first pull request is open and green, and no person has merged one. The plinth pin is at the latest release: the api entries answer floor-check's two reads, so the guide's pin line is the same in every run and nothing reaches GitHub.",
+  "issues": [],
+  "pulls": [
+    {
+      "number": 1,
+      "title": "docs: first pull request",
+      "state": "OPEN",
+      "isDraft": false,
+      "headRefName": "docs/first",
+      "headRefOid": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-12T08:40:00Z",
+      "body": "## What and why\n\nThe project's first pull request, which turns on the checks.\n",
+      "statusCheckRollup": [
+        {"name": "ci / pr-title", "status": "COMPLETED", "conclusion": "SUCCESS"},
+        {"name": "ci / lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
+        {"name": "ci / typecheck", "status": "COMPLETED", "conclusion": "SUCCESS"},
+        {"name": "ci / test", "status": "COMPLETED", "conclusion": "SUCCESS"},
+        {"name": "ci / build", "status": "COMPLETED", "conclusion": "SUCCESS"},
+        {"name": "ci / floor-check", "status": "COMPLETED", "conclusion": "SUCCESS"}
+      ],
+      "comments": []
+    }
+  ],
+  "api": [
+    {"path": "^repos/coolbress/plinth/releases/latest$", "json": {"tag_name": "v2.28.0"}},
+    {"path": "^repos/coolbress/plinth/compare/[0-9a-f]{40}\\.\\.\\.v2\\.28\\.0(\\?|$)", "json": {"status": "identical", "ahead_by": 0, "behind_by": 0}}
+  ]
+}

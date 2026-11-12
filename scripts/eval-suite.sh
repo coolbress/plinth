@@ -23,6 +23,10 @@
 # guide-reminder grade what /plinth:guide says, which only the plinth arm has;
 # guide-plain and guide-reminder-plain ask the same in plain words, in that arm,
 # so plinth without the guide is graded on the same patterns (#883).
+# guide-fresh and guide-busy run the guide on a project with no merge yet and
+# on one under way (#907); a task's report.json says what the grade records of
+# its final report besides the pass: the tool use of the step it is at, and,
+# for the busy one, the failing check and the pin behind.
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -80,7 +84,7 @@
 # whole for a person to look at. At the end the records' size is printed.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day owed-item guide guide-reminder guide-plain guide-reminder-plain friend-311 late-fee skip-mypy)
+all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day owed-item guide guide-fresh guide-busy guide-reminder guide-plain guide-reminder-plain friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
 session_timeout=900

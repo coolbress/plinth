@@ -251,6 +251,10 @@ case "$action" in
   guide-noexist) final='The release on a tag does not exist yet (release.yml).\n\n```\n/grilling\n```' ;;
   guide-money) final='See release.yml.\nThe uptime monitor costs money.\n\n```\n/grilling\n```' ;;
   guide-free) final='See release.yml.\nThe uptime monitor and error tracker are not paid: each has a free plan, so you need no paid plan.\n\n```\n/grilling\n```' ;;
+  # The fresh and busy guide tasks (#907): reports that name the step's tool use, and that do not.
+  fresh-right) final='On a version tag you push, a cli project publishes to PyPI: see .github/workflows/release.yml.\nAn uptime monitor and an error tracker have a free plan each.\n\nNext, merge your first pull request. Squash and merge leaves one commit on main:\n\n```\nbody=\"$(gh pr view 1 --json body --jq .body)\" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body \"$body\"\n```' ;;
+  busy-right) final='Releases go to PyPI on a tag: release.yml.\nUptime monitors have a free plan.\n\nci / build fails on #12, and it is a plinth job.\nThe plinth pin is behind v2.29.0.\nSay merge #14: it leaves the newer pin on main.\n\n```\nmerge #14\n```' ;;
+  busy-bare) final='Releases go to PyPI on a tag: release.yml.\n\n```\nmerge #14\n```' ;;
   guide-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="bash /plugin/scripts/guide-state.sh ."
     final='I could not read the repository.\n\n```\ngh auth login\n```' ;;
   reminder-right) final='Publishes on a tag: release.yml.\n\n```\n/plinth:template-update\n```' ;;
@@ -607,6 +611,92 @@ check "guide-reminder-plain passes on the template update" \
 suite --config-dir "$tmp/cfg" --task guide --arm none --runs 1 --out "$tmp/gn"
 check "guide named in an arm it does not run in stops (exit 2), not an empty green table" \
   '[ "$(rc)" = 2 ] && [ "$(sessions)" = 0 ] && grep -q "nothing to run" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+
+# --- the fresh and busy guide tasks (#907): their records reach the row each one expects
+busy_repo="$tmp/guide-busy-repo"
+mkdir -p "$busy_repo/.github/workflows"
+cp "$guide_repo/.copier-answers.yml" "$busy_repo/"
+printf 'on: pull_request\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@cecffe1f52c2911558ece2b978c759c9203e1f63\n' > "$busy_repo/.github/workflows/ci.yml"
+git -C "$busy_repo" init -q -b main
+state_on() { # <repo> <task>: guide-state.sh on that repository through the task's stand-in
+  local b="$tmp/guide-bin-$2"
+  mkdir -p "$b"; : > "$b/calls.log"
+  cp "$root/scripts/eval-suite-gh.py" "$b/gh"; chmod +x "$b/gh"
+  cp "$root/eval-suite/tasks/$2/issues.json" "$b/issues.json"
+  # A dead proxy: floor-check's fallback to api.github.com fails, so a read the stand-in did not answer shows as not read.
+  (cd "$1" && PATH="$b:$PATH" https_proxy=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 bash "$root/scripts/guide-state.sh" .) 2>&1
+}
+# The command guide-state.sh prints, in one code block, passes the task's own code-block pattern.
+block_passes() { # <task> <command>
+  python3 -I -c '
+import json, re, sys
+pattern = [i for i in json.load(open(sys.argv[1])) if i["item"].startswith("one code block")][0]["named"]
+sys.exit(0 if re.search(pattern, "Type this:\n\n```\n" + sys.argv[2] + "\n```\n", re.IGNORECASE) else 1)' \
+    "$root/eval-suite/tasks/$1/open.json" "$2"
+}
+gs="$(state_on "$busy_repo" guide-fresh)"
+cmd="$(sed -n 's/^command: //p' <<<"$gs")"
+want='body="$(gh pr view 1 --json body --jq .body)" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body "$body"'
+check "guide-fresh: no merge by a person routes to merging the first pull request, the pin at the latest release" \
+  'grep -qx "first pull request merged: no (0 merged by people)" <<<"$gs" && grep -q "^where: Repository made, its first pull request open" <<<"$gs" && grep -qx "plinth pin: cecffe1f52c2911558ece2b978c759c9203e1f63, at v2.28.0, the latest plinth release" <<<"$gs" && [ "$cmd" = "$want" ]' "$gs"
+check "guide-fresh: its expected command, in one code block, passes its own pattern" 'block_passes guide-fresh "$cmd"' "$cmd"
+gs="$(state_on "$busy_repo" guide-busy)"
+cmd="$(sed -n 's/^command: //p' <<<"$gs")"
+check "guide-busy: a failing plinth job with the pin behind routes to Dependabot's green pin raise, not diagnose" \
+  '[ "$cmd" = "merge #14" ] && grep -qx "plinth pin: cecffe1f52c2911558ece2b978c759c9203e1f63, behind v2.29.0, the latest plinth release, 11 commit(s) behind" <<<"$gs" && grep -q "^  ci / build: a plinth job" <<<"$gs"' "$gs"
+check "guide-busy: several merges, the draft with its date, Dependabot, the comment and the log are all read" \
+  'grep -qx "first pull request merged: yes (5 merged by people)" <<<"$gs" && grep -qx "  #13 (for #11) draft, checks pass: feat: export the ledger to CSV" <<<"$gs" && grep -qx "open Dependabot pull requests: #14" <<<"$gs" && grep -qx "comments by people on pull request #12: 1" <<<"$gs" && grep -qx "    log: gh run view --job 54899120345 --log-failed" <<<"$gs"' "$gs"
+check "guide-busy: the stand-in refuses none of the guide's reads" '! grep -q "not served" <<<"$gs"' "$gs"
+check "guide-busy: its expected command, in one code block, passes its own pattern" 'block_passes guide-busy "$cmd"' "$cmd"
+b="$tmp/guide-bin-guide-busy"
+sf="$(PATH="$b:$PATH" gh run view --job 54899120345 --log-failed 2>&1)"
+check "the stand-in serves a listed job's failed log" 'grep -qF "##[error]Process completed with exit code 2" <<<"$sf"' "$sf"
+sf="$(PATH="$b:$PATH" gh run view --job 1 --log-failed 2>&1)"; src=$?
+check "the stand-in refuses a job's log its records do not have" '[ "$src" = 1 ] && grep -q "no log of job 1" <<<"$sf"' "$sf"
+sf="$(PATH="$b:$PATH" gh api repos/coolbress/plinth/releases/latest --jq .tag_name 2>&1)"
+check "the stand-in answers a listed api path, with --jq and no --json, as gh api takes it" '[ "$sf" = v2.29.0 ]' "$sf"
+sf="$(PATH="$b:$PATH" gh api -X POST repos/coolbress/plinth/releases/latest 2>&1)"; src=$?
+check "must not pass: a POST to a listed path is refused" '[ "$src" = 1 ] && grep -q "is not served" <<<"$sf"' "$sf"
+sf="$(PATH="$b:$PATH" gh api repos/trial/probe/issues/12/comments -f body=hi 2>&1)"; src=$?
+check "must not pass: a call with fields to a path whose entry is not a query is refused, as a write" '[ "$src" = 1 ] && grep -q "is not served" <<<"$sf"' "$sf"
+sf="$(PATH="$b:$PATH" gh api graphql -f query='{ x }' --jq '.data.repository.issues.nodes[0].number' 2>&1)"
+check "a read query with fields is answered by an entry that says query" '[ "$sf" = 7 ]' "$sf"
+sf="$(PATH="$b:$PATH" gh api graphql --input /dev/null 2>&1)"; src=$?
+check "must not pass: a query from --input is refused" '[ "$src" = 1 ]' "$sf"
+sf="$(PATH="$b:$PATH" gh api repos/coolbress/plinth/releases/latest -XDELETE 2>&1)"; src=$?
+check "must not pass: a method joined to -X (-XDELETE) is refused" '[ "$src" = 1 ] && grep -q "is not served" <<<"$sf"' "$sf"
+sf="$(PATH="$b:$PATH" gh api graphql -f query='mutation { deleteIssue(input: {issueId: "x"}) { clientMutationId } }' 2>&1)"; src=$?
+check "must not pass: a GraphQL mutation is refused by an entry that says query" '[ "$src" = 1 ] && grep -q "is not served" <<<"$sf"' "$sf"
+check "guide-busy: the pin line came from the stand-in, both of floor-check's reads logged" \
+  'grep -qx "api repos/coolbress/plinth/releases/latest" "$b/calls.log" && grep -q "^api repos/coolbress/plinth/compare/[0-9a-f]\{40\}\.\.\.v2\.29\.0" "$b/calls.log"' "$(cat "$b/calls.log")"
+sf="$(PATH="$tmp/guide-bin-guide:$PATH" gh api repos/coolbress/plinth/releases/latest 2>&1)"; src=$?
+check "a task whose records list no api path refuses it, as before" '[ "$src" = 1 ] && grep -q "is not served" <<<"$sf"' "$sf"
+
+# --- what the grade records of a guide report (#907): its length, the tool use, the busy items
+: > "$log"
+EVAL_STUB_ACTIONS=busy-right,busy-bare suite --config-dir "$tmp/cfg" --task guide-busy --runs 2 --out "$tmp/gb"
+rep() { kg "$1" "$2" "$3" '(r["pass"], r["report"]["lines"], r["report"]["tool_use_named"], sorted(r["report"]["recorded"].items()))'; }
+check "guide-busy runs in the plinth arm only" \
+  '[ "$(rc)" = 0 ] && [ "$(sessions)" = 2 ] && [ ! -e "$tmp/gb/runs/guide-busy-none-1" ]' "$(cat "$tmp/out.txt")"
+check "a report naming the tool use, the failing check and the pin records all three, and its 8 lines" \
+  '[ "$(rep gb guide-busy 1)" = "(True, 8, True, [('"'"'names the failing check'"'"', True), ('"'"'says the pin is behind'"'"', True)])" ]' "$(rep gb guide-busy 1)"
+check "must not pass: a bare report records none of them, and its 4 lines; its pass is the open items alone" \
+  '[ "$(rep gb guide-busy 2)" = "(True, 4, False, [('"'"'names the failing check'"'"', False), ('"'"'says the pin is behind'"'"', False)])" ]' "$(rep gb guide-busy 2)"
+check "the grade line prints the length and the tool use" 'grep -q "graded guide-busy plinth 1: passed=True .* lines=8 tool_use_named=True" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "the kind table adds the tool use, the recorded items and the median length" \
+  'grep -qF "the step'"'"'s tool use named 1/2; \`names the failing check\` 1/2; \`says the pin is behind\` 1/2; lines (median) 6 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "the per-run table gives each run's lines, tool use and recorded items" \
+  'grep -qF "| guide-busy · plinth 1 | 8 | yes | \`names the failing check\` yes; \`says the pin is behind\` yes |" "$tmp/out.txt" && grep -qF "| guide-busy · plinth 2 | 4 | no | \`names the failing check\` no; \`says the pin is behind\` no |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+: > "$log"
+EVAL_STUB_ACTIONS=fresh-right,guide-right suite --config-dir "$tmp/cfg" --task guide-fresh --runs 2 --out "$tmp/gf"
+check "guide-fresh passes the merge command and names its tool use; /grilling there fails and names none" \
+  '[ "$(kg gf guide-fresh 1 "r[\"pass\"], r[\"report\"][\"tool_use_named\"]")" = "(True, True)" ] && [ "$(kg gf guide-fresh 2 "r[\"pass\"], r[\"report\"][\"tool_use_named\"]")" = "(False, False)" ]' "$(cat "$tmp/out.txt"; kg gf guide-fresh 1 'r["report"], r["task_record"]["named"]'; kg gf guide-fresh 2 'r["report"]')"
+check "the per-run table shows – for a task whose report.json records no item" \
+  'grep -qE "^\| guide-fresh · plinth 1 \| [0-9]+ \| yes \| – \|$" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "a task with no report.json still records its report's length, and no tool use or per-run row" \
+  '[ "$(kg gq guide-reminder-plain 1 "r[\"report\"][\"lines\"], r[\"report\"][\"tool_use_named\"]")" = "(4, None)" ] && ! grep -q "| guide-reminder-plain · plinth 1 |" "$tmp/gq/summary.md"' "$(kg gq guide-reminder-plain 1 'r["report"]'; cat "$tmp/gq/summary.md")"
+check "guide's canned right report names /grilling but not the issue it leaves: the tool use is not named" \
+  '[ "$(kg gd guide 1 "r[\"report\"][\"tool_use\"][\"types\"], r[\"report\"][\"tool_use\"][\"leaves\"], r[\"pass\"]")" = "(True, False, True)" ]' "$(kg gd guide 1 'r["report"]')"
 
 # --- a question task has no pass; it records the questions
 : > "$log"

@@ -9,6 +9,11 @@ the folder that holds the hidden tests), whose result is not counted. A run
 with a `not-run.txt` never really ran (#864): it is in no table and no count of
 runs started, and is named on a line of its own. A resume moves a run it runs
 again to set-aside/, beside <runs dir>: only its cost and its name are read.
+
+A task with a report.json (#907) adds, to its line of the second table, how
+many runs named its step's tool use and the median length of the final report,
+and a third table gives each of its runs: the report's lines, whether the tool
+use was named, and each item report.json records.
 """
 
 from __future__ import annotations
@@ -34,8 +39,31 @@ def passed(rs: list[Run]) -> str:
     return frac(judged, lambda r: r["pass"]) if judged else "–"
 
 
+def report_of(r: Run) -> dict[str, Any]:
+    """The run's report record; a grade from before #907 has none."""
+    return r.get("report") or {}
+
+
+def told(rs: list[Run]) -> str:
+    """The tool use named and the length, for a task with a report.json; else nothing."""
+    rep = [report_of(r) for r in rs]
+    if any(x.get("tool_use_named") is None for x in rep):
+        return ""
+    lines = statistics.median(x["lines"] for x in rep)
+    items = list(rep[0].get("recorded", {}))
+    also = "".join(f"; `{i}` {sum(1 for x in rep if x.get('recorded', {}).get(i))}/{len(rs)}" for i in items)
+    return f"the step's tool use named {sum(1 for x in rep if x['tool_use_named'])}/{len(rs)}{also}; lines (median) {lines:g}"
+
+
 def records(rs: list[Run]) -> str:
     """What the runs' kind records besides the main table, in words."""
+    line = kind_records(rs)
+    more = told(rs)
+    return f"{line}; {more}" if line and more else line or more
+
+
+def kind_records(rs: list[Run]) -> str:
+    """What the runs' kind records, in words."""
     kind = rs[0].get("kind", "test")
     k = [r.get("task_record", {}) for r in rs]
     n = len(rs)
@@ -137,6 +165,18 @@ def main() -> None:
         print("|---|---|")
         for t, a, line in extra:
             print(f"| {t} · {a} | {line} |")
+    per_run = [r for _, _, rs in rows for r in sorted(rs, key=lambda r: r["n"]) if told([r])]
+    if per_run:
+        print()
+        print("| Run | Lines | Step's tool use named | Also named |")
+        print("|---|---|---|---|")
+        for r in per_run:
+            rep = report_of(r)
+            also = "; ".join(f"`{i}` {'yes' if v else 'no'}" for i, v in rep.get("recorded", {}).items()) or "–"
+            print(
+                f"| {r['task']} · {r['arm']} {r['n']} | {rep['lines']} "
+                f"| {'yes' if rep['tool_use_named'] else 'no'} | {also} |"
+            )
     counted = [r for rs in groups.values() for r in rs]
     # The same figure the ceiling adds up: a session that reported no cost
     # is counted at the budget it was given.

@@ -7,9 +7,18 @@ when the session started. It serves `issue list`, `issue view`, `pr list`,
 `pr view`, `repo view` and `auth status`, shaped as gh prints them into a pipe
 (tab-separated), or as JSON with `--json`, filtered with `--jq` as gh filters it
 (#836: scripts/guide-state.sh reads through it; jq does the filtering, so a
-call with `--jq` needs jq on the PATH). Anything else, a write included, exits 1
-and says so; nothing reaches GitHub. Every call is appended to calls.log beside
-it, for the grade.
+call with `--jq` needs jq on the PATH). Two more only where issues.json has
+them (#907): `api <path>`, answered with the `json` of the first of its `api`
+entries whose `path` pattern finds the path, and `run view --job <id>
+--log-failed`, answered with `logs[<id>]`. An `api` call is a GET, unless its
+entry says `"query": true`: then one with fields (-f, -F) is answered too, as a
+GraphQL query that only reads is (gh sends it as a POST); a `mutation` in its
+fields is a write and is refused. Anything else, a
+write included, exits 1 and says so; nothing reaches GitHub. Every call is
+appended to calls.log beside it, for the grade.
+
+A refused `gh api` is what a caller that falls back to the network sees, as
+floor-check does: a task that must not read GitHub lists the paths it reads.
 
 Python 3.9 and the standard library only: it runs on whatever python3 the
 session finds.
@@ -24,8 +33,9 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SERVED = "issue list/view, pr list/view, repo view and auth status"
-CALLS = {("issue", "list"), ("issue", "view"), ("pr", "list"), ("pr", "view"), ("repo", "view"), ("auth", "status")}
+SERVED = "issue list/view, pr list/view, repo view and auth status, and the api paths and run logs its records list"
+CALLS = {("issue", "list"), ("issue", "view"), ("pr", "list"), ("pr", "view"), ("repo", "view"), ("auth", "status"),
+         ("run", "view")}
 
 
 def refuse(why):
@@ -36,14 +46,18 @@ def refuse(why):
 def options(args):
     """The positional arguments and the options, by their long name."""
     short = {"-s": "--state", "-l": "--label", "-L": "--limit", "-c": "--comments", "-R": "--repo",
-             "-q": "--jq", "-t": "--template", "-S": "--search", "-w": "--web"}
-    flags = {"--comments", "--web"}
+             "-q": "--jq", "-t": "--template", "-S": "--search", "-w": "--web",
+             "-X": "--method", "-f": "--raw-field", "-F": "--field", "-H": "--header"}
+    flags = {"--comments", "--web", "--paginate", "--log-failed", "--log", "--verbose", "-v"}
     pos, opts = [], {}
     i = 0
     while i < len(args):
         a = args[i]
         if a.startswith("-"):
             name, _, value = a.partition("=")
+            # A short option with its value joined, as gh takes it: -XDELETE, -fbody=hi.
+            if not a.startswith("--") and len(a) > 2 and a[:2] in short and short[a[:2]] not in flags:
+                name, value = a[:2], a[2:]
             name = short.get(name, name)
             if name in flags:
                 opts[name] = True
@@ -115,7 +129,7 @@ def viewing(records, pos, opts, what):
 
 def filtered(jq, group, verb, pos, opts):
     """What `serve` prints, through jq -r: gh's --jq prints a string raw too."""
-    if "--json" not in opts:
+    if "--json" not in opts and group != "api":
         refuse("--jq needs --json")
     shown = io.StringIO()
     with contextlib.redirect_stdout(shown):
@@ -133,13 +147,41 @@ def main(args):
     with open(HERE / "calls.log", "a") as log:
         log.write(" ".join(args).replace("\n", " ") + "\n")
     group, verb = (args + ["", ""])[:2]
-    if (group, verb) not in CALLS:
+    if group == "api":
+        pos, opts = options(args[1:])
+        verb = pos[0] if pos else ""
+        if not answer(verb, opts):
+            refuse(f"`gh {group} {verb}` is not served")
+    elif (group, verb) not in CALLS:
         refuse(f"`gh {group} {verb}` is not served")
-    pos, opts = options(args[2:])
+    else:
+        pos, opts = options(args[2:])
     jq = opts.pop("--jq", None)
     if jq:
         filtered(jq[-1], group, verb, pos, opts)
     serve(group, verb, pos, opts)
+
+
+def answer(path, opts):
+    """The `api` entry of issues.json that answers `path`, or None.
+
+    A GET is answered by any entry whose pattern finds the path. A call with
+    fields (-f, -F) only by one that says `"query": true`, a read query such as
+    GraphQL's. An --input, or a method other than GET and that POST, is a
+    write: never answered."""
+    fields = any(k in opts for k in ("--raw-field", "--field"))
+    method = (opts.get("--method") or ["POST" if fields else "GET"])[-1].upper()
+    if "--input" in opts or method not in ("GET", "POST") or (method == "POST" and not fields):
+        return None
+    path = path.lstrip("/")
+    entry = next((e for e in DATA.get("api", []) if re.search(e["path"], path)), None)
+    if entry is None or (fields and not entry.get("query")):
+        return None
+    # A GraphQL mutation is a write, whatever the entry says.
+    body = " ".join(v for k in ("--raw-field", "--field") for v in opts.get(k, []))
+    if re.search(r"\bmutation\b", body):
+        return None
+    return entry
 
 
 def serve(group, verb, pos, opts):
@@ -162,6 +204,14 @@ def serve(group, verb, pos, opts):
             [str(r["number"]), r["title"], r["headRefName"], r["state"], r["createdAt"]]))
     elif (group, verb) == ("pr", "view"):
         viewing(pulls, pos, opts, "pull request")
+    elif group == "api":
+        print(json.dumps(answer(verb, opts)["json"], indent=2, ensure_ascii=False))
+    elif (group, verb) == ("run", "view"):
+        job = (opts.get("--job") or [""])[-1]
+        log = DATA.get("logs", {}).get(job)
+        if log is None or not (opts.get("--log-failed") or opts.get("--log")):
+            refuse(f"no log of job {job or '(none named)'} in this repository's records")
+        sys.stdout.write(log)
 
 
 DATA = json.loads((HERE / "issues.json").read_text())

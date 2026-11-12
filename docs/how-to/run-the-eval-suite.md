@@ -1,7 +1,7 @@
 # How to run the eval suite
 
 The eval suite gives Claude Code the same small tasks three ways, except the
-four guide tasks, which only the third has, and checks the results afterwards:
+six guide tasks, which only the third has, and checks the results afterwards:
 
 - **none**: the project plinth renders, without `AGENTS.md`, `CLAUDE.md`
   and `.claude/`, and with no plugins;
@@ -30,7 +30,7 @@ You need:
   systems have `perl` already), and `jq` for the `next-day`, `owed-item` and guide tasks;
 - a network connection: the suite downloads the project template and its
   Python packages;
-- about three hours. The whole suite is 120 runs, one after another.
+- about three hours. The whole suite is 126 runs, one after another.
 
 ## What it costs
 
@@ -47,13 +47,14 @@ adds these numbers up and stops on its own:
   timed out or crashed) is counted at its whole limit, because it may
   have spent that much.
 - **A full suite** of the first four tasks cost about US$5 (36 runs). With
-  all sixteen tasks it is 120 runs, and that can reach the US$10 ceiling: name
+  all eighteen tasks it is 126 runs, and that can reach the US$10 ceiling: name
   fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it. For
   v2.29.0 it stopped at that ceiling at run 78, and a resume with
   `--ceiling 14` finished it at US$13.41 (posted on #647).
-- **The release run** is 84 runs: the 72 that cost about US$10.70 at v2.29.0's
-  medians, and 12 added since, not yet measured: the two plain-question tasks'
-  6 (about US$0.75 if they cost what the guide tasks do) and `owed-item`'s 6.
+- **The release run** is 90 runs: the 72 that cost about US$10.70 at v2.29.0's
+  medians, and 18 added since, not yet measured: the two plain-question tasks'
+  6 and `guide-fresh`'s and `guide-busy`'s 6 (about US$0.75 each if they cost
+  what the guide tasks do), and `owed-item`'s 6.
   It has a US$15 ceiling of its own (see [The release run](#the-release-run)).
 - **The two guide tasks alone** are six runs and should cost under US$1. One
   guide session cost US$0.03 to US$0.15 in the sessions measured for #836 on
@@ -173,6 +174,7 @@ means `test`).
 | `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report names the open item |
 | `owed-item`: "close issue #1 today; Lucía will read the goodbye line later", where #1's last criterion waits on her and the rest is merged (#882, #891) | owed | a `gh issue create` for the item, not a `--dry-run`, and the final report names the item and says whether it left #1 open or filed a follow-up |
 | `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
+| `guide-fresh`, `guide-busy`: `/plinth:guide` on a `cli` project whose first pull request is open with no merge by a person, or on one under way: several merges, a person's pull request whose plinth job `ci / build` fails, a draft that waits for a date, and Dependabot's green pull request raising a plinth pin one release behind (#907, plinth arm only) | resume | as for `guide`, the one command being the first pull request's merge command, or `merge #14` |
 | `guide-plain`, `guide-reminder-plain`: the same two projects, asked in plain words where the project is and what to type next, without `/plinth:guide` (#883, plinth arm only) | resume | as for the guide task with the same records |
 | `friend-311`, `late-fee`, `skip-mypy`: requests that need the person's decision (#646) | question | nothing passes; the run's `reader.md` is for a reader |
 
@@ -256,6 +258,33 @@ for a file name or `PyPI`, so a correct sentence naming neither fails it. Read
 `reader.md` for what the patterns cannot judge. The guide's own script
 has its tests in `tests/guide-cases.sh`; these grade the words the model writes.
 
+`guide-fresh` and `guide-busy` add the two states the first guide tasks
+did not have: a project before its first merge, and a project under way, where
+the guide printed about 32 lines in real use (#799's F19), two thirds of them
+the same on every run. Their records also answer the `gh api` reads the guide makes through
+floor-check and its own script: plinth's latest release and the compare against
+it, the failing pull request's comments and GitHub's issue dependencies, and the
+failing job's log for `gh run view`. Each answer is in the task's `issues.json`,
+under `api` and `logs`, so the pin line is the same in every run and nothing
+reaches GitHub. Other tasks' stand-ins answer no `gh api` call, and
+floor-check then reads GitHub itself. The busy project's latest release is
+v2.29.0, one release after the template's default pin at v2.28.0; when the
+template's default pin moves, that answer does not, and the guide still reads
+the pin as behind.
+
+Every run records its final report's length, the lines that are not blank.
+`guide`, `guide-fresh` and `guide-busy` each have a `report.json`, and the grade
+records two more things from it, neither of which changes the pass: whether the
+report says how to use the tool of the step the project is at, what to type and
+what that leaves behind (an issue, a commit on `main`, the pin raised), and, for
+`guide-busy`, whether it names the failing check `ci / build` and says the pin
+is behind. These are word patterns too, with no model judge, which favours
+longer answers: what to type and what it leaves count when both are found
+anywhere in the report, the second on one line with the tool or the merge, so
+a tour line that says them counts as much as the next step does. The second
+table adds their counts and the median length, and a third table gives each
+run's length and whether the tool use was named.
+
 The two plain-question tasks are the guide tasks with the guide taken out
 (#883). Their records and patterns are the same files as `guide`'s and
 `guide-reminder`'s, and their request names no command: a beginner asks, in
@@ -276,7 +305,7 @@ files it changed.
 
 ## Smaller runs
 
-The full suite is twelve tasks × three arms × three runs, plus the four guide
+The full suite is twelve tasks × three arms × three runs, plus the six guide
 tasks × the plinth arm × three runs. To try one thing, name it:
 
 ```bash
@@ -287,6 +316,13 @@ The guide tasks alone:
 
 ```bash
 scripts/eval-suite.sh --task guide --task guide-reminder --arm plinth
+```
+
+The guide on its three states, before and after a change to how much it says
+(#907, #908), nine runs:
+
+```bash
+scripts/eval-suite.sh --task guide --task guide-fresh --task guide-busy --arm plinth
 ```
 
 The guide against a plain question (#883), twelve runs:
@@ -319,7 +355,7 @@ scripts/eval-suite.sh --release
 ```
 
 It runs every task in the `repo-only` and `plinth` arms only, three runs each,
-84 runs in all, under a US$15 ceiling. It leaves out the `none` arm: that arm
+90 runs in all, under a US$15 ceiling. It leaves out the `none` arm: that arm
 has no `AGENTS.md`, `CLAUDE.md`, `.claude/` or plugins, so nothing a plinth or
 template release changes reaches it, and it cannot show that a release made the
 agent worse. Three runs a cell stay, because two cannot tell a 1/2 from chance.
