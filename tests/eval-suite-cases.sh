@@ -259,7 +259,7 @@ case "$action" in
   guide-money) final='See release.yml.\nThe uptime monitor costs money.\n\n```\n/grilling\n```' ;;
   guide-free) final='See release.yml.\nThe uptime monitor and error tracker are not paid: each has a free plan, so you need no paid plan.\n\n```\n/grilling\n```' ;;
   # The fresh and busy guide tasks (#907): reports that name the step's tool use, and that do not.
-  fresh-right) final='On a version tag you push, a cli project publishes to PyPI: see .github/workflows/release.yml.\nAn uptime monitor and an error tracker have a free plan each.\n\nNext, merge your first pull request. Squash and merge leaves one commit on main:\n\n```\nbody=\"$(gh pr view 1 --json body --jq .body)\" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body \"$body\"\n```' ;;
+  fresh-right) final='On a version tag you push, a cli project publishes to PyPI: see .github/workflows/release.yml.\nAn uptime monitor and an error tracker have a free plan each.\n\nNext, merge your first pull request. Squash and merge leaves one commit on main:\n\n```\nmerge #1\n```' ;;
   busy-right) final='Releases go to PyPI on a tag: release.yml.\nUptime monitors have a free plan.\n\nci / build fails on #12, and it is a plinth job.\nThe plinth pin is behind v2.29.0.\nSay merge #14: it leaves the newer pin on main.\n\n```\nmerge #14\n```' ;;
   busy-bare) final='Releases go to PyPI on a tag: release.yml.\n\n```\nmerge #14\n```' ;;
   guide-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="bash /plugin/scripts/guide-state.sh ."
@@ -643,7 +643,7 @@ sys.exit(0 if re.search(pattern, "Type this:\n\n```\n" + sys.argv[2] + "\n```\n"
 }
 gs="$(state_on "$busy_repo" guide-fresh)"
 cmd="$(sed -n 's/^command: //p' <<<"$gs")"
-want='body="$(gh pr view 1 --json body --jq .body)" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body "$body"'
+want='merge #1'
 check "guide-fresh: no merge by a person routes to merging the first pull request, the pin at the latest release" \
   'grep -qx "first pull request merged: no (0 merged by people)" <<<"$gs" && grep -q "^where: Repository made, its first pull request open" <<<"$gs" && grep -qx "plinth pin: cecffe1f52c2911558ece2b978c759c9203e1f63, at v2.28.0, the latest plinth release" <<<"$gs" && [ "$cmd" = "$want" ]' "$gs"
 check "guide-fresh: its expected command, in one code block, passes its own pattern" 'block_passes guide-fresh "$cmd"' "$cmd"

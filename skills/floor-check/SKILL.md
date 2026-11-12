@@ -529,6 +529,7 @@ pinned to, so an older pin keeps running the older checker until then.
 Do not fix anything in this session, and do not run anything that writes.
 
 End the report with one line in the person's language: try typing
-`/plinth:guide`; it explains the whole way in plain words, where this
-repository is on it, and the one command to type next. On a repository plinth
-did not make, it points back here.
+`/plinth:guide`; it explains in plain words where this repository is, how
+to use the tools of that step and the next, and the one command to type next;
+`/plinth:guide map` shows the whole way. On a repository plinth did not make,
+it points back here.

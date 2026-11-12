@@ -226,8 +226,11 @@ approve its `gh pr merge` command: approving it is your merge, as in
 Then do what the `next:` line said: `cd ~/my-app`, and there
 `git switch main && git pull` first (the generator left the checkout on the
 pull request's branch, and the next session starts from `main`). Then
-`claude`, and type `/plinth:guide`: it shows the whole way in plain words
-and names the command to type after this merge.
+`claude`, and type `/plinth:guide`: until this first merge it shows the
+whole way in plain words, every step with its tool and how to use it, and
+names the command to type next. After the merge it explains the step you are
+at and the next one, the rest in a line each; `/plinth:guide map` shows the
+whole way again.
 
 If the `administration:` line said the login has it, do its link next, before
 the agent works on its own: about five minutes for a token without that

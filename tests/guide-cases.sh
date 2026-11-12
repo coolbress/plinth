@@ -109,11 +109,16 @@ pr() { # <number> <title> <bot:true|false> <check conclusion or "-" for none, "r
     "$(ago "${6:-86400}")" 0 "$1" "$(ago "${5:-86400}")"
 }
 put() { local f="$1"; shift; local IFS=,; printf '[%s]' "$*" > "$f"; }
+row_tool() { awk -F ' \\| ' -v p="| $1" -v r="$root" 'index($0, p) == 1 { gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r, $3); print $3; exit }' "$arsenal"; }
 issue() { local l=""; [ -z "$3" ] || l="{\"name\":\"$3\"}"; printf '{"number":%s,"title":"%s","labels":[%s]}' "$1" "$2" "$l"; }
 
+# Every command a case printed, for the check that each is a command of the
+# arsenal's table, `merge #N` or `none:` (#908).
+printed="$work/commands"; : > "$printed"
 # expect <case> <dir> <where starts with> <command line> [<other expected line>]
 expect() {
   local out; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"; local rc=$?
+  sed -n 's/^command: //p' <<<"$out" >> "$printed"
   if [ "$rc" -eq 0 ] && grep -qF "where: $3" <<<"$out" && grep -qxF "command: $4" <<<"$out" &&
      { [ -z "${5:-}" ] || grep -qF -- "$5" <<<"$out"; } && grep -qx 'table:' <<<"$out"; then
     ok "$1"
@@ -137,7 +142,7 @@ d="$(repo created)"
 put "$d/open.json" "$(pr 1 'chore(deps): bump actions/checkout' true SUCCESS)" "$(pr 2 'docs: first pull request through the wall' false run)"
 expect "just created, Dependabot's pull request first: the door's is the one to merge" "$d" \
   "Repository made, its first pull request open (step 1)" \
-  "body=\"\$(gh pr view 2 --json body --jq .body)\" && gh pr merge 2 --squash --match-head-commit $(printf '%040d' 2) --body \"\$body\"" \
+  "merge #2" \
   "checks pending"
 
 d="$(repo first-merged)"
@@ -152,22 +157,23 @@ put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false S
 put "$d/issues.json" "$(issue 4 'Ask the user for their name' '')" "$(issue 5 'Show monthly totals' ready-for-agent)"
 expect "an issue open: the ready-for-agent one, not the lowest number" "$d" "A ticket ready (step 4)" "/implement #5" "before: /clear"
 grep -q "hosting: render" <<<"$(MOCK_DIR="$d" "$script" "$d")" && ok "a web project says where it runs" || bad "web: no hosting line"
-# What it started with off (#763), through scripts/off-by-default.sh.
-out="$(MOCK_DIR="$d" "$script" "$d")"
+# What it started with off (#763), through scripts/off-by-default.sh. Past
+# the first merge the whole list is the map's (#908).
+out="$(MOCK_DIR="$d" "$script" "$d" map)"
 if grep -qx 'off by default:' <<<"$out" && grep -q '^  off: The third-party reviewer' <<<"$out" && grep -q '^  started off .*: HSTS preload' <<<"$out"
 then ok "a web project names the reviewer and HSTS as off"; else bad "web: off-by-default lines"; sed 's/^/        /' <<<"$out" | head -14; fi
 d2="$(repo cli-off)"
-out="$(MOCK_DIR="$d2" "$script" "$d2")"
+out="$(MOCK_DIR="$d2" "$script" "$d2" map)"
 if grep -q '^  off: The third-party reviewer' <<<"$out" && ! grep -q 'HSTS' <<<"$out"
 then ok "a cli project names the reviewer, not the web item"; else bad "cli: off-by-default lines"; fi
 # The told rows (#772): a sign the project has drops its row; one with no
 # sign is said to have started off, since whether it is on is not read.
-: > "$d2/SUPPORT.md"; out="$(MOCK_DIR="$d2" "$script" "$d2")"; rm "$d2/SUPPORT.md"
+: > "$d2/SUPPORT.md"; out="$(MOCK_DIR="$d2" "$script" "$d2" map)"; rm "$d2/SUPPORT.md"
 if ! grep -q 'A support file' <<<"$out" && grep -q '^  off: Sponsorship' <<<"$out" && grep -q '^  started off (whether it is on now is not read): Topics' <<<"$out"
 then ok "a cli project with SUPPORT.md: that row is gone, sponsorship is off, topics started off"
 else bad "the told rows in the guide"; grep -iE 'support|sponsor|topics' <<<"$out" | sed 's/^/        /'; fi
 mkdir -p "$d2/.github/workflows"; : > "$d2/.github/workflows/third-party.yml"
-out="$(MOCK_DIR="$d2" "$script" "$d2")"
+out="$(MOCK_DIR="$d2" "$script" "$d2" map)"
 # The reviewer itself is not listed; the steps a project with its caller still
 # has (#765) are, as started off, since none of them can be read from files.
 if ! grep -qF 'The third-party reviewer (' <<<"$out" && [ "$(grep -cE 'started off \(whether it is on now is not read\): (The summons token|Requiring the third-party reviewer)' <<<"$out")" = 2 ] \
@@ -227,6 +233,7 @@ comment() { printf '{"id":%s,"user":{"login":"%s","type":"%s"},"body":"x"}' "$1"
 # starting with "!" must be in no line of it.
 state() {
   local name="$1" out miss="" l; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"; shift 2
+  sed -n 's/^command: //p' <<<"$out" >> "$printed"
   for l in "$@"; do
     case "$l" in
       '!'*) grep -qF -- "${l#!}" <<<"$out" && miss="$miss
@@ -339,7 +346,8 @@ build_fails="$(prc 6 'feat: monthly totals' "$(run 'ci / build' FAILURE 456)")"
 printf '[]' > "$d/comments.json"
 put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump coolbress/plinth from 2.28.0 to 2.31.0' SUCCESS)"
 state "pin behind, Dependabot's green pull request raising it, a plinth job failing: merge #9, then #6's checks again" "$d" \
-  "where: Green, and seen working (step 6)" "command: merge #9" "!command: diagnose" "!fixes the code"
+  "where: Green, and seen working (step 6)" "command: merge #9" "!command: diagnose" "!fixes the code" \
+  "then: A pull request with checks running (step 5) -> $(row_tool 'A pull request with checks running')" "!\`gh pr update-branch"
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
 grep -E '^note: ' <<<"$out" | grep -qF "Dependabot's pull request #9 raises the pin and its checks are green" &&
   grep -E '^note: ' <<<"$out" | grep -qF "after it merges, pull request #6's checks are run again on the newer plinth" &&
@@ -371,15 +379,15 @@ gh pr list --author app/dependabot --search coolbress/plinth
 newest: Dependabot looks once a week and waits three days after a release.
 HOWTO
 put "$d/open.json" "$build_fails"
-state "pin behind, no Dependabot pull request: the command and note are the how-to's" "$d" \
-  "where: Between pieces of work (step 9)" "command: gh pr list --author app/dependabot --search coolbress/plinth" "!command: diagnose"
+state "pin behind, no Dependabot pull request: floor-check in the session, the how-to's terminal line in the note" "$d" \
+  "where: Between pieces of work (step 9)" "command: /plinth:floor-check" "!command: diagnose" "!command: gh "
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
-grep -E '^note: ' <<<"$out" | grep -qF 'no Dependabot pull request raising the pin is open; from docs/how-to/keep-this-project-current.md, "3. Merge the plinth pin pull request": Done when: that command lists nothing. That does not prove the pin is the newest: Dependabot looks once a week and waits three days after a release.' &&
+grep -E '^note: ' <<<"$out" | grep -qF 'no Dependabot pull request raising the pin is open; from docs/how-to/keep-this-project-current.md, "3. Merge the plinth pin pull request": in a terminal, gh pr list --author app/dependabot --search coolbress/plinth; Done when: that command lists nothing. That does not prove the pin is the newest: Dependabot looks once a week and waits three days after a release.' &&
   grep -E '^note: ' <<<"$out" | grep -qF "pull request #6's checks are run again" &&
   ok "the how-to's note: none open, its Done when, then #6's checks again" || bad "the how-to's note: $(grep -E '^note: ' <<<"$out")"
 put "$d/open.json" "$build_fails" "$(dependabot 9 'chore(deps): bump coolbress/plinth from 2.28.0 to 2.31.0' FAILURE)"
 state "Dependabot's pull request raising the pin, its checks failing: not merged; the how-to, and #9 named" "$d" \
-  "command: gh pr list --author app/dependabot --search coolbress/plinth" "!command: merge"
+  "command: /plinth:floor-check" "!command: merge"
 grep -qF "Dependabot's pull request #9 raises the pin, its checks fail: it is merged once they are green" <<<"$(MOCK_DIR="$d" "$script" "$d" 2>&1)" &&
   ok "the failing Dependabot pull request is named in the note" || bad "the failing Dependabot pull request is not named"
 rm "$d/docs/how-to/keep-this-project-current.md"
@@ -736,7 +744,7 @@ d="$(repo bots-only)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
 put "$d/open.json" "$(pr 10 'chore(deps): bump y' true SUCCESS)"
 expect "only Dependabot open, past the first merge: step 9" "$d" "Between pieces of work (step 9)" \
-  "/plinth:floor-check (then the Dependabot pull requests, one at a time, on green)"
+  "/plinth:floor-check" "note: then Dependabot's pull requests (#10), one at a time, each merged on green on the person's word"
 
 d="$(repo idle)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
@@ -787,7 +795,7 @@ d="$(repo under-the-read-bots)"
 many 99 0 > "$d/merged.json"; put "$d/open.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
 expect "99 merged, all a bot's, the first pull request open: still the first merge" "$d" \
   "Repository made, its first pull request open (step 1)" \
-  "body=\"\$(gh pr view 2 --json body --jq .body)\" && gh pr merge 2 --squash --match-head-commit $(printf '%040d' 2) --body \"\$body\"" \
+  "merge #2" \
   "first pull request merged: no (0 merged by people)"
 
 d="$(repo no-login)"
@@ -856,6 +864,104 @@ then ok "the skill says to give the why: line's reason and no other"; else bad "
 
 if grep -qF 'look again in a minute' "$root/skills/guide/SKILL.md" && grep -qF '`no checks ran`: no' "$root/skills/guide/SKILL.md"
 then ok "the skill says checks not started yet and no checks ran in plain words"; else bad "the skill does not say what an empty rollup means"; fi
+
+# ── how much of the way (#908) ───────────────────────────────────────────
+# mode: full before a person's merge, on map, or with the state not read;
+# focused otherwise. Each reason, and map turning a busy project to full.
+mode_is() { # <case> <dir> <mode line> [<env assignment>] [map]
+  local out; out="$(env MOCK_DIR="$2" "${4:-X=}" "$script" ${5:-"$2"} 2>&1)"
+  if grep -qxF -- "$3" <<<"$out" && [ "$(grep -c '^mode: ' <<<"$out")" = 1 ]; then ok "$1"
+  else bad "$1: wanted '$3', got '$(grep '^mode: ' <<<"$out")'"; fi
+}
+mode_is "mode: no git checkout, full" "$work/plain" "mode: full (no repository yet, so nothing has merged)"
+mode_is "mode: a repository plinth did not make, full: its pull requests are not read" "$work/other" \
+  "mode: full (the state was not read: pull requests are read only on a repository plinth made)"
+mode_is "mode: the first pull request open, no merge, full" "$work/created" "mode: full (no pull request by a person has merged yet)"
+mode_is "mode: Dependabot's merges only, full" "$work/under-the-read-bots" "mode: full (no pull request by a person has merged yet)"
+mode_is "mode: a person's pull request merged, focused" "$work/idle" "mode: focused (a pull request by a person has merged)"
+mode_is "mode: more merges than the read, none of them a person's, focused" "$work/many-merged" \
+  "mode: focused (past the first merge: more merged pull requests than the 100 read)"
+mode_is "mode: gh not logged in, full" "$work/idle" "mode: full (the state was not read)" MOCK_GH_FAIL=1
+mode_is "mode: one read failing, full" "$work/idle" "mode: full (the state was not read)" "MOCK_FAIL_ON=pr list merged"
+mode_is "mode: GitLab, full" "$work/gitlab" "mode: full (the state was not read)"
+mode_is "mode: map turns a busy project to full" "$work/idle" "mode: full (asked for the whole way (map))" X= "$work/idle map"
+mode_is "mode: map before the directory works too" "$work/idle" "mode: full (asked for the whole way (map))" X= "map $work/idle"
+out="$(MOCK_DIR="$work/idle" "$script" map "$work/idle" 2>&1)"
+grep -qx 'last merge: #7 on 2026-10-27 by person: feat: x' <<<"$out" && ok "map before the directory still reads that directory" ||
+  bad "map before the directory: $(grep -E '^(repository|last merge)' <<<"$out")"
+
+# Off by default by mode: focused says how many and names only a step to do
+# now; full, every item. The project with the reviewer's caller has both kinds.
+put "$d2/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+out="$(MOCK_DIR="$d2" "$script" "$d2" 2>&1)"
+full="$(MOCK_DIR="$d2" "$script" "$d2" map 2>&1)"
+n="$(awk '/^off by default:$/{on=1; next} on && /^  why: /{exit} on' <<<"$full" | grep -c .)"
+if grep -qxF "off by default: $n left off; /plinth:guide map names each" <<<"$out" &&
+   grep -qF '  to do, if not done yet (whether it is done is not read): Turn on Codex code review for this repository' <<<"$out" &&
+   ! grep -qE '^  (off|started off)' <<<"$out" && grep -q '^  why: ' <<<"$out" && [ "$n" -ge 3 ]
+then ok "focused: the off-by-default count ($n), only the step to do now named, and the rule"
+else bad "focused off-by-default:"; grep -A6 '^off by default' <<<"$out" | sed 's/^/        /'; fi
+d3="$(repo cli-quiet)"; put "$d3/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+out="$(MOCK_DIR="$d3" "$script" "$d3" 2>&1)"
+if grep -qE '^off by default: [0-9]+ left off; /plinth:guide map names each$' <<<"$out" && ! grep -qE '^  (off|started off|to do)' <<<"$out"
+then ok "focused with nothing to do now: the count alone, no item named"
+else bad "focused, nothing to do now:"; grep -A4 '^off by default' <<<"$out" | sed 's/^/        /'; fi
+out="$(MOCK_DIR="$work/created" "$script" "$work/created" 2>&1)"
+grep -qx 'off by default:' <<<"$out" && grep -q '^  off: The third-party reviewer' <<<"$out" &&
+  ok "full before the first merge: every off-by-default item" || bad "full before the first merge: $(grep -A3 '^off by default' <<<"$out")"
+out="$(MOCK_GH_FAIL=1 MOCK_DIR="$work/idle" "$script" "$work/idle" 2>&1)"
+grep -qx 'off by default:' <<<"$out" && grep -q '^  off: ' <<<"$out" &&
+  ok "full with the state not read: every off-by-default item" || bad "not read, off-by-default: $(grep -A3 '^off by default' <<<"$out")"
+
+# then: the row the table's Then cell names, on every path that has a step.
+state "then: after /implement, the pull request row" "$work/unlabelled" \
+  "command: /implement #9" "then: A pull request with checks running (step 5) -> $(row_tool 'A pull request with checks running')"
+state "then: after the first pull request's merge, the first-merge row" "$work/created" \
+  "command: merge #2" "then: First pull request merged (step 1) -> $(row_tool 'First pull request merged')"
+
+# Every Then cell names a row of the table, or is -; every row has six cells.
+tbl="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" | tail -n +3)"
+bad_then=""
+while IFS= read -r r; do
+  nf="$(awk -F ' \\| ' '{ print NF }' <<<"$r")"; th="$(awk -F ' \\| ' '{ sub(/ \|$/, "", $6); print $6 }' <<<"$r")"
+  [ "$nf" = 6 ] || { bad_then="$bad_then
+        $nf cells: $r"; continue; }
+  [ "$th" = - ] || grep -qF -- "| $th" <<<"$(cut -c1-200 <<<"$tbl" | awk -F ' \\| ' '{ print $1 }')" || bad_then="$bad_then
+        Then '$th' names no row"
+done <<<"$tbl"
+[ -z "$bad_then" ] && ok "every row of the table has six cells and a Then that names a row or -" || bad "the table's rows:$bad_then"
+grep -v '^| No repository yet' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
+grep '^| No repository yet' "$arsenal" | awk -F ' \\| ' '{ print $1 " | " $2 " | " $3 " |" }' > "$work/row5"
+awk -v r="$(cat "$work/row5")" '{ print } /^\| --- \| --- \| --- \| --- \|/ && !done { print r; done = 1 }' "$work/plugin/skills/arsenal/SKILL.md" > "$work/x.md" && mv "$work/x.md" "$work/plugin/skills/arsenal/SKILL.md"
+out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && grep -qF "the arsenal's row 'No repository yet' does not have six cells" <<<"$out" &&
+  ok "a row with three cells: exit 1, named" || bad "a short row: exit $rc: $(head -3 <<<"$out")"
+
+# Every command a case printed is one the table's How to use it cells give
+# (`#N` for a number, `…` for the words after it), `merge #N`, or `none:`.
+how="$(awk -F ' \\| ' '{ print $4 }' <<<"$tbl" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)"
+odd=""
+while IFS= read -r c; do
+  [ -n "$c" ] || continue
+  g="$(sed -E 's/#[0-9]+/#N/g' <<<"$c")"
+  case "$g" in "none: "*) continue ;; esac
+  grep -qxF -- "$g" <<<"$how" && continue
+  while IFS= read -r h; do case "$h" in *…) [ "${g#"${h%…}"}" != "$g" ] && continue 2 ;; esac; done <<<"$how"
+  odd="$odd
+        $c"
+done < <(sort -u "$printed")
+[ "$(grep -c . "$printed")" -ge 50 ] && [ -z "$odd" ] && ok "every printed command ($(sort -u "$printed" | grep -c .) kinds) is the table's, merge #N or none:" ||
+  bad "printed commands not in the table's How to use it cells:$odd"
+grep -qxF 'merge #N' <<<"$how" && ok "the table's How to use it cells give merge #N" || bad "no merge #N in the How to use it cells"
+
+# The boundary (#908): each skill's description and first lines name the other.
+for pair in "arsenal:/plinth:guide" "guide:/plinth:arsenal"; do
+  f="$root/skills/${pair%%:*}/SKILL.md"; other="${pair#*:}"
+  desc="$(sed -n 's/^description: //p' "$f")"
+  first="$(awk '/^# /{on=1; next} on && NF {print; n++} on && n && !NF {exit}' "$f")"
+  grep -qF -- "$other" <<<"$desc" && grep -qF -- "$other" <<<"$first" &&
+    ok "${pair%%:*}'s description and first lines name $other" || bad "${pair%%:*} does not name $other in its description and first lines"
+done
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"

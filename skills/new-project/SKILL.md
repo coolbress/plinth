@@ -399,7 +399,8 @@ What to do with the output:
   `administration:` line's included. The next step for the user is to open
   the pull request URL, wait for the checks, and merge with squash. On
   GitHub, end with one line in the person's language: try typing
-  `/plinth:guide` in the new repository's folder; it explains the whole way
-  in plain words and names the command to type after this merge.
+  `/plinth:guide` in the new repository's folder; before this merge it
+  explains the whole way in plain words and names the command to type next,
+  and after it, `/plinth:guide map` shows the whole way again.
 
 Do not edit the generated repository in this session.

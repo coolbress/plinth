@@ -159,7 +159,7 @@ Five skills, prefixed `/plinth:`:
 | `floor-check [owner/name]` | Reads an existing repository against the same floor the CI job checks, the live ruleset, whether it is behind the template plinth is tested with today, and what this machine's Claude Code settings say about the sandbox; lists each miss with one fix; changes nothing | You or the agent |
 | `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; on a conflict it recommends a resolution for each file and applies it only on your word, before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
-| `guide` | Explains the whole workflow in plain words, in your language: the nine steps and four moments with their tools from the arsenal's table, where your repository is now, and the one command to type next; changes nothing | You only: type `/` and pick it |
+| `guide` | Explains in plain words, in your language, where your repository is, how to use the tools of that step and the next from the arsenal's table, and the one command to type next; the whole way, every step in depth, until the first merge or with `/plinth:guide map`; changes nothing | You only: type `/` and pick it |
 
 Every skill only you can start, these and the dependencies' together, is on
 [one list in the arsenal](skills/arsenal/SKILL.md#skills-only-the-person-can-start).

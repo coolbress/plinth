@@ -12,7 +12,7 @@
     "named": "\\A(?![\\s\\S]*(?:(?:uptime|monitor|error[- ]track|모니터|(?:오류|에러) ?추적)[^\\n]*(?:(?<!not )(?<!no )\\bpaid\\b|\\bcosts? money\\b|유료)|(?:(?<!not )(?<!no )\\bpaid\\b|\\bcosts? money\\b|유료)[^\\n]*(?:uptime|monitor|error[- ]track|모니터|(?:오류|에러) ?추적)))"
   },
   {
-    "item": "one code block: the merge command for #1",
-    "named": "\\A(?:(?!```)[\\s\\S])*```[a-z]*\\s*body=\"\\$\\(gh pr view 1 --json body --jq \\.body\\)\" && gh pr merge 1 --squash --match-head-commit [0-9a-f]{40} --body \"\\$body\"\\s*```(?:(?!```)[\\s\\S])*\\Z"
+    "item": "one code block: merge #1",
+    "named": "\\A(?:(?!```)[\\s\\S])*```[a-z]*\\s*merge #1\\s*```(?:(?!```)[\\s\\S])*\\Z"
   }
 ]
