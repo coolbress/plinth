@@ -184,7 +184,7 @@ kind='def kind: [.labels[].name] as $l
 # its ## Blocked by (### Blocked by from the task form), up to the next
 # heading, unless that section opens with "None", and those on a
 # first line "Blocked by: #N, #N" (docs/agents/issue-tracker.md's fallback).
-# Not read: GitHub's native issue dependencies. A pull request is for each #N
+# GitHub's native issue dependencies are read below. A pull request is for each #N
 # its body names after a closing keyword or "Part of", as GitHub reads it.
 refs='def refs: [scan("(?:^|[^A-Za-z0-9_./-])#([0-9]+)") | .[0]];'
 blockers='def blockers: [(.body // "") | split("\n")[] | sub("\r$"; "")] as $ls
@@ -312,6 +312,28 @@ fi
 # open issues are the newest 100: a blocker older than all of them, in a read
 # that came back full, is not known to be closed, so it still blocks.
 ready_n="$(awk -F '\t' '$4 == "ticket" && ("," $2 ",") ~ /,ready-for-agent,/' <<<"$issues" | grep -c . || true)"
+# GitHub's native issue dependencies, which docs/agents/issue-tracker.md and
+# /to-tickets use first: one GraphQL call for the open ready-for-agent issues
+# (up to 100, 50 edges each way). Out: <waiter>\t<blocker> for each edge whose
+# blocker is open, from blockedBy, and from blocking where the waiter is an
+# open issue of this repository; a blocker in another repository is written
+# owner/repo#N, and blocks too. A failed read, or a GitHub or gh that does not
+# know the fields, leaves the choice to the bodies and the line says so.
+deps=""; deps_failed=""
+if [ "$ready_n" -ge 1 ]; then
+  owner="${repo%%/*}"; name="${repo#*/}"
+  deps="$(cd "$top" && gh api graphql -F owner="$owner" -F name="$name" -f query='
+    query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+      issues(states: OPEN, labels: ["ready-for-agent"], first: 100) { nodes { number
+        blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
+        blocking(first: 50) { nodes { number state repository { nameWithOwner } } } } } } }' \
+    --jq '"'"$(tr 'A-Z' 'a-z' <<<"$repo")"'" as $me
+      | def ref: if (.repository.nameWithOwner | ascii_downcase) == $me then (.number | tostring) else "\(.repository.nameWithOwner)#\(.number)" end;
+      .data.repository.issues.nodes[] | .number as $n
+      | ((.blockedBy.nodes[] | select(.state == "OPEN") | [($n | tostring), ref]),
+         (.blocking.nodes[] | select(.state == "OPEN" and (.repository.nameWithOwner | ascii_downcase) == $me) | [(.number | tostring), ($n | tostring)]))
+      | @tsv' 2>&1)" || { deps_failed="$(tail -1 <<<"$deps" | tr '\t' ' ')"; deps=""; }
+fi
 order=""; order_failed=""
 if [ "$ready_n" -ge 2 ]; then
   while IFS=$'\t' read -r n _ said; do
@@ -335,16 +357,22 @@ choice="$(awk -F '\t' -v full="$([ "$(grep -c . <<<"$issues" || true)" -ge 100 ]
   $1 == "" { next }
   f == 1 { k = split($10, a, ","); for (i = 1; i <= k; i++) if (!(a[i] in pr)) pr[a[i]] = $1; next }
   f == 2 { if (!($1 in rank)) { rank[$1] = ++nr; spec[$1] = $2 }; next }
+  f == 3 { native[$1] = native[$1] "," $2; nopen[$2] = 1; next }
   { open[$1] = 1; if (min == "" || $1 + 0 < min + 0) min = $1
     if ($4 != "ticket") next
-    t[++n] = $1; ready[$1] = (("," $2 ",") ~ /,ready-for-agent,/); blk[$1] = $5
-    k = split($5, a, ","); for (i = 1; i <= k; i++) { nw[a[i]]++; waits[a[i]] = waits[a[i]] (waits[a[i]] == "" ? "" : " ") "#" $1 } }
+    t[++n] = $1; ready[$1] = (("," $2 ",") ~ /,ready-for-agent,/)
+    # The body'"'"'s blockers and the native ones, each once.
+    k = split($5 native[$1], a, ","); b = ""; delete seen
+    for (i = 1; i <= k; i++) if (a[i] != "" && !(a[i] in seen)) { seen[a[i]] = 1; b = b "," a[i] }
+    blk[$1] = substr(b, 2)
+    k = split(blk[$1], a, ","); for (i = 1; i <= k; i++) { nw[a[i]]++; waits[a[i]] = waits[a[i]] (waits[a[i]] == "" ? "" : " ") "#" $1 } }
   END {
     for (j = 1; j <= n; j++) {
       x = t[j]; ob = ""; closed = ""
       k = split(blk[x], a, ",")
       for (i = 1; i <= k; i++) {
-        if (a[i] in open) ob = ob " #" a[i]
+        if (a[i] ~ /#/) ob = ob " " a[i]
+        else if ((a[i] in open) || (a[i] in nopen)) ob = ob " #" a[i]
         else if (full && a[i] + 0 < min + 0) ob = ob " #" a[i] "~"
         else closed = closed " #" a[i]
       }
@@ -372,7 +400,7 @@ choice="$(awk -F '\t' -v full="$([ "$(grep -c . <<<"$issues" || true)" -ge 100 ]
     if (nb) s = s "; blocked by an open issue: " substr(bl, 3)
     if (np) s = s "; in an open pull request: " substr(tk, 3)
     print "skipped: " (nb + np ? s : "none")
-  }' <(printf '%s\n' "$prs") <(printf '%s\n' "$order") - <<<"$issues")"
+  }' <(printf '%s\n' "$prs") <(printf '%s\n' "$order") <(printf '%s\n' "$deps") - <<<"$issues")"
 pick="$(awk -F '\t' '$1 == "pick" { print $2 }' <<<"$choice")"
 fallback="$(awk -F '\t' '$1 == "fallback" { print $2 }' <<<"$choice")"
 
@@ -399,7 +427,10 @@ not_tickets="$(awk -F '\t' 'FNR == NR { cut[$1] = $3; next }
   $4 == "spec" { printf "  #%s [%s] a spec, a record: a person does it; tickets cut from it: %s\n", $1, $2, cut[$1] }' \
   <(printf '%s\n' "$specs") - <<<"$issues")"
 if [ -n "$not_tickets" ]; then echo "open issues that are not tickets, never for /implement:"; printf '%s\n' "$not_tickets"; fi
-grep -E '^(ticket to take|skipped): ' <<<"$choice"
+grep -E '^(ticket to take|skipped): ' <<<"$choice" | while IFS= read -r l; do
+  case "$l" in "ticket to take: "*) [ -z "$deps_failed" ] || l="$l; GitHub's issue dependencies: not read ($deps_failed)" ;; esac
+  printf '%s\n' "$l"
+done
 [ -z "$order_failed" ] || echo "spec sub-issue order: not read ($order_failed)"
 if [ -n "$merged" ]; then
   last="$(head -1 <<<"$merged")"

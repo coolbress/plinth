@@ -117,6 +117,8 @@ What to keep to:
   waits on. Each open pull request's line names the issue it is `for`. When
   `command:` is another step, the ticket comes after it. With `none`, every
   ready ticket waits on what its line names: say that, and offer none of them.
+  When the line ends `GitHub's issue dependencies: not read`, say the choice
+  went by the issues' text alone, and guess no dependency.
 - `where: not read` means the script could not read the repository: say what
   was not read, from the line that says so, and the one thing that fixes it
   (for example, logging in with `gh auth login`); name no step.
