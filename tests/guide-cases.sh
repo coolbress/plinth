@@ -35,6 +35,8 @@ if [ "$1" = api ] && [[ "$2" == repos/*/commits/* ]]; then
   jq --arg s "${2##*/}" '[.[].commits[]? | select(.oid == $s)] | first | {commit: {committer: {date: .committedDate}}}' "$MOCK_DIR/open.json" | jq -r "$jqf"
   exit
 fi
+# As gh before 2.94.0 does (#909): MOCK_OLD_GH refuses subIssuesSummary.
+case ",$fields," in *,subIssuesSummary,*) [ -n "${MOCK_OLD_GH:-}" ] && { echo "Unknown JSON field: \"subIssuesSummary\"" >&2; exit 1; } ;; esac
 # As GitHub does (#906): a list asking for each pull request's commits asks
 # for more nodes than GraphQL allows, so the whole read fails.
 case ",$fields," in *,commits,*) [ "$1" = pr ] && { echo "GraphQL: By the time this query traverses to the authors connection, it is requesting up to 1,000,000 possible nodes which exceeds the maximum limit of 500,000." >&2; exit 1; } ;; esac
@@ -532,6 +534,13 @@ put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 25 'Another sp
 out="$(MOCK_ALL_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
 grep -qx 'command: /grilling' <<<"$out" && [ "$(grep -c 'tickets cut from it: not read' <<<"$out")" -eq 2 ] &&
   ok "both searches failing: each not read, no /to-tickets" || bad "two failed searches"
+# An older gh (#909): the issues are still read and the ticket still routed;
+# only the specs are not read, and none is cut on a guess.
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 20 'Export to CSV' '')"
+out="$(MOCK_OLD_GH=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+if grep -qx 'command: /implement #20' <<<"$out" && grep -qF '#19 [spec] a spec, a record: a person does it; tickets cut from it: not read (sub-issues: Unknown JSON field: "subIssuesSummary")' <<<"$out"
+then ok "gh without subIssuesSummary: the issues still read, the spec not read, never /to-tickets"
+else bad "gh without subIssuesSummary"; sed 's/^/        /' <<<"$out" | grep -E 'issues|spec|command|where'; fi
 put "$d/open.json" "$(pr 13 'feat: export' false run)"
 expect "an uncut spec next to an open pull request: the pull request first" "$d" "A pull request with checks running (step 5)" "/run"
 printf '[]' > "$d/open.json"

@@ -192,8 +192,8 @@ if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
-elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body,subIssuesSummary \
-      --jq "$kind"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind, (.subIssuesSummary.total // 0)] | @tsv' 2>&1)"; then
+elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body \
+      --jq "$kind"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind] | @tsv' 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
 fi
 if [ -n "$failed" ]; then
@@ -205,8 +205,11 @@ fi
 
 field() { cut -f"$1"; }
 # What was cut from each open spec (#909), as /to-tickets cuts one: its
-# sub-issues, open or closed (column 5 of the list), else the issues, open or
-# closed, whose body names #N under ## Parent. Only the first spec with none
+# sub-issues, open or closed, else the issues, open or closed, whose body
+# names #N under ## Parent. The sub-issue counts are a read of their own, one
+# call and only when a spec is open: gh before 2.94.0 has no subIssuesSummary
+# and refuses a list that asks for it, which would leave every issue unread;
+# here only the specs are. A spec missing from that read is unread too. Only the first spec with none
 # is routed to, so the search runs in number order on specs with no sub-issue
 # and stops at the first that comes back uncut: one search per spec up to and
 # including it, none past it. The search's words only narrow it; the filter is
@@ -219,9 +222,18 @@ parent_of='def parent_of($n): [(.body // "") | split("\n")[]]
       if ($l | startswith("## ")) then .on = ($l | test("^## Parent[ \t]*\r?$"))
       elif .on and ($l | test("(^|[^A-Za-z0-9_./-])#" + ($n | tostring) + "([^0-9]|$)")) then .hit = true
       else . end) | .hit;'
-specs="$(awk -F '\t' '$4 == "spec" { print $1 "\t" ($5 == "" ? 0 : $5) }' <<<"$issues" |
+specs=""
+if open_specs="$(awk -F '\t' '$4 == "spec" { print $1 }' <<<"$issues")" && [ -n "$open_specs" ]; then
+  subs_read="$(cd "$top" && gh issue list --state open --label spec --limit 100 --json number,subIssuesSummary \
+    --jq '.[] | [.number, (.subIssuesSummary.total // 0)] | @tsv' 2>&1)" || subs_failed="$(tail -1 <<<"$subs_read" | tr '\t' ' ')"
+  specs="$(while IFS= read -r n; do
+      subs="$([ -n "${subs_failed:-}" ] || awk -F '\t' -v n="$n" '$1 == n { print $2; exit }' <<<"$subs_read")"
+      printf '%s\t%s\n' "$n" "${subs:--}"
+    done <<<"$open_specs" |
   { first=""; while IFS=$'\t' read -r n subs; do
-    if [ "$subs" -gt 0 ]; then
+    if [ "$subs" = - ]; then
+      printf '%s\tunread\tnot read (sub-issues: %s)\n' "$n" "${subs_failed:-not in the read of open specs}"
+    elif [ "$subs" -gt 0 ]; then
       printf '%s\tcut\t%s sub-issue%s\n' "$n" "$subs" "$([ "$subs" -eq 1 ] || echo s)"
     elif [ -n "$first" ]; then
       printf '%s\tunsearched\tnot searched (spec #%s, with none, comes first)\n' "$n" "$first"
@@ -233,6 +245,7 @@ specs="$(awk -F '\t' '$4 == "spec" { print $1 "\t" ($5 == "" ? 0 : $5) }' <<<"$i
       printf '%s\tunread\tnot read (%s)\n' "$n" "$(tail -1 <<<"$named" | tr '\t' ' ')"
     fi
   done; })"
+fi
 # Column 9 of the list is whether Dependabot's pull request raises the plinth
 # pin (#904): never so for a person's, so their rows end at 8 and take the
 # checks line below as 9.

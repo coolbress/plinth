@@ -47,7 +47,9 @@ pull requests and have no tag.
   `/to-tickets #N`, after a `ready-for-agent` ticket and before an unlabelled
   issue, the template reminder and `/grilling`, including a spec that also
   carries `ready-for-agent` (it went to `/grilling` before). A search that
-  fails says `not read` and never routes to `/to-tickets`.
+  fails says `not read` and never routes to `/to-tickets`. The sub-issue
+  counts are one read of their own, made only when a spec is open: a gh older
+  than 2.94.0 has no such field, and there only the specs say `not read`.
 
 ### Fixed
 
