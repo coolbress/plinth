@@ -17,9 +17,11 @@ pull requests and have no tag.
   first pull request is open with no merge by a person, and `guide-busy`, a
   project under way with several merges, a person's pull request whose plinth
   job `ci / build` fails, a draft waiting for a date, and Dependabot's green
-  pull request raising a plinth pin one release behind. Their read-only `gh`
-  also answers the `gh api` paths and the job log their records list, so the
-  pin line is the same in every run and nothing reaches GitHub. Every graded run
+  pull request raising a plinth pin one release behind. Each runs on a copy of
+  the project whose workflows call plinth at the commit its `plinth_pin` file
+  names, not at the template's default, and its read-only `gh` also answers
+  the `gh api` paths and the job log its records list, so the pin line is the
+  same in every run and on every template, and nothing reaches GitHub. Every graded run
   records its final report's length, and a task's `report.json` records,
   without changing the pass, whether the report says what to type for the
   current step's tool and what that leaves behind, and, for the busy project,

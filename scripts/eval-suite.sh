@@ -26,7 +26,9 @@
 # guide-fresh and guide-busy run the guide on a project with no merge yet and
 # on one under way (#907); a task's report.json says what the grade records of
 # its final report besides the pass: the tool use of the step it is at, and,
-# for the busy one, the failing check and the pin behind.
+# for the busy one, the failing check and the pin behind. A task with a
+# plinth_pin runs on a fixture of its own whose workflows call plinth at that
+# commit, not at the template's default.
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -319,8 +321,28 @@ gaps() { # <task>
   [ -f "$g" ] || return 0
   python3 -I -c 'import json, sys; print("\n".join(g["path"] for g in json.load(open(sys.argv[1]))))' "$g"
 }
-# Whether a task runs on a fixture of its own: it removes gaps or plants a previous session.
-own_fixture() { [ -f "$root/eval-suite/tasks/$1/gaps.json" ] || [ -d "$root/eval-suite/tasks/$1/previous" ]; }
+# Whether a task runs on a fixture of its own: it removes gaps, plants a previous session or pins plinth.
+own_fixture() {
+  [ -f "$root/eval-suite/tasks/$1/gaps.json" ] || [ -d "$root/eval-suite/tasks/$1/previous" ] \
+    || [ -f "$root/eval-suite/tasks/$1/plinth_pin" ]
+}
+# A task's plinth_pin (#907): the plinth commit its project calls, whatever the
+# template's default is, so the guide's pin line is the task's own. Every
+# workflow call of coolbress/plinth at a full SHA, and the recorded plinth_sha,
+# move to it; a render with no such call stops here.
+pin_plinth() { # <task> <fixture>
+  local f="$root/eval-suite/tasks/$1/plinth_pin" pin w
+  [ -f "$f" ] || return 0
+  pin="$(tr -d '[:space:]' < "$f")"
+  [[ "$pin" =~ ^[0-9a-f]{40}$ ]] || die "task $1: plinth_pin is not a full commit SHA (got: $pin)"
+  for w in "$2"/.github/workflows/*.yml "$2"/.github/workflows/*.yaml; do
+    [ -f "$w" ] || continue
+    PIN="$pin" perl -pi -e 's{(coolbress/plinth/\.github/workflows/[^\s@]+@)[0-9a-fA-F]{40}}{$1$ENV{PIN}}g' "$w"
+  done
+  [ ! -f "$2/.copier-answers.yml" ] || PIN="$pin" perl -pi -e 's{^plinth_sha: .*$}{plinth_sha: $ENV{PIN}}' "$2/.copier-answers.yml"
+  grep -qsE "coolbress/plinth/\.github/workflows/[^[:space:]@]+@$pin" "$2"/.github/workflows/*.y*ml \
+    || die "task $1: plinth_pin names $pin, but the render has no workflow that calls coolbress/plinth at a full commit SHA"
+}
 # The fixture a task runs on: its archetype's, or its own.
 fixture_of() { # <task> <arm>
   local a
@@ -361,6 +383,7 @@ make_fixtures() {
         [ -e "$f/$p" ] || die "task $t: gaps.json names $p, which the $a render does not have"
         rm -f "$f/$p"
       done < <(gaps "$t")
+      pin_plinth "$t" "$f"
       commit_fixture "$f"
       [ -d "$root/eval-suite/tasks/$t/previous" ] || continue
       cp -R "$root/eval-suite/tasks/$t/previous/." "$f"

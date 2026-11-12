@@ -1,6 +1,6 @@
 {
   "repo": "trial/probe",
-  "about": "#907: a project just made. Its first pull request is open and green, and no person has merged one. The plinth pin is at the latest release: the api entries answer floor-check's two reads, so the guide's pin line is the same in every run and nothing reaches GitHub.",
+  "about": "#907: a project just made. Its first pull request is open and green, and no person has merged one. The plinth pin is at the latest release: plinth_pin holds v2.28.0's commit, whatever the template's default is, and the api entries answer floor-check's two reads, so the guide's pin line is the same in every run and nothing reaches GitHub.",
   "issues": [],
   "pulls": [
     {
@@ -15,18 +15,54 @@
       "createdAt": "2026-11-12T08:40:00Z",
       "body": "## What and why\n\nThe project's first pull request, which turns on the checks.\n",
       "statusCheckRollup": [
-        {"name": "ci / pr-title", "status": "COMPLETED", "conclusion": "SUCCESS"},
-        {"name": "ci / lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
-        {"name": "ci / typecheck", "status": "COMPLETED", "conclusion": "SUCCESS"},
-        {"name": "ci / test", "status": "COMPLETED", "conclusion": "SUCCESS"},
-        {"name": "ci / build", "status": "COMPLETED", "conclusion": "SUCCESS"},
-        {"name": "ci / floor-check", "status": "COMPLETED", "conclusion": "SUCCESS"}
+        {
+          "name": "ci / pr-title",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "ci / lint",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "ci / typecheck",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "ci / test",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "ci / build",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "ci / floor-check",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        }
       ],
       "comments": []
     }
   ],
   "api": [
-    {"path": "^repos/coolbress/plinth/releases/latest$", "json": {"tag_name": "v2.28.0"}},
-    {"path": "^repos/coolbress/plinth/compare/[0-9a-f]{40}\\.\\.\\.v2\\.28\\.0(\\?|$)", "json": {"status": "identical", "ahead_by": 0, "behind_by": 0}}
+    {
+      "path": "^repos/coolbress/plinth/releases/latest$",
+      "json": {
+        "tag_name": "v2.28.0"
+      }
+    },
+    {
+      "path": "^repos/coolbress/plinth/compare/cecffe1f52c2911558ece2b978c759c9203e1f63\\.\\.\\.v2\\.28\\.0(\\?|$)",
+      "json": {
+        "status": "identical",
+        "ahead_by": 0,
+        "behind_by": 0
+      }
+    }
   ]
 }

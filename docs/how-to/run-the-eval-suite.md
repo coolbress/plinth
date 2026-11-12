@@ -267,10 +267,13 @@ it, the failing pull request's comments and GitHub's issue dependencies, and the
 failing job's log for `gh run view`. Each answer is in the task's `issues.json`,
 under `api` and `logs`, so the pin line is the same in every run and nothing
 reaches GitHub. Other tasks' stand-ins answer no `gh api` call, and
-floor-check then reads GitHub itself. The busy project's latest release is
-v2.29.0, one release after the template's default pin at v2.28.0; when the
-template's default pin moves, that answer does not, and the guide still reads
-the pin as behind.
+floor-check then reads GitHub itself. The pin is the task's own: its
+`plinth_pin` file holds v2.28.0's commit, and the task runs on a copy of the
+project whose workflows call plinth at that commit, whatever the template's
+default is. The compare is answered for that commit only, so the busy project
+is one release behind v2.29.0 and the fresh one at the latest release, v2.28.0,
+on every template. A render with no workflow calling plinth at a full commit
+SHA stops the suite before any session.
 
 Every run records its final report's length, the lines that are not blank.
 `guide`, `guide-fresh` and `guide-busy` each have a `report.json`, and the grade

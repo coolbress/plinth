@@ -1,6 +1,6 @@
 {
   "repo": "trial/probe",
-  "about": "#907: a project under way, as #799 F19 saw one. Five pull requests merged by a person and one by Dependabot; open: a person's pull request whose plinth job ci / build fails, a person's draft that waits for a date, and Dependabot's pull request raising the plinth pin, green. The api entries answer floor-check's two reads with a pin one release behind (v2.29.0, 11 commits, as the release after the template's default pin v2.28.0 is), the failing pull request's comments, and GitHub's issue dependencies (none); nothing reaches GitHub.",
+  "about": "#907: a project under way, as #799 F19 saw one. Five pull requests merged by a person and one by Dependabot; open: a person's pull request whose plinth job ci / build fails, a person's draft that waits for a date, and Dependabot's pull request raising the plinth pin, green. The api entries answer floor-check's two reads with a pin one release behind: plinth_pin holds v2.28.0's commit, whatever the template's default is, and v2.29.0, 11 commits on, is the latest, the failing pull request's comments, and GitHub's issue dependencies (none); nothing reaches GitHub.",
   "issues": [
     {
       "number": 7,
@@ -332,7 +332,7 @@
       }
     },
     {
-      "path": "^repos/coolbress/plinth/compare/[0-9a-f]{40}\\.\\.\\.v2\\.29\\.0(\\?|$)",
+      "path": "^repos/coolbress/plinth/compare/cecffe1f52c2911558ece2b978c759c9203e1f63\\.\\.\\.v2\\.29\\.0(\\?|$)",
       "json": {
         "status": "ahead",
         "ahead_by": 11,

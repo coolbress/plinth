@@ -66,6 +66,13 @@ printf '\n\ndef greet(name: str) -> str:\n    return f"Hello, {name}!"\n' >> "$d
 # The template's own ignores, which keep the caches out of a run's changed files.
 printf '__pycache__/\n.venv/\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\n.claude/worktrees/\n' > "$dest/.gitignore"
 mkdir -p "$dest/.github"; echo "# Changelog" > "$dest/CHANGELOG.md"; echo "version: 2" > "$dest/.github/dependabot.yml"
+# The template's workflows, calling plinth at a default past v2.29.0 (v2.31.0's commit), as a later template would (#907).
+if [ -z "${EVAL_STUB_NO_WORKFLOWS:-}" ]; then
+  mkdir -p "$dest/.github/workflows"
+  printf 'on: pull_request\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@aef12a4d25ea75a3b8d0b26ade61e41539ce1c95\n' > "$dest/.github/workflows/ci.yml"
+  printf 'on: pull_request\njobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@aef12a4d25ea75a3b8d0b26ade61e41539ce1c95\n' > "$dest/.github/workflows/label.yml"
+  printf '_commit: v1.40.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\nplinth_sha: aef12a4d25ea75a3b8d0b26ade61e41539ce1c95\n' > "$dest/.copier-answers.yml"
+fi
 echo "# rules" > "$dest/AGENTS.md"; ln -s AGENTS.md "$dest/CLAUDE.md"
 mkdir -p "$dest/.claude/output-styles" "$dest/.git"; echo '{"outputStyle": "Stub style"}' > "$dest/.claude/settings.json"
 printf -- '---\nname: Stub style\n---\n\nSay what you ran.\n' > "$dest/.claude/output-styles/stub-style.md"
@@ -687,6 +694,18 @@ check "the kind table adds the tool use, the recorded items and the median lengt
   'grep -qF "the step'"'"'s tool use named 1/2; \`names the failing check\` 1/2; \`says the pin is behind\` 1/2; lines (median) 6 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 check "the per-run table gives each run's lines, tool use and recorded items" \
   'grep -qF "| guide-busy · plinth 1 | 8 | yes | \`names the failing check\` yes; \`says the pin is behind\` yes |" "$tmp/out.txt" && grep -qF "| guide-busy · plinth 2 | 4 | no | \`names the failing check\` no; \`says the pin is behind\` no |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+pinned="$tmp/gb/fixtures/plinth-cli-guide-busy"
+check "guide-busy's own fixture calls plinth at its plinth_pin in every workflow, the shared one keeps the template's default" \
+  'grep -q "python-ci.yml@cecffe1f52c2911558ece2b978c759c9203e1f63\$" "$pinned/.github/workflows/ci.yml" && grep -q "pr-label.yml@cecffe1f52c2911558ece2b978c759c9203e1f63\$" "$pinned/.github/workflows/label.yml" && grep -qx "plinth_sha: cecffe1f52c2911558ece2b978c759c9203e1f63" "$pinned/.copier-answers.yml" && ! grep -rq aef12a4d "$pinned/.github" && grep -q "@aef12a4d25ea75a3b8d0b26ade61e41539ce1c95\$" "$tmp/gb/fixtures/plinth-cli/.github/workflows/ci.yml"' "$(cat "$pinned/.github/workflows/ci.yml" "$pinned/.copier-answers.yml")"
+gs="$(state_on "$pinned" guide-busy)"
+check "with the template's default past v2.29.0, guide-busy's project still reads merge #14 and its own pin behind v2.29.0" \
+  'grep -qx "command: merge #14" <<<"$gs" && grep -qx "plinth pin: cecffe1f52c2911558ece2b978c759c9203e1f63, behind v2.29.0, the latest plinth release, 11 commit(s) behind" <<<"$gs"' "$gs"
+sf="$(PATH="$tmp/guide-bin-guide-busy:$PATH" gh api "repos/coolbress/plinth/compare/aef12a4d25ea75a3b8d0b26ade61e41539ce1c95...v2.29.0?per_page=1&page=2" 2>&1)"; src=$?
+check "must not pass: the compare is answered for the task's own pin only, not the template's default" '[ "$src" = 1 ] && grep -q "is not served" <<<"$sf"' "$sf"
+: > "$log"
+EVAL_STUB_NO_WORKFLOWS=1 suite --config-dir "$tmp/cfg" --task guide-busy --runs 1 --out "$tmp/gnp"
+check "must not pass: a plinth_pin on a render with no plinth workflow stops before any session (exit 2)" \
+  '[ "$(rc)" = 2 ] && [ "$(sessions)" = 0 ] && grep -q "plinth_pin names cecffe1f52c2911558ece2b978c759c9203e1f63, but the render has no workflow" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 : > "$log"
 EVAL_STUB_ACTIONS=fresh-right,guide-right suite --config-dir "$tmp/cfg" --task guide-fresh --runs 2 --out "$tmp/gf"
 check "guide-fresh passes the merge command and names its tool use; /grilling there fails and names none" \
