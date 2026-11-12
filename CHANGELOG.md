@@ -34,9 +34,10 @@ pull requests and have no tag.
 - The eval suite's guide tasks find what the step's tool leaves behind in one
   block of the report with the tool (a paragraph or a list, the text between
   blank lines), not only on one line (#908): a "What it leaves" line under the
-  tool's line now counts. For `guide-busy` the merge is `merge #N`, or merging
-  #14 named as such, so a line saying only which pull request could merge does
-  not count.
+  tool's line now counts. For `guide-busy` the merge is `merge #N`, "merge"
+  followed by #14 (with only "Dependabot's" and "pull request" or "PR" between),
+  or #14 followed by 병합 or 머지, no longer any `#14`, so "the change that could
+  merge is #14" beside `main` does not count.
 - `/plinth:guide` explains the tools of the step the project is at and the
   next one in depth, and the rest in a line each, with the whole way before
   the first merge or on request (#908). `scripts/guide-state.sh` prints

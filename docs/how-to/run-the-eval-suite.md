@@ -286,8 +286,12 @@ longer answers: what to type and what it leaves count when both are found
 anywhere in the report, the second in one block with the tool or the merge (a
 paragraph or a list, the text between blank lines, so a "What it leaves" line
 under the tool's line counts; for `guide-busy` the merge is `merge #N`, or
-merging #14 named as such), so a tour line that says them counts as much as
-the next step does. The second
+"merge" followed by #14, with only "Dependabot's" and "pull request" or "PR"
+between them, or #14 followed by 병합 or 머지, so "when #14 is merged" does not
+count), so a tour line that says them counts as much as the next step does.
+The tool and what it leaves only have to be in one block, not about one
+thing: a list of steps with no blank line between them can count the tool of
+one line with what another line leaves. The second
 table adds their counts and the median length, and a third table gives each
 run's length and whether the tool use was named.
 
