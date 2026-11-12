@@ -42,7 +42,9 @@ if [ "$1" = api ] && [[ "$2" == repos/*/issues/*/sub_issues ]]; then
   [ -n "${MOCK_SUBS_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
   n="${2%/sub_issues}"; n="${n##*/}"
   set -o pipefail
-  jq '[.[] | {number: .}]' "$MOCK_DIR/subs-$n.json" | jq -r "$jqf"
+  # A number, or "owner/repo#N" for another repository's sub-issue.
+  jq '[.[] | tostring | if test("#") then {number: (split("#")[1] | tonumber), repository_url: "https://api.github.com/repos/\(split("#")[0])"}
+    else {number: tonumber, repository_url: "https://api.github.com/repos/o/r"} end]' "$MOCK_DIR/subs-$n.json" | jq -r "$jqf"
   exit
 fi
 # The GraphQL read of native issue dependencies (#910): deps.json, in
@@ -663,6 +665,10 @@ put "$d/issues.json" "$(subbed 19 'The queue spec' 3 0)" "$(tkt 11 'One' ready-f
 printf '[13, 12, 11]' > "$d/subs-19.json"
 state "a spec's sub-issues: in the spec's order, over one others wait on" "$d" \
   "command: /implement #13" "ticket to take: #13, not blocked; a sub-issue of spec #19, next in its order"
+printf '["other/repo#14", 13, 12, 11]' > "$d/subs-19.json"
+state "another repository's sub-issue with the same number: not this one" "$d" \
+  "ticket to take: #13, not blocked; a sub-issue of spec #19, next in its order"
+printf '[13, 12, 11]' > "$d/subs-19.json"
 put "$d/open.json" "$(prb 8 'feat: three' 'Closes #13')"
 state "the spec's first sub-issue in a pull request: the next in its order" "$d" \
   "ticket to take: #12, not blocked; a sub-issue of spec #19, next in its order"

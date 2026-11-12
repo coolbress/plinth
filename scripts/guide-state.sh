@@ -314,7 +314,9 @@ fi
 ready_n="$(awk -F '\t' '$4 == "ticket" && ("," $2 ",") ~ /,ready-for-agent,/' <<<"$issues" | grep -c . || true)"
 # GitHub's native issue dependencies, which docs/agents/issue-tracker.md and
 # /to-tickets use first: one GraphQL call for the open ready-for-agent issues
-# (up to 100, 50 edges each way). Out: <waiter>\t<blocker> for each edge whose
+# (the newest 100, as the issue read; 50 edges each way, more not read). An
+# unlabelled ticket's own are not read: it is known to wait only through a
+# ready ticket's blocking edge or its body. Out: <waiter>\t<blocker> for each edge whose
 # blocker is open, from blockedBy, and from blocking where the waiter is an
 # open issue of this repository; a blocker in another repository is written
 # owner/repo#N, and blocks too. A failed read, or a GitHub or gh that does not
@@ -322,9 +324,9 @@ ready_n="$(awk -F '\t' '$4 == "ticket" && ("," $2 ",") ~ /,ready-for-agent,/' <<
 deps=""; deps_failed=""
 if [ "$ready_n" -ge 1 ]; then
   owner="${repo%%/*}"; name="${repo#*/}"
-  deps="$(cd "$top" && gh api graphql -F owner="$owner" -F name="$name" -f query='
+  deps="$(cd "$top" && gh api graphql -f owner="$owner" -f name="$name" -f query='
     query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
-      issues(states: OPEN, labels: ["ready-for-agent"], first: 100) { nodes { number
+      issues(states: OPEN, labels: ["ready-for-agent"], first: 100, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number
         blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
         blocking(first: 50) { nodes { number state repository { nameWithOwner } } } } } } }' \
     --jq '"'"$(tr 'A-Z' 'a-z' <<<"$repo")"'" as $me
@@ -338,7 +340,7 @@ order=""; order_failed=""
 if [ "$ready_n" -ge 2 ]; then
   while IFS=$'\t' read -r n _ said; do
     case "$said" in *sub-issue*) ;; *) continue ;; esac
-    if got="$(cd "$top" && gh api "repos/$repo/issues/$n/sub_issues" --paginate --jq '.[].number' 2>&1)"; then
+    if got="$(cd "$top" && gh api "repos/$repo/issues/$n/sub_issues" --paginate --jq '.[] | select((.repository_url // "") | ascii_downcase | endswith("/repos/'"$(tr 'A-Z' 'a-z' <<<"$repo")"'")) | .number' 2>&1)"; then
       order="$order$(awk -v s="$n" 'NF { print $1 "\t" s "\t" (++i) }' <<<"$got")"$'\n'
     else
       order_failed="${order_failed:+$order_failed; }#$n: $(tail -1 <<<"$got" | tr '\t' ' ')"
@@ -581,7 +583,8 @@ elif n="$(awk -F '\t' '$2 == "none"' <<<"$specs" | head -1 | field 1)" && [ -n "
   note="issue #$n is a spec no ticket was cut from yet; /to-tickets cuts it into tickets that /implement can take one at a time"
   say "A job bigger than one session" "/to-tickets #$n"
 elif [ -n "$fallback" ]; then
-  # A ticket without ready-for-agent, on the same skips: never one that waits.
+  # A ticket without ready-for-agent, on the same skips, by its body and the
+  # ready tickets' dependency edges: its own native blockers are not read.
   before="/clear"; say "A ticket ready" "/implement #$fallback"
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"

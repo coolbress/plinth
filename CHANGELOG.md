@@ -60,8 +60,9 @@ pull requests and have no tag.
   sub-issue in the spec's order, then the ticket the most open tickets wait
   on, then the lowest number, and prints `ticket to take:` with the reason
   and a `skipped:` line. When every ready ticket waits it names on what, and
-  sends none of them to `/implement`; an unlabelled ticket that does not wait
-  is still taken after that, as before. Each open pull request's line names
+  sends none of them to `/implement`; an unlabelled ticket is still taken
+  after that, as before, unless its body or a ready ticket's dependency says
+  it waits (its own native dependencies are not read). Each open pull request's line names
   the issue it is for, and the open-issue line counts the `ready-for-agent`
   ones. A dependency read that fails says `not read` on the ticket line, and
   the bodies choose.
