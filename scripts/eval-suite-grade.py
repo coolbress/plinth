@@ -42,9 +42,11 @@ Every run records its final report's length: `report.lines`, the lines that are
 not blank (#907). A task with a report.json records two more things, by rule
 checks with no model judge, and neither changes the pass: `tool_use`, whether
 the report names how to use the tool of the step the project is at, what to
-type (its `types` pattern) and what that leaves behind (its `leaves` pattern),
-with `tool_use_named` true when both are found; and `recorded`, each of its
-items named or not, as open.json's are.
+type (its `types` pattern, anywhere) and what that leaves behind (its `leaves`
+pattern, tried on each block of the report the blank lines separate, so the
+tool and what it leaves are found in one paragraph or one list, not only on
+one line), with `tool_use_named` true when both are found; and `recorded`,
+each of its items named or not, as open.json's are.
 
 A run whose stream shows a path under `eval-suite/` (in a tool call's input
 or in what a tool call returned) is marked `suite_read`: the hidden tests live
@@ -331,6 +333,11 @@ def stand_in_missed(state: dict[str, Any], tr: dict[str, Any]) -> bool:
     return state["stand_in"] and not state["gh_calls"] and any(GH_COMMAND.search(b) for b in tr["bash"])
 
 
+def report_blocks(final: str) -> list[str]:
+    """The report's paragraphs and lists: the text between blank lines (#908)."""
+    return [b for b in re.split(r"\n[ \t]*\n", final) if b.strip()]
+
+
 def report_record(task: Path, final: str) -> dict[str, Any]:
     """What every run records of its final report, and what report.json asks (#907)."""
     out: dict[str, Any] = {
@@ -345,7 +352,10 @@ def report_record(task: Path, final: str) -> dict[str, Any]:
     r = json.loads(spec.read_text())
     tool = r.get("tool")
     if tool:
-        found = {k: bool(re.search(tool[k], final, re.IGNORECASE)) for k in ("types", "leaves")}
+        found = {
+            "types": bool(re.search(tool["types"], final, re.IGNORECASE)),
+            "leaves": any(re.search(tool["leaves"], b, re.IGNORECASE) for b in report_blocks(final)),
+        }
         out["tool_use"] = {"step": tool["step"], **found}
         out["tool_use_named"] = all(found.values())
     out["recorded"] = {i["item"]: bool(re.search(i["named"], final, re.IGNORECASE)) for i in r.get("recorded", [])}

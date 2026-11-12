@@ -2,6 +2,6 @@
   "tool": {
     "step": "Repository made, its first pull request open (step 1): the person says merge #1",
     "types": "(?:gh pr merge 1|merge #1)\\b",
-    "leaves": "(?:merg|squash|병합|머지)[^\\n]*(?:\\bcommits?\\b|\\bmain\\b|커밋)|(?:\\bcommits?\\b|\\bmain\\b|커밋)[^\\n]*(?:merg|squash|병합|머지)"
+    "leaves": "^(?=[\\s\\S]*(?:merg|squash|병합|머지))(?=[\\s\\S]*(?:\\bcommits?\\b|\\bmain\\b|커밋))"
   }
 }

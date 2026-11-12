@@ -283,8 +283,11 @@ what that leaves behind (an issue, a commit on `main`, the pin raised), and, for
 `guide-busy`, whether it names the failing check `ci / build` and says the pin
 is behind. These are word patterns too, with no model judge, which favours
 longer answers: what to type and what it leaves count when both are found
-anywhere in the report, the second on one line with the tool or the merge, so
-a tour line that says them counts as much as the next step does. The second
+anywhere in the report, the second in one block with the tool or the merge (a
+paragraph or a list, the text between blank lines, so a "What it leaves" line
+under the tool's line counts; for `guide-busy` the merge is `merge #N`, or
+merging #14 named as such), so a tour line that says them counts as much as
+the next step does. The second
 table adds their counts and the median length, and a third table gives each
 run's length and whether the tool use was named.
 

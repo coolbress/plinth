@@ -262,6 +262,11 @@ case "$action" in
   fresh-right) final='On a version tag you push, a cli project publishes to PyPI: see .github/workflows/release.yml.\nAn uptime monitor and an error tracker have a free plan each.\n\nNext, merge your first pull request. Squash and merge leaves one commit on main:\n\n```\nmerge #1\n```' ;;
   busy-right) final='Releases go to PyPI on a tag: release.yml.\nUptime monitors have a free plan.\n\nci / build fails on #12, and it is a plinth job.\nThe plinth pin is behind v2.29.0.\nSay merge #14: it leaves the newer pin on main.\n\n```\nmerge #14\n```' ;;
   busy-bare) final='Releases go to PyPI on a tag: release.yml.\n\n```\nmerge #14\n```' ;;
+  # #908: the tool and what it leaves on lines of their own, in one block; and apart, in two blocks.
+  guide-split) final='See release.yml.\n\n**Step 2: an idea in your own words.**\n- **When to use it:** before any code. Type `/grilling` with your idea.\n- **It leaves:** an issue that says what done means.\n\n```\n/grilling\n```' ;;
+  guide-apart) final='See release.yml.\n\nType `/grilling` with your idea.\n\nIt leaves an issue that says what done means.\n\n```\n/grilling\n```' ;;
+  busy-split) final='ci / build fails on #12.\n\n**This step (merge, step 6).**\nYou say `merge #N`, and I never merge on my own.\nThe merge leaves one squashed commit on `main`.\n\n```\nmerge #14\n```' ;;
+  busy-apart) final='The one change that could merge is #14, and #12 waits on `main`.\n\nYou say merge for one pull request.\nThe merge leaves one squashed commit.\n\n```\nmerge #14\n```' ;;
   guide-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="bash /plugin/scripts/guide-state.sh ."
     final='I could not read the repository.\n\n```\ngh auth login\n```' ;;
   reminder-right) final='Publishes on a tag: release.yml.\n\n```\n/plinth:template-update\n```' ;;
@@ -721,6 +726,18 @@ check "a task with no report.json still records its report's length, and no tool
   '[ "$(kg gq guide-reminder-plain 1 "r[\"report\"][\"lines\"], r[\"report\"][\"tool_use_named\"]")" = "(4, None)" ] && ! grep -q "| guide-reminder-plain · plinth 1 |" "$tmp/gq/summary.md"' "$(kg gq guide-reminder-plain 1 'r["report"]'; cat "$tmp/gq/summary.md")"
 check "guide's canned right report names /grilling but not the issue it leaves: the tool use is not named" \
   '[ "$(kg gd guide 1 "r[\"report\"][\"tool_use\"][\"types\"], r[\"report\"][\"tool_use\"][\"leaves\"], r[\"pass\"]")" = "(True, False, True)" ]' "$(kg gd guide 1 'r["report"]')"
+: > "$log"
+EVAL_STUB_ACTIONS=guide-split,guide-apart suite --config-dir "$tmp/cfg" --task guide --runs 2 --out "$tmp/gs"
+EVAL_STUB_ACTIONS=busy-split,busy-apart suite --config-dir "$tmp/cfg" --task guide-busy --runs 2 --out "$tmp/bs"
+tu() { kg "$1" "$2" "$3" 'r["report"]["tool_use"]["types"], r["report"]["tool_use"]["leaves"], r["report"]["tool_use_named"]'; }
+check "the tool and what it leaves on lines of their own, in one block, are named (#908's guide run 3)" \
+  '[ "$(tu gs guide 1)" = "(True, True, True)" ]' "$(kg gs guide 1 'r["report"]')"
+check "must not pass: /grilling and the issue it leaves in two blocks are not named" \
+  '[ "$(tu gs guide 2)" = "(True, False, False)" ]' "$(kg gs guide 2 'r["report"]')"
+check "merge #N and the commit on main it leaves, in one block, are named (#908's guide-busy run 1)" \
+  '[ "$(tu bs guide-busy 1)" = "(True, True, True)" ]' "$(kg bs guide-busy 1 'r["report"]')"
+check "must not pass: #14 said as what could merge beside main, and the commit in another block without #14 or merge #N, are not named" \
+  '[ "$(tu bs guide-busy 2)" = "(True, False, False)" ]' "$(kg bs guide-busy 2 'r["report"]')"
 
 # --- a question task has no pass; it records the questions
 : > "$log"

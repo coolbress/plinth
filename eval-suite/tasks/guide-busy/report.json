@@ -2,7 +2,7 @@
   "tool": {
     "step": "Green, and seen working (step 6): the person says merge #14",
     "types": "merge #14\\b",
-    "leaves": "(?:#14\\b)[^\\n]*(?:\\bcommits?\\b|\\bmain\\b|커밋|\\bpin\\b|핀)|(?:\\bcommits?\\b|\\bmain\\b|커밋|\\bpin\\b|핀)[^\\n]*(?:#14\\b)"
+    "leaves": "^(?=[\\s\\S]*(?:\\bmerge #N\\b|\\bmerg\\w*\\s+(?:Dependabot's\\s+)?(?:pull request\\s+|PR\\s+)?#14\\b|#14\\S*\\s*(?:병합|머지)))(?=[\\s\\S]*(?:\\bcommits?\\b|\\bmain\\b|커밋|\\bpin\\b|핀))"
   },
   "recorded": [
     {
