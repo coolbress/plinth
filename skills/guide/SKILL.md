@@ -112,6 +112,11 @@ What to keep to:
   `none`, `command:` is step 3's `/to-tickets #N`, which cuts it into
   tickets; `not read` there is not none: say it was not read, and guess
   neither.
+- `ticket to take:` names the ticket `/implement` takes and why: give that
+  reason, in plain words, and the `skipped:` count with what each skipped one
+  waits on. Each open pull request's line names the issue it is `for`. When
+  `command:` is another step, the ticket comes after it. With `none`, every
+  ready ticket waits on what its line names: say that, and offer none of them.
 - `where: not read` means the script could not read the repository: say what
   was not read, from the line that says so, and the one thing that fixes it
   (for example, logging in with `gh auth login`); name no step.
