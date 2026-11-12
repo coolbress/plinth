@@ -1,0 +1,382 @@
+{
+  "repo": "trial/probe",
+  "about": "#907: a project under way, as #799 F19 saw one. Five pull requests merged by a person and one by Dependabot; open: a person's pull request whose plinth job ci / build fails, a person's draft that waits for a date, and Dependabot's pull request raising the plinth pin, green. The api entries answer floor-check's two reads with a pin one release behind: plinth_pin holds v2.28.0's commit, whatever the template's default is, and v2.29.0, 11 commits on, is the latest, the failing pull request's comments, and GitHub's issue dependencies (none); nothing reaches GitHub.",
+  "issues": [
+    {
+      "number": 7,
+      "title": "Add a --shout flag",
+      "state": "OPEN",
+      "labels": [
+        "task",
+        "ready-for-agent"
+      ],
+      "author": "trial",
+      "createdAt": "2026-11-09T08:00:00Z",
+      "updatedAt": "2026-11-11T09:00:00Z",
+      "closedAt": null,
+      "body": "## What to build\n\n`probe greet --shout` prints the greeting in capitals.\n\n## Acceptance criteria\n\n- [ ] `--shout` prints `HELLO, ANA!` for `ana`\n",
+      "comments": []
+    },
+    {
+      "number": 11,
+      "title": "Export the ledger to CSV",
+      "state": "OPEN",
+      "labels": [
+        "task"
+      ],
+      "author": "trial",
+      "createdAt": "2026-11-10T08:00:00Z",
+      "updatedAt": "2026-11-10T08:00:00Z",
+      "closedAt": null,
+      "body": "## What to build\n\n`probe export --csv` writes the ledger as CSV.\n",
+      "comments": []
+    }
+  ],
+  "pulls": [
+    {
+      "number": 2,
+      "title": "docs: first pull request",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "docs/first",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-03T09:00:00Z",
+      "mergedAt": "2026-11-03T15:30:00Z",
+      "body": "## What and why\n\nThe project's first pull request.\n",
+      "comments": []
+    },
+    {
+      "number": 3,
+      "title": "feat: say goodbye in Spanish",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "pr-3",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-04T09:00:00Z",
+      "mergedAt": "2026-11-04T15:30:00Z",
+      "body": "## What and why\n\nAdds `farewell(name)`.\n\nCloses #1\n",
+      "comments": []
+    },
+    {
+      "number": 5,
+      "title": "feat: count invoices due today",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "pr-5",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-05T09:00:00Z",
+      "mergedAt": "2026-11-05T15:30:00Z",
+      "body": "## What and why\n\nThe ledger counts an invoice due today.\n\nCloses #4\n",
+      "comments": []
+    },
+    {
+      "number": 6,
+      "title": "build(deps): bump ruff from 0.7.3 to 0.7.4",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "pr-6",
+      "baseRefName": "main",
+      "author": "app/dependabot",
+      "createdAt": "2026-11-06T09:00:00Z",
+      "mergedAt": "2026-11-06T15:30:00Z",
+      "body": "Bumps [ruff](https://github.com/astral-sh/ruff) from 0.7.3 to 0.7.4.\n",
+      "comments": []
+    },
+    {
+      "number": 8,
+      "title": "fix: keep the ledger's totals in cents",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "pr-8",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-07T09:00:00Z",
+      "mergedAt": "2026-11-07T15:30:00Z",
+      "body": "## What and why\n\nTotals no longer round twice.\n\nCloses #6\n",
+      "comments": []
+    },
+    {
+      "number": 10,
+      "title": "docs: say how to run the ledger",
+      "state": "MERGED",
+      "isDraft": false,
+      "headRefName": "pr-10",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-10T09:00:00Z",
+      "mergedAt": "2026-11-10T15:30:00Z",
+      "body": "## What and why\n\nThe README's usage section.\n",
+      "comments": []
+    },
+    {
+      "number": 12,
+      "title": "feat: add a --shout flag",
+      "state": "OPEN",
+      "isDraft": false,
+      "headRefName": "feat/shout",
+      "headRefOid": "9f3c2e1a7b6d5c4e3f2a1b0c9d8e7f6a5b4c3d2e",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-11T09:10:00Z",
+      "body": "## What and why\n\n`probe greet --shout` prints the greeting in capitals.\n\nCloses #7\n",
+      "statusCheckRollup": [
+        {
+          "name": "ci / pr-title",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / lint",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / typecheck",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / test",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / build",
+          "status": "COMPLETED",
+          "conclusion": "FAILURE",
+          "detailsUrl": "https://github.com/trial/probe/actions/runs/19203311207/job/54899120345"
+        },
+        {
+          "name": "ci / secrets",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / deps",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / diff-size",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / floor-check",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        }
+      ],
+      "comments": [
+        {
+          "author": "trial",
+          "body": "`ci / build` was green on Monday and this pull request does not touch packaging."
+        }
+      ]
+    },
+    {
+      "number": 13,
+      "title": "feat: export the ledger to CSV",
+      "state": "OPEN",
+      "isDraft": true,
+      "headRefName": "feat/csv",
+      "headRefOid": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+      "baseRefName": "main",
+      "author": "trial",
+      "createdAt": "2026-11-10T14:00:00Z",
+      "body": "## What and why\n\nA first cut of the CSV export.\n\nDraft until 2026-11-20, when the accountant sends the column order.\n\nPart of #11\n",
+      "statusCheckRollup": [
+        {
+          "name": "ci / pr-title",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / lint",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / typecheck",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / test",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / build",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / secrets",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / deps",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / diff-size",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / floor-check",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        }
+      ],
+      "comments": []
+    },
+    {
+      "number": 14,
+      "title": "build(deps): bump the actions group with 1 update",
+      "state": "OPEN",
+      "isDraft": false,
+      "headRefName": "dependabot/github_actions/actions-0f1e2d3c4b",
+      "headRefOid": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+      "baseRefName": "main",
+      "author": "app/dependabot",
+      "createdAt": "2026-11-12T05:00:00Z",
+      "body": "Bumps the actions group with 1 update: [coolbress/plinth](https://github.com/coolbress/plinth).\n\nUpdates `coolbress/plinth` to 6e2b06bdb935fcc048e5f33413d216c9921a006c, the commit release v2.29.0 tags.\n",
+      "statusCheckRollup": [
+        {
+          "name": "ci / pr-title",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / lint",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / typecheck",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / test",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / build",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / secrets",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / deps",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / diff-size",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        },
+        {
+          "name": "ci / floor-check",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS",
+          "detailsUrl": ""
+        }
+      ],
+      "comments": []
+    }
+  ],
+  "api": [
+    {
+      "path": "^repos/coolbress/plinth/releases/latest$",
+      "json": {
+        "tag_name": "v2.29.0"
+      }
+    },
+    {
+      "path": "^repos/coolbress/plinth/compare/cecffe1f52c2911558ece2b978c759c9203e1f63\\.\\.\\.v2\\.29\\.0(\\?|$)",
+      "json": {
+        "status": "ahead",
+        "ahead_by": 11,
+        "behind_by": 0
+      }
+    },
+    {
+      "path": "^repos/trial/probe/issues/12/comments(\\?|$)",
+      "json": [
+        {
+          "id": 3521,
+          "user": {
+            "login": "trial",
+            "type": "User"
+          },
+          "body": "`ci / build` was green on Monday and this pull request does not touch packaging."
+        }
+      ]
+    },
+    {
+      "path": "^graphql$",
+      "query": true,
+      "json": {
+        "data": {
+          "repository": {
+            "issues": {
+              "nodes": [
+                {
+                  "number": 7,
+                  "blockedBy": {
+                    "nodes": []
+                  },
+                  "blocking": {
+                    "nodes": []
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "logs": {
+    "54899120345": "build\tInstall smoke\t2026-11-11T09:14:02.1Z + uv venv /tmp/smoke-sdist\nbuild\tInstall smoke\t2026-11-11T09:14:03.4Z + uv pip install --python /tmp/smoke-sdist dist/probe-0.1.0.tar.gz\nbuild\tInstall smoke\t2026-11-11T09:14:05.0Z error: Failed to build `probe @ file:///home/runner/work/probe/probe/dist/probe-0.1.0.tar.gz`\nbuild\tInstall smoke\t2026-11-11T09:14:05.0Z   Caused by: the build backend's version is newer than the uv the smoke step installs\nbuild\tInstall smoke\t2026-11-11T09:14:05.1Z ##[error]Process completed with exit code 2.\nbuild\tPost Run actions/checkout\t2026-11-11T09:14:05.6Z Cleaning up orphan processes\n"
+  }
+}

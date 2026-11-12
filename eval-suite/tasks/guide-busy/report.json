@@ -1,0 +1,17 @@
+{
+  "tool": {
+    "step": "Green, and seen working (step 6): the person says merge #14",
+    "types": "merge #14\\b",
+    "leaves": "(?:#14\\b)[^\\n]*(?:\\bcommits?\\b|\\bmain\\b|커밋|\\bpin\\b|핀)|(?:\\bcommits?\\b|\\bmain\\b|커밋|\\bpin\\b|핀)[^\\n]*(?:#14\\b)"
+  },
+  "recorded": [
+    {
+      "item": "names the failing check",
+      "named": "ci / build"
+    },
+    {
+      "item": "says the pin is behind",
+      "named": "(?:\\bpin\\b|핀|\\bplinth\\b)[^\\n]*(?:\\bbehind\\b|\\bolder\\b|out of date|outdated|v2\\.29\\.0|뒤처|뒤쳐|오래된|이전 (?:버전|릴리))|(?:\\bbehind\\b|\\bolder\\b|out of date|outdated|v2\\.29\\.0|뒤처|뒤쳐|오래된|이전 (?:버전|릴리))[^\\n]*(?:\\bpin\\b|핀|\\bplinth\\b)"
+    }
+  ]
+}
