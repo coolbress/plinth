@@ -118,7 +118,7 @@ printed="$work/commands"; : > "$printed"
 # expect <case> <dir> <where starts with> <command line> [<other expected line>]
 expect() {
   local out; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"; local rc=$?
-  sed -n 's/^command: //p' <<<"$out" >> "$printed"
+  awk '/^where: /{ w = substr($0, 8) } /^command: /{ print w "\t" substr($0, 10) }' <<<"$out" >> "$printed"
   if [ "$rc" -eq 0 ] && grep -qF "where: $3" <<<"$out" && grep -qxF "command: $4" <<<"$out" &&
      { [ -z "${5:-}" ] || grep -qF -- "$5" <<<"$out"; } && grep -qx 'table:' <<<"$out"; then
     ok "$1"
@@ -233,7 +233,7 @@ comment() { printf '{"id":%s,"user":{"login":"%s","type":"%s"},"body":"x"}' "$1"
 # starting with "!" must be in no line of it.
 state() {
   local name="$1" out miss="" l; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"; shift 2
-  sed -n 's/^command: //p' <<<"$out" >> "$printed"
+  awk '/^where: /{ w = substr($0, 8) } /^command: /{ print w "\t" substr($0, 10) }' <<<"$out" >> "$printed"
   for l in "$@"; do
     case "$l" in
       '!'*) grep -qF -- "${l#!}" <<<"$out" && miss="$miss
@@ -937,22 +937,29 @@ out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
 [ "$rc" -eq 1 ] && grep -qF "the arsenal's row 'No repository yet' does not have six cells" <<<"$out" &&
   ok "a row with three cells: exit 1, named" || bad "a short row: exit $rc: $(head -3 <<<"$out")"
 
-# Every command a case printed is one the table's How to use it cells give
-# (`#N` for a number, `…` for the words after it), `merge #N`, or `none:`.
-how="$(awk -F ' \\| ' '{ print $4 }' <<<"$tbl" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)"
+# Every command a case printed is a command the How to use it cell of the
+# row it landed on gives (`#N` for a number, `…` for the words after it): a
+# backticked text there that starts with `/`, `merge ` or `diagnose this`.
+# `none:` is the one exception: that row has nothing to type.
+how_of() { # <where cell>: that row's commands
+  awk -F ' \\| ' -v w="| $1 |" 'index($0, w) == 1 { print $4 }' <<<"$tbl" | grep -oE '`[^`]+`' | tr -d '`' | grep -E '^(/|merge |diagnose this)'
+}
 odd=""
-while IFS= read -r c; do
+while IFS=$'\t' read -r w c; do
   [ -n "$c" ] || continue
   g="$(sed -E 's/#[0-9]+/#N/g' <<<"$c")"
   case "$g" in "none: "*) continue ;; esac
+  how="$(how_of "$w")"
   grep -qxF -- "$g" <<<"$how" && continue
   while IFS= read -r h; do case "$h" in *…) [ "${g#"${h%…}"}" != "$g" ] && continue 2 ;; esac; done <<<"$how"
   odd="$odd
-        $c"
+        $w: $c"
 done < <(sort -u "$printed")
-[ "$(grep -c . "$printed")" -ge 50 ] && [ -z "$odd" ] && ok "every printed command ($(sort -u "$printed" | grep -c .) kinds) is the table's, merge #N or none:" ||
-  bad "printed commands not in the table's How to use it cells:$odd"
-grep -qxF 'merge #N' <<<"$how" && ok "the table's How to use it cells give merge #N" || bad "no merge #N in the How to use it cells"
+[ "$(grep -c . "$printed")" -ge 50 ] && [ -z "$odd" ] && ok "every printed command ($(sort -u "$printed" | grep -c .) kinds) is its own row's, or none:" ||
+  bad "printed commands not in their row's How to use it cell:$odd"
+# Must not pass: a command from another row's cell.
+w="$(head -1 "$printed" | cut -f1)"; [ -n "$w" ] && ! how_of "$w" | grep -qxF '/retro' &&
+  ok "must not pass: /retro is not the How to use it cell of '$w'" || bad "the per-row check would take another row's command"
 
 # The boundary (#908): each skill's description and first lines name the other.
 for pair in "arsenal:/plinth:guide" "guide:/plinth:arsenal"; do

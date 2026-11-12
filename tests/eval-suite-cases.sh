@@ -647,6 +647,11 @@ want='merge #1'
 check "guide-fresh: no merge by a person routes to merging the first pull request, the pin at the latest release" \
   'grep -qx "first pull request merged: no (0 merged by people)" <<<"$gs" && grep -q "^where: Repository made, its first pull request open" <<<"$gs" && grep -qx "plinth pin: cecffe1f52c2911558ece2b978c759c9203e1f63, at v2.28.0, the latest plinth release" <<<"$gs" && [ "$cmd" = "$want" ]' "$gs"
 check "guide-fresh: its expected command, in one code block, passes its own pattern" 'block_passes guide-fresh "$cmd"' "$cmd"
+# #647's reading rule counts one code block with the command; the form before
+# #908 (the full merge line) still counts, so the form alone moves no number.
+old_form='body="$(gh pr view 1 --json body --jq .body)" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body "$body"'
+check "guide-fresh: the merge line from before #908, in one code block, passes too" 'block_passes guide-fresh "$old_form"' "$old_form"
+check "must not pass: guide-fresh on another pull request's merge" '! block_passes guide-fresh "merge #12"' ""
 gs="$(state_on "$busy_repo" guide-busy)"
 cmd="$(sed -n 's/^command: //p' <<<"$gs")"
 check "guide-busy: a failing plinth job with the pin behind routes to Dependabot's green pin raise, not diagnose" \

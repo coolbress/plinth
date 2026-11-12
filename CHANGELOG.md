@@ -37,8 +37,8 @@ pull requests and have no tag.
   `mode: full` or `mode: focused` with its reason: `full` before a person's
   pull request has merged, when the state was not read, or when asked with
   `/plinth:guide map` (the script takes `map` after the folder); `focused`
-  otherwise. It prints `then:`, the step after this one, on every path, from
-  a new Then column. The arsenal's "Where you are, and what to do next"
+  otherwise. It prints `then:`, the step after this one, wherever it names a
+  step, from a new Then column. The arsenal's "Where you are, and what to do next"
   table gains three columns the guide reads for that depth: How to use it
   (when, and what to type: the command the guide prints), It leaves, and
   Then. In `focused`, the off-by-default lines are a count and only the
@@ -52,7 +52,9 @@ pull requests and have no tag.
   `/plinth:arsenal` and `/plinth:guide` each name the other in their
   description and first lines: the catalog answers which tool for a task
   without reading the project; the guide reads the project. The eval task
-  `guide-fresh` now expects `merge #1` in its one code block.
+  `guide-fresh` takes `merge #1` in its one code block, and still the full
+  merge command it expected before, so #647's comparison counts one command
+  either way.
 - `/plinth:guide` no longer names "Something broke" from the check colour
   alone (#903). For the pull request it names, `scripts/guide-state.sh` prints
   each failing check, whether it is a plinth job (a job of a workflow the
