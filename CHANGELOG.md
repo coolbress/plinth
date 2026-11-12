@@ -38,6 +38,14 @@ pull requests and have no tag.
   that raises the pin; the note says the failing pull request's checks are run
   again after it. A template behind adds a `step 9:` line naming
   `/plinth:template-update`, and the step the project is at does not change.
+- `/plinth:guide` names step 3 (#909). For each open `spec` issue
+  `scripts/guide-state.sh` reads whether any ticket was cut from it: a
+  sub-issue, open or closed, or an issue whose body names it under
+  `## Parent` (one GitHub search per spec, its first 100 matches). A spec with
+  none routes to "A job bigger than one session" with the command
+  `/to-tickets #N`, after a `ready-for-agent` ticket and before an unlabelled
+  issue, the template reminder and `/grilling`. A search that fails says
+  `not read` and never routes to `/to-tickets`.
 
 ### Fixed
 

@@ -5,7 +5,8 @@
 # table itself. For a pull request with a failing check it names the checks
 # that failed, whose each one is, and how many comments people left (#903).
 # It says whether the template tag and the plinth pin are behind, from
-# floor-check's own reads (#904).
+# floor-check's own reads (#904). For an open spec it reads whether any
+# ticket was cut from it, and routes one with none to step 3 (#909).
 # Read-only: it runs git and gh reads, nothing else.
 #
 #   guide-state.sh [<dir>]     # default: the current directory
@@ -191,8 +192,8 @@ if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
-elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body \
-      --jq "$kind"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind] | @tsv' 2>&1)"; then
+elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body,subIssuesSummary \
+      --jq "$kind"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind, (.subIssuesSummary.total // 0)] | @tsv' 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
 fi
 if [ -n "$failed" ]; then
@@ -203,6 +204,29 @@ if [ -n "$failed" ]; then
 fi
 
 field() { cut -f"$1"; }
+# What was cut from each open spec (#909), as /to-tickets cuts one: its
+# sub-issues, open or closed (column 5 of the list), else the issues, open or
+# closed, whose body names #N under ## Parent, one search per such spec. The
+# search's words only narrow it; the filter is what decides: #N in that
+# section and nowhere else, not owner/repo#N, not #N0. It reads the first
+# 100 matches only. Out: <number>\t<what was cut, "none", or "not read (...)">.
+parent_of='def parent_of($n): [(.body // "") | split("\n")[]]
+  | reduce .[] as $l ({on: false, hit: false};
+      if ($l | startswith("## ")) then .on = ($l | test("^## Parent[ \t]*\r?$"))
+      elif .on and ($l | test("(^|[^A-Za-z0-9_./-])#" + ($n | tostring) + "([^0-9]|$)")) then .hit = true
+      else . end) | .hit;'
+specs="$(awk -F '\t' '$4 == "spec" { print $1 "\t" ($5 == "" ? 0 : $5) }' <<<"$issues" |
+  while IFS=$'\t' read -r n subs; do
+    if [ "$subs" -gt 0 ]; then
+      printf '%s\t%s sub-issue%s\n' "$n" "$subs" "$([ "$subs" -eq 1 ] || echo s)"
+    elif named="$(cd "$top" && gh issue list --state all --limit 100 --search "#$n in:body" --json number,body \
+          --jq "$parent_of"' [.[] | select(.number != '"$n"' and parent_of('"$n"')) | .number] | sort | map("#\(.)") | join(", ")' 2>&1)"; then
+      if [ -n "$named" ]; then printf '%s\t%s names it under ## Parent\n' "$n" "$named"
+      else printf '%s\tnone\n' "$n"; fi
+    else
+      printf '%s\tnot read (%s)\n' "$n" "$(tail -1 <<<"$named" | tr '\t' ' ')"
+    fi
+  done)"
 # Column 9 of the list is whether Dependabot's pull request raises the plinth
 # pin (#904): never so for a person's, so their rows end at 8 and take the
 # checks line below as 9.
@@ -255,10 +279,12 @@ else
   echo "open issues: none"
 fi
 # Every one of them, past the ten above: none is ever an /implement target.
-not_tickets="$(awk -F '\t' '$4 == "reminder" { printf "  #%s the monthly template reminder: a person types /plinth:template-update\n", $1 }
+not_tickets="$(awk -F '\t' 'FNR == NR { cut[$1] = $2; next }
+  $4 == "reminder" { printf "  #%s the monthly template reminder: a person types /plinth:template-update\n", $1 }
   $4 == "person" { printf "  #%s [%s] a person'"'"'s task: a person does it\n", $1, $2 }
   $4 == "wayfinder" { printf "  #%s [%s] a wayfinder record: a person does it\n", $1, $2 }
-  $4 == "spec" { printf "  #%s [%s] a spec, a record: a person does it\n", $1, $2 }' <<<"$issues")"
+  $4 == "spec" { printf "  #%s [%s] a spec, a record: a person does it; tickets cut from it: %s\n", $1, $2, cut[$1] }' \
+  <(printf '%s\n' "$specs") - <<<"$issues")"
 if [ -n "$not_tickets" ]; then echo "open issues that are not tickets, never for /implement:"; printf '%s\n' "$not_tickets"; fi
 if [ -n "$merged" ]; then
   last="$(head -1 <<<"$merged")"
@@ -404,6 +430,11 @@ elif n="$(labelled ready-for-agent "$tickets")" && [ -n "$n" ]; then
   before="/clear"; say "A ticket ready" "/implement #$n"
 elif n="$(labelled needs-triage "$issues")" && [ -n "$n" ]; then
   note="issue #$n"; say "Something broke" "/triage"
+elif n="$(awk -F '\t' '$2 == "none"' <<<"$specs" | head -1 | field 1)" && [ -n "$n" ]; then
+  # Work not cut yet comes after work cut (a ready-for-agent ticket) and
+  # before an unlabelled issue (#909).
+  note="issue #$n is a spec no ticket was cut from yet; /to-tickets cuts it into tickets that /implement can take one at a time"
+  say "A job bigger than one session" "/to-tickets #$n"
 elif [ -n "$tickets" ]; then
   before="/clear"; say "A ticket ready" "/implement #$(head -1 <<<"$tickets" | field 1)"
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
