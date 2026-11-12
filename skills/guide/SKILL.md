@@ -108,6 +108,10 @@ What to keep to:
   check has run on it, which is something to look into before going on, not
   a broken check; say it in those plain words. One with `no checks yet; when
   its head was pushed was not read`: say both halves, and guess neither.
+- A spec's line says what was cut from it (`tickets cut from it:`). With
+  `none`, `command:` is step 3's `/to-tickets #N`, which cuts it into
+  tickets; `not read` there is not none: say it was not read, and guess
+  neither.
 - `where: not read` means the script could not read the repository: say what
   was not read, from the line that says so, and the one thing that fixes it
   (for example, logging in with `gh auth login`); name no step.

@@ -19,7 +19,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$work/bin"
 cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
-# MOCK_DIR holds open.json, merged.json and issues.json, and comments.json
+# MOCK_DIR holds open.json, merged.json, issues.json and all.json, and comments.json
 # when a case reads a pull request's comments; MOCK_GH_FAIL makes every call
 # fail as an unauthenticated gh does. A list is cut at --limit.
 set -u
@@ -35,6 +35,8 @@ if [ "$1" = api ] && [[ "$2" == repos/*/commits/* ]]; then
   jq --arg s "${2##*/}" '[.[].commits[]? | select(.oid == $s)] | first | {commit: {committer: {date: .committedDate}}}' "$MOCK_DIR/open.json" | jq -r "$jqf"
   exit
 fi
+# As gh before 2.94.0 does (#909): MOCK_OLD_GH refuses subIssuesSummary.
+case ",$fields," in *,subIssuesSummary,*) [ -n "${MOCK_OLD_GH:-}" ] && { echo "Unknown JSON field: \"subIssuesSummary\"" >&2; exit 1; } ;; esac
 # As GitHub does (#906): a list asking for each pull request's commits asks
 # for more nodes than GraphQL allows, so the whole read fails.
 case ",$fields," in *,commits,*) [ "$1" = pr ] && { echo "GraphQL: By the time this query traverses to the authors connection, it is requesting up to 1,000,000 possible nodes which exceeds the maximum limit of 500,000." >&2; exit 1; } ;; esac
@@ -43,6 +45,11 @@ case "$1 $2 ${4:-}" in
   "pr list open")      f=open.json ;;
   "pr list merged")    f=merged.json ;;
   "issue list open")   f=issues.json ;;
+  # The search for issues naming a spec under ## Parent (#909): every issue
+  # in all.json, the search words not applied, so the script's filter is
+  # what picks. MOCK_ALL_FAIL fails it; MOCK_ALL_LOG counts the calls.
+  "issue list all")    [ -z "${MOCK_ALL_LOG:-}" ] || echo search >> "$MOCK_ALL_LOG"
+                       [ -n "${MOCK_ALL_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }; f=all.json ;;
   "api repos/o/r/issues/"*"/comments "*) f=comments.json ;;
   *) echo "mock gh: unexpected $*" >&2; exit 1 ;;
 esac
@@ -63,7 +70,7 @@ export FLOOR_CHECK_API_DIR="$work/api"; mkdir -p "$FLOOR_CHECK_API_DIR"
 repo() {
   local d="$work/$1"; mkdir -p "$d"; git -C "$d" init -q
   [ "${2:-}" = none ] || printf '_commit: v1.28.0\n_src_path: %s\n%s\n' "${SRC:-gh:coolbress/plinth-template}" "${2:-archetype: cli}" > "$d/.copier-answers.yml"
-  printf '[]' > "$d/open.json"; printf '[]' > "$d/merged.json"; printf '[]' > "$d/issues.json"
+  printf '[]' > "$d/open.json"; printf '[]' > "$d/merged.json"; printf '[]' > "$d/issues.json"; printf '[]' > "$d/all.json"
   echo "$d"
 }
 # ago <seconds>: that long before now, in GitHub's form.
@@ -452,12 +459,93 @@ expect "a wayfinder:task labelled ready-for-human: a person's" "$d" "An idea in 
 # docs/agents/issue-tracker.md lists a spec with the records.
 d="$(repo spec-record)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+# A spec no ticket was cut from (#909) is step 3: /to-tickets #N. Cut means
+# a sub-issue of it, open or closed (subIssuesSummary.total), or an issue
+# whose body names it under ## Parent.
+subbed() { printf '{"number":%s,"title":"%s","labels":[{"name":"spec"}],"subIssuesSummary":{"total":%s,"completed":%s}}' "$1" "$2" "$3" "$4"; }
+bodied() { jq -nc --argjson n "$1" --arg b "$2" '{number: $n, title: "t", labels: [], body: $b}'; }
 put "$d/issues.json" "$(issue 19 'The queue spec' spec)"
-expect "a spec alone: said to be a record, on to the next row" "$d" "An idea in your own words (step 2)" "/grilling" "#19 [spec] a spec, a record: a person does it"
+expect "a spec alone, nothing cut from it: step 3, /to-tickets on it" "$d" "A job bigger than one session (step 3)" "/to-tickets #19" "#19 [spec] a spec, a record: a person does it; tickets cut from it: none"
+grep -q '^note: issue #19 is a spec no ticket was cut from yet; /to-tickets cuts it into tickets that /implement can take one at a time$' <<<"$(MOCK_DIR="$d" "$script" "$d")" &&
+  ok "the uncut spec's note says what /to-tickets makes" || bad "no note for the uncut spec"
+put "$d/issues.json" "$(subbed 19 'The queue spec' 1 0)"
+expect "a spec with one open sub-issue: not cut again" "$d" "An idea in your own words (step 2)" "/grilling" "tickets cut from it: 1 sub-issue"
+put "$d/issues.json" "$(subbed 19 'The queue spec' 2 2)"
+expect "a spec whose sub-issues are all closed: still cut" "$d" "An idea in your own words (step 2)" "/grilling" "tickets cut from it: 2 sub-issues"
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)"
+put "$d/all.json" "$(bodied 19 '## Parent
+
+#3')" "$(bodied 21 '## What to build
+
+Part of #19.
+
+## Parent
+
+#19, T1.2 The queue spec')"
+expect "a spec an issue names under ## Parent: not cut again" "$d" "An idea in your own words (step 2)" "/grilling" "tickets cut from it: #21 names it under ## Parent"
+# Not under ## Parent, another repository's #19, a longer number, its own body: not cut from it.
+put "$d/all.json" "$(bodied 22 '## What to build
+
+Like #19.
+
+## Parent
+
+#3')" "$(bodied 23 '## Parent
+
+other/repo#19')" "$(bodied 24 '## Parent
+
+#190')" "$(bodied 19 '## Parent
+
+#19')"
+expect "#19 named outside ## Parent, as other/repo#19, as #190, or by itself: still uncut" "$d" "A job bigger than one session (step 3)" "/to-tickets #19" "tickets cut from it: none"
+printf '[]' > "$d/all.json"
+out="$(MOCK_ALL_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+if grep -qx 'command: /grilling' <<<"$out" && grep -qF '#19 [spec] a spec, a record: a person does it; tickets cut from it: not read (HTTP 502: Bad Gateway)' <<<"$out"
+then ok "the ## Parent search failing: not read, and never /to-tickets on a guess"
+else bad "a failed ## Parent search"; sed 's/^/        /' <<<"$out" | head -20; fi
 put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 20 'Export to CSV' ready-for-agent)"
-expect "a spec next to a ready-for-agent ticket: the ticket wins" "$d" "A ticket ready (step 4)" "/implement #20" "#19 [spec] a spec, a record"
+expect "an uncut spec next to a ready-for-agent ticket: the ticket wins" "$d" "A ticket ready (step 4)" "/implement #20" "#19 [spec] a spec, a record"
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 20 'Export to CSV' '')"
+expect "an uncut spec next to an unlabelled issue: the spec is cut first" "$d" "A job bigger than one session (step 3)" "/to-tickets #19"
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 11 "$reminder" '')"
+expect "an uncut spec next to the template reminder: the spec first" "$d" "A job bigger than one session (step 3)" "/to-tickets #19" "#11 the monthly template reminder"
+put "$d/issues.json" "$(subbed 19 'The queue spec' 1 0)" "$(issue 25 'Another spec' spec)"
+expect "two specs, the lower one cut: the uncut one" "$d" "A job bigger than one session (step 3)" "/to-tickets #25"
+# The search runs only on specs with no sub-issue, in number order, and
+# stops at the first uncut one: calls = searched specs up to it.
+searches() { # <case> <wanted calls> <wanted command> [<other line>]
+  local log="$work/searches.log" out n; : > "$log"
+  out="$(MOCK_ALL_LOG="$log" MOCK_DIR="$d" "$script" "$d" 2>&1)"; n="$(grep -c . "$log")"
+  if [ "$n" -eq "$2" ] && grep -qxF "command: $3" <<<"$out" && { [ -z "${4:-}" ] || grep -qF -- "$4" <<<"$out"; }
+  then ok "$1"; else bad "$1 ($n searches, wanted $2; wanted command: $3${4:+ / $4})"; sed 's/^/        /' <<<"$out" | grep -E 'spec|command' ; fi
+}
+put "$d/issues.json" "$(subbed 19 'The queue spec' 1 0)" "$(issue 25 'Another spec' spec)" "$(issue 26 'A third spec' spec)"
+searches "three specs, the first with a sub-issue: one search, none past the uncut one" 1 "/to-tickets #25" "#26 [spec] a spec, a record: a person does it; tickets cut from it: not searched (spec #25, with none, comes first)"
+put "$d/all.json" "$(bodied 21 '## Parent
+
+#25')"
+searches "the second spec named under ## Parent: searched on to the third" 2 "/to-tickets #26" "#25 [spec] a spec, a record: a person does it; tickets cut from it: #21 names it under ## Parent"
+put "$d/issues.json" "$(subbed 19 'The queue spec' 1 0)" "$(subbed 25 'Another spec' 2 1)"
+searches "every spec with sub-issues: no search" 0 "/grilling"
+printf '[]' > "$d/all.json"
+# Routing reads the state, not the words said: a spec whose search failed or
+# was not run is never routed to, whatever its line says.
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 25 'Another spec' spec)"
+out="$(MOCK_ALL_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qx 'command: /grilling' <<<"$out" && [ "$(grep -c 'tickets cut from it: not read' <<<"$out")" -eq 2 ] &&
+  ok "both searches failing: each not read, no /to-tickets" || bad "two failed searches"
+# An older gh (#909): the issues are still read and the ticket still routed;
+# only the specs are not read, and none is cut on a guess.
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 20 'Export to CSV' '')"
+out="$(MOCK_OLD_GH=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+if grep -qx 'command: /implement #20' <<<"$out" && grep -qF '#19 [spec] a spec, a record: a person does it; tickets cut from it: not read (sub-issues: Unknown JSON field: "subIssuesSummary")' <<<"$out"
+then ok "gh without subIssuesSummary: the issues still read, the spec not read, never /to-tickets"
+else bad "gh without subIssuesSummary"; sed 's/^/        /' <<<"$out" | grep -E 'issues|spec|command|where'; fi
+put "$d/open.json" "$(pr 13 'feat: export' false run)"
+expect "an uncut spec next to an open pull request: the pull request first" "$d" "A pull request with checks running (step 5)" "/run"
+printf '[]' > "$d/open.json"
 put "$d/issues.json" "$(two_labels 19 'The queue spec' spec ready-for-agent)"
-expect "a spec with the triage label: still never /implement" "$d" "An idea in your own words (step 2)" "/grilling" "#19 [spec,ready-for-agent]"
+expect "a spec with the triage label: cut, never /implement" "$d" "A job bigger than one session (step 3)" "/to-tickets #19" "#19 [spec,ready-for-agent]"
 # A record opens with needs-triage: evaluating it is still /triage's.
 put "$d/issues.json" "$(two_labels 19 'The queue spec' spec needs-triage)"
 expect "a spec to triage: /triage, not the next row" "$d" "Something broke (step 7)" "/triage" "note: issue #19"
