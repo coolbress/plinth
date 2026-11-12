@@ -35,6 +35,28 @@ if [ "$1" = api ] && [[ "$2" == repos/*/commits/* ]]; then
   jq --arg s "${2##*/}" '[.[].commits[]? | select(.oid == $s)] | first | {commit: {committer: {date: .committedDate}}}' "$MOCK_DIR/open.json" | jq -r "$jqf"
   exit
 fi
+# GET repos/<o>/<r>/issues/<n>/sub_issues (#910): subs-<n>.json, numbers in
+# the spec's own order. MOCK_SUBS_FAIL fails it; MOCK_SUBS_LOG counts calls.
+if [ "$1" = api ] && [[ "$2" == repos/*/issues/*/sub_issues ]]; then
+  [ -z "${MOCK_SUBS_LOG:-}" ] || echo sub >> "$MOCK_SUBS_LOG"
+  [ -n "${MOCK_SUBS_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  n="${2%/sub_issues}"; n="${n##*/}"
+  set -o pipefail
+  # A number, or "owner/repo#N" for another repository's sub-issue.
+  jq '[.[] | tostring | if test("#") then {number: (split("#")[1] | tonumber), repository_url: "https://api.github.com/repos/\(split("#")[0])"}
+    else {number: tonumber, repository_url: "https://api.github.com/repos/o/r"} end]' "$MOCK_DIR/subs-$n.json" | jq -r "$jqf"
+  exit
+fi
+# The GraphQL read of native issue dependencies (#910): deps.json, in
+# GitHub's response shape, else no edges. MOCK_DEPS_FAIL fails it as a GitHub
+# that does not know the field does; MOCK_DEPS_LOG counts the calls.
+if [ "$1" = api ] && [ "$2" = graphql ]; then
+  [ -z "${MOCK_DEPS_LOG:-}" ] || echo deps >> "$MOCK_DEPS_LOG"
+  [ -n "${MOCK_DEPS_FAIL:-}" ] && { echo "GraphQL: Field 'blockedBy' doesn't exist on type 'Issue' (repository.issues.nodes.0.blockedBy)" >&2; exit 1; }
+  set -o pipefail
+  if [ -f "$MOCK_DIR/deps.json" ]; then cat "$MOCK_DIR/deps.json"; else echo '{"data":{"repository":{"issues":{"nodes":[]}}}}'; fi | jq -r "$jqf"
+  exit
+fi
 # As gh before 2.94.0 does (#909): MOCK_OLD_GH refuses subIssuesSummary.
 case ",$fields," in *,subIssuesSummary,*) [ -n "${MOCK_OLD_GH:-}" ] && { echo "Unknown JSON field: \"subIssuesSummary\"" >&2; exit 1; } ;; esac
 # As GitHub does (#906): a list asking for each pull request's commits asks
@@ -553,6 +575,162 @@ put "$d/issues.json" "$(two_labels 16 'Which queue?' wayfinder:research needs-tr
 expect "a wayfinder record to triage: /triage" "$d" "Something broke (step 7)" "/triage" "note: issue #16"
 put "$d/issues.json" "$(two_labels 14 'Renew the domain' ready-for-human needs-triage)"
 expect "a person's task to triage: /triage" "$d" "Something broke (step 7)" "/triage" "note: issue #14"
+
+# Which ticket /implement takes (#910): not one blocked by an open issue, not
+# one an open pull request is for; then a spec's sub-issue order, then the
+# ticket the most others wait on, then the lowest number; and why.
+tkt() { # <number> <title> <labels, comma-separated> [<body>]
+  jq -nc --argjson n "$1" --arg t "$2" --arg l "$3" --arg b "${4:-}" \
+    '{number: $n, title: $t, labels: ($l | split(",") | map(select(. != "") | {name: .})), body: $b}'
+}
+prb() { # <number> <title> <body>: a person's open pull request, checks running
+  pr "$1" "$2" false run | jq -c --arg b "$3" '. + {body: $b}'
+}
+d="$(repo pick)"
+put "$d/merged.json" "$(pr 1 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+put "$d/issues.json" "$(tkt 2 'Pick the queue' ready-for-human)" \
+  "$(tkt 3 'Queue worker' ready-for-agent '## What to build
+
+x
+
+## Blocked by
+
+- #2')" "$(tkt 5 'Export to CSV' ready-for-agent)" "$(tkt 6 'Import' ready-for-agent)"
+state "the lowest ready ticket blocked by an open issue: the next one, and why" "$d" \
+  "command: /implement #5" "ticket to take: #5, not blocked; the lowest number of the 2 left" \
+  "skipped: 1 of 3 ready-for-agent; blocked by an open issue: #3 on #2" "open issues (4, 3 ready-for-agent):"
+put "$d/open.json" "$(prb 8 'feat: queue worker' 'Does the work.
+
+Closes #3')"
+put "$d/issues.json" "$(tkt 3 'Queue worker' ready-for-agent)" "$(tkt 5 'Export to CSV' ready-for-agent)" "$(tkt 6 'Import' ready-for-agent)"
+state "the lowest ready ticket with an open pull request: the pull request first; the ticket after it is the next" "$d" \
+  "command: /run" "  #8 (for #3) ready, checks pending: feat: queue worker" \
+  "ticket to take: #5, not blocked; the lowest number of the 2 left" \
+  "skipped: 1 of 3 ready-for-agent; in an open pull request: #3 on pull request #8"
+put "$d/open.json" "$(prb 8 'feat: part' 'Part of #5; see also #6 and other/repo#3')"
+state "Part of names the issue; a bare mention and another repository's do not" "$d" \
+  "  #8 (for #5) ready, checks pending: feat: part" "ticket to take: #3, not blocked; the lowest number of the 2 left"
+printf '[]' > "$d/open.json"
+put "$d/issues.json" "$(tkt 3 'Small fix' ready-for-agent)" "$(tkt 7 'Schema' ready-for-agent)" \
+  "$(tkt 8 'Reader' ready-for-agent '## Blocked by
+
+- #7')" "$(tkt 9 'Writer' ready-for-agent 'Blocked by: #7')"
+state "one ticket that two others wait on: chosen over a lower one, the two named" "$d" \
+  "command: /implement #7" "before: /clear" "ticket to take: #7, not blocked; #8 and #9 wait on it" \
+  "skipped: 2 of 4 ready-for-agent; blocked by an open issue: #8 on #7; #9 on #7"
+put "$d/issues.json" "$(tkt 2 'Pick the queue' ready-for-human)" "$(tkt 3 'Queue worker' ready-for-agent 'Blocked by: #2')" \
+  "$(tkt 4 'Retry' ready-for-agent '## Blocked by
+
+#2, #3')"
+state "every ready ticket blocked: what each waits on, and no /implement" "$d" \
+  "ticket to take: none; every ready-for-agent ticket waits: #3 on #2; #4 on #2 and #3" \
+  "skipped: 2 of 2 ready-for-agent; blocked by an open issue: #3 on #2; #4 on #2 and #3" \
+  "command: /grilling" "!command: /implement"
+put "$d/issues.json" "$(tkt 2 'Pick the queue' ready-for-human)" "$(tkt 3 'Queue worker' ready-for-agent 'Blocked by: #2')" \
+  "$(tkt 4 'Unlabelled and blocked' '' 'Blocked by: #2')" "$(tkt 5 'Unlabelled' '')"
+state "every ready ticket blocked: an unlabelled ticket that waits too is passed over" "$d" \
+  "command: /implement #5" "ticket to take: none; every ready-for-agent ticket waits: #3 on #2"
+put "$d/issues.json" "$(tkt 2 'Other work' '')" "$(tkt 3 'Queue worker' ready-for-agent '## Blocked by
+
+None. Touches the same code as #2; land after it or rebase.')" \
+  "$(tkt 4 'Retry' ready-for-agent '## Blocked by
+
+- #1
+- other/repo#2')"
+state "a Blocked by that opens with None, a closed blocker, another repository's: not blocked" "$d" \
+  "command: /implement #3" "skipped: none" "ticket to take: #3, not blocked; the lowest number of the 2 left"
+# The task form writes its fields as ### headings; a heading ends the section.
+put "$d/issues.json" "$(tkt 2 'Other work' '')" "$(tkt 3 'From the form' ready-for-agent '### What to build
+
+x
+
+### Blocked by
+
+#2')" "$(tkt 4 'Retry' ready-for-agent '## Blocked by
+
+- #1
+
+### Notes
+
+Like #2.')"
+state "### Blocked by from the task form blocks; a mention under a later heading does not" "$d" \
+  "command: /implement #4" "skipped: 1 of 2 ready-for-agent; blocked by an open issue: #3 on #2"
+put "$d/issues.json" "$(tkt 4 'Retry' ready-for-agent 'Blocked by: #1')"
+state "the one ready ticket, its blocker closed: said so" "$d" \
+  "command: /implement #4" "ticket to take: #4, not blocked (#1 is closed); the only ready-for-agent ticket left"
+# A spec's sub-issue order comes first (read only with two or more ready).
+put "$d/issues.json" "$(subbed 19 'The queue spec' 3 0)" "$(tkt 11 'One' ready-for-agent)" \
+  "$(tkt 12 'Two' ready-for-agent)" "$(tkt 13 'Three' ready-for-agent)" "$(tkt 14 'Waited on' ready-for-agent)" \
+  "$(tkt 15 'Waits' ready-for-agent 'Blocked by: #14')"
+printf '[13, 12, 11]' > "$d/subs-19.json"
+state "a spec's sub-issues: in the spec's order, over one others wait on" "$d" \
+  "command: /implement #13" "ticket to take: #13, not blocked; a sub-issue of spec #19, next in its order"
+printf '["other/repo#14", 13, 12, 11]' > "$d/subs-19.json"
+state "another repository's sub-issue with the same number: not this one" "$d" \
+  "ticket to take: #13, not blocked; a sub-issue of spec #19, next in its order"
+printf '[13, 12, 11]' > "$d/subs-19.json"
+put "$d/open.json" "$(prb 8 'feat: three' 'Closes #13')"
+state "the spec's first sub-issue in a pull request: the next in its order" "$d" \
+  "ticket to take: #12, not blocked; a sub-issue of spec #19, next in its order"
+printf '[]' > "$d/open.json"
+out="$(MOCK_SUBS_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF 'spec sub-issue order: not read (#19: HTTP 502: Bad Gateway)' <<<"$out" && grep -qxF 'command: /implement #14' <<<"$out" &&
+  grep -qxF 'ticket to take: #14, not blocked; #15 waits on it' <<<"$out" &&
+  ok "the sub-issue order not read: said so, and the next rule chooses" || { bad "sub-issue order not read"; grep -E 'spec|ticket|command' <<<"$out" | sed 's/^/        /'; }
+log="$work/subs.log"; : > "$log"
+put "$d/issues.json" "$(subbed 19 'The queue spec' 3 0)" "$(tkt 11 'One' ready-for-agent)"
+MOCK_SUBS_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+[ ! -s "$log" ] && ok "one ready ticket: the sub-issue order is not read" || bad "one ready ticket: sub-issues read $(grep -c . "$log") times"
+# GitHub's native dependencies (#910), read in one call: a ticket blocked only
+# there is skipped as one blocked in its body is, and counted as waiting.
+# deps <ready number>:<blockedBy|blocking>:<other number>:<OPEN|CLOSED>[:<repo>] ...
+deps() {
+  printf '%s\n' "$@" | jq -Rn '[inputs | split(":") | {n: (.[0] | tonumber), rel: .[1],
+      o: {number: (.[2] | tonumber), state: .[3], repository: {nameWithOwner: (.[4] // "o/r")}}}]
+    | group_by(.n) | map({number: .[0].n, blockedBy: {nodes: [.[] | select(.rel == "blockedBy") | .o]},
+      blocking: {nodes: [.[] | select(.rel == "blocking") | .o]}}) | {data: {repository: {issues: {nodes: .}}}}' > "$d/deps.json"
+}
+printf '[]' > "$d/open.json"
+put "$d/issues.json" "$(tkt 2 'Pick the queue' ready-for-human)" "$(tkt 3 'Queue worker' ready-for-agent)" \
+  "$(tkt 4 'Retry' ready-for-agent)" "$(tkt 5 'Export' ready-for-agent)"
+deps 3:blockedBy:2:OPEN 4:blockedBy:1:CLOSED 4:blocking:9:CLOSED
+state "a ticket blocked only by a native dependency: skipped as a body's is; a closed one blocks nothing" "$d" \
+  "command: /implement #4" "skipped: 1 of 3 ready-for-agent; blocked by an open issue: #3 on #2" \
+  "ticket to take: #4, not blocked; the lowest number of the 2 left"
+put "$d/issues.json" "$(tkt 2 'Pick the queue' ready-for-human)" "$(tkt 3 'Queue worker' ready-for-agent)" \
+  "$(tkt 4 'Retry' ready-for-agent)" "$(tkt 5 'Export' ready-for-agent)" "$(tkt 6 'Report' '' 'Blocked by: #5')"
+deps 3:blockedBy:2:OPEN 5:blocking:3:OPEN 5:blocking:2:OPEN
+state "native blocking edges count as waiting, with the body's; a person's task waiting is not a ticket" "$d" \
+  "command: /implement #5" "ticket to take: #5, not blocked; #3 and #6 wait on it"
+deps 3:blockedBy:7:OPEN:other/repo 3:blockedBy:2:OPEN 4:blockedBy:2:OPEN 4:blockedBy:3:OPEN 5:blockedBy:7:OPEN:other/repo
+put "$d/issues.json" "$(tkt 2 'Pick the queue' ready-for-human)" "$(tkt 3 'Queue worker' ready-for-agent 'Blocked by: #2')" \
+  "$(tkt 4 'Retry' ready-for-agent)" "$(tkt 5 'Export' ready-for-agent)"
+state "a blocker in another repository, open: blocks; one named in the body and natively: said once" "$d" \
+  "ticket to take: none; every ready-for-agent ticket waits: #3 on #2 and other/repo#7; #4 on #2 and #3; #5 on other/repo#7" "!command: /implement"
+out="$(MOCK_DEPS_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "ticket to take: #4, not blocked; the lowest number of the 2 left; GitHub's issue dependencies: not read (GraphQL: Field 'blockedBy' doesn't exist on type 'Issue' (repository.issues.nodes.0.blockedBy))" <<<"$out" &&
+  grep -qxF 'command: /implement #4' <<<"$out" && grep -qxF 'skipped: 1 of 3 ready-for-agent; blocked by an open issue: #3 on #2' <<<"$out" &&
+  ok "the dependencies not read: the bodies choose, the line says not read, the rest of the guide still read" ||
+  { bad "the dependencies not read"; grep -E 'ticket|skipped|command|where' <<<"$out" | sed 's/^/        /'; }
+log="$work/deps.log"; : > "$log"
+MOCK_DEPS_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+[ "$(grep -c . "$log")" = 1 ] && ok "three ready tickets: the dependencies are one call" || bad "dependencies read $(grep -c . "$log") times for three ready tickets"
+put "$d/issues.json" "$(tkt 2 'Pick the queue' ready-for-human)"
+: > "$log"; MOCK_DEPS_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+[ ! -s "$log" ] && ok "no ready ticket: the dependencies are not read" || bad "no ready ticket: dependencies read anyway"
+rm "$d/deps.json"
+# The open issues are the newest 100: a blocker older than all of them is not
+# known to be closed when the read came back full, and still blocks.
+d="$(repo pick-full)"
+put "$d/merged.json" "$(pr 1 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+jq -n '[range(101; 201) | {number: ., title: "t\(.)", labels: [], body: ""}]
+  | map(if .number == 101 then .labels = [{name: "ready-for-agent"}] | .body = "Blocked by: #5"
+        elif .number == 102 then .labels = [{name: "ready-for-agent"}] else . end)' > "$d/issues.json"
+state "a full read, a blocker older than all of it: not known closed, still blocks" "$d" \
+  "command: /implement #102" "skipped: 1 of 2 ready-for-agent; blocked by an open issue: #101 on #5 (not in the open issues read)"
+jq 'map(select(.number != 200))' "$d/issues.json" > "$d/x.json" && mv "$d/x.json" "$d/issues.json"
+state "99 open, the blocker not among them: closed" "$d" \
+  "command: /implement #101" "ticket to take: #101, not blocked (#5 is closed); the lowest number of the 2 left"
 
 d="$(repo bots-only)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"

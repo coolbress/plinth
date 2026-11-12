@@ -6,7 +6,8 @@
 # that failed, whose each one is, and how many comments people left (#903).
 # It says whether the template tag and the plinth pin are behind, from
 # floor-check's own reads (#904). For an open spec it reads whether any
-# ticket was cut from it, and routes one with none to step 3 (#909).
+# ticket was cut from it, and routes one with none to step 3 (#909). It picks
+# the ticket /implement takes by the rules below, and says why (#910).
 # Read-only: it runs git and gh reads, nothing else.
 #
 #   guide-state.sh [<dir>]     # default: the current directory
@@ -178,6 +179,23 @@ kind='def kind: [.labels[].name] as $l
     elif ($l | any(startswith("wayfinder:") and . != "wayfinder:task")) then "wayfinder"
     elif ($l | index("spec")) then "spec"
     else "ticket" end;'
+# Which ticket to take (#910). refs: the #N of this repository in a text, not
+# owner/repo#N, not part of a longer word. An issue's blockers: each #N under
+# its ## Blocked by (### Blocked by from the task form), up to the next
+# heading, unless that section opens with "None", and those on a
+# first line "Blocked by: #N, #N" (docs/agents/issue-tracker.md's fallback).
+# GitHub's native issue dependencies are read below. A pull request is for each #N
+# its body names after a closing keyword or "Part of", as GitHub reads it.
+refs='def refs: [scan("(?:^|[^A-Za-z0-9_./-])#([0-9]+)") | .[0]];'
+blockers='def blockers: [(.body // "") | split("\n")[] | sub("\r$"; "")] as $ls
+  | [$ls | reduce .[] as $l ({on: false, lines: []};
+      if ($l | test("^#{1,6}[ \t]")) then .on = ($l | test("(?i)^#{2,3}[ \t]+Blocked by[ \t]*$"))
+      elif .on and ($l | test("\\S")) then .lines += [$l] else . end) | .lines] as [$sec]
+  | (if ($sec | length) > 0 and ($sec[0] | test("(?i)^([-*][ \t]+)?none([^a-z]|$)")) then [] else [$sec[] | refs[]] end)
+    + (if ($ls[0] // "" | test("(?i)^Blocked by:")) then ($ls[0] | refs) else [] end)
+  | map(tonumber) | unique | map(tostring) | join(",");'
+for_issues='def for_issues: [(.body // "") | scan("(?i)(?:^|[^a-z0-9_])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of)[ \t]*:?[ \t]+#([0-9]+)") | .[0] | tonumber]
+  | unique | map(tostring) | join(",");'
 
 # Each read on its own, so the line names the one that failed and its error.
 # Merged pull requests are read up to $read. A read that comes back full may
@@ -187,13 +205,13 @@ read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt \
-      --jq "$rollup$raises"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises] | @tsv' 2>&1)"; then
+      --jq "$rollup$raises$for_issues"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
 elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body \
-      --jq "$kind"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind] | @tsv' 2>&1)"; then
+      --jq "$kind$refs$blockers"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind, blockers] | @tsv' 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
 fi
 if [ -n "$failed" ]; then
@@ -284,15 +302,121 @@ if [ "$(grep -c . <<<"$merged" || true)" -ge "$read" ]; then
   past_first=yes; counted="$counted of the last $read read; older ones not read"
 fi
 
+# Which ticket /implement takes (#910), from what the repository records. A
+# ready-for-agent ticket is skipped while its blockers include an open issue,
+# or while an open pull request is for it (that pull request is routed first).
+# Of the rest: a sub-issue of an open spec first, in the spec's sub-issue
+# order (specs in number order); then the one the most open tickets name as
+# their blocker; then the lowest number. The sub-issue order is read, one call
+# per open spec with sub-issues, only when two or more tickets are ready. The
+# open issues are the newest 100: a blocker older than all of them, in a read
+# that came back full, is not known to be closed, so it still blocks.
+ready_n="$(awk -F '\t' '$4 == "ticket" && ("," $2 ",") ~ /,ready-for-agent,/' <<<"$issues" | grep -c . || true)"
+# GitHub's native issue dependencies, which docs/agents/issue-tracker.md and
+# /to-tickets use first: one GraphQL call for the open ready-for-agent issues
+# (the newest 100, as the issue read; 50 edges each way, more not read). An
+# unlabelled ticket's own are not read: it is known to wait only through a
+# ready ticket's blocking edge or its body. Out: <waiter>\t<blocker> for each edge whose
+# blocker is open, from blockedBy, and from blocking where the waiter is an
+# open issue of this repository; a blocker in another repository is written
+# owner/repo#N, and blocks too. A failed read, or a GitHub or gh that does not
+# know the fields, leaves the choice to the bodies and the line says so.
+deps=""; deps_failed=""
+if [ "$ready_n" -ge 1 ]; then
+  owner="${repo%%/*}"; name="${repo#*/}"
+  deps="$(cd "$top" && gh api graphql -f owner="$owner" -f name="$name" -f query='
+    query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+      issues(states: OPEN, labels: ["ready-for-agent"], first: 100, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number
+        blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
+        blocking(first: 50) { nodes { number state repository { nameWithOwner } } } } } } }' \
+    --jq '"'"$(tr 'A-Z' 'a-z' <<<"$repo")"'" as $me
+      | def ref: if (.repository.nameWithOwner | ascii_downcase) == $me then (.number | tostring) else "\(.repository.nameWithOwner)#\(.number)" end;
+      .data.repository.issues.nodes[] | .number as $n
+      | ((.blockedBy.nodes[] | select(.state == "OPEN") | [($n | tostring), ref]),
+         (.blocking.nodes[] | select(.state == "OPEN" and (.repository.nameWithOwner | ascii_downcase) == $me) | [(.number | tostring), ($n | tostring)]))
+      | @tsv' 2>&1)" || { deps_failed="$(tail -1 <<<"$deps" | tr '\t' ' ')"; deps=""; }
+fi
+order=""; order_failed=""
+if [ "$ready_n" -ge 2 ]; then
+  while IFS=$'\t' read -r n _ said; do
+    case "$said" in *sub-issue*) ;; *) continue ;; esac
+    if got="$(cd "$top" && gh api "repos/$repo/issues/$n/sub_issues" --paginate --jq '.[] | select((.repository_url // "") | ascii_downcase | endswith("/repos/'"$(tr 'A-Z' 'a-z' <<<"$repo")"'")) | .number' 2>&1)"; then
+      order="$order$(awk -v s="$n" 'NF { print $1 "\t" s "\t" (++i) }' <<<"$got")"$'\n'
+    else
+      order_failed="${order_failed:+$order_failed; }#$n: $(tail -1 <<<"$got" | tr '\t' ' ')"
+    fi
+  done <<<"$specs"
+fi
+choice="$(awk -F '\t' -v full="$([ "$(grep -c . <<<"$issues" || true)" -ge 100 ] && echo 1)" '
+  function said(list,   k, a, i, s) { k = split(list, a, " "); s = a[1]
+    for (i = 2; i <= k; i++) s = s (i == k ? " and " : ", ") a[i]; return s }
+  function better(a, b,   ra, rb) { if (b == "") return 1
+    ra = (a in rank) ? rank[a] : 1e9; rb = (b in rank) ? rank[b] : 1e9
+    if (ra != rb) return ra < rb
+    if (nw[a] + 0 != nw[b] + 0) return nw[a] + 0 > nw[b] + 0
+    return a + 0 < b + 0 }
+  FNR == 1 { f++ }
+  $1 == "" { next }
+  f == 1 { k = split($10, a, ","); for (i = 1; i <= k; i++) if (!(a[i] in pr)) pr[a[i]] = $1; next }
+  f == 2 { if (!($1 in rank)) { rank[$1] = ++nr; spec[$1] = $2 }; next }
+  f == 3 { native[$1] = native[$1] "," $2; nopen[$2] = 1; next }
+  { open[$1] = 1; if (min == "" || $1 + 0 < min + 0) min = $1
+    if ($4 != "ticket") next
+    t[++n] = $1; ready[$1] = (("," $2 ",") ~ /,ready-for-agent,/)
+    # The body'"'"'s blockers and the native ones, each once.
+    k = split($5 native[$1], a, ","); b = ""; delete seen
+    for (i = 1; i <= k; i++) if (a[i] != "" && !(a[i] in seen)) { seen[a[i]] = 1; b = b "," a[i] }
+    blk[$1] = substr(b, 2)
+    k = split(blk[$1], a, ","); for (i = 1; i <= k; i++) { nw[a[i]]++; waits[a[i]] = waits[a[i]] (waits[a[i]] == "" ? "" : " ") "#" $1 } }
+  END {
+    for (j = 1; j <= n; j++) {
+      x = t[j]; ob = ""; closed = ""
+      k = split(blk[x], a, ",")
+      for (i = 1; i <= k; i++) {
+        if (a[i] ~ /#/) ob = ob " " a[i]
+        else if ((a[i] in open) || (a[i] in nopen)) ob = ob " #" a[i]
+        else if (full && a[i] + 0 < min + 0) ob = ob " #" a[i] "~"
+        else closed = closed " #" a[i]
+      }
+      if (ob != "") { why = said(substr(ob, 2)); gsub(/~/, " (not in the open issues read)", why) }
+      if (!ready[x]) { if (ob == "" && !(x in pr) && fallback == "") fallback = x; continue }
+      if (ob != "") { nb++; bl = bl "; #" x " on " why }
+      else if (x in pr) { np++; tk = tk "; #" x " on pull request #" pr[x] }
+      else { nc++; cl[x] = substr(closed, 2); if (better(x, pick)) pick = x }
+    }
+    print "pick\t" pick
+    print "fallback\t" fallback
+    if (nb + np + nc == 0) exit
+    if (pick == "") {
+      print "ticket to take: none; every ready-for-agent ticket waits: " substr(bl tk, 3)
+    } else {
+      r = "not blocked"
+      if (cl[pick] != "") r = r " (" said(cl[pick]) (index(cl[pick], " ") ? " are" : " is") " closed)"
+      if (pick in rank) r = r "; a sub-issue of spec #" spec[pick] ", next in its order"
+      if (nw[pick] > 0) r = r "; " said(waits[pick]) (nw[pick] > 1 ? " wait" : " waits") " on it"
+      if (nc == 1) r = r "; the only ready-for-agent ticket left"
+      else if (!(pick in rank) && nw[pick] == 0) r = r "; the lowest number of the " nc " left"
+      print "ticket to take: #" pick ", " r
+    }
+    s = nb + np " of " nb + np + nc " ready-for-agent"
+    if (nb) s = s "; blocked by an open issue: " substr(bl, 3)
+    if (np) s = s "; in an open pull request: " substr(tk, 3)
+    print "skipped: " (nb + np ? s : "none")
+  }' <(printf '%s\n' "$prs") <(printf '%s\n' "$order") <(printf '%s\n' "$deps") - <<<"$issues")"
+pick="$(awk -F '\t' '$1 == "pick" { print $2 }' <<<"$choice")"
+fallback="$(awk -F '\t' '$1 == "fallback" { print $2 }' <<<"$choice")"
+
 if [ -n "$people_prs" ]; then
   echo "open pull requests:"
-  awk -F '\t' '{ printf "  #%s %s, %s: %s\n", $1, $3, $9, $6 }' <<<"$people_prs"
+  # Each one with the issues it is for (#910), from its row in $prs.
+  awk -F '\t' 'FNR == NR { if ($10 != "") { f = $10; gsub(/,/, ", #", f); fr[$1] = " (for #" f ")" }; next }
+    { printf "  #%s%s %s, %s: %s\n", $1, fr[$1], $3, $9, $6 }' <(printf '%s\n' "$prs") - <<<"$people_prs"
 else
   echo "open pull requests: none"
 fi
 [ -n "$bot_prs" ] && echo "open Dependabot pull requests: $(field 1 <<<"$bot_prs" | sed 's/^/#/' | paste -sd ' ' -)"
 if [ -n "$issues" ]; then
-  echo "open issues ($(grep -c . <<<"$issues")):"
+  echo "open issues ($(grep -c . <<<"$issues"), $ready_n ready-for-agent):"
   head -10 <<<"$issues" | awk -F '\t' '{ printf "  #%s [%s] %s\n", $1, ($2 == "" ? "no label" : $2), $3 }'
 else
   echo "open issues: none"
@@ -305,6 +429,11 @@ not_tickets="$(awk -F '\t' 'FNR == NR { cut[$1] = $3; next }
   $4 == "spec" { printf "  #%s [%s] a spec, a record: a person does it; tickets cut from it: %s\n", $1, $2, cut[$1] }' \
   <(printf '%s\n' "$specs") - <<<"$issues")"
 if [ -n "$not_tickets" ]; then echo "open issues that are not tickets, never for /implement:"; printf '%s\n' "$not_tickets"; fi
+grep -E '^(ticket to take|skipped): ' <<<"$choice" | while IFS= read -r l; do
+  case "$l" in "ticket to take: "*) [ -z "$deps_failed" ] || l="$l; GitHub's issue dependencies: not read ($deps_failed)" ;; esac
+  printf '%s\n' "$l"
+done
+[ -z "$order_failed" ] || echo "spec sub-issue order: not read ($order_failed)"
 if [ -n "$merged" ]; then
   last="$(head -1 <<<"$merged")"
   echo "last merge: #$(field 1 <<<"$last") on $(field 3 <<<"$last") by $(field 2 <<<"$last"): $(field 4 <<<"$last")"
@@ -375,7 +504,6 @@ if [ -n "$broken" ]; then
 fi
 echo
 
-tickets="$(awk -F '\t' '$4 == "ticket"' <<<"$issues")"
 pin_behind="$(sed -nE 's/^plinth pin: [^,]+, behind (v[0-9.]+), .*/\1/p' <<<"$behind_lines")"
 template_behind="$(sed -nE 's/^template: ([^,]+), behind (v[0-9.]+), .*/\1 is behind \2/p' <<<"$behind_lines")"
 # pin_howto: the project's own how-to step that raises the plinth pin, as
@@ -445,8 +573,8 @@ elif [ -n "$people_prs" ]; then
     esac
     say "A pull request with checks running" "/run" "Green, and seen working"
   fi
-elif n="$(labelled ready-for-agent "$tickets")" && [ -n "$n" ]; then
-  before="/clear"; say "A ticket ready" "/implement #$n"
+elif [ -n "$pick" ]; then
+  before="/clear"; say "A ticket ready" "/implement #$pick"
 elif n="$(labelled needs-triage "$issues")" && [ -n "$n" ]; then
   note="issue #$n"; say "Something broke" "/triage"
 elif n="$(awk -F '\t' '$2 == "none"' <<<"$specs" | head -1 | field 1)" && [ -n "$n" ]; then
@@ -454,8 +582,10 @@ elif n="$(awk -F '\t' '$2 == "none"' <<<"$specs" | head -1 | field 1)" && [ -n "
   # before an unlabelled issue (#909).
   note="issue #$n is a spec no ticket was cut from yet; /to-tickets cuts it into tickets that /implement can take one at a time"
   say "A job bigger than one session" "/to-tickets #$n"
-elif [ -n "$tickets" ]; then
-  before="/clear"; say "A ticket ready" "/implement #$(head -1 <<<"$tickets" | field 1)"
+elif [ -n "$fallback" ]; then
+  # A ticket without ready-for-agent, on the same skips, by its body and the
+  # ready tickets' dependency edges: its own native blockers are not read.
+  before="/clear"; say "A ticket ready" "/implement #$fallback"
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
 elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
