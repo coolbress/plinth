@@ -45,8 +45,9 @@ case "$1 $2 ${4:-}" in
   "issue list open")   f=issues.json ;;
   # The search for issues naming a spec under ## Parent (#909): every issue
   # in all.json, the search words not applied, so the script's filter is
-  # what picks. MOCK_ALL_FAIL fails it.
-  "issue list all")    [ -n "${MOCK_ALL_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }; f=all.json ;;
+  # what picks. MOCK_ALL_FAIL fails it; MOCK_ALL_LOG counts the calls.
+  "issue list all")    [ -z "${MOCK_ALL_LOG:-}" ] || echo search >> "$MOCK_ALL_LOG"
+                       [ -n "${MOCK_ALL_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }; f=all.json ;;
   "api repos/o/r/issues/"*"/comments "*) f=comments.json ;;
   *) echo "mock gh: unexpected $*" >&2; exit 1 ;;
 esac
@@ -508,6 +509,29 @@ put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 11 "$reminder"
 expect "an uncut spec next to the template reminder: the spec first" "$d" "A job bigger than one session (step 3)" "/to-tickets #19" "#11 the monthly template reminder"
 put "$d/issues.json" "$(subbed 19 'The queue spec' 1 0)" "$(issue 25 'Another spec' spec)"
 expect "two specs, the lower one cut: the uncut one" "$d" "A job bigger than one session (step 3)" "/to-tickets #25"
+# The search runs only on specs with no sub-issue, in number order, and
+# stops at the first uncut one: calls = searched specs up to it.
+searches() { # <case> <wanted calls> <wanted command> [<other line>]
+  local log="$work/searches.log" out n; : > "$log"
+  out="$(MOCK_ALL_LOG="$log" MOCK_DIR="$d" "$script" "$d" 2>&1)"; n="$(grep -c . "$log")"
+  if [ "$n" -eq "$2" ] && grep -qxF "command: $3" <<<"$out" && { [ -z "${4:-}" ] || grep -qF -- "$4" <<<"$out"; }
+  then ok "$1"; else bad "$1 ($n searches, wanted $2; wanted command: $3${4:+ / $4})"; sed 's/^/        /' <<<"$out" | grep -E 'spec|command' ; fi
+}
+put "$d/issues.json" "$(subbed 19 'The queue spec' 1 0)" "$(issue 25 'Another spec' spec)" "$(issue 26 'A third spec' spec)"
+searches "three specs, the first with a sub-issue: one search, none past the uncut one" 1 "/to-tickets #25" "#26 [spec] a spec, a record: a person does it; tickets cut from it: not searched (spec #25, with none, comes first)"
+put "$d/all.json" "$(bodied 21 '## Parent
+
+#25')"
+searches "the second spec named under ## Parent: searched on to the third" 2 "/to-tickets #26" "#25 [spec] a spec, a record: a person does it; tickets cut from it: #21 names it under ## Parent"
+put "$d/issues.json" "$(subbed 19 'The queue spec' 1 0)" "$(subbed 25 'Another spec' 2 1)"
+searches "every spec with sub-issues: no search" 0 "/grilling"
+printf '[]' > "$d/all.json"
+# Routing reads the state, not the words said: a spec whose search failed or
+# was not run is never routed to, whatever its line says.
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)" "$(issue 25 'Another spec' spec)"
+out="$(MOCK_ALL_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qx 'command: /grilling' <<<"$out" && [ "$(grep -c 'tickets cut from it: not read' <<<"$out")" -eq 2 ] &&
+  ok "both searches failing: each not read, no /to-tickets" || bad "two failed searches"
 put "$d/open.json" "$(pr 13 'feat: export' false run)"
 expect "an uncut spec next to an open pull request: the pull request first" "$d" "A pull request with checks running (step 5)" "/run"
 printf '[]' > "$d/open.json"

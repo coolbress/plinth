@@ -206,27 +206,33 @@ fi
 field() { cut -f"$1"; }
 # What was cut from each open spec (#909), as /to-tickets cuts one: its
 # sub-issues, open or closed (column 5 of the list), else the issues, open or
-# closed, whose body names #N under ## Parent, one search per such spec. The
-# search's words only narrow it; the filter is what decides: #N in that
-# section and nowhere else, not owner/repo#N, not #N0. It reads the first
-# 100 matches only. Out: <number>\t<what was cut, "none", or "not read (...)">.
+# closed, whose body names #N under ## Parent. Only the first spec with none
+# is routed to, so the search runs in number order on specs with no sub-issue
+# and stops at the first that comes back uncut: one search per spec up to and
+# including it, none past it. The search's words only narrow it; the filter is
+# what decides: #N in that section and nowhere else, not owner/repo#N, not
+# #N0. It reads the first 100 matches only.
+# Out: <number>\t<cut|none|unread|unsearched>\t<what is said of it>; routing
+# reads the second column, the spec's line the third (as #906 keeps them).
 parent_of='def parent_of($n): [(.body // "") | split("\n")[]]
   | reduce .[] as $l ({on: false, hit: false};
       if ($l | startswith("## ")) then .on = ($l | test("^## Parent[ \t]*\r?$"))
       elif .on and ($l | test("(^|[^A-Za-z0-9_./-])#" + ($n | tostring) + "([^0-9]|$)")) then .hit = true
       else . end) | .hit;'
 specs="$(awk -F '\t' '$4 == "spec" { print $1 "\t" ($5 == "" ? 0 : $5) }' <<<"$issues" |
-  while IFS=$'\t' read -r n subs; do
+  { first=""; while IFS=$'\t' read -r n subs; do
     if [ "$subs" -gt 0 ]; then
-      printf '%s\t%s sub-issue%s\n' "$n" "$subs" "$([ "$subs" -eq 1 ] || echo s)"
+      printf '%s\tcut\t%s sub-issue%s\n' "$n" "$subs" "$([ "$subs" -eq 1 ] || echo s)"
+    elif [ -n "$first" ]; then
+      printf '%s\tunsearched\tnot searched (spec #%s, with none, comes first)\n' "$n" "$first"
     elif named="$(cd "$top" && gh issue list --state all --limit 100 --search "#$n in:body" --json number,body \
           --jq "$parent_of"' [.[] | select(.number != '"$n"' and parent_of('"$n"')) | .number] | sort | map("#\(.)") | join(", ")' 2>&1)"; then
-      if [ -n "$named" ]; then printf '%s\t%s names it under ## Parent\n' "$n" "$named"
-      else printf '%s\tnone\n' "$n"; fi
+      if [ -n "$named" ]; then printf '%s\tcut\t%s names it under ## Parent\n' "$n" "$named"
+      else printf '%s\tnone\tnone\n' "$n"; first="$n"; fi
     else
-      printf '%s\tnot read (%s)\n' "$n" "$(tail -1 <<<"$named" | tr '\t' ' ')"
+      printf '%s\tunread\tnot read (%s)\n' "$n" "$(tail -1 <<<"$named" | tr '\t' ' ')"
     fi
-  done)"
+  done; })"
 # Column 9 of the list is whether Dependabot's pull request raises the plinth
 # pin (#904): never so for a person's, so their rows end at 8 and take the
 # checks line below as 9.
@@ -279,7 +285,7 @@ else
   echo "open issues: none"
 fi
 # Every one of them, past the ten above: none is ever an /implement target.
-not_tickets="$(awk -F '\t' 'FNR == NR { cut[$1] = $2; next }
+not_tickets="$(awk -F '\t' 'FNR == NR { cut[$1] = $3; next }
   $4 == "reminder" { printf "  #%s the monthly template reminder: a person types /plinth:template-update\n", $1 }
   $4 == "person" { printf "  #%s [%s] a person'"'"'s task: a person does it\n", $1, $2 }
   $4 == "wayfinder" { printf "  #%s [%s] a wayfinder record: a person does it\n", $1, $2 }

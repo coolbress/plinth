@@ -41,11 +41,13 @@ pull requests and have no tag.
 - `/plinth:guide` names step 3 (#909). For each open `spec` issue
   `scripts/guide-state.sh` reads whether any ticket was cut from it: a
   sub-issue, open or closed, or an issue whose body names it under
-  `## Parent` (one GitHub search per spec, its first 100 matches). A spec with
-  none routes to "A job bigger than one session" with the command
+  `## Parent` (a GitHub search, its first 100 matches, run in number order
+  only on specs with no sub-issue and stopped at the first uncut one). A spec
+  with none routes to "A job bigger than one session" with the command
   `/to-tickets #N`, after a `ready-for-agent` ticket and before an unlabelled
-  issue, the template reminder and `/grilling`. A search that fails says
-  `not read` and never routes to `/to-tickets`.
+  issue, the template reminder and `/grilling`, including a spec that also
+  carries `ready-for-agent` (it went to `/grilling` before). A search that
+  fails says `not read` and never routes to `/to-tickets`.
 
 ### Fixed
 
