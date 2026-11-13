@@ -479,6 +479,34 @@ paste_script="$(printf '%s\n' "P=$root/scripts" '"$P/with-admin-token.sh" /bin/e
 paste_out="$(bash -c "$paste_script" <<<"ghp_$(printf 'x%.0s' $(seq 36))" 2>&1)"
 case "$paste_out" in *"RAN probe --archetype=backend"*) ok fine-grained "the three lines pasted into bash run as one call with its arguments" ;;
   *) bad fine-grained "the pasted three lines did not reach the call's arguments"; printf '%s\n' "$paste_out" | sed 's/^/        /' ;; esac
+# The printed command is read back by a shell: a description with a space and
+# a quote and Hangul, and a contact with a space, must come out as the same arguments,
+# and the Assisted-by the skill set must reach the run (#923). The printed
+# call and arguments lines run as pasted, with P pointing at the real
+# with-admin-token.sh beside a new-project.sh that prints what it received.
+E="MOCK_FINE=1 PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" run fine-grained-quoted err no no "with-admin-token.sh" \
+  -- probe --archetype=backend "--description=it's a \"small\" 한글 앱" "--code-of-conduct=Jane Doe <j@example.com>"
+mkdir -p "$work/readback"; cp "$root/scripts/with-admin-token.sh" "$work/readback/"
+printf '%s\n' '#!/usr/bin/env bash' 'printf "ASSISTED=%s\n" "${PLINTH_ASSISTED_BY:-}"; printf "ARG=%s\n" "$@"' > "$work/readback/new-project.sh"
+chmod +x "$work/readback/new-project.sh"
+readback_lines() { grep -A1 -F '"$P/with-admin-token.sh" "$P/new-project.sh" \' "$1" | grep -v '^--$'; }
+want_args="$(printf 'ARG=%s\n' probe --archetype=backend "--description=it's a \"small\" 한글 앱" "--code-of-conduct=Jane Doe <j@example.com>")"
+readback_out="$(bash -c "P=$work/readback; $(readback_lines "$work/home-fine-grained-quoted/out")" <<<"ghp_$(printf 'x%.0s' $(seq 36))" 2>/dev/null)"
+if [ "$(grep '^ARG=' <<<"$readback_out")" = "$want_args" ]
+then ok fine-grained-quoted "the printed arguments, read back by bash, are the run's arguments"
+else bad fine-grained-quoted "the printed arguments do not read back as the run's"; printf '%s\n' "$readback_out" | sed 's/^/        /'; readback_lines "$work/home-fine-grained-quoted/out" | sed 's/^/        /'; fi
+# Read back is not enough: the person copies the line off a screen, so the
+# Hangul must be printed as itself, not as escaped bytes (bash 3.2's %q).
+if grep -qF "small\" 한글 앱" "$work/home-fine-grained-quoted/out"
+then ok fine-grained-quoted "non-ASCII text is printed as itself"
+else bad fine-grained-quoted "non-ASCII text is printed escaped"; fi
+if grep -qxF 'ASSISTED=Claude:claude-opus-5-5' <<<"$readback_out"
+then ok fine-grained-quoted "the printed command carries PLINTH_ASSISTED_BY to the run"
+else bad fine-grained-quoted "the printed command drops PLINTH_ASSISTED_BY"; fi
+readback_out="$(bash -c "P=$work/readback; $(readback_lines "$work/home-fine-grained/out")" <<<"ghp_$(printf 'x%.0s' $(seq 36))" 2>/dev/null)"
+if grep -qxF 'ASSISTED=' <<<"$readback_out" && ! grep -qF PLINTH_ASSISTED_BY "$work/home-fine-grained/out"
+then ok fine-grained "without PLINTH_ASSISTED_BY the printed command sets none"
+else bad fine-grained "the printed command names PLINTH_ASSISTED_BY although it was not set"; fi
 # A user typed the hint's placeholder literally; the refusal must name the
 # bare form as valid, or an agent "corrects" it to owner/name (#125).
 run angle-brackets err no no "is not <name> or <owner>/<name>"                                 -- '<probe>'

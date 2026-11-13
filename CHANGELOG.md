@@ -118,6 +118,28 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:template-update` says that it does not serve GitLab yet, instead
+  of failing on a `gh` error (#924). When `origin` is at gitlab.com, a
+  `*.gitlab.com` or a `gitlab.*` host, or `.copier-answers.yml` says
+  `host: gitlab`, `scripts/template-update.sh` stops before it needs `gh` and
+  before any worktree. It points to step 2 of the project's
+  `docs/how-to/keep-this-project-current.md`. A GitLab under another name with
+  no `host:` answer is not recognised.
+- The command `/plinth:new-project` prints for the admin-token path, when gh
+  holds a fine-grained token, quotes every argument (#923): a `--description`
+  or a code-of-conduct contact with a space or a quote in it read back as
+  several arguments when pasted. The command also sets `PLINTH_ASSISTED_BY`
+  when the run had it, so the first pull request of a run continued in a
+  separate terminal keeps its `Assisted-by` line.
+- Step 5 of `docs/how-to/run-a-project.md` lists the three questions again
+  under that name (#921): "What shows it works, and what did you not check?",
+  "Can I see it?", "What did the reviewer say?". #616 had dropped the list,
+  while the arsenal's step-5 row, which `/plinth:guide` passes on before a
+  merge, and its 5 Check row still told the person to ask them. Both rows now
+  say them and point to step 5, and `tests/doc-pinned-facts.sh` fails when a
+  line in a page at the root, under `docs/` or under `skills/` names the
+  three questions without saying them, or step 5's numbered list has other
+  than three items.
 - `/plinth:template-update` no longer sends a person in a loop when GitHub
   refuses the update's push because the agent's token may not change
   `.github/workflows/` (#925), the token the token page recommends. On that
@@ -128,6 +150,7 @@ pull requests and have no tag.
   now finds a branch already on origin at the commit and opens the pull
   request without pushing again. Any other failed push keeps the exit 1
   retry. Tested with a stubbed refusal, not a live push.
+
 - `/plinth:guide` no longer states the people's share of the newest 100
   merged pull requests as a total (#905): a project with 203 merged said 98.
   When `scripts/guide-state.sh` reads a full 100, the line says
