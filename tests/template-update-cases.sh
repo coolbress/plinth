@@ -116,12 +116,14 @@ case "${MOCK_COPIER:-clean}" in
   glossary) mkdir -p docs/agents && printf -- '- Root **`GLOSSARY.md`**: the glossary.\n' > docs/agents/domain.md ;;
 esac
 MOCK
-# ── wrapper: git, failing only `ls-remote` when MOCK_LSREMOTE_FAIL is set ─
+# ── wrapper: git, failing only `ls-remote` when MOCK_LSREMOTE_FAIL is set, ─
+# and `push` with MOCK_PUSH_FAIL's text as what the remote said (#925)
 real_git="$(command -v git)"
 cat > "$work/bin/git" <<MOCK
 #!/usr/bin/env bash
 for a in "\$@"; do
   if [ "\$a" = ls-remote ] && [ -n "\${MOCK_LSREMOTE_FAIL:-}" ]; then echo "fatal: could not read from remote repository" >&2; exit 128; fi
+  if [ "\$a" = push ] && [ -n "\${MOCK_PUSH_FAIL:-}" ]; then printf '%s\\n' "\$MOCK_PUSH_FAIL" >&2; exit 1; fi
 done
 exec "$real_git" "\$@"
 MOCK
@@ -392,6 +394,43 @@ if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && [ "$(git -C "$wt" rev-
    && grep -q "^- AGENTS.md" "$work/gh.log.body"
 then ok "--finish after a failed pull request opens it, with the same one commit and its description"
 else bad "resume (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── a push refused for the workflow permission is the person's (#925) ──
+# GitHub's two wordings: a classic token or OAuth app lacks the `workflow`
+# scope; a fine-grained token or GitHub App lacks the `workflows` permission.
+branch="chore/template-$target_ref"
+for refusal in \
+  "scope: ! [remote rejected] HEAD -> $branch (refusing to allow a Personal Access Token to create or update workflow \`.github/workflows/ci.yml\` without \`workflow\` scope)" \
+  "permission: ! [remote rejected] HEAD -> $branch (refusing to allow a GitHub App to create or update workflow \`.github/workflows/ci.yml\` without \`workflows\` permission)"; do
+  kind="${refusal%%:*}"; said="${refusal#*: }"
+  fixture "wfpush$kind"; reset_logs
+  base="$(git -C "$BARE" rev-parse main)"; wt="$(wt_of "wfpush$kind")"
+  out="$(cd "$repo" && MOCK_PUSH_FAIL="$said" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" 2>&1)"; rc=$?
+  if [ "$rc" = 5 ] && grep -qF "$said" <<<"$out" && grep -qF "separate terminal" <<<"$out" \
+     && grep -qxF "  git -C $wt push origin HEAD:refs/heads/$branch" <<<"$out" \
+     && grep -qxF "  $script --finish $wt" <<<"$out" && ! grep -qF "Run again" <<<"$out" \
+     && ! grep -q "pr create" "$work/gh.log" && ! git -C "$BARE" rev-parse -q --verify "refs/heads/$branch" >/dev/null
+  then ok "a push refused for the workflow $kind: exit 5, the branch, the push for a separate terminal and --finish after it, not the retry"
+  else bad "workflow $kind refusal (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+done
+# The person pushes from their own terminal; --finish under the same refused
+# credential finds the branch at the commit and opens the pull request
+# without pushing again (a push would be refused by the mock).
+git -C "$wt" push -q origin "HEAD:refs/heads/$branch"
+reset_logs
+out="$(cd "$repo" && MOCK_PUSH_FAIL="$said" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "already on origin" <<<"$out" \
+   && [ "$(git -C "$wt" rev-list --count "$base..HEAD")" = 1 ] && [ "$(git -C "$BARE" rev-parse main)" = "$base" ]
+then ok "--finish after the person pushed opens the pull request without pushing again, on the same one commit"
+else bad "finish after the person's push (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Any other push failure is the generic retry.
+fixture pushother; reset_logs
+base="$(git -C "$BARE" rev-parse main)"; wt="$(wt_of pushother)"
+out="$(cd "$repo" && MOCK_PUSH_FAIL="fatal: unable to access 'https://github.com/o/r/': Could not resolve host: github.com" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -qF "Run again: $script --finish $wt" <<<"$out" && grep -qF "Could not resolve host" <<<"$out" \
+   && ! grep -qF "separate terminal" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
+then ok "any other push failure keeps the generic retry: exit 1, --finish again"
+else bad "other push failure (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # ── a pin Dependabot raised is the one copier is given ──────────────────
 fixture raised; reset_logs
@@ -988,6 +1027,20 @@ if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "422 reviewab
    && grep -qF "Opened as it is on \`--over-limit\`" <<<"$body"
 then ok "--over-limit opens it as it is, and the description says it is over"
 else bad "--over-limit (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Refused for the workflow permission on --over-limit: the printed --finish
+# line carries --over-limit and --assisted-by, or run as printed it stops at
+# the split again and the description loses its last line (#925).
+fixture big-refused; reset_logs; big big-refused
+reset_logs
+out="$(cd "$repo" && MOCK_PUSH_FAIL="! [remote rejected] HEAD -> chore/template-$target_ref (refusing to allow an OAuth App to create or update workflow \`.github/workflows/ci.yml\` without \`workflow\` scope)" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" --over-limit --assisted-by "Claude:claude-test-1" 2>&1)"; rc=$?
+if [ "$rc" = 5 ] && grep -qxF "  $script --finish $wt --over-limit --assisted-by Claude:claude-test-1" <<<"$out"
+then ok "the hand-off's --finish line keeps --over-limit and --assisted-by"
+else bad "hand-off flags (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+git -C "$wt" push -q origin "HEAD:refs/heads/chore/template-$target_ref"
+reset_logs; run --finish "$wt" --over-limit --assisted-by "Claude:claude-test-1"
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && tail -1 "$work/gh.log.body" | grep -qxF "Assisted-by: Claude:claude-test-1"
+then ok "run as printed after the person's push, the over-limit update opens with its Assisted-by line"
+else bad "hand-off run as printed (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 run --apply "$(git -C "$BARE" rev-parse main)" --over-limit
 if [ "$rc" = 2 ]; then ok "--over-limit is for --finish only, after the count was read"; else bad "--over-limit with --apply (rc=$rc)"; fi
 
