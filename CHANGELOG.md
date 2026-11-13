@@ -32,19 +32,26 @@ pull requests and have no tag.
 ### Changed
 
 - `/plinth:guide` names the token step past the first merge whatever the
-  route, while the session's login is still an admin of the repository
-  (#922). "First pull request merged" was the route only with nothing else
-  open, so a ticket or an issue to triage hid its three pages for good.
-  `scripts/guide-state.sh` now reads `permissions.admin` for the current
-  login (`gh api repos/<owner>/<repo>`, no credential read) once a person's
-  pull request has merged, and prints a `token step: not done:` line naming
-  the three pages when it is `true`, nothing when `false`, and
-  `token step: not read (…)` when the read fails. The command stays the
-  route's; on the "First pull request merged" row itself, and before the
-  first merge, there is no read and no line.
-  The eval suite's offline `gh` answers that read for the five guide tasks
-  that have a merge (`guide`, `guide-busy`, `guide-reminder` and the two
-  `-plain` ones) with `admin: false`, so what they print is as before.
+  route, while the credential the session's `gh` uses can still administer
+  the repository (#922). "First pull request merged" was the route only with
+  nothing else open, so a ticket or an issue to triage hid its three pages
+  for good. `scripts/guide-state.sh` now reads, once a person's pull request
+  has merged, the reach of that credential as `/plinth:new-project` reads it
+  at creation: `permissions.admin` on the repository (the account's role,
+  which says `true` for the owner whatever the token), then, under `true`,
+  the scopes of a classic or OAuth token (`repo` or `public_repo` carry the
+  role), or for a fine-grained token a read that needs Administration (403 is
+  none). It prints `token step: not done:` naming the three pages when the
+  credential has administration, `token step: not verified:` when a
+  fine-grained token can read Administration and whether it can change it
+  cannot be read, nothing when the account is not an admin or the token has
+  no Administration, and `token step: not read (…)` when a read fails. No
+  token is read. The command stays the route's; on the "First pull request
+  merged" row itself, and before the first merge, there is no read and no
+  line. The eval suite's offline `gh` answers the first read for the five
+  guide tasks that have a merge (`guide`, `guide-busy`, `guide-reminder` and
+  the two `-plain` ones) with `admin: false`, so what they print is as
+  before.
 - The eval suite's guide tasks find what the step's tool leaves behind in one
   block of the report with the tool (a paragraph or a list, the text between
   blank lines), not only on one line (#908): a "What it leaves" line under the

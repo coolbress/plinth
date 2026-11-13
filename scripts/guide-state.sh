@@ -644,22 +644,46 @@ else
 fi
 # The token step (#922): "First pull request merged" is the route only while
 # nothing else is open, so past the first merge, whatever the route, a line
-# of its own names its three pages while the login this session works under
-# is an admin of the repository: the agent can still change the checks. The
-# read is the repository's permissions.admin for that login, no credential.
-# Not an admin: no line. Before the first merge the step is still ahead, and
-# on its own row the pages are already named: no read, no line.
+# of its own names its three pages while the credential gh uses in this
+# session can administer the repository: the agent can still change the
+# checks. Before the first merge the step is still ahead, and on its own row
+# the pages are already named: no read, no line.
+# permissions.admin is the account's role, not the token's reach (measured
+# 2026-09-29, docs/how-to/give-the-agent-a-token.md step 3): a fine-grained
+# token with Administration at No access answers true for the owner. So, as
+# new-project.sh reads it at creation: false is no line; under true, a classic
+# or OAuth token (X-OAuth-Scopes) has the reach when its scopes carry repo or
+# public_repo, and a fine-grained one (no such header) is asked a read that
+# needs Administration: 403 "not accessible" is none (the step is done, no
+# line), 200 is read access at least, whether it can write not readable.
+# Nothing else is read: no token, only these answers.
 if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ -z "${pages_named:-}" ]; then
+  cells="$(row "First pull request merged")" || exit 1
+  pages="$(sed -n 3p <<<"$cells")"; pages="${pages%%; *}"; step1="$(sed -n 1p <<<"$cells")"
+  reach=""; unread_why=""
   # On success the answer is the last line, whatever gh warned above it.
   if admin="$(cd "$top" && gh api "repos/$repo" --jq .permissions.admin 2>&1)"; then admin="$(tail -1 <<<"$admin")"; fi
-  if [ "$admin" = true ]; then
-    cells="$(row "First pull request merged")" || exit 1
-    pages="$(sed -n 3p <<<"$cells")"
-    echo "token step: not done: the login this session works under is an admin of $repo, so the agent can still change the checks; before going on, follow the three pages of $(sed -n 1p <<<"$cells"), in order: ${pages%%; *}"
-  elif [ "$admin" != false ]; then
-    if [ -z "$admin" ] || [ "$admin" = null ]; then admin="no permissions in the answer"; else admin="$(tail -1 <<<"$admin" | tr '\t' ' ')"; fi
-    echo "token step: not read (whether the login this session works under is an admin of $repo: $admin)"
-  fi
+  case "$admin" in
+    false) reach=none ;;
+    true)
+      if ! headers="$(cd "$top" && gh api -i user 2>/dev/null | tr -d '\r' | sed '/^$/,$d')"; then headers=""; fi
+      if scopes="$(awk 'tolower($1) == "x-oauth-scopes:" { sub(/^[^:]*: ?/, ""); print; found = 1; exit } END { exit !found }' <<<"$headers")"; then
+        if grep -qE '(^|,) *(repo|public_repo) *(,|$)' <<<"$scopes"; then reach="admin"
+        else unread_why="its scopes ($scopes) carry neither repo nor public_repo"; fi
+      elif probe="$(cd "$top" && gh api "repos/$repo/actions/permissions" --silent 2>&1)"; then reach="read"
+      else
+        case "$probe" in *"HTTP 403"*"not accessible"*|*"not accessible"*"HTTP 403"*) reach=none ;;
+          *) unread_why="$(tail -1 <<<"$probe" | tr '\t' ' ')" ;; esac
+      fi ;;
+    ""|null) unread_why="no permissions in the answer" ;;
+    *) unread_why="$(tail -1 <<<"$admin" | tr '\t' ' ')" ;;
+  esac
+  case "$reach" in
+    none) ;;
+    admin) echo "token step: not done: the credential gh uses in this session has administration of $repo (the account is its admin, and the token's scopes carry that role), so the agent can still change the checks; before going on, follow the three pages of $step1, in order: $pages" ;;
+    read) echo "token step: not verified: the account is an admin of $repo and the credential gh uses in this session reads its Administration settings; whether it can also change them cannot be read, and the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
+    *) echo "token step: not read (whether the credential gh uses in this session can administer $repo: $unread_why)" ;;
+  esac
 fi
 # The template behind (#904): step 9's line names the update; the step the
 # project is at stays the one above.

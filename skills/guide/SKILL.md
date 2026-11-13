@@ -137,12 +137,16 @@ What to keep to:
   check has run on it, which is something to look into before going on, not
   a broken check; say it in those plain words. One with `no checks yet; when
   its head was pushed was not read`: say both halves, and guess neither.
-- A `token step: not done:` line means the login this session works under is
-  still an admin of the repository, so the agent can still change the checks:
-  say so in part 4, after the command, and name the three pages it lists, in
-  that order, as the step to finish before going on. The command stays the
-  one `command:` prints. `token step: not read` means just that: say whether
-  the step is done was not read, and guess neither.
+- A `token step: not done:` line means the credential this session's `gh`
+  uses can still administer the repository, so the agent can still change
+  the checks: say so in part 4, after the command, and name the three pages
+  it lists, in that order, as the step to finish before going on. The command
+  stays the one `command:` prints. `token step: not verified:` means the
+  credential can read the repository's Administration settings and whether
+  it can change them could not be read: say both, and name the pages as the
+  way to make sure. `token step: not read` means just that: say whether the
+  step is done was not read, and guess neither. No `token step:` line is not
+  a claim that the step is done; say nothing about it.
 - A spec's line says what was cut from it (`tickets cut from it:`). With
   `none`, `command:` is step 3's `/to-tickets #N`, which cuts it into
   tickets; `not read` there is not none: say it was not read, and guess

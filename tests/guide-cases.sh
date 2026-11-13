@@ -66,6 +66,24 @@ if [ "$1" = api ] && [ "$2" = repos/o/r ]; then
   jq -n --argjson a "${MOCK_ADMIN:-false}" '{full_name: "o/r", permissions: {admin: $a, push: true}}' | jq -r "$jqf"
   exit
 fi
+# GET -i user: the credential's headers; X-OAuth-Scopes from MOCK_SCOPES
+# ("repo, read:org" unless said; "none" leaves it out, as a fine-grained
+# token's answer does).
+if [ "$1" = api ] && [ "$2" = -i ] && [ "${3:-}" = user ]; then
+  printf 'HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n'
+  [ "${MOCK_SCOPES:-repo, read:org}" = none ] || printf 'X-Oauth-Scopes: %s\r\n' "${MOCK_SCOPES:-repo, read:org}"
+  printf '\r\n{"login":"someone"}\n'
+  exit
+fi
+# GET repos/<o>/<r>/actions/permissions, which needs Administration: 403 as
+# GitHub answers a token without it, unless MOCK_PROBE is ok (200) or fail.
+if [ "$1" = api ] && [ "$2" = repos/o/r/actions/permissions ]; then
+  case "${MOCK_PROBE:-403}" in
+    ok) exit 0 ;;
+    fail) echo "HTTP 502: Bad Gateway" >&2; exit 1 ;;
+    *) echo "gh: Resource not accessible by personal access token (HTTP 403)" >&2; exit 1 ;;
+  esac
+fi
 # As gh before 2.94.0 does (#909): MOCK_OLD_GH refuses subIssuesSummary.
 case ",$fields," in *,subIssuesSummary,*) [ -n "${MOCK_OLD_GH:-}" ] && { echo "Unknown JSON field: \"subIssuesSummary\"" >&2; exit 1; } ;; esac
 # As GitHub does (#906): a list asking for each pull request's commits asks
@@ -477,12 +495,15 @@ put "$d/issues.json" "$(issue 14 'Renew the domain' ready-for-human)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 expect "a ready-for-human issue, one merge so far: the row after the first merge" "$d" "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "#14 [ready-for-human]"
 
-# The token step (#922): while the session's login is an admin of the
-# repository, a line of its own names the three pages, whatever the route;
-# the command stays the route's. Not an admin: no line. The read failing: a
-# line saying it was not read.
+# The token step (#922): while the credential gh uses in the session can
+# administer the repository, a line of its own names the three pages, whatever
+# the route; the command stays the route's. The account's admin role alone is
+# not that: a fine-grained token without Administration answers admin true
+# for the owner too, so its reach is read as new-project.sh reads it. Not an
+# admin, or no reach: no line. A read failing: a line saying it was not read.
 pages="$(row_tool 'First pull request merged')"; pages="${pages%%; *}"
-token_line="token step: not done: the login this session works under is an admin of o/r, so the agent can still change the checks; before going on, follow the three pages of First pull request merged (step 1), in order: $pages"
+token_line="token step: not done: the credential gh uses in this session has administration of o/r (the account is its admin, and the token's scopes carry that role), so the agent can still change the checks; before going on, follow the three pages of First pull request merged (step 1), in order: $pages"
+unread() { echo "token step: not read (whether the credential gh uses in this session can administer o/r: $1)"; }
 d="$(repo token)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
@@ -506,9 +527,19 @@ no_token() {
 put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
 MOCK_ADMIN=false no_token "token: a login that is not an admin: no line" "$d" "/implement #15"
 MOCK_ADMIN_FAIL=1 no_token "token: the read failing: a line saying it was not read" "$d" "/implement #15" \
-  "token step: not read (whether the login this session works under is an admin of o/r: HTTP 403: Resource not accessible by integration)"
+  "$(unread 'HTTP 403: Resource not accessible by integration')"
 MOCK_ADMIN=null no_token "token: an answer with no admin field: not read, said so" "$d" "/implement #15" \
-  "token step: not read (whether the login this session works under is an admin of o/r: no permissions in the answer)"
+  "$(unread 'no permissions in the answer')"
+# A fine-grained token (no X-OAuth-Scopes) on the owner's account: the
+# Administration read answers 403, so it has none and the step is done.
+MOCK_ADMIN=true MOCK_SCOPES=none no_token "token: an admin account's fine-grained token without Administration: no line" "$d" "/implement #15"
+MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=ok no_token "token: a fine-grained token that reads Administration: not verified, the pages named" "$d" "/implement #15" \
+  "token step: not verified: the account is an admin of o/r and the credential gh uses in this session reads its Administration settings; whether it can also change them cannot be read, and the agent's token should have Administration at No access, as the three pages of First pull request merged (step 1) say, in order: $pages"
+MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=fail no_token "token: the Administration read failing: not read" "$d" "/implement #15" \
+  "$(unread 'HTTP 502: Bad Gateway')"
+MOCK_ADMIN=true MOCK_SCOPES='read:org, gist' no_token "token: a classic token without the repo scope: not read, not taken as done" "$d" "/implement #15" \
+  "$(unread 'its scopes (read:org, gist) carry neither repo nor public_repo')"
+MOCK_ADMIN=true MOCK_SCOPES='public_repo' no_token "token: a classic token with public_repo: not done" "$d" "/implement #15" "$token_line"
 # The first merge's own row already names the pages: unchanged, no line.
 printf '[]' > "$d/issues.json"; put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 MOCK_ADMIN=true no_token "token: First pull request merged with nothing open: unchanged, no second line" "$d" "none: three pages to follow, in order (the tool cell)"
