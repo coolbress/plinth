@@ -118,6 +118,13 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:template-update` says that it does not serve GitLab yet, instead
+  of failing on a `gh` error (#924). When `origin` is at gitlab.com, a
+  `*.gitlab.com` or a `gitlab.*` host, or `.copier-answers.yml` says
+  `host: gitlab`, `scripts/template-update.sh` stops before it needs `gh` and
+  before any worktree. It points to step 2 of the project's
+  `docs/how-to/keep-this-project-current.md`. A GitLab under another name with
+  no `host:` answer is not recognised.
 - `/plinth:guide` no longer states the people's share of the newest 100
   merged pull requests as a total (#905): a project with 203 merged said 98.
   When `scripts/guide-state.sh` reads a full 100, the line says
