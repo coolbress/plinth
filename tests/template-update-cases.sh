@@ -216,6 +216,35 @@ if [ "$rc" != 0 ] && grep -q "not verified" <<<"$out" && [ ! -e "$work/uvx.log" 
 then ok "origin/main that differs from GitHub's own main is not a verified base: stops"
 else bad "unverified base (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
+# ── GitLab is not served yet (#924) ──────────────────────────────────────
+# Told by origin's URL, or by `host: gitlab` in the answers file (a GitLab
+# under another name). Either stops before gh or copier runs and before any
+# worktree, naming GitLab and the template's own update steps.
+gitlab_stops() { # <what> <args...>
+  local what="$1"; shift; reset_logs; run "$@"
+  if [ "$rc" = 1 ] && grep -q "GitLab" <<<"$out" && grep -qF "docs/how-to/keep-this-project-current.md" <<<"$out" \
+     && [ ! -s "$work/gh.log" ] && [ ! -e "$work/uvx.log" ] && [ ! -e "$(wt_of gitlab)" ] \
+     && ! git -C "$repo" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
+  then ok "$what: stops before gh, copier or a worktree, naming GitLab and the update steps"
+  else bad "$what (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+}
+fixture gitlab
+git -C "$repo" remote set-url origin git@gitlab.com:o/r.git
+gitlab_stops "the plan on an origin at gitlab.com (ssh)"
+gitlab_stops "--apply on an origin at gitlab.com (ssh)" --apply "$(git -C "$BARE" rev-parse main)"
+git -C "$repo" remote set-url origin https://gitlab.example.com/group/sub/r.git
+gitlab_stops "the plan on an origin at a self-hosted gitlab.* host (https)"
+git -C "$repo" remote set-url origin "$BARE"
+printf 'host: gitlab\n' >> "$repo/.copier-answers.yml"
+gitlab_stops "the plan on a checkout whose answers say host: gitlab"
+# A GitHub repository whose path only contains the word is still served.
+fixture gitlab-word; reset_logs
+git -C "$repo" remote set-url origin https://github.com/o/gitlab-mirror.git
+git -C "$repo" config url."$BARE".insteadOf https://github.com/o/gitlab-mirror.git
+run
+if [ "$rc" = 0 ] && ! grep -q "GitLab" <<<"$out"; then ok "a GitHub repository named gitlab-mirror is not taken for GitLab"
+else bad "gitlab in a GitHub path (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
 # ── clean update ────────────────────────────────────────────────────────
 fixture clean; reset_logs
 printf 'scratch\n' > "$repo/untracked-in-the-users-checkout"
@@ -1149,6 +1178,9 @@ else bad "the skill's fields"; fi
 if grep -qF "run the project's default review" <<<"$skill_text" && grep -qF 'replace the `Review:` line with what ran' <<<"$skill_text"
 then ok "the skill says the agent runs the default review and replaces the Review: line with what ran"
 else bad "the skill's review step"; fi
+if grep -qF 'GitLab is not served yet' <<<"$skill_text"
+then ok "the skill says GitLab is not served yet (#924)"
+else bad "the skill's GitLab line"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

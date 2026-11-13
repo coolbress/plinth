@@ -118,6 +118,13 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:template-update` says that it does not serve GitLab yet, instead
+  of failing on a `gh` error (#924). When `origin` is at gitlab.com, a
+  `*.gitlab.com` or a `gitlab.*` host, or `.copier-answers.yml` says
+  `host: gitlab`, `scripts/template-update.sh` stops before it needs `gh` and
+  before any worktree. It points to step 2 of the project's
+  `docs/how-to/keep-this-project-current.md`. A GitLab under another name with
+  no `host:` answer is not recognised.
 - The command `/plinth:new-project` prints for the admin-token path, when gh
   holds a fine-grained token, quotes every argument (#923): a `--description`
   or a code-of-conduct contact with a space or a quote in it read back as
