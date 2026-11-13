@@ -635,7 +635,7 @@ elif [ -n "$fallback" ]; then
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
 elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
-  say "First pull request merged" "none: three pages to follow, in order (the tool cell)"
+  say "First pull request merged" "none: three pages to follow, in order (the tool cell)"; pages_named=yes
 elif [ -n "$bot_prs" ]; then
   note="then Dependabot's pull requests ($(field 1 <<<"$bot_prs" | sed 's/^/#/' | paste -sd ' ' -)), one at a time, each merged on green on the person's word"
   say "Between pieces of work" "/plinth:floor-check"
@@ -649,13 +649,16 @@ fi
 # read is the repository's permissions.admin for that login, no credential.
 # Not an admin: no line. Before the first merge the step is still ahead, and
 # on its own row the pages are already named: no read, no line.
-if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$said_cmd" != "none: three pages to follow, in order (the tool cell)" ]; then
-  if admin="$(cd "$top" && gh api "repos/$repo" --jq .permissions.admin 2>&1)" && [ "$admin" = true ]; then
+if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ -z "${pages_named:-}" ]; then
+  # On success the answer is the last line, whatever gh warned above it.
+  if admin="$(cd "$top" && gh api "repos/$repo" --jq .permissions.admin 2>&1)"; then admin="$(tail -1 <<<"$admin")"; fi
+  if [ "$admin" = true ]; then
     cells="$(row "First pull request merged")" || exit 1
     pages="$(sed -n 3p <<<"$cells")"
     echo "token step: not done: the login this session works under is an admin of $repo, so the agent can still change the checks; before going on, follow the three pages of $(sed -n 1p <<<"$cells"), in order: ${pages%%; *}"
   elif [ "$admin" != false ]; then
-    echo "token step: not read (whether the login this session works under is an admin of $repo: $( [ -n "$admin" ] && tail -1 <<<"$admin" | tr '\t' ' ' || echo "no permissions in the answer"))"
+    if [ -z "$admin" ] || [ "$admin" = null ]; then admin="no permissions in the answer"; else admin="$(tail -1 <<<"$admin" | tr '\t' ' ')"; fi
+    echo "token step: not read (whether the login this session works under is an admin of $repo: $admin)"
   fi
 fi
 # The template behind (#904): step 9's line names the update; the step the

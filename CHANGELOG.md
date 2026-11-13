@@ -42,6 +42,9 @@ pull requests and have no tag.
   `token step: not read (…)` when the read fails. The command stays the
   route's; on the "First pull request merged" row itself, and before the
   first merge, there is no read and no line.
+  The eval suite's offline `gh` answers that read for the five guide tasks
+  that have a merge (`guide`, `guide-busy`, `guide-reminder` and the two
+  `-plain` ones) with `admin: false`, so what they print is as before.
 - The eval suite's guide tasks find what the step's tool leaves behind in one
   block of the report with the tool (a paragraph or a list, the text between
   blank lines), not only on one line (#908): a "What it leaves" line under the

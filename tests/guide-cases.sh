@@ -507,6 +507,8 @@ put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
 MOCK_ADMIN=false no_token "token: a login that is not an admin: no line" "$d" "/implement #15"
 MOCK_ADMIN_FAIL=1 no_token "token: the read failing: a line saying it was not read" "$d" "/implement #15" \
   "token step: not read (whether the login this session works under is an admin of o/r: HTTP 403: Resource not accessible by integration)"
+MOCK_ADMIN=null no_token "token: an answer with no admin field: not read, said so" "$d" "/implement #15" \
+  "token step: not read (whether the login this session works under is an admin of o/r: no permissions in the answer)"
 # The first merge's own row already names the pages: unchanged, no line.
 printf '[]' > "$d/issues.json"; put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 MOCK_ADMIN=true no_token "token: First pull request merged with nothing open: unchanged, no second line" "$d" "none: three pages to follow, in order (the tool cell)"
