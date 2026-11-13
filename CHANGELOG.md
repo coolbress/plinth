@@ -118,6 +118,12 @@ pull requests and have no tag.
 
 ### Fixed
 
+- The command `/plinth:new-project` prints for the admin-token path, when gh
+  holds a fine-grained token, quotes every argument (#923): a `--description`
+  or a code-of-conduct contact with a space or a quote in it read back as
+  several arguments when pasted. The command also sets `PLINTH_ASSISTED_BY`
+  when the run had it, so the first pull request of a run continued in a
+  separate terminal keeps its `Assisted-by` line.
 - `/plinth:guide` no longer states the people's share of the newest 100
   merged pull requests as a total (#905): a project with 203 merged said 98.
   When `scripts/guide-state.sh` reads a full 100, the line says
