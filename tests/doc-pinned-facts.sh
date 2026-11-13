@@ -7,7 +7,8 @@
 # tutorial's count of them) must be the ones new-project.sh stops without; the
 # skill counts the arsenal and the marketplace state must be the manifest's
 # lists; the squash-merge command must read the same in the three pages that
-# show it (#835). A doc that states no count passes; a wrong one fails with its file and line. The
+# show it (#835); step 5 of run-a-project.md must list the three questions,
+# and a line elsewhere that names them must say all three (#921). A doc that states no count passes; a wrong one fails with its file and line. The
 # checker then runs on copies with one wrong line each, so it cannot pass
 # without looking.
 set -uo pipefail
@@ -210,6 +211,36 @@ for rel in ("docs/tutorials/getting-started.md", "docs/how-to/cut-a-release.md")
         i = text.find("taste-skill@plinth")
         fail(f"{rel}:{text.count(chr(10), 0, i) + 1 if i >= 0 else 1} must link README.md#install-in-detail and not repeat the one-time commands")
 
+# 8. The three questions (#921): step 5 of run-a-project.md lists them under
+# that name, and every other line that names them says all three.
+# CHANGELOG.md is history and keeps the wording each release had.
+rap_rel = "docs/how-to/run-a-project.md"
+rap = (docs / rap_rel).read_text(encoding="utf-8")
+s5 = re.search(r"^### 5\..*?(?=^### 6\.)", rap, re.M | re.S)
+listed = []
+if s5:
+    lst = re.search(r"the three questions:\n\n((?:[ \t]*\d+\. .*\n)+)", s5.group(0))
+    if lst:
+        listed = [m.group(1) or m.group(2) for m in re.finditer(r'\d+\. (?:"([^"]+)"|(.*))', lst.group(1))]
+s5_lines = range(rap.count("\n", 0, s5.start()) + 1, rap.count("\n", 0, s5.end()) + 1) if s5 else range(0)
+if len(listed) != 3:
+    fail(f"{rap_rel}:{rap.count(chr(10), 0, s5.start()) + 1 if s5 else 1} step 5 lists {len(listed)} questions under \"the three questions:\", not three")
+named, before = 0, fails
+for path in sorted([*(p for p in docs.glob("*.md") if p.name != "CHANGELOG.md"), *(docs / "docs").rglob("*.md"), *(docs / "skills").rglob("*.md")]):
+    rel = path.relative_to(docs).as_posix()
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if "three questions" not in line.lower() or (rel == rap_rel and n in s5_lines):
+            continue
+        named += 1
+        if len(listed) != 3:
+            fail(f"{rel}:{n} names the three questions; step 5 does not list three to say")
+            continue
+        missing = [q for q in listed if q not in line]
+        if missing:
+            fail(f"{rel}:{n} names the three questions and does not say " + "; ".join(f'"{q}"' for q in missing))
+if fails == before:
+    print(f"  PASS  the three questions: listed in step 5, said on all {named} line(s) that name them")
+
 print(f"  PASS  {stated} stated check count(s) read; expected "
       + ", ".join(f"{a or 'other'} {n}" for a, n in want.items()) if not fails else
       f"-- {fails} failed")
@@ -286,4 +317,10 @@ copy; printf '\nclaude plugin update taste-skill@plinth\n' >>"$tmp/docs/docs/how
 expect_fail "a one-time command repeated outside the README" docs/how-to/cut-a-release.md
 copy; sed -i.bak 's/--squash --match-head-commit <sha> --body/--squash --body/' "$tmp/docs/docs/how-to/run-a-project.md"
 expect_fail_at "a squash-merge command that differs" "docs/how-to/run-a-project.md:$(tool_line 'gh pr merge <n> --squash' docs/how-to/run-a-project.md)"
+copy; sed -i.bak '/^  2\. "Can I see it?"$/d' "$tmp/docs/docs/how-to/run-a-project.md"
+expect_fail_at "a step 5 that lists two of the three questions" "docs/how-to/run-a-project.md:$(grep -n -m1 '^### 5\.' "$tmp/docs/docs/how-to/run-a-project.md" | cut -d: -f1)"
+copy; sed -i.bak 's/"Can I see it?", "What did the reviewer say?" |/"Can I see it?" |/' "$tmp/docs/skills/arsenal/SKILL.md"
+expect_fail_at "an arsenal cell that names the three questions and says two" "skills/arsenal/SKILL.md:$(tool_line '"Can I see it?" |' skills/arsenal/SKILL.md)"
+copy; printf '\nThen ask the three questions.\n' >>"$tmp/docs/skills/guide/SKILL.md"
+expect_fail "a line that names the three questions and says none" skills/guide/SKILL.md
 exit "$status"

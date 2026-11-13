@@ -160,9 +160,13 @@ see these: guidance only.
 - **Where you are:** a pull request with its checks running.
 - **Next:** wait for the required checks: nine on GitHub (ten for
   `backend` or `data-ml`, twelve for `web`), with the code-scan rule beside
-  them. Then ask: "What shows it
-  works, and what did you not check?", "Can I see it?", "What did the reviewer
-  say?". The reviewer, by default, is a fresh-context review the agent ran
+  them. Then ask the three questions:
+
+  1. "What shows it works, and what did you not check?"
+  2. "Can I see it?"
+  3. "What did the reviewer say?"
+
+  The reviewer, by default, is a fresh-context review the agent ran
   before opening the pull request: a new subagent given only the diff, the
   issue's acceptance criteria and the repository's Code Review Rules, never
   the conversation that wrote the change. In one study, a model judging code
