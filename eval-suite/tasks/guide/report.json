@@ -2,6 +2,6 @@
   "tool": {
     "step": "An idea in your own words (step 2): /grilling",
     "types": "/grilling",
-    "leaves": "(?:/grilling)[^\\n]*(?:\\bissues?\\b|이슈)|(?:\\bissues?\\b|이슈)[^\\n]*(?:/grilling)"
+    "leaves": "^(?=[\\s\\S]*/grilling)(?=[\\s\\S]*(?:\\bissues?\\b|이슈))"
   }
 }

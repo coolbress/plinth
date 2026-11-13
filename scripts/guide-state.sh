@@ -7,10 +7,14 @@
 # It says whether the template tag and the plinth pin are behind, from
 # floor-check's own reads (#904). For an open spec it reads whether any
 # ticket was cut from it, and routes one with none to step 3 (#909). It picks
-# the ticket /implement takes by the rules below, and says why (#910).
+# the ticket /implement takes by the rules below, and says why (#910). It
+# picks how much of the way the guide explains (#908): `mode: full` before a
+# person's pull request has merged, when asked for the map, or when the state
+# was not read; `mode: focused` otherwise, which lists only what is worth
+# doing now of what started off.
 # Read-only: it runs git and gh reads, nothing else.
 #
-#   guide-state.sh [<dir>]     # default: the current directory
+#   guide-state.sh [<dir>] [map]   # default: the current directory; map: the whole way
 #
 # The rows are copied from skills/arsenal/SKILL.md as they stand, never from
 # a list of its own, so the guide cannot name a step or tool the table does
@@ -19,19 +23,24 @@
 set -uo pipefail
 plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 arsenal="$plugin/skills/arsenal/SKILL.md"
-dir="${1:-.}"
+dir="."; map=""
+for a in "$@"; do
+  case "$a" in map) map=yes ;; *) dir="$a" ;; esac
+done
 
 # The table names files under ${CLAUDE_PLUGIN_ROOT}; the person gets the path.
 table="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" |
   awk -v r="$plugin" '{ gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r); print }')"
 [ -n "$table" ] || { echo "guide-state: no table under 'Where you are, and what to do next' in $arsenal" >&2; exit 1; }
 
-# row <start of the "Where you are" cell>: the row's three cells, one per line.
+# row <start of the "Where you are" cell>: the row's six cells, one per line:
+# where, next action, tool, how to use it, what it leaves, then.
 row() {
   local r
   r="$(printf '%s\n' "$table" | awk -v p="| $1" 'index($0, p) == 1' | head -1)"
   [ -n "$r" ] || { echo "guide-state: the arsenal's table has no row starting '$1'" >&2; return 1; }
-  printf '%s\n' "$r" | awk -F ' \\| ' '{ sub(/^\| /, "", $1); sub(/ \|$/, "", $3); print $1; print $2; print $3 }'
+  printf '%s\n' "$r" | awk -F ' \\| ' 'NF != 6 { exit 1 } { sub(/^\| /, "", $1); sub(/ \|$/, "", $6); for (i = 1; i <= 6; i++) print $i }' ||
+    { echo "guide-state: the arsenal's row '$1' does not have six cells" >&2; return 1; }
 }
 
 # why_line <row start> <words>: "why:", the row's name and its tool cell from
@@ -52,6 +61,8 @@ whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
 
 # say <row start> <command> [<then: row start>]: the verdict block. The
 # command is typed as printed; $before (typed first) and $note go with it.
+# `then:` is the step after this one (#908): the row the table's Then cell
+# names (`-` there is none), unless the state names another.
 before=""; note=""; said_cmd=""
 say() {
   local cells after
@@ -63,13 +74,22 @@ say() {
   echo "command: $2"
   said_cmd="$2"
   [ -z "$note" ] || echo "note: $note"
-  if [ -n "${3:-}" ]; then
-    after="$(row "$3")" || exit 1
+  after="${3:-$(sed -n 6p <<<"$cells")}"
+  if [ "$after" != - ]; then
+    after="$(row "$after")" || exit 1
     echo "then: $(sed -n 1p <<<"$after") -> $(sed -n 3p <<<"$after")"
   fi
 }
 
+# How much of the way the guide explains (#908), by the state alone: full
+# before a person's pull request has merged, on `map`, or when the state was
+# not read; focused otherwise. set_mode <full|focused> <reason>; map wins.
+mode=full; mode_why="no pull request by a person has merged yet"
+set_mode() { if [ -n "$map" ]; then mode=full; mode_why="asked for the whole way (map)"; else mode="$1"; mode_why="$2"; fi; }
+set_mode "$mode" "$mode_why"
+
 finish() {
+  echo "mode: $mode ($mode_why)"
   echo
   printf '%s\n' "$whys"
   echo
@@ -82,6 +102,7 @@ echo "plinth guide state (read-only)"
 
 if ! git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
   echo "repository: none here (not a git checkout)"
+  set_mode full "no repository yet, so nothing has merged"
   echo
   say "No repository yet" "/plinth:new-project <owner>/<name>"
   finish
@@ -99,6 +120,7 @@ src="$(answer _src_path)"
 if [ ! -f "$answers" ] || [ "$src" != "gh:$template_repo" ]; then
   if [ -f "$answers" ]; then echo "made by plinth: no (.copier-answers.yml names ${src:-no} template, not gh:$template_repo)"
   else echo "made by plinth: no (no .copier-answers.yml)"; fi
+  set_mode full "the state was not read: pull requests are read only on a repository plinth made"
   echo
   say "A repository plinth did not make" "/plinth:floor-check"
   finish
@@ -126,26 +148,42 @@ behind_lines=""
 if [ "$(answer host)" = gitlab ]; then
   behind
   echo "repository: GitLab; the guide reads GitHub only, so issues and merge requests were not read"
+  set_mode full "the state was not read"
   echo
   echo "where: not read"
   finish
 fi
 
 # What the project started with off and does not have yet (#763), from the
-# one list new-project.sh prints at creation.
+# one list new-project.sh prints at creation. Said once the mode is known
+# (#908): in full, every item; in focused, how many, and only the ones whose
+# line says to do them now.
+off_said=""
 if off="$("$plugin/scripts/off-by-default.sh" "${archetype:-none}" "$top" 2>&1)"; then
   if [ -n "$off" ]; then
-    echo "off by default:"; sed 's/^/  /' <<<"$off"
-    if rule="$("$plugin/scripts/off-by-default.sh" --why 2>&1)"; then echo "  why: $rule"
-    else echo "  why: not read ($(head -1 <<<"$rule"))"; fi
-  else echo "off by default: none left off"; fi
+    if rule="$("$plugin/scripts/off-by-default.sh" --why 2>&1)"; then off_why="$rule"
+    else off_why="not read ($(head -1 <<<"$rule"))"; fi
+  else off_said="none left off"; fi
 else
-  echo "off by default: not read ($(head -1 <<<"$off"))"
+  off_said="not read ($(head -1 <<<"$off"))"
 fi
+say_off() {
+  local now
+  if [ -n "$off_said" ]; then echo "off by default: $off_said"; return; fi
+  if [ "$mode" = full ]; then
+    echo "off by default:"; sed 's/^/  /' <<<"$off"
+  else
+    now="$(grep '^to do, if not done yet' <<<"$off")"
+    echo "off by default: $(grep -c . <<<"$off") left off; /plinth:guide map names each"
+    [ -z "$now" ] || sed 's/^/  /' <<<"$now"
+  fi
+  echo "  why: $off_why"
+}
 
 if ! repo="$(cd "$top" && gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
   echo "repository: not read ($(head -1 <<<"$repo"))"
   behind --no-network
+  set_mode full "the state was not read"; say_off
   echo
   echo "where: not read"
   finish
@@ -216,6 +254,7 @@ elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json numb
 fi
 if [ -n "$failed" ]; then
   echo "issues and pull requests: not read ($failed)"
+  set_mode full "the state was not read"; say_off
   echo
   echo "where: not read"
   finish
@@ -502,6 +541,10 @@ if [ -n "$broken" ]; then
     echo "comments by people on pull request #$n: not read ($(tail -1 <<<"$said"))"
   fi
 fi
+if [ "$people_merged" -gt 0 ]; then set_mode focused "a pull request by a person has merged"
+elif [ -n "$past_first" ]; then set_mode focused "past the first merge: more merged pull requests than the $read read"
+else set_mode full "no pull request by a person has merged yet"; fi
+say_off
 echo
 
 pin_behind="$(sed -nE 's/^plinth pin: [^,]+, behind (v[0-9.]+), .*/\1/p' <<<"$behind_lines")"
@@ -525,10 +568,11 @@ if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   first="$(awk -F '\t' 'index($6, "docs: first pull request") == 1' <<<"$people_prs" | head -1)"
   [ -n "$first" ] || first="$(head -1 <<<"$people_prs")"
   if [ -n "$first" ]; then
+    # Merging is the person's word for that pull request (#908), as for any
+    # other: the agent squash-merges it then, at the head the checks ran on.
     n="$(field 1 <<<"$first")"; sha="$(field 5 <<<"$first")"
-    say "Repository made, its first pull request open" \
-      "body=\"\$(gh pr view $n --json body --jq .body)\" && gh pr merge $n --squash --match-head-commit $sha --body \"\$body\"" \
-      "First pull request merged"
+    note="pull request #$n is the project's first ($(field 9 <<<"$first")); once every check is green, saying merge #$n is the person's word for it: the agent squash-merges it at head ${sha:0:7}, where the checks ran, and brings main up to date in this folder"
+    say "Repository made, its first pull request open" "merge #$n"
   else
     say "Repository made, its first pull request open" "none: no pull request is open; open the repository's pull requests page"
   fi
@@ -539,20 +583,22 @@ elif [ -n "$people_prs" ]; then
     # the newer plinth comes first, then this pull request's checks again.
     n="$(field 1 <<<"$broken")"
     raise="$(awk -F '\t' '$9 == "plinth"' <<<"$bot_prs" | head -1)"
-    again="after it merges, pull request #$n's checks are run again on the newer plinth (\`gh pr update-branch $n\` brings main into it and starts them), and only a check still failing then is diagnosed"
+    again="after it merges, pull request #$n's checks are run again on the newer plinth (the agent brings main into it with gh pr update-branch $n, which starts them), and only a check still failing then is diagnosed"
     [ -z "$own_failing" ] || again="$again; $own_failing: the project's own, where the agent fixes the code, not the check"
     if [ -n "$raise" ] && [ "$(field 4 <<<"$raise")" = pass ]; then
       note="pull request #$n's failing check ($plinth_failing) is a plinth job, and the project calls a plinth older than $pin_behind, the latest release; Dependabot's pull request #$(field 1 <<<"$raise") raises the pin and its checks are green; merging it is the person's word for that pull request; $again"
-      say "Green, and seen working" "merge #$(field 1 <<<"$raise")"
+      say "Green, and seen working" "merge #$(field 1 <<<"$raise")" "A pull request with checks running"
     elif howto="$(pin_howto)"; then
       note="pull request #$n's failing check ($plinth_failing) is a plinth job, and the project calls a plinth older than $pin_behind, the latest release; "
       if [ -n "$raise" ]; then note="${note}Dependabot's pull request #$(field 1 <<<"$raise") raises the pin, its checks $(field 4 <<<"$raise"): it is merged once they are green; "
       else note="${note}no Dependabot pull request raising the pin is open; "; fi
-      note="${note}from $howto_file, \"$(sed -n 1p <<<"$howto")\": $(sed -n 3p <<<"$howto"); $again"
-      say "Between pieces of work" "$(sed -n 2p <<<"$howto")"
+      # The how-to's command runs in a terminal, not in the session (#908):
+      # it goes in the note; /plinth:floor-check names the pin to raise.
+      note="${note}from $howto_file, \"$(sed -n 1p <<<"$howto")\": in a terminal, $(sed -n 2p <<<"$howto"); $(sed -n 3p <<<"$howto"); $again"
+      say "Between pieces of work" "/plinth:floor-check" "A pull request with checks running"
     else
       note="pull request #$n's failing check ($plinth_failing) is a plinth job, and the project calls a plinth older than $pin_behind, the latest release; $howto_file has no step that raises the pin ($howto), so /plinth:floor-check names the pin to raise; $again"
-      say "Something broke" "/plinth:floor-check"
+      say "Something broke" "/plinth:floor-check" "A pull request with checks running"
     fi
   elif [ -n "$broken" ] && [ -n "$plinth_failing" ]; then
     # A plinth job (#903): nothing in the pull request may need to change.
@@ -571,7 +617,7 @@ elif [ -n "$people_prs" ]; then
       "checks not started yet"*) note="pull request #$n, $checks; look again in a minute, then /run once they are green" ;;
       *) note="pull request #$n, $checks; /run once they are green" ;;
     esac
-    say "A pull request with checks running" "/run" "Green, and seen working"
+    say "A pull request with checks running" "/run"
   fi
 elif [ -n "$pick" ]; then
   before="/clear"; say "A ticket ready" "/implement #$pick"
@@ -589,9 +635,10 @@ elif [ -n "$fallback" ]; then
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
 elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
-  say "First pull request merged" "none: three pages to follow, in order (the tool cell)" "An idea in your own words"
+  say "First pull request merged" "none: three pages to follow, in order (the tool cell)"
 elif [ -n "$bot_prs" ]; then
-  say "Between pieces of work" "/plinth:floor-check (then the Dependabot pull requests, one at a time, on green)"
+  note="then Dependabot's pull requests ($(field 1 <<<"$bot_prs" | sed 's/^/#/' | paste -sd ' ' -)), one at a time, each merged on green on the person's word"
+  say "Between pieces of work" "/plinth:floor-check"
 else
   say "An idea in your own words" "/grilling"
 fi

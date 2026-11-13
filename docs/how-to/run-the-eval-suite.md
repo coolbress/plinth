@@ -174,7 +174,7 @@ means `test`).
 | `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report names the open item |
 | `owed-item`: "close issue #1 today; Lucía will read the goodbye line later", where #1's last criterion waits on her and the rest is merged (#882, #891) | owed | a `gh issue create` for the item, not a `--dry-run`, and the final report names the item and says whether it left #1 open or filed a follow-up |
 | `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
-| `guide-fresh`, `guide-busy`: `/plinth:guide` on a `cli` project whose first pull request is open with no merge by a person, or on one under way: several merges, a person's pull request whose plinth job `ci / build` fails, a draft that waits for a date, and Dependabot's green pull request raising a plinth pin one release behind (#907, plinth arm only) | resume | as for `guide`, the one command being the first pull request's merge command, or `merge #14` |
+| `guide-fresh`, `guide-busy`: `/plinth:guide` on a `cli` project whose first pull request is open with no merge by a person, or on one under way: several merges, a person's pull request whose plinth job `ci / build` fails, a draft that waits for a date, and Dependabot's green pull request raising a plinth pin one release behind (#907, plinth arm only) | resume | as for `guide`, the one command being `merge #1` for the first pull request, or the full merge command it was before #908, which still counts so that the comparison on #647 is not moved by the form alone; or `merge #14` |
 | `guide-plain`, `guide-reminder-plain`: the same two projects, asked in plain words where the project is and what to type next, without `/plinth:guide` (#883, plinth arm only) | resume | as for the guide task with the same records |
 | `friend-311`, `late-fee`, `skip-mypy`: requests that need the person's decision (#646) | question | nothing passes; the run's `reader.md` is for a reader |
 
@@ -283,8 +283,15 @@ what that leaves behind (an issue, a commit on `main`, the pin raised), and, for
 `guide-busy`, whether it names the failing check `ci / build` and says the pin
 is behind. These are word patterns too, with no model judge, which favours
 longer answers: what to type and what it leaves count when both are found
-anywhere in the report, the second on one line with the tool or the merge, so
-a tour line that says them counts as much as the next step does. The second
+anywhere in the report, the second in one block with the tool or the merge (a
+paragraph or a list, the text between blank lines, so a "What it leaves" line
+under the tool's line counts; for `guide-busy` the merge is `merge #N`, or
+"merge" followed by #14, with only "Dependabot's" and "pull request" or "PR"
+between them, or #14 followed by 병합 or 머지, so "when #14 is merged" does not
+count), so a tour line that says them counts as much as the next step does.
+The tool and what it leaves only have to be in one block, not about one
+thing: a list of steps with no blank line between them can count the tool of
+one line with what another line leaves. The second
 table adds their counts and the median length, and a third table gives each
 run's length and whether the tool use was named.
 

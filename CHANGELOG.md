@@ -31,6 +31,37 @@ pull requests and have no tag.
 
 ### Changed
 
+- The eval suite's guide tasks find what the step's tool leaves behind in one
+  block of the report with the tool (a paragraph or a list, the text between
+  blank lines), not only on one line (#908): a "What it leaves" line under the
+  tool's line now counts. For `guide-busy` the merge is `merge #N`, "merge"
+  followed by #14 (with only "Dependabot's" and "pull request" or "PR" between),
+  or #14 followed by 병합 or 머지, no longer any `#14`, so "the change that could
+  merge is #14" beside `main` does not count.
+- `/plinth:guide` explains the tools of the step the project is at and the
+  next one in depth, and the rest in a line each, with the whole way before
+  the first merge or on request (#908). `scripts/guide-state.sh` prints
+  `mode: full` or `mode: focused` with its reason: `full` before a person's
+  pull request has merged, when the state was not read, or when asked with
+  `/plinth:guide map` (the script takes `map` after the folder); `focused`
+  otherwise. It prints `then:`, the step after this one, wherever it names a
+  step, from a new Then column. The arsenal's "Where you are, and what to do next"
+  table gains three columns the guide reads for that depth: How to use it
+  (when, and what to type: the command the guide prints), It leaves, and
+  Then. In `focused`, the off-by-default lines are a count and only the
+  steps to do now; in `full`, every item. The printed command is always what
+  the person types into the session, a command of the table or `merge #N`:
+  the first pull request is now `merge #1` (it was the full `gh pr merge`
+  line), a project with only Dependabot's pull requests open gets
+  `/plinth:floor-check` with the pull requests in its note, and a pin behind
+  with no Dependabot pull request gets `/plinth:floor-check` with the
+  project's how-to's terminal command in its note (it was that command).
+  `/plinth:arsenal` and `/plinth:guide` each name the other in their
+  description and first lines: the catalog answers which tool for a task
+  without reading the project; the guide reads the project. The eval task
+  `guide-fresh` takes `merge #1` in its one code block, and still the full
+  merge command it expected before, so #647's comparison counts one command
+  either way.
 - `/plinth:guide` no longer names "Something broke" from the check colour
   alone (#903). For the pull request it names, `scripts/guide-state.sh` prints
   each failing check, whether it is a plinth job (a job of a workflow the

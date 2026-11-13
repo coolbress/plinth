@@ -259,9 +259,14 @@ case "$action" in
   guide-money) final='See release.yml.\nThe uptime monitor costs money.\n\n```\n/grilling\n```' ;;
   guide-free) final='See release.yml.\nThe uptime monitor and error tracker are not paid: each has a free plan, so you need no paid plan.\n\n```\n/grilling\n```' ;;
   # The fresh and busy guide tasks (#907): reports that name the step's tool use, and that do not.
-  fresh-right) final='On a version tag you push, a cli project publishes to PyPI: see .github/workflows/release.yml.\nAn uptime monitor and an error tracker have a free plan each.\n\nNext, merge your first pull request. Squash and merge leaves one commit on main:\n\n```\nbody=\"$(gh pr view 1 --json body --jq .body)\" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body \"$body\"\n```' ;;
+  fresh-right) final='On a version tag you push, a cli project publishes to PyPI: see .github/workflows/release.yml.\nAn uptime monitor and an error tracker have a free plan each.\n\nNext, merge your first pull request. Squash and merge leaves one commit on main:\n\n```\nmerge #1\n```' ;;
   busy-right) final='Releases go to PyPI on a tag: release.yml.\nUptime monitors have a free plan.\n\nci / build fails on #12, and it is a plinth job.\nThe plinth pin is behind v2.29.0.\nSay merge #14: it leaves the newer pin on main.\n\n```\nmerge #14\n```' ;;
   busy-bare) final='Releases go to PyPI on a tag: release.yml.\n\n```\nmerge #14\n```' ;;
+  # #908: the tool and what it leaves on lines of their own, in one block; and apart, in two blocks.
+  guide-split) final='See release.yml.\n\n**Step 2: an idea in your own words.**\n- **When to use it:** before any code. Type `/grilling` with your idea.\n- **It leaves:** an issue that says what done means.\n\n```\n/grilling\n```' ;;
+  guide-apart) final='See release.yml.\n\nType `/grilling` with your idea.\n\nIt leaves an issue that says what done means.\n\n```\n/grilling\n```' ;;
+  busy-split) final='ci / build fails on #12.\n\n**This step (merge, step 6).**\nYou say `merge #N`, and I never merge on my own.\nThe merge leaves one squashed commit on `main`.\n\n```\nmerge #14\n```' ;;
+  busy-apart) final='The one change that could merge is #14, and #12 waits on `main`.\n\nYou say merge for one pull request.\nThe merge leaves one squashed commit.\n\n```\nmerge #14\n```' ;;
   guide-missed) rm -f "$(dirname "$ws")/bin/calls.log"; bashcmd="bash /plugin/scripts/guide-state.sh ."
     final='I could not read the repository.\n\n```\ngh auth login\n```' ;;
   reminder-right) final='Publishes on a tag: release.yml.\n\n```\n/plinth:template-update\n```' ;;
@@ -643,10 +648,15 @@ sys.exit(0 if re.search(pattern, "Type this:\n\n```\n" + sys.argv[2] + "\n```\n"
 }
 gs="$(state_on "$busy_repo" guide-fresh)"
 cmd="$(sed -n 's/^command: //p' <<<"$gs")"
-want='body="$(gh pr view 1 --json body --jq .body)" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body "$body"'
+want='merge #1'
 check "guide-fresh: no merge by a person routes to merging the first pull request, the pin at the latest release" \
   'grep -qx "first pull request merged: no (0 merged by people)" <<<"$gs" && grep -q "^where: Repository made, its first pull request open" <<<"$gs" && grep -qx "plinth pin: cecffe1f52c2911558ece2b978c759c9203e1f63, at v2.28.0, the latest plinth release" <<<"$gs" && [ "$cmd" = "$want" ]' "$gs"
 check "guide-fresh: its expected command, in one code block, passes its own pattern" 'block_passes guide-fresh "$cmd"' "$cmd"
+# #647's reading rule counts one code block with the command; the form before
+# #908 (the full merge line) still counts, so the form alone moves no number.
+old_form='body="$(gh pr view 1 --json body --jq .body)" && gh pr merge 1 --squash --match-head-commit 4b825dc642cb6eb9a060e54bf8d69288fbee4904 --body "$body"'
+check "guide-fresh: the merge line from before #908, in one code block, passes too" 'block_passes guide-fresh "$old_form"' "$old_form"
+check "must not pass: guide-fresh on another pull request's merge" '! block_passes guide-fresh "merge #12"' ""
 gs="$(state_on "$busy_repo" guide-busy)"
 cmd="$(sed -n 's/^command: //p' <<<"$gs")"
 check "guide-busy: a failing plinth job with the pin behind routes to Dependabot's green pin raise, not diagnose" \
@@ -716,6 +726,18 @@ check "a task with no report.json still records its report's length, and no tool
   '[ "$(kg gq guide-reminder-plain 1 "r[\"report\"][\"lines\"], r[\"report\"][\"tool_use_named\"]")" = "(4, None)" ] && ! grep -q "| guide-reminder-plain · plinth 1 |" "$tmp/gq/summary.md"' "$(kg gq guide-reminder-plain 1 'r["report"]'; cat "$tmp/gq/summary.md")"
 check "guide's canned right report names /grilling but not the issue it leaves: the tool use is not named" \
   '[ "$(kg gd guide 1 "r[\"report\"][\"tool_use\"][\"types\"], r[\"report\"][\"tool_use\"][\"leaves\"], r[\"pass\"]")" = "(True, False, True)" ]' "$(kg gd guide 1 'r["report"]')"
+: > "$log"
+EVAL_STUB_ACTIONS=guide-split,guide-apart suite --config-dir "$tmp/cfg" --task guide --runs 2 --out "$tmp/gs"
+EVAL_STUB_ACTIONS=busy-split,busy-apart suite --config-dir "$tmp/cfg" --task guide-busy --runs 2 --out "$tmp/bs"
+tu() { kg "$1" "$2" "$3" 'r["report"]["tool_use"]["types"], r["report"]["tool_use"]["leaves"], r["report"]["tool_use_named"]'; }
+check "the tool and what it leaves on lines of their own, in one block, are named (#908's guide run 3)" \
+  '[ "$(tu gs guide 1)" = "(True, True, True)" ]' "$(kg gs guide 1 'r["report"]')"
+check "must not pass: /grilling and the issue it leaves in two blocks are not named" \
+  '[ "$(tu gs guide 2)" = "(True, False, False)" ]' "$(kg gs guide 2 'r["report"]')"
+check "merge #N and the commit on main it leaves, in one block, are named (#908's guide-busy run 1)" \
+  '[ "$(tu bs guide-busy 1)" = "(True, True, True)" ]' "$(kg bs guide-busy 1 'r["report"]')"
+check "must not pass: #14 said as what could merge beside main, and the commit in another block without #14 or merge #N, are not named" \
+  '[ "$(tu bs guide-busy 2)" = "(True, False, False)" ]' "$(kg bs guide-busy 2 'r["report"]')"
 
 # --- a question task has no pass; it records the questions
 : > "$log"
