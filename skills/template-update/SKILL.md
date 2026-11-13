@@ -13,6 +13,9 @@ skill runs it and relays what it says, then runs the project's review on the
 pull request it opened. The command is the checker's own line,
 read from it, never written out here or by you.
 
+GitLab is not served yet: on a GitLab checkout the script stops before any
+work and names the project's own update steps; relay that and stop.
+
 ## 1. The plan
 
 From the repository's own checkout:

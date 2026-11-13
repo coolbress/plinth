@@ -74,6 +74,28 @@ done
 [ "$over_limit" = no ] || [ "$mode" = finish ] || usage
 pin="${pin:-live}"
 
+# GitLab is not served yet (#924): everything below reads the repository
+# with gh. Told by origin's URL as configured (gitlab.com, *.gitlab.com, or a
+# gitlab.* host) or by `host: gitlab` in the answers file, for a GitLab under
+# another name. Stops before gh is needed at all, and before any worktree.
+on_gitlab() {
+  local top url host
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  sed -nE "s/^host: *['\"]?([^'\" ]*).*/\1/p" "$top/.copier-answers.yml" 2>/dev/null | grep -qx gitlab && return 0
+  url="$(git -C "$top" config --get remote.origin.url 2>/dev/null)" || return 1
+  case "$url" in
+    *://*) host="${url#*://}"; host="${host%%/*}"; host="${host##*@}"; host="${host%%:*}" ;;
+    [!/]*:*) host="${url%%:*}"; case "$host" in */*) return 1 ;; esac; host="${host##*@}" ;;
+    *) return 1 ;;
+  esac
+  host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
+  case "$host" in gitlab.com | *.gitlab.com | gitlab.*) return 0 ;; esac
+  return 1
+}
+on_gitlab && die "this repository is on GitLab, which /plinth:template-update does not serve yet: nothing was changed.
+  Follow step 2, \"Update the template\", of docs/how-to/keep-this-project-current.md: /plinth:floor-check
+  prints the copier update line to run on a new branch, then open a merge request."
+
 for tool in git gh python3 uvx; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"
 done

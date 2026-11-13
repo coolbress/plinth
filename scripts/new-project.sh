@@ -250,6 +250,16 @@ else
   # then lack Members and fail step 3, so the stop names it (#286 review).
   kind_note=""
   [ -n "$kind_now" ] || kind_note="the type of $owner could not be read: if it is an organization, also set Organization permissions Members: read"
+  # The command is pasted into another shell: each argument quoted, so a
+  # description or contact with a space or a quote reads back as one, and the
+  # Assisted-by the skill set carried, so the run there keeps it (#923).
+  # Single quotes, not printf %q: macOS's bash 3.2 %q escapes some bytes of
+  # Hangul and prints the rest raw, and the line no longer shows as text.
+  sq() { case "$1" in ''|*[!A-Za-z0-9._/=:@%+,-]*) local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s" ;; *) printf '%s' "$1" ;; esac; }
+  admin_args=""
+  for a in "$@"; do admin_args="$admin_args${admin_args:+ }$(sq "$a")"; done
+  admin_env=""
+  [ -z "$assisted_by" ] || admin_env="PLINTH_ASSISTED_BY=$assisted_by "
   stop "gh is using a fine-grained token; whether it reaches a repository that does not exist yet cannot be read" \
     "  fix, either of two. The browser login is shorter, but its token is scoped repo across the account rather than" \
     "  to selected repositories; the admin-token path keeps the fine-grained token's narrow reach." \
@@ -261,8 +271,8 @@ else
     "  2. run the door with an admin token, typed at a prompt (never on the command line)," \
     "     in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
     "    P=$(printf '%q' "$here")" \
-    "    \"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" \\" \
-    "      $*" \
+    "    $admin_env\"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" \\" \
+    "      $admin_args" \
     "     the token, fine-grained, pre-filled for $owner (7 days; its${kind_note:+ repository} permissions already set):" \
     "       $token_link" \
     ${kind_note:+"     $kind_note"} \
