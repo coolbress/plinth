@@ -156,6 +156,16 @@ the plan; then show the plan again and ask again.
   base. The other choice is `--finish <worktree> --over-limit`: the pull
   request opens as it is, and `ci / diff-size` stays red on it until it is
   split, since an approval does not lift the size limit (#795).
+- **Exit 5, the push is the person's**: GitHub refused the branch because
+  it changes `.github/workflows/` and the credential the agent pushes with
+  may not (a token without the workflow permission, as
+  `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md` recommends).
+  This is not a retry: `--finish` from here is refused the same way. The
+  commit is ready. Show the user the `git push` line the script printed and
+  ask them to run it from a separate terminal with a credential that has the
+  permission; do not run it yourself or look for another credential. When
+  they say it is pushed, run the printed `--finish` line once; it finds the
+  branch on origin at the commit and opens the draft without pushing again.
 - **Exit 1**: it stopped. Show the message; it names what to do. When the
   push or the pull request failed, that is the same `--finish` line again,
   which pushes the commit already made and does not make a second one. Do not

@@ -118,6 +118,16 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:template-update` no longer sends a person in a loop when GitHub
+  refuses the update's push because the agent's token may not change
+  `.github/workflows/` (#925), the token the token page recommends. On that
+  refusal, in either wording (`workflow` scope or `workflows` permission),
+  the script exits 5 and says the push is the person's: the commit and branch
+  are ready, the `git push` line to run from a separate terminal with a
+  credential that has the permission, then `--finish` once more. `--finish`
+  now finds a branch already on origin at the commit and opens the pull
+  request without pushing again. Any other failed push keeps the exit 1
+  retry. Tested with a stubbed refusal, not a live push.
 - `/plinth:guide` no longer states the people's share of the newest 100
   merged pull requests as a total (#905): a project with 203 merged said 98.
   When `scripts/guide-state.sh` reads a full 100, the line says
