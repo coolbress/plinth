@@ -125,6 +125,12 @@ pull requests and have no tag.
   before any worktree. It points to step 2 of the project's
   `docs/how-to/keep-this-project-current.md`. A GitLab under another name with
   no `host:` answer is not recognised.
+- The command `/plinth:new-project` prints for the admin-token path, when gh
+  holds a fine-grained token, quotes every argument (#923): a `--description`
+  or a code-of-conduct contact with a space or a quote in it read back as
+  several arguments when pasted. The command also sets `PLINTH_ASSISTED_BY`
+  when the run had it, so the first pull request of a run continued in a
+  separate terminal keeps its `Assisted-by` line.
 - Step 5 of `docs/how-to/run-a-project.md` lists the three questions again
   under that name (#921): "What shows it works, and what did you not check?",
   "Can I see it?", "What did the reviewer say?". #616 had dropped the list,
