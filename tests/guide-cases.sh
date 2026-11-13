@@ -57,6 +57,39 @@ if [ "$1" = api ] && [ "$2" = graphql ]; then
   if [ -f "$MOCK_DIR/deps.json" ]; then cat "$MOCK_DIR/deps.json"; else echo '{"data":{"repository":{"issues":{"nodes":[]}}}}'; fi | jq -r "$jqf"
   exit
 fi
+# GET repos/<o>/<r> (#922): the login's permissions there, admin from
+# MOCK_ADMIN (false unless said), role_name from MOCK_ROLE (admin or write by
+# that unless said). MOCK_ADMIN_FAIL fails it; MOCK_ADMIN_LOG counts the calls.
+if [ "$1" = api ] && [ "$2" = repos/o/r ]; then
+  [ -z "${MOCK_ADMIN_LOG:-}" ] || echo admin >> "$MOCK_ADMIN_LOG"
+  [ -n "${MOCK_ADMIN_FAIL:-}" ] && { echo "HTTP 403: Resource not accessible by integration" >&2; exit 1; }
+  jq -n --argjson a "${MOCK_ADMIN:-false}" --arg r "${MOCK_ROLE:-$([ "${MOCK_ADMIN:-false}" = true ] && echo admin || echo write)}" \
+    '{full_name: "o/r", role_name: $r, permissions: {admin: $a, push: true}}' | jq -r "$jqf"
+  exit
+fi
+# GET users/<o>: the owner's type, User unless MOCK_KIND says.
+if [ "$1" = api ] && [ "$2" = users/o ]; then
+  jq -n --arg k "${MOCK_KIND:-User}" '{login: "o", type: $k}' | jq -r "$jqf"
+  exit
+fi
+# GET -i user: the credential's headers; X-OAuth-Scopes from MOCK_SCOPES
+# ("repo, read:org" unless said; "none" leaves it out, as a fine-grained
+# token's answer does).
+if [ "$1" = api ] && [ "$2" = -i ] && [ "${3:-}" = user ]; then
+  printf 'HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n'
+  [ "${MOCK_SCOPES:-repo, read:org}" = none ] || printf 'X-Oauth-Scopes: %s\r\n' "${MOCK_SCOPES:-repo, read:org}"
+  printf '\r\n{"login":"someone"}\n'
+  exit
+fi
+# GET repos/<o>/<r>/actions/permissions, which needs Administration: 403 as
+# GitHub answers a token without it, unless MOCK_PROBE is ok (200) or fail.
+if [ "$1" = api ] && [ "$2" = repos/o/r/actions/permissions ]; then
+  case "${MOCK_PROBE:-403}" in
+    ok) exit 0 ;;
+    fail) echo "HTTP 502: Bad Gateway" >&2; exit 1 ;;
+    *) echo "gh: Resource not accessible by personal access token (HTTP 403)" >&2; exit 1 ;;
+  esac
+fi
 # As gh before 2.94.0 does (#909): MOCK_OLD_GH refuses subIssuesSummary.
 case ",$fields," in *,subIssuesSummary,*) [ -n "${MOCK_OLD_GH:-}" ] && { echo "Unknown JSON field: \"subIssuesSummary\"" >&2; exit 1; } ;; esac
 # As GitHub does (#906): a list asking for each pull request's commits asks
@@ -468,6 +501,64 @@ put "$d/issues.json" "$(issue 14 'Renew the domain' ready-for-human)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 expect "a ready-for-human issue, one merge so far: the row after the first merge" "$d" "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "#14 [ready-for-human]"
 
+# The token step (#922): while the credential gh uses in the session reaches
+# the repository's Administration, a line of its own names the three pages,
+# whatever the route; the command stays the route's. The account's admin role
+# alone is not that: a fine-grained token without Administration answers
+# admin true for the owner too, so the reach is read by
+# scripts/lib/admin-reach.sh, as new-project.sh reads it. No reach: no line.
+# Read-only, or not read: not verified, with why.
+pages="$(row_tool 'First pull request merged')"; pages="${pages%%; *}"
+token_line="token step: not done: the credential gh uses in this session reaches the Administration of o/r, so the agent can still change the checks; before going on, follow the three pages of First pull request merged (step 1), in order: $pages"
+unverified() { echo "token step: not verified: $1; the agent's token should have Administration at No access, as the three pages of First pull request merged (step 1) say, in order: $pages"; }
+d="$(repo token)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
+MOCK_ADMIN=true expect "token: one merge, a ready ticket, a classic token with repo on an admin account: /implement, and the pages named" "$d" "A ticket ready (step 4)" "/implement #15" "$token_line"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)" "$(pr 9 'feat: y' false SUCCESS)"
+MOCK_ADMIN=true expect "token: three merges, a ready ticket, Administration reached: the line still" "$d" "A ticket ready (step 4)" "/implement #15" "$token_line"
+put "$d/issues.json" "$(issue 8 'It crashes' needs-triage)"
+MOCK_ADMIN=true expect "token: an issue to triage, Administration reached: the line too" "$d" "Something broke (step 7)" "/triage" "$token_line"
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)"
+MOCK_ADMIN=true expect "token: an uncut spec, Administration reached: the line too" "$d" "A job bigger than one session (step 3)" "/to-tickets #19" "$token_line"
+printf '[]' > "$d/issues.json"
+MOCK_ADMIN=true expect "token: nothing open past the first merge, Administration reached: the line under /grilling" "$d" "An idea in your own words (step 2)" "/grilling" "$token_line"
+# no_token <case> <dir> <command> [<expected token line, else none>]: the
+# command, and the token line exactly as given or none at all.
+no_token() {
+  local out; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"
+  if grep -qxF "command: $3" <<<"$out" && if [ -n "${4:-}" ]; then [ "$(grep '^token step' <<<"$out")" = "$4" ]; else ! grep -q '^token step' <<<"$out"; fi; then
+    ok "$1"
+  else bad "$1"; grep -E '^(command|token step)' <<<"$out" | sed 's/^/        /'; fi
+}
+put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
+MOCK_ADMIN=true MOCK_SCOPES='public_repo' no_token "token: a classic token with public_repo: not done" "$d" "/implement #15" "$token_line"
+# None: the step is done, or was never needed.
+MOCK_ADMIN=true MOCK_SCOPES=none no_token "token: an admin account's fine-grained token refused the Administration read (403): no line" "$d" "/implement #15"
+MOCK_ADMIN=false no_token "token: a role below admin on a personal account's repository: no line" "$d" "/implement #15"
+MOCK_ADMIN=false MOCK_ROLE=maintain no_token "token: maintain on a personal account's repository: no line" "$d" "/implement #15"
+# Not verified: read-only, or the reach not read.
+MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=ok no_token "token: a fine-grained token that reads Administration: not verified" "$d" "/implement #15" \
+  "token step: not verified: the credential gh uses in this session reads the Administration of o/r, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the three pages of First pull request merged (step 1) say, in order: $pages"
+MOCK_ADMIN_FAIL=1 no_token "token: the role read failing: not verified, with why" "$d" "/implement #15" \
+  "$(unverified 'the role on o/r was not read (HTTP 403: Resource not accessible by integration)')"
+MOCK_ADMIN=null MOCK_ROLE=null no_token "token: an answer with no permissions: not verified, with why" "$d" "/implement #15" \
+  "$(unverified "the role on o/r was not read (the answer was 'null null')")"
+MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=fail no_token "token: the Administration read failing: not verified" "$d" "/implement #15" \
+  "$(unverified 'the Administration read on o/r failed (HTTP 502: Bad Gateway)')"
+MOCK_ADMIN=true MOCK_SCOPES='read:org, gist' no_token "token: a classic token without the repo scope: not verified, not taken as done" "$d" "/implement #15" \
+  "$(unverified 'its scopes (read:org, gist) carry neither repo nor public_repo')"
+MOCK_ADMIN=false MOCK_KIND=Organization no_token "token: a role below admin in an organization: not verified" "$d" "/implement #15" \
+  "$(unverified 'the role on o/r is write, in an organization, whose own roles can grant editing its rules')"
+# The first merge's own row already names the pages: unchanged, no line.
+printf '[]' > "$d/issues.json"; put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+MOCK_ADMIN=true no_token "token: First pull request merged with nothing open: unchanged, no second line" "$d" "none: three pages to follow, in order (the tool cell)"
+# Before the first merge the step is still ahead: no line, and no read.
+printf '[]' > "$d/merged.json"; put "$d/open.json" "$(pr 2 'docs: first pull request' false SUCCESS)"
+: > "$work/admin.log"
+MOCK_ADMIN=true MOCK_ADMIN_LOG="$work/admin.log" no_token "token: before the first merge: no line" "$d" "merge #2"
+[ ! -s "$work/admin.log" ] && ok "token: before the first merge the admin read is not made" || bad "token: the admin read ran before the first merge"
+
 d="$(repo record)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
 put "$d/issues.json" "$(issue 16 'Which queue?' wayfinder:grilling)"
@@ -818,8 +909,9 @@ grep -qx 'where: not read' <<<"$out" && ! grep -q '^command:' <<<"$out" &&
   ok "a GitLab checkout: not read, no step" || bad "a GitLab checkout"
 
 # A table that lost a row the guide looks for stops with exit 1, never guesses.
-mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/scripts"
+mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/scripts/lib"
 cp "$script" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
+cp "$root/scripts/lib/admin-reach.sh" "$work/plugin/scripts/lib/"
 grep -v '^| An idea in your own words' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
 d="$work/idle"
 out="$(MOCK_DIR="$d" "$work/plugin/scripts/guide-state.sh" "$d" 2>&1)"; rc=$?

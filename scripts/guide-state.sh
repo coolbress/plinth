@@ -22,6 +22,8 @@
 # guess. Issue and pull request titles are printed as they are: data.
 set -uo pipefail
 plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/admin-reach.sh
+. "$plugin/scripts/lib/admin-reach.sh" 2>/dev/null || { echo "guide-state: no $plugin/scripts/lib/admin-reach.sh" >&2; exit 1; }
 arsenal="$plugin/skills/arsenal/SKILL.md"
 dir="."; map=""
 for a in "$@"; do
@@ -635,12 +637,34 @@ elif [ -n "$fallback" ]; then
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
 elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
-  say "First pull request merged" "none: three pages to follow, in order (the tool cell)"
+  say "First pull request merged" "none: three pages to follow, in order (the tool cell)"; pages_named=yes
 elif [ -n "$bot_prs" ]; then
   note="then Dependabot's pull requests ($(field 1 <<<"$bot_prs" | sed 's/^/#/' | paste -sd ' ' -)), one at a time, each merged on green on the person's word"
   say "Between pieces of work" "/plinth:floor-check"
 else
   say "An idea in your own words" "/grilling"
+fi
+# The token step (#922): "First pull request merged" is the route only while
+# nothing else is open, so past the first merge, whatever the route, a line
+# of its own names its three pages while the credential gh uses in this
+# session reaches the repository's Administration: the agent can still
+# change the checks. The reach is read as new-project.sh reads it at creation,
+# by scripts/lib/admin-reach.sh: not from the account's role alone, which
+# stays admin for the owner after the token step. admin: not done; none: no
+# line; read, or a reach that could not be read: not verified, with why.
+# Before the first merge the step is still ahead, and on its own row the pages
+# are already named: no read, no line.
+if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ -z "${pages_named:-}" ]; then
+  cells="$(row "First pull request merged")" || exit 1
+  pages="$(sed -n 3p <<<"$cells")"; pages="${pages%%; *}"; step1="$(sed -n 1p <<<"$cells")"
+  in_repo_gh() { (cd "$top" && gh "$@"); }
+  reach="$(admin_reach in_repo_gh "$repo" "?" "?")"
+  case "$reach" in
+    none) ;;
+    admin) echo "token step: not done: the credential gh uses in this session reaches the Administration of $repo, so the agent can still change the checks; before going on, follow the three pages of $step1, in order: $pages" ;;
+    read) echo "token step: not verified: the credential gh uses in this session reads the Administration of $repo, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
+    *) echo "token step: not verified: ${reach#unknown: }; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
+  esac
 fi
 # The template behind (#904): step 9's line names the update; the step the
 # project is at stays the one above.
