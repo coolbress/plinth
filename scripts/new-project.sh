@@ -1135,14 +1135,8 @@ fi
 # line, not the repository. Through with-admin-token.sh the typed token ran the
 # setup and goes with this process; the agent inherits gh's own login, so that
 # is the one asked.
-# `permissions.admin` is the account's role, not the token's reach: a
-# fine-grained token with Administration at No access answered `true` for the
-# owner, and a read needing Administration answered it 403 (measured
-# 2026-09-29). So the role decides only when it is a standard one below admin
-# on a personal account's repository (in an organization, an organization role
-# can grant "Edit repository rules" beside it); under admin, a classic token's `repo` scope carries the role, and a
-# fine-grained one is asked that read. A 200 there is read access at least,
-# and whether it can write, which editing the ruleset needs, cannot be read.
+# How the reach is read, and why not from `permissions.admin` alone, is in
+# scripts/lib/admin-reach.sh, which /plinth:guide reads too (#922).
 guide="https://github.com/coolbress/plinth/blob/main/docs/how-to/give-the-agent-a-token.md"
 if [ "${PLINTH_TOKEN_SOURCE:-}" = prompt ]; then
   who="gh's own login (not the token typed for this run)"
@@ -1153,19 +1147,9 @@ else
   as_agent() { gh "$@"; }
   agent_headers="$headers"
 fi
-role="$(as_agent api "repos/$repo" --jq '"\(.permissions.admin) \(.role_name)"' 2>/dev/null)" || role=""
-reach=unknown
-case "$role" in
-  "false read"|"false triage"|"false write"|"false maintain") [ "$kind" = Organization ] || reach=none ;;
-  "true "*)
-    if agent_scopes="$(awk 'tolower($1)=="x-oauth-scopes:"{sub(/^[^:]*: ?/,""); print; found=1; exit} END{exit !found}' <<<"$agent_headers")"; then
-      grep -qE "(^|,) *(repo|public_repo) *(,|$)" <<<"$agent_scopes" && reach="admin"
-    elif probe="$(as_agent api "repos/$repo/actions/permissions" --silent 2>&1)"; then
-      reach="read"
-    else
-      case "$probe" in *"HTTP 403"*"not accessible"*|*"not accessible"*"HTTP 403"*) reach=none ;; esac
-    fi ;;
-esac
+# shellcheck source=scripts/lib/admin-reach.sh
+. "$here/lib/admin-reach.sh"
+reach="$(admin_reach as_agent "$repo" "$kind" "$agent_headers")"
 case "$reach" in
   admin) admin_line="  administration: $who has it on $repo, so an agent using it can edit or delete the ruleset. After the first merge, give the agent a token without it: $guide" ;;
   none)  admin_line="  administration: $who has none on $repo, so an agent using it cannot edit the ruleset" ;;

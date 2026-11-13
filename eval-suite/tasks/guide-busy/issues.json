@@ -329,10 +329,18 @@
       "path": "^repos/trial/probe$",
       "json": {
         "full_name": "trial/probe",
+        "role_name": "write",
         "permissions": {
           "admin": false,
           "push": true
         }
+      }
+    },
+    {
+      "path": "^users/trial$",
+      "json": {
+        "login": "trial",
+        "type": "User"
       }
     },
     {
