@@ -57,6 +57,15 @@ if [ "$1" = api ] && [ "$2" = graphql ]; then
   if [ -f "$MOCK_DIR/deps.json" ]; then cat "$MOCK_DIR/deps.json"; else echo '{"data":{"repository":{"issues":{"nodes":[]}}}}'; fi | jq -r "$jqf"
   exit
 fi
+# GET repos/<o>/<r> (#922): the login's permissions there, admin from
+# MOCK_ADMIN (false unless said). MOCK_ADMIN_FAIL fails it; MOCK_ADMIN_LOG
+# counts the calls.
+if [ "$1" = api ] && [ "$2" = repos/o/r ]; then
+  [ -z "${MOCK_ADMIN_LOG:-}" ] || echo admin >> "$MOCK_ADMIN_LOG"
+  [ -n "${MOCK_ADMIN_FAIL:-}" ] && { echo "HTTP 403: Resource not accessible by integration" >&2; exit 1; }
+  jq -n --argjson a "${MOCK_ADMIN:-false}" '{full_name: "o/r", permissions: {admin: $a, push: true}}' | jq -r "$jqf"
+  exit
+fi
 # As gh before 2.94.0 does (#909): MOCK_OLD_GH refuses subIssuesSummary.
 case ",$fields," in *,subIssuesSummary,*) [ -n "${MOCK_OLD_GH:-}" ] && { echo "Unknown JSON field: \"subIssuesSummary\"" >&2; exit 1; } ;; esac
 # As GitHub does (#906): a list asking for each pull request's commits asks
@@ -467,6 +476,45 @@ expect "ready-for-human and ready-for-agent on one issue: never /implement" "$d"
 put "$d/issues.json" "$(issue 14 'Renew the domain' ready-for-human)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 expect "a ready-for-human issue, one merge so far: the row after the first merge" "$d" "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "#14 [ready-for-human]"
+
+# The token step (#922): while the session's login is an admin of the
+# repository, a line of its own names the three pages, whatever the route;
+# the command stays the route's. Not an admin: no line. The read failing: a
+# line saying it was not read.
+pages="$(row_tool 'First pull request merged')"; pages="${pages%%; *}"
+token_line="token step: not done: the login this session works under is an admin of o/r, so the agent can still change the checks; before going on, follow the three pages of First pull request merged (step 1), in order: $pages"
+d="$(repo token)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
+MOCK_ADMIN=true expect "token: one merge, a ready ticket, an admin login: /implement, and the pages named" "$d" "A ticket ready (step 4)" "/implement #15" "$token_line"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)" "$(pr 9 'feat: y' false SUCCESS)"
+MOCK_ADMIN=true expect "token: three merges, a ready ticket, an admin login: the line still" "$d" "A ticket ready (step 4)" "/implement #15" "$token_line"
+put "$d/issues.json" "$(issue 8 'It crashes' needs-triage)"
+MOCK_ADMIN=true expect "token: an issue to triage, an admin login: the line too" "$d" "Something broke (step 7)" "/triage" "$token_line"
+put "$d/issues.json" "$(issue 19 'The queue spec' spec)"
+MOCK_ADMIN=true expect "token: an uncut spec, an admin login: the line too" "$d" "A job bigger than one session (step 3)" "/to-tickets #19" "$token_line"
+printf '[]' > "$d/issues.json"
+MOCK_ADMIN=true expect "token: nothing open past the first merge, an admin login: the line under /grilling" "$d" "An idea in your own words (step 2)" "/grilling" "$token_line"
+# no_token <case> <dir> <command> [<expected token line, else none>]: the
+# command, and the token line exactly as given or none at all.
+no_token() {
+  local out; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"
+  if grep -qxF "command: $3" <<<"$out" && if [ -n "${4:-}" ]; then [ "$(grep '^token step' <<<"$out")" = "$4" ]; else ! grep -q '^token step' <<<"$out"; fi; then
+    ok "$1"
+  else bad "$1"; grep -E '^(command|token step)' <<<"$out" | sed 's/^/        /'; fi
+}
+put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
+MOCK_ADMIN=false no_token "token: a login that is not an admin: no line" "$d" "/implement #15"
+MOCK_ADMIN_FAIL=1 no_token "token: the read failing: a line saying it was not read" "$d" "/implement #15" \
+  "token step: not read (whether the login this session works under is an admin of o/r: HTTP 403: Resource not accessible by integration)"
+# The first merge's own row already names the pages: unchanged, no line.
+printf '[]' > "$d/issues.json"; put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+MOCK_ADMIN=true no_token "token: First pull request merged with nothing open: unchanged, no second line" "$d" "none: three pages to follow, in order (the tool cell)"
+# Before the first merge the step is still ahead: no line, and no read.
+printf '[]' > "$d/merged.json"; put "$d/open.json" "$(pr 2 'docs: first pull request' false SUCCESS)"
+: > "$work/admin.log"
+MOCK_ADMIN=true MOCK_ADMIN_LOG="$work/admin.log" no_token "token: before the first merge: no line" "$d" "merge #2"
+[ ! -s "$work/admin.log" ] && ok "token: before the first merge the admin read is not made" || bad "token: the admin read ran before the first merge"
 
 d="$(repo record)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"

@@ -31,6 +31,17 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:guide` names the token step past the first merge whatever the
+  route, while the session's login is still an admin of the repository
+  (#922). "First pull request merged" was the route only with nothing else
+  open, so a ticket or an issue to triage hid its three pages for good.
+  `scripts/guide-state.sh` now reads `permissions.admin` for the current
+  login (`gh api repos/<owner>/<repo>`, no credential read) once a person's
+  pull request has merged, and prints a `token step: not done:` line naming
+  the three pages when it is `true`, nothing when `false`, and
+  `token step: not read (…)` when the read fails. The command stays the
+  route's; on the "First pull request merged" row itself, and before the
+  first merge, there is no read and no line.
 - The eval suite's guide tasks find what the step's tool leaves behind in one
   block of the report with the tool (a paragraph or a list, the text between
   blank lines), not only on one line (#908): a "What it leaves" line under the

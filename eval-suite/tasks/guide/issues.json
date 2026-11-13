@@ -39,5 +39,17 @@
       "body": "## What and why\n\nAdds `farewell(name)`.\n\nCloses #1\n",
       "comments": []
     }
+  ],
+  "api": [
+    {
+      "path": "^repos/trial/probe$",
+      "json": {
+        "full_name": "trial/probe",
+        "permissions": {
+          "admin": false,
+          "push": true
+        }
+      }
+    }
   ]
 }

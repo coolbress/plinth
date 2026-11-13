@@ -642,6 +642,22 @@ elif [ -n "$bot_prs" ]; then
 else
   say "An idea in your own words" "/grilling"
 fi
+# The token step (#922): "First pull request merged" is the route only while
+# nothing else is open, so past the first merge, whatever the route, a line
+# of its own names its three pages while the login this session works under
+# is an admin of the repository: the agent can still change the checks. The
+# read is the repository's permissions.admin for that login, no credential.
+# Not an admin: no line. Before the first merge the step is still ahead, and
+# on its own row the pages are already named: no read, no line.
+if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$said_cmd" != "none: three pages to follow, in order (the tool cell)" ]; then
+  if admin="$(cd "$top" && gh api "repos/$repo" --jq .permissions.admin 2>&1)" && [ "$admin" = true ]; then
+    cells="$(row "First pull request merged")" || exit 1
+    pages="$(sed -n 3p <<<"$cells")"
+    echo "token step: not done: the login this session works under is an admin of $repo, so the agent can still change the checks; before going on, follow the three pages of $(sed -n 1p <<<"$cells"), in order: ${pages%%; *}"
+  elif [ "$admin" != false ]; then
+    echo "token step: not read (whether the login this session works under is an admin of $repo: $( [ -n "$admin" ] && tail -1 <<<"$admin" | tr '\t' ' ' || echo "no permissions in the answer"))"
+  fi
+fi
 # The template behind (#904): step 9's line names the update; the step the
 # project is at stays the one above.
 if [ -n "$template_behind" ] && [ "$said_cmd" != /plinth:template-update ]; then
