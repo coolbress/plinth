@@ -393,6 +393,13 @@ finish() { # <worktree>
     split_proposal "$wt" "$mb" "$total" "$max" "$exclude" "$branch" "$repo" "$default" "$to" "${spec[@]}"
     exit 4
   fi
+  # The --finish line a stop below prints carries what this run was given
+  # that the record does not keep (#925): --over-limit, without which the
+  # run stops at the split again, and --assisted-by, the description's last
+  # line. --resolved is kept in the record above.
+  local again; again="$(q "$0") --finish $(q "$wt")"
+  [ "$over_limit" = no ] || again="$again --over-limit"
+  [ -z "$assisted" ] || again="$again --assisted-by $(q "$assisted")"
   # The one push this script makes, to the update branch by name. The
   # default branch is refused above and never named here. A branch already
   # on origin at this commit is a person's push after a refusal (#925): it
@@ -419,12 +426,12 @@ finish() { # <worktree>
           echo "From a separate terminal, with a credential that has the workflow permission, push it:"
           echo "  git -C $(q "$wt") push origin HEAD:refs/heads/$(q "$branch")"
           echo "Then run this once more; it finds the pushed branch and opens the draft pull request without pushing again:"
-          echo "  $(q "$0") --finish $(q "$wt")"
+          echo "  $again"
         } >&2
         exit 5
       fi
       rm -f "$push_err"
-      die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $(q "$0") --finish $(q "$wt")"
+      die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $again"
     fi
     rm -f "$push_err"
   fi
@@ -441,7 +448,7 @@ finish() { # <worktree>
     --jq "[.[] | select((.headRepositoryOwner.login + \"/\" + .headRepository.name | ascii_downcase) == \"$own\" and .headRefOid == \"$pushed\")][0].url // empty" \
     2>/dev/null)" || pr=""
   [ -n "$pr" ] || pr="$(gh pr create --repo "$repo" --draft --base "$default" --head "$branch" --title "$title" --body-file "$body")" \
-    || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $(q "$0") --finish $(q "$wt")"; }
+    || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $again"; }
   rm -f "$body"
   printf 'pr=%s\n' "$pr" >> "$sf"
   echo "Draft pull request: $pr"

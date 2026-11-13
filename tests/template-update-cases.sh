@@ -998,6 +998,20 @@ if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "422 reviewab
    && grep -qF "Opened as it is on \`--over-limit\`" <<<"$body"
 then ok "--over-limit opens it as it is, and the description says it is over"
 else bad "--over-limit (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Refused for the workflow permission on --over-limit: the printed --finish
+# line carries --over-limit and --assisted-by, or run as printed it stops at
+# the split again and the description loses its last line (#925).
+fixture big-refused; reset_logs; big big-refused
+reset_logs
+out="$(cd "$repo" && MOCK_PUSH_FAIL="! [remote rejected] HEAD -> chore/template-$target_ref (refusing to allow an OAuth App to create or update workflow \`.github/workflows/ci.yml\` without \`workflow\` scope)" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" --over-limit --assisted-by "Claude:claude-test-1" 2>&1)"; rc=$?
+if [ "$rc" = 5 ] && grep -qxF "  $script --finish $wt --over-limit --assisted-by Claude:claude-test-1" <<<"$out"
+then ok "the hand-off's --finish line keeps --over-limit and --assisted-by"
+else bad "hand-off flags (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+git -C "$wt" push -q origin "HEAD:refs/heads/chore/template-$target_ref"
+reset_logs; run --finish "$wt" --over-limit --assisted-by "Claude:claude-test-1"
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && tail -1 "$work/gh.log.body" | grep -qxF "Assisted-by: Claude:claude-test-1"
+then ok "run as printed after the person's push, the over-limit update opens with its Assisted-by line"
+else bad "hand-off run as printed (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 run --apply "$(git -C "$BARE" rev-parse main)" --over-limit
 if [ "$rc" = 2 ]; then ok "--over-limit is for --finish only, after the count was read"; else bad "--over-limit with --apply (rc=$rc)"; fi
 

@@ -94,7 +94,7 @@ the plan; then show the plan again and ask again.
 
 ## 3. What it says
 
-- **Exit 0**: it made one commit in the worktree, pushed that branch, and
+- **Exit 0**: it made one commit in the worktree, pushed that branch (or found it pushed by the person after exit 5), and
   opened a draft pull request. Show the URL. Its checks start now and nothing
   waited for them. Do not wait for them, mark it ready or merge it.
   Its description says `Review: none (...)`, because no review has run yet.
