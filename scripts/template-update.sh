@@ -16,7 +16,9 @@
 #   template-update.sh --finish <worktree> [--resolved <path> <how>]... [--assisted-by <agent>:<model>]
 #       After a person resolved the conflicts: checks nothing is left, then
 #       commits, pushes and opens the draft pull request. Also finishes an
-#       update whose push or pull request failed, without a second commit.
+#       update whose push or pull request failed, without a second commit,
+#       and one whose branch a person pushed after a refusal, without
+#       pushing it again.
 #       Each --resolved says how one conflicted file was resolved (which
 #       side, on whose word) for the description; it is a record, not a
 #       check, and names only a file copier left in conflict (#556).
@@ -40,7 +42,8 @@
 #
 # Exit: 0 done (a plan printed, or a draft opened), 1 stopped or nothing to
 # update, 2 usage, 3 a conflict is waiting for a person, 4 over the diff
-# limit, nothing pushed, a split proposed.
+# limit, nothing pushed, a split proposed, 5 origin refused the push for the
+# workflow permission: a person pushes the branch, then --finish (#925).
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 checker="$here/floor-check.py"
@@ -412,10 +415,48 @@ finish() { # <worktree>
     split_proposal "$wt" "$mb" "$total" "$max" "$exclude" "$branch" "$repo" "$default" "$to" "${spec[@]}"
     exit 4
   fi
+  # The --finish line a stop below prints carries what this run was given
+  # that the record does not keep (#925): --over-limit, without which the
+  # run stops at the split again, and --assisted-by, the description's last
+  # line. --resolved is kept in the record above.
+  local again; again="$(q "$0") --finish $(q "$wt")"
+  [ "$over_limit" = no ] || again="$again --over-limit"
+  [ -z "$assisted" ] || again="$again --assisted-by $(q "$assisted")"
   # The one push this script makes, to the update branch by name. The
-  # default branch is refused above and never named here.
-  git -C "$wt" push -q origin "HEAD:refs/heads/$branch" \
-    || { rm -f "$body"; die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $(q "$0") --finish $(q "$wt")"; }
+  # default branch is refused above and never named here. A branch already
+  # on origin at this commit is a person's push after a refusal (#925): it
+  # is not pushed again. A probe that fails is not that; the push runs.
+  local remote_at; remote_at="$(git -C "$wt" ls-remote origin "refs/heads/$branch" 2>/dev/null | cut -f1)" || remote_at=""
+  if [ -n "$remote_at" ] && [ "$remote_at" = "$(git -C "$wt" rev-parse HEAD)" ]; then
+    echo "$branch is already on origin at this commit; not pushed again."
+  else
+    local push_err; push_err="$(mktemp)"
+    if ! git -C "$wt" push -q origin "HEAD:refs/heads/$branch" 2>"$push_err"; then
+      cat "$push_err" >&2
+      rm -f "$body"
+      # GitHub refuses a change under .github/workflows/ from a credential
+      # without the `workflow` scope (classic token, OAuth app) or the
+      # `workflows` permission (fine-grained token, GitHub App); a template
+      # update usually carries one. Run again here, it is refused the same
+      # way: the push is a person's (docs/how-to/give-the-agent-a-token.md).
+      if grep -q "refusing to allow .* to create or update workflow" "$push_err"; then
+        rm -f "$push_err"
+        {
+          echo "template-update: origin refused $branch because it changes .github/workflows/ and the credential here may not (GitHub's reason is above)."
+          echo "Running --finish again here is refused the same way: this push is a person's, not a retry."
+          echo "The commit is ready in $wt, on $branch; no pull request is opened yet."
+          echo "From a separate terminal, with a credential that has the workflow permission, push it:"
+          echo "  git -C $(q "$wt") push origin HEAD:refs/heads/$(q "$branch")"
+          echo "Then run this once more; it finds the pushed branch and opens the draft pull request without pushing again:"
+          echo "  $again"
+        } >&2
+        exit 5
+      fi
+      rm -f "$push_err"
+      die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $again"
+    fi
+    rm -f "$push_err"
+  fi
   # A pull request GitHub created although gh reported a failure (the reply
   # lost on the way back) is this one: adopt it rather than fail on the
   # duplicate every time (Codex review on #273). `--head` matches the branch
@@ -429,7 +470,7 @@ finish() { # <worktree>
     --jq "[.[] | select((.headRepositoryOwner.login + \"/\" + .headRepository.name | ascii_downcase) == \"$own\" and .headRefOid == \"$pushed\")][0].url // empty" \
     2>/dev/null)" || pr=""
   [ -n "$pr" ] || pr="$(gh pr create --repo "$repo" --draft --base "$default" --head "$branch" --title "$title" --body-file "$body")" \
-    || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $(q "$0") --finish $(q "$wt")"; }
+    || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $again"; }
   rm -f "$body"
   printf 'pr=%s\n' "$pr" >> "$sf"
   echo "Draft pull request: $pr"
