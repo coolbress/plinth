@@ -15,7 +15,8 @@ yourself. Nothing here is enforced; the required checks on GitHub are the only
 enforcement. Start from where the person is; the steps are those of
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, which says for each one
 what to look at, what the person decides, and whether it holds if forgotten.
-Point them to it when they ask what to type next.
+When they ask what to type next, point them to `/plinth:guide`, typed in the
+project's folder: it reads the project and names the step; the page is the long form.
 
 ## Where you are, and what to do next
 

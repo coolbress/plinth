@@ -1061,6 +1061,11 @@ for pair in "arsenal:/plinth:guide" "guide:/plinth:arsenal"; do
   grep -qF -- "$other" <<<"$desc" && grep -qF -- "$other" <<<"$first" &&
     ok "${pair%%:*}'s description and first lines name $other" || bad "${pair%%:*} does not name $other in its description and first lines"
 done
+# #920: asked what to type next, the arsenal sends the person to the guide.
+next="$(awk '/^# /{on=1} on' "$root/skills/arsenal/SKILL.md" | tr '\n' ' ' | grep -oE '[^.]*what to type next[^.]*\.' || true)"
+[ -n "$next" ] && grep -qF -- '/plinth:guide' <<<"$next" &&
+  ok "arsenal: the sentence on what to type next names /plinth:guide" ||
+  bad "arsenal: the sentence on what to type next does not name /plinth:guide: ${next:-none found}"
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"
