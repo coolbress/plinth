@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:arsenal`, asked what to type next, points the person to
+  `/plinth:guide` instead of `docs/how-to/run-a-project.md` (#920): asked in
+  plain words after #908, sessions reached the guide in 0 of 6 runs and all six
+  named the arsenal.
+
 ### Fixed
 
 - `ci / web-audit` installs `basic-ftp` 6.2.4, past GHSA-5pm8-86m8-9m6r, a
