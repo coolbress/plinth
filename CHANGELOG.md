@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- A uv workspace member released on its own tags, apart from the root
+  (#931): the template's `release.yml` (in the plinth-template release that
+  follows) releases a member that the root `pyproject.toml` lists under
+  `[tool.plinth.release] own-tags` only on `<prefix>-v<version>` tags.
+  `ruleset-tags.json`, the tag ruleset `/plinth:new-project` applies, now
+  also includes `refs/tags/*-v*`, so a released tag of that shape cannot be
+  moved or deleted either. `/plinth:floor-check` judges one more item for
+  each listed prefix: the door's ruleset covers it, one made before covers
+  `v*` only, and the WARN's `gh api -X POST` adds a ruleset for that prefix
+  alone, which needs repository administration. An existing project gets
+  the workflow through `/plinth:template-update` once the template release
+  is out.
+
 ### Changed
 
 - `/plinth:arsenal`, asked what to type next, points the person to

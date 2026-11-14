@@ -131,6 +131,7 @@ import argparse
 import base64
 import copy
 import fnmatch
+import importlib
 import ipaddress
 import json
 import math
@@ -3252,10 +3253,12 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
 # The archetypes that release from a `v*` tag, and get the door's tag
 # ruleset (ruleset-tags.json, #772): every one but `web`, which deploys on
 # green. The exception is named, not the list: the template owns the
-# archetypes (tests/archetype-single-source.sh).
+# archetypes (tests/archetype-single-source.sh). `*-v*` is a uv workspace
+# member's own tag, `<prefix>-v<version>` (#931), whatever its prefix.
 TAG_NOT_RELEASING = ("web",)
-TAG_RULESET = {"name": "tags: v* not moved or deleted", "target": "tag", "enforcement": "active",
-               "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
+TAG_RULESET = {"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active",
+               "bypass_actors": [],
+               "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}},
                "rules": [{"type": "deletion"}, {"type": "update"}]}
 
 
@@ -3305,7 +3308,56 @@ def excludes_a_v_tag(pattern: str) -> bool:
     return first in ("", "v", "*", "?", "[", "\\")
 
 
-def tag_ruleset_covers(rs: dict) -> tuple[list[str], bool]:
+def own_tag_prefixes(project: Path) -> dict[str, str] | None:
+    """The members of a uv workspace released on their own tags (#931):
+    `own-tags` under [tool.plinth.release] in pyproject.toml, each member's
+    name and its prefix, read as the release workflow reads it, whatever the
+    TOML spelling. Nothing when there is no such list; None when there may
+    be one that cannot be read here (a Python without tomllib and a file
+    that says `own-tags`, a file that is not TOML, a list that is not a
+    table of strings)."""
+    f = project / "pyproject.toml"
+    if not f.is_file():
+        return {}
+    text = read(f)
+    try:  # tomllib is Python 3.11's; these scripts also run on older ones
+        data = importlib.import_module("tomllib").loads(text)
+    except (ImportError, ValueError):
+        return None if "own-tags" in text else {}
+    node: object = data
+    for k in ("tool", "plinth", "release"):
+        node = node.get(k, {}) if isinstance(node, dict) else None
+    if not isinstance(node, dict):
+        return None
+    listed = node.get("own-tags", {})
+    if not isinstance(listed, dict) or not all(isinstance(v, str) for v in listed.values()):
+        return None
+    return {str(k): v for k, v in listed.items()}
+
+
+def covers_prefix(pattern: str, prefix: str) -> bool:
+    """Does this include pattern match every `<prefix>v*` tag? A pattern
+    with `?` or `[` is never taken to: it names some of them at most."""
+    if pattern == "~ALL":
+        return True
+    if not pattern.startswith("refs/tags/") or any(c in pattern for c in "?["):
+        return False
+    return fnmatch.fnmatchcase(f"refs/tags/{prefix}v*", pattern)
+
+
+def excludes_prefix(pattern: str, prefix: str) -> bool:
+    """Could this exclude pattern match some `<prefix>v*` tag? Its literal
+    start and `<prefix>v` must agree as far as both go."""
+    if not pattern.startswith("refs/tags/"):
+        return pattern == "~ALL" or any(c in pattern for c in "*?[")
+    rest, lit = pattern[len("refs/tags/"):], f"{prefix}v"
+    head = re.split(r"[*?\[\\]", rest, maxsplit=1)[0]
+    if head == rest:
+        return rest.startswith(lit)
+    return lit.startswith(head) or head.startswith(lit)
+
+
+def tag_ruleset_covers(rs: dict, prefix: str | None = None) -> tuple[list[str], bool]:
     """What a tag ruleset leaves open of what TAG_RULESET closes, and whether
     its bypass actors were read. No gaps when it is active, includes the
     whole `v*` namespace (TAG_NAMESPACE, not a sample tag: `refs/tags/v1.0.0`
@@ -3313,18 +3365,26 @@ def tag_ruleset_covers(rs: dict) -> tuple[list[str], bool]:
     blocks deletion and update, and lets no actor bypass it. `non_fast_forward`
     is not `update`: it lets a tag move to a later commit. Bypass actors are
     returned only to a token that administers the repository; without the
-    key they are unread, never taken as none."""
+    key they are unread, never taken as none. With a `prefix`, the namespace
+    is a listed member's own tags, `<prefix>v*` (#931), in place of `v*`."""
     gaps = []
     if rs.get("enforcement") != "active":
         gaps.append(f"enforcement is {rs.get('enforcement')}")
     cond = (rs.get("conditions") or {}).get("ref_name") or {}
     inc = [p for p in cond.get("include") or [] if isinstance(p, str)]
     exc = [p for p in cond.get("exclude") or [] if isinstance(p, str)]
-    if not any(p in TAG_NAMESPACE for p in inc):
-        gaps.append(f"it includes {inc or 'nothing'}, not every v* tag (refs/tags/v*)")
-    open_exc = [p for p in exc if excludes_a_v_tag(p)]
-    if open_exc:
-        gaps.append(f"it excludes {open_exc}, which can match a v* tag")
+    if prefix is None:
+        if not any(p in TAG_NAMESPACE for p in inc):
+            gaps.append(f"it includes {inc or 'nothing'}, not every v* tag (refs/tags/v*)")
+        open_exc = [p for p in exc if excludes_a_v_tag(p)]
+        if open_exc:
+            gaps.append(f"it excludes {open_exc}, which can match a v* tag")
+    else:
+        if not any(covers_prefix(p, prefix) for p in inc):
+            gaps.append(f"it includes {inc or 'nothing'}, not every {prefix}v* tag (refs/tags/{prefix}v*)")
+        open_exc = [p for p in exc if excludes_prefix(p, prefix)]
+        if open_exc:
+            gaps.append(f"it excludes {open_exc}, which can match a {prefix}v* tag")
     types = {r.get("type") for r in rs.get("rules") or [] if isinstance(r, dict)}
     gaps += [f"no {t} rule" for t in ("deletion", "update") if t not in types]
     actors = rs.get("bypass_actors")
@@ -3334,41 +3394,25 @@ def tag_ruleset_covers(rs: dict) -> tuple[list[str], bool]:
     return gaps, isinstance(actors, list)
 
 
-def check_tag_ruleset(repo: str, archetype: str | None, network: bool, actions_token: bool = False) -> None:
-    """A releasing archetype's `v*` tags can be neither moved nor deleted
-    (#772): a moved tag changes what a release names, a deleted one makes it
-    vanish. Rulesets are listed with read access; their bypass actors need
-    administration, so a ruleset that covers everything else and whose
-    actors are unread is a SKIP (an INFO left to the skill under
-    --actions-token), never a PASS. WARN, never FAIL, as the merge ruleset:
-    every repository made before #772 lacks it, and `ci / floor-check` runs
-    in each one."""
-    if archetype is None or archetype in TAG_NOT_RELEASING or (not network and not os.environ.get("FLOOR_CHECK_API_DIR")):
-        return
-    listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
-    if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
-        result("SKIP", "the tag ruleset not verified: this repository's rulesets could not be listed")
-        return
+def judge_tag_rulesets(repo: str, archetype: str, rulesets: list[tuple[object, dict]], unread: bool,
+                       actions_token: bool, member: tuple[str, str] | None = None) -> None:
+    """One item: whether one of the tag rulesets read keeps the `v*` tags,
+    or with `member` (its name and prefix) that member's own tags, from
+    being moved or deleted."""
     best: list[str] | None = None
-    unread = False
     actors_unread: object = None
-    for item in listed if isinstance(listed, list) else []:
-        if not isinstance(item, dict) or item.get("target") != "tag" or item.get("source_type", "Repository") != "Repository":
-            continue
-        rs = api(f"repos/{repo}/rulesets/{item.get('id')}", network)
-        if not isinstance(rs, dict):
-            unread = True
-            continue
-        gaps, actors_read = tag_ruleset_covers(rs)
+    tags = f"{member[1]}v*" if member else "v*"
+    for rid, rs in rulesets:
+        gaps, actors_read = tag_ruleset_covers(rs, member[1] if member else None)
         if not gaps and actors_read:
-            result("PASS", f"the tag ruleset keeps v* tags from being moved or deleted, with no bypass actor (ruleset {item.get('id')})")
+            result("PASS", f"the tag ruleset keeps {tags} tags from being moved or deleted, with no bypass actor (ruleset {rid})")
             return
         if not gaps:
-            actors_unread = item.get("id")
+            actors_unread = rid
             continue
         best = gaps if best is None or len(gaps) < len(best) else best
     if actors_unread is not None:
-        msg = (f"the tag ruleset (ruleset {actors_unread}) covers v* tags, and its bypass actors are not read here")
+        msg = (f"the tag ruleset (ruleset {actors_unread}) covers {tags} tags, and its bypass actors are not read here")
         if actions_token:
             result("INFO", f"{msg}: /plinth:floor-check reads them with a login that administers the repository", deferred=True)
         else:
@@ -3377,11 +3421,56 @@ def check_tag_ruleset(repo: str, archetype: str | None, network: bool, actions_t
     if unread and best is None:
         result("SKIP", "the tag ruleset not verified: a tag ruleset is listed and could not be read")
         return
-    why = f"the tag rulesets here leave v* tags open: {'; '.join(best)}" if best else "no tag ruleset"
-    result("WARN", f"{why}: for a {archetype}, which releases from a v* tag, anyone with write access can move "
-                   "or delete a released tag")
-    result("INFO", f"  gh api -X POST repos/{repo}/rulesets --input - <<<{shlex.quote(json.dumps(TAG_RULESET))}"
+    why = f"the tag rulesets here leave {tags} tags open: {'; '.join(best)}" if best else "no tag ruleset"
+    if member:
+        result("WARN", f"{why}: [tool.plinth.release] own-tags in pyproject.toml releases {member[0]} on {tags} "
+                       "tags, so anyone with write access can move or delete a released tag of it")
+        body = {**TAG_RULESET, "name": f"tags: {tags} not moved or deleted",
+                "conditions": {"ref_name": {"include": [f"refs/tags/{tags}"], "exclude": []}}}
+    else:
+        result("WARN", f"{why}: for a {archetype}, which releases from a v* tag, anyone with write access can move "
+                       "or delete a released tag")
+        body = TAG_RULESET
+    result("INFO", f"  gh api -X POST repos/{repo}/rulesets --input - <<<{shlex.quote(json.dumps(body))}"
                    "   (needs repository administration)")
+
+
+def check_tag_ruleset(repo: str, archetype: str | None, network: bool, actions_token: bool = False,
+                      project: Path | None = None) -> None:
+    """A releasing archetype's `v*` tags can be neither moved nor deleted
+    (#772): a moved tag changes what a release names, a deleted one makes it
+    vanish. Rulesets are listed with read access; their bypass actors need
+    administration, so a ruleset that covers everything else and whose
+    actors are unread is a SKIP (an INFO left to the skill under
+    --actions-token), never a PASS. WARN, never FAIL, as the merge ruleset:
+    every repository made before #772 lacks it, and `ci / floor-check` runs
+    in each one. A member that pyproject.toml lists under
+    [tool.plinth.release] own-tags (#931) is one more item, for its own
+    `<prefix>v*` tags: a repository made before them protects `v*` only."""
+    if archetype is None or archetype in TAG_NOT_RELEASING or (not network and not os.environ.get("FLOOR_CHECK_API_DIR")):
+        return
+    listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
+    if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
+        result("SKIP", "the tag ruleset not verified: this repository's rulesets could not be listed")
+        return
+    rulesets: list[tuple[object, dict]] = []
+    unread = False
+    for item in listed if isinstance(listed, list) else []:
+        if not isinstance(item, dict) or item.get("target") != "tag" or item.get("source_type", "Repository") != "Repository":
+            continue
+        rs = api(f"repos/{repo}/rulesets/{item.get('id')}", network)
+        if isinstance(rs, dict):
+            rulesets.append((item.get("id"), rs))
+        else:
+            unread = True
+    judge_tag_rulesets(repo, archetype, rulesets, unread, actions_token)
+    members = own_tag_prefixes(project) if project is not None else {}
+    if members is None:
+        result("SKIP", "the tag ruleset for members released on their own tags not verified: [tool.plinth.release] "
+                       "own-tags in pyproject.toml could not be read here")
+        return
+    for name, prefix in sorted(members.items()):
+        judge_tag_rulesets(repo, archetype, rulesets, unread, actions_token, (name, prefix))
 
 
 def check_description(repo: str, network: bool) -> None:
@@ -4570,7 +4659,7 @@ def main() -> int:
         check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying, root)
         check_actions_allowlist(root, a.repo, network, a.actions_token)
         check_actions_token(a.repo, network, a.actions_token)
-        check_tag_ruleset(a.repo, archetype, network, a.actions_token)
+        check_tag_ruleset(a.repo, archetype, network, a.actions_token, project)
         check_description(a.repo, network)
         check_labels(a.repo, network)
     else:

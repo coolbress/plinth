@@ -49,14 +49,15 @@ elif grep -q "not applied" "$work/out"; then ok "a write that did not take fails
 else bad "failed without saying why"; fi
 
 # ruleset-tags.json, the one /plinth:new-project applies to a releasing
-# archetype (#772): v* tags only, deletion and every update blocked (a
+# archetype (#772): v* tags, and a uv workspace member's own tags of the
+# shape <prefix>-v<version> (#931), deletion and every update blocked (a
 # non_fast_forward rule would let a tag move to a later commit), creation
 # not, and no bypass.
 t="$root/ruleset-tags.json"
 if [ "$(jq -c '[.target, .enforcement, .conditions.ref_name.include, .conditions.ref_name.exclude, ([.rules[].type] | sort), .bypass_actors]' "$t")" \
-   = '["tag","active",["refs/tags/v*"],[],["deletion","update"],[]]' ]
-then ok "ruleset-tags.json: v* tags, deletion and update blocked, creation not, no bypass"
-else bad "ruleset-tags.json is not the v* tag ruleset #772 asks for: $(jq -c . "$t")"; fi
+   = '["tag","active",["refs/tags/v*","refs/tags/*-v*"],[],["deletion","update"],[]]' ]
+then ok "ruleset-tags.json: v* and *-v* tags, deletion and update blocked, creation not, no bypass"
+else bad "ruleset-tags.json is not the tag ruleset #772 and #931 ask for: $(jq -c . "$t")"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
