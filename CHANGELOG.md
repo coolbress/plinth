@@ -18,6 +18,16 @@ pull requests and have no tag.
   plain words after #908, sessions reached the guide in 0 of 6 runs and all six
   named the arsenal.
 
+### Fixed
+
+- `ci / web-audit` installs `basic-ftp` 6.2.4, past GHSA-5pm8-86m8-9m6r, a
+  crash in its `MLSD` listing parser (an uncaught `TypeError` from a
+  `__proto__` fact name; medium). `scripts/web-audit/package.json`'s override
+  moved from 6.2.3, and only that package's lockfile entry changed. The job
+  fetches the lockfile from the plinth commit a project calls, so a project
+  gets it when its `coolbress/plinth` pins in `ci.yml` and `label.yml` are
+  raised past this release.
+
 ## [2.32.0] - 2026-11-14
 
 `/plinth:guide` reads a project under way as it is: it says when the template or the plinth pin is behind, picks the ticket that is not blocked or taken, sends an uncut spec to `/to-tickets`, explains the current and next step's tools in depth, and names the token step while the agent's credential still reaches Administration. The eval suite measures it on a fresh and a busy project. `/plinth:template-update` says that GitLab is not served yet, and hands a push GitHub refuses for the workflow permission to the person instead of looping on `--finish`. The admin-token command `/plinth:new-project` prints quotes every argument and keeps `Assisted-by`, and the step-5 three questions are named again. No workflow a project calls changed, so a project's `coolbress/plinth` pins need no raise for this release.
