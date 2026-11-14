@@ -11,6 +11,21 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- A uv workspace member released on its own tags, apart from the root
+  (#931): the template's `release.yml` (in the plinth-template release that
+  follows) releases a member that the root `pyproject.toml` lists under
+  `[tool.plinth.release] own-tags` only on `<prefix>-v<version>` tags.
+  `ruleset-tags.json`, the tag ruleset `/plinth:new-project` applies, now
+  also includes `refs/tags/*-v*`, so a released tag of that shape cannot be
+  moved or deleted either. `/plinth:floor-check` judges one more item for
+  each listed prefix: the door's ruleset covers it, one made before covers
+  `v*` only, and the WARN's `gh api -X POST` adds a ruleset for that prefix
+  alone, which needs repository administration. An existing project gets
+  the workflow through `/plinth:template-update` once the template release
+  is out.
+
 ## [2.32.0] - 2026-11-14
 
 `/plinth:guide` reads a project under way as it is: it says when the template or the plinth pin is behind, picks the ticket that is not blocked or taken, sends an uncut spec to `/to-tickets`, explains the current and next step's tools in depth, and names the token step while the agent's credential still reaches Administration. The eval suite measures it on a fresh and a busy project. `/plinth:template-update` says that GitLab is not served yet, and hands a push GitHub refuses for the workflow permission to the person instead of looping on `--finish`. The admin-token command `/plinth:new-project` prints quotes every argument and keeps `Assisted-by`, and the step-5 three questions are named again. No workflow a project calls changed, so a project's `coolbress/plinth` pins need no raise for this release.
