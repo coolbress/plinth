@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.32.0] - 2026-11-14
+
+`/plinth:guide` reads a project under way as it is: it says when the template or the plinth pin is behind, picks the ticket that is not blocked or taken, sends an uncut spec to `/to-tickets`, explains the current and next step's tools in depth, and names the token step while the agent's credential still reaches Administration. The eval suite measures it on a fresh and a busy project. `/plinth:template-update` says that GitLab is not served yet, and hands a push GitHub refuses for the workflow permission to the person instead of looping on `--finish`. The admin-token command `/plinth:new-project` prints quotes every argument and keeps `Assisted-by`, and the step-5 three questions are named again. No workflow a project calls changed, so a project's `coolbress/plinth` pins need no raise for this release.
+
+tested with plinth-template v1.43.1
+
 ### Added
 
 - Two guide tasks in the eval suite (#907): `guide-fresh`, a project whose
@@ -5229,7 +5235,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.31.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.32.0...HEAD
+[2.32.0]: https://github.com/coolbress/plinth/releases/tag/v2.32.0
 [2.31.0]: https://github.com/coolbress/plinth/releases/tag/v2.31.0
 [2.30.0]: https://github.com/coolbress/plinth/releases/tag/v2.30.0
 [2.29.0]: https://github.com/coolbress/plinth/releases/tag/v2.29.0
