@@ -150,6 +150,17 @@ if [ "$rc" = 1 ] && [ "$(grep -c '^many.txt:' <<<"$out")" = 12 ] && [ "$(grep -c
   ok "twelve markers: twelve log lines, nine annotations and one count"
 else bad "twelve markers: twelve log lines, nine annotations and one count" "rc=$rc"$'\n'"$out"; fi
 
+# A path git still quotes under core.quotePath=false (it holds a double quote)
+# and that also holds non-ASCII text, which stays raw inside the quotes.
+fresh 'docs/한"x.md' $'# x\n'
+commit 'docs/한"x.md' "# x
+$lt HEAD
+$gt main
+"
+run
+if [ "$rc" = 1 ] && grep -q "^docs/한\"x.md:2: $lt HEAD" <<<"$out"; then ok "a quoted path with non-ASCII text is named as it is"
+else bad "a quoted path with non-ASCII text is named as it is" "rc=$rc"$'\n'"$out"; fi
+
 # A deleted file and a revision git does not know.
 fresh gone.txt "$lt HEAD"$'\n'
 g rm -q gone.txt; g commit -qm gone

@@ -27,10 +27,12 @@ code span.
 Each marker is printed as `path:line: text` (the line number in the head) and
 the first nine as `::error` annotations: GitHub drops a step's annotations
 past ten. Exit 1 when there is one, 0 when there is none, 2 when git cannot
-produce the diff.
+produce the diff or the script stops on anything else: a crash is never read
+as a marker.
 
     tests/conflict-markers-cases.sh runs it on throwaway repositories.
 """
+import codecs
 import re
 import subprocess
 import sys
@@ -46,8 +48,10 @@ def unquote(path):
     """git writes a path with unusual bytes as a C string in double quotes."""
     if not path.startswith('"'):
         return path
-    raw = path[1:-1].encode("latin-1", "backslashreplace").decode("unicode_escape")
-    return raw.encode("latin-1").decode("utf-8", "replace")
+    # On bytes: non-ASCII text stays raw UTF-8 inside the quotes, beside the
+    # escapes (a quote, a backslash, a tab).
+    raw, _ = codecs.escape_decode(path[1:-1].encode("utf-8"))
+    return raw.decode("utf-8", "replace")
 
 
 def added_lines(revisions):
@@ -101,6 +105,9 @@ def main(argv):
     except RuntimeError as err:
         print(f"::error::git could not produce the diff {err}. Update the branch from its base and push again: {HOW}")
         return 2
+    except Exception as err:  # noqa: BLE001  exit 1 means a marker was found; a crash is not one
+        print(f"::error::the conflict-marker check stopped ({type(err).__name__}: {err}); the diff was not read: {HOW}")
+        return 2
     found = sorted(edges + [m for m in middles if m[0] in files])
     if not found:
         print(f"OK: no line the diff ({' '.join(argv)}) adds is a merge conflict marker.")
@@ -111,7 +118,7 @@ def main(argv):
         print(f"::error file={escape(path, True)},line={line}::{escape(path)}:{line} is a merge conflict marker "
               f"({escape(text[:40])}). Resolve the conflict, delete the marker lines and push: {HOW}")
     if len(found) > ANNOTATED:
-        print(f"::error::{len(found) - ANNOTATED} more conflict marker lines are in the log")
+        print(f"::error::{len(found) - ANNOTATED} more conflict marker lines are in the log: {HOW}")
     return 1
 
 
