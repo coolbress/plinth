@@ -255,6 +255,20 @@ naming yourself as a commit trailer would (e.g. `Claude:claude-opus-5-5`): the
 first pull request's description (the first merge request's, with
 `--host gitlab`) ends with that `Assisted-by` line.
 
+The run takes several minutes, and up to about 26: on GitHub it waits up to
+five times, 5 minutes at most each, and once for a minute more. The first
+three waits and the minute come before the wall stands,
+at most about 16 minutes in; the last two only report main's first CI run (on
+GitLab it waits once). Tell the person that in one line before it starts, and that a
+quiet stretch is waiting, not stuck. Run it once: run it in the background, or
+with the longest timeout the Bash tool allows, which is shorter than the worst
+case. Either way, wait for that same run to end and read its output before
+saying anything about the result. If the tool says the command was moved to
+the background, that is not a failure: wait for that same run to end. Never
+run the script again while it is running: a second run works on the same
+repository name. An interrupt before the wall stands deletes the repository,
+by design; say so if the person asks to stop.
+
 The script checks tools, token, owner and visibility first and creates nothing
 until all four pass. It then creates the repository, renders the template into
 `~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL (and,
