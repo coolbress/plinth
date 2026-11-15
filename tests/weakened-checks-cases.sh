@@ -610,17 +610,17 @@ first "over the limit: fail, first" '^- fail: diff size, 4 lines, over the limit
 # The conflict-marker step (#936), with the script the fetch step would have
 # put in RUNNER_TEMP; tests/conflict-markers-cases.sh holds what it finds.
 mkdir -p "$tmp/rt/plinth-markers"; cp "$root/scripts/conflict-markers.py" "$tmp/rt/plinth-markers/"
-markers="No line the pull request adds is a merge conflict marker"
-verdict diff-size "$markers" FETCH=skipped BASE_SHA="" HEAD_SHA=""
+marker_step="No line the pull request adds is a merge conflict marker"
+verdict diff-size "$marker_step" FETCH=skipped BASE_SHA="" HEAD_SHA=""
 first "conflict markers, not a pull request: pass, does not apply" '^- pass: conflict markers, does not apply \(not a pull request'
-verdict diff-size "$markers" FETCH=success BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+verdict diff-size "$marker_step" FETCH=success BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
 first "conflict markers, none added: pass" '^- pass: conflict markers, no line the pull request adds is one$'
 [ "$rc" = 0 ] && ok "conflict markers, none added: exit 0" || bad "conflict markers, none added: exit $rc" "$out"
-verdict diff-size "$markers" FETCH=failure BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+verdict diff-size "$marker_step" FETCH=failure BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
 first "conflict markers, the fetch failed: fail, not a pass" '^- fail: conflict markers, plinth.s check could not be fetched'
 [ "$rc" != 0 ] && ok "conflict markers, the fetch failed: the step fails" || bad "conflict markers, the fetch failed: exit 0" "$out"
 printf '%s main\n' "$(printf '>%.0s' 1 2 3 4 5 6 7)" >> "$r/src/m.py"; commit
-verdict diff-size "$markers" FETCH=success BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+verdict diff-size "$marker_step" FETCH=success BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
 first "conflict markers, one added: fail, the log names the file" '^- fail: conflict markers, a line the pull request adds is one'
 if [ "$rc" = 1 ] && grep -q '^src/m.py:6: ' <<<"$out"; then ok "conflict markers, one added: exit 1, src/m.py:6 in the log"
 else bad "conflict markers, one added: expected exit 1 and src/m.py:6" "rc=$rc"$'\n'"$out"; fi
