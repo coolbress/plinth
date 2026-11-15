@@ -17,6 +17,13 @@ pull requests and have no tag.
   `/plinth:guide` instead of `docs/how-to/run-a-project.md` (#920): asked in
   plain words after #908, sessions reached the guide in 0 of 6 runs and all six
   named the arsenal.
+- `/plinth:new-project` renders plinth-template v1.44.0: a uv workspace
+  member listed under `[tool.plinth.release] own-tags` is released on its own
+  `<prefix>-v<version>` tags, and a `v*` tag leaves it out after checking the
+  index has the release the root needs (#931); the rendered `AGENTS.md` tells
+  the agent to have the person type `/plinth:guide` when asked what to do next
+  (coolbress/plinth-template#234). A new project still calls plinth v2.28.0.
+  An existing project gets both through `/plinth:template-update`.
 
 ### Fixed
 
