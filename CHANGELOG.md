@@ -11,6 +11,23 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `ci / diff-size` fails a pull request whose diff adds a merge conflict
+  marker, naming each file and line (#936): `<<<<<<<`, `|||||||` or
+  `>>>>>>>` at the start of a line, alone or before a space and a label, and
+  `=======` alone on its line where the same file's added lines carry one of
+  those, since alone it is also a Markdown heading's underline. Only added
+  lines are read, in every tracked file, so a marker the base already has
+  passes; one inside a fenced code block a document adds fails, and an
+  indented one or one in a code span passes. A pull request in
+  coolbress/plinth-template kept three markers in `CHANGELOG.md` past every
+  check (coolbress/plinth-template#237). It is a new step in an existing
+  required check, so no ruleset needs a new required check: an existing
+  project gets it by raising both `coolbress/plinth` `uses:` lines, in
+  `ci.yml` and `label.yml`, to the release that carries it. plinth's own
+  `ci / docs` runs the same check. A GitLab pipeline does not run it yet.
+
 ### Changed
 
 - `/plinth:new-project` says how long the run takes and how to wait for it
