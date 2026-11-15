@@ -11,6 +11,18 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` says how long the run takes and how to wait for it
+  (#919): several minutes, up to about 26 on GitHub (five waits of up to 5
+  minutes each and one of a minute), of which at most about 16 come before
+  the wall stands. The agent tells the person before the run starts, runs the
+  script once in the background or with the longest Bash timeout, waits for
+  that same run to end even when the tool moves it to the background, and
+  never starts a second run while one is going.
+  `tests/new-project-failpath.sh` reads those lines and checks that the
+  script's worst cases still fit those minutes.
+
 ## [2.33.0] - 2026-11-15
 
 A uv workspace can release a member on its own tags, apart from the root: plinth-template v1.44.0's `release.yml` releases a member listed under `[tool.plinth.release] own-tags` only on `<prefix>-v<version>` tags, the door's tag ruleset now also keeps `*-v*` tags from being moved or deleted, and `/plinth:floor-check` says when a listed prefix is left open. The rendered `AGENTS.md` and `/plinth:arsenal` now send a person asking what to do next to `/plinth:guide`. `ci / web-audit` installs `basic-ftp` 6.2.4, past GHSA-5pm8-86m8-9m6r. A project gets the web-audit fix and floor-check's prefix item by raising both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to this release; the template change comes through `/plinth:template-update`.

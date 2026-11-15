@@ -1733,5 +1733,28 @@ if [ -f "$work/home-gl-render-env/uvx-env" ] && ! grep -qE '^(GH_TOKEN|GITHUB_TO
 then ok gl-render-env "copier's environment holds none of gh's or glab's token variables"
 else bad gl-render-env "a token variable reached copier"; grep -E 'TOKEN' "$work/home-gl-render-env/uvx-env" 2>/dev/null | cut -d= -f1 | sed 's/^/        /'; fi
 
+# The skill says how long the run takes and how to wait for it (#919): before
+# the wall, three waits of first_pr_wait each and a 60 s sleep; after it, one or
+# two more waits on main's first CI run (wait_baseline). An agent that reads
+# "moved to the background" as a failure would run the door a second time on
+# the same repository.
+skill="$root/skills/new-project/SKILL.md"
+for phrase in 'several minutes, and up to about 26' 'at most about 16 minutes in' \
+              'longest timeout the Bash tool allows' 'run it in the background' \
+              'wait for that same run to end' 'run the script again while it is running' \
+              'An interrupt before the wall'; do
+  if grep -qF "$phrase" "$skill"; then ok skill-wait "the skill says \"$phrase\""
+  else bad skill-wait "skills/new-project/SKILL.md does not say \"$phrase\""; fi
+done
+# The skill's minutes must still cover the script's worst cases.
+wait_s="$(sed -n 's/^first_pr_wait="\${PLINTH_FIRST_PR_WAIT:-\([0-9]*\)}"$/\1/p' "$root/scripts/new-project.sh")"
+if [ -z "$wait_s" ]; then bad skill-wait "scripts/new-project.sh no longer sets first_pr_wait's default as this test reads it"
+else
+  wait_s=$((10#$wait_s)); before=$((3 * wait_s + 60)); all=$((5 * wait_s + 60))
+  if [ "$before" -le 960 ] && [ "$all" -le 1560 ]
+  then ok skill-wait "worst cases ${before} s before the wall and ${all} s in all fit the skill's 16 and 26 minutes"
+  else bad skill-wait "worst cases ${before} s before the wall and ${all} s in all no longer fit the skill's 16 and 26 minutes"; fi
+fi
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
