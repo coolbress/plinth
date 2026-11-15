@@ -607,6 +607,23 @@ for i in 1 2 3; do printf 'z%s = 3\n' "$i" >> "$r/src/m.py"; done; commit
 verdict diff-size "Measure the reviewable diff" MAX_LINES=2 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
 first "over the limit: fail, first" '^- fail: diff size, 4 lines, over the limit of 2$'
 [ "$rc" != 0 ] && ok "over the limit: the step still fails" || bad "over the limit: exit 0" "$out"
+# The conflict-marker step (#936), with the script the fetch step would have
+# put in RUNNER_TEMP; tests/conflict-markers-cases.sh holds what it finds.
+mkdir -p "$tmp/rt/plinth-markers"; cp "$root/scripts/conflict-markers.py" "$tmp/rt/plinth-markers/"
+markers="No line the pull request adds is a merge conflict marker"
+verdict diff-size "$markers" FETCH=skipped BASE_SHA="" HEAD_SHA=""
+first "conflict markers, not a pull request: pass, does not apply" '^- pass: conflict markers, does not apply \(not a pull request'
+verdict diff-size "$markers" FETCH=success BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "conflict markers, none added: pass" '^- pass: conflict markers, no line the pull request adds is one$'
+[ "$rc" = 0 ] && ok "conflict markers, none added: exit 0" || bad "conflict markers, none added: exit $rc" "$out"
+verdict diff-size "$markers" FETCH=failure BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "conflict markers, the fetch failed: fail, not a pass" '^- fail: conflict markers, plinth.s check could not be fetched'
+[ "$rc" != 0 ] && ok "conflict markers, the fetch failed: the step fails" || bad "conflict markers, the fetch failed: exit 0" "$out"
+printf '%s main\n' "$(printf '>%.0s' 1 2 3 4 5 6 7)" >> "$r/src/m.py"; commit
+verdict diff-size "$markers" FETCH=success BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "conflict markers, one added: fail, the log names the file" '^- fail: conflict markers, a line the pull request adds is one'
+if [ "$rc" = 1 ] && grep -q '^src/m.py:6: ' <<<"$out"; then ok "conflict markers, one added: exit 1, src/m.py:6 in the log"
+else bad "conflict markers, one added: expected exit 1 and src/m.py:6" "rc=$rc"$'\n'"$out"; fi
 dir=""
 
 echo "-- verdict lines: ci / deps"
@@ -967,10 +984,11 @@ else bad "twelve not yet confirmed: the summary does not carry all twelve" "$sum
 [ "$rc" = 0 ] && ok "twelve not yet confirmed: the step passes" || bad "the step exited $rc" "$out"
 # Every job's helper is the same text, so the cap and the marker hold in each:
 # one per job, the two web-only jobs (#614), code-growth (#705), web-audit
-# (#709) and pr-title's description step (#781) included.
+# (#709), pr-title's description step (#781) and diff-size's conflict-marker
+# step (#936) included.
 helpers="$(grep -E '^ +(nw=0;|say\(\) )' "$wf" | sed 's/^ *//' | sort | uniq -c)"
 if [ "$(wc -l <<<"$helpers" | tr -d ' ')" = 2 ] && [ "$(awk '{print $1}' <<<"$helpers" | sort -u | wc -l | tr -d ' ')" = 1 ] \
-  && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 14 ]; then
+  && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 15 ]; then
   ok "every step that writes verdicts defines the same capped say helper ($(awk 'NR==1{print $1}' <<<"$helpers") steps)"
 else bad "the say helpers differ between steps, or a step lacks the cap" "$helpers"; fi
 fake_verdicts "fail: a" "${twelve[@]}"; sed -i.bak 's/^print("  PASS  x")$/print("  FAIL  a"); sys.exit(1)/' "$tmp/rt/plinth/floor-check.py"

@@ -1276,7 +1276,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -uo pipefail
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; }
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
             echo "Not a pull request: no diff to read."
             say "pass: conflict markers, does not apply (not a pull request: no diff to read)"
