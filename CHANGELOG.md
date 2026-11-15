@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.33.0] - 2026-11-15
+
+A uv workspace can release a member on its own tags, apart from the root: plinth-template v1.44.0's `release.yml` releases a member listed under `[tool.plinth.release] own-tags` only on `<prefix>-v<version>` tags, the door's tag ruleset now also keeps `*-v*` tags from being moved or deleted, and `/plinth:floor-check` says when a listed prefix is left open. The rendered `AGENTS.md` and `/plinth:arsenal` now send a person asking what to do next to `/plinth:guide`. `ci / web-audit` installs `basic-ftp` 6.2.4, past GHSA-5pm8-86m8-9m6r. A project gets the web-audit fix and floor-check's prefix item by raising both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to this release; the template change comes through `/plinth:template-update`.
+
+tested with plinth-template v1.44.0
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6895776318>
+
 ### Added
 
 - A uv workspace member released on its own tags, apart from the root
@@ -5273,7 +5280,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.32.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.33.0...HEAD
+[2.33.0]: https://github.com/coolbress/plinth/releases/tag/v2.33.0
 [2.32.0]: https://github.com/coolbress/plinth/releases/tag/v2.32.0
 [2.31.0]: https://github.com/coolbress/plinth/releases/tag/v2.31.0
 [2.30.0]: https://github.com/coolbress/plinth/releases/tag/v2.30.0
