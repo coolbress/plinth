@@ -423,7 +423,13 @@ login cannot administer the repository, and never run it.
   SKIP, an INFO left to this skill under `--actions-token`. None, or one that leaves a gap (a
   `non_fast_forward` rule in place of `update` lets a tag move to a later
   commit), is the WARN naming the gap, with the `gh api -X POST` that adds
-  the door's. Rulesets are read with read access.
+  the door's. Rulesets are read with read access. A uv workspace member
+  that `pyproject.toml` lists under `[tool.plinth.release] own-tags` is
+  released on its own `<prefix>v*` tags, and each listed prefix is one
+  more item judged the same way: the door's ruleset covers it
+  (`refs/tags/*-v*`), one made before covers `v*` only, and the WARN's
+  `gh api -X POST` adds a ruleset for that prefix alone. A list that
+  cannot be read here is a SKIP.
 - **The description.** With `--repo`: one is a PASS, none an INFO with the
   `gh repo edit` that sets one. It is asked at creation and skippable, and
   not recorded, so none is never a miss.

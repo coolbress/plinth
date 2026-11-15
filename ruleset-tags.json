@@ -1,12 +1,13 @@
 {
-  "name": "tags: v* not moved or deleted",
+  "name": "tags: v* and *-v* not moved or deleted",
   "target": "tag",
   "enforcement": "active",
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
       "include": [
-        "refs/tags/v*"
+        "refs/tags/v*",
+        "refs/tags/*-v*"
       ],
       "exclude": []
     }

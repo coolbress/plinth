@@ -3339,7 +3339,7 @@ wall "must not pass: no tag ruleset is a WARN naming why it matters" \
   "WARN  no tag ruleset: for a backend, which releases from a v\* tag, anyone with write access can move or delete a released tag" \
   "printf '[{\"id\":1,\"target\":\"branch\"}]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "...with the call that adds the door's one, which needs administration" \
-  "INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{\"name\": \"tags: v\\* not moved or deleted\"" \
+  "INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{\"name\": \"tags: v\\* and \\*-v\\* not moved or deleted\"" \
   "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "a missing tag ruleset never fails the floor" "-- 0 failed, 1 not verified" "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "the door's tag ruleset is a PASS" "PASS  the tag ruleset keeps v\\* tags from being moved or deleted, with no bypass actor (ruleset 3)"
@@ -3365,6 +3365,48 @@ then ok "--actions-token: unread tag bypass actors are left to /plinth:floor-che
 wall "~ALL with deletion and update is a PASS too" "PASS  the tag ruleset keeps v\* tags" "jq -c '.conditions.ref_name.include = [\"~ALL\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "a listing that cannot be read is a SKIP, counted" "-- 0 failed, 2 not verified" "printf 'not json' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "a listed tag ruleset that cannot be read is a SKIP" "SKIP  the tag ruleset not verified: a tag ruleset is listed and could not be read" "rm \"$tagrs\""
+# A uv workspace member released on its own tags (#931): each prefix that
+# pyproject.toml lists under [tool.plinth.release] own-tags is one more item.
+# The door's ruleset covers *-v*; one made before covers v* only.
+cp "$good/pyproject.toml" "$work/pyproject.saved"
+printf '\n[tool.plinth.release]\nown-tags = { "checker" = "checker-" }\n' >> "$good/pyproject.toml"
+wall "the door's tag ruleset covers a listed member's own tags" \
+  "PASS  the tag ruleset keeps checker-v\\* tags from being moved or deleted, with no bypass actor (ruleset 3)"
+old_tags="jq -c '.conditions.ref_name.include = [\"refs/tags/v*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a v*-only tag ruleset leaves a listed prefix open, a WARN" \
+  "WARN  the tag rulesets here leave checker-v\\* tags open: it includes \\['refs/tags/v\\*'\\], not every checker-v\\* tag (refs/tags/checker-v\\*): \\[tool.plinth.release\\] own-tags in pyproject.toml releases checker" "$old_tags"
+wall "...and its fix adds a ruleset for that prefix alone" \
+  'gh api -X POST repos/o/r/rulesets --input - <<<.*"name": "tags: checker-v\* not moved or deleted".*"include": \["refs/tags/checker-v\*"\]' "$old_tags"
+wall "...while the v* item still passes" "PASS  the tag ruleset keeps v\\* tags from being moved or deleted" "$old_tags"
+wall "...and never fails the floor" "-- 0 failed" "$old_tags"
+wall "must not pass: an exclude that can match a listed prefix's tag is a WARN" \
+  "WARN  the tag rulesets here leave checker-v\\* tags open: it excludes \\['refs/tags/checker-v0\\*'\\]" \
+  "jq -c '.conditions.ref_name.exclude = [\"refs/tags/checker-v0*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "must not pass: a sample tag of the prefix is not the prefix" \
+  "WARN  the tag rulesets here leave checker-v\\* tags open: it includes \\['refs/tags/v\\*', 'refs/tags/checker-v1.0.0'\\]" \
+  "jq -c '.conditions.ref_name.include = [\"refs/tags/v*\", \"refs/tags/checker-v1.0.0\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "an exclude for another prefix is not a gap" "PASS  the tag ruleset keeps checker-v\\* tags" \
+  "jq -c '.conditions.ref_name.exclude = [\"refs/tags/other-v*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "a second tag ruleset for the prefix alone is a PASS beside the v* one" \
+  "PASS  the tag ruleset keeps checker-v\\* tags from being moved or deleted, with no bypass actor (ruleset 4)" \
+  "$old_tags; jq -c '.id = 4 | .conditions.ref_name.include = [\"refs/tags/checker-v*\"]' <<<\"\$good_tags\" > \"$api/repos/o/r/rulesets/4.json\"; printf '%s' '[{\"id\":1,\"target\":\"branch\",\"source_type\":\"Repository\"},{\"id\":3,\"target\":\"tag\",\"source_type\":\"Repository\"},{\"id\":4,\"target\":\"tag\",\"source_type\":\"Repository\"}]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
+rm -f "$api/repos/o/r/rulesets/4.json"
+cp "$work/pyproject.saved" "$good/pyproject.toml"
+printf '\n[tool.plinth.release]\nown-tags = { "validator" = "validator-" }\n' >> "$good/pyproject.toml"
+wall "a prefix that starts with v is covered by v* alone" "PASS  the tag ruleset keeps validator-v\\* tags" "$old_tags"
+cp "$work/pyproject.saved" "$good/pyproject.toml"
+printf '\n[tool.plinth]\nrelease.own-tags = { "checker" = "checker-" }\n' >> "$good/pyproject.toml"
+wall "must not pass: the list spelled as a dotted key is read too, and a v*-only ruleset leaves it open" \
+  "WARN  the tag rulesets here leave checker-v\\* tags open" "$old_tags"
+cp "$work/pyproject.saved" "$good/pyproject.toml"
+printf '\n[tool.plinth.release]\nown-tags = "checker-"\n' >> "$good/pyproject.toml"
+wall "an own-tags list that cannot be read is a SKIP, counted" "-- 0 failed, 2 not verified"
+wall "...that says what it could not read" "SKIP  the tag ruleset for members released on their own tags not verified"
+cp "$work/pyproject.saved" "$good/pyproject.toml"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
+if [ "$(grep -c 'tag ruleset' <<<"$out")" = 1 ]; then ok "without own-tags, the tag ruleset is one item, as before"
+else bad "without own-tags, the tag ruleset is not one item"; grep 'tag ruleset' <<<"$out" | sed 's/^/        /'; fi
+
 # floor-check.py has no file beside it in consumer CI, so the ruleset it
 # offers is its own copy: it must be the door's file.
 if python3 - "$root" <<'PY'
