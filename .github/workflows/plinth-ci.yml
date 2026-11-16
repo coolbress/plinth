@@ -260,6 +260,9 @@ jobs:
       - name: A pull request that changes a released CHANGELOG.md section fails, unless it names it or puts it back
         run: ./tests/changelog-released-cases.sh
 
+      - name: A conflict marker a diff adds fails with its file and line; one the base already has passes
+        run: ./tests/conflict-markers-cases.sh
+
       - name: ci / release-gate passes what is not a release, and a release only on a green e2e on its head
         run: ./tests/release-gate-cases.sh
 
@@ -356,6 +359,18 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
         run: ./scripts/closing-references.sh
+
+      # The check python-ci.yml's `ci / diff-size` runs for every project
+      # (#936), here on this repository's own pull requests: HEAD^1 is the
+      # base the merge commit sits on, so HEAD^1..HEAD is what the pull
+      # request adds. Not a pull request: a pass, nothing read.
+      - name: No line the pull request adds is a merge conflict marker
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != pull_request ]; then echo "Not a pull request: no diff to read."; exit 0; fi
+          ./scripts/conflict-markers.py HEAD^1 HEAD
 
       # A pull request open across a release can merge main in and keep its
       # new line inside the section the release just tagged (#877, #881). The
