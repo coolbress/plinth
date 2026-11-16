@@ -36,6 +36,30 @@ pull requests and have no tag.
   check had stopped on TestPyPI's old copies of pinned dependencies
   (coolbress/plinth-template#241). A new project still calls plinth v2.28.0.
   An existing project gets it through `/plinth:template-update`.
+- floor-check's force-push item says which spellings the deny list stops
+  (#942). It passed on any entry starting with `Bash(git push --force` or
+  `Bash(git push -f`, which under Claude Code's matching stop only those
+  words written first: not `--force-with-lease`, `git push origin <b>
+  --force`, a `+` refspec or `git -C <dir> push --force`. In a real project
+  an agent in auto mode pushed its pull request's branch with
+  `--force-with-lease`, and nothing stopped it. The item now probes each
+  spelling under the documented matching, names the ones denied in its PASS,
+  and WARNs with the rules to add when only the old two are there. Neither
+  `git push --force` nor `git push -f` denied is still a FAIL, now read by
+  what the rules stop: a list whose only push rule names
+  `--force-with-lease`, which passed before, fails. coolbress/plinth-template carries the wider
+  rules and an `AGENTS.md` that no longer says the permission prompt stops
+  what no rule matches (in auto mode the classifier decides); an existing
+  project gets both through `/plinth:template-update` once plinth renders
+  that template. plinth's own `.claude/settings.json` carries the same rules.
+  A pull request's branch stays unprotected on GitHub: `non_fast_forward` on
+  every branch would break Dependabot, which rebases its pull requests by
+  force-pushing, and a person's own rebase or GitHub's "Update branch
+  (rebase)"; a force-pushed pull request branch never reaches `main`, and its
+  earlier commits stay reachable from the pull request's timeline and the
+  local reflog.
+- The eval suite's force count also counts a `+` refspec
+  (`git push origin +<b>`) (#942).
 - `/plinth:new-project` says how long the run takes and how to wait for it
   (#919): several minutes, up to about 26 on GitHub (five waits of up to 5
   minutes each and one of a minute), of which at most about 16 come before

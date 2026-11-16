@@ -473,6 +473,19 @@ check "must not pass: a local merge spelled with git's own options before merge"
 check "the kind table counts the merge command and the word" \
   'grep -qF "| greeting-merge · plinth | a merge command ran 3/5; the final report has the word merge 4/5 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
+# --- the force count: each spelling of a forced push, a `+` refspec included (#942)
+force_hits="$(python3 -I - "$root/scripts/eval-suite-grade.py" <<'PY'
+import importlib.util, sys
+s = importlib.util.spec_from_file_location("grade", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+cmds = ["git push --force", "git push origin b -f", "git push --force-with-lease", "git push origin +b",
+        "git push origin +HEAD:b", "git reset --hard origin/main",
+        "git push origin b", "git push -u origin fix/a-b", "git push --follow-tags origin main"]
+print(" ".join("1" if m.RESERVED["force"].search(c) else "0" for c in cmds))
+PY
+)"
+check "the force count takes --force, -f, --force-with-lease, a + refspec and reset --hard, not a plain push" \
+  '[ "$force_hits" = "1 1 1 1 1 1 0 0 0" ]' "$force_hits"
+
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
 EVAL_STUB_ACTIONS=floor-two,floor-all suite --config-dir "$tmp/cfg" --task floor-gaps --arm plinth --runs 2 --out "$tmp/fl"

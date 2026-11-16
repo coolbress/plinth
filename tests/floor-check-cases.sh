@@ -38,7 +38,7 @@ printf 'version: 2\n' > "$good/.github/dependabot.yml"
 for f in bug feature task; do printf 'name: %s\ndescription: "x"\nlabels: ["%s"]\nbody: []\n' "$f" "$f" > "$good/.github/ISSUE_TEMPLATE/$f.yml"; done
 printf '* text=auto eol=lf\nuv.lock linguist-generated\n' > "$good/.gitattributes"
 cat > "$good/.claude/settings.json" <<'JSON'
-{"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(gh auth token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Bash(cat *.env)","Bash(grep *.env)","Read(~/.config/gh/**)"]}}
+{"permissions":{"deny":["Bash(git push --force:*)","Bash(git push -f:*)","Bash(git push *--force*)","Bash(git push * -f)","Bash(git push * -f *)","Bash(git push *+*)","Bash(git * push *--force*)","Bash(git * push -f)","Bash(git * push -f *)","Bash(git * push * -f)","Bash(git * push * -f *)","Bash(git * push *+*)","Bash(rm -rf:*)","Bash(gh auth token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Bash(cat *.env)","Bash(grep *.env)","Read(~/.config/gh/**)"]}}
 JSON
 printf '[project]\nname = "app"\n' > "$good/pyproject.toml"; : > "$good/uv.lock"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: %s\n' "$target_ref" > "$good/.copier-answers.yml"
@@ -115,6 +115,21 @@ plant "a sourcing deny spelt with a ? is caught: only * is a wildcard" "sed -i.b
 plant "a settings without the cat rule is caught" "sed -i.bak 's/\"Bash(cat \*\.env)\",//' .claude/settings.json" "does not deny \`cat .env\`"
 plant "a grep rule that names only .env.example is caught" "sed -i.bak 's/\"Bash(grep \*\.env)\"/\"Bash(grep *.env.example)\"/' .claude/settings.json" "does not deny \`grep KEY .env\`"
 plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source *.env.local*)\"/' .claude/settings.json" "does not deny \`source .env\`"
+# The force-push item names the spellings it found denied (#942): the
+# template's rules pass, the two old rules alone warn with the lines to add,
+# and neither of those two is still a FAIL.
+fp_out() { local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"; ( cd "$copy" && eval "$1" ); python3 "$checker" --root "$copy" --no-network 2>&1; }
+out="$(fp_out :)"
+if grep -qF 'PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`' <<<"$out"; then ok "the template's force-push rules pass, naming each spelling (#942)"
+else bad "the template's force-push rules should pass naming each spelling"; grep 'force push' <<<"$out" | sed 's/^/        /'; fi
+only_two="python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); d=j[\"permissions\"][\"deny\"]; j[\"permissions\"][\"deny\"]=[\"Bash(git push --force:*)\",\"Bash(git push -f:*)\"]+[x for x in d if \"push\" not in x]; json.dump(j,open(p,\"w\"))'"
+out="$(fp_out "$only_two")"
+if grep -qF 'WARN  .claude/settings.json denies force push only as `git push --force`, `git push -f`; not `--force-with-lease`, `--force` after other arguments' <<<"$out" \
+  && grep -qF 'INFO    add to permissions.deny: "Bash(git push *--force*)", "Bash(git push * -f *)", "Bash(git push *+*)", "Bash(git * push *--force*)"' <<<"$out" \
+  && grep -q -- '-- 0 failed' <<<"$out"; then ok "the two old force-push rules alone are a WARN with the rules to add (#942)"
+else bad "the two old force-push rules alone should WARN with the rules to add"; grep -E 'force push|add to' <<<"$out" | sed 's/^/        /'; fi
+plant "no force-push rule at all fails" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "does not deny force push"
+plant "a deny of --force-with-lease alone is not the floor" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[\"Bash(git push --force-with-lease)\"]+[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "does not deny force push"
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
 # A *.md symbolic link whose target is missing was read like a file and
 # crashed the checker before any verdict (#525). It is a FAIL naming the link
@@ -2962,7 +2977,7 @@ mkdir -p "$glgood/.gitlab/issue_templates" "$glgood/.gitlab/merge_request_templa
 for f in Bug:bug Feature:enhancement Task:task; do printf '## What\n\n/label ~%s\n' "${f#*:}" > "$glgood/.gitlab/issue_templates/${f%%:*}.md"; done
 printf '## What and why\n' > "$glgood/.gitlab/merge_request_templates/Default.md"
 cat > "$glgood/.claude/settings.json" <<'JSON'
-{"permissions":{"deny":["Bash(git push --force:*)","Bash(rm -rf:*)","Bash(glab auth status --show-token*)","Bash(glab auth status -t*)","Bash(glab config get token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Bash(cat *.env)","Bash(grep *.env)","Read(~/.config/glab-cli/**)"]}}
+{"permissions":{"deny":["Bash(git push --force:*)","Bash(git push -f:*)","Bash(git push *--force*)","Bash(git push * -f)","Bash(git push * -f *)","Bash(git push *+*)","Bash(git * push *--force*)","Bash(git * push -f)","Bash(git * push -f *)","Bash(git * push * -f)","Bash(git * push * -f *)","Bash(git * push *+*)","Bash(rm -rf:*)","Bash(glab auth status --show-token*)","Bash(glab auth status -t*)","Bash(glab config get token*)","Read(./.env)","Bash(. *.env*)","Bash(source *.env*)","Bash(cat *.env)","Bash(grep *.env)","Read(~/.config/glab-cli/**)"]}}
 JSON
 printf 'archetype: backend\nhost: gitlab\n_src_path: gh:coolbress/plinth-template\n_commit: %s\n' "$target_ref" > "$glgood/.copier-answers.yml"
 glsha=0123456789abcdef0123456789abcdef01234567

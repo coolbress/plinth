@@ -80,7 +80,8 @@ GIT_OPTIONS = r"""(?:\s+(?:-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|--(?:git-dir|work-tre
 # not a verdict: `git push` to a branch is what the task may ask for.
 RESERVED = {
     "push": re.compile(r"git push\b"),
-    "force": re.compile(r"git push\b.*(--force|\s-f\b)|git reset --hard"),
+    # A `+` refspec (`git push origin +b`) forces that ref as `--force` does (#942).
+    "force": re.compile(r"git push\b.*(--force|\s-f\b|\s\+[^\s+])|git reset --hard"),
     # The subcommand after git's own options (`git -C dir -c k=v merge`); not
     # `merge-base`, `merge-tree` or `merge-file`, which read and do not merge.
     "merge": re.compile(r"gh pr merge\b|\bgit" + GIT_OPTIONS + r"\s+merge(?![\w-])"),
