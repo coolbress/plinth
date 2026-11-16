@@ -116,7 +116,8 @@ on:
       test-timeout-minutes:
         description: |
           `ci / test`'s time limit in whole minutes, 1 to 360 (#941). pytest
-          and each extra version stop two minutes before it, so the job still
+          and each extra version stop two minutes before it (a fifth of it
+          under ten minutes), so the job still
           says what ran and that the limit stopped it. Raise it for a suite
           that runs near ten minutes: the same suite was measured at 345 s and
           589 s one commit apart.
@@ -291,7 +292,9 @@ jobs:
   # but leaves the pytest it started running (measured for #941; the runs
   # are in its pull request). So the first step records the start, and pytest and each extra
   # version run under coreutils `timeout`, set to what is left of the limit
-  # less TEST_MARGIN_SECONDS, the time kept for the changed lines and Verdict.
+  # less a margin kept for the changed lines and Verdict: TEST_MARGIN_SECONDS,
+  # or a fifth of the limit when that is shorter, so a 1-minute limit still
+  # runs pytest. `-k 10`: a pytest that ignores the TERM is killed 10 s on.
   # GitHub expressions have no `+`, so the job's limit cannot be the input
   # plus a margin. They accept 0 and 400 without a word: Time limit checks
   # the range.
@@ -316,7 +319,7 @@ jobs:
             echo "::error::test-timeout-minutes is '$LIMIT': it takes whole minutes from 1 to 360, GitHub's limit for a job; set it under ci.yml's with: (docs/reference/required-checks.md)"
             exit 1
           fi
-          echo "this job's limit: $LIMIT minutes (test-timeout-minutes); pytest stops $TEST_MARGIN_SECONDS s before it"
+          echo "this job's limit: $LIMIT minutes (test-timeout-minutes); pytest stops $((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS)) s before it"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
@@ -411,12 +414,13 @@ jobs:
           LIMIT: ${{ inputs.test-timeout-minutes }}
         run: |
           limited() {
-            local rc=0 now left
-            now="$(date +%s)"; left=$((LIMIT * 60 - (now - $(cat "$RUNNER_TEMP/test.started")) - TEST_MARGIN_SECONDS))
-            if [ "$left" -gt 0 ]; then timeout -k 30 "$left" "$@" || rc=$?; else rc=124; fi
+            local rc=0 now left margin
+            now="$(date +%s)"; margin=$((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS))
+            left=$((LIMIT * 60 - (now - $(cat "$RUNNER_TEMP/test.started")) - margin))
+            if [ "$left" -gt 0 ]; then timeout -k 10 "$left" "$@" || rc=$?; else rc=124; fi
             if [ "$rc" = 124 ] || { [ "$rc" = 137 ] && [ "$(date +%s)" -ge $((now + left)) ]; }; then
               echo "$LIMIT" > "$RUNNER_TEMP/pytest.time-limit"
-              echo "::error::pytest stopped at the time limit, not at a failing test: the job's $LIMIT-minute limit (test-timeout-minutes) less $TEST_MARGIN_SECONDS s for the steps after it; raise test-timeout-minutes under ci.yml's with: (docs/reference/required-checks.md)"
+              echo "::error::pytest stopped at the time limit, not at a failing test: the job's $LIMIT-minute limit (test-timeout-minutes) less $margin s for the steps after it; raise test-timeout-minutes under ci.yml's with: (docs/reference/required-checks.md)"
             fi
             return "$rc"
           }
@@ -576,12 +580,13 @@ jobs:
         run: |
           set -euo pipefail
           limited() {
-            local rc=0 now left
-            now="$(date +%s)"; left=$((LIMIT * 60 - (now - $(cat "$RUNNER_TEMP/test.started")) - TEST_MARGIN_SECONDS))
-            if [ "$left" -gt 0 ]; then timeout -k 30 "$left" "$@" || rc=$?; else rc=124; fi
+            local rc=0 now left margin
+            now="$(date +%s)"; margin=$((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS))
+            left=$((LIMIT * 60 - (now - $(cat "$RUNNER_TEMP/test.started")) - margin))
+            if [ "$left" -gt 0 ]; then timeout -k 10 "$left" "$@" || rc=$?; else rc=124; fi
             if [ "$rc" = 124 ] || { [ "$rc" = 137 ] && [ "$(date +%s)" -ge $((now + left)) ]; }; then
               echo "$LIMIT" > "$RUNNER_TEMP/extra.time-limit"
-              echo "::error::pytest on $v stopped at the time limit, not at a failing test: the job's $LIMIT-minute limit (test-timeout-minutes) less $TEST_MARGIN_SECONDS s for the steps after it; raise test-timeout-minutes under ci.yml's with: (docs/reference/required-checks.md)"
+              echo "::error::pytest on $v stopped at the time limit, not at a failing test: the job's $LIMIT-minute limit (test-timeout-minutes) less $margin s for the steps after it; raise test-timeout-minutes under ci.yml's with: (docs/reference/required-checks.md)"
             fi
             return "$rc"
           }
@@ -606,7 +611,7 @@ jobs:
           say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           # The time limit stopped it (#941): the step left a file saying so.
-          limit() { [ -s "$RUNNER_TEMP/$1" ] && say "fail: $2, stopped at the time limit: the job's $LIMIT-minute limit (test-timeout-minutes) less $TEST_MARGIN_SECONDS s kept for the steps after it ended it, not a failing test; raise test-timeout-minutes under ci.yml's with:, or make the suite faster"; }
+          limit() { [ -s "$RUNNER_TEMP/$1" ] && say "fail: $2, stopped at the time limit: the job's $LIMIT-minute limit (test-timeout-minutes) less $((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS)) s kept for the steps after it ended it, not a failing test; raise test-timeout-minutes under ci.yml's with:, or make the suite faster"; }
           if [ "$LIMIT_OUTCOME" = failure ]; then say "fail: test-timeout-minutes, '$LIMIT' is not whole minutes from 1 to 360"; fi
           v "$SYNC" "uv sync --locked"
           if [ "$WEB" = true ]; then v "$PG" "a disposable Postgres for the tests"; fi

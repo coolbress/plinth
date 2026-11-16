@@ -57,7 +57,7 @@ spec:
       description: Python versions to test in addition to .python-version, space separated.
       default: ""
     test-timeout-minutes:
-      description: The test job's time limit in whole minutes, 1 to 360; pytest stops two minutes before it.
+      description: The test job's time limit in whole minutes, 1 to 360; pytest stops two minutes before it (a fifth of it under ten minutes).
       type: number
       default: 10
 ---
@@ -174,8 +174,9 @@ typecheck:
 #
 # The test-timeout-minutes input is the job's limit (#941), as on GitHub:
 # pytest and each extra version run under coreutils `timeout`, set to what is
-# left of it less PLINTH_TEST_MARGIN_SECONDS, the time kept for the changed
-# lines and the Verdict, which then says the limit stopped it. For 0 or less
+# left of it less a margin kept for the changed lines and the Verdict
+# (PLINTH_TEST_MARGIN_SECONDS, or a fifth of the limit when that is
+# shorter); the Verdict then says the limit stopped it. For 0 or less
 # GitLab's duration parser returns no duration (read in its source), so
 # GitLab's message about the timeout comes before this script names the input.
 test:
@@ -188,29 +189,34 @@ test:
     PLINTH_TEST_MARGIN_SECONDS: "120"
   script:
     - |
-      plinth_started="$(date +%s)"
+      # From the job's start, which GitLab's timeout counts from too: the
+      # image pull and the clone come before this script.
+      plinth_started="$(python3 -c 'import datetime, sys; print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).timestamp()))' "${CI_JOB_STARTED_AT:-}" 2>/dev/null)" || plinth_started="$(date +%s)"
       case "$PLINTH_TEST_TIMEOUT_MINUTES" in "" | *[!0-9]*) l= ;; *) l=1 ;; esac
       if [ -z "$l" ] || [ "$PLINTH_TEST_TIMEOUT_MINUTES" -lt 1 ] || [ "$PLINTH_TEST_TIMEOUT_MINUTES" -gt 360 ]; then
         say "fail: test-timeout-minutes, '$PLINTH_TEST_TIMEOUT_MINUTES' is not whole minutes from 1 to 360; set it in the include's inputs"
         plinth_failed=1
       fi
+      # The margin: PLINTH_TEST_MARGIN_SECONDS, or a fifth of the limit when
+      # that is shorter, as on GitHub.
+      plinth_margin=$((l ? (PLINTH_TEST_TIMEOUT_MINUTES * 12 < PLINTH_TEST_MARGIN_SECONDS ? PLINTH_TEST_TIMEOUT_MINUTES * 12 : PLINTH_TEST_MARGIN_SECONDS) : 0))
       # <marker> <command>...: the command under `timeout`, with what is left
       # of the limit. Exit 124, or 137 at the deadline when it ignored the
       # TERM, is the limit, and the marker file tells the verdict.
       limited() {
         local m="$1" rc=0 now left; shift
-        now="$(date +%s)"; left=$((PLINTH_TEST_TIMEOUT_MINUTES * 60 - (now - plinth_started) - PLINTH_TEST_MARGIN_SECONDS))
-        if [ "$left" -gt 0 ]; then timeout -k 30 "$left" "$@" || rc=$?; else rc=124; fi
+        now="$(date +%s)"; left=$((PLINTH_TEST_TIMEOUT_MINUTES * 60 - (now - plinth_started) - plinth_margin))
+        if [ "$left" -gt 0 ]; then timeout -k 10 "$left" "$@" || rc=$?; else rc=124; fi
         if [ "$rc" = 124 ] || { [ "$rc" = 137 ] && [ "$(date +%s)" -ge $((now + left)) ]; }; then
           : > "$PLINTH_TMP/$m"
-          echo "stopped at the time limit, not at a failing test: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $PLINTH_TEST_MARGIN_SECONDS s for the steps after it"
+          echo "stopped at the time limit, not at a failing test: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $plinth_margin s for the steps after it"
         fi
         return "$rc"
       }
       # After a step: when its marker is there, its fail line says the limit.
       time_limit() {
         [ -e "$PLINTH_TMP/$1" ] || return 0
-        plinth_lines[${#plinth_lines[@]} - 1]="fail: $2, stopped at the time limit: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $PLINTH_TEST_MARGIN_SECONDS s kept for the steps after it ended it, not a failing test; raise test-timeout-minutes in the include's inputs, or make the suite faster"
+        plinth_lines[${#plinth_lines[@]} - 1]="fail: $2, stopped at the time limit: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $plinth_margin s kept for the steps after it ended it, not a failing test; raise test-timeout-minutes in the include's inputs, or make the suite faster"
       }
       plinth_uv || exit 1
       cd "$PLINTH_WORKDIR" || exit 1

@@ -34,8 +34,9 @@ pull requests and have no tag.
   every test passed: the same suite ran 589 s and 345 s one commit apart,
   and a job cancelled at its limit wrote only "The operation was canceled."
   The input is the job's own limit. pytest and each extra Python version now
-  run under coreutils `timeout` with what is left of it less 120 seconds
-  kept for the changed lines and the summary, so the summary's line reads
+  run under coreutils `timeout` with what is left of it less 120 seconds,
+  or a fifth of the limit when that is shorter, kept for the changed lines
+  and the summary, so the summary's line reads
   `fail: pytest on .python-version, stopped at the time limit` with the
   minutes and the input's name. A value outside 1 to 360 fails the job,
   naming the input. A step's own `timeout-minutes` was measured first and

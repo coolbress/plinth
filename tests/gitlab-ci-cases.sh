@@ -851,6 +851,8 @@ exit 0
 SH
 chmod +x "$tmp/uvbin/uv"
 trepo="$tmp/test-job"; mkdir -p "$trepo"
+# <seconds>: that long ago, as GitLab writes CI_JOB_STARTED_AT.
+ago() { python3 -c 'import datetime, sys; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%SZ"))' "$1"; }
 tjob() { # [VAR=value...]: runs the test job in $trepo with uv stubbed
   : > "$tmp/uv.log"
   (cd "$trepo" && env PATH="$tmp/uvbin:$PATH" UVLOG="$tmp/uv.log" CI_MERGE_REQUEST_IID= CI_OPEN_MERGE_REQUESTS= \
@@ -871,14 +873,19 @@ expect "a branch pipeline: the changed-lines line still reads does not apply" 0 
 tjob CI_MERGE_REQUEST_IID=7
 if grep -q "uv run --no-sync coverage run --branch --source=. -m pytest" "$tmp/uv.log"; then ok "a merge request runs pytest under coverage, as before"
 else bad "a merge request did not run pytest under coverage (exit $rc)" "$out"$'\n'"$(cat "$tmp/uv.log")"; fi
-tjob PLINTH_TEST_TIMEOUT_MINUTES=1 PLINTH_TEST_MARGIN_SECONDS=57 STUB_SLEEP=60
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60
 expect "pytest past what is left of the limit: Verdict says the time limit stopped it" 1 \
-  "fail: pytest on .python-version, stopped at the time limit: the job's 1-minute limit (test-timeout-minutes) less 57 s kept for the steps after it ended it, not a failing test"
-tjob PLINTH_TEST_TIMEOUT_MINUTES=1 PLINTH_TEST_MARGIN_SECONDS=57 STUB_SLEEP=60 PLINTH_EXTRA_PYTHON_VERSIONS="3.13 3.14"
+  "fail: pytest on .python-version, stopped at the time limit: the job's 1-minute limit (test-timeout-minutes) less 12 s kept for the steps after it ended it, not a failing test"
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60 PLINTH_EXTRA_PYTHON_VERSIONS="3.13 3.14"
 expect "pytest stopped at the limit: the extra versions do not run" 1 "not yet confirmed: pytest on 3.13 3.14, it did not run"
 tjob PLINTH_TEST_TIMEOUT_MINUTES=10 STUB_RC=1
 expect "a failing test is still a plain fail line" 1 "- fail: pytest on .python-version"
 refuse "a failing test is not blamed on the time limit" "stopped at the time limit"
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 5)"
+if [ "$rc" = 0 ] && grep -qx "uv run pytest" "$tmp/uv.log"; then ok "a 1-minute limit still runs pytest (the margin is a fifth of it)"
+else bad "a 1-minute limit ran no pytest (exit $rc)" "$out"; fi
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 60)"
+expect "the job started a minute ago (image pull, clone): no time left, pytest does not start" 1 "stopped at the time limit"
 for v in 0 361 2.5; do
   tjob PLINTH_TEST_TIMEOUT_MINUTES="$v"
   expect "test-timeout-minutes '$v' fails, naming the input and its range" 1 "fail: test-timeout-minutes, '$v' is not whole minutes from 1 to 360"

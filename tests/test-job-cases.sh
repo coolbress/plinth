@@ -137,16 +137,21 @@ if [ "$rc" = 0 ] && grep -q "uv run --no-sync coverage run --branch --source=. -
 else bad "a pull request did not run pytest under coverage (exit $rc)" "$out"$'\n'"$(cat "$rt/uv.log")"; fi
 
 echo "-- the time limit"
+for v in 1 2; do
+  fresh; started 5; KEEP=1 run pytest LIMIT="$v" COV=skipped
+  if [ "$rc" = 0 ] && grep -qx "uv run pytest" "$rt/uv.log"; then ok "a $v-minute limit still runs pytest (the margin is a fifth of it)"
+  else bad "a $v-minute limit ran no pytest (exit $rc)" "$out"; fi
+done
 verdict() { KEEP=1 run Verdict SYNC=success PYTEST="$1" EXTRA="${2:-skipped}" VERSIONS="${3:-}" WEB=false PG=skipped LIMIT=1 LIMIT_OUTCOME=success; }
 fresh
-started $(( 60 - margin - 3 ))
+started $(( 60 - 12 - 3 ))   # a 1-minute limit keeps a fifth, 12 s
 KEEP=1 run pytest LIMIT=1 COV=skipped STUB_SLEEP=60
 if [ "$rc" != 0 ] && [ -s "$rt/pytest.time-limit" ] && printf '%s' "$out" | grep -q "::error::"; then ok "pytest past what is left of the limit is stopped (exit $rc) and says so"
 else bad "pytest past the limit (exit $rc)" "$out"; fi
 verdict failure
 line="$(printf '%s\n' "$summary" | grep "pytest on .python-version")"
 case "$line" in
-  "- fail: pytest on .python-version, stopped at the time limit"*"1-minute"*"test-timeout-minutes"*"not a failing test"*) ok "Verdict says the time limit stopped pytest, with the minutes and the input" ;;
+  "- fail: pytest on .python-version, stopped at the time limit"*"1-minute"*"test-timeout-minutes"*"less 12 s"*"not a failing test"*) ok "Verdict says the time limit stopped pytest, with the minutes and the input" ;;
   *) bad "Verdict's pytest line" "$summary" ;;
 esac
 
@@ -162,7 +167,7 @@ if [ "$rc" = 0 ] && printf '%s\n' "$summary" | grep -qx -- "- fail: pytest on .p
 else bad "a failing test's line" "$summary"; fi
 
 fresh
-started $(( 60 - margin - 3 ))
+started $(( 60 - 12 - 3 ))   # a 1-minute limit keeps a fifth, 12 s
 KEEP=1 run extra LIMIT=1 VERSIONS="3.13 3.14" STUB_SLEEP=60
 if [ "$rc" != 0 ] && [ -s "$rt/extra.time-limit" ] && [ "$(grep -c pytest "$rt/uv.log")" = 1 ]; then ok "an extra version past the limit is stopped, and the next one does not start"
 else bad "extra versions past the limit (exit $rc)" "$out"$'\n'"$(cat "$rt/uv.log")"; fi
