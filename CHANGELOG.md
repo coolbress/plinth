@@ -30,6 +30,12 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.44.1: a TestPyPI
+  rehearsal of a uv workspace release takes only the workspace's own
+  packages from TestPyPI and everything else from PyPI, where the install
+  check had stopped on TestPyPI's old copies of pinned dependencies
+  (coolbress/plinth-template#241). A new project still calls plinth v2.28.0.
+  An existing project gets it through `/plinth:template-update`.
 - `/plinth:new-project` says how long the run takes and how to wait for it
   (#919): several minutes, up to about 26 on GitHub (five waits of up to 5
   minutes each and one of a minute), of which at most about 16 come before
