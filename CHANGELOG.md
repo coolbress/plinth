@@ -37,6 +37,12 @@ pull requests and have no tag.
   local reflog.
 - The eval suite's force count also counts a `+` refspec
   (`git push origin +<b>`) (#942).
+- `/plinth:new-project` renders plinth-template v1.44.2: the deny list
+  refuses the force-push spellings an agent writes, and `AGENTS.md` says
+  what the rules cannot stop and that a pull request's branch is updated by
+  merging the base in (coolbress/plinth-template#244). A new project still
+  calls plinth v2.28.0. An existing project gets it through
+  `/plinth:template-update`.
 
 ## [2.34.0] - 2026-11-16
 
