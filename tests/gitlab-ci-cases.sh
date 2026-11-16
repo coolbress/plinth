@@ -4,10 +4,10 @@
 # the coverage requirements, the question to coverage about its source (#761),
 # the changed-lines judge and the diff-size
 # functions named below are the same text. Every job's script goes through
-# bash -n and shellcheck; pr-title, deps, floor-check and diff-size are extracted and
-# run here against fixtures with the tool downloads stubbed, under GitLab's
-# `set -eo pipefail`, so the rule tested is the rule shipped. lint,
-# typecheck, test, build and secrets do not run here. GitLab itself never
+# bash -n and shellcheck; pr-title, deps, floor-check, diff-size and test are
+# extracted and run here against fixtures with the tool downloads stubbed (uv
+# too, for test), under GitLab's `set -eo pipefail`, so the rule tested is the
+# rule shipped. lint, typecheck, build and secrets do not run here. GitLab itself never
 # runs here: whether GitLab accepts the file is a run on GitLab.com,
 # recorded on #353. floor-check installs its PyYAML from PyPI (#528), so
 # those cases need network; the other downloads are stubbed.
@@ -834,6 +834,63 @@ expect "named in the description: listed as named, no WARN" 0 \
 (cd "$repo" && CI_MERGE_REQUEST_IID='' CI_OPEN_MERGE_REQUESTS='g/p!3' PLINTH_WORKDIR=. PLINTH_MAX_DIFF_LINES=400 PLINTH_DIFF_SIZE_EXCLUDE="" run_job diff-size \
    && printf '%s\n%s' "$rc" "$out" > "$tmp/o"); rc="$(head -1 "$tmp/o")"; out="$(cat "$tmp/o")"
 expect "a branch pipeline while a merge request is open fails" 1 "fail: diff size, this is a branch pipeline while merge request g/p!3 is open"
+
+echo "-- test: coverage only on a merge request, and the time limit (#941)"
+# uv stubbed: it logs its arguments, and a pytest it runs sleeps $STUB_SLEEP
+# seconds, then exits $STUB_RC. The include's inputs reach the script as the
+# job's variables; the case passes them as run_job's environment.
+mkdir -p "$tmp/uvbin"
+cat > "$tmp/uvbin/uv" <<'SH'
+#!/usr/bin/env bash
+echo "uv $*" >> "$UVLOG"
+case " $* " in
+  *" python - "*) exit 10 ;;   # coverage's configuration names no source
+  *pytest*) [ "${STUB_SLEEP:-0}" = 0 ] || exec sleep "$STUB_SLEEP"; exit "${STUB_RC:-0}" ;;
+esac
+exit 0
+SH
+chmod +x "$tmp/uvbin/uv"
+trepo="$tmp/test-job"; mkdir -p "$trepo"
+# <seconds>: that long ago, as GitLab writes CI_JOB_STARTED_AT.
+ago() { python3 -c 'import datetime, sys; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%SZ"))' "$1"; }
+tjob() { # [VAR=value...]: runs the test job in $trepo with uv stubbed
+  : > "$tmp/uv.log"
+  (cd "$trepo" && env PATH="$tmp/uvbin:$PATH" UVLOG="$tmp/uv.log" CI_MERGE_REQUEST_IID= CI_OPEN_MERGE_REQUESTS= \
+     PLINTH_WORKDIR=. PLINTH_EXTRA_PYTHON_VERSIONS= PLINTH_TEST_TIMEOUT_MINUTES=10 PLINTH_TEST_MARGIN_SECONDS=120 "$@" \
+     bash -c "$(declare -f run_job limit); tmp='$tmp'; mark='$mark'; run_job test; printf '%s\n%s' \"\$rc\" \"\$out\"" > "$tmp/o")
+  rc="$(head -1 "$tmp/o")"; out="$(tail -n +2 "$tmp/o")"
+}
+job="$(python3 -c 'import sys; t = open(sys.argv[1]).read(); print(t.split("\ntest:\n", 1)[1].split("\n  script:", 1)[0])' "$gl")"
+for want in '  timeout: $[[ inputs.test-timeout-minutes ]]m' '    PLINTH_TEST_TIMEOUT_MINUTES: $[[ inputs.test-timeout-minutes ]]' '    PLINTH_TEST_MARGIN_SECONDS: "120"'; do
+  if printf '%s\n' "$job" | grep -qxF -- "$want"; then ok "the test job has: ${want# *}"; else bad "the test job lacks: $want" "$job"; fi
+done
+if python3 -c 'import re, sys; s = open(sys.argv[1]).read().split("\n---\n")[0] + "\n"; m =re.search(r"^    test-timeout-minutes:\n((?:      .*\n)+)", s, re.M); sys.exit(not (m and "type: number" in m.group(1) and "default: 10" in m.group(1)))' "$gl"
+then ok "the include's test-timeout-minutes input is a number defaulting to 10"; else bad "the include has no number input test-timeout-minutes defaulting to 10"; fi
+tjob
+if [ "$rc" = 0 ] && grep -qx "uv run pytest" "$tmp/uv.log" && ! grep -q coverage "$tmp/uv.log"; then ok "a branch pipeline runs pytest without coverage"
+else bad "a branch pipeline (exit $rc)" "$out"$'\n'"$(cat "$tmp/uv.log")"; fi
+expect "a branch pipeline: the changed-lines line still reads does not apply" 0 "pass: changed lines ran under the tests, does not apply (not a merge request)"
+tjob CI_MERGE_REQUEST_IID=7
+if grep -q "uv run --no-sync coverage run --branch --source=. -m pytest" "$tmp/uv.log"; then ok "a merge request runs pytest under coverage, as before"
+else bad "a merge request did not run pytest under coverage (exit $rc)" "$out"$'\n'"$(cat "$tmp/uv.log")"; fi
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60
+expect "pytest past what is left of the limit: Verdict says the time limit stopped it" 1 \
+  "fail: pytest on .python-version, stopped at the time limit: the job's 1-minute limit (test-timeout-minutes) less 12 s kept for the steps after it ended it, not a failing test"
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60 PLINTH_EXTRA_PYTHON_VERSIONS="3.13 3.14"
+expect "pytest stopped at the limit: the extra versions do not run" 1 "not yet confirmed: pytest on 3.13 3.14, it did not run"
+tjob PLINTH_TEST_TIMEOUT_MINUTES=10 STUB_RC=1
+expect "a failing test is still a plain fail line" 1 "- fail: pytest on .python-version"
+refuse "a failing test is not blamed on the time limit" "stopped at the time limit"
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 5)"
+if [ "$rc" = 0 ] && grep -qx "uv run pytest" "$tmp/uv.log"; then ok "a 1-minute limit still runs pytest (the margin is a fifth of it)"
+else bad "a 1-minute limit ran no pytest (exit $rc)" "$out"; fi
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 60)"
+expect "the job started a minute ago (image pull, clone): no time left, pytest does not start" 1 "stopped at the time limit"
+for v in 0 361 2.5; do
+  tjob PLINTH_TEST_TIMEOUT_MINUTES="$v"
+  expect "test-timeout-minutes '$v' fails, naming the input and its range" 1 "fail: test-timeout-minutes, '$v' is not whole minutes from 1 to 360"
+done
+if ! grep -q pytest "$tmp/uv.log"; then ok "an out-of-range test-timeout-minutes runs no test"; else bad "an out-of-range limit still ran pytest" "$(cat "$tmp/uv.log")"; fi
 
 echo "-- temporary directories (#575)"
 made="$(find "$tmp/job-tmp" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"

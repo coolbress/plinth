@@ -113,6 +113,18 @@ on:
         type: string
         default: ""
 
+      test-timeout-minutes:
+        description: |
+          `ci / test`'s time limit in whole minutes, 1 to 360 (#941). pytest
+          and each extra version stop two minutes before it (a fifth of it
+          under ten minutes), so the job still
+          says what ran and that the limit stopped it. Raise it for a suite
+          that runs near ten minutes: the same suite was measured at 345 s and
+          589 s one commit apart.
+        required: false
+        type: number
+        default: 10
+
       floor-check-required-checks:
         description: |
           Check names the repository's ruleset must require, comma separated.
@@ -275,13 +287,39 @@ jobs:
           v "$SYNC" "uv sync --locked"
           v "$MYPY" "mypy"
 
+  # The input is the job's limit (#941). A job at its limit is cancelled and
+  # writes no Verdict, and a step's own timeout-minutes kills the step's shell
+  # but leaves the pytest it started running (measured for #941; the runs
+  # are in its pull request). So the first step records the start, and pytest and each extra
+  # version run under coreutils `timeout`, set to what is left of the limit
+  # less a margin kept for the changed lines and Verdict: TEST_MARGIN_SECONDS,
+  # or a fifth of the limit when that is shorter, so a 1-minute limit still
+  # runs pytest. `-k 10`: a pytest that ignores the TERM is killed 10 s on.
+  # GitHub expressions have no `+`, so the job's limit cannot be the input
+  # plus a margin. They accept 0 and 400 without a word: Time limit checks
+  # the range.
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.test-timeout-minutes }}
+    env:
+      TEST_MARGIN_SECONDS: "120"
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
+      - name: Time limit
+        id: limit
+        working-directory: .   # before the checkout, working-directory may not exist
+        env:
+          LIMIT: ${{ inputs.test-timeout-minutes }}
+        run: |
+          date +%s > "$RUNNER_TEMP/test.started"
+          case "$LIMIT" in "" | *[!0-9]*) ok= ;; *) ok=1 ;; esac
+          if [ -z "$ok" ] || [ "$LIMIT" -lt 1 ] || [ "$LIMIT" -gt 360 ]; then
+            echo "::error::test-timeout-minutes is '$LIMIT': it takes whole minutes from 1 to 360, GitHub's limit for a job; set it under ci.yml's with: (docs/reference/required-checks.md)"
+            exit 1
+          fi
+          echo "this job's limit: $LIMIT minutes (test-timeout-minutes); pytest stops $((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS)) s before it"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
@@ -332,9 +370,12 @@ jobs:
       # lock already carries (pytest-cov's, say) is used as locked: installing
       # over it would run the tests against an environment uv.lock does not
       # describe. A failed install never fails the job: pytest then runs
-      # without coverage and the changed lines are not yet confirmed.
+      # without coverage and the changed lines are not yet confirmed. Only a
+      # pull request's changed lines read coverage's data, so on a push it is
+      # not installed and pytest runs without it (#941).
       - name: Install coverage
         id: cov
+        if: ${{ github.event.pull_request }}
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -365,11 +406,25 @@ jobs:
       # environment, so every file it reads counts; a configuration it cannot
       # read leaves the second rule, and `coverage run` then says what is wrong.
       # The question's exit code: 0 a source is named, 10 none, else unreadable.
+      # Under `timeout` (#941): exit 124, or 137 at the deadline when pytest
+      # ignored the TERM, is the limit, and pytest.time-limit tells Verdict.
       - id: pytest
         env:
           COV: ${{ steps.cov.outcome }}
+          LIMIT: ${{ inputs.test-timeout-minutes }}
         run: |
-          if [ "$COV" != success ]; then exec uv run pytest; fi
+          limited() {
+            local rc=0 now left margin
+            now="$(date +%s)"; margin=$((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS))
+            left=$((LIMIT * 60 - (now - $(cat "$RUNNER_TEMP/test.started")) - margin))
+            if [ "$left" -gt 0 ]; then timeout -k 10 "$left" "$@" || rc=$?; else rc=124; fi
+            if [ "$rc" = 124 ] || { [ "$rc" = 137 ] && [ "$(date +%s)" -ge $((now + left)) ]; }; then
+              echo "$LIMIT" > "$RUNNER_TEMP/pytest.time-limit"
+              echo "::error::pytest stopped at the time limit, not at a failing test: the job's $LIMIT-minute limit (test-timeout-minutes) less $margin s for the steps after it; raise test-timeout-minutes under ci.yml's with: (docs/reference/required-checks.md)"
+            fi
+            return "$rc"
+          }
+          if [ "$COV" != success ]; then limited uv run pytest; exit; fi
           src=.; [ -d src ] && src=src
           rc=0; uv run --no-sync python - <<'PY' || rc=$?
           import sys
@@ -380,11 +435,11 @@ jobs:
           PY
           if [ "$rc" = 0 ]; then
             echo "coverage's configuration names its source: measured as configured"
-            exec uv run --no-sync coverage run --branch -m pytest
+            limited uv run --no-sync coverage run --branch -m pytest; exit
           fi
           if [ "$rc" = 10 ]; then echo "coverage's configuration names no source: --source=$src"
           else echo "could not read coverage's configuration (exit $rc): --source=$src"; fi
-          exec uv run --no-sync coverage run --branch --source="$src" -m pytest
+          limited uv run --no-sync coverage run --branch --source="$src" -m pytest
 
       # Which of the lines a pull request changes ran under the tests (#503).
       # Reported, never failing (#503's Decisions, 2026-10-12): the verdict
@@ -515,16 +570,29 @@ jobs:
 
       # Exercise the declared range for real. Empty input: this step does
       # nothing. uv downloads the interpreter, so the runner needs no preinstall.
+      # Each version under `timeout`, as pytest above (#941).
       - name: Also on the extra Python versions
         id: extra
         if: inputs.extra-python-versions != ''
         env:
           VERSIONS: ${{ inputs.extra-python-versions }}
+          LIMIT: ${{ inputs.test-timeout-minutes }}
         run: |
           set -euo pipefail
+          limited() {
+            local rc=0 now left margin
+            now="$(date +%s)"; margin=$((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS))
+            left=$((LIMIT * 60 - (now - $(cat "$RUNNER_TEMP/test.started")) - margin))
+            if [ "$left" -gt 0 ]; then timeout -k 10 "$left" "$@" || rc=$?; else rc=124; fi
+            if [ "$rc" = 124 ] || { [ "$rc" = 137 ] && [ "$(date +%s)" -ge $((now + left)) ]; }; then
+              echo "$LIMIT" > "$RUNNER_TEMP/extra.time-limit"
+              echo "::error::pytest on $v stopped at the time limit, not at a failing test: the job's $LIMIT-minute limit (test-timeout-minutes) less $margin s for the steps after it; raise test-timeout-minutes under ci.yml's with: (docs/reference/required-checks.md)"
+            fi
+            return "$rc"
+          }
           for v in $VERSIONS; do
             echo "── python $v"
-            uv run --isolated --python "$v" --with pytest pytest -q
+            limited uv run --isolated --python "$v" --with pytest pytest -q
           done
 
       - name: Verdict
@@ -536,14 +604,19 @@ jobs:
           VERSIONS: ${{ inputs.extra-python-versions }}
           WEB: ${{ inputs.web }}
           PG: ${{ steps.pg.outcome }}
+          LIMIT: ${{ inputs.test-timeout-minutes }}
+          LIMIT_OUTCOME: ${{ steps.limit.outcome }}
         run: |
           nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
           say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          # The time limit stopped it (#941): the step left a file saying so.
+          limit() { [ -s "$RUNNER_TEMP/$1" ] && say "fail: $2, stopped at the time limit: the job's $LIMIT-minute limit (test-timeout-minutes) less $((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS)) s kept for the steps after it ended it, not a failing test; raise test-timeout-minutes under ci.yml's with:, or make the suite faster"; }
+          if [ "$LIMIT_OUTCOME" = failure ]; then say "fail: test-timeout-minutes, '$LIMIT' is not whole minutes from 1 to 360"; fi
           v "$SYNC" "uv sync --locked"
           if [ "$WEB" = true ]; then v "$PG" "a disposable Postgres for the tests"; fi
-          v "$PYTEST" "pytest on .python-version"
-          if [ -n "$VERSIONS" ]; then v "$EXTRA" "pytest on $VERSIONS"
+          limit pytest.time-limit "pytest on .python-version" || v "$PYTEST" "pytest on .python-version"
+          if [ -n "$VERSIONS" ]; then limit extra.time-limit "pytest on $VERSIONS" || v "$EXTRA" "pytest on $VERSIONS"
           else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
           if [ -s "$RUNNER_TEMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$RUNNER_TEMP/changed.verdict"
           else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi

@@ -11,31 +11,8 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
-### Added
-
-- `ci / diff-size` fails a pull request whose diff adds a merge conflict
-  marker, naming each file and line (#936): `<<<<<<<`, `|||||||` or
-  `>>>>>>>` at the start of a line, alone or before a space and a label, and
-  `=======` alone on its line where the same file's added lines carry one of
-  those, since alone it is also a Markdown heading's underline. Only added
-  lines are read, in every tracked file, so a marker the base already has
-  passes; one inside a fenced code block a document adds fails, and an
-  indented one or one in a code span passes. A pull request in
-  coolbress/plinth-template kept three markers in `CHANGELOG.md` past every
-  check (coolbress/plinth-template#237). It is a new step in an existing
-  required check, so no ruleset needs a new required check: an existing
-  project gets it by raising both `coolbress/plinth` `uses:` lines, in
-  `ci.yml` and `label.yml`, to the release that carries it. plinth's own
-  `ci / docs` runs the same check. A GitLab pipeline does not run it yet.
-
 ### Changed
 
-- `/plinth:new-project` renders plinth-template v1.44.1: a TestPyPI
-  rehearsal of a uv workspace release takes only the workspace's own
-  packages from TestPyPI and everything else from PyPI, where the install
-  check had stopped on TestPyPI's old copies of pinned dependencies
-  (coolbress/plinth-template#241). A new project still calls plinth v2.28.0.
-  An existing project gets it through `/plinth:template-update`.
 - floor-check's force-push item says which spellings the deny list stops
   (#942). It passed on any entry starting with `Bash(git push --force` or
   `Bash(git push -f`, which under Claude Code's matching stop only those
@@ -60,6 +37,68 @@ pull requests and have no tag.
   local reflog.
 - The eval suite's force count also counts a `+` refspec
   (`git push origin +<b>`) (#942).
+
+## [2.34.0] - 2026-11-16
+
+`ci / test` no longer runs pytest under coverage on a push, where nothing reads it, says when pytest stopped at the job's time limit instead of ending as "The operation was canceled.", and takes that limit from a new input, `test-timeout-minutes` (default 10): a real project's suite had started to be cancelled at 10 minutes with every test passed. `ci / diff-size` fails a pull request whose diff adds a merge conflict marker. `/plinth:new-project` renders plinth-template v1.44.1, whose TestPyPI rehearsal of a uv workspace release takes only the workspace's own packages from TestPyPI, and says how long its run takes and that the agent waits for that one run. A project gets the checks' changes by raising both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to this release; the template change comes through `/plinth:template-update`.
+
+tested with plinth-template v1.44.1
+
+### Added
+
+- `ci / diff-size` fails a pull request whose diff adds a merge conflict
+  marker, naming each file and line (#936): `<<<<<<<`, `|||||||` or
+  `>>>>>>>` at the start of a line, alone or before a space and a label, and
+  `=======` alone on its line where the same file's added lines carry one of
+  those, since alone it is also a Markdown heading's underline. Only added
+  lines are read, in every tracked file, so a marker the base already has
+  passes; one inside a fenced code block a document adds fails, and an
+  indented one or one in a code span passes. A pull request in
+  coolbress/plinth-template kept three markers in `CHANGELOG.md` past every
+  check (coolbress/plinth-template#237). It is a new step in an existing
+  required check, so no ruleset needs a new required check: an existing
+  project gets it by raising both `coolbress/plinth` `uses:` lines, in
+  `ci.yml` and `label.yml`, to the release that carries it. plinth's own
+  `ci / docs` runs the same check. A GitLab pipeline does not run it yet.
+- `ci / test` takes its time limit from a new input, `test-timeout-minutes`
+  (whole minutes from 1 to 360, default 10, so a project that sets nothing
+  keeps today's 10 minutes), and says when that limit, not a test, stopped
+  pytest (#941). A project's `ci / test` was cancelled at 10 minutes with
+  every test passed: the same suite ran 589 s and 345 s one commit apart,
+  and a job cancelled at its limit wrote only "The operation was canceled."
+  The input is the job's own limit. pytest and each extra Python version now
+  run under coreutils `timeout` with what is left of it less 120 seconds,
+  or a fifth of the limit when that is shorter, kept for the changed lines
+  and the summary, so the summary's line reads
+  `fail: pytest on .python-version, stopped at the time limit` with the
+  minutes and the input's name. A value outside 1 to 360 fails the job,
+  naming the input. A step's own `timeout-minutes` was measured first and
+  not used: it killed the step's shell and left the pytest it started
+  running into the later steps. An existing project gets this by raising
+  both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to the
+  release that carries it, and sets the input under the `ci` job's `with:`
+  (`test-timeout-minutes: 20`); no check or job is renamed and no ruleset
+  needs an edit. GitLab's `test` job takes the same input in the include's
+  `inputs:` as its `timeout:`, and its script names the input for a value
+  above 360. For 0 or less, GitLab's duration parser returns no duration
+  (read in its source), so GitLab should refuse the pipeline with a message
+  about the job's timeout before the script can name the input. Neither the
+  interpolated `timeout:` nor that refusal has run on GitLab.com yet.
+
+### Changed
+
+- `ci / test` runs pytest without coverage where nothing reads coverage's
+  data: on a push (GitHub) and outside a merge request pipeline (GitLab)
+  (#941). Coverage was installed and run there too, and only the changed
+  lines of a pull request or merge request are judged from it. On a pull
+  request or merge request the run is unchanged, and on a push the
+  changed-lines line still reads "does not apply (not a pull request)".
+- `/plinth:new-project` renders plinth-template v1.44.1: a TestPyPI
+  rehearsal of a uv workspace release takes only the workspace's own
+  packages from TestPyPI and everything else from PyPI, where the install
+  check had stopped on TestPyPI's old copies of pinned dependencies
+  (coolbress/plinth-template#241). A new project still calls plinth v2.28.0.
+  An existing project gets it through `/plinth:template-update`.
 - `/plinth:new-project` says how long the run takes and how to wait for it
   (#919): several minutes, up to about 26 on GitHub (five waits of up to 5
   minutes each and one of a minute), of which at most about 16 come before
@@ -5339,7 +5378,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.33.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.34.0...HEAD
+[2.34.0]: https://github.com/coolbress/plinth/releases/tag/v2.34.0
 [2.33.0]: https://github.com/coolbress/plinth/releases/tag/v2.33.0
 [2.32.0]: https://github.com/coolbress/plinth/releases/tag/v2.32.0
 [2.31.0]: https://github.com/coolbress/plinth/releases/tag/v2.31.0

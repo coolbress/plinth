@@ -906,7 +906,9 @@ else bad "a locked coverage was installed over (exit $crc)" "$(cat "$tmp/args")"
 # src/ directory and `.` without; plain `uv run pytest` otherwise. A source
 # coverage's own configuration names wins: no --source then (#761).
 job_step test pytest > "$tmp/p.sh" || bad "test / pytest: step not found"
-pyrun() { rm -f "$tmp/args"*; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" COV="$2" ${3:+FAKE_SRC_RC="$3"} bash -e "$tmp/p.sh" >"$tmp/plog" 2>&1); prc=$?; }
+# The job started just now, with ten minutes to run (#941; tests/test-job-cases.sh).
+mkdir -p "$tmp/prt"
+pyrun() { rm -f "$tmp/args"*; date +%s > "$tmp/prt/test.started"; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" RUNNER_TEMP="$tmp/prt" LIMIT=10 TEST_MARGIN_SECONDS=120 COV="$2" ${3:+FAKE_SRC_RC="$3"} bash -e "$tmp/p.sh" >"$tmp/plog" 2>&1); prc=$?; }
 pyrun "$tmp/srcl" success 0
 grep -qx 'uv run --no-sync coverage run --branch -m pytest' "$tmp/args" && grep -q 'measured as configured' "$tmp/plog" \
   && ok "pytest, coverage's configuration names a source: no --source, measured as configured" || bad "pytest, configured source" "$(cat "$tmp/args" "$tmp/plog")"
