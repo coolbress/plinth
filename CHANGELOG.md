@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.35.0] - 2026-11-17
+
+An agent's force push is refused in the spellings it actually writes: plinth-template v1.44.2's deny list also refuses `--force` and `--force-with-lease` anywhere after `git push`, `-f` after other arguments, a `+` refspec and options between `git` and `push`, and its `AGENTS.md` no longer says the permission prompt stops a spelling no rule matches, names what the rules cannot stop, and says a pull request's branch is updated by merging the base in. `/plinth:floor-check` names the force-push spellings it found denied and WARNs, with the rules to add, when only the old two are there. A project gets floor-check's change by raising both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to this release; the template change comes through `/plinth:template-update`.
+
+tested with plinth-template v1.44.2
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-6921100693>
+
 ### Changed
 
 - floor-check's force-push item says which spellings the deny list stops
@@ -5384,7 +5391,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.34.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.35.0...HEAD
+[2.35.0]: https://github.com/coolbress/plinth/releases/tag/v2.35.0
 [2.34.0]: https://github.com/coolbress/plinth/releases/tag/v2.34.0
 [2.33.0]: https://github.com/coolbress/plinth/releases/tag/v2.33.0
 [2.32.0]: https://github.com/coolbress/plinth/releases/tag/v2.32.0
