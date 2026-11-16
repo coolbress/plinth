@@ -125,9 +125,16 @@ else bad "the template's force-push rules should pass naming each spelling"; gre
 only_two="python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); d=j[\"permissions\"][\"deny\"]; j[\"permissions\"][\"deny\"]=[\"Bash(git push --force:*)\",\"Bash(git push -f:*)\"]+[x for x in d if \"push\" not in x]; json.dump(j,open(p,\"w\"))'"
 out="$(fp_out "$only_two")"
 if grep -qF 'WARN  .claude/settings.json denies force push only as `git push --force`, `git push -f`; not `--force-with-lease`, `--force` after other arguments' <<<"$out" \
-  && grep -qF 'INFO    add to permissions.deny: "Bash(git push *--force*)", "Bash(git push * -f *)", "Bash(git push *+*)", "Bash(git * push *--force*)"' <<<"$out" \
+  && grep -qF 'INFO    add to permissions.deny: "Bash(git push *--force*)", "Bash(git push * -f)", "Bash(git push *+*)", "Bash(git * push *--force*)"' <<<"$out" \
   && grep -q -- '-- 0 failed' <<<"$out"; then ok "the two old force-push rules alone are a WARN with the rules to add (#942)"
 else bad "the two old force-push rules alone should WARN with the rules to add"; grep -E 'force push|add to' <<<"$out" | sed 's/^/        /'; fi
+# A trailing ` *` matches the bare command only as a rule's one wildcard:
+# `Bash(git push * -f *)` leaves `git push origin b -f` open (#946 review).
+no_end_f="python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if x not in (\"Bash(git push * -f)\",\"Bash(git * push -f)\",\"Bash(git * push * -f)\")]; json.dump(j,open(p,\"w\"))'"
+out="$(fp_out "$no_end_f")"
+if grep -qF 'not `-f` after other arguments, `git -C <dir> push -f`, `git -C <dir> push <b> -f`' <<<"$out" \
+  && grep -qF 'INFO    add to permissions.deny: "Bash(git push * -f)", "Bash(git * push -f)", "Bash(git * push * -f)"' <<<"$out"; then ok "a rule ending \` -f *\` does not stand in for one ending \` -f\`: a WARN naming the three (#946)"
+else bad "rules ending \` -f *\` alone should WARN for a trailing -f"; grep -E 'force push|add to' <<<"$out" | sed 's/^/        /'; fi
 plant "no force-push rule at all fails" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "does not deny force push"
 plant "a deny of --force-with-lease alone is not the floor" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[\"Bash(git push --force-with-lease)\"]+[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "does not deny force push"
 plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"

@@ -609,25 +609,29 @@ FORCE_PUSH_SPELLINGS = [
     ("`git push -f`", "git push -f", "Bash(git push -f:*)"),
     ("`--force-with-lease`", "git push --force-with-lease", "Bash(git push *--force*)"),
     ("`--force` after other arguments", "git push origin b --force", "Bash(git push *--force*)"),
-    ("`-f` after other arguments", "git push origin b -f", "Bash(git push * -f *)"),
+    ("`-f` after other arguments", "git push origin b -f", "Bash(git push * -f)"),
     ("a `+` refspec", "git push origin +b", "Bash(git push *+*)"),
     ("`git -C <dir> push --force`", "git -C d push --force", "Bash(git * push *--force*)"),
-    ("`git -C <dir> push -f`", "git -C d push -f", "Bash(git * push -f *)"),
-    ("`git -C <dir> push <b> -f`", "git -C d push origin b -f", "Bash(git * push * -f *)"),
+    ("`git -C <dir> push -f`", "git -C d push -f", "Bash(git * push -f)"),
+    ("`git -C <dir> push <b> -f`", "git -C d push origin b -f", "Bash(git * push * -f)"),
     ("`git -C <dir> push +<b>`", "git -C d push origin +b", "Bash(git * push *+*)"),
+    ("`-f` between other arguments", "git push origin -f b", "Bash(git push * -f *)"),
+    ("`git -C <dir> push -f <b>`", "git -C d push -f origin b", "Bash(git * push -f *)"),
 ]
 
 
 def deny_rule_matches(rule: str, cmd: str) -> bool:
     """Claude Code's documented Bash matching: a trailing `:*` is a trailing
-    ` *`, whose space is part of the rule and which also matches the bare
-    command; any other `*` matches any text; nothing else is special."""
+    ` *`, whose space is part of the rule; it also matches the bare command
+    only when it is the rule's only wildcard (`Bash(git push * -f *)` does
+    not match `git push origin b -f`); any other `*` matches any text;
+    nothing else is special."""
     if not (rule.startswith("Bash(") and rule.endswith(")")):
         return False
     body, tail = rule[5:-1], ""
     if body.endswith(":*"):
         body = body[:-2] + " *"
-    if body.endswith(" *"):
+    if body.endswith(" *") and body.count("*") == 1:
         body, tail = body[:-2], "(?: .*)?"
     return re.fullmatch(".*".join(map(re.escape, body.split("*"))) + tail, cmd, re.DOTALL) is not None
 
