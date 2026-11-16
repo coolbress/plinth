@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.34.0] - 2026-11-16
+
+`ci / test` no longer runs pytest under coverage on a push, where nothing reads it, says when pytest stopped at the job's time limit instead of ending as "The operation was canceled.", and takes that limit from a new input, `test-timeout-minutes` (default 10): a real project's suite had started to be cancelled at 10 minutes with every test passed. `ci / diff-size` fails a pull request whose diff adds a merge conflict marker. `/plinth:new-project` renders plinth-template v1.44.1, whose TestPyPI rehearsal of a uv workspace release takes only the workspace's own packages from TestPyPI, and says how long its run takes and that the agent waits for that one run. A project gets the checks' changes by raising both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to this release; the template change comes through `/plinth:template-update`.
+
+tested with plinth-template v1.44.1
+
 ### Added
 
 - `ci / diff-size` fails a pull request whose diff adds a merge conflict
@@ -5345,7 +5351,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.33.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.34.0...HEAD
+[2.34.0]: https://github.com/coolbress/plinth/releases/tag/v2.34.0
 [2.33.0]: https://github.com/coolbress/plinth/releases/tag/v2.33.0
 [2.32.0]: https://github.com/coolbress/plinth/releases/tag/v2.32.0
 [2.31.0]: https://github.com/coolbress/plinth/releases/tag/v2.31.0
