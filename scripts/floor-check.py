@@ -573,7 +573,6 @@ def check_agent_settings(root: Path, host: str = "github") -> None:
         return re.fullmatch(".*".join(map(re.escape, d[5:-1].split("*"))), cmd) is not None
 
     wants = {
-        "force push": lambda d: d.startswith(("Bash(git push --force", "Bash(git push -f")),
         "rm -rf": lambda d: d.startswith("Bash(rm -rf"),
         "gh auth token": lambda d: d.startswith("Bash(gh auth token"),
         ".env reads": lambda d: d.startswith("Read(./.env"),
@@ -595,9 +594,68 @@ def check_agent_settings(root: Path, host: str = "github") -> None:
         wants["glab auth status -t"] = lambda d: bash_rule_stops("glab auth status -t", d)
         wants["glab config get token"] = lambda d: bash_rule_stops("glab config get token", d)
         wants["glab config reads"] = lambda d: d.startswith("Read(~/.config/glab-cli")
+    check_force_push_deny(deny)
     for what, match in wants.items():
         ok(any(match(d) for d in deny), f".claude/settings.json denies {what}",
            f".claude/settings.json does not deny {what}")
+
+
+# The spellings of a force push an agent writes, each with the command probed
+# and the template's rule that denies it (plinth-template, #942). The first two
+# are the floor; the rest were added after an agent in auto mode pushed
+# `--force-with-lease`, which `Bash(git push --force:*)` does not match.
+FORCE_PUSH_SPELLINGS = [
+    ("`git push --force`", "git push --force", "Bash(git push --force:*)"),
+    ("`git push -f`", "git push -f", "Bash(git push -f:*)"),
+    ("`--force-with-lease`", "git push --force-with-lease", "Bash(git push *--force*)"),
+    ("`--force` after other arguments", "git push origin b --force", "Bash(git push *--force*)"),
+    ("`-f` after other arguments", "git push origin b -f", "Bash(git push * -f)"),
+    ("a `+` refspec", "git push origin +b", "Bash(git push *+*)"),
+    ("`git -C <dir> push --force`", "git -C d push --force", "Bash(git * push *--force*)"),
+    ("`git -C <dir> push -f`", "git -C d push -f", "Bash(git * push -f)"),
+    ("`git -C <dir> push <b> -f`", "git -C d push origin b -f", "Bash(git * push * -f)"),
+    ("`git -C <dir> push +<b>`", "git -C d push origin +b", "Bash(git * push *+*)"),
+    ("`-f` between other arguments", "git push origin -f b", "Bash(git push * -f *)"),
+    ("`git -C <dir> push -f <b>`", "git -C d push -f origin b", "Bash(git * push -f *)"),
+]
+
+
+def deny_rule_matches(rule: str, cmd: str) -> bool:
+    """Claude Code's documented Bash matching: a trailing `:*` is a trailing
+    ` *`, whose space is part of the rule; it also matches the bare command
+    only when it is the rule's only wildcard (`Bash(git push * -f *)` does
+    not match `git push origin b -f`); any other `*` matches any text;
+    nothing else is special."""
+    if not (rule.startswith("Bash(") and rule.endswith(")")):
+        return False
+    body, tail = rule[5:-1], ""
+    if body.endswith(":*"):
+        body = body[:-2] + " *"
+    if body.endswith(" *") and body.count("*") == 1:
+        body, tail = body[:-2], "(?: .*)?"
+    return re.fullmatch(".*".join(map(re.escape, body.split("*"))) + tail, cmd, re.DOTALL) is not None
+
+
+def check_force_push_deny(deny: list) -> None:
+    """Names the spellings the rules deny, not only that one rule starts with
+    `Bash(git push --force` (#942). Neither of the first two denied is a FAIL,
+    as before; a wider spelling missing is new ground, so a WARN."""
+    rules = [d for d in deny if isinstance(d, str)]
+    stops = {label: any(deny_rule_matches(r, cmd) for r in rules) for label, cmd, _ in FORCE_PUSH_SPELLINGS}
+    denied = [label for label, hit in stops.items() if hit]
+    floor = [label for label, _, _ in FORCE_PUSH_SPELLINGS[:2]]
+    if not any(stops[label] for label in floor):
+        result("FAIL", ".claude/settings.json does not deny force push")
+        return
+    missing = [(label, rule) for label, _, rule in FORCE_PUSH_SPELLINGS if not stops[label]]
+    if not missing:
+        result("PASS", f".claude/settings.json denies force push: {', '.join(denied)}")
+        return
+    result("WARN", f".claude/settings.json denies force push only as {', '.join(denied)}; "
+                   f"not {', '.join(label for label, _ in missing)}")
+    adds = list(dict.fromkeys(rule for _, rule in missing))
+    result("INFO", "  add to permissions.deny: " + ", ".join(json.dumps(r) for r in adds)
+           + "   (plinth-template's rules; an existing project gets them from /plinth:template-update)")
 
 
 # The three predicates below were named by #42 and shipped by #95. Each is new

@@ -11,6 +11,33 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- floor-check's force-push item says which spellings the deny list stops
+  (#942). It passed on any entry starting with `Bash(git push --force` or
+  `Bash(git push -f`, which under Claude Code's matching stop only those
+  words written first: not `--force-with-lease`, `git push origin <b>
+  --force`, a `+` refspec or `git -C <dir> push --force`. In a real project
+  an agent in auto mode pushed its pull request's branch with
+  `--force-with-lease`, and nothing stopped it. The item now probes each
+  spelling under the documented matching, names the ones denied in its PASS,
+  and WARNs with the rules to add when only the old two are there. Neither
+  `git push --force` nor `git push -f` denied is still a FAIL, now read by
+  what the rules stop: a list whose only push rule names
+  `--force-with-lease`, which passed before, fails. coolbress/plinth-template carries the wider
+  rules and an `AGENTS.md` that no longer says the permission prompt stops
+  what no rule matches (in auto mode the classifier decides); an existing
+  project gets both through `/plinth:template-update` once plinth renders
+  that template. plinth's own `.claude/settings.json` carries the same rules.
+  A pull request's branch stays unprotected on GitHub: `non_fast_forward` on
+  every branch would break Dependabot, which rebases its pull requests by
+  force-pushing, and a person's own rebase or GitHub's "Update branch
+  (rebase)"; a force-pushed pull request branch never reaches `main`, and its
+  earlier commits stay reachable from the pull request's timeline and the
+  local reflog.
+- The eval suite's force count also counts a `+` refspec
+  (`git push origin +<b>`) (#942).
+
 ## [2.34.0] - 2026-11-16
 
 `ci / test` no longer runs pytest under coverage on a push, where nothing reads it, says when pytest stopped at the job's time limit instead of ending as "The operation was canceled.", and takes that limit from a new input, `test-timeout-minutes` (default 10): a real project's suite had started to be cancelled at 10 minutes with every test passed. `ci / diff-size` fails a pull request whose diff adds a merge conflict marker. `/plinth:new-project` renders plinth-template v1.44.1, whose TestPyPI rehearsal of a uv workspace release takes only the workspace's own packages from TestPyPI, and says how long its run takes and that the agent waits for that one run. A project gets the checks' changes by raising both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to this release; the template change comes through `/plinth:template-update`.
