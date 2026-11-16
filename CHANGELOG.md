@@ -27,8 +27,38 @@ pull requests and have no tag.
   project gets it by raising both `coolbress/plinth` `uses:` lines, in
   `ci.yml` and `label.yml`, to the release that carries it. plinth's own
   `ci / docs` runs the same check. A GitLab pipeline does not run it yet.
+- `ci / test` takes its time limit from a new input, `test-timeout-minutes`
+  (whole minutes from 1 to 360, default 10, so a project that sets nothing
+  keeps today's 10 minutes), and says when that limit, not a test, stopped
+  pytest (#941). A project's `ci / test` was cancelled at 10 minutes with
+  every test passed: the same suite ran 589 s and 345 s one commit apart,
+  and a job cancelled at its limit wrote only "The operation was canceled."
+  The input is the job's own limit. pytest and each extra Python version now
+  run under coreutils `timeout` with what is left of it less 120 seconds
+  kept for the changed lines and the summary, so the summary's line reads
+  `fail: pytest on .python-version, stopped at the time limit` with the
+  minutes and the input's name. A value outside 1 to 360 fails the job,
+  naming the input. A step's own `timeout-minutes` was measured first and
+  not used: it killed the step's shell and left the pytest it started
+  running into the later steps. An existing project gets this by raising
+  both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to the
+  release that carries it, and sets the input under the `ci` job's `with:`
+  (`test-timeout-minutes: 20`); no check or job is renamed and no ruleset
+  needs an edit. GitLab's `test` job takes the same input in the include's
+  `inputs:` as its `timeout:`, and its script names the input for a value
+  above 360. For 0 or less, GitLab's duration parser returns no duration
+  (read in its source), so GitLab should refuse the pipeline with a message
+  about the job's timeout before the script can name the input. Neither the
+  interpolated `timeout:` nor that refusal has run on GitLab.com yet.
 
 ### Changed
+
+- `ci / test` runs pytest without coverage where nothing reads coverage's
+  data: on a push (GitHub) and outside a merge request pipeline (GitLab)
+  (#941). Coverage was installed and run there too, and only the changed
+  lines of a pull request or merge request are judged from it. On a pull
+  request or merge request the run is unchanged, and on a push the
+  changed-lines line still reads "does not apply (not a pull request)".
 
 - `/plinth:new-project` says how long the run takes and how to wait for it
   (#919): several minutes, up to about 26 on GitHub (five waits of up to 5

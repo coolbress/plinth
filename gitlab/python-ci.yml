@@ -56,6 +56,10 @@ spec:
     extra-python-versions:
       description: Python versions to test in addition to .python-version, space separated.
       default: ""
+    test-timeout-minutes:
+      description: The test job's time limit in whole minutes, 1 to 360; pytest stops two minutes before it.
+      type: number
+      default: 10
 ---
 
 # Merge request pipelines, and the default branch after a merge. A branch
@@ -167,18 +171,54 @@ typecheck:
 # request pipeline checks out the merge request's head, so here they are
 # judged against CI_MERGE_REQUEST_DIFF_BASE_SHA, the merge base GitLab's
 # Changes tab shows.
+#
+# The test-timeout-minutes input is the job's limit (#941), as on GitHub:
+# pytest and each extra version run under coreutils `timeout`, set to what is
+# left of it less PLINTH_TEST_MARGIN_SECONDS, the time kept for the changed
+# lines and the Verdict, which then says the limit stopped it. For 0 or less
+# GitLab's duration parser returns no duration (read in its source), so
+# GitLab's message about the timeout comes before this script names the input.
 test:
   extends: .plinth
+  timeout: $[[ inputs.test-timeout-minutes ]]m
   variables:
     GIT_DEPTH: "0"
     PLINTH_EXTRA_PYTHON_VERSIONS: $[[ inputs.extra-python-versions ]]
+    PLINTH_TEST_TIMEOUT_MINUTES: $[[ inputs.test-timeout-minutes ]]
+    PLINTH_TEST_MARGIN_SECONDS: "120"
   script:
     - |
+      plinth_started="$(date +%s)"
+      case "$PLINTH_TEST_TIMEOUT_MINUTES" in "" | *[!0-9]*) l= ;; *) l=1 ;; esac
+      if [ -z "$l" ] || [ "$PLINTH_TEST_TIMEOUT_MINUTES" -lt 1 ] || [ "$PLINTH_TEST_TIMEOUT_MINUTES" -gt 360 ]; then
+        say "fail: test-timeout-minutes, '$PLINTH_TEST_TIMEOUT_MINUTES' is not whole minutes from 1 to 360; set it in the include's inputs"
+        plinth_failed=1
+      fi
+      # <marker> <command>...: the command under `timeout`, with what is left
+      # of the limit. Exit 124, or 137 at the deadline when it ignored the
+      # TERM, is the limit, and the marker file tells the verdict.
+      limited() {
+        local m="$1" rc=0 now left; shift
+        now="$(date +%s)"; left=$((PLINTH_TEST_TIMEOUT_MINUTES * 60 - (now - plinth_started) - PLINTH_TEST_MARGIN_SECONDS))
+        if [ "$left" -gt 0 ]; then timeout -k 30 "$left" "$@" || rc=$?; else rc=124; fi
+        if [ "$rc" = 124 ] || { [ "$rc" = 137 ] && [ "$(date +%s)" -ge $((now + left)) ]; }; then
+          : > "$PLINTH_TMP/$m"
+          echo "stopped at the time limit, not at a failing test: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $PLINTH_TEST_MARGIN_SECONDS s for the steps after it"
+        fi
+        return "$rc"
+      }
+      # After a step: when its marker is there, its fail line says the limit.
+      time_limit() {
+        [ -e "$PLINTH_TMP/$1" ] || return 0
+        plinth_lines[${#plinth_lines[@]} - 1]="fail: $2, stopped at the time limit: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $PLINTH_TEST_MARGIN_SECONDS s kept for the steps after it ended it, not a failing test; raise test-timeout-minutes in the include's inputs, or make the suite faster"
+      }
       plinth_uv || exit 1
       cd "$PLINTH_WORKDIR" || exit 1
       step "uv sync --locked" uv sync --locked
       # A failed install never fails the job: pytest then runs without
-      # coverage and the changed lines are not yet confirmed.
+      # coverage and the changed lines are not yet confirmed. Only a merge
+      # request's changed lines read coverage's data, so elsewhere it is not
+      # installed and pytest runs without it (#941).
       install_coverage() {
         local r="$PLINTH_TMP/coverage-requirements.txt"
         cat > "$r" <<'REQ'
@@ -200,7 +240,7 @@ test:
         uv run --no-sync coverage --version
       }
       cov=skipped
-      if [ "$plinth_failed" = 0 ]; then
+      if [ "$plinth_failed" = 0 ] && [ -n "${CI_MERGE_REQUEST_IID:-}" ]; then
         if install_coverage; then cov=success; else cov=failure; fi
       fi
       # Under coverage when it installed; the outcome is pytest's either way.
@@ -213,7 +253,7 @@ test:
       # read leaves the second rule, and `coverage run` then says what is wrong.
       # The question's exit code: 0 a source is named, 10 none, else unreadable.
       run_pytest() {
-        if [ "$cov" != success ]; then uv run pytest; return; fi
+        if [ "$cov" != success ]; then limited pytest.time-limit uv run pytest; return; fi
         local src=.; [ -d src ] && src=src
         local rc=0; uv run --no-sync python - <<'PY' || rc=$?
       import sys
@@ -224,15 +264,16 @@ test:
       PY
         if [ "$rc" = 0 ]; then
           echo "coverage's configuration names its source: measured as configured"
-          uv run --no-sync coverage run --branch -m pytest
+          limited pytest.time-limit uv run --no-sync coverage run --branch -m pytest
           return
         fi
         if [ "$rc" = 10 ]; then echo "coverage's configuration names no source: --source=$src"
         else echo "could not read coverage's configuration (exit $rc): --source=$src"; fi
-        uv run --no-sync coverage run --branch --source="$src" -m pytest
+        limited pytest.time-limit uv run --no-sync coverage run --branch --source="$src" -m pytest
       }
       step "pytest on .python-version" run_pytest
       pytest_outcome="$plinth_last"
+      time_limit pytest.time-limit "pytest on .python-version"
 
       # Which of the lines a merge request changes ran under the tests (#503).
       # Reported, never failing; a step that breaks leaves no verdict file,
@@ -352,10 +393,12 @@ test:
         local v
         for v in $PLINTH_EXTRA_PYTHON_VERSIONS; do
           echo "── python $v"
-          uv run --isolated --python "$v" --with pytest pytest -q || return 1
+          limited extra.time-limit uv run --isolated --python "$v" --with pytest pytest -q || return 1
         done
       }
-      if [ -n "$PLINTH_EXTRA_PYTHON_VERSIONS" ]; then step "pytest on $PLINTH_EXTRA_PYTHON_VERSIONS" extra_versions
+      if [ -n "$PLINTH_EXTRA_PYTHON_VERSIONS" ]; then
+        step "pytest on $PLINTH_EXTRA_PYTHON_VERSIONS" extra_versions
+        time_limit extra.time-limit "pytest on $PLINTH_EXTRA_PYTHON_VERSIONS"
       else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
       if [ -n "$branch_of_mr" ]; then :
       elif [ -s "$PLINTH_TMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/changed.verdict"
