@@ -81,6 +81,12 @@ is gone. The run that makes the repository deletes it when the result is
 recorded and checks that it is gone (a 404 on reading it); a raw record worth
 keeping stays outside the public records.
 
+A real project made with plinth is named in a record only when its owner has
+made the link public, for example a public repository whose README says it was
+made with plinth, and only while it stays so: when the owner takes the link
+back, the name comes out of the record. Otherwise it is "a real project", with
+the conditions that matter, as for a test repository.
+
 Outside users read these records, so write them in the product's voice, not
 as a person's story. A decision reads "Decided: …", not "the owner decided";
 someone doing a task is "a maintainer" or the role they have, not a person
