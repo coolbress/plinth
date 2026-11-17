@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/how-to/run-a-project.md` step 9 says what to do when a dependency
+  pull request stays red (#949): read why; when one package in a group is
+  the cause, take it out with the group's `exclude-patterns`, or regenerate
+  on its branch knowing Dependabot stops rebasing it, and merge the rest;
+  `@dependabot ignore` is a lasting pin, undone with `unignore`. It says
+  `.github/dependabot.yml`'s groups and cooldown are the project's to
+  change. The template's part (its keep-current how-to and its cooldown
+  comment, which now says the wait holds only the packages a pull request
+  names, not those `uv lock` moves with them) reaches an existing project
+  through `/plinth:template-update` once plinth renders the template
+  release that carries it.
+
 ## [2.35.0] - 2026-11-17
 
 An agent's force push is refused in the spellings it actually writes: plinth-template v1.44.2's deny list also refuses `--force` and `--force-with-lease` anywhere after `git push`, `-f` after other arguments, a `+` refspec and options between `git` and `push`, and its `AGENTS.md` no longer says the permission prompt stops a spelling no rule matches, names what the rules cannot stop, and says a pull request's branch is updated by merging the base in. `/plinth:floor-check` names the force-push spellings it found denied and WARNs, with the rules to add, when only the old two are there. A project gets floor-check's change by raising both `coolbress/plinth` `uses:` lines, in `ci.yml` and `label.yml`, to this release; the template change comes through `/plinth:template-update`.
