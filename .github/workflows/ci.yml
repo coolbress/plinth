@@ -51,6 +51,7 @@ jobs:
       issues: read
       pull-requests: read
       actions: write
+      checks: write   # seeded for #953
     with:
       working-directory: canary
       extra-python-versions: "3.13"
@@ -68,6 +69,7 @@ jobs:
       issues: read
       pull-requests: read
       actions: write
+      checks: write   # seeded for #953
     with:
       working-directory: canary-web
       web: true
