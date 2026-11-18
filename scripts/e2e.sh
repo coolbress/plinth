@@ -4,7 +4,7 @@
 #   e2e.sh [<owner>]
 #
 # Creates <owner>/plinth-e2e-<run> with the door beside this file
-# (new-project.sh: create, render, main, labels, CodeQL, ruleset, the first
+# (new-project.sh: render, create, main, labels, CodeQL, ruleset, the first
 # pull request), reads the wall back with the checker `ci / floor-check` runs
 # (floor-check.py), waits for every check on that pull request to be green,
 # squash-merges it, reads main back, and deletes the repository. The `e2e`

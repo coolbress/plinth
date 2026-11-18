@@ -45,6 +45,15 @@ pull requests and have no tag.
   failing, not a test; the checkout fails when the tag no longer names the
   pinned commit.
 
+### Fixed
+
+- On GitHub, `/plinth:new-project` renders the template before it creates the
+  repository, as it does on GitLab (#964). A name the template refuses, such
+  as `class`, now stops with copier's own words and creates nothing. Before, it created the repository and then
+  deleted it, and without the token's `delete_repo` scope it left an empty
+  repository to delete by hand. When the create itself fails, the stop says
+  that the render stays in the local directory.
+
 ## [2.36.0] - 2026-11-18
 
 A project's dependency updates and reverts get the guidance a real project found missing: `docs/how-to/run-a-project.md` step 9 says what to do when a dependency pull request stays red (take the one package out of its group, know that `@dependabot ignore` is a lasting pin) and that `dependabot.yml`'s groups are the project's to change. `/plinth:new-project` renders plinth-template v1.45.1, whose keep-current how-to says the same, whose undo how-to says to fill the revert's description before merging and how to see `main` back, and whose `plinth_sha` default makes a new project call plinth v2.32.0 from its first commit. README and the tutorial name the code-of-conduct and description questions `/plinth:new-project` asks, and `/plinth:template-update` names its exit 2. No reusable workflow changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.
