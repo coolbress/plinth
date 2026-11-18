@@ -2026,6 +2026,7 @@ jobs:
       # error and reports "not verified" in every consumer's CI, so the one
       # place it matters most is the one place it would never run (#84).
       issues: read
+      checks: write   # seeded fault for #953: no caller grants this
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
