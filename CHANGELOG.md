@@ -11,6 +11,29 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- plinth's own CI runs plinth-template's `cli` project, rendered at the
+  commit `scripts/new-project.sh` pins and committed as `canary-template/`,
+  through the pull request's own `python-ci.yml` (#953). The new
+  `canary-template` job grants and passes exactly what the rendered
+  `ci.yml` grants and passes, so a `python-ci.yml` change that a template
+  project's caller cannot run, such as a job asking for a permission the
+  caller does not grant, fails in plinth's pull request instead of after a
+  release. `tests/template-render.sh` fails when the render, that copy or the
+  job's name falls behind the pin; a pin raise re-renders with
+  `tests/template-render.sh --write`. No ruleset requires the job, and no
+  consumer's `ci / *` check changes.
+
+### Changed
+
+- The tests that compare plinth with the template read one checkout of it at
+  the pinned commit, made by `tests/lib/template-checkout.sh`, instead of
+  each downloading files at the tag (#953). `ci / install` makes the
+  checkout once, in a step of its own, so a network error is that step
+  failing, not a test; the checkout fails when the tag no longer names the
+  pinned commit.
+
 ## [2.36.0] - 2026-11-18
 
 A project's dependency updates and reverts get the guidance a real project found missing: `docs/how-to/run-a-project.md` step 9 says what to do when a dependency pull request stays red (take the one package out of its group, know that `@dependabot ignore` is a lasting pin) and that `dependabot.yml`'s groups are the project's to change. `/plinth:new-project` renders plinth-template v1.45.1, whose keep-current how-to says the same, whose undo how-to says to fill the revert's description before merging and how to see `main` back, and whose `plinth_sha` default makes a new project call plinth v2.32.0 from its first commit. README and the tutorial name the code-of-conduct and description questions `/plinth:new-project` asks, and `/plinth:template-update` names its exit 2. No reusable workflow changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.

@@ -4,8 +4,9 @@
 # guide-state.sh both call that reader. Cases: what each archetype is told,
 # a feature the project already has is not listed, a Steps page that does not
 # exist fails --check (must-not-pass first), and a phrase a project file must
-# contain is read in the template at the tag the door pins (network; an
-# unreadable template is a FAIL, as in archetype-single-source.sh).
+# contain is read in the template at the commit the door pins (one checkout,
+# tests/lib/template-checkout.sh; none is a FAIL, as in
+# archetype-single-source.sh).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 script="$root/scripts/off-by-default.sh"
@@ -113,17 +114,21 @@ for f in skills/new-project/SKILL.md skills/guide/SKILL.md; do
   then ok "$f points to the sorting rule"; else bad "$f does not point to 'How an item is sorted'"; fi
 done
 
-# 6. A project-file phrase is in the template at the pinned tag.
-template="${TEMPLATE_REPO:-coolbress/plinth-template}"
-ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$root/scripts/new-project.sh")}"
-while IFS=$'\t' read -r file phrase; do
-  [ -n "$file" ] || continue
-  body="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/$template/$ref/template/$file.jinja" 2>/dev/null ||
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/$template/$ref/template/$file" 2>/dev/null)"
-  if [ -z "$body" ]; then bad "could not read $file in $template@$ref; cannot verify \"$phrase\""
-  elif grep -qF "$phrase" <<<"$body"; then ok "$template@$ref $file contains \"$phrase\""
-  else bad "$template@$ref $file does not contain \"$phrase\""; fi
-done < <("$script" --project-phrases)
+# 6. A project-file phrase is in the template at the pinned commit, read from
+#    one checkout (tests/lib/template-checkout.sh).
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
+if template_checkout "$work"; then
+  while IFS=$'\t' read -r file phrase; do
+    [ -n "$file" ] || continue
+    body="$(cat "$template_dir/template/$file.jinja" 2>/dev/null || cat "$template_dir/template/$file" 2>/dev/null)"
+    if [ -z "$body" ]; then bad "could not read $file in $template_at; cannot verify \"$phrase\""
+    elif grep -qF "$phrase" <<<"$body"; then ok "$template_at $file contains \"$phrase\""
+    else bad "$template_at $file does not contain \"$phrase\""; fi
+  done < <("$script" --project-phrases)
+else
+  bad "no checkout of the template: $template_error"
+fi
 [ -n "$("$script" --project-phrases)" ] || bad "--project-phrases printed nothing; the list has a project-file item"
 
 echo "-- $pass passed, $fail failed"

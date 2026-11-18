@@ -172,12 +172,13 @@ for dep in "${deps[@]}"; do expect "$dep" "Hooks (0)"; done
 # locally, without a login or an API call (measured on 2.1.314); a dropped
 # description shows as `< 20` tokens. Only this fresh configuration, so the
 # listing holds the default set and nothing else.
-tsha="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$root/scripts/new-project.sh")"
-[ -n "$tsha" ] || { echo "  FAIL  no template_sha in scripts/new-project.sh"; exit 1; }
+# The template is read from one checkout at the pinned commit (tests/lib/template-checkout.sh).
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
+template_checkout "$CLAUDE_CONFIG_DIR" || { echo "  FAIL  no checkout of the template: $template_error"; exit 1; }
 listing="$CLAUDE_CONFIG_DIR/listing"; mkdir -p "$listing/.claude"
-budget="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/coolbress/plinth-template/$tsha/template/.claude/settings.json.jinja" \
-  | sed -nE 's/^ *"skillListingBudgetFraction": *([0-9.]+),?$/\1/p')"
-[ -n "$budget" ] || { echo "  FAIL  no skillListingBudgetFraction read from plinth-template $tsha"; exit 1; }
+budget="$(sed -nE 's/^ *"skillListingBudgetFraction": *([0-9.]+),?$/\1/p' "$template_dir/template/.claude/settings.json.jinja" 2>/dev/null || true)"
+[ -n "$budget" ] || { echo "  FAIL  no skillListingBudgetFraction read from $template_at"; exit 1; }
 printf '{"skillListingBudgetFraction": %s}\n' "$budget" > "$listing/.claude/settings.json"
 (cd "$listing" && claude -p --model claude-haiku-4-5 /context) | python3 -c '
 import re, sys
@@ -211,8 +212,8 @@ expect mattpocock-skills@plinth "Skills (15)" "${added[@]}"
 tdir="$CLAUDE_CONFIG_DIR/template-files"; mkdir -p "$tdir"
 for p in template/docs/agents/domain.md template/AGENTS.md.jinja \
          template/.github/ISSUE_TEMPLATE/end-or-hand-over.yml template/.gitlab/issue_templates/End-or-hand-over.md; do
-  curl -fsSL --retry 3 -o "$tdir/$(basename "$p")" "https://raw.githubusercontent.com/coolbress/plinth-template/$tsha/$p" \
-    || { echo "  FAIL  could not read $p at plinth-template $tsha"; exit 1; }
+  cp "$template_dir/$p" "$tdir/$(basename "$p")" 2>/dev/null \
+    || { echo "  FAIL  no $p in $template_at"; exit 1; }
 done
 claude plugin list --json | python3 -c '
 import json, re, sys

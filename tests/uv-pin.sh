@@ -10,13 +10,15 @@
 # The order of a raise follows from it: the template's copies first, in a
 # template release, then plinth's copies and `template_ref` in one pull request.
 # Before that tag exists, read the template's branch:
-#   TEMPLATE_URL=<path or URL> TEMPLATE_REF=<branch> tests/uv-pin.sh
-# Reads the network: the template and the release's checksum, and unreadable is
-# a FAIL. The must-not-pass cases run first.
+#   TEMPLATE_REF=<branch> tests/uv-pin.sh
+# or a checkout whose HEAD is it: PLINTH_TEMPLATE_DIR=<path> TEMPLATE_REF=<branch>.
+# The template is read from one checkout at the pinned commit
+# (tests/lib/template-checkout.sh); the release's checksum over the network.
+# Either unreadable is a FAIL. The must-not-pass cases run first.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-template_url="${TEMPLATE_URL:-https://github.com/coolbress/plinth-template}"
-ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$root/scripts/new-project.sh")}"
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
 tarball="uv-x86_64-unknown-linux-gnu.tar.gz"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
@@ -27,11 +29,12 @@ cat >"$work/pins.py" <<'PY'
 # pins.py <tree>: stdout "<version> <sha256> <copies>" and, on stderr, one line
 # per file; exit 1 with the reason when the tree's copies are not one pin. A
 # file counts when it downloads uv or names a pin; Markdown only describes one,
-# and tests/ holds this test's own fixtures.
+# tests/ holds this test's own fixtures, and canary-template/ is a render of
+# the template, whose copies are read below as the template's.
 import os, re, sys
 TARBALL = 'f="uv-x86_64-unknown-linux-gnu.tar.gz"'
 URL = "astral-sh/uv/releases/download/"
-SKIP = {".git", ".claude", ".venv", "node_modules", "tests", "evidence"}
+SKIP = {".git", ".claude", ".venv", "node_modules", "tests", "evidence", "canary-template"}
 tree = sys.argv[1]
 problems, versions, shas, copies = [], set(), set(), 0
 for d, dirs, names in os.walk(tree):
@@ -130,16 +133,16 @@ if [ -n "$version" ]; then
   else bad "uv $version's release publishes $upstream for $tarball; the pin says $sha"; fi
 fi
 
-echo "  the template's copies at $ref:"
-if git clone -q --depth 1 --branch "$ref" -c advice.detachedHead=false "$template_url" "$work/template" 2>/dev/null; then
-  if there="$(pins "$work/template")"; then
-    if [ -n "$version" ] && [ "${there% *}" = "$version $sha" ]; then ok "the template at $ref names the same pin (${there##* } copies)"
-    else bad "the template at $ref pins ${there% *}; plinth pins ${version:-nothing agreed}. Raise the template's first, release it, then raise plinth's and template_ref in one pull request"; fi
+if template_checkout "$work"; then
+  echo "  the template's copies at $template_at:"
+  if there="$(pins "$template_dir")"; then
+    if [ -n "$version" ] && [ "${there% *}" = "$version $sha" ]; then ok "the template at $template_at names the same pin (${there##* } copies)"
+    else bad "the template at $template_at pins ${there% *}; plinth pins ${version:-nothing agreed}. Raise the template's first, release it, then raise plinth's and template_ref in one pull request"; fi
   else
-    bad "the template's copies at $ref are not one pin: $there"
+    bad "the template's copies at $template_at are not one pin: $there"
   fi
 else
-  bad "could not read the template at $ref; cannot verify"
+  bad "no checkout of the template: $template_error"
 fi
 
 echo "-- $pass passed, $fail failed"
