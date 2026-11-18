@@ -1,0 +1,531 @@
+# Publishes this package to PyPI when a version tag (`v1.2.3`) is pushed, then
+# makes a GitHub Release with generated notes. The steps a person takes once
+# before the first tag: docs/how-to/publish-a-release.md.
+#
+# Not a required check and not part of `ci`: it runs on a tag, never on a pull
+# request, so no ruleset waits for it. No job is skipped with `if:`; each job
+# runs or fails, so a red run says which step stopped.
+#
+# No stored secret. PyPI trusts this workflow through Trusted Publishing: the
+# publish job asks GitHub for a short-lived identity token (`id-token: write`)
+# and PyPI accepts it only from the repository, workflow file and environment
+# registered as the project's publisher. The action also signs what it
+# uploads (attestations), and PyPI shows that on the project page. The
+# GitHub Release also carries an SBOM, `sbom.spdx.json`: what installing the
+# wheel puts in an environment.
+#
+# A uv workspace (`[tool.uv.workspace]` in pyproject.toml): one tag releases
+# the root and every member that is a package. A root that depends on a
+# member cannot be installed from PyPI unless the member is there too. The
+# tag is the root's version; each member keeps its own, and a member file
+# PyPI already has is skipped, not uploaded again. Each published package
+# needs its own publisher on PyPI. Without a workspace, one package is built
+# and published, and a file PyPI already has fails the run.
+#
+# A member can be released on its own tags instead, apart from the root: the
+# root's pyproject.toml lists it with a prefix that ends in `-`,
+#
+#   [tool.plinth.release]
+#   own-tags = { "<member's name>" = "<prefix>-" }
+#
+# and a tag `<prefix>-v<version>` then builds and uploads that member alone,
+# its version compared after PEP 440 normalisation (`-v1.0.0-rc.1` matches
+# `1.0.0rc1`), and a file PyPI already has fails the run. A `v*` tag leaves
+# the listed members out, and first checks that the index has a release of
+# each one the root depends on within the root's range: the member goes
+# first, the root after.
+name: Release
+
+on:
+  push:
+    # `*-v*` is a listed member's tag; a tag of that shape that names no
+    # listed member fails at the first step and uploads nothing.
+    tags: ["v*", "*-v*"]
+
+# Nothing by default; each job asks for what it uses.
+permissions: {}
+
+# Two tags pushed together publish one after the other, never at once.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Checks before anything leaves the repository, then builds. A tag that
+  # fails here uploads nothing.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      # "true" in a uv workspace: the publish job then skips a file PyPI has,
+      # unless the tag is a member's own.
+      workspace: ${{ steps.build.outputs.workspace }}
+      # The listed member a `<prefix>-v*` tag releases; empty for a `v*` tag.
+      member: ${{ steps.tag.outputs.member }}
+    # The index a listed member is looked up on: PyPI's, or TestPyPI's when
+    # the release goes there. The install check takes the workspace's own
+    # packages alone from it; everything else comes from PyPI.
+    env:
+      INDEX_URL: ${{ startsWith(vars.PYPI_REPOSITORY_URL, 'https://test.pypi.org/') && 'https://test.pypi.org/simple/' || 'https://pypi.org/simple/' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history, to tell whether the tagged commit is on main.
+          fetch-depth: 0
+          persist-credentials: false   # nothing here pushes
+      # Which package this tag releases. A `v*` tag is the root's, and must
+      # be `v` and its version exactly. A tag starting with a prefix that
+      # [tool.plinth.release] own-tags lists, then `v`, is that member's.
+      # Writes, under $RUNNER_TEMP, what the steps below read:
+      # `release-member` (the member's name, or nothing), `release-version`,
+      # `release-sibling-pins` (on a member's tag, the workspace's other
+      # packages at their versions),
+      # `release-listed` (each listed member as a wheel's file name spells
+      # it) and `release-needs` (on a `v*` tag, each requirement of the root
+      # on a listed member, a tab, and that member's prefix).
+      - name: Check the tag against pyproject.toml's version
+        id: tag
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, os, re, sys, tomllib
+          from pathlib import Path
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          temp = Path(os.environ["RUNNER_TEMP"])
+          STAY = "Leave this tag where it is: plinth's tag ruleset, on a repository that has it, refuses to move or delete it."
+
+          def stop(title, text):
+              print(f"::error title={title}::{text} Nothing was uploaded.")
+              sys.exit(1)
+
+          def key(name):
+              return re.sub(r"[-_.]+", "-", name).lower()
+
+          # PEP 440's normal form, as `packaging` spells a version.
+          PEP440 = re.compile(
+              r"v?(?:(?P<epoch>[0-9]+)!)?(?P<release>[0-9]+(?:\.[0-9]+)*)"
+              r"(?P<pre>[-_.]?(?P<pre_l>alpha|a|beta|b|preview|pre|c|rc)[-_.]?(?P<pre_n>[0-9]+)?)?"
+              r"(?P<post>-(?P<post_n1>[0-9]+)|[-_.]?(?P<post_l>post|rev|r)[-_.]?(?P<post_n2>[0-9]+)?)?"
+              r"(?P<dev>[-_.]?dev[-_.]?(?P<dev_n>[0-9]+)?)?"
+              r"(?:\+(?P<local>[a-z0-9]+(?:[-_.][a-z0-9]+)*))?",
+              re.IGNORECASE,
+          )
+
+          def normal(v):
+              m = PEP440.fullmatch(v.strip())
+              if not m:
+                  return None
+              s = f"{int(m['epoch'])}!" if m["epoch"] and int(m["epoch"]) else ""
+              s += ".".join(str(int(p)) for p in m["release"].split("."))
+              if m["pre"]:
+                  letter = {"alpha": "a", "beta": "b", "c": "rc", "pre": "rc", "preview": "rc"}
+                  s += letter.get(m["pre_l"].lower(), m["pre_l"].lower()) + str(int(m["pre_n"] or 0))
+              if m["post"]:
+                  s += f".post{int(m['post_n1'] or m['post_n2'] or 0)}"
+              if m["dev"]:
+                  s += f".dev{int(m['dev_n'] or 0)}"
+              if m["local"]:
+                  s += "+" + re.sub(r"[-_]", ".", m["local"].lower())
+              return s
+
+          root = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          version = root["project"]["version"]
+          listed = root.get("tool", {}).get("plinth", {}).get("release", {}).get("own-tags", {})
+          workspace = root.get("tool", {}).get("uv", {}).get("workspace")
+          LIST = "[tool.plinth.release] own-tags in pyproject.toml"
+          FIX = f"Fix {LIST} in a pull request, merge it, and tag the merged commit with a version that has no tag yet. {STAY}"
+          if not isinstance(listed, dict) or not all(isinstance(v, str) for v in listed.values()):
+              stop("The own-tags list cannot be read", f"{LIST} is not a table of member names and prefixes. {FIX}")
+
+          # The workspace's members, by name: where each is and its version.
+          members = {}
+          if listed and not isinstance(workspace, dict):
+              stop("The own-tags list cannot be read", f"{LIST} lists members, and pyproject.toml has no [tool.uv.workspace]. {FIX}")
+          if listed:
+              # As uv reads them: `**` crosses directories, hidden ones too.
+              dirs = {d for p in workspace.get("members", []) for d in glob.glob(p, recursive=True, include_hidden=True)}
+              dirs -= {d for p in workspace.get("exclude", []) for d in glob.glob(p, recursive=True, include_hidden=True)}
+              for d in sorted(dirs):
+                  f = Path(d) / "pyproject.toml"
+                  if f.is_file():
+                      project = tomllib.loads(f.read_text(encoding="utf-8")).get("project", {})
+                      if "name" in project:
+                          members[key(project["name"])] = project
+          prefixes = {}
+          for name, prefix in listed.items():
+              if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*-", prefix):
+                  stop("The own-tags list cannot be read", f"{LIST} gives {name} the prefix {prefix!r}: a prefix is letters, digits, dots, underscores and hyphens, and ends in a hyphen, so that its tags match *-v*. {FIX}")
+              if key(name) not in members or key(name) == key(root["project"]["name"]):
+                  stop("The own-tags list cannot be read", f"{LIST} lists {name}, which is not a member of this workspace. {FIX}")
+              if prefix in prefixes.values():
+                  stop("The own-tags list cannot be read", f"{LIST} gives two members the prefix {prefix}. {FIX}")
+              prefixes[name] = prefix
+          (temp / "release-listed").write_text(
+              "".join(re.sub(r"[-_.]+", "_", n).lower() + "\n" for n in prefixes), encoding="utf-8")
+
+          # A listed member's own tag: the longest prefix it starts with.
+          mine = sorted((p, n) for n, p in prefixes.items() if tag.startswith(p + "v"))
+          needs = pins = ""
+          if mine:
+              prefix, name = max(mine, key=lambda pn: len(pn[0]))
+              said = members[key(name)].get("version", "")
+              wanted = tag[len(prefix) + 1:]
+              if normal(wanted) is None or normal(wanted) != normal(said):
+                  stop("The tag and the version differ", f"The tag is {tag}, which releases {name} at {wanted}, but its pyproject.toml says version = \"{said}\" ({normal(said)} in PEP 440's normal form). {STAY} To release {said}, tag a commit on main {prefix}v{said}. To release another version, change its version in a pull request (uv version --package {name} <version>) to one that has no tag yet, merge it, and tag the merged commit with it.")
+              member, version = name, said
+              # The workspace's other packages at the versions their files
+              # say, as uv.lock holds them, for the install check.
+              for k, p in [*members.items(), (key(root["project"]["name"]), root["project"])]:
+                  if k != key(name) and isinstance(p.get("version"), str):
+                      pins += f"{p['name']}=={p['version']}\n"
+              print(f"The tag {tag} releases the member {name} alone, and matches its version {said}.")
+          else:
+              if tag != f"v{version}":
+                  hint = "" if tag.startswith("v") else f" A tag <prefix>v<version> releases a member only when {LIST} lists it with that prefix."
+                  stop("The tag and the version differ", f"The tag is {tag}, but pyproject.toml says version = \"{version}\".{hint} {STAY} To release {version}, tag a commit on main v{version}. To release another version, change version in pyproject.toml in a pull request to one that has no tag yet, merge it, and tag the merged commit with it.")
+              member = ""
+              print(f"The tag {tag} matches pyproject.toml's version {version}.")
+              for need in root["project"].get("dependencies", []):
+                  m = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", need)
+                  for name, prefix in prefixes.items():
+                      if m and key(m[1]) == key(name):
+                          needs += f"{need.strip()}\t{prefix}\n"
+              for name in prefixes:
+                  print(f"{name} is released on its own tags ({prefixes[name]}v*), not on this one.")
+          (temp / "release-member").write_text(member, encoding="utf-8")
+          (temp / "release-version").write_text(version, encoding="utf-8")
+          (temp / "release-needs").write_text(needs, encoding="utf-8")
+          (temp / "release-sibling-pins").write_text(pins, encoding="utf-8")
+          if "GITHUB_OUTPUT" in os.environ:
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+                  out.write(f"member={member}\n")
+          PY
+      - name: Check the tagged commit is on main
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error title=The tag is not on main::$GITHUB_REF_NAME points at a commit that is not on main, so it never passed the checks a pull request needs. Nothing was uploaded. Leave this tag where it is: plinth's tag ruleset, on a repository that has it, refuses to move or delete this tag. Tag a commit on main with a version that has no tag yet."
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME is on main."
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+      # `workspace-root` holds the root's name as a wheel's file name spells
+      # it, or nothing without a workspace or on a member's own tag; the
+      # steps below read it.
+      - name: Build the package, and every package of a uv workspace
+        id: build
+        run: |
+          set -euo pipefail
+          member="$(cat "$RUNNER_TEMP/release-member")"
+          if [ -n "$member" ]; then
+            # A listed member's own tag: that member alone, built as PyPI
+            # will install it, without the workspace's sources.
+            : > "$RUNNER_TEMP/workspace-root"
+            echo "workspace=true" >> "$GITHUB_OUTPUT"; uv build --package "$member" --no-sources
+            exit 0
+          fi
+          root="$(python3 - <<'PY'
+          import re, tomllib
+          with open("pyproject.toml", "rb") as f:
+              project = tomllib.load(f)
+          if "workspace" in project.get("tool", {}).get("uv", {}):
+              print(re.sub(r"[-_.]+", "_", project["project"]["name"]).lower())
+          PY
+          )"
+          printf '%s' "$root" > "$RUNNER_TEMP/workspace-root"
+          if [ -n "$root" ]; then
+            echo "workspace=true" >> "$GITHUB_OUTPUT"; uv build --all-packages
+          else
+            echo "workspace=false" >> "$GITHUB_OUTPUT"; uv build
+          fi
+          # A member listed under [tool.plinth.release] own-tags is released on
+          # its own tags only: its files leave dist/ before anything reads it.
+          # Each file is known by the Name in its own metadata, not its file
+          # name, which an older build backend spells with hyphens; a file
+          # whose metadata cannot be read stops the run.
+          python3 - <<'PY'
+          import os, re, sys, tarfile, zipfile
+          from email.parser import HeaderParser
+          from pathlib import Path
+
+          listed = set(Path(os.environ["RUNNER_TEMP"], "release-listed").read_text(encoding="utf-8").split())
+          if not listed:
+              sys.exit(0)
+          for f in sorted(Path("dist").glob("[!.]*")):
+              try:
+                  if f.name.endswith(".whl"):
+                      with zipfile.ZipFile(f) as z:
+                          (meta,) = [n for n in z.namelist() if re.fullmatch(r"[^/]+\.dist-info/METADATA", n)]
+                          text = z.read(meta).decode()
+                  else:
+                      with tarfile.open(f) as t:
+                          (meta,) = [m for m in t.getmembers() if re.fullmatch(r"[^/]+/PKG-INFO", m.name)]
+                          text = t.extractfile(meta).read().decode()
+                  name = HeaderParser().parsestr(text)["Name"]
+              except Exception as e:
+                  print(f"::error title=A built file's name could not be read::{f} has no metadata this run can read ({e!r}), so it cannot tell whether it is a member released on its own tags. Nothing was uploaded.")
+                  sys.exit(1)
+              if re.sub(r"[-_.]+", "_", name).lower() in listed:
+                  f.unlink()
+                  print(f"Left out {f}: {name} is released on its own tags.")
+          PY
+      # The tag is the root's version, checked above; each member has its own.
+      # The install check below needs the root's wheel and, for each member,
+      # the version just built, both read from the wheels' file names.
+      - name: Find the workspace's root wheel and its members' versions
+        run: |
+          set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/workspace-root")"
+          if [ -s "$RUNNER_TEMP/release-member" ]; then
+            echo "A member's own tag: $(cat "$RUNNER_TEMP/release-member") alone."
+            exit 0
+          fi
+          if [ -z "$root" ]; then
+            echo "No uv workspace: one package."
+            exit 0
+          fi
+          # A wheel is <name>-<version>-<tags>.whl; neither part holds a hyphen.
+          name() { n="${1#dist/}"; printf '%s' "${n%%-*}" | tr '[:upper:]' '[:lower:]' | tr -s '._' '__'; }
+          version() { v="${1#dist/*-}"; printf '%s' "${v%%-*}"; }
+          wheel=""
+          : > "$RUNNER_TEMP/workspace-pins"
+          for f in dist/*.whl; do
+            n="$(name "$f")"
+            if [ "$n" = "$root" ]; then
+              wheel="$f"
+            else
+              echo "$n==$(version "$f")" | tee -a "$RUNNER_TEMP/workspace-pins"
+            fi
+          done
+          if [ -z "$wheel" ]; then
+            echo "::error title=The workspace's root was not built::dist/ holds no wheel of $root. uv builds a workspace's root only when it is a package: one with a [build-system], or with package = true under [tool.uv]. Nothing was uploaded. Leave this tag where it is: plinth's tag ruleset, on a repository that has it, refuses to move or delete a v* tag. Make the root a package in a pull request, raise its version to one that has no tag yet, merge it, and tag the merged commit with it."
+            exit 1
+          fi
+          printf '%s' "$wheel" > "$RUNNER_TEMP/workspace-root-wheel"
+          echo "The root's wheel is $wheel."
+      # On a `v*` tag, a listed member the root depends on is not uploaded
+      # with it, so it must be on the index already, at a release within the
+      # root's range: the member goes first, the root after. A pre-release
+      # counts only where the root's range names one. The needs are resolved
+      # together, for every platform (`--universal`), its environment marker kept: a
+      # need for Windows alone is checked on this Linux runner too, against
+      # Windows wheels. It proves the index has the member; it does not
+      # choose the version: the install check below takes the member from
+      # the index within all the root's needs, as anyone installing it does.
+      - name: Check the index has each listed member the root needs
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/listed-found"
+          if [ ! -s "$RUNNER_TEMP/release-needs" ]; then
+            echo "The root needs no member released on its own tags."
+            exit 0
+          fi
+          # All together: two needs on one member, both applying on one
+          # platform, then get one version that meets both.
+          cut -f1 "$RUNNER_TEMP/release-needs" > "$RUNNER_TEMP/needs.txt"
+          need="$(paste -sd '|' "$RUNNER_TEMP/needs.txt" | sed 's/|/ and /g')"
+          tags="$(cut -f2 "$RUNNER_TEMP/release-needs" | sort -u | sed 's/$/v<version>/' | paste -sd ' ' -)"
+          if ! got="$(uv pip compile "$RUNNER_TEMP/needs.txt" --universal --no-config --no-deps --prerelease explicit --index-url "$INDEX_URL" --quiet --no-header --no-annotate 2>&1)"; then
+            printf '%s\n' "$got"
+            echo "::error title=A member the root needs is not on the index::The root's pyproject.toml asks for $need, and $INDEX_URL has no release that meets it. Nothing was uploaded. A member listed under [tool.plinth.release] own-tags goes first: tag it $tags and wait for that run to be green, then re-run this run's failed jobs (Re-run jobs on the run's page, or gh run rerun <run id> --failed): this tag stays as it is."
+            exit 1
+          fi
+          printf '%s\n' "$got" | sed '/^#/d' | grep -E '^[^ ]+==' > "$RUNNER_TEMP/listed-found" || true
+          # Every member needed has a version, or the check did not run.
+          key() { sed -E 's/^[[:space:]]*([A-Za-z0-9][A-Za-z0-9._-]*).*/\1/' | tr '[:upper:]' '[:lower:]' | tr -s '._-' '---' | sort -u; }
+          missing="$(comm -23 <(key < "$RUNNER_TEMP/needs.txt") <(key < "$RUNNER_TEMP/listed-found"))"
+          if [ -n "$missing" ]; then
+            printf '%s\n' "$got"
+            echo "::error title=A member the root needs is not on the index::Resolving $need against $INDEX_URL gave no version of $(paste -sd ' ' - <<<"$missing"), so this run cannot tell that the index has it. Nothing was uploaded."
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/listed-found"
+      # A software bill of materials (SBOM), attached to the GitHub Release.
+      # The wheel names what it needs, not what it installs, so the SBOM is
+      # of a fresh environment with the built wheel installed at the runtime
+      # versions uv.lock names. It travels apart from dist/: the publish job
+      # uploads dist/ whole, and PyPI refuses a file that is not a package.
+      # The workspace's packages the install takes from the index come from
+      # $INDEX_URL alone, and nothing else does: TestPyPI holds old or
+      # unrelated uploads under the names PyPI's packages have, and uv takes
+      # each package from the first index that has it, so `--index` would
+      # send every dependency there.
+      - name: Install syft (official release, SHA256 verified)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SYFT_VERSION: "1.55.0"
+          SYFT_SHA256: "bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/syft"; mkdir -p "$d"
+          f="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/$f"
+          echo "${SYFT_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" syft
+          echo "$d" >> "$GITHUB_PATH"
+      - name: Make the SBOM of the wheel and what it installs
+        run: |
+          set -euo pipefail
+          env="$RUNNER_TEMP/sbom-env"
+          uv venv --quiet "$env"
+          # `from-index/pyproject.toml`, read with -r: what this release
+          # itself needs of the workspace's packages that the index gives,
+          # each requirement as written, its marker kept, pinned to
+          # $INDEX_URL as an explicit index. On a `v*` tag, the root's
+          # requirements on listed members (`release-needs`); on a member's
+          # tag, the built wheel's requirements on the workspace's other
+          # packages. uv applies such a pin only to a package the file
+          # requires itself, so a workspace package needed only further down
+          # the chain is looked up on PyPI: in a TestPyPI rehearsal it is not
+          # taken from TestPyPI.
+          from_index() {
+            python3 - <<'PY'
+          import json, os, re, zipfile
+          from email.parser import HeaderParser
+          from pathlib import Path
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          def key(name):
+              return re.sub(r"[-_.]+", "-", name).lower()
+          def named(req):
+              return re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", req)[1]
+          if (temp / "release-member").read_text(encoding="utf-8"):
+              siblings = {key(p.split("==")[0]) for p in (temp / "release-sibling-pins").read_text(encoding="utf-8").split()}
+              (wheel,) = Path("dist").glob("*.whl")
+              with zipfile.ZipFile(wheel) as z:
+                  (meta,) = [n for n in z.namelist() if re.fullmatch(r"[^/]+\.dist-info/METADATA", n)]
+                  reqs = HeaderParser().parsestr(z.read(meta).decode()).get_all("Requires-Dist") or []
+              # A requirement under an extra is not installed without it.
+              needs = [r.strip() for r in reqs if key(named(r)) in siblings and "extra" not in r.partition(";")[2]]
+          else:
+              needs = [line.split("\t")[0] for line in (temp / "release-needs").read_text(encoding="utf-8").splitlines() if line]
+          for need in needs:
+              print(f"{need} comes from {os.environ['INDEX_URL']}.")
+          text = '[project]\nname = "release-install-check"\nversion = "0"\n'
+          text += f"dependencies = {json.dumps(needs)}\n"
+          text += f'\n[[tool.uv.index]]\nname = "release"\nurl = {json.dumps(os.environ["INDEX_URL"])}\nexplicit = true\n'
+          text += "\n[tool.uv.sources]\n" + "".join(f'{json.dumps(n)} = {{ index = "release" }}\n' for n in dict.fromkeys(named(r) for r in needs))
+          (temp / "from-index").mkdir(exist_ok=True)
+          (temp / "from-index" / "pyproject.toml").write_text(text, encoding="utf-8")
+          PY
+          }
+          if [ -s "$RUNNER_TEMP/workspace-root" ]; then
+            # A workspace: the root's wheel alone. Its members are looked up
+            # in dist/ too, each pinned to the version just built, so another
+            # version on the index is not taken instead. This does not show
+            # that PyPI has that member's code: a member changed without a
+            # new version is skipped at the upload. A member released on its
+            # own tags comes from the index, within the root's needs.
+            uv export --locked --no-dev --no-emit-workspace --no-hashes --quiet -o "$RUNNER_TEMP/constraints.txt"
+            cat "$RUNNER_TEMP/workspace-pins" >> "$RUNNER_TEMP/constraints.txt"
+            from_index
+            uv pip install --quiet --python "$env" --constraint "$RUNNER_TEMP/constraints.txt" --find-links dist -r "$RUNNER_TEMP/from-index/pyproject.toml" "$(cat "$RUNNER_TEMP/workspace-root-wheel")"
+          elif [ -s "$RUNNER_TEMP/release-member" ]; then
+            # A member's own tag: its wheel, under the lockfile's versions of
+            # what it needs, the workspace's other packages included; those
+            # come from the index, as they will for whoever installs it.
+            uv export --locked --no-dev --package "$(cat "$RUNNER_TEMP/release-member")" --no-emit-workspace --no-hashes --quiet -o "$RUNNER_TEMP/constraints.txt"
+            cat "$RUNNER_TEMP/release-sibling-pins" >> "$RUNNER_TEMP/constraints.txt"
+            from_index
+            uv pip install --quiet --python "$env" --constraint "$RUNNER_TEMP/constraints.txt" -r "$RUNNER_TEMP/from-index/pyproject.toml" dist/*.whl
+          else
+            uv export --locked --no-dev --no-emit-project --no-hashes --quiet -o "$RUNNER_TEMP/constraints.txt"
+            uv pip install --quiet --python "$env" --constraint "$RUNNER_TEMP/constraints.txt" dist/*.whl
+          fi
+          name="$(cat "$RUNNER_TEMP/release-member")"
+          [ -n "$name" ] || name="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["name"])')"
+          mkdir -p sbom
+          syft scan "dir:$env" --source-name "$name" --source-version "$(cat "$RUNNER_TEMP/release-version")" -o spdx-json=sbom/sbom.spdx.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: sbom/
+          if-no-files-found: error
+
+  # The only job that can speak for this repository to PyPI, and it runs no
+  # code from the repository: it uploads what `build` made.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The environment PyPI's publisher names. Its protection rules (who may
+    # approve, which tags) are set in the repository's settings.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          # PyPI unless the repository variable PYPI_REPOSITORY_URL says
+          # otherwise; https://test.pypi.org/legacy/ rehearses on TestPyPI.
+          repository-url: ${{ vars.PYPI_REPOSITORY_URL || 'https://upload.pypi.org/legacy/' }}
+          attestations: true
+          # In a uv workspace a member whose version did not change is on
+          # PyPI already: its files are skipped, and the rest are uploaded.
+          # Without a workspace, or on a member's own tag, a file PyPI
+          # already has fails the run.
+          skip-existing: ${{ needs.build.outputs.workspace == 'true' && needs.build.outputs.member == '' }}
+      - name: Say why PyPI refused, in plain words
+        if: failure()
+        run: |
+          {
+            echo "### PyPI did not accept this release"
+            echo
+            echo "If the log of the step above says \`invalid-publisher\`, PyPI has no publisher registered for this project that matches this repository. On PyPI (or TestPyPI), add a pending publisher with this repository's owner and name, the workflow file \`release.yml\` and the environment \`pypi\`, then re-run this run's failed jobs (Re-run jobs on the run's page, or gh run rerun <run id> --failed): the tag stays as it is. In a uv workspace, every package it publishes needs its own publisher with those same values."
+            echo
+            echo "If it says the file already exists, this version was published before: PyPI never takes a version twice. Raise the version in pyproject.toml and tag again."
+            echo
+            echo "The steps, in order: docs/how-to/publish-a-release.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=PyPI did not accept this release::Read the run summary for what to check. The steps: docs/how-to/publish-a-release.md."
+
+  # The release page on GitHub, once PyPI has the files.
+  github-release:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sbom
+          path: sbom/
+      # The wheel and sdist PyPI has, and the SBOM beside them. A member's
+      # own release is never marked the latest: that stays the root's.
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MEMBER: ${{ needs.build.outputs.member }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes ${MEMBER:+--latest=false} dist/* sbom/sbom.spdx.json

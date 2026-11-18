@@ -30,7 +30,21 @@ its own checks must have passed on the commit it tags.
    no update line, while the tag names any other commit (#519). If the new tag
    needs a newer copier, raise `copier_version` and `copier_newer` in the same
    block.
-4. List every other place the old tag appears:
+4. Re-render `canary-template/`, the new tag's `cli` project that the
+   `canary-template` job in `.github/workflows/ci.yml` runs through this
+   commit's `python-ci.yml`:
+
+   ```bash
+   tests/template-render.sh --write
+   ```
+
+   Then set that job's `name:` to the new tag and the first seven characters
+   of its commit, `canary-template (plinth-template vA.B.C at abcdef0)`. If
+   the rendered `.github/workflows/ci.yml` grants or passes something new in
+   its `ci` job, copy it into the `canary-template` job too.
+   `tests/template-render.sh` fails until the render, the name and the copy
+   all match the new pin (#953).
+5. List every other place the old tag appears:
 
    ```bash
    git grep -n 'vOLD' -- ':!CHANGELOG.md'
@@ -40,7 +54,7 @@ its own checks must have passed on the commit it tags.
    `docs/tutorials/getting-started.md`, and the summary check in
    `tests/new-project-failpath.sh`. Run the command again; it prints nothing
    when you are done.
-5. Under `## [Unreleased]` in `CHANGELOG.md`, add a `Changed` entry that says
+6. Under `## [Unreleased]` in `CHANGELOG.md`, add a `Changed` entry that says
    what an instance rendered at the new tag receives, and that
    `/plinth:floor-check` now reports a repository on the old tag as behind.
    If the new tag's `plinth_sha` default moved, do not write that an update
@@ -49,12 +63,12 @@ its own checks must have passed on the commit it tags.
    set. When the tag's pin is newer, the plan recommends it,
    `--plinth-pin tested`, and only the person's confirmation applies it
    (#511, #519).
-6. Run every check in [CONTRIBUTING.md](../../CONTRIBUTING.md#run-the-checks).
-   With network, `tests/archetype-single-source.sh` reads the new tag's
-   `copier.yml`. If it fails, the template changed which archetypes get a
-   container image: change the set in `scripts/floor-check.py` to match, in
-   the same pull request.
-7. Open the pull request titled `chore(new-project): render plinth-template vA.B.C`.
-8. In the next release, write `tested with plinth-template vA.B.C` in the why
+7. Run every check in [CONTRIBUTING.md](../../CONTRIBUTING.md#run-the-checks).
+   `tests/archetype-single-source.sh` reads the new tag's `copier.yml`, from
+   the checkout `tests/lib/template-checkout.sh` makes. If it fails, the
+   template changed which archetypes get a container image: change the set in
+   `scripts/floor-check.py` to match, in the same pull request.
+8. Open the pull request titled `chore(new-project): render plinth-template vA.B.C`.
+9. In the next release, write `tested with plinth-template vA.B.C` in the why
    ([How to cut a release](cut-a-release.md)). Its `e2e` run is the first live
    render at the new tag.

@@ -13,14 +13,14 @@
 #    names an issue, which needs nothing turned on, and never the form, which
 #    a private repository is not offered.
 #
-# Renders the template at the tag the door pins (TEMPLATE_REF overrides, a
-# branch or commit included) with the copier the door runs. Network; an
-# unreadable template is a FAIL, not a pass.
+# Renders the template at the commit the door pins, from one checkout
+# (tests/lib/template-checkout.sh; TEMPLATE_REF reads a branch instead), with
+# the copier the door runs. No checkout is a FAIL, not a pass.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 door="$root/scripts/new-project.sh"
-template="${TEMPLATE_REPO:-coolbress/plinth-template}"
-ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$door")}"
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
 copier_version="$(sed -n 's/^copier_version="\(.*\)"$/\1/p' "$door")"
 copier_newer="$(sed -n 's/^copier_newer="\(.*\)"$/\1/p' "$door")"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
@@ -44,17 +44,21 @@ render() { # <dest> <copier --data args...>
   local dest="$1"; shift
   env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
     copier copy --defaults --quiet --data project_name=probe --data owner=o --data license=MIT "$@" \
-    --vcs-ref "$ref" "gh:$template" "$dest" </dev/null >/dev/null 2>&1
+    --vcs-ref HEAD "$template_dir" "$dest" </dev/null >/dev/null 2>&1
 }
 
 # Archetypes from the template's own copier.yml, not a list kept here.
-copier_yml="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/$template/$ref/copier.yml" 2>/dev/null)"
-archetypes="$(awk '/^archetype:/{a=1;next} a&&/^[^ #]/{exit} a&&/^  choices:/{c=1;next} c&&/^    [^:]+: /{print $NF}' <<<"$copier_yml")"
-[ -n "$archetypes" ] || bad "could not read the archetypes from $template@$ref copier.yml"
+archetypes=""
+if template_checkout "$work"; then
+  archetypes="$(awk '/^archetype:/{a=1;next} a&&/^[^ #]/{exit} a&&/^  choices:/{c=1;next} c&&/^    [^:]+: /{print $NF}' "$template_dir/copier.yml" 2>/dev/null)"
+  [ -n "$archetypes" ] || bad "could not read the archetypes from $template_at copier.yml"
+else
+  bad "no checkout of the template: $template_error"
+fi
 
 for arch in $archetypes; do
   out="$work/$arch"
-  if ! render "$out" --data "archetype=$arch"; then bad "$arch: could not render $template@$ref"; continue; fi
+  if ! render "$out" --data "archetype=$arch"; then bad "$arch: could not render $template_at"; continue; fi
   patterns="$(door_patterns "$arch")"
   verdict="$(python3 - "$root/scripts/floor-check.py" "$out" "$patterns" <<'PY'
 import importlib.util, sys
@@ -90,7 +94,7 @@ done
 # SECURITY.md's route against what the door sets up.
 form="Security → Report a vulnerability"
 pvr_call='[ "$private" = 1 ] ||'$'\n''  setup_call "private vulnerability reporting" -X PUT "repos/$repo/private-vulnerability-reporting"'
-if render "$work/public" --data archetype=cli --data visibility=public && render "$work/private" --data archetype=cli --data visibility=private; then
+if [ -n "$archetypes" ] && render "$work/public" --data archetype=cli --data visibility=public && render "$work/private" --data archetype=cli --data visibility=private; then
   pub="$(sed '/^## Response/,$d' "$work/public/SECURITY.md")"; priv="$(sed '/^## Response/,$d' "$work/private/SECURITY.md")"
   if grep -qF "**$form**" <<<"$pub" && grep -qF "$pvr_call" "$door"; then ok "public: SECURITY.md names the form, and the door turns it on there"
   else bad "public: SECURITY.md names the form only if the door turns it on for a public repository (form named: $(grep -cF "$form" <<<"$pub"))"; fi
@@ -99,7 +103,7 @@ if render "$work/public" --data archetype=cli --data visibility=public && render
   then ok "private: SECURITY.md names an issue, not the form a private repository lacks, and the door passes the answer"
   else bad "private: SECURITY.md must name an issue and not the form, from the visibility the door passes"; fi
 else
-  bad "could not render SECURITY.md from $template@$ref"
+  bad "could not render SECURITY.md from $template_at"
 fi
 
 echo "-- $pass passed, $fail failed"

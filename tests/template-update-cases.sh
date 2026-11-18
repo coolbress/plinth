@@ -292,8 +292,12 @@ else bad "What I checked myself"; printf '%s\n' "$checked" | sed 's/^/        /'
 if grep -qx 'Review: none (no review had run when this pull request opened)' "$work/clean.body"
 then ok "the Review: line says no review has run"
 else bad "the Review: line"; sed 's/^/        /' "$work/clean.body"; fi
-form_url="https://raw.githubusercontent.com/coolbress/plinth-template/$target_ref/template/.github/PULL_REQUEST_TEMPLATE.md"
-if curl -fsSL --retry 3 -o "$work/form.md" "$form_url" 2>/dev/null && [ -s "$work/form.md" ]; then
+# The form at the pinned commit, from one checkout (tests/lib/template-checkout.sh).
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
+if ! template_checkout "$work"; then
+  bad "no checkout of the template: $template_error; cannot verify the description against its form"
+elif cp "$template_dir/template/.github/PULL_REQUEST_TEMPLATE.md" "$work/form.md" 2>/dev/null && [ -s "$work/form.md" ]; then
   if said="$(form_fields "$work/form.md" "$work/clean.body")"; then ok "the description writes every field of the form at $target_ref, in its order"
   else bad "the description against the form at $target_ref"; printf '%s\n' "$said" | sed 's/^/        /'; fi
   { cat "$work/form.md"; printf '\n## A field the form gained\n'; } > "$work/form-more.md"
@@ -303,7 +307,7 @@ if curl -fsSL --retry 3 -o "$work/form.md" "$form_url" 2>/dev/null && [ -s "$wor
   if said="$(form_fields "$work/form-label.md" "$work/clean.body")"; then bad "a form that gained a label line passes"
   else ok "a form that gained a label line the script does not write fails ($said)"; fi
 else
-  bad "could not read the form at $form_url; cannot verify the description against it"
+  bad "$template_at has no template/.github/PULL_REQUEST_TEMPLATE.md; cannot verify the description against it"
 fi
 printf '## How it was verified\n\n## What and why\n' > "$work/form-order.md"
 if said="$(form_fields "$work/form-order.md" "$work/clean.body")"; then bad "a form in another order passes"

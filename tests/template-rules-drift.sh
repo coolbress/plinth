@@ -7,12 +7,13 @@
 # raise that rewords or drops a listed rule fails here; whoever raises the pin
 # adds the rule to plinth, or writes `differs: <why>` as the counterpart.
 # A rule the template adds that is not listed is not caught: list it when the
-# pin raise brings it. Reads the template over the network; unreadable is a
-# FAIL. The must-not-pass cases run first.
+# pin raise brings it. Reads the template from one checkout at the pinned
+# commit (tests/lib/template-checkout.sh); none is a FAIL. The must-not-pass
+# cases run first.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-template="${TEMPLATE_REPO:-coolbress/plinth-template}"
-ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$root/scripts/new-project.sh")}"
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -73,18 +74,20 @@ cp -R "$work/t" "$work/t2"; grep -vF 'What I checked myself' "$work/t/form" >"$w
 if out="$(check_rules "$work/t2" "$work/p")"; then bad "a template that dropped a listed rule passes"
 else ok "a template that dropped a listed rule fails ($out)"; fi
 
-# The real files: the template at the pinned tag against plinth's own.
-mkdir -p "$work/real"
-base="https://raw.githubusercontent.com/$template/$ref/template"
-if curl -fsSL --retry 3 -o "$work/real/agents" "$base/AGENTS.md.jinja" 2>/dev/null \
-   && curl -fsSL --retry 3 -o "$work/real/form" "$base/.github/PULL_REQUEST_TEMPLATE.md" 2>/dev/null \
-   && curl -fsSL --retry 3 -o "$work/real/contributing" "$base/CONTRIBUTING.md.jinja" 2>/dev/null \
-   && [ -s "$work/real/agents" ] && [ -s "$work/real/form" ] && [ -s "$work/real/contributing" ]; then
-  if out="$(check_rules "$work/real" "$root")"
-  then ok "plinth's CLAUDE.md, CONTRIBUTING.md and pull-request template carry each rule shared with $template@$ref (${#rules[@]} listed)"
-  else bad "rules shared with $template@$ref missing or stale:"; sed 's/^/        /' <<<"$out"; fi
+# The real files: the template at the pinned commit against plinth's own.
+if template_checkout "$work"; then
+  mkdir -p "$work/real"; t="$template_dir/template"
+  cp "$t/AGENTS.md.jinja" "$work/real/agents" 2>/dev/null; cp "$t/.github/PULL_REQUEST_TEMPLATE.md" "$work/real/form" 2>/dev/null
+  cp "$t/CONTRIBUTING.md.jinja" "$work/real/contributing" 2>/dev/null
+  if [ -s "$work/real/agents" ] && [ -s "$work/real/form" ] && [ -s "$work/real/contributing" ]; then
+    if out="$(check_rules "$work/real" "$root")"
+    then ok "plinth's CLAUDE.md, CONTRIBUTING.md and pull-request template carry each rule shared with $template_at (${#rules[@]} listed)"
+    else bad "rules shared with $template_at missing or stale:"; sed 's/^/        /' <<<"$out"; fi
+  else
+    bad "$template_at has no AGENTS.md.jinja, CONTRIBUTING.md.jinja or pull-request form under template/; cannot verify"
+  fi
 else
-  bad "could not read $template@$ref AGENTS.md.jinja, CONTRIBUTING.md.jinja and the pull-request form; cannot verify"
+  bad "no checkout of the template: $template_error"
 fi
 
 echo "-- $pass passed, $fail failed"

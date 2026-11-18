@@ -6,6 +6,8 @@
   },
   "ignores": [
     ".scratch/**",
+    // plinth-template's render, committed for the canary-template job (#953); the template lints its own.
+    "canary-template/**",
     // A pull-request template starts at "##": the pull request's title is its heading (MD041).
     ".github/PULL_REQUEST_TEMPLATE.md"
   ]
