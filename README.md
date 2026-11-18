@@ -34,7 +34,8 @@ claude plugin install plinth@plinth
 
 Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it asks
 what kind of project it is and whether to use the recommended defaults (or
-customize the host, visibility, third-party reviewer, licence and directory),
+customize the host, visibility, third-party reviewer, licence, code of
+conduct, description and directory),
 then creates a repository with the checks already required, or says why it
 could not. Each answer is also a flag, and a flag given is not asked
 ([the tutorial](docs/tutorials/getting-started.md#create-the-repository)). From there,
@@ -87,7 +88,10 @@ each check by name.
 > **Outside:** when a wall cannot be raised (no admin, no `gh` auth, a private
 > repository on GitHub Free, personal or organization, where the token reads the
 > plan) the tool stops before creating anything and says why; a token that cannot
-> read the plan lets the ruleset call decide, and a refused one ends the run. A private repository on GitHub Pro, Team or Enterprise
+> read the plan lets the ruleset call decide, and a refused one ends the run;
+> for a private repository, a classic token without `read:user` (or `user`)
+> on a personal account, or without `delete_repo`, stops before creating
+> anything instead. A private repository on GitHub Pro, Team or Enterprise
 > gets the same required checks, with CodeQL, dependency review and push
 > protection only where GitHub Code Security and Secret Protection are
 > enabled; the door names each part it left out and what stands in its place
