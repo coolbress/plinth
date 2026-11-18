@@ -252,8 +252,19 @@ see these: guidance only.
 - **Where you are:** between pieces of work.
 - **Next:** take dependency updates one pull request at a time, on green;
   one can pass the code-scan rule unscanned, which runs on `main` after the
-  merge. After each plinth release, `/plinth:floor-check` says whether the
-  repository is behind, and `/plinth:template-update` takes the update as a
+  merge. When one stays red, read why in its failing check first. When one
+  package in a group is the cause, take it out of the group with the
+  group's `exclude-patterns` in `.github/dependabot.yml`, so it comes in a
+  pull request of its own, and merge the rest; or regenerate what it
+  changes on its branch, knowing Dependabot then stops rebasing that
+  branch. `@dependabot ignore <name>`, on a group's pull request, is a
+  lasting pin, undone only with `@dependabot unignore <name>`, not a way
+  past one red run. The file's groups and cooldown are the project's to
+  change: `/plinth:floor-check` checks only that it exists, and a template
+  update keeps the project's lines unless the template changed the same
+  ones. A project's `docs/how-to/keep-this-project-current.md` says the
+  same, from plinth-template v1.45.0. After each plinth
+  release, `/plinth:floor-check` says whether the repository is behind, and `/plinth:template-update` takes the update as a
   draft pull request. A project on GitHub rendered from template v1.39.0 or
   later also gets a monthly reminder when it is behind: an issue titled
   "Template update available: …". What to type for it is
