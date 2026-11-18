@@ -735,6 +735,11 @@ E="MOCK_CHOICES=garbage" run review-unread err no no "could not read whether the
 E="MOCK_REVIEW_Q=1 MOCK_REVIEW_NORECORD=1" run review-dropped err no no "did not record third_party_review: true" -- probe --third-party-review
 run review-both err no no "--third-party-review and --no-third-party-review: choose one" -- probe --third-party-review --no-third-party-review
 run public-private err no no "--private and --public: choose one" -- probe --private --public
+run public-private-rev err no no "--private and --public: choose one" -- probe --public --private
+# Exit 1 only: grep's 2 (a log missing or unread) must not read as "no call".
+pair_rc=0; grep -q '^gh ' "$work/home-public-private/calls.log" "$work/home-public-private-rev/calls.log" || pair_rc=$?
+if [ "$pair_rc" = 1 ]
+then ok public-private "both orders stop before any gh call"; else bad public-private "gh was called before the refusal"; fi
 run public-said ok yes no "(public, MIT, cli, as owner)" -- probe --public
 
 echo "the owner's code of conduct and security policy, and the description (#772)"
@@ -1609,6 +1614,23 @@ gl_run gl-coc err no no "--code-of-conduct is for GitHub only for now" -- probe 
 gl_run gl-desc err no no "--description is for GitHub only for now" -- probe --host gitlab "--description=x"
 if ! grep -q '^glab ' "$work/home-gl-coc/calls.log" "$work/home-gl-desc/calls.log"
 then ok gl-coc "the GitLab door refuses both before any glab call"; else bad gl-coc "glab was called before the refusal"; fi
+# The pairs the GitHub door refuses, on GitLab (#960). --private with --public
+# is refused there too, in either order: the last one used to win, and an
+# added --public made a private request public. The other pairs stop because
+# one side of each is GitHub only.
+gl_run gl-private-public err no no "--private and --public: choose one" -- probe --host gitlab --private --public
+gl_run gl-public-private err no no "--private and --public: choose one" -- probe --host gitlab --public --private
+gl_run gl-review-both err no no "--third-party-review is for GitHub only" -- probe --host gitlab --no-third-party-review --third-party-review
+gl_run gl-review-both-rev err no no "--third-party-review is for GitHub only" -- probe --host gitlab --third-party-review --no-third-party-review
+gl_run gl-coc-both err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --no-code-of-conduct --code-of-conduct=a@b.c
+gl_run gl-desc-both err no no "--description is for GitHub only for now" -- probe --host gitlab --no-description --description=x
+gl_run gl-coc-both-rev err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --code-of-conduct=a@b.c --no-code-of-conduct
+gl_run gl-desc-both-rev err no no "--description is for GitHub only for now" -- probe --host gitlab --description=x --no-description
+pair_homes=""; for c in gl-private-public gl-public-private gl-review-both gl-review-both-rev gl-coc-both gl-coc-both-rev gl-desc-both gl-desc-both-rev; do pair_homes="$pair_homes $work/home-$c/calls.log"; done
+# shellcheck disable=SC2086
+pair_rc=0; grep -q '^glab ' $pair_homes || pair_rc=$?
+if [ "$pair_rc" = 1 ]; then ok gl-pairs "every refused pair stops before any glab call"
+else bad gl-pairs "glab was called before a refusal"; fi
 gl_run gl-case ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- Tester/probe --host gitlab
 E="MOCK_GLAB_VERSION_FORMAT=old MOCK_GLAB_VERSION=1.36.0" gl_run gl-glab-old-format err no no "glab 1.36.0 is below" -- probe --host gitlab
 E="MOCK_GLAB_VERSION_FORMAT=none" gl_run gl-glab-no-version err no no "could not read glab's version" -- probe --host gitlab
