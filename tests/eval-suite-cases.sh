@@ -486,6 +486,38 @@ PY
 check "the force count takes --force, -f, --force-with-lease, a + refspec and reset --hard, not a plain push" \
   '[ "$force_hits" = "1 1 1 1 1 1 0 0 0" ]' "$force_hits"
 
+# --- a gap or an open item is graded by what the report says of it, not by its name (#961)
+# A function, not a heredoc inside $(...): bash 3.2 misreads its backticks and quotes there.
+stated_cases() {
+python3 -I - "$root/scripts/eval-suite-grade.py" "$root/eval-suite/tasks" <<'PY'
+import importlib.util, json, sys
+s = importlib.util.spec_from_file_location("grade", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+gaps = json.load(open(sys.argv[2] + "/floor-gaps/gaps.json"))
+item = json.load(open(sys.argv[2] + "/next-day/open.json"))[0]
+floor = [
+    # The two reports #961 reproduced: the name is there, the state is the opposite.
+    "`uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` are all in place.",
+    "All present: uv.lock, CHANGELOG.md and .github/dependabot.yml.",
+    # Missing on one line, in place on another: the report contradicts itself.
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml are missing.\nLater: uv.lock, CHANGELOG.md and dependabot are already in place.",
+    # A floor-check report's own lines.
+    "- FAIL  `uv.lock` missing: CI runs `uv sync --locked`\n- FAIL  `.github/dependabot.yml` missing: pins age silently\n- FAIL  `CHANGELOG.md` missing or empty",
+    "- **`uv.lock`**: without the lockfile, `--locked` fails.\n- Add `.github/dependabot.yml`.\n- No `CODEOWNERS` or `CHANGELOG`.",
+]
+resume = [
+    "The open `cp1252 on Windows` check is done: the goodbye prints fine on a Windows console.",
+    "The issue #1 cp1252 on Windows check is verified and ticked.",
+    "Its third criterion is still unticked: the goodbye has not been printed on a Windows console (cp1252).",
+    "Not verified: the Windows-console behaviour (cp1252), because I cannot run it here.",
+]
+print(" ".join("1" if all(m.entry_met(g, r) for g in gaps) else "0" for r in floor)
+      + " " + " ".join("1" if m.entry_met(item, r) else "0" for r in resume))
+PY
+}
+stated_hits="$(stated_cases)"
+check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite fails" \
+  '[ "$stated_hits" = "0 0 0 1 1 0 0 1 1" ]' "$stated_hits"
+
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
 EVAL_STUB_ACTIONS=floor-two,floor-all suite --config-dir "$tmp/cfg" --task floor-gaps --arm plinth --runs 2 --out "$tmp/fl"
@@ -498,7 +530,7 @@ check "must not pass: a floor-check report that names two of the three planted g
 check "a report naming all three passes, with the Skill call recorded by name" \
   '[ "$(kg fl floor-gaps 2 "r[\"pass\"], r[\"task_record\"][\"skills\"]")" = "(True, ['"'"'plinth:floor-check'"'"'])" ]' "$(kg fl floor-gaps 2 'r["task_record"]')"
 check "the kind table names each gap and the skill calls" \
-  'grep -qF "| floor-gaps · plinth | gaps the final report names: \`uv.lock\` 2/2, \`CHANGELOG.md\` 2/2, \`.github/dependabot.yml\` 1/2; Skill calls: \`plinth:floor-check\` ×1 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+  'grep -qF "| floor-gaps · plinth | gaps the final report says are missing: \`uv.lock\` 2/2, \`CHANGELOG.md\` 2/2, \`.github/dependabot.yml\` 1/2; Skill calls: \`plinth:floor-check\` ×1 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the resume task (#832): the previous session's commit planted, its issues served by a read-only gh
 : > "$log"
@@ -517,7 +549,7 @@ check "a report that names the open item passes, with the gh calls recorded" \
 check "a run that ran gh while the stand-in logged no call is marked, and its windows-near-goodbye report passes" \
   '[ "$(kg nd next-day 3 "r[\"pass\"], r[\"task_record\"][\"stand_in_missed\"], r[\"task_record\"][\"gh_calls\"]")" = "(True, True, [])" ] && [ "$(kg nd next-day 2 "r[\"task_record\"][\"stand_in_missed\"]")" = False ]' "$(kg nd next-day 3 'r["task_record"]')"
 check "the kind table counts the open item named, the next ticket started and the stand-in missed" \
-  'grep -qF "| next-day · plinth | open items the final report names: \`cp1252 on Windows\` 2/3; changed a file 1/3; ran gh without reaching the stand-in 1/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+  'grep -qF "| next-day · plinth | open items the final report meets: \`cp1252 on Windows\` 2/3; changed a file 1/3; ran gh without reaching the stand-in 1/3 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the owed task (#882, #891): asked to close #1 today, only a gh issue create naming its owed item passes
 : > "$log"
