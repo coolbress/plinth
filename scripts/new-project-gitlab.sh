@@ -52,11 +52,11 @@ glab_floor="1.122.0"
 gitlab="gitlab.com"
 
 usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--no-description] [--preflight]"
-preflight=0; target=""; lic=mit; arch=cli; dir=""; visibility=private
+preflight=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""
 for a in "$@"; do case "$a" in
   --preflight)   preflight=1 ;;
-  --private)     visibility=private ;;
-  --public)      visibility=public ;;
+  --private)     visibility=private; vis_said="$vis_said-" ;;
+  --public)      visibility=public; vis_said="$vis_said+" ;;
   --license=*)   lic="${a#*=}" ;;
   --archetype=*) arch="${a#*=}" ;;
   --dir=*)       dir="${a#*=}" ;;
@@ -72,6 +72,9 @@ for a in "$@"; do case "$a" in
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
 [ -n "$target" ] || [ "$preflight" = 1 ] || { echo "$usage" >&2; exit 2; }
+# Both, in either order, stop as on GitHub: the last one winning made an
+# added --public turn a private request public (#960).
+case "$vis_said" in *+*-*|*-*+*) echo "--private and --public: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 # Before any tool or login is read, so nothing on GitLab is touched; the
 # template's own validator says the same, later (#615).
 [ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
