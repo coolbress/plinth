@@ -1593,7 +1593,9 @@ gl_run gl-review-both err no no "--third-party-review is for GitHub only" -- pro
 gl_run gl-review-both-rev err no no "--third-party-review is for GitHub only" -- probe --host gitlab --third-party-review --no-third-party-review
 gl_run gl-coc-both err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --no-code-of-conduct --code-of-conduct=a@b.c
 gl_run gl-desc-both err no no "--description is for GitHub only for now" -- probe --host gitlab --no-description --description=x
-pair_homes=""; for c in gl-private-public gl-public-private gl-review-both gl-review-both-rev gl-coc-both gl-desc-both; do pair_homes="$pair_homes $work/home-$c/calls.log"; done
+gl_run gl-coc-both-rev err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --code-of-conduct=a@b.c --no-code-of-conduct
+gl_run gl-desc-both-rev err no no "--description is for GitHub only for now" -- probe --host gitlab --description=x --no-description
+pair_homes=""; for c in gl-private-public gl-public-private gl-review-both gl-review-both-rev gl-coc-both gl-coc-both-rev gl-desc-both gl-desc-both-rev; do pair_homes="$pair_homes $work/home-$c/calls.log"; done
 # shellcheck disable=SC2086
 if ! grep -q '^glab ' $pair_homes; then ok gl-pairs "every refused pair stops before any glab call"
 else bad gl-pairs "glab was called before a refusal"; fi
