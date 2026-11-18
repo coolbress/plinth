@@ -55,6 +55,8 @@ market="$root/.claude-plugin/marketplace.json"
 changelog="$root/CHANGELOG.md"
 usage="usage: scripts/make-release.sh vX.Y.Z <why-file>"
 stop() { printf '%s\n' "$@" >&2; exit 1; }
+# shellcheck source=scripts/lib/template-reads.sh
+. "$root/scripts/lib/template-reads.sh"
 
 tag="${1:?$usage}"; why_file="${2:-}"
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || stop "not a vX.Y.Z tag: $tag" "$usage"
@@ -222,23 +224,14 @@ grep -qE '^\[Unreleased\]: [^[:space:]]+/compare/[^[:space:]]+\.\.\.HEAD$' "$cha
 # template's own diff, through gh; a diff that cannot be read asks, too.
 suite_line="$(grep -E '^eval suite( not run)?:' "$why_file" || true)"
 [ "$(grep -c . <<<"$suite_line")" -le 1 ] || stop "the why-file has more than one 'eval suite' line:" "$suite_line"
-prev_ref="$(python3 - "$changelog" "$current" "${template_repo##*/}" <<'PY'
-import re, sys
-text, ver, name = open(sys.argv[1]).read(), sys.argv[2], sys.argv[3]
-m = re.search(r"^## \[" + re.escape(ver) + r"\][^\n]*\n(.*?)(?=^## \[|^\[Unreleased\]: |\Z)", text, re.M | re.S)
-t = m and re.search(r"^tested with " + re.escape(name) + r" (\S+)$", m[1], re.M)
-print(t[1] if t else "")
-PY
-)"
+prev_ref="$(released_template_ref "$changelog" "$current" "${template_repo##*/}")"
 [ -n "$prev_ref" ] || stop "CHANGELOG.md's [$current] section has no 'tested with ${template_repo##*/} <tag>' line;" \
   "  it names the template the release before was tested with, which run 1 compares the pin with"
 if [ "$prev_ref" != "$template_ref" ]; then
   # Over 300 files the list is cut short (GitHub's limit); a cut list asks.
-  changed="$(gh api "repos/$template_repo/compare/$prev_ref...$template_ref" \
-               --jq '(.files | length), (.files[] | .filename, (.previous_filename // empty))' 2>&1)" \
-    || stop "cannot read what $template_repo changed from $prev_ref to $template_ref: $changed"
-  reads="$(tail -n +2 <<<"$changed" | grep -E '^template/(AGENTS\.md\.jinja|CLAUDE\.md\.jinja|\.claude/)' | sort -u || true)"
-  [ "$(head -1 <<<"$changed")" -lt 300 ] || reads="(over 300 files changed; GitHub lists no more)"
+  template_agent_reads "$template_repo" "$prev_ref" "$template_ref" \
+    || stop "cannot read what $template_repo changed from $prev_ref to $template_ref: $template_reads_error"
+  reads="$template_reads"
   if [ -n "$reads" ]; then
     case "$suite_line" in
       "eval suite:"*)

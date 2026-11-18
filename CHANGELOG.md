@@ -24,6 +24,17 @@ pull requests and have no tag.
   job's name falls behind the pin; a pin raise re-renders with
   `tests/template-render.sh --write`. No ruleset requires the job, and no
   consumer's `ci / *` check changes.
+- `scripts/raise-template-pin.sh vA.B.C [<commit>]` raises the template pin
+  (#954). It reads the tag's commit from GitHub, changes nothing when the tag
+  does not exist, is not a published release or names another commit than
+  the one given, and edits the lines a raise changed by hand: the door's
+  `template_ref` and `template_sha`, the README, the tutorial, the
+  failure-path test, `canary-template`'s job name and one `[Unreleased]`
+  line. It prints whether the next release owes the eval suite, read
+  through the same code `scripts/make-release.sh` asks with, and what is
+  left to write. `docs/how-to/upgrade-the-template-pin.md` now says to raise
+  the pin once per plinth release, before cutting it, and
+  `docs/how-to/cut-a-release.md` step 1 says when.
 
 ### Changed
 
