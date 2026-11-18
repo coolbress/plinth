@@ -60,6 +60,8 @@ def job(path, name):
     m = re.search(rf"^  {re.escape(name)}:\n((?:(?:    .*|\s*)\n)*)", text, re.M)
     if not m:
         return None
+    # Every key of the job: a scalar as its value, a block (permissions,
+    # with, secrets, anything else) as a mapping of its keys.
     out, block = {"permissions": {}, "with": {}}, None
     for line in m.group(1).splitlines():
         line = re.sub(r"\s+#.*$", "", line.rstrip())
@@ -70,10 +72,14 @@ def job(path, name):
             block = k.group(1) if k.group(2) == "" else None
             if block is None:
                 out[k.group(1)] = k.group(2).strip("\"'")
+            else:
+                out.setdefault(block, {})
             continue
         kv = re.fullmatch(r"      ([A-Za-z0-9_-]+):\s*(.*)", line)
-        if kv and block in ("permissions", "with"):
+        if kv and block is not None:
             out[block][kv.group(1)] = kv.group(2).strip("\"'")
+        elif block is not None:
+            out[block].setdefault("(unread)", []).append(line.strip())
     return out
 
 plinth_yml, rendered_yml, tag, sha = sys.argv[1:5]
@@ -161,6 +167,10 @@ seed dir    's/^      working-directory: canary-template$/      working-director
 seed uses   's{^    uses: \./\.github/workflows/python-ci\.yml$}{    uses: coolbress/plinth/.github/workflows/python-ci.yml\@main} if $. > 3' "a job calling another workflow than this commit's"
 seed name   "s/ at ${sha:0:7}//" "a job whose name does not say the commit"
 seed if     's/^    with:$/    if: false\n    with:/' "a job with an if:"
+printf '    secrets:\n      API_TOKEN: ${{ secrets.API_TOKEN }}\n' >>"$work/rendered.yml"
+if out="$(mirror "$work/good.yml" "$work/rendered.yml" "$tag" "$sha")"; then bad "a rendered caller passing a secrets: block the job lacks passes"
+else ok "a rendered caller passing a secrets: block the job lacks fails ($(head -1 <<<"$out"))"; fi
+perl -0pi -e 's/    secrets:\n      API_TOKEN: .*\n//' "$work/rendered.yml"
 printf '    secrets: inherit\n' >>"$work/rendered.yml"
 if out="$(mirror "$work/good.yml" "$work/rendered.yml" "$tag" "$sha")"; then bad "a rendered caller with a key the job lacks (secrets:) passes"
 else ok "a rendered caller with a key the job lacks fails ($(head -1 <<<"$out"))"; fi
