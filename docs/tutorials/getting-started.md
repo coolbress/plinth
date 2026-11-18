@@ -80,12 +80,14 @@ picker (a window of choices; Other lets you type an answer instead):
    model (`data-ml`); or a website people log in to (`web`, then where it
    runs).
 2. **Use the recommended defaults?** public, on GitHub, MIT licence, in
-   `~/my-app`, no third-party reviewer. Yes asks nothing more. Customize
-   asks the host (GitLab.com needs `glab` installed and logged in) and the
-   licence; then public or private, whose recommendation depends on the
-   host, and on GitHub whether a code reviewer such as Codex's is already
-   connected to your account; then the folder, with `~/my-app` offered and
-   any other path typed into Other.
+   `~/my-app`, no third-party reviewer, no code of conduct, no description.
+   Yes asks nothing more. Customize asks the host (GitLab.com needs `glab`
+   installed and logged in) and the licence; then public or private, whose
+   recommendation depends on the host, and on GitHub whether a code reviewer
+   such as Codex's is already connected to your account; then, on GitHub, a
+   code of conduct (with a contact; not asked when your account's own applies)
+   and a one-line description; then the folder,
+   with `~/my-app` offered and any other path typed into Other.
 
 Where the picker cannot be shown (`claude -p`), the same questions come as
 text, numbered.

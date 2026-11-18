@@ -173,6 +173,11 @@ the plan; then show the plan again and ask again.
   push or the pull request failed, that is the same `--finish` line again,
   which pushes the commit already made and does not make a second one. Do not
   work around it: do not run copier, `git push` or `gh pr create` yourself.
+- **Exit 2**: the arguments were wrong and nothing was committed. A usage
+  line means a flag was missing its value or given in the wrong step; run
+  the step as written above. A `--resolved` path copier did not leave in
+  conflict is followed by the files that are; run `--finish` again naming
+  those.
 
 The pull request's description says which plinth pin was chosen and names
 both SHAs, and lists what copier merged cleanly, each conflicted file with
