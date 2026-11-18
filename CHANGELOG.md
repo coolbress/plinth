@@ -45,6 +45,15 @@ pull requests and have no tag.
   failing, not a test; the checkout fails when the tag no longer names the
   pinned commit.
 
+### Fixed
+
+- `/plinth:new-project --host gitlab` refuses `--private` together with
+  `--public`, in either order, before anything is read or created (#960).
+  The last of the two used to win, so an added `--public` made a private
+  request a public GitLab.com project; the GitHub door already stopped.
+  The other pairs the GitHub door refuses already stopped on GitLab, since
+  one side of each is GitHub only; the cases now cover both orders.
+
 ## [2.36.0] - 2026-11-18
 
 A project's dependency updates and reverts get the guidance a real project found missing: `docs/how-to/run-a-project.md` step 9 says what to do when a dependency pull request stays red (take the one package out of its group, know that `@dependabot ignore` is a lasting pin) and that `dependabot.yml`'s groups are the project's to change. `/plinth:new-project` renders plinth-template v1.45.1, whose keep-current how-to says the same, whose undo how-to says to fill the revert's description before merging and how to see `main` back, and whose `plinth_sha` default makes a new project call plinth v2.32.0 from its first commit. README and the tutorial name the code-of-conduct and description questions `/plinth:new-project` asks, and `/plinth:template-update` names its exit 2. No reusable workflow changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.
