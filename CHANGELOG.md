@@ -51,8 +51,8 @@ pull requests and have no tag.
   repository, as it does on GitLab (#964). A name the template refuses, such
   as `class`, now stops with copier's own words and creates nothing. Before, it created the repository and then
   deleted it, and without the token's `delete_repo` scope it left an empty
-  repository to delete by hand. When the create itself fails, the stop says
-  that the render stays in the local directory.
+  repository to delete by hand. A stop after the render began names what it
+  left in the local directory, which the next run would refuse.
 
 ## [2.36.0] - 2026-11-18
 

@@ -265,6 +265,8 @@ printf 'uvx %s\n' "$*" >> "$GH_LOG"
 case "$*" in *copier*copy*) ;; *) exit 0 ;; esac
 [ "${MOCK_UVX_ENV:-0}" = 1 ] && env > "$HOME/uvx-env"
 if [ "${FAIL_AT:-}" = copier ]; then echo "mock copier: refusing on purpose" >&2; exit 1; fi
+# A render that wrote some files and then failed (#964): what it left is named.
+if [ "${MOCK_COPIER_PARTIAL:-0}" = 1 ]; then mkdir -p "${!#}"; : > "${!#}/README.md"; echo "mock copier: failed half way" >&2; exit 1; fi
 # A name the template's validator refuses (#964): copier stops before writing
 # a file, with its own words (measured with copier 9.18.2 at the pinned commit
 # for `class`, a name GitHub takes and Python cannot import).
@@ -830,6 +832,7 @@ for c in create-fails review-dropped coc-dropped; do
   grep -qF "the render stays at $work/home-$c/probe" "$work/home-$c/out" \
     && ok "$c" "the stop names the render left on disk" || bad "$c" "the stop does not name the render left on disk"
 done
+E="MOCK_COPIER_PARTIAL=1" run copier-partial err no no "the render stays at $work/home-copier-partial/probe" -- probe
 if grep -qF "the render stays at" "$work/home-name-refused/out"; then bad name-refused "a refusal that wrote nothing names a render"
 else ok name-refused "a refusal that wrote nothing names no render"; fi
 

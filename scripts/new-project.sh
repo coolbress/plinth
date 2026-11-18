@@ -570,10 +570,11 @@ echo "create $repo ($visibility, $spdx, $arch_words, as $role) from $template_re
 # ── create ───────────────────────────────────────────────────────────────
 created=0; rendered=0
 cleanup() {
-  # Stopped after the render and before the repository exists: the render on
-  # disk is all there is, and the next run refuses a directory that is not
-  # empty, so it is named (#964).
-  if [ "$created" != 1 ] && [ "$rendered" = 1 ]; then
+  # Stopped once the render began and before the repository exists: what it
+  # wrote on disk is all there is, and the next run refuses a directory that
+  # is not empty, so it is named (#964). The directory was empty or absent
+  # before the render, so anything in it now is this run's.
+  if [ "$created" != 1 ] && [ "$rendered" = 1 ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
     echo "the render stays at $dir: remove it before running again, or pass --dir=<another path>" >&2
   fi
   [ "$created" = 1 ] || return 0
@@ -601,6 +602,7 @@ trap cleanup EXIT
 # token, would execute. Rendering into a plain directory
 # and removing whatever `.git` it left, then initialising, leaves it nothing
 # but content (Codex review on #118).
+rendered=1
 if ! env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
@@ -610,10 +612,9 @@ if ! env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version
   ${hosting_data[@]+"${hosting_data[@]}"} ${review_data[@]+"${review_data[@]}"} \
   ${owner_files_data[@]+"${owner_files_data[@]}"} \
   --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null; then
-  echo "the template refused these answers (copier's words above); nothing was created on GitHub" >&2
+  echo "copier stopped (its words above: a refused answer, or a fetch that failed); nothing was created on GitHub" >&2
   exit 1
 fi
-rendered=1
 rm -rf "$dir/.git"
 # Asked for the reviewer, the render must have recorded it; otherwise the
 # repository would go up without the check the person chose.
