@@ -53,6 +53,13 @@ pull requests and have no tag.
   request a public GitLab.com project; the GitHub door already stopped.
   The other pairs the GitHub door refuses already stopped on GitLab, since
   one side of each is GitHub only; the cases now cover both orders.
+- On GitHub, `/plinth:new-project` renders the template before it creates the
+  repository, as it does on GitLab (#964). A name the template refuses, such
+  as `class`, now stops with copier's own words and creates nothing. Before,
+  it created the repository and then deleted it, and without the token's
+  `delete_repo` scope it left an empty repository to delete by hand. A stop
+  after the render began names what it left in the local directory, which
+  the next run would refuse.
 
 - The eval suite's `floor-gaps` and `next-day` tasks pass a report by what it
   says of each gap or open item, not by its name appearing (#961). A report

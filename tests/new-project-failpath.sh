@@ -265,6 +265,13 @@ printf 'uvx %s\n' "$*" >> "$GH_LOG"
 case "$*" in *copier*copy*) ;; *) exit 0 ;; esac
 [ "${MOCK_UVX_ENV:-0}" = 1 ] && env > "$HOME/uvx-env"
 if [ "${FAIL_AT:-}" = copier ]; then echo "mock copier: refusing on purpose" >&2; exit 1; fi
+# A render that wrote some files and then failed (#964): what it left is named.
+if [ "${MOCK_COPIER_PARTIAL:-0}" = 1 ]; then mkdir -p "${!#}"; : > "${!#}/README.md"; echo "mock copier: failed half way" >&2; exit 1; fi
+# A name the template's validator refuses (#964): copier stops before writing
+# a file, with its own words (measured with copier 9.18.2 at the pinned commit
+# for `class`, a name GitHub takes and Python cannot import).
+for a in "$@"; do case "$a" in project_name=class)
+  echo "ValueError: Validation error for question 'project_name': The package name 'class' derived from 'class' is a Python keyword; it cannot be imported. Choose another repository name." >&2; exit 1 ;; esac; done
 dst="${!#}"; pname=""; plic=""; powner=""
 for a in "$@"; do case "$a" in project_name=*) pname="${a#*=}" ;; license=*) plic="${a#*=}" ;; owner=*) powner="${a#*=}" ;; esac; done
 : "${pname:?mock copier: no --data project_name}"; : "${plic:?mock copier: no --data license}"
@@ -603,7 +610,7 @@ E="MOCK_SCOPES=repo,workflow" run rollback-off ok yes no "rollback: off (no dele
 # goes on, and one line under it names the step that failed and its error, or
 # that the text carried no choices (#629). Which step: `gh api` (FAIL_AT=choices),
 # `base64 -d` (a body it cannot decode), or neither (a copier.yml without them).
-unread="warning: could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
+unread="warning: could not read the template's archetype and license lists; copier decides (a refusal creates nothing)"
 run choices-read ok yes no "" -- probe
 E="FAIL_AT=choices" run choices-gh-fails ok yes no "$unread" -- probe
 grep -qxF "  gh api failed: mock gh: failing at choices on purpose" "$work/home-choices-gh-fails/out" \
@@ -725,7 +732,7 @@ then ok review "the ruleset posted with the reviewer is byte for byte the one wi
 else bad review "the reviewer changed the posted ruleset"; fi
 run review-old-template err no no "cannot render the third-party reviewer; nothing was created" -- probe --third-party-review
 E="MOCK_CHOICES=garbage" run review-unread err no no "could not read whether the template can render the third-party reviewer" -- probe --third-party-review
-E="MOCK_REVIEW_Q=1 MOCK_REVIEW_NORECORD=1" run review-dropped err yes yes "did not record third_party_review: true" -- probe --third-party-review
+E="MOCK_REVIEW_Q=1 MOCK_REVIEW_NORECORD=1" run review-dropped err no no "did not record third_party_review: true" -- probe --third-party-review
 run review-both err no no "--third-party-review and --no-third-party-review: choose one" -- probe --third-party-review --no-third-party-review
 run public-private err no no "--private and --public: choose one" -- probe --private --public
 run public-private-rev err no no "--private and --public: choose one" -- probe --public --private
@@ -765,7 +772,7 @@ else bad coc-old-template-sec "an owner answer reached a template that does not 
 run coc-old-template err no no "cannot render a code of conduct; nothing was created" -- probe --code-of-conduct=conduct@example.org
 E="MOCK_CHOICES=garbage" run coc-unread err no no "could not read whether the template can render a code of conduct" -- probe --code-of-conduct=conduct@example.org
 E="MOCK_COC_Q=1 MOCK_SHARED_COC=error" run coc-lookup-fails err no no "cannot read whether tester/.github publishes a code of conduct or a security policy" -- probe
-E="MOCK_COC_Q=1 MOCK_COC_NORENDER=1" run coc-dropped err yes yes "did not render CODE_OF_CONDUCT.md" -- probe --code-of-conduct=conduct@example.org
+E="MOCK_COC_Q=1 MOCK_COC_NORENDER=1" run coc-dropped err no no "did not render CODE_OF_CONDUCT.md" -- probe --code-of-conduct=conduct@example.org
 run coc-both err no no "--code-of-conduct and --no-code-of-conduct: choose one" -- probe --code-of-conduct=a@b.c --no-code-of-conduct
 run coc-bare err no no "--code-of-conduct needs the address reports go to" -- probe --code-of-conduct
 run coc-empty err no no "--code-of-conduct= needs one line" -- probe "--code-of-conduct= "
@@ -814,8 +821,28 @@ if grep -q 'license=Apache-2.0' "$work/home-apache/calls.log" && ! grep -q -- '-
 then ok apache "the chosen license reaches copier, and no license text is fetched over the render"
 else bad apache "the license did not reach copier, or its text was fetched over the render"; fi
 
+# The template is the judge of a name (#964): one the door's own check lets
+# through and copier's validator refuses stops before the repository exists,
+# with copier's words, as a refusal of any other answer does.
+run name-refused   err no no "The package name 'class' derived from 'class' is a Python keyword" -- class
+grep -qF "nothing was created on GitHub" "$work/home-name-refused/out" \
+  && ok name-refused "the stop says nothing was created on GitHub" || bad name-refused "the stop does not say nothing was created on GitHub"
+E="FAIL_AT=copier" run copier          err no no "mock copier: refusing on purpose"     -- probe
+E="MOCK_PLAN=pro FAIL_AT=copier" run private-copier err no no "mock copier: refusing on purpose" -- probe --private
+# A create that fails after the render: gh was asked (created=yes in run's
+# terms) and nothing is deleted; the stop names where to look, and the render
+# left on disk, as every stop after the render does.
+E="FAIL_AT=create" run create-fails    err yes no "if GitHub created it anyway, it is at https://github.com/tester/probe" -- probe
+for c in create-fails review-dropped coc-dropped; do
+  grep -qF "the render stays at $work/home-$c/probe" "$work/home-$c/out" \
+    && ok "$c" "the stop names the render left on disk" || bad "$c" "the stop does not name the render left on disk"
+done
+E="MOCK_COPIER_PARTIAL=1" run copier-partial err no no "the render stays at $work/home-copier-partial/probe" -- probe
+if grep -qF "the render stays at" "$work/home-name-refused/out"; then bad name-refused "a refusal that wrote nothing names a render"
+else ok name-refused "a refusal that wrote nothing names no render"; fi
+
 echo "after creation: any failure deletes"
-for at in copier push default-branch codeql ruleset ruleset-merge secret dependabot actions allowlist merge pr; do
+for at in push default-branch codeql ruleset ruleset-merge secret dependabot actions allowlist merge pr; do
   E="FAIL_AT=$at" run "$at" err yes yes "" -- probe
 done
 # A failing setup call names itself (#356), whatever the error.
@@ -1011,6 +1038,8 @@ check "all three locations GitHub reads a shared pull-request template from are 
   '[ "$(grep -c "contents/.*PULL_REQUEST_TEMPLATE.md" "$log")" = 3 ]'
 # Order, not shape: every question about the owner is answered before anything
 # exists, so a wrong answer costs nothing.
+check "copier renders before the repository is created, so a refused answer creates nothing (#964)" \
+  '[ "$(grep -n "^uvx .*copier copy" "$log" | cut -d: -f1)" -lt "$(grep -n "^gh repo create" "$log" | cut -d: -f1)" ]'
 check "the owner's shared templates are asked about before anything is created" \
   '[ "$(grep -n "^gh repo create" "$log" | cut -d: -f1)" -gt "$(grep -nE "contents/(.github/)?(PULL_REQUEST_TEMPLATE.md|ISSUE_TEMPLATE)|/.github --jq .visibility" "$log" | tail -1 | cut -d: -f1)" ]'
 check "an owner with no shared templates gets the box's own copies" \
@@ -1281,7 +1310,7 @@ E="MOCK_PLAN=none MOCK_SCOPES=repo,workflow,delete_repo,read:user FAIL_AT=rulese
 has   private-ruleset-refused "the refusal names what a private ruleset needs and the public command" out 'needs GitHub Pro.*/plinth:new-project probe$'
 E="MOCK_PLAN=pro FAIL_AT=ruleset" run private-ruleset-fails err yes yes "could not apply the ruleset" -- probe --private
 hasnt private-ruleset-fails "a verified plan is not blamed for a ruleset failure" out 'was not verified'
-for at in copier push dependabot actions allowlist merge pr; do
+for at in push dependabot actions allowlist merge pr; do
   E="MOCK_PLAN=pro FAIL_AT=$at" run "private-fails-$at" err yes yes "" -- probe --private
 done
 E="MOCK_PLAN=team MOCK_SECURITY=enabled,enabled FAIL_AT=secret" run private-fails-secret err yes yes "could not set secret scanning and push protection" -- someorg/probe --private
