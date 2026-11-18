@@ -61,6 +61,16 @@ pull requests and have no tag.
   after the render began names what it left in the local directory, which
   the next run would refuse.
 
+- The eval suite's `floor-gaps` and `next-day` tasks pass a report by what it
+  says of each gap or open item, not by its name appearing (#961). A report
+  calling all three planted gaps "in place", or the open `cp1252` check
+  "done", passed before and fails now: each entry of the task's `gaps.json`
+  or `open.json` has a `stated` and an `opposite` pattern, read on the lines
+  and sentences that name it. The grade records the old reading as
+  `mentioned`. Tables on #647 before and after this release are not compared
+  cell by cell for these two tasks without saying so; checked by hand, 108
+  entries of archived final reports grade the same as before.
+
 ## [2.36.0] - 2026-11-18
 
 A project's dependency updates and reverts get the guidance a real project found missing: `docs/how-to/run-a-project.md` step 9 says what to do when a dependency pull request stays red (take the one package out of its group, know that `@dependabot ignore` is a lasting pin) and that `dependabot.yml`'s groups are the project's to change. `/plinth:new-project` renders plinth-template v1.45.1, whose keep-current how-to says the same, whose undo how-to says to fill the revert's description before merging and how to see `main` back, and whose `plinth_sha` default makes a new project call plinth v2.32.0 from its first commit. README and the tutorial name the code-of-conduct and description questions `/plinth:new-project` asks, and `/plinth:template-update` names its exit 2. No reusable workflow changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.
