@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/agents/issue-tracker.md` says a defect is a `bug`, whoever finds it,
+  and that a `bug` made `ready-for-agent` gains `## Acceptance criteria` (and
+  `## Not building` when it helps) below the form's fields, where `/implement`
+  reads them (#957). The rule read two ways ("a bug report takes its own
+  label"), and an agent in a real project wrote a defect it had reproduced as
+  a task. The same change is in plinth-template's `issue-tracker.md` on both
+  hosts, with the template reminder opening its issue as a `task` that is
+  `ready-for-human`; an existing project gets it through
+  `/plinth:template-update` once plinth renders that template release. Issues
+  already closed are not relabelled.
+
 ## [2.36.0] - 2026-11-18
 
 A project's dependency updates and reverts get the guidance a real project found missing: `docs/how-to/run-a-project.md` step 9 says what to do when a dependency pull request stays red (take the one package out of its group, know that `@dependabot ignore` is a lasting pin) and that `dependabot.yml`'s groups are the project's to change. `/plinth:new-project` renders plinth-template v1.45.1, whose keep-current how-to says the same, whose undo how-to says to fill the revert's description before merging and how to see `main` back, and whose `plinth_sha` default makes a new project call plinth v2.32.0 from its first commit. README and the tutorial name the code-of-conduct and description questions `/plinth:new-project` asks, and `/plinth:template-update` names its exit 2. No reusable workflow changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.
