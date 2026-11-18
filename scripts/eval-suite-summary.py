@@ -80,12 +80,12 @@ def kind_records(rs: list[Run]) -> str:
             for s in x["skills"]:
                 calls[s] += 1
         used = ", ".join(f"`{s}` ×{c}" for s, c in sorted(calls.items())) or "none"
-        return f"gaps the final report names: {named}; Skill calls: {used}"
+        return f"gaps the final report says are missing: {named}; Skill calls: {used}"
     if kind == "resume":
         items = list(k[0]["named"])
         named = ", ".join(f"`{i}` {sum(1 for x in k if x['named'][i])}/{n}" for i in items)
         return (
-            f"open items the final report names: {named}; "
+            f"open items the final report meets: {named}; "
             f"changed a file {sum(1 for x in k if x['changed_files'])}/{n}; "
             f"ran gh without reaching the stand-in {sum(1 for x in k if x['stand_in_missed'])}/{n}"
         )
