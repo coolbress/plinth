@@ -262,8 +262,8 @@ see these: guidance only.
   past one red run. The file's groups and cooldown are the project's to
   change: `/plinth:floor-check` checks only that it exists, and a template
   update keeps the project's lines unless the template changed the same
-  ones. The project's `docs/how-to/keep-this-project-current.md` says the
-  same, from the template release that carries #949. After each plinth
+  ones. A project's `docs/how-to/keep-this-project-current.md` says the
+  same, from plinth-template v1.45.0. After each plinth
   release, `/plinth:floor-check` says whether the repository is behind, and `/plinth:template-update` takes the update as a
   draft pull request. A project on GitHub rendered from template v1.39.0 or
   later also gets a monthly reminder when it is behind: an issue titled

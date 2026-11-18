@@ -19,11 +19,15 @@ pull requests and have no tag.
   on its branch knowing Dependabot stops rebasing it, and merge the rest;
   `@dependabot ignore` is a lasting pin, undone with `unignore`. It says
   `.github/dependabot.yml`'s groups and cooldown are the project's to
-  change. The template's part (its keep-current how-to and its cooldown
-  comment, which now says the wait holds only the packages a pull request
-  names, not those `uv lock` moves with them) reaches an existing project
-  through `/plinth:template-update` once plinth renders the template
-  release that carries it.
+  change.
+- `/plinth:new-project` renders plinth-template v1.45.0. Its keep-current
+  how-to says the same as step 9, and its `dependabot.yml` comment says the
+  default cooldown holds each package a pull request names, not those
+  `uv lock` moves with them (coolbress/plinth-template#251). Its
+  `CONTRIBUTING.md` step 5 shows the description's checked and review
+  fields (coolbress/plinth-template#250). A new project now calls plinth
+  v2.32.0. An existing project gets the template's part through
+  `/plinth:template-update`.
 
 ## [2.35.0] - 2026-11-17
 
