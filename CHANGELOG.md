@@ -20,12 +20,15 @@ pull requests and have no tag.
   `@dependabot ignore` is a lasting pin, undone with `unignore`. It says
   `.github/dependabot.yml`'s groups and cooldown are the project's to
   change.
-- `/plinth:new-project` renders plinth-template v1.45.0. Its keep-current
+- `/plinth:new-project` renders plinth-template v1.45.1. Its keep-current
   how-to says the same as step 9, and its `dependabot.yml` comment says the
   default cooldown holds each package a pull request names, not those
   `uv lock` moves with them (coolbress/plinth-template#251). Its
   `CONTRIBUTING.md` step 5 shows the description's checked and review
-  fields (coolbress/plinth-template#250). A new project now calls plinth
+  fields (coolbress/plinth-template#250). Its undo how-to says to fill the
+  revert's description from the form before merging, which review a revert
+  takes, how to watch the checks, and how to see `main` back
+  (coolbress/plinth-template#253). A new project now calls plinth
   v2.32.0. An existing project gets the template's part through
   `/plinth:template-update`.
 
