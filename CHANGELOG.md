@@ -59,10 +59,10 @@ pull requests and have no tag.
   calling all three planted gaps "in place", or the open `cp1252` check
   "done", passed before and fails now: each entry of the task's `gaps.json`
   or `open.json` has a `stated` and an `opposite` pattern, read on the lines
-  that name it. The grade records the old reading as `mentioned`. Tables on
-  #647 before and after this release are not compared cell by cell for
-  these two tasks without saying so; 108 entries of archived final reports
-  grade the same as before.
+  and sentences that name it. The grade records the old reading as
+  `mentioned`. Tables on #647 before and after this release are not compared
+  cell by cell for these two tasks without saying so; checked by hand, 108
+  entries of archived final reports grade the same as before.
 
 ## [2.36.0] - 2026-11-18
 

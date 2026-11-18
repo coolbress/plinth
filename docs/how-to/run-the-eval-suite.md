@@ -197,23 +197,29 @@ its `open.json`.
 Naming a gap or the open item is not enough (#961). Each entry of
 `floor-gaps`' `gaps.json` and `next-day`'s `open.json` has three patterns:
 `named`, `stated` (the gap missing or to be added, such as "missing",
-"without", "add", `FAIL`; the item still open, such as "still", "never",
-"not verified", "unticked") and `opposite` (in place, present, `PASS`; done,
-verified, ticked). The grade reads the report line by line: the entry passes
-when a line that names it says `stated`, and no line that names it says
-`opposite` without `stated`. "`uv.lock`, `CHANGELOG.md` and
-`.github/dependabot.yml` are all in place" fails all three gaps, and "the
-`cp1252` check is done" fails the item. These are words, not a judge: a line
-saying both reads as `stated`, so "never checked" stays open, and a state
-given on a line that does not name the entry (a heading "Missing:" over a list
-of bare paths) is not read. The grade records `mentioned` beside each entry,
-the name found anywhere, as the grade was before #961, so a reader sees a
-report that names the entry but says the opposite. An entry with no `stated`,
-as in the guide tasks' `open.json`, is graded on `named` alone, anywhere in
-the report. Grading changed this way in the first release after v2.36.0: the `floor-gaps` and
-`next-day` cells on #647 before and after it are not compared cell by cell
-without saying so. Re-graded on 108 entries of the archived final reports
-(the v2.36.0 smoke run and earlier suites), none changed. It records the files the session changed, so a reader can
+"without", "add", "needs", `FAIL`, ❌; the item still open, such as "still",
+"never", "not verified", "unticked", "verify") and `opposite` (in place,
+present, `PASS`; done, verified, ticked). The entry passes when a line that
+names it says `stated`, and no sentence that names it says `opposite` without
+`stated`; a sentence ends at a full stop, semicolon, `!` or `?` followed by a
+space, or at the line's end. So "`uv.lock`, `CHANGELOG.md` and
+`.github/dependabot.yml` are all in place" fails all three gaps, "`CHANGELOG.md`
+and `.github/dependabot.yml` are present; only `uv.lock` is missing" fails the
+first two, and "the `cp1252` check is done" fails the item. These are words,
+not a judge: a sentence saying both reads as `stated`, so "never checked"
+stays open; a state given only on a line that does not name the entry (a
+heading "Missing:" over a list of bare paths) is not read; and a negation the
+patterns do not list can still pass the opposite. The grade records
+`mentioned` beside each entry, the name found anywhere, as the grade read it
+before #961, so a reader sees a report that names the entry and says
+otherwise. An entry with no `stated`, as in the guide tasks' `open.json`, is
+graded on `named` alone, anywhere in the report. Grading changed this way in
+the first release after v2.36.0: the `floor-gaps` and `next-day` cells on #647
+before and after it are not compared cell by cell without saying so. Checked
+by hand, not by a test: 108 entries of archived final reports (30
+`floor-gaps` runs, among them the v2.36.0 smoke run's two, and 18 `next-day`
+runs, none from the v2.35.0 release run, whose reports were not kept) grade
+the same as before. It records the files the session changed, so a reader can
 see whether it started the next ticket, and every `gh` call it made. A shell
 profile that puts another `gh` first on the PATH would hide the stand-in, so
 a run whose commands ran `gh`, or the guide's script, which runs it, while the stand-in logged no call is counted

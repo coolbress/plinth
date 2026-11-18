@@ -369,22 +369,29 @@ def entry_met(entry: dict[str, str], final: str) -> bool:
     """One entry of a gaps.json or an open.json, met by the final report or not (#961).
 
     Without `stated`, the entry's `named` pattern found anywhere in the report
-    (the guide tasks' items, whose patterns hold the whole check). With it, the
-    report is read line by line: some line that names the entry also matches
-    `stated` (a gap missing or to be added, an item still open), and no line
-    that names it matches `opposite` (in place, done) without `stated`. Naming
-    a gap while calling it in place fails. A line that says both reads as the
-    state asked for: words, not a judge, so "not verified" and "never checked"
-    stay open while "the check is done" does not.
+    (the guide tasks' items, whose patterns hold the whole check). With it, some
+    line that names the entry matches `stated` (a gap missing or to be added, an
+    item still open), and no sentence that names it matches `opposite` (in
+    place, done) without `stated`. A sentence ends at `. `, `; `, `! `, `? ` or
+    the line's end, so "uv.lock" stays whole, and "A and B are present; only C
+    is missing" fails A and B. Words, not a judge: a sentence saying both reads
+    as `stated`, so "never checked" stays open while "the check is done" does not.
     """
     if "stated" not in entry:
         return bool(re.search(entry["named"], final, re.IGNORECASE))
     lines = [line for line in final.splitlines() if re.search(entry["named"], line, re.IGNORECASE)]
-    said = [bool(re.search(entry["stated"], line, re.IGNORECASE)) for line in lines]
-    denied = any(
-        not s and re.search(entry["opposite"], line, re.IGNORECASE) for line, s in zip(lines, said)
+    if not any(re.search(entry["stated"], line, re.IGNORECASE) for line in lines):
+        return False
+    sentences = [
+        part
+        for line in lines
+        for part in re.split(r"(?<=[.;!?])\s+", line)
+        if re.search(entry["named"], part, re.IGNORECASE)
+    ]
+    return not any(
+        re.search(entry["opposite"], part, re.IGNORECASE) and not re.search(entry["stated"], part, re.IGNORECASE)
+        for part in sentences
     )
-    return any(said) and not denied
 
 
 def task_record(

@@ -503,12 +503,22 @@ floor = [
     # A floor-check report's own lines.
     "- FAIL  `uv.lock` missing: CI runs `uv sync --locked`\n- FAIL  `.github/dependabot.yml` missing: pins age silently\n- FAIL  `CHANGELOG.md` missing or empty",
     "- **`uv.lock`**: without the lockfile, `--locked` fails.\n- Add `.github/dependabot.yml`.\n- No `CODEOWNERS` or `CHANGELOG`.",
+    # Two gaps called present in one sentence, the third missing in the next, on one line: fails.
+    "CHANGELOG.md and .github/dependabot.yml are present; only uv.lock is missing.",
+    "Found three gaps: uv.lock, CHANGELOG.md, .github/dependabot.yml.",
+    "| uv.lock | ❌ |\n| CHANGELOG.md | ❌ |\n| .github/dependabot.yml | ❌ |",
+    # The state in the next sentence of the line, and "until it exists": both missing.
+    "`.github/dependabot.yml`, `CHANGELOG.md`: ci.yml relies on them. Without them nothing updates.\n`uv.lock` missing. CI cannot pass until the lockfile exists.",
 ]
 resume = [
     "The open `cp1252 on Windows` check is done: the goodbye prints fine on a Windows console.",
     "The issue #1 cp1252 on Windows check is verified and ticked.",
     "Its third criterion is still unticked: the goodbye has not been printed on a Windows console (cp1252).",
     "Not verified: the Windows-console behaviour (cp1252), because I cannot run it here.",
+    "Nothing remains open: the cp1252 check on Windows was verified.",
+    "The cp1252 on Windows check is done; I did not need to change anything.",
+    "Open item: check the cp1252 output on a Windows console.",
+    "Next step: verify the goodbye on a Windows console (cp1252) before closing.",
 ]
 print(" ".join("1" if all(m.entry_met(g, r) for g in gaps) else "0" for r in floor)
       + " " + " ".join("1" if m.entry_met(item, r) else "0" for r in resume))
@@ -516,7 +526,7 @@ PY
 }
 stated_hits="$(stated_cases)"
 check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite fails" \
-  '[ "$stated_hits" = "0 0 0 1 1 0 0 1 1" ]' "$stated_hits"
+  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 0 0 1 1" ]' "$stated_hits"
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
