@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:records-check` counts what is out of place in a repository's
+  issue and pull-request records, read-only (#977). Facts are judged
+  whatever the conventions say: a `#N` or `owner/repo#N` that resolves to
+  nothing, a home path in a body (by line and form, never what matched), a
+  body at 90% of GitHub's size limit. Convention items are judged only
+  against the repository's own templates, `CONTRIBUTING.md`,
+  `docs/agents/issue-tracker.md` and `AGENTS.md`, each line naming the file:
+  a completed task or bug with no ending, and a merged pull request with no
+  AI trailer, an INFO. With no convention read the line says `not checked`.
+  Unticked acceptance criteria are listed for a person to read. It is not a
+  CI job and changes nothing.
+
 ## [2.37.0] - 2026-11-19
 
 A name the template refuses now stops `/plinth:new-project` before anything is created, on GitHub as on GitLab, and the GitLab door refuses `--private` with `--public`. New projects render plinth-template v1.46.1: it refuses project names that never rendered, keeps a project's own test and `data/` files, says a defect is a `bug` whoever finds it, and raises the `backend`, `data-ml` and `web` image's `python:3.12-slim` digest past `apt` 3.0.3, which the rendered image scan refused from 2026-11-19. plinth's own CI now runs the pinned template's `cli` project through the pull request's `python-ci.yml`, and `scripts/raise-template-pin.sh` raises the pin. `/plinth:floor-check` shows the template's diff for `AGENTS.md` and `CONTRIBUTING.md`, whose sources end in `.jinja`. The eval suite grades a floor gap or an open item by what the report says of it. No reusable workflow that a project calls changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.
