@@ -11,8 +11,39 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- plinth's own CI runs plinth-template's `cli` project, rendered at the
+  commit `scripts/new-project.sh` pins and committed as `canary-template/`,
+  through the pull request's own `python-ci.yml` (#953). The new
+  `canary-template` job grants and passes exactly what the rendered
+  `ci.yml` grants and passes, so a `python-ci.yml` change that a template
+  project's caller cannot run, such as a job asking for a permission the
+  caller does not grant, fails in plinth's pull request instead of after a
+  release. `tests/template-render.sh` fails when the render, that copy or the
+  job's name falls behind the pin; a pin raise re-renders with
+  `tests/template-render.sh --write`. No ruleset requires the job, and no
+  consumer's `ci / *` check changes.
+- `scripts/raise-template-pin.sh vA.B.C [<commit>]` raises the template pin
+  (#954). It reads the tag's commit from GitHub, changes nothing when the tag
+  does not exist, is not a published release or names another commit than
+  the one given, and edits the lines a raise changed by hand: the door's
+  `template_ref` and `template_sha`, the README, the tutorial, the
+  failure-path test, `canary-template`'s job name and one `[Unreleased]`
+  line. It prints whether the next release owes the eval suite, read
+  through the same code `scripts/make-release.sh` asks with, and what is
+  left to write. `docs/how-to/upgrade-the-template-pin.md` now says to raise
+  the pin once per plinth release, before cutting it, and
+  `docs/how-to/cut-a-release.md` step 1 says when.
+
 ### Changed
 
+- The tests that compare plinth with the template read one checkout of it at
+  the pinned commit, made by `tests/lib/template-checkout.sh`, instead of
+  each downloading files at the tag (#953). `ci / install` makes the
+  checkout once, in a step of its own, so a network error is that step
+  failing, not a test; the checkout fails when the tag no longer names the
+  pinned commit.
 - `docs/agents/issue-tracker.md` says a defect is a `bug`, whoever finds it,
   and that a `bug` made `ready-for-agent` gains `## Acceptance criteria` (and
   `## Not building` when it helps) below the form's fields, where `/implement`
@@ -23,6 +54,32 @@ pull requests and have no tag.
   `ready-for-human`; an existing project gets it through
   `/plinth:template-update` once plinth renders that template release. Issues
   already closed are not relabelled.
+
+### Fixed
+
+- `/plinth:new-project --host gitlab` refuses `--private` together with
+  `--public`, in either order, before anything is read or created (#960).
+  The last of the two used to win, so an added `--public` made a private
+  request a public GitLab.com project; the GitHub door already stopped.
+  The other pairs the GitHub door refuses already stopped on GitLab, since
+  one side of each is GitHub only; the cases now cover both orders.
+- On GitHub, `/plinth:new-project` renders the template before it creates the
+  repository, as it does on GitLab (#964). A name the template refuses, such
+  as `class`, now stops with copier's own words and creates nothing. Before,
+  it created the repository and then deleted it, and without the token's
+  `delete_repo` scope it left an empty repository to delete by hand. A stop
+  after the render began names what it left in the local directory, which
+  the next run would refuse.
+
+- The eval suite's `floor-gaps` and `next-day` tasks pass a report by what it
+  says of each gap or open item, not by its name appearing (#961). A report
+  calling all three planted gaps "in place", or the open `cp1252` check
+  "done", passed before and fails now: each entry of the task's `gaps.json`
+  or `open.json` has a `stated` and an `opposite` pattern, read on the lines
+  and sentences that name it. The grade records the old reading as
+  `mentioned`. Tables on #647 before and after this release are not compared
+  cell by cell for these two tasks without saying so; checked by hand, 108
+  entries of archived final reports grade the same as before.
 
 ## [2.36.0] - 2026-11-18
 

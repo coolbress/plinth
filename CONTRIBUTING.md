@@ -11,7 +11,9 @@ claude plugin validate --strict .                           # marketplace manife
 claude plugin validate --strict .claude-plugin/plugin.json  # plugin manifest
 claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
-# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, build-cases, template-rules-drift, template-update-cases, arsenal-freshness, uv-pin and release-download-token need network
+# one checkout of plinth-template at the pinned commit, for the tests that read it
+export PLINTH_TEMPLATE_DIR="$(mktemp -d)/plinth-template" && tests/lib/template-checkout.sh "$PLINTH_TEMPLATE_DIR"
+# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, build-cases, release-allowlist, template-render, arsenal-freshness, uv-pin and release-download-token need network
 failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
 [ -z "$failed" ] || { echo "FAILED:$failed"; false; }
 ```
@@ -34,12 +36,19 @@ version whose standard library parses TOML, as the runner's does.
 `tests/install-smoke-interrupt.sh` needs `perl`, `pkill` and `pgrep` and takes
 about 20 seconds. `tests/gitlab-ci-cases.sh` installs the GitLab
 `floor-check` job's PyYAML from PyPI, pinned by hash, so it needs network.
-`tests/template-update-cases.sh` reads the template's pull-request form at the
-pinned tag, so it does too, and takes minutes rather than seconds.
+The tests that compare plinth with the template (`template-rules-drift`,
+`archetype-single-source`, `off-by-default-cases`, `uv-pin`,
+`release-allowlist`, `arsenal-freshness`, `template-update-cases`,
+`template-render` and `install-smoke`) read the checkout `PLINTH_TEMPLATE_DIR`
+names, which must be at the pinned commit with nothing changed; without it,
+each fetches its own. `ci / install` makes the checkout once, in a step of
+its own, so a network error there is the fetch failing, not a test.
+`tests/template-update-cases.sh` takes minutes rather than seconds.
 Everything else runs offline in seconds.
 
 That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
-one, the link check. CodeQL and the `canary` jobs run only on GitHub.
+one, the link check. CodeQL and the `canary`, `canary-web` and
+`canary-template` jobs run only on GitHub.
 
 The lint files are what `ci / tools` calls, with the same flags, but a
 local pass is the CI pass only where the tool is the same one:
@@ -165,8 +174,12 @@ release needs a green run on the commit it tags, or on a commit with its tree
    squash message.
 
    CI runs `ci / install`, `ci / tools`, `ci / docs`, `ci / release-gate` and
-   `CodeQL`; the canary
-   job runs the reusable workflow against `canary/`. `third-party / review`
+   `CodeQL`; the canary jobs run the reusable workflow at this commit against
+   `canary/` and `canary-web/`, and `canary-template` against
+   `canary-template/`, plinth-template's `cli` render at the pinned commit,
+   with the grant and inputs its rendered `ci.yml` gives the call (#953). No
+   ruleset requires the canaries; `scripts/merge-when-green.sh` still waits
+   for them, as for every check. `third-party / review`
    waits for a review by the Codex reviewer once the pull request is ready,
    and it is required on `main`: a pull request without an accepted review on
    its head does not merge, a draft, a pull request only Dependabot pushed to

@@ -2,15 +2,17 @@
 # The archetype vocabulary has one source: the template's copier.yml. The floor
 # checker only needs to know which archetypes get a container image and a
 # .env.example, and those names must be exactly the ones copier.yml conditions
-# on. Reads the real copier.yml over the network; unreadable is a FAIL, not a
-# pass (a check that cannot fail is not a check).
+# on. Reads the real copier.yml from one checkout at the commit the door pins
+# (tests/lib/template-checkout.sh), not `main`: the checker must agree with
+# what the door actually renders. A template that moves ahead of the pin is not
+# a failure here; raising the pin brings its vocabulary into this check. No
+# checkout, or no copier.yml in it, is a FAIL, not a pass (a check that cannot
+# fail is not a check).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-template="${TEMPLATE_REPO:-coolbress/plinth-template}"
-# The tag the door pins, not `main`: the checker must agree with what the door
-# actually renders. A template that moves ahead of the pin is not a failure here;
-# raising the pin brings its vocabulary into this check.
-ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$root/scripts/new-project.sh")}"
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
+work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
@@ -22,16 +24,16 @@ then bad "floor-check.py hardcodes the archetype choices; the template owns that
 else ok "floor-check.py does not hardcode the archetype choices"; fi
 
 # 2. The conditional set equals what copier.yml's `_exclude` conditions name.
-# raw.githubusercontent.com needs no token for a public repository (CI runners have none in this job).
-copier="$(curl -fsSL --retry 3 "https://raw.githubusercontent.com/$template/$ref/copier.yml" 2>/dev/null)"
-if [ -z "$copier" ]; then
-  bad "could not read $template@$ref copier.yml; cannot verify the vocabulary"
+if ! template_checkout "$work"; then
+  bad "no checkout of the template: $template_error"
+elif ! copier="$(cat "$template_dir/copier.yml" 2>/dev/null)" || [ -z "$copier" ]; then
+  bad "$template_at has no copier.yml; cannot verify the vocabulary"
 else
   from_template="$(grep -o "archetype not in \[[^]]*\]" <<<"$copier" | head -1 | grep -o "'[a-z-]*'" | tr -d "'" | sort | tr '\n' ' ')"
   from_checker="$(python3 "$root/scripts/floor-check.py" --print-conditional-archetypes | tr ' ' '\n' | sort | tr '\n' ' ')"
   if [ -n "$from_template" ] && [ "$from_template" = "$from_checker" ]
-  then ok "conditional archetypes agree with $template@$ref copier.yml: $from_checker"
-  else bad "conditional archetypes differ: checker '$from_checker' vs $template@$ref '$from_template'"; fi
+  then ok "conditional archetypes agree with $template_at copier.yml: $from_checker"
+  else bad "conditional archetypes differ: checker '$from_checker' vs $template_at '$from_template'"; fi
 fi
 
 echo "-- $pass passed, $fail failed"

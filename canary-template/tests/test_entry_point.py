@@ -1,0 +1,109 @@
+"""The entry point as a person runs it, in its own process:
+
+    python -m probe
+
+The package's own test calls `greet` in this process; nothing there runs the
+program. This test does: it exits 0, its log line says "started" and carries
+a greeting, and what it logs matches `tests/entry_point.expected` (the
+greeting's value included).
+
+A command line keeps its output and its logs apart (clig.dev): the result goes
+to stdout, where the next program in a pipe reads it, and the JSON log lines
+go to stderr. `--help` and `--version` print and exit 0 without logging; a
+wrong option exits 2 with the usage on stderr.
+
+When you change the entry point, change this test and that file with it, in
+the same pull request. A changed output fails here with a diff; when the change
+is intended, copy the new lines into `tests/entry_point.expected`, so the
+reviewer sees the old and the new output side by side.
+"""
+
+from __future__ import annotations
+
+import difflib
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+EXPECTED = Path(__file__).with_name("entry_point.expected")
+
+#: Fields that change from run to run, left out of the comparison.
+VARYING = ("time",)
+
+
+def run(*args: str) -> subprocess.CompletedProcess[str]:
+    # The interpreter running pytest, so the program sees the same environment.
+    return subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "probe", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+
+
+def records(done: subprocess.CompletedProcess[str]) -> list[dict[str, Any]]:
+    """Each line of stderr as the JSON object the entry point logs."""
+    return [json.loads(line) for line in done.stderr.splitlines() if line]
+
+
+def steady(record: dict[str, Any]) -> str:
+    """The record without the fields that vary, in the order it was logged."""
+    return json.dumps({k: v for k, v in record.items() if k not in VARYING}, ensure_ascii=False)
+
+
+def test_the_entry_point_runs_and_logs_that_it_started() -> None:
+    done = run()
+    assert done.returncode == 0, f"exit {done.returncode}\n{done.stdout}\n{done.stderr}"
+    logged = records(done)
+    started = [r for r in logged if r.get("message") == "started"]
+    assert started, f"no 'started' line in what it logged:\n{done.stdout}\n{done.stderr}"
+    # Its value is the stored output's to hold, so an intended change is one file.
+    assert started[0].get("greeting"), f"the 'started' line carries no greeting: {started[0]}"
+
+
+def test_what_the_entry_point_prints_matches_the_stored_output() -> None:
+    done = run()
+    assert done.returncode == 0, f"exit {done.returncode}\n{done.stdout}\n{done.stderr}"
+    actual = [steady(r) for r in records(done)]
+    expected = EXPECTED.read_text(encoding="utf-8").splitlines()
+    diff = "\n".join(
+        difflib.unified_diff(expected, actual, str(EXPECTED.name), "printed now", lineterm="")
+    )
+    assert actual == expected, (
+        f"the entry point's output changed ({', '.join(VARYING)} left out):\n{diff}\n"
+        f"If the change is intended, put the new lines in tests/{EXPECTED.name}."
+    )
+
+
+def test_the_result_goes_to_stdout_and_the_logs_to_stderr() -> None:
+    done = run("Ada")
+    assert done.returncode == 0, f"exit {done.returncode}\n{done.stdout}\n{done.stderr}"
+    assert done.stdout == "Hello, Ada!\n"
+    assert [r["message"] for r in records(done)] == ["started"]
+
+
+def test_help_prints_the_usage_and_logs_nothing() -> None:
+    done = run("--help")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.startswith("usage: probe "), done.stdout
+    assert "--version" in done.stdout
+    assert done.stderr == ""
+
+
+def test_version_prints_the_installed_version() -> None:
+    from importlib.metadata import version
+
+    done = run("--version")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == f"probe {version('probe')}\n"
+    assert done.stderr == ""
+
+
+def test_a_wrong_option_exits_2_with_the_usage_on_stderr() -> None:
+    done = run("--no-such-option")
+    assert done.returncode == 2
+    assert done.stdout == ""
+    assert "usage: probe " in done.stderr

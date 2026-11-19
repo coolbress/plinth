@@ -72,3 +72,29 @@ jobs:
       working-directory: canary-web
       web: true
       floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"
+
+  # plinth-template's `cli` project as the door renders it today, at the
+  # commit scripts/new-project.sh pins, committed under canary-template/,
+  # through this commit's python-ci.yml (#953). The grant and the inputs are
+  # the rendered caller's `ci` job, copied: a python-ci.yml change that the
+  # template's caller cannot run fails here, in plinth's pull request, not in
+  # a project after the release. tests/template-render.sh fails when the
+  # copy, the render or this name falls behind the pin; a pin raise re-renders
+  # with `tests/template-render.sh --write`. Added to the copy, and only these:
+  # the directory, plinth's own ruleset's checks (as `canary` passes them),
+  # and no diff limit, since the render is generated, not reviewed line by
+  # line. Its check names are `canary-template (…) / …`, required by no
+  # ruleset; the name moves with the pin.
+  canary-template:
+    name: canary-template (plinth-template v1.45.1 at 80248ba)
+    uses: ./.github/workflows/python-ci.yml
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: write
+    with:
+      working-directory: canary-template
+      extra-python-versions: "3.13"
+      max-diff-lines: 0
+      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"

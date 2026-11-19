@@ -27,6 +27,18 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash -s stable
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      # One checkout of plinth-template at the commit scripts/new-project.sh
+      # pins, read by every step below that compares plinth with the template
+      # (#953). A network error fails here, named as the fetch, not as a test;
+      # the tests read files and render from it, and fail on a checkout that
+      # is not at the pin.
+      - name: Check out plinth-template at the commit the door pins
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-template"
+          ./tests/lib/template-checkout.sh "$d"
+          echo "PLINTH_TEMPLATE_DIR=$d" >> "$GITHUB_ENV"
+
       - name: Manifests, pins, skill frontmatter
         run: ./tests/marketplace-manifest.sh
 
@@ -116,6 +128,9 @@ jobs:
 
       - name: The door's Actions allowlist and SECURITY.md route agree with the template it renders
         run: ./tests/release-allowlist.sh
+
+      - name: canary-template/ is the pinned template's cli render, and its caller job is the rendered caller
+        run: ./tests/template-render.sh
 
       - name: plinth's reusable workflows use only actions every consumer's Actions allowlist allows
         run: ./tests/reusable-workflow-allowlist.sh
@@ -247,6 +262,9 @@ jobs:
 
       - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit or its tree
         run: ./tests/make-release-guards.sh
+
+      - name: A template pin raise edits only the tag and the commit, and changes nothing for a tag that is missing or names another commit
+        run: ./tests/raise-template-pin-cases.sh
 
       - name: No merge while a check is red, the reviewer has not answered the head, or an inline comment has no reply
         run: ./tests/merge-when-green-cases.sh
@@ -428,7 +446,9 @@ jobs:
           remap=(--remap "^$repo/blob/main/([^#]*)(#.*)?\$ file://$PWD/\$1")
           # A host that refuses every automated request is in .lycheeignore,
           # which lychee reads from the checkout root, with the date measured.
-          "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" \
+          # canary-template/ is the template's render (#953): its links name
+          # a project that does not exist, and the template checks its own.
+          "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" --exclude-path '(^|/)canary-template/' \
             --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
           # The remap on two fixtures, offline: an existing file passes with no
           # network, and a missing one fails, so the remap cannot pass unchecked.

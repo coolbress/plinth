@@ -170,8 +170,8 @@ means `test`).
 | `cli-name`, `ledger`, `about`, `greeting-push` | test | the hidden test passes in a tree the agent left |
 | `notes-stats`: a page for logged-in people, which `tests/test_access.py` fails until the page is marked | checked | the hidden test and every check pass in the same tree |
 | `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes, `origin/main` did not move and no merge command ran |
-| `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report names every missing file |
-| `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report names the open item |
+| `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report says each missing file is missing or must be added |
+| `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report says the open item is still open |
 | `owed-item`: "close issue #1 today; Lucía will read the goodbye line later", where #1's last criterion waits on her and the rest is merged (#882, #891) | owed | a `gh issue create` for the item, not a `--dry-run`, and the final report names the item and says whether it left #1 open or filed a follow-up |
 | `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
 | `guide-fresh`, `guide-busy`: `/plinth:guide` on a `cli` project whose first pull request is open with no merge by a person, or on one under way: several merges, a person's pull request whose plinth job `ci / build` fails, a draft that waits for a date, and Dependabot's green pull request raising a plinth pin one release behind (#907, plinth arm only) | resume | as for `guide`, the one command being `merge #1` for the first pull request, or the full merge command it was before #908, which still counts so that the comparison on #647 is not moved by the form alone; or `merge #14` |
@@ -192,7 +192,34 @@ one more commit, the previous session's merged pull request, whose
 description says what was not verified. Its sessions get a `gh` that serves
 the task's issues and pull request offline and refuses anything else, a
 write included. The open item and the words that count as naming it are in
-its `open.json`. It records the files the session changed, so a reader can
+its `open.json`.
+
+Naming a gap or the open item is not enough (#961). Each entry of
+`floor-gaps`' `gaps.json` and `next-day`'s `open.json` has three patterns:
+`named`, `stated` (the gap missing or to be added, such as "missing",
+"without", "add", "needs", `FAIL`, ❌; the item still open, such as "still",
+"never", "not verified", "unticked", "verify") and `opposite` (in place,
+present, `PASS`; done, verified, ticked). The entry passes when a line that
+names it says `stated`, and no sentence that names it says `opposite` without
+`stated`; a sentence ends at a full stop, semicolon, `!` or `?` followed by a
+space, or at the line's end. So "`uv.lock`, `CHANGELOG.md` and
+`.github/dependabot.yml` are all in place" fails all three gaps, "`CHANGELOG.md`
+and `.github/dependabot.yml` are present; only `uv.lock` is missing" fails the
+first two, and "the `cp1252` check is done" fails the item. These are words,
+not a judge: a sentence saying both reads as `stated`, so "never checked"
+stays open; a state given only on a line that does not name the entry (a
+heading "Missing:" over a list of bare paths) is not read; and a negation the
+patterns do not list can still pass the opposite. The grade records
+`mentioned` beside each entry, the name found anywhere, as the grade read it
+before #961, so a reader sees a report that names the entry and says
+otherwise. An entry with no `stated`, as in the guide tasks' `open.json`, is
+graded on `named` alone, anywhere in the report. Grading changed this way in
+the first release after v2.36.0: the `floor-gaps` and `next-day` cells on #647
+before and after it are not compared cell by cell without saying so. Checked
+by hand, not by a test: 108 entries of archived final reports (30
+`floor-gaps` runs, among them the v2.36.0 smoke run's two, and 18 `next-day`
+runs, none from the v2.35.0 release run, whose reports were not kept) grade
+the same as before. It records the files the session changed, so a reader can
 see whether it started the next ticket, and every `gh` call it made. A shell
 profile that puts another `gh` first on the PATH would hide the stand-in, so
 a run whose commands ran `gh`, or the guide's script, which runs it, while the stand-in logged no call is counted

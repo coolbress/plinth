@@ -270,8 +270,9 @@ repository name. An interrupt before the wall stands deletes the repository,
 by design; say so if the person asks to stop.
 
 The script checks tools, token, owner and visibility first and creates nothing
-until all four pass. It then creates the repository, renders the template into
-`~/<name>` (or `--dir`), pushes `main`, raises the ruleset and CodeQL (and,
+until all four pass. It then renders the template into `~/<name>` (or
+`--dir`), where a name or answer the template refuses stops with copier's
+words before anything exists on GitHub, creates the repository, pushes `main`, raises the ruleset and CodeQL (and,
 for `cli`, `library`, `backend` and `data-ml`, which release from a `v*`
 tag, a tag
 ruleset no one can bypass that keeps those tags from being moved or

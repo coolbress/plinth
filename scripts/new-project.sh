@@ -40,7 +40,8 @@
 #                 and so does a classic token that could read your plan with
 #                 read:user and lacks it; a plan no scope would show is said, and
 #                 the ruleset call decides
-# Then: create, render the box (copier, one tested tag), push main (the baseline,
+# Then: render the box (copier, one tested tag; a refused answer stops here,
+# before anything exists on GitHub), create, push main (the baseline,
 # before the wall, and the proof the token can push), confirm main is the
 # default branch the ruleset will target, labels, ruleset, secret scanning,
 # Dependabot, private vulnerability reporting (public only), Actions allowlist
@@ -360,9 +361,9 @@ spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
 # The archetype and license vocabularies live in the template's copier.yml; a
 # copy here would drift. Both are read from it, because copier refuses a value
 # outside its own choices (measured: `Invalid choice for 'license': 'GPL-3.0'
-# is not in ['MIT', 'Apache-2.0']`) and that refusal lands after the repository
-# exists, so an unsupported license would create and delete. Unreadable is not
-# a stop: copier is the judge, and a refusal rolls back.
+# is not in ['MIT', 'Apache-2.0']`), and a stop here names the choices.
+# Unreadable is not a stop: copier is the judge, and it renders before the
+# repository is created, so a refusal creates nothing (#964).
 # The tag must still name the commit this plinth was tested with (#519);
 # the render below fetches that commit, not the tag, so a tag moved after
 # this check changes nothing. copier records the tag all the same
@@ -382,7 +383,7 @@ if [ -n "$arch_choices" ] && [ -n "$lic_choices" ]; then
   grep -qxF "$arch" <<<"$arch_choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$arch_choices")"
   grep -qxF "$spdx" <<<"$lic_choices" || stop "the template does not carry the license $spdx" "  it accepts: $(tr '\n' ' ' <<<"$lic_choices")"
 else
-  warn "could not read the template's archetype and license lists; copier decides (a refusal rolls back)"
+  warn "could not read the template's archetype and license lists; copier decides (a refusal creates nothing)"
   printf '  %s\n' "$(unread_why)" >&2
 fi
 # Where a web app runs (#677): `render`, or a place plinth lists and does not
@@ -567,8 +568,15 @@ arch_words="$arch"
 echo "create $repo ($visibility, $spdx, $arch_words, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
-created=0
+created=0; rendered=0
 cleanup() {
+  # Stopped once the render began and before the repository exists: what it
+  # wrote on disk is all there is, and the next run refuses a directory that
+  # is not empty, so it is named (#964). The directory was empty or absent
+  # before the render, so anything in it now is this run's.
+  if [ "$created" != 1 ] && [ "$rendered" = 1 ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
+    echo "the render stays at $dir: remove it before running again, or pass --dir=<another path>" >&2
+  fi
   [ "$created" = 1 ] || return 0
   # scripts/e2e.sh reads the start of this line, and of `done:` below, as the
   # proof that this run created the repository; keep both as they are.
@@ -582,20 +590,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-desc_args=(); [ -z "$desc" ] || desc_args=(--description "$desc")
-gh repo create "$repo" "--$visibility" ${desc_args[@]+"${desc_args[@]}"} >/dev/null
-created=1
-
-# Render. Name, owner, license and package directory are settled here: the
-# owner renders pyproject's author and URLs, the license renders LICENSE, and
-# copier.yml's validator refuses a name that makes no Python package before
-# writing a file. Copier at its pinned version with nothing published after
-# the pinned date, without the token, and before the repository exists on
-# disk: nothing it writes may be a hook or a config line that a git command
-# below, run with the token, would execute. Rendering into a plain directory
+# Render, before the repository is created (#964). Name, owner, license and
+# package directory are settled here: the owner renders pyproject's author and
+# URLs, the license renders LICENSE, and copier.yml's validator refuses a name
+# that makes no Python package before writing a file. The door's own name
+# check above is GitHub's alphabet only; the template stays the one judge of a
+# name, and its refusal stops before anything exists on GitHub, as on GitLab.
+# Copier at its pinned version with nothing published after the pinned date,
+# without the token, and before the repository exists on disk: nothing it
+# writes may be a hook or a config line that a git command below, run with the
+# token, would execute. Rendering into a plain directory
 # and removing whatever `.git` it left, then initialising, leaves it nothing
 # but content (Codex review on #118).
-env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+rendered=1
+if ! env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
@@ -603,7 +611,10 @@ env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --e
   --data "visibility=$([ "$private" = 1 ] && echo private || echo public)" \
   ${hosting_data[@]+"${hosting_data[@]}"} ${review_data[@]+"${review_data[@]}"} \
   ${owner_files_data[@]+"${owner_files_data[@]}"} \
-  --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
+  --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null; then
+  echo "copier stopped (its words above: a refused answer, or a fetch that failed); nothing was created on GitHub" >&2
+  exit 1
+fi
 rm -rf "$dir/.git"
 # Asked for the reviewer, the render must have recorded it; otherwise the
 # repository would go up without the check the person chose.
@@ -615,6 +626,15 @@ if [ "$coc" = 1 ] && ! [ -s "$dir/CODE_OF_CONDUCT.md" ]; then
   echo "the template did not render CODE_OF_CONDUCT.md although a code of conduct was asked for" >&2
   exit 1
 fi
+# Create only now: everything above is local, so a refusal there leaves
+# nothing on GitHub to roll back (#964). A failed create is not rolled back
+# either: its answer may be lost with the repository made, so it is named.
+desc_args=(); [ -z "$desc" ] || desc_args=(--description "$desc")
+if ! gh repo create "$repo" "--$visibility" ${desc_args[@]+"${desc_args[@]}"} >/dev/null; then
+  echo "the create call failed (gh's words above); if GitHub created it anyway, it is at $url" >&2
+  exit 1
+fi
+created=1
 # init -b main: an empty clone would follow init.defaultBranch, and a `master`
 # there leaves the ruleset (~DEFAULT_BRANCH = main) guarding an empty branch.
 git init -q -b main "$dir"

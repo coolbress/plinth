@@ -64,10 +64,11 @@ export PATH="$work/bin:$PATH"
 # A repository with exactly the files the release touches or reads, and a bare
 # origin so that pushes and fetches are real.
 repo="$work/repo"; origin="$work/origin.git"
-mkdir -p "$repo/.claude-plugin" "$repo/scripts"
+mkdir -p "$repo/.claude-plugin" "$repo/scripts/lib"
 cp "$root"/.claude-plugin/plugin.json "$root"/.claude-plugin/marketplace.json "$repo/.claude-plugin/"
 cp "$root"/CHANGELOG.md "$repo/"
 cp "$root"/scripts/make-release.sh "$root"/scripts/new-project.sh "$repo/scripts/"
+cp "$root"/scripts/lib/template-reads.sh "$repo/scripts/lib/"
 # One known entry under Unreleased, whatever the real file has there today.
 python3 - "$repo/CHANGELOG.md" <<'PY'
 import pathlib, re, sys

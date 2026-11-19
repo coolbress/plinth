@@ -22,6 +22,18 @@ the move changes what a new project's agent reads, and then asks for
    sed -nE 's/^template_ref="([^"]+)"$/\1/p' scripts/new-project.sh
    ```
 
+   If plinth-template has a newer release than that tag, raise the pin
+   first, once for this release, to the latest one:
+
+   ```bash
+   gh release view --repo coolbress/plinth-template --json tagName --jq .tagName
+   scripts/raise-template-pin.sh vA.B.C <commit>
+   ```
+
+   Its pull request ([How to upgrade the template pin](upgrade-the-template-pin.md))
+   merges before step 3's run 1; then read the tag again. The script's eval
+   suite line is the answer run 1 reaches.
+
    Beside it, `template_sha` is the commit that tag named when it was
    tested. It moves only with `template_ref`, in the pin pull request
    ([How to upgrade the template pin](upgrade-the-template-pin.md)), never

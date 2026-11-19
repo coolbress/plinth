@@ -2,7 +2,7 @@
 # The arsenal says what ships. A row written before a release workflow existed
 # told a real project that a release on a tag was "planned, not built yet"
 # (#833), and nothing tied the claim to the template. This reads the template
-# at the tag scripts/new-project.sh pins and the whole of skills/arsenal/SKILL.md
+# at the commit scripts/new-project.sh pins and the whole of skills/arsenal/SKILL.md
 # and fails when:
 #   - a table cell says "planned", "not built yet" or "nothing yet" about
 #     something the template renders or the plugin installs;
@@ -15,12 +15,13 @@
 #     types, or a page that used to repeat that list does not point at it.
 # It reads the template's source tree, not a render. Other words for a plan
 # ("waits for #N") are not caught, and the frontmatter of the dependencies'
-# skills is not read: only plinth's own are held against the list. Reads over
-# the network; unreadable is a FAIL. The must-not-pass cases run first.
+# skills is not read: only plinth's own are held against the list. The template
+# is read from one checkout (tests/lib/template-checkout.sh), the issues over
+# the network; either unreadable is a FAIL. The must-not-pass cases run first.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-template="${TEMPLATE_REPO:-coolbress/plinth-template}"
-ref="${TEMPLATE_REF:-$(sed -n 's/^template_ref="\(.*\)"$/\1/p' "$root/scripts/new-project.sh")}"
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -296,17 +297,17 @@ state_of=real_state
 if [ "$(real_state coolbress/plinth 703)" = closed ]; then ok "issue state reads over the network (#703 closed)"
 else bad "could not read coolbress/plinth#703's state; a named plan cannot be verified"; fi
 
-mkdir -p "$work/real"
-if curl -fsSL --retry 3 --max-time 120 "https://codeload.github.com/$template/tar.gz/$ref" | tar -xz --strip-components=1 -C "$work/real" 2>/dev/null \
-   && [ -f "$work/real/copier.yml" ]; then
-  if out="$(stale_claims "$root/skills/arsenal/SKILL.md" "$work/real" "$root")"
-  then ok "no arsenal cell contradicts $template@$ref or what the plugin installs"
-  else bad "stale claims against $template@$ref:"; sed 's/^/        /' <<<"$out"; fi
-  if out="$(missing_facts "$root/skills/arsenal/SKILL.md" "$root/docs/how-to/run-a-project.md" "$work/real")"
-  then ok "the release and reminder facts match $template@$ref"
-  else bad "facts missing against $template@$ref:"; sed 's/^/        /' <<<"$out"; fi
+if ! template_checkout "$work"; then
+  bad "no checkout of the template: $template_error"
+elif [ -f "$template_dir/copier.yml" ]; then
+  if out="$(stale_claims "$root/skills/arsenal/SKILL.md" "$template_dir" "$root")"
+  then ok "no arsenal cell contradicts $template_at or what the plugin installs"
+  else bad "stale claims against $template_at:"; sed 's/^/        /' <<<"$out"; fi
+  if out="$(missing_facts "$root/skills/arsenal/SKILL.md" "$root/docs/how-to/run-a-project.md" "$template_dir")"
+  then ok "the release and reminder facts match $template_at"
+  else bad "facts missing against $template_at:"; sed 's/^/        /' <<<"$out"; fi
 else
-  bad "could not read $template@$ref; cannot verify"
+  bad "$template_at has no copier.yml; cannot verify"
 fi
 if out="$(typed_list "$root")"; then ok "the person-typed skills are one list, and the other pages point at it"
 else bad "the person-typed list:"; sed 's/^/        /' <<<"$out"; fi
