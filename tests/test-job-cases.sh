@@ -148,10 +148,15 @@ started $(( 60 - 12 - 3 ))   # a 1-minute limit keeps a fifth, 12 s
 KEEP=1 run pytest LIMIT=1 COV=skipped STUB_SLEEP=60
 if [ "$rc" != 0 ] && [ -s "$rt/pytest.time-limit" ] && printf '%s' "$out" | grep -q "::error::"; then ok "pytest past what is left of the limit is stopped (exit $rc) and says so"
 else bad "pytest past the limit (exit $rc)" "$out"; fi
+# #983: measure what takes the time before raising the limit.
+case "$(printf '%s\n' "$out" | grep "::error::")" in
+  *"uv run pytest --durations=20"*"raise test-timeout-minutes"*"moves between runs of the same commit"*) ok "the stop line names uv run pytest --durations=20 before raising the limit" ;;
+  *) bad "the stop line does not say to measure before raising the limit" "$out" ;;
+esac
 verdict failure
 line="$(printf '%s\n' "$summary" | grep "pytest on .python-version")"
 case "$line" in
-  "- fail: pytest on .python-version, stopped at the time limit"*"1-minute"*"test-timeout-minutes"*"less 12 s"*"not a failing test"*) ok "Verdict says the time limit stopped pytest, with the minutes and the input" ;;
+  "- fail: pytest on .python-version, stopped at the time limit"*"1-minute"*"test-timeout-minutes"*"less 12 s"*"not a failing test"*"uv run pytest --durations=20"*"raise test-timeout-minutes"*"moves between runs of the same commit"*) ok "Verdict says the time limit stopped pytest, with the minutes, the input and the measuring step" ;;
   *) bad "Verdict's pytest line" "$summary" ;;
 esac
 
