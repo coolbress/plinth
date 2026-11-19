@@ -130,7 +130,8 @@ pr_url="" # the first pull request, once the door has reported it
 # pull request's head: every error of a job that did not pass, and the
 # warnings of the `image` job, whose scan warns for 14 days before it fails;
 # each package of that warning is said with the days it has left, so a
-# scheduled run shows it before a release does. A record, not a gate: a read
+# scheduled run shows it before a release does. Read after the merge, and
+# before a failure about the pull request's jobs. A record, not a gate: a read
 # that fails is said, and the journey's verdict does not change.
 job_notes() { # <head sha>
   REPO="$repo" HEAD_SHA="$1" python3 - <<'PY' || echo "the test repository's annotations: not read (python exited $?)"
@@ -141,7 +142,10 @@ summary = open(os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull, "a", encodin
 today = datetime.datetime.now(datetime.timezone.utc).date()
 
 def gh(path):
-    r = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+    try:
+        r = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"gh api {path} did not answer within 60 s")
     if r.returncode:
         raise RuntimeError(f"gh api {path} exited {r.returncode}: {' '.join((r.stderr or r.stdout).split())}")
     return json.loads(r.stdout)
@@ -185,8 +189,12 @@ except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as e:
 PY
 }
 pr_head() { gh pr view "$pr_url" --json headRefOid --jq .headRefOid 2>/dev/null || true; }
+# A failure about the pull request's jobs says what they said, then fails.
+# Here and not in cleanup: cleanup also runs on a cancellation, whose grace
+# period belongs to the deletion.
+fail_after_notes() { local h; h="$(pr_head)"; [ -z "$h" ] || job_notes "$h"; fail "$@"; }
 cleanup() {
-  local rc=$? out why head
+  local rc=$? out why
   trap - EXIT
   # The trap is cleared once the final deletion succeeded, so this runs only
   # on a failure or on a signal (a cancellation, a workflow timeout). On a
@@ -208,7 +216,6 @@ cleanup() {
   # is not 404 is not "absent", and a probe that failed on a bad minute would
   # have read that way and left a public repository behind unreported.
   echo "the journey did not finish (exit $rc); deleting $url if it is still there (the local copy $dir stays)" >&2
-  if [ -n "$pr_url" ]; then head="$(pr_head)"; [ -z "$head" ] || job_notes "$head"; fi
   if out="$(gh repo delete "$repo" --yes 2>&1)"; then echo "deleted $url" >&2
   elif grep -qE 'HTTP 404|Not Found' <<<"$out"; then echo "$url is already gone" >&2
   else why="ROLLBACK FAILED"; [ "$merged" = 0 ] || why="MERGED, NOT DELETED"
@@ -291,7 +298,7 @@ while :; do
   # query that failed reads as nothing red and is asked again next poll;
   # only the merge state below opens the door, so that costs time, not truth.
   red="$(gh pr checks "$pr_url" --json bucket,name,link --jq '.[] | select(.bucket == "fail") | "  \(.name)  \(.link)"' 2>/dev/null || true)"
-  [ -z "$red" ] || fail "a check on the first pull request is red:" "$red"
+  [ -z "$red" ] || fail_after_notes "a check on the first pull request is red:" "$red"
   state="$(gh pr view "$pr_url" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null || echo unknown)"
   # CLEAN is GitHub's word for "every rule is satisfied", CodeQL's included;
   # a merge refused after it is a race with that evaluation, so try again.
@@ -317,7 +324,7 @@ while :; do
     fi
   fi
   [ "$SECONDS" -lt "$deadline" ] \
-    || fail "the first pull request was not merged within $wait_s s (merge state: $state):" "$(gh pr checks "$pr_url" 2>&1 || true)"
+    || fail_after_notes "the first pull request was not merged within $wait_s s (merge state: $state):" "$(gh pr checks "$pr_url" 2>&1 || true)"
   sleep $(( wait_s < 20 ? wait_s : 20 ))
 done
 # What the pull request waited for, by name: the required checks only
@@ -368,7 +375,7 @@ if [ -n "$release_sha" ]; then
   # A finished job's log can lag behind its conclusion, and label.yml, which
   # nothing waits for, can still be running.
   for attempt in 1 2 3 4 5 6; do
-    head="$(gh pr view "$pr_url" --json headRefOid --jq .headRefOid 2>/dev/null || true)"
+    head="$(pr_head)"
     if [ -n "$head" ]; then
       called="$(called_sha "$head")"
       label="$(label_run "$head")"
@@ -376,9 +383,9 @@ if [ -n "$release_sha" ]; then
     [ -z "$called" ] || [ "$label" != "success $release_sha" ] || break
     [ "$attempt" = 6 ] || sleep $(( wait_s < 20 ? 0 : 10 ))
   done
-  [ -n "$called" ] || fail "could not read the called job.workflow_sha from ci / floor-check on $pr_url; nothing shows that this run tested its own commit"
-  [ "$called" = "$release_sha" ] || fail "the called job.workflow_sha is ${called//$'\n'/ and }, not this run's commit $release_sha"
-  [ "$label" = "success $release_sha" ] || fail "label.yml's run on $pr_url reads \"${label:-nothing}\" (conclusion, then the commit it called pr-label.yml at), not success at this run's commit $release_sha"
+  [ -n "$called" ] || fail_after_notes "could not read the called job.workflow_sha from ci / floor-check on $pr_url; nothing shows that this run tested its own commit"
+  [ "$called" = "$release_sha" ] || fail_after_notes "the called job.workflow_sha is ${called//$'\n'/ and }, not this run's commit $release_sha"
+  [ "$label" = "success $release_sha" ] || fail_after_notes "label.yml's run on $pr_url reads \"${label:-nothing}\" (conclusion, then the commit it called pr-label.yml at), not success at this run's commit $release_sha"
   echo "called job.workflow_sha: $called, this run's commit"
   echo "called pr-label.yml: success at $release_sha"
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf 'called job.workflow_sha: %s, this run'"'"'s commit\ncalled pr-label.yml: success at %s\n' "$called" "$release_sha" >> "$GITHUB_STEP_SUMMARY"

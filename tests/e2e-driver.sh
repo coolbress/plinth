@@ -148,7 +148,7 @@ saw() { grep -q -- "$1" "$GH_LOG"; }
 said() { grep -q -- "$1" "$work/out"; }
 deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
 # <pattern> is logged before the last deletion of the run
-before_delete() { [ -n "$(grep -n -- "$1" "$GH_LOG" | head -1)" ] && [ "$(grep -n -- "$1" "$GH_LOG" | head -1 | cut -d: -f1)" -lt "$(grep -n '^gh repo delete ' "$GH_LOG" | tail -1 | cut -d: -f1)" ]; }
+before_delete() { local at; at="$(grep -n -- "$1" "$GH_LOG" | head -1 | cut -d: -f1)"; [ -n "$at" ] && [ "$at" -lt "$(grep -n '^gh repo delete ' "$GH_LOG" | tail -1 | cut -d: -f1)" ]; }
 # The wait is 2 s, not 1: e2e.sh reads its deadline from $SECONDS, whole seconds,
 # and a 1 s deadline set at the end of a wall-clock second is already reached at
 # the first poll's check, so a case that needs a second poll (a read that
@@ -316,6 +316,7 @@ check "merged and not deleted twice is a failure" no $?
 is "the repository is named loudly, apart from a rollback" said "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42 may EXIST"
 is "and in the job summary"  grep -q "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42" "$work/summary"
 run DELETE_KILL=1;         check "a cancellation landing on the last deletion: the trap is still armed" no $?
+is "cleanup reads no annotations before deleting again" bash -c '[ "$(grep -c "check-runs" "$1")" = 1 ]' _ "$GH_LOG"
 is "the deletion is asked again" deletes 3
 is "and reported"          said "deleted https://github.com/tester/plinth-e2e-42"
 run DELETE_KILL=1 DELETE_RC3=1 GITHUB_STEP_SUMMARY="$work/summary2"
