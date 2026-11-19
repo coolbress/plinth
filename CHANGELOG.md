@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.37.0] - 2026-11-19
+
+A name the template refuses now stops `/plinth:new-project` before anything is created, on GitHub as on GitLab, and the GitLab door refuses `--private` with `--public`. New projects render plinth-template v1.46.0: it refuses project names that never rendered, keeps a project's own test and `data/` files, and says a defect is a `bug` whoever finds it. plinth's own CI now runs the pinned template's `cli` project through the pull request's `python-ci.yml`, and `scripts/raise-template-pin.sh` raises the pin. `/plinth:floor-check` shows the template's diff for `AGENTS.md` and `CONTRIBUTING.md`, whose sources end in `.jinja`. The eval suite grades a floor gap or an open item by what the report says of it. No reusable workflow that a project calls changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.
+
+tested with plinth-template v1.46.0
+
 ### Added
 
 - plinth's own CI runs plinth-template's `cli` project, rendered at the
@@ -5501,7 +5507,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.36.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.37.0...HEAD
+[2.37.0]: https://github.com/coolbress/plinth/releases/tag/v2.37.0
 [2.36.0]: https://github.com/coolbress/plinth/releases/tag/v2.36.0
 [2.35.0]: https://github.com/coolbress/plinth/releases/tag/v2.35.0
 [2.34.0]: https://github.com/coolbress/plinth/releases/tag/v2.34.0
