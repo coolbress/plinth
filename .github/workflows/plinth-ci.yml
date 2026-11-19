@@ -475,8 +475,11 @@ jobs:
           fi
           echo "[late](file://$fr/late.md)" >"$fr/late-link.md"
           (sleep 2; touch "$fr/late.md") &
-          check 6 --no-progress --offline -- "$fr/late-link.md" \
-            || { echo "::error::a link that came back during the wait still failed the second run"; exit 1; }
+          out="$(check 6 --no-progress --offline -- "$fr/late-link.md" 2>&1)" \
+            || { echo "$out"; echo "::error::a link that came back during the wait still failed the second run"; exit 1; }
+          echo "$out"
+          grep -q 'checking the failed links once more' <<<"$out" \
+            || { echo "::error::the first run passed, so this fixture did not reach the second run"; exit 1; }
           rm -f .lycheecache
           # The remap on two fixtures, offline: an existing file passes with no
           # network, and a missing one fails, so the remap cannot pass unchecked.
