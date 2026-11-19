@@ -179,6 +179,8 @@ try:
                         age = (today - datetime.date.fromisoformat(since)).days
                         left = int(limit.group(1)) - age
                         when = f"its fix is {age} days old; the image job fails it in {left} day{'' if left == 1 else 's'}, at {limit.group(1)} days"
+                        if left <= 0:  # warned before midnight UTC, read after it
+                            when = f"its fix is {age} days old; the image job fails it from its next run, at {limit.group(1)} days"
                     else:
                         when = "its fix has no known date, so the image job does not count its days"
                     say("warning", "image scan in the test repository", f"{pkg} {version} ({ids}): {when}")

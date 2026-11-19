@@ -330,12 +330,12 @@ echo "-- what the test repository's jobs said, repeated before it is deleted (#9
 # fixes 14 days and 3 days old, and one of no known date: the gate fails a
 # fix older than 14 days, so they have 1 day, 12 days and no count left.
 day() { python3 -c 'import datetime,sys; print(datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=int(sys.argv[1])))' "$1"; }
-d14="$(day 14)"; d3="$(day 3)"
+d14="$(day 14)"; d3="$(day 3)"; d15="$(day 15)"
 runs_json='{"total_count":3,"check_runs":[
  {"id":11,"name":"image","status":"completed","conclusion":"success","output":{"annotations_count":1}},
  {"id":12,"name":"ci / test","status":"completed","conclusion":"success","output":{"annotations_count":1}},
  {"id":13,"name":"ci / lint","status":"completed","conclusion":"success","output":{"annotations_count":0}}]}'
-warn="not yet confirmed: image scan, 3 high or critical vulnerabilities have a fix 14 days old or less, or of no known date: apt 3.0.3 (fixed in 3.0.4, since $d14: CVE-2026-109518); libfoo 1.2 (fixed in 1.3, since $d3: CVE-2026-1, CVE-2026-2); libbar 0.9 (fixed in 1.0, date not known: GHSA-xxxx-yyyy-zzzz); reported and not blocking until the fix is 15 days old; a Debian package or Python itself is fixed by a newer base image (grype 0.104.0, database built 2026-11-18)"
+warn="not yet confirmed: image scan, 3 high or critical vulnerabilities have a fix 14 days old or less, or of no known date: apt 3.0.3 (fixed in 3.0.4, since $d14: CVE-2026-109518); libfoo 1.2 (fixed in 1.3, since $d3: CVE-2026-1, CVE-2026-2); libbar 0.9 (fixed in 1.0, date not known: GHSA-xxxx-yyyy-zzzz); libbaz 2.0 (fixed in 2.1, since $d15: CVE-2026-3); reported and not blocking until the fix is 15 days old; a Debian package or Python itself is fixed by a newer base image (grype 0.104.0, database built 2026-11-18)"
 ann_json="$(jq -nc --arg w "$warn" '{"11":[{"path":".github","start_line":1,"annotation_level":"warning","title":"","message":$w}],
   "12":[{"path":".github","start_line":1,"annotation_level":"warning","title":"","message":"a warning of another job"}]}')"
 run "CHECK_RUNS=$runs_json" "ANNOTATIONS=$ann_json" GITHUB_STEP_SUMMARY="$work/summary-scan"
@@ -343,6 +343,7 @@ check "an image job that passed with a scan warning: the journey still passes" o
 is "the package, the CVE and the days left are repeated as a warning" said "^::warning title=image scan in the test repository::apt 3.0.3 (CVE-2026-109518): its fix is 14 days old; the image job fails it in 1 day, at 15 days"
 is "each package on its own line" said "^::warning title=image scan in the test repository::libfoo 1.2 (CVE-2026-1, CVE-2026-2): its fix is 3 days old; the image job fails it in 12 days, at 15 days"
 is "a fix of no known date says so" said "^::warning title=image scan in the test repository::libbar 0.9 (GHSA-xxxx-yyyy-zzzz): its fix has no known date, so the image job does not count its days"
+is "a warning read after the day it was written turned does not count below zero" said "^::warning title=image scan in the test repository::libbaz 2.0 (CVE-2026-3): its fix is 15 days old; the image job fails it from its next run, at 15 days"
 is "and in the job summary" grep -q "apt 3.0.3 (CVE-2026-109518): its fix is 14 days old" "$work/summary-scan"
 is "another job's warning on a green run is not repeated" not said "a warning of another job"
 is "read from the head before the deletion" before_delete "^gh api repos/tester/plinth-e2e-42/commits/feedface.*/check-runs"
