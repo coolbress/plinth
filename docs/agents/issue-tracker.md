@@ -25,6 +25,12 @@ repository's templates into plinth's shape.
 
 ## Three kinds of issue (this repository's default)
 
+Name the kind, and the form you write it in, before you write the body.
+A defect is a `bug`, whoever finds it: a person who reports it, or an agent
+that reproduced it and can say what the fix must do. A feature request is an
+`enhancement`. Any other issue takes its kind from its result: a decision, an
+answer or a map is a record; a change to code or documents is a `task`.
+
 The forms are this repository's own, in `.github/ISSUE_TEMPLATE/`: the Bug,
 Feature request and Task forms below, End or hand over this project (`task`),
 and a `config.yml` that keeps blank issues open for records. The CLI does not
@@ -33,7 +39,7 @@ headings and add the form's label yourself.
 
 | Kind | Form and label | Shape |
 | --- | --- | --- |
-| A request from anyone | Bug (`bug`), Feature request (`enhancement`) | The form's fields: what happened, steps, expected, environment, logs; or what you are blocked on, how you would like it, what you tried |
+| A defect, reported by anyone; a feature request | Bug (`bug`), Feature request (`enhancement`) | The form's fields: what happened, steps, expected, environment, logs; or what you are blocked on, how you would like it, what you tried. A `bug` made `ready-for-agent` gains `## Acceptance criteria` (and `## Not building` when it helps) below the form's fields, in the same issue: `/implement` reads them |
 | A task, one thing to build | Task (`task`) | `## Parent`, `## What to build`, `## Acceptance criteria`, `## Not building`, `## Blocked by`; while open, decisions go under `## Decisions` (dated) and the result under `## Outcome` |
 | A record: research, a decision, a map, a spec | blank issue; the kind is a label: `wayfinder:map`, `wayfinder:research`, `wayfinder:grilling`, or `spec` (the door creates them), plus the triage label while open | `## Question`, `## Findings`, `## Decision`, `## Used by` for research; the map and the spec keep their own shape |
 

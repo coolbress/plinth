@@ -44,6 +44,16 @@ pull requests and have no tag.
   checkout once, in a step of its own, so a network error is that step
   failing, not a test; the checkout fails when the tag no longer names the
   pinned commit.
+- `docs/agents/issue-tracker.md` says a defect is a `bug`, whoever finds it,
+  and that a `bug` made `ready-for-agent` gains `## Acceptance criteria` (and
+  `## Not building` when it helps) below the form's fields, where `/implement`
+  reads them (#957). The rule read two ways ("a bug report takes its own
+  label"), and an agent in a real project wrote a defect it had reproduced as
+  a task. The same change is in plinth-template's `issue-tracker.md` on both
+  hosts, with the template reminder opening its issue as a `task` that is
+  `ready-for-human`; an existing project gets it through
+  `/plinth:template-update` once plinth renders that template release. Issues
+  already closed are not relabelled.
 
 ### Fixed
 
