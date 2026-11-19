@@ -66,8 +66,12 @@ its own checks must have passed on the commit it tags.
 
    If the rendered `.github/workflows/ci.yml` grants or passes something new
    in its `ci` job, copy it into the `canary-template` job too.
-   `tests/template-render.sh` fails until the render, the name and the copy
-   all match the new pin (#953).
+   Then copy the two `FROM` lines of the new tag's
+   `template/Dockerfile.jinja` into `canary-web/Dockerfile`: its base images
+   move with the pin, since `ci / web-audit` builds and starts that image
+   without scanning it.
+   `tests/template-render.sh` fails until the render, the name, the copy and
+   canary-web's `FROM` lines all match the new pin (#953, #975).
 4. The script lists every other line still naming the old tag or its commit.
    Change each, or keep one that names the release a thing arrived in, such
    as "from plinth-template v1.45.0".

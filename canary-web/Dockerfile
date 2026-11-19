@@ -1,7 +1,8 @@
 # canary-web's image, the template's web Dockerfile with one change: no
 # `__main__.py` here, so uvicorn is the command. `ci / web-audit` builds and
-# starts it (plinth #709). The digests are the template's; nothing raises them
-# here, so they move by hand when the template's do.
+# starts it (plinth #709). The two FROM lines are the pinned template's
+# `template/Dockerfile.jinja`; tests/template-render.sh fails until a pin raise
+# copies them here (#975).
 
 # ── build stage ───────────────────────────────────────────────────────────
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS build
@@ -18,7 +19,7 @@ RUN uv sync --locked --no-dev
 RUN DJANGO_SETTINGS_MODULE=canary_web.settings .venv/bin/python -m django collectstatic --noinput
 
 # ── run stage ─────────────────────────────────────────────────────────────
-FROM python:3.12-slim@sha256:09f7da3bc104798d0afb40bc08d23ab2da20a76130cec1f2ef170848f5d85217
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 
 RUN useradd --create-home --uid 10001 app
 WORKDIR /app

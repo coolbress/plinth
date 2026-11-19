@@ -124,8 +124,69 @@ git -C "$work" config user.email >/dev/null 2>&1 || {
   export GIT_COMMITTER_NAME="$login" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
 }
 merged=0 # what the summary says when the deletion is what failed
+pr_url="" # the first pull request, once the door has reported it
+# What the test repository's jobs said, repeated in this run before the
+# repository is deleted: its logs and annotations go with it (#975). From the
+# pull request's head: every error of a job that did not pass, and the
+# warnings of the `image` job, whose scan warns for 14 days before it fails;
+# each package of that warning is said with the days it has left, so a
+# scheduled run shows it before a release does. A record, not a gate: a read
+# that fails is said, and the journey's verdict does not change.
+job_notes() { # <head sha>
+  REPO="$repo" HEAD_SHA="$1" python3 - <<'PY' || echo "the test repository's annotations: not read (python exited $?)"
+import datetime, json, os, re, subprocess
+
+repo, head = os.environ["REPO"], os.environ["HEAD_SHA"]
+summary = open(os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull, "a", encoding="utf-8")
+today = datetime.datetime.now(datetime.timezone.utc).date()
+
+def gh(path):
+    r = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError(f"gh api {path} exited {r.returncode}: {' '.join((r.stderr or r.stdout).split())}")
+    return json.loads(r.stdout)
+
+def say(kind, title, text):
+    data = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    prop = title.replace("%", "%25").replace(":", "%3A").replace(",", "%2C")
+    print(f"::{kind} title={prop}::{data}")
+    summary.write(f"- {kind}: {title}: {text}\n")
+
+# One package of the template's warning: `<name> <version> (fixed in <versions>,
+# since <date>: <ids>)`, or `..., date not known: <ids>)`.
+entry = re.compile(r"(\S+) (\S+) \(fixed in [^,()]*, (?:since (\d{4}-\d{2}-\d{2})|date not known): ([^)]*)\)")
+try:
+    runs = gh(f"repos/{repo}/commits/{head}/check-runs?per_page=100").get("check_runs") or []
+    for run in runs:
+        name, conclusion = run.get("name", "?"), run.get("conclusion")
+        failed = conclusion not in (None, "success", "neutral", "skipped")
+        if not (failed or name == "image") or not (run.get("output") or {}).get("annotations_count"):
+            continue
+        for a in gh(f"repos/{repo}/check-runs/{run['id']}/annotations?per_page=100"):
+            level, message = a.get("annotation_level"), a.get("message") or ""
+            if failed and level == "failure":
+                say("error", f"{name} in the test repository", message)
+            elif name == "image" and level == "warning":
+                limit = re.search(r"until the fix is (\d+) days old", message)
+                found = list(entry.finditer(message)) if limit else []
+                for m in found:
+                    pkg, version, since, ids = m.groups()
+                    if since:
+                        age = (today - datetime.date.fromisoformat(since)).days
+                        left = int(limit.group(1)) - age
+                        when = f"its fix is {age} days old; the image job fails it in {left} day{'' if left == 1 else 's'}, at {limit.group(1)} days"
+                    else:
+                        when = "its fix has no known date, so the image job does not count its days"
+                    say("warning", "image scan in the test repository", f"{pkg} {version} ({ids}): {when}")
+                if not found:
+                    say("warning", "image scan in the test repository", message)
+except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as e:
+    print(f"the test repository's annotations: not read ({e})")
+PY
+}
+pr_head() { gh pr view "$pr_url" --json headRefOid --jq .headRefOid 2>/dev/null || true; }
 cleanup() {
-  local rc=$? out why
+  local rc=$? out why head
   trap - EXIT
   # The trap is cleared once the final deletion succeeded, so this runs only
   # on a failure or on a signal (a cancellation, a workflow timeout). On a
@@ -147,6 +208,7 @@ cleanup() {
   # is not 404 is not "absent", and a probe that failed on a bad minute would
   # have read that way and left a public repository behind unreported.
   echo "the journey did not finish (exit $rc); deleting $url if it is still there (the local copy $dir stays)" >&2
+  if [ -n "$pr_url" ]; then head="$(pr_head)"; [ -z "$head" ] || job_notes "$head"; fi
   if out="$(gh repo delete "$repo" --yes 2>&1)"; then echo "deleted $url" >&2
   elif grep -qE 'HTTP 404|Not Found' <<<"$out"; then echo "$url is already gone" >&2
   else why="ROLLBACK FAILED"; [ "$merged" = 0 ] || why="MERGED, NOT DELETED"
@@ -278,6 +340,8 @@ done
 tip="$(gh api "repos/$repo/commits/main" --jq '"\(.sha[0:12]) \(.commit.message | split("\n")[0])"')"
 case "$tip" in *"docs: first pull request through the wall"*) ;; *) fail "main does not carry the squash commit; its tip is: $tip" ;; esac
 echo "merged: $tip"; merged=1
+head="$(pr_head)"
+if [ -n "$head" ]; then job_notes "$head"; else echo "the test repository's annotations: not read (no head for $pr_url)"; fi
 
 # A release branch: the called run itself says which commit it came from. The
 # floor-check job echoes `plinth <job.workflow_sha>` when it fetches its checker
