@@ -30,7 +30,8 @@ nothing else.
 ## What it judges
 
 Every line is `PASS`, `WARN`, `INFO` or `SKIP`. The last line counts the
-items per rule and how many were not verified.
+items per rule, the rules not checked for want of a convention, and the
+records not verified.
 
 - **Facts**, whatever the conventions say: `ref` (a `#N` or `owner/repo#N`
   outside code that was deleted, 410, or is a 404 above the highest number

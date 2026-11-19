@@ -69,6 +69,7 @@ DOC_PATHS = ("CONTRIBUTING.md", ".github/CONTRIBUTING.md", "docs/CONTRIBUTING.md
 
 counts: dict[str, int] = {}
 skips = 0
+unchecked = 0
 
 
 class CannotRun(Exception):
@@ -76,9 +77,12 @@ class CannotRun(Exception):
 
 
 def line(kind: str, msg: str, rule: str | None = None) -> None:
-    global skips
+    global skips, unchecked
     print(f"  {kind:4}  {msg}")
-    if kind == "SKIP":
+    # A rule with no convention read is not a record left unread.
+    if kind == "SKIP" and "not checked: convention not read" in msg:
+        unchecked += 1
+    elif kind == "SKIP":
         skips += 1
     if rule and kind in ("WARN", "INFO"):
         counts[rule] = counts.get(rule, 0) + 1
@@ -221,7 +225,13 @@ def outside_fences(body: str) -> list[tuple[int, str]]:
 
 
 def norm(h: str) -> str:
-    return re.sub(r"\s+", " ", h.strip().strip(":").strip()).casefold()
+    return re.sub(r"\s+", " ", h.replace("*", "").replace("__", "").strip().strip(":").strip()).casefold()
+
+
+def named(heading: str, names: set[str]) -> bool:
+    """The heading is one of the names, or one followed by more words:
+    `## Outcome: completed`, `## Outcome (cancelled)`."""
+    return any(heading == n or re.match(re.escape(n) + r"\W", heading) for n in names)
 
 
 def headings(body: str) -> list[tuple[int, int, str]]:
@@ -236,7 +246,8 @@ def headings(body: str) -> list[tuple[int, int, str]]:
 
 
 INLINE_CODE = re.compile(r"(`+)(.+?)\1")
-REF = re.compile(r"(?<![\w&/#.\-])(?:([A-Za-z0-9][\w.\-]*/[\w.\-]+))?#(\d+)\b")
+# An owner is letters, digits and hyphens: `v1.2/x#4` is not a reference.
+REF = re.compile(r"(?<![\w&/#.\-])(?:([A-Za-z0-9][A-Za-z0-9\-]*/[\w.\-]+))?#(\d+)\b")
 
 
 def refs(body: str) -> set[tuple[str | None, int]]:
@@ -252,7 +263,7 @@ def refs(body: str) -> set[tuple[str | None, int]]:
 
 
 HOME = re.compile(r"(?<![\w.\-])(/Users/|/home/|[A-Za-z]:\\Users\\)([^\s/\\`'\"<>()\[\]]+)")
-NOT_A_PERSON = {"runner", "user", "username", "you", "your-name", "name", "me", "shared", "$user", "${user}",
+NOT_A_PERSON = {"runner", "ubuntu", "linuxbrew", "public", "default", "user", "username", "you", "your-name", "name", "me", "shared", "$user", "${user}",
                 "...", "…", "<you>", "<user>", "<name>"}
 
 
@@ -430,7 +441,7 @@ def unticked_criteria(body: str, names: set[str]) -> list[int]:
     hs = headings(body)
     out: list[int] = []
     for idx, (ln, level, text) in enumerate(hs):
-        if text not in names:
+        if not named(text, names):
             continue
         end = next((h[0] for h in hs[idx + 1:] if h[1] <= level), max(lines, default=0) + 1)
         out += [i for i in range(ln + 1, end) if i in lines and re.match(r"^\s*[-*+]\s+\[ \]", lines[i])]
@@ -556,8 +567,8 @@ def check(root: Path, repo: str) -> None:
                 continue
             if not set(got) & set(KIND_LABELS):
                 continue
-            hs = {h for _, _, h in headings(i.get("body") or "")}
-            if hs & ending or RECORD_HEADING in hs:
+            hs = [h for _, _, h in headings(i.get("body") or "")]
+            if any(named(h, ending | {RECORD_HEADING}) for h in hs):
                 continue
             line("WARN", f"ending: {i.get('url')} closed completed with no ending section ({shown}, "
                          f"from {', '.join(ending_from)})", "ending")
@@ -616,7 +627,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     rules = ("ref", "home-path", "body-size", "ending", "trailer")
     per = ", ".join(f"{r} {counts.get(r, 0)}" for r in rules)
-    print(f"-- {per}; for a person to read: criteria {counts.get('criteria', 0)}; {skips} not verified")
+    print(f"-- {per}; for a person to read: criteria {counts.get('criteria', 0)}; "
+          f"{unchecked} rules not checked; {skips} not verified")
     return 0
 
 

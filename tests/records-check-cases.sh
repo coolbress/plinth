@@ -31,14 +31,16 @@ page1 = [
     issue(3, ["task"], "### What to build\n\nx\n\n### Acceptance criteria\n\n- [X] one\n- [ ] two\n\n### Outcome\n\ndone\n"),
     issue(4, ["wayfinder:research"], "## Question\n\nq\n\n## Decision\n\nd\n"),
     issue(5, ["task"], "## What to build\n\nx\n\n## Decision\n\nd\n"),
+    # An ending heading with more words after it is still that heading.
+    issue(14, ["task"], "## What to build\n\nx\n\n## **Outcome**: completed\n\ndone\n"),
     issue(6, ["task"], "## What to build\n\nx\n", reason="NOT_PLANNED"),
 ]
 page2 = [
     # Labels cut at their page size: the kind is not known.
     issue(7, [f"l{i}" for i in range(20)], "no ending\n", total=25),
     issue(8, ["task"], "See #2, `#9999` and x/y#3.\n\n```\n#8888 /Users/carol/in-a-fence\n```\n"
-                       "Ran in /Users/alice/work and /home/runner/work and /Users/<you>/x, on github.com/home/page.\n"
-                       "Also #500, #9, #10, x/y#4, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n",
+                       "Ran in /Users/alice/work and /home/runner/work and /home/ubuntu/x and /Users/<you>/x, on github.com/home/page.\n"
+                       "Also v1.2/x#3, #500, #9, #10, x/y#4, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n",
           state="OPEN", reason=None),
     issue(11, [], "a" * 59000, state="OPEN", reason=None),
     # Three UTF-8 bytes per character: near the limit in bytes only.
@@ -111,12 +113,13 @@ if grep -vE '^  (PASS|WARN|INFO|SKIP)  |^-- ' <<<"$out" | grep -q .; then
   bad "a line is not PASS, WARN, INFO or SKIP: $(grep -vE '^  (PASS|WARN|INFO|SKIP)  |^-- ' <<<"$out" | head -2)"
 else ok "every line is PASS, WARN, INFO or SKIP, and the summary"; fi
 hasnt "never FAIL" "FAIL"
-has "both pages of issues are read" "o/r: 11 issues and 4 pull requests read"
+has "both pages of issues are read" "o/r: 12 issues and 4 pull requests read"
 has "a completed bug whose only ending is another heading is named" "ending: $U/issues/1 closed completed"
 has "a completed task with no ending is named, with the file" "ending: $U/issues/2 closed completed with no ending section (\`outcome\`, from AGENTS.md)"
 has "a heading the sentence names before the ending is not an ending" "ending: $U/issues/13 closed completed"
 hasnt "an issue form's ### Outcome is an ending" "$U/issues/3 closed"
 hasnt "a record ending in Decision is excepted" "$U/issues/5 "
+hasnt "an ending heading with more words after it is an ending" "$U/issues/14 "
 hasnt "a record with no kind label is not judged" "$U/issues/4 "
 hasnt "an issue closed not planned is not judged" "$U/issues/6 "
 has "labels cut at their page size are a SKIP" "SKIP  ending: $U/issues/7 not verified: its labels were cut at 20"
@@ -126,6 +129,7 @@ hasnt "a discussion number resolves" "#10 "
 hasnt "#N in inline code is not a reference" "9999"
 hasnt "#N in a code fence is not a reference" "8888"
 hasnt "owner/repo#N that resolves is not named" "x/y#3"
+hasnt "a path whose first part cannot be an owner is not a reference" "v1.2/x"
 has "owner/repo#N not found at or below that repository's highest number is a SKIP" "SKIP  x/y#4 not verified: status 404 at or below the highest number, 100"
 has "a repository that cannot be read is a SKIP for its references" "SKIP  gone/repo#1 not verified: gone/repo could not be read (NOT_FOUND)"
 hasnt "an HTML entity is not a reference" "#39"
@@ -143,7 +147,7 @@ has "a merged pull request with no trailer is an INFO, not a violation" "INFO  t
 hasnt "a closed unmerged pull request is not judged" "pull/23"
 has "unticked criteria are for a person to read, with the file" "INFO  for a person to read: 1 completed issues leave acceptance criteria unticked (heading from .github/ISSUE_TEMPLATE/task.yml)"
 has "the unticked criterion's line is listed; [X] is ticked" "INFO    $U/issues/3 line 8"
-has "the last line counts per rule and not verified" "-- ref 2, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 3 not verified"
+has "the last line counts per rule and not verified" "-- ref 2, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 0 rules not checked; 3 not verified"
 hasnt "nothing says missing" "missing"
 
 # ---- Another ending heading: judged against it, not against plinth's.
@@ -158,6 +162,7 @@ has "the same issues with no convention files: not checked" "SKIP  ending: not c
 has "no criteria heading read: not checked" "SKIP  criteria: not checked: convention not read"
 hasnt "nothing says missing without conventions" "missing"
 hasnt "no convention item is judged without conventions" "closed completed with no ending"
+has "rules not checked are counted apart from records not verified" "; 3 rules not checked; 2 not verified"
 has "the facts are judged without conventions" "ref: #500 resolves to nothing"
 
 # ---- The owner's shared issue forms, when the repository has none of its own.
