@@ -38,7 +38,7 @@ pull requests and have no tag.
 
 ### Changed
 
-- `/plinth:new-project` renders plinth-template v1.46.0 instead of v1.45.1.
+- `/plinth:new-project` renders plinth-template v1.46.1 instead of v1.45.1.
   A project name that would write two files to one path, or that is no
   distribution name (`_demo`), is refused before a file is written
   (coolbress/plinth-template#256); a project's own test renders whatever its
@@ -47,7 +47,11 @@ pull requests and have no tag.
   (coolbress/plinth-template#260); a refused name says why
   (coolbress/plinth-template#262); and the issue tracker page and template
   reminder carry #957's rule. `copier update` needs no hands except for a
-  name that never worked, as the template's 1.46.0 section says.
+  name that never worked, as the template's 1.46.0 section says. v1.46.1
+  raises the `backend`, `data-ml` and `web` image's `python:3.12-slim`
+  digest past `apt` 3.0.3, which the rendered `image` job's scan refused
+  from 2026-11-19 (coolbress/plinth-template#267); a project whose digest
+  Dependabot already raised sees a one-line conflict there and keeps its own.
   `plinth_sha`'s default is unchanged (v2.32.0). `tests/template-rules-drift.sh`
   now also holds the two shared sentences of `docs/agents/issue-tracker.md`.
 - The tests that compare plinth with the template read one checkout of it at
