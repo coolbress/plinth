@@ -108,8 +108,9 @@ GitHub's merge. The agent still pushes branches and opens pull requests, and
 the checks and your review in step 5 of [Run a project](run-a-project.md#5-check-what-the-checks-cannot) are what judge them. Measured on a
 public repository owned by a personal account on GitHub Free; a private
 repository, GitHub Pro and a repository an organization owns were not
-measured. On GitLab the same idea is a Developer login, not built yet
-([#553](https://github.com/coolbress/plinth/issues/553)).
+measured. On GitLab the same idea is a Developer login; this page does not cover it,
+and [#553](https://github.com/coolbress/plinth/issues/553) records what was
+measured there.
 
 ## A repository made before the merge ruleset
 

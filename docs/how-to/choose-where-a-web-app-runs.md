@@ -107,8 +107,8 @@ the dashboard (done and checked in #607).
 
 ## Railway
 
-Listed, not checked by plinth: plinth does not deploy here, and nobody has
-tried these steps for plinth. A trial is planned in
+Listed, not checked by plinth: plinth does not deploy here. Whether these
+steps have been tried for plinth, and what a trial found, is in
 [#680](https://github.com/coolbress/plinth/issues/680).
 
 **What it costs.** About $10 a month, an estimate from the rates, not
