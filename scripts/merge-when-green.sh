@@ -345,7 +345,8 @@ echo "$after"
 # After the merge, with GET calls only: the issues GitHub closes through this
 # pull request and those its description names on a `Part of #N` line. For each,
 # the acceptance criteria still unticked and, for one the merge closed, a
-# body with no `## Outcome` (or `## Decision`). Which criterion the change met
+# body with no `## Outcome` (or `## Decision`; `###` too, as an issue form
+# writes its fields). Which criterion the change met
 # is the merger's call, so nothing is ticked here, and a failed read prints
 # "not read" and leaves the exit status as it was without this section.
 named() {
@@ -363,10 +364,13 @@ named() {
       echo "$r#$n: not read"; said=1; continue
     fi
     ib="${ib//$'\r'/}"
-    todo="$(awk '/^## /{in_ac = ($0 ~ /^## Acceptance criteria[[:space:]]*$/); next}
+    # `##` headings, or `###` as an issue form writes its fields (#978); a
+    # heading deeper than the criteria's own stays inside their section.
+    todo="$(awk '/^###? /{l = index($0, " "); if (in_ac && l > lvl) next
+                           in_ac = ($0 ~ /^###? Acceptance criteria[[:space:]]*$/); lvl = l; next}
                  in_ac && /^[[:space:]]*[-*] \[ \]/' <<<"$ib")"
     end=yes
-    [ "$kind" = part ] || grep -qE '^## (Outcome|Decision)([^[:alnum:]]|$)' <<<"$ib" || end=no
+    [ "$kind" = part ] || grep -qE '^###? (Outcome|Decision)([^[:alnum:]]|$)' <<<"$ib" || end=no
     [ -n "$todo" ] || [ "$end" = no ] || continue
     if [ "$kind" = closes ]; then echo "$r#$n, closed by this merge:"; else echo "$r#$n, part of this change:"; fi
     [ -z "$todo" ] || { echo "  unticked acceptance criteria:"; sed 's/^[[:space:]]*/    /' <<<"$todo"; }
