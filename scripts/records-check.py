@@ -172,11 +172,12 @@ def graphql(name: str, query: str, variables: dict[str, Any]) -> dict | None:
 
 
 ISSUES_Q = """query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
-issues(first:%d,after:$cursor,orderBy:{field:CREATED_AT,direction:ASC}){pageInfo{hasNextPage endCursor}
-nodes{number url state stateReason body labels(first:%d){totalCount nodes{name}}}}}}""" % (PAGE, LABELS_PAGE)
+issues(first:PAGE,after:$cursor,orderBy:{field:CREATED_AT,direction:ASC}){pageInfo{hasNextPage endCursor}
+nodes{number url state stateReason body labels(first:LABELS){totalCount nodes{name}}}}}}"""
+ISSUES_Q = ISSUES_Q.replace("first:PAGE", f"first:{PAGE}").replace("first:LABELS", f"first:{LABELS_PAGE}")
 PULLS_Q = """query($owner:String!,$name:String!,$cursor:String){repository(owner:$owner,name:$name){
-pullRequests(first:%d,after:$cursor,orderBy:{field:CREATED_AT,direction:ASC}){pageInfo{hasNextPage endCursor}
-nodes{number url state merged body mergeCommit{message}}}}}""" % PAGE
+pullRequests(first:PAGE,after:$cursor,orderBy:{field:CREATED_AT,direction:ASC}){pageInfo{hasNextPage endCursor}
+nodes{number url state merged body mergeCommit{message}}}}}""".replace("first:PAGE", f"first:{PAGE}")
 
 
 def read_all(kind: str, field: str, query: str, owner: str, name: str) -> list[dict]:
@@ -254,8 +255,9 @@ def refs(body: str) -> set[tuple[str | None, int]]:
     found: set[tuple[str | None, int]] = set()
     for _, ln in outside_fences(body):
         ln = INLINE_CODE.sub(" ", ln)
-        # A link's target is a URL, not a reference.
-        ln = re.sub(r"\]\([^)]*\)", "]", ln)
+        # A link is not a reference, its text included: GitHub does not turn
+        # `[discussion #121836](url)` into a link to this repository's #121836.
+        ln = re.sub(r"\[[^\]]*\]\([^)]*\)", " ", ln)
         ln = re.sub(r"https?://\S+", " ", ln)
         for m in REF.finditer(ln):
             found.add((m.group(1), int(m.group(2))))
@@ -294,9 +296,9 @@ def read_conventions(root: Path, owner: str) -> dict[str, str]:
     forms = root / ".github" / "ISSUE_TEMPLATE"
     local = sorted(p for p in forms.iterdir() if p.is_file()) if forms.is_dir() else []
     if local:
-        for p in local:
-            if p.suffix in ISSUE_TEMPLATE_SUFFIXES:
-                out[str(p.relative_to(root))] = p.read_text(encoding="utf-8", errors="replace")
+        for f in local:
+            if f.suffix in ISSUE_TEMPLATE_SUFFIXES:
+                out[str(f.relative_to(root))] = f.read_text(encoding="utf-8", errors="replace")
     else:
         status, listing = rest(f"repos/{owner}/.github/contents/.github/ISSUE_TEMPLATE")
         if status == 200 and isinstance(listing, list):
@@ -318,7 +320,7 @@ def read_conventions(root: Path, owner: str) -> dict[str, str]:
             once.append(p)
     pr = once
     prdir = root / ".github" / "PULL_REQUEST_TEMPLATE"
-    pr += [str(p.relative_to(root)) for p in sorted(prdir.glob("*.md"))] if prdir.is_dir() else []
+    pr += [str(f.relative_to(root)) for f in sorted(prdir.glob("*.md"))] if prdir.is_dir() else []
     if pr:
         for p in pr:
             out[p] = (root / p).read_text(encoding="utf-8", errors="replace")
@@ -374,8 +376,8 @@ def sentences(text: str) -> list[str]:
 # in" ("the ending under `## Outcome`", "ends in `## Decision`"), or before
 # "is its ending". A heading elsewhere in the sentence (`## Decisions`, dated,
 # while open) is not one.
-ENDING = (re.compile(r"\b(?:ending|ends in|ends with)\b[^`]{0,40}`#{1,6} ([^`]+)`", re.I),
-          re.compile(r"`#{1,6} ([^`]+)` is (?:its|the) ending", re.I))
+ENDING = (re.compile(r"\b(?:ending|ends in|ends with)\b[^`]{0,40}`#{1,6} ([^`]+)`", re.IGNORECASE),
+          re.compile(r"`#{1,6} ([^`]+)` is (?:its|the) ending", re.IGNORECASE))
 BACKTICK_HEADING = re.compile(r"`#{1,6} ([^`]+)`")
 
 
@@ -390,7 +392,7 @@ def ending_convention(conv: dict[str, str]) -> tuple[set[str], list[str]]:
     return names, where
 
 
-CRITERIA = re.compile(r"acceptance criteri", re.I)
+CRITERIA = re.compile(r"acceptance criteri", re.IGNORECASE)
 
 
 def criteria_convention(conv: dict[str, str]) -> tuple[set[str], list[str]]:
@@ -401,9 +403,9 @@ def criteria_convention(conv: dict[str, str]) -> tuple[set[str], list[str]]:
     for path, text in conv.items():
         found = {norm(h) for h in BACKTICK_HEADING.findall(text) if CRITERIA.search(h)}
         if path.endswith(".md"):
-            found |= {norm(m.group(1)) for m in re.finditer(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", text, re.M)
+            found |= {norm(m.group(1)) for m in re.finditer(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", text, re.MULTILINE)
                       if CRITERIA.search(m.group(1))}
-        found |= {norm(m.group(1).strip("'\"")) for m in re.finditer(r"^\s*label:\s*(.+?)\s*$", text, re.M)
+        found |= {norm(m.group(1).strip("'\"")) for m in re.finditer(r"^\s*label:\s*(.+?)\s*$", text, re.MULTILINE)
                   if CRITERIA.search(m.group(1))}
         if found:
             names |= found
@@ -524,7 +526,7 @@ def check(root: Path, repo: str) -> None:
     pulls = read_all("pulls", "pullRequests", PULLS_Q, owner, name)
     line("INFO", f"{repo}: {len(issues)} issues and {len(pulls)} pull requests read")
     items = [(i, "issue") for i in issues] + [(p, "pull request") for p in pulls]
-    known = {x.get("number") for x, _ in items}
+    known = {x["number"] for x, _ in items if isinstance(x.get("number"), int)}
 
     # Facts.
     refs_by_repo: dict[str, dict[int, list[str]]] = {}

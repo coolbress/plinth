@@ -40,7 +40,8 @@ page2 = [
     issue(7, [f"l{i}" for i in range(20)], "no ending\n", total=25),
     issue(8, ["task"], "See #2, `#9999` and x/y#3.\n\n```\n#8888 /Users/carol/in-a-fence\n```\n"
                        "Ran in /Users/alice/work and /home/runner/work and /home/ubuntu/x and /Users/<you>/x, on github.com/home/page.\n"
-                       "Also v1.2/x#3, #500, #9, #10, x/y#4, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n",
+                       "Also v1.2/x#3, #500, #9, #10, x/y#4, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n"
+                       "GitHub staff say so in [community discussion #121836](https://github.com/orgs/community/discussions/121836).\n",
           state="OPEN", reason=None),
     issue(11, [], "a" * 59000, state="OPEN", reason=None),
     # Three UTF-8 bytes per character: near the limit in bytes only.
@@ -134,6 +135,7 @@ has "owner/repo#N not found at or below that repository's highest number is a SK
 has "a repository that cannot be read is a SKIP for its references" "SKIP  gone/repo#1 not verified: gone/repo could not be read (NOT_FOUND)"
 hasnt "an HTML entity is not a reference" "#39"
 hasnt "a link's anchor is not a reference" "#77"
+hasnt "a link's text is not a reference" "121836"
 has "a home path is named by line and form" "home-path: $U/issues/8 line 6: a home path (/Users/<name>)"
 has "a home path in a code fence is public too" "home-path: $U/issues/8 line 4: a home path (/Users/<name>)"
 hasnt "the home path line never repeats what matched" "alice"
