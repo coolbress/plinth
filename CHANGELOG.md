@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.37.0] - 2026-11-19
+
+A name the template refuses now stops `/plinth:new-project` before anything is created, on GitHub as on GitLab, and the GitLab door refuses `--private` with `--public`. New projects render plinth-template v1.46.1: it refuses project names that never rendered, keeps a project's own test and `data/` files, says a defect is a `bug` whoever finds it, and raises the `backend`, `data-ml` and `web` image's `python:3.12-slim` digest past `apt` 3.0.3, which the rendered image scan refused from 2026-11-19. plinth's own CI now runs the pinned template's `cli` project through the pull request's `python-ci.yml`, and `scripts/raise-template-pin.sh` raises the pin. `/plinth:floor-check` shows the template's diff for `AGENTS.md` and `CONTRIBUTING.md`, whose sources end in `.jinja`. The eval suite grades a floor gap or an open item by what the report says of it. No reusable workflow that a project calls changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.
+
+tested with plinth-template v1.46.1
+
 ### Added
 
 - plinth's own CI runs plinth-template's `cli` project, rendered at the
@@ -86,6 +92,12 @@ pull requests and have no tag.
   `delete_repo` scope it left an empty repository to delete by hand. A stop
   after the render began names what it left in the local directory, which
   the next run would refuse.
+- `/plinth:floor-check` prints the template's own diff for `AGENTS.md` and
+  `CONTRIBUTING.md` when a project's template tag is behind the pin (#969).
+  Their sources end in `.jinja`, and the lookup by the plain name never found
+  them, so only the list of changed files was printed. Each name now matches
+  its source with or without `.jinja`, and the diff is shown under the
+  rendered name.
 
 - The eval suite's `floor-gaps` and `next-day` tasks pass a report by what it
   says of each gap or open item, not by its name appearing (#961). A report
@@ -5505,7 +5517,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.36.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.37.0...HEAD
+[2.37.0]: https://github.com/coolbress/plinth/releases/tag/v2.37.0
 [2.36.0]: https://github.com/coolbress/plinth/releases/tag/v2.36.0
 [2.35.0]: https://github.com/coolbress/plinth/releases/tag/v2.35.0
 [2.34.0]: https://github.com/coolbress/plinth/releases/tag/v2.34.0
