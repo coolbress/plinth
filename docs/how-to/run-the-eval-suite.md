@@ -51,10 +51,10 @@ adds these numbers up and stops on its own:
   fewer tasks (see [Smaller runs](#smaller-runs)) to stay under it. For
   v2.29.0 it stopped at that ceiling at run 78, and a resume with
   `--ceiling 14` finished it at US$13.41 (posted on #647).
-- **The release run** is 90 runs: the 72 that cost about US$10.70 at v2.29.0's
-  medians, and 18 added since, not yet measured: the two plain-question tasks'
-  6 and `guide-fresh`'s and `guide-busy`'s 6 (about US$0.75 each if they cost
-  what the guide tasks do), and `owed-item`'s 6.
+- **The release run** is 90 runs and cost US$12.50 for v2.35.0 (posted on
+  #647). At that run's medians, `owed-item`'s six runs cost about US$0.75,
+  `guide-fresh`'s and `guide-busy`'s about US$0.90, and the two
+  plain-question tasks' about US$0.50.
   It has a US$15 ceiling of its own (see [The release run](#the-release-run)).
 - **The two guide tasks alone** are six runs and should cost under US$1. One
   guide session cost US$0.03 to US$0.15 in the sessions measured for #836 on
@@ -396,7 +396,7 @@ It runs every task in the `repo-only` and `plinth` arms only, three runs each,
 has no `AGENTS.md`, `CLAUDE.md`, `.claude/` or plugins, so nothing a plinth or
 template release changes reaches it, and it cannot show that a release made the
 agent worse. Three runs a cell stay, because two cannot tell a 1/2 from chance.
-[#647's Decision of 2026-11-09](https://github.com/coolbress/plinth/issues/647#issuecomment-6734852683) sets this shape; the
+The entry in #647's Decisions "[the suite a release runs](https://github.com/coolbress/plinth/issues/647)" sets this shape; the
 `none` arm stays in the default suite, for comparisons that ask whether plinth
 helps at all.
 
@@ -442,7 +442,8 @@ the branch and commit plinth was installed from. Every run must pass. A run that
 failed, was not graded, was not run or read the hidden tests is named there, and
 the script exits with status 1 (3 when the ceiling or the usage limit stopped it). Two runs of three tasks
 catch a skill that broke outright. They cannot show a small drop in how often a
-skill works: #647's Decision of 2026-11-07 says how many runs that takes. Post
+skill works: #647's Decisions entry "[how many runs a decision needs, and the
+pass rules](https://github.com/coolbress/plinth/issues/647)" says how many runs that takes. Post
 the table on #647, and name the comment in the release pull request's
 description.
 
