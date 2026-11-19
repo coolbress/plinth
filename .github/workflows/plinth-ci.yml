@@ -448,8 +448,36 @@ jobs:
           # which lychee reads from the checkout root, with the date measured.
           # canary-template/ is the template's render (#953): its links name
           # a project that does not exist, and the template checks its own.
-          "$d/lychee" --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" --exclude-path '(^|/)canary-template/' \
+          # A host that fails only some requests is checked twice instead
+          # (#971): lychee's --max-retries covers a timeout, a 5xx, 408 and
+          # 429, not a failed TLS handshake or a 403, and nngroup.com failed
+          # one of 88 requests from the runners with a TLS handshake and passed
+          # the next. A failed run waits and runs once more with --cache;
+          # lychee never writes a failed link to its cache, so the second run
+          # requests only the links that failed, and a 404 fails it as well.
+          check() { # check <seconds to wait before the second run> <lychee arguments>
+            local wait="$1"; shift
+            rm -f .lycheecache
+            "$d/lychee" --cache "$@" && return 0
+            echo "::warning::the link check failed; checking the failed links once more in ${wait}s (#971)"
+            sleep "$wait"
+            "$d/lychee" --cache "$@"
+          }
+          check 60 --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" --exclude-path '(^|/)canary-template/' \
             --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
+          # The second run on two fixtures, offline: a link still missing fails
+          # both runs, so the check still fails; a link that appears during the
+          # wait passes the second, so a failure that does not last passes.
+          fr="$RUNNER_TEMP/lychee-retry"; mkdir -p "$fr"
+          echo "[gone](file://$fr/gone.md)" >"$fr/gone-link.md"
+          if check 0 --no-progress --offline -- "$fr/gone-link.md"; then
+            echo "::error::a link to a missing file passed the second run: it checks nothing"; exit 1
+          fi
+          echo "[late](file://$fr/late.md)" >"$fr/late-link.md"
+          (sleep 2; touch "$fr/late.md") &
+          check 6 --no-progress --offline -- "$fr/late-link.md" \
+            || { echo "::error::a link that came back during the wait still failed the second run"; exit 1; }
+          rm -f .lycheecache
           # The remap on two fixtures, offline: an existing file passes with no
           # network, and a missing one fails, so the remap cannot pass unchecked.
           fx="$RUNNER_TEMP/lychee-remap"; mkdir -p "$fx/ok" "$fx/missing"
