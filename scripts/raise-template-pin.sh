@@ -157,6 +157,7 @@ else
 fi
 echo "still to do:"
 echo "  1. tests/template-render.sh --write, to re-render canary-template/ at $tag; if the rendered ci.yml's ci job grants or passes something new, copy it into the canary-template job"
+echo "     and copy template/Dockerfile.jinja's FROM lines at $tag into canary-web/Dockerfile, which tests/template-render.sh holds to them (#975)"
 plinth_sha_note=""
 grep -qx 'copier.yml' <<<"$template_changed" && plinth_sha_note=", and whether plinth_sha's default moved (copier.yml changed)"
 echo "  2. CHANGELOG.md [Unreleased]: say what a project rendered at $tag receives (gh release view $tag --repo $repo)$plinth_sha_note"

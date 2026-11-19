@@ -14,6 +14,9 @@
 #      is generated, not reviewed line by line) and floor-check-required-checks
 #      (plinth's own ruleset, as `canary` passes it). Its name says the tag and
 #      the commit it was rendered from.
+#   3. canary-web/Dockerfile's FROM lines are the pinned template's
+#      template/Dockerfile.jinja's, in order: copied by hand at a pin raise
+#      (#975).
 # Committed, not rendered in the job: a job that calls a reusable workflow
 # has no steps of its own, and python-ci.yml checks out the repository, so
 # the project it runs on has to be in the commit. The template is read from
@@ -179,6 +182,33 @@ grep -v '^  canary-template:' "$work/good.yml" | sed '/^    name: canary-templat
 if out="$(mirror "$work/none.yml" "$work/rendered.yml" "$tag" "$sha")"; then bad "no canary-template job passes"
 else ok "no canary-template job fails ($out)"; fi
 
+# same_froms <template Dockerfile.jinja> <canary-web Dockerfile>: the FROM
+# lines, in order, are the template's; prints both sets and exits 1 if not.
+# canary-web/Dockerfile is the template's web Dockerfile with uvicorn as the
+# command, and `ci / web-audit` builds and starts it without scanning it: base
+# images left behind the template's carry what its scan already fixed (#975).
+same_froms() {
+  local want got
+  want="$(grep -E '^FROM ' "$1" 2>/dev/null)"; got="$(grep -E '^FROM ' "$2" 2>/dev/null)"
+  [ -n "$want" ] && [ "$want" = "$got" ] && return 0
+  printf 'the template'"'"'s:\n%s\n%s'"'"'s:\n%s\n' "${want:-(none)}" "${2#"$root"/}" "${got:-(none)}" | sed 's/^/        /'
+  return 1
+}
+
+# ---- Must not pass: canary-web's base images.
+printf '# x\nFROM a@sha256:1 AS build\nRUN x\nFROM b@sha256:2\n' >"$work/tpl.Dockerfile"
+cp "$work/tpl.Dockerfile" "$work/web.Dockerfile"
+if same_froms "$work/tpl.Dockerfile" "$work/web.Dockerfile" >/dev/null; then ok "a Dockerfile with the template's FROM lines passes"
+else bad "a Dockerfile with the template's FROM lines fails"; fi
+for c in 's/sha256:2/sha256:3/' 's/ AS build//' '/^FROM b/d' 's/^RUN x$/FROM c@sha256:4/'; do
+  sed "$c" "$work/tpl.Dockerfile" >"$work/web.Dockerfile"
+  if same_froms "$work/tpl.Dockerfile" "$work/web.Dockerfile" >/dev/null; then bad "a Dockerfile edited by '$c' passes"
+  else ok "a Dockerfile edited by '$c' fails"; fi
+done
+: >"$work/empty"
+if same_froms "$work/empty" "$work/empty" >/dev/null; then bad "a template with no FROM line passes"
+else ok "a template with no FROM line fails: nothing read is not a match"; fi
+
 # ---- The real ones: the template at the pinned commit.
 if ! template_checkout "$work"; then
   bad "no checkout of the template: $template_error"
@@ -217,6 +247,10 @@ caller="$work/fresh/.github/workflows/ci.yml"; [ -f "$caller" ] || caller="$root
 if out="$(mirror "$root/.github/workflows/ci.yml" "$caller" "$template_ref" "$template_sha")"
 then ok "ci.yml's canary-template job grants and passes what the rendered caller does, and is named for $template_ref at ${template_sha:0:7}"
 else bad "ci.yml's canary-template job is not the rendered caller:"; sed 's/^/        /' <<<"$out"; fi
+
+if out="$(same_froms "$template_dir/template/Dockerfile.jinja" "$root/canary-web/Dockerfile")"
+then ok "canary-web/Dockerfile's FROM lines are template/Dockerfile.jinja's at $template_ref"
+else bad "canary-web/Dockerfile's FROM lines are not template/Dockerfile.jinja's at $template_at; copy the template's:"; echo "$out"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

@@ -81,6 +81,13 @@ case "$*" in
   "api --paginate repos/"*"/rulesets?per_page=100 --jq "*) printf '%s' "${MERGE_IDS-5}" ;;
   "api repos/"*"/rulesets/"*)         if [ -n "${MERGE_READBACK:-}" ]; then echo "$MERGE_READBACK"; else
                                         jq '. + {id: 5, rules: [{type: "update", parameters: {update_allows_fetch_and_merge: false}}]}' "$MERGE_FILE"; fi ;;
+  # What the test repository's jobs said (#975): the head's check runs as
+  # GitHub returns them (CHECK_RUNS, raw JSON), then one check run's
+  # annotations (ANNOTATIONS, a JSON object keyed by the run's id).
+  "api repos/"*"/commits/"*"/check-runs"*) [ -z "${RUNS_RC:-}" ] || { echo "HTTP 502: Bad Gateway" >&2; exit "$RUNS_RC"; }
+                                      none='{"total_count":0,"check_runs":[]}'; printf '%s\n' "${CHECK_RUNS:-$none}" ;;
+  "api repos/"*"/check-runs/"*"/annotations"*) id="$*"; id="${id#*/check-runs/}"; id="${id%%/*}"
+                                      jq -c --arg id "$id" '.[$id] // []' <<<"${ANNOTATIONS:-"{}"}" ;;
   "api repos/"*"/commits/main --jq "*) echo "${MAIN_TIP:-0123456789ab docs: first pull request through the wall (#1)}" ;;   # GitHub appends the number (measured)
   "api repos/"*"/commits/"*)          echo "feedfacefeedfacefeedfacefeedfacefeedface" ;;
   "api repos/"*" --jq .default_branch") echo "${DEFAULT_BRANCH:-main}" ;;
@@ -140,6 +147,8 @@ not() { ! "$@"; }
 saw() { grep -q -- "$1" "$GH_LOG"; }
 said() { grep -q -- "$1" "$work/out"; }
 deletes() { [ "$(grep -c '^gh repo delete ' "$GH_LOG")" = "$1" ]; }
+# <pattern> is logged before the last deletion of the run
+before_delete() { local at; at="$(grep -n -- "$1" "$GH_LOG" | head -1 | cut -d: -f1)"; [ -n "$at" ] && [ "$at" -lt "$(grep -n '^gh repo delete ' "$GH_LOG" | tail -1 | cut -d: -f1)" ]; }
 # The wait is 2 s, not 1: e2e.sh reads its deadline from $SECONDS, whole seconds,
 # and a 1 s deadline set at the end of a wall-clock second is already reached at
 # the first poll's check, so a case that needs a second poll (a read that
@@ -156,7 +165,7 @@ run() { # <env assignments...> [-- <arguments to e2e.sh...>]
   while [ $# -gt 0 ]; do [ "$1" = -- ] && { shift; args=("$@"); break; }; envs+=("$1"); shift; done
   set -- ${envs[@]+"${envs[@]}"}
   runs=$((runs + 1)); export GH_LOG="$work/log.$runs"; : > "$GH_LOG"
-  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY MERGE_IDS MERGE_READBACK PLINTH_E2E_ARCHETYPE GITHUB_REF GITHUB_SHA DOOR_NO_PINS PUSH_RC PR_HEAD CI_RUN FLOOR_JOB LOG_EMPTY CALLED_SHA LABEL_RUN
+  unset USER_401 USER_NO_LOGIN RECORD_RC CREATE_RC CREATE_EXISTS PROBE_LOST DELETE_RC1 DELETE_RC2 DELETE_RC3 DELETE_KILL CHECKS_RC CHECKS_FAILS DOOR_RC DOOR_PREFLIGHT DOOR_CREATE_FAILED EXISTS_RC DEFAULT_BRANCH FLOOR_RC FAILED_CHECKS STATE STATE_AFTER_PUSH CODEQL MERGE_RC MAIN_TIP GITHUB_STEP_SUMMARY MERGE_IDS MERGE_READBACK PLINTH_E2E_ARCHETYPE GITHUB_REF GITHUB_SHA DOOR_NO_PINS PUSH_RC PR_HEAD CI_RUN FLOOR_JOB LOG_EMPTY CALLED_SHA LABEL_RUN CHECK_RUNS ANNOTATIONS RUNS_RC
   env "$@" PLINTH_E2E_WAIT=2 "$work/scripts/e2e.sh" ${args[@]+"${args[@]}"} >"$work/out" 2>&1
 }
 export GITHUB_RUN_ID=42
@@ -307,12 +316,58 @@ check "merged and not deleted twice is a failure" no $?
 is "the repository is named loudly, apart from a rollback" said "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42 may EXIST"
 is "and in the job summary"  grep -q "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42" "$work/summary"
 run DELETE_KILL=1;         check "a cancellation landing on the last deletion: the trap is still armed" no $?
+is "cleanup reads no annotations before deleting again" bash -c '[ "$(grep -c "check-runs" "$1")" = 1 ]' _ "$GH_LOG"
 is "the deletion is asked again" deletes 3
 is "and reported"          said "deleted https://github.com/tester/plinth-e2e-42"
 run DELETE_KILL=1 DELETE_RC3=1 GITHUB_STEP_SUMMARY="$work/summary2"
 check "a cancellation, then a deletion that fails" no $?
 is "the repository is named loudly" said "MERGED, NOT DELETED: https://github.com/tester/plinth-e2e-42 may EXIST"
 is "and in the job summary"  grep -q "plinth-e2e-42" "$work/summary2"
+
+echo "-- what the test repository's jobs said, repeated before it is deleted (#975)"
+# Recorded shapes: GET /commits/{sha}/check-runs and /check-runs/{id}/annotations.
+# The image job's warning is the template's own line (v1.46.1's ci.yml), with
+# fixes 14 days and 3 days old, and one of no known date: the gate fails a
+# fix older than 14 days, so they have 1 day, 12 days and no count left.
+day() { python3 -c 'import datetime,sys; print(datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=int(sys.argv[1])))' "$1"; }
+d14="$(day 14)"; d3="$(day 3)"; d15="$(day 15)"
+runs_json='{"total_count":3,"check_runs":[
+ {"id":11,"name":"image","status":"completed","conclusion":"success","output":{"annotations_count":1}},
+ {"id":12,"name":"ci / test","status":"completed","conclusion":"success","output":{"annotations_count":1}},
+ {"id":13,"name":"ci / lint","status":"completed","conclusion":"success","output":{"annotations_count":0}}]}'
+warn="not yet confirmed: image scan, 3 high or critical vulnerabilities have a fix 14 days old or less, or of no known date: apt 3.0.3 (fixed in 3.0.4, since $d14: CVE-2026-109518); libfoo 1.2 (fixed in 1.3, since $d3: CVE-2026-1, CVE-2026-2); libbar 0.9 (fixed in 1.0, date not known: GHSA-xxxx-yyyy-zzzz); libbaz 2.0 (fixed in 2.1, since $d15: CVE-2026-3); reported and not blocking until the fix is 15 days old; a Debian package or Python itself is fixed by a newer base image (grype 0.104.0, database built 2026-11-18)"
+ann_json="$(jq -nc --arg w "$warn" '{"11":[{"path":".github","start_line":1,"annotation_level":"warning","title":"","message":$w}],
+  "12":[{"path":".github","start_line":1,"annotation_level":"warning","title":"","message":"a warning of another job"}]}')"
+run "CHECK_RUNS=$runs_json" "ANNOTATIONS=$ann_json" GITHUB_STEP_SUMMARY="$work/summary-scan"
+check "an image job that passed with a scan warning: the journey still passes" ok $?
+is "the package, the CVE and the days left are repeated as a warning" said "^::warning title=image scan in the test repository::apt 3.0.3 (CVE-2026-109518): its fix is 14 days old; the image job fails it in 1 day, at 15 days"
+is "each package on its own line" said "^::warning title=image scan in the test repository::libfoo 1.2 (CVE-2026-1, CVE-2026-2): its fix is 3 days old; the image job fails it in 12 days, at 15 days"
+is "a fix of no known date says so" said "^::warning title=image scan in the test repository::libbar 0.9 (GHSA-xxxx-yyyy-zzzz): its fix has no known date, so the image job does not count its days"
+is "a warning read after the day it was written turned does not count below zero" said "^::warning title=image scan in the test repository::libbaz 2.0 (CVE-2026-3): its fix is 15 days old; the image job fails it from its next run, at 15 days"
+is "and in the job summary" grep -q "apt 3.0.3 (CVE-2026-109518): its fix is 14 days old" "$work/summary-scan"
+is "another job's warning on a green run is not repeated" not said "a warning of another job"
+is "read from the head before the deletion" before_delete "^gh api repos/tester/plinth-e2e-42/commits/feedface.*/check-runs"
+other_warn='not yet confirmed: image scan, grype did not finish (its database is fetched at run time; the scan step'"'"'s log says why); a run where it finishes confirms it'
+run "CHECK_RUNS=$runs_json" "ANNOTATIONS=$(jq -nc --arg w "$other_warn" '{"11":[{"annotation_level":"warning","message":$w}]}')"
+check "a scan warning with no package: the journey passes" ok $?
+is "it is repeated as written" said "^::warning title=image scan in the test repository::not yet confirmed: image scan, grype did not finish"
+run "CHECK_RUNS=$runs_json" RUNS_RC=1; check "check runs that cannot be read do not turn a finished journey red" ok $?
+is "the line says they were not read, with gh's words" said "^the test repository's annotations: not read (.*HTTP 502: Bad Gateway"
+is "deleted" deletes 2
+
+red_runs='{"total_count":2,"check_runs":[
+ {"id":21,"name":"image","status":"completed","conclusion":"failure","output":{"annotations_count":2}},
+ {"id":22,"name":"ci / test","status":"completed","conclusion":"success","output":{"annotations_count":0}}]}'
+red_ann='{"21":[{"annotation_level":"failure","message":"fail: image scan, 1 high or critical vulnerabilities have had a fix for more than 14 days: apt 3.0.3 (fixed in 3.0.4, since 2026-11-04: CVE-2026-109518); how\nsecond line"},
+ {"annotation_level":"failure","message":"Process completed with exit code 1."},{"annotation_level":"notice","message":"a notice"}]}'
+run FAILED_CHECKS=$'  image  https://github.com/o/r/actions/runs/1/job/2\n' "CHECK_RUNS=$red_runs" "ANNOTATIONS=$red_ann"
+check "a red image check fails the journey" no $?
+is "its error text is printed, not only its link" said "^::error title=image in the test repository::fail: image scan, 1 high or critical vulnerabilities have had a fix for more than 14 days: apt 3.0.3"
+is "a second line stays on the annotation's line" said "CVE-2026-109518); how%0Asecond line$"
+is "every error of the failed job" said "^::error title=image in the test repository::Process completed with exit code 1.$"
+is "a notice is not an error" not said "a notice"
+is "read before the deletion" before_delete "^gh api repos/tester/plinth-e2e-42/check-runs/21/annotations"
+is "deleted" deletes 2
 
 echo "-- a release branch calls plinth at its own commit (#862)"
 rel=0123456789abcdef0123456789abcdef01234567
