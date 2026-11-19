@@ -10,6 +10,9 @@ checker="$root/scripts/floor-check.py"
 # a fixture): captured once so the fixtures stay a PASS across a pin raise.
 target_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+# The short list's template sources are read at the pin (#969).
+# shellcheck source=tests/lib/template-checkout.sh
+. "$root/tests/lib/template-checkout.sh"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub (#519)
   mkdir -p "$1/repos/coolbress/plinth-template/commits"
@@ -2469,24 +2472,85 @@ else bad "--print-update-command, no answers file (rc=$rc, stdout '$printed')"; 
 # made only when behind, filtered to template/ (the door's own tests, docs
 # and copier.yml are not rendered into a consumer repository).
 tmpl_api="$work/api-template"; mkdir -p "$tmpl_api/repos/coolbress/plinth-template/compare"
+# The short list's sources as the template names them at the pin (#969): a
+# fixture that fed a plain AGENTS.md matched no real file. Each name is found
+# as its source with or without .jinja in the pinned checkout; none is a FAIL.
+short_list="$(sed -nE 's/^TEMPLATE_DRIFT_DIFF_FILES = \((.*)\)$/\1/p' "$checker" | sed 's/[",]/ /g')"
+[ -n "$short_list" ] || bad "no TEMPLATE_DRIFT_DIFF_FILES read from $checker"
+src_agents="" src_contributing="" src_gitignore=""
+if ! template_checkout "$work"; then bad "the pinned template checkout: $template_error"
+else
+  for name in $short_list; do
+    src=""
+    for cand in "$name" "$name.jinja"; do
+      [ -f "$template_dir/template/$cand" ] && { src="template/$cand"; break; }
+    done
+    if [ -n "$src" ]; then ok "the short list's $name is $src at $template_at"
+    else bad "the short list's $name has no source template/$name or template/$name.jinja at $template_at"; fi
+    case "$name" in
+      AGENTS.md) src_agents="$src" ;;
+      CONTRIBUTING.md) src_contributing="$src" ;;
+      .gitignore) src_gitignore="$src" ;;
+      *) bad "the short list's $name has no fixture here; add one" ;;
+    esac
+  done
+fi
+src_agents="${src_agents:-template/AGENTS.md}"
+src_contributing="${src_contributing:-template/CONTRIBUTING.md}"
+src_gitignore="${src_gitignore:-template/.gitignore}"
 patch_agents=$'@@ -1,2 +1,3 @@\n # Agents\n+one more line\n'
-jq -n --arg patch "$patch_agents" '{files: [
-    {filename: "template/AGENTS.md", status: "modified", patch: $patch},
-    {filename: "template/.gitignore", status: "modified"},
+patch_contrib=$'@@ -1,2 +1,3 @@\n # Contributing\n+one more rule\n'
+patch_ignore=$'@@ -1,1 +1,2 @@\n .venv/\n+.cache/\n'
+jq -n --arg patch "$patch_agents" --arg cpatch "$patch_contrib" \
+      --arg a "$src_agents" --arg c "$src_contributing" --arg g "$src_gitignore" '{files: [
+    {filename: $a, status: "modified", patch: $patch},
+    {filename: $c, status: "modified", patch: $cpatch},
+    {filename: $g, status: "modified"},
     {filename: "docs/README.md", status: "modified"}
   ]}' > "$tmpl_api/repos/coolbress/plinth-template/compare/v1.0.0...${target_ref}.json"
 tag_names "$tmpl_api" "$target_sha"
 tcopy="$work/tmpl-drift"; rm -rf "$tcopy"; cp -R "$good" "$tcopy"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy/.copier-answers.yml"
 out="$(FLOOR_CHECK_API_DIR="$tmpl_api" python3 "$checker" --root "$tcopy" 2>&1)"
-if grep -q "changed in the template: \.gitignore, AGENTS\.md" <<<"$out"; then ok "the changed-files list is scoped to template/ and strips the prefix"
-else bad "changed-files list"; printf '%s\n' "$out" | grep -E 'changed in the template' | sed 's/^/        /'; fi
+want_list="$(printf '%s\n' "$src_agents" "$src_contributing" "$src_gitignore" | sed 's|^template/||' | LC_ALL=C sort | paste -sd, - | sed 's/,/, /g')"
+if grep -qF "changed in the template: $want_list" <<<"$out"; then ok "the changed-files list is scoped to template/ and strips the prefix"
+else bad "changed-files list, want '$want_list'"; printf '%s\n' "$out" | grep -E 'changed in the template' | sed 's/^/        /'; fi
 if grep -q "docs/README.md" <<<"$out"; then bad "a file outside template/ leaked into the changed-files list"
 else ok "a file outside template/ (the door never renders it) is left out"; fi
-if grep -q "  AGENTS.md:" <<<"$out" && grep -q "+one more line" <<<"$out"; then ok "the short list's diff is shown for AGENTS.md, from the same compare call"
-else bad "AGENTS.md diff"; printf '%s\n' "$out" | grep -E 'AGENTS|one more line' | sed 's/^/        /'; fi
+if grep -q "^  INFO    AGENTS\.md:$" <<<"$out" && grep -q "+one more line" <<<"$out" \
+   && grep -q "^  INFO    CONTRIBUTING\.md:$" <<<"$out" && grep -q "+one more rule" <<<"$out"
+then ok "the short list's diff is shown for AGENTS.md and CONTRIBUTING.md from their pinned sources, under the rendered names"
+else bad "AGENTS.md / CONTRIBUTING.md diff"; printf '%s\n' "$out" | grep -E 'AGENTS|CONTRIBUTING|one more' | sed 's/^/        /'; fi
 if grep -q "  \.gitignore:" <<<"$out"; then bad ".gitignore has no patch in the fixture; it should print no diff header"
 else ok "a short-list file with no patch in the compare response prints no diff block"; fi
+# The .jinja spelling whatever the pin says (#969; plinth-template#260 renames
+# .gitignore): AGENTS.md.jinja and .gitignore.jinja are each shown under the
+# rendered name, and a plain CONTRIBUTING.md still is.
+jinja_api="$work/api-template-jinja"; mkdir -p "$jinja_api/repos/coolbress/plinth-template/compare"
+jq -n --arg patch "$patch_agents" --arg cpatch "$patch_contrib" --arg gpatch "$patch_ignore" '{files: [
+    {filename: "template/AGENTS.md.jinja", status: "modified", patch: $patch},
+    {filename: "template/CONTRIBUTING.md", status: "modified", patch: $cpatch},
+    {filename: "template/.gitignore.jinja", status: "renamed", previous_filename: "template/.gitignore", patch: $gpatch}
+  ]}' > "$jinja_api/repos/coolbress/plinth-template/compare/v1.0.0...${target_ref}.json"
+tag_names "$jinja_api" "$target_sha"
+jout="$(FLOOR_CHECK_API_DIR="$jinja_api" python3 "$checker" --root "$tcopy" 2>&1)"
+if grep -q "^  INFO    AGENTS\.md:$" <<<"$jout" && grep -q "+one more line" <<<"$jout" \
+   && grep -q "^  INFO    \.gitignore:$" <<<"$jout" && grep -q "+\.cache/" <<<"$jout" \
+   && grep -q "^  INFO    CONTRIBUTING\.md:$" <<<"$jout" && grep -q "+one more rule" <<<"$jout"
+then ok "template/AGENTS.md.jinja and template/.gitignore.jinja are shown as AGENTS.md and .gitignore, a plain CONTRIBUTING.md too"
+else bad ".jinja sources' diff"; printf '%s\n' "$jout" | grep -E 'AGENTS|CONTRIBUTING|gitignore|one more|cache' | sed 's/^/        /'; fi
+if grep -q "\.jinja:$" <<<"$jout"; then bad "a diff label kept .jinja; the label is the rendered name"
+else ok "no diff label carries .jinja"; fi
+# A rename git did not pair: the plain source removed, the .jinja one added.
+# The diff shown is the added one's, not the deletion (fresh-context review).
+jq -n --arg gpatch "$patch_ignore" '{files: [
+    {filename: "template/.gitignore", status: "removed", patch: "@@ -1,1 +0,0 @@\n-.venv/"},
+    {filename: "template/.gitignore.jinja", status: "added", patch: $gpatch}
+  ]}' > "$jinja_api/repos/coolbress/plinth-template/compare/v1.0.0...${target_ref}.json"
+jout="$(FLOOR_CHECK_API_DIR="$jinja_api" python3 "$checker" --root "$tcopy" 2>&1)"
+if [ "$(grep -c "^  INFO    \.gitignore:$" <<<"$jout")" = 1 ] && grep -q "+\.cache/" <<<"$jout" && ! grep -q "^  INFO      -\.venv/$" <<<"$jout"
+then ok "a plain source removed beside its .jinja added: the added one's diff, once"
+else bad "unpaired rename"; printf '%s\n' "$jout" | grep -E 'gitignore|venv|cache' | sed 's/^/        /'; fi
 if grep -q "PASS  template:" <<<"$out" || grep -q "SKIP.*template drift" <<<"$out"; then bad "a behind repository must not read as passed or not verified"
 else ok "a behind repository is a WARN, and only a WARN"; fi
 

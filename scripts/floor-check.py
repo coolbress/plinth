@@ -187,8 +187,9 @@ GITLAB_PIPELINE = Path(__file__).resolve().parent.parent / "gitlab" / "python-ci
 # This repository's own identity, as consumer workflows pin it (#219): the
 # `uses:` lines that call plinth's reusable workflows.
 PLINTH_REPO = "coolbress/plinth"
-# Template files the door renders unchanged (no .jinja): the short list #219's
-# drift item shows a diff for, alongside the bare list of what else changed.
+# The short list #219's drift item shows a diff for, alongside the bare list
+# of what else changed, by the rendered name: each one's source under
+# template/ is that name or that name with .jinja (#969).
 TEMPLATE_DRIFT_DIFF_FILES = ("AGENTS.md", "CONTRIBUTING.md", ".gitignore")
 
 SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", ".scratch", "dist"}
@@ -1795,7 +1796,10 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
                        "archetype, inherited forms or a hand-made edit can mean some of it was never rendered here")
         by_name = {f["filename"][len("template/"):]: f for f in changed}
         for name in TEMPLATE_DRIFT_DIFF_FILES:
-            entry = by_name.get(name)
+            # Its source as named or with .jinja; a rename git did not pair
+            # reads as the old one removed and the new one added: the added.
+            found = [by_name[n] for n in (name, f"{name}.jinja") if isinstance(by_name.get(n), dict)]
+            entry = next((e for e in found if e.get("status") != "removed"), found[0] if found else None)
             patch = entry.get("patch") if isinstance(entry, dict) else None
             if patch:
                 result("INFO", f"  {name}:")
