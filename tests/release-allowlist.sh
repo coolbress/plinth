@@ -48,9 +48,11 @@ render() { # <dest> <copier --data args...>
 }
 
 # Archetypes from the template's own copier.yml, not a list kept here.
+# The choices end at the next two-space key: since v1.46.0 a validator
+# follows them, whose four-space lines are not choices.
 archetypes=""
 if template_checkout "$work"; then
-  archetypes="$(awk '/^archetype:/{a=1;next} a&&/^[^ #]/{exit} a&&/^  choices:/{c=1;next} c&&/^    [^:]+: /{print $NF}' "$template_dir/copier.yml" 2>/dev/null)"
+  archetypes="$(awk '/^archetype:/{a=1;next} a&&/^[^ #]/{exit} a&&/^  choices:/{c=1;next} c&&/^  [^ ]/{c=0} c&&/^    [^:]+: /{print $NF}' "$template_dir/copier.yml" 2>/dev/null)"
   [ -n "$archetypes" ] || bad "could not read the archetypes from $template_at copier.yml"
 else
   bad "no checkout of the template: $template_error"

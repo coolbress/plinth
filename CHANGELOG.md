@@ -38,6 +38,18 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.46.0 instead of v1.45.1.
+  A project name that would write two files to one path, or that is no
+  distribution name (`_demo`), is refused before a file is written
+  (coolbress/plinth-template#256); a project's own test renders whatever its
+  name (coolbress/plinth-template#258); a project named `dist`, `data`,
+  `build`, `htmlcov` or `staticfiles` keeps its package
+  (coolbress/plinth-template#260); a refused name says why
+  (coolbress/plinth-template#262); and the issue tracker page and template
+  reminder carry #957's rule. `copier update` needs no hands except for a
+  name that never worked, as the template's 1.46.0 section says.
+  `plinth_sha`'s default is unchanged (v2.32.0). `tests/template-rules-drift.sh`
+  now also holds the two shared sentences of `docs/agents/issue-tracker.md`.
 - The tests that compare plinth with the template read one checkout of it at
   the pinned commit, made by `tests/lib/template-checkout.sh`, instead of
   each downloading files at the tag (#953). `ci / install` makes the
@@ -52,7 +64,7 @@ pull requests and have no tag.
   a task. The same change is in plinth-template's `issue-tracker.md` on both
   hosts, with the template reminder opening its issue as a `task` that is
   `ready-for-human`; an existing project gets it through
-  `/plinth:template-update` once plinth renders that template release. Issues
+  `/plinth:template-update` from plinth-template v1.46.0. Issues
   already closed are not relabelled.
 
 ### Fixed
