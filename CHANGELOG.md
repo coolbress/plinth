@@ -88,6 +88,12 @@ tested with plinth-template v1.46.0
   `delete_repo` scope it left an empty repository to delete by hand. A stop
   after the render began names what it left in the local directory, which
   the next run would refuse.
+- `/plinth:floor-check` prints the template's own diff for `AGENTS.md` and
+  `CONTRIBUTING.md` when a project's template tag is behind the pin (#969).
+  Their sources end in `.jinja`, and the lookup by the plain name never found
+  them, so only the list of changed files was printed. Each name now matches
+  its source with or without `.jinja`, and the diff is shown under the
+  rendered name.
 
 - The eval suite's `floor-gaps` and `next-day` tasks pass a report by what it
   says of each gap or open item, not by its name appearing (#961). A report
