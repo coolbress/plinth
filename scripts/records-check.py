@@ -180,10 +180,13 @@ pullRequests(first:PAGE,after:$cursor,orderBy:{field:CREATED_AT,direction:ASC}){
 nodes{number url state merged body mergeCommit{message}}}}}""".replace("first:PAGE", f"first:{PAGE}")
 
 
-def read_all(kind: str, field: str, query: str, owner: str, name: str) -> list[dict]:
-    """Every node of one paginated list; CannotRun when a page is not read.
-    Fixture pages are graphql/<kind>-1.json, -2.json, ..."""
+def read_all(kind: str, field: str, query: str, owner: str, name: str) -> tuple[list[dict], list[str]]:
+    """Every node of one paginated list, and one note for each record GitHub
+    answered with an error or null (a page can carry data and errors at once:
+    that record is not verified, never dropped). CannotRun when a page is not
+    read. Fixture pages are graphql/<kind>-1.json, -2.json, ..."""
     nodes: list[dict] = []
+    unread: list[str] = []
     cursor = None
     page = 1
     while True:
@@ -192,10 +195,22 @@ def read_all(kind: str, field: str, query: str, owner: str, name: str) -> list[d
         if not isinstance(conn, dict):
             why = "; ".join(e.get("message", "") for e in (ans or {}).get("errors") or []) or "no answer"
             raise CannotRun(f"the {kind} of {owner}/{name} could not be read (page {page}: {why})")
-        nodes += [n for n in conn.get("nodes") or [] if isinstance(n, dict)]
+        # An error whose path is repository.<field>.nodes.<i>... is about record i.
+        errs: dict[int, str] = {}
+        for e in (ans or {}).get("errors") or []:
+            path = e.get("path") if isinstance(e, dict) else None
+            if (isinstance(path, list) and len(path) > 3 and path[:3] == ["repository", field, "nodes"]
+                    and isinstance(path[3], int)):
+                errs.setdefault(path[3], f"GitHub answered an error for it ({e.get('message') or 'no message'})")
+        for i, n in enumerate(conn.get("nodes") or []):
+            if isinstance(n, dict) and i not in errs:
+                nodes.append(n)
+                continue
+            who = f"#{n['number']}" if isinstance(n, dict) and isinstance(n.get("number"), int) else f"record {i + 1}"
+            unread.append(f"{who} on page {page} not verified: {errs.get(i, 'GitHub answered no record')}")
         info = conn.get("pageInfo") or {}
         if not info.get("hasNextPage"):
-            return nodes
+            return nodes, unread
         cursor = info.get("endCursor")
         page += 1
 
@@ -206,22 +221,51 @@ FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$")
 
 
+LIST_ITEM = re.compile(r"^\s{0,3}(?:[-*+]|\d{1,9}[.)])(?:\s|$)")
+
+
+def indent(ln: str) -> int:
+    return len(ln.expandtabs(4)) - len(ln.expandtabs(4).lstrip(" "))
+
+
 def outside_fences(body: str) -> list[tuple[int, str]]:
-    """(line number, text) of each line outside fenced code; fence lines dropped."""
+    """(line number, text) of each line outside code; fence lines dropped.
+    Code is a fenced block, or an indented one: four spaces after a blank
+    line, outside a list (in a list, that is the item's next paragraph)."""
     out: list[tuple[int, str]] = []
     fence: str | None = None
+    prev_blank = True
+    in_list = False
+    in_indented = False
     for i, ln in enumerate(body.splitlines(), 1):
+        blank = not ln.strip()
         m = FENCE.match(ln)
         if m:
             mark = m.group(1)
             if fence is None:
                 fence = mark[0] * len(mark)
+                in_indented = False
+                prev_blank = False
                 continue
             if mark[0] == fence[0] and len(mark) >= len(fence):
                 fence = None
+                prev_blank = False
                 continue
-        if fence is None:
-            out.append((i, ln))
+        if fence is not None:
+            continue
+        if in_indented:
+            if blank or indent(ln) >= 4:
+                continue
+            in_indented = False
+        if not blank and indent(ln) >= 4 and prev_blank and not in_list:
+            in_indented = True
+            continue
+        if LIST_ITEM.match(ln):
+            in_list = True
+        elif not blank and indent(ln) == 0 and prev_blank:
+            in_list = False
+        prev_blank = blank
+        out.append((i, ln))
     return out
 
 
@@ -522,9 +566,12 @@ def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[
 
 def check(root: Path, repo: str) -> None:
     owner, name = repo.split("/", 1)
-    issues = read_all("issues", "issues", ISSUES_Q, owner, name)
-    pulls = read_all("pulls", "pullRequests", PULLS_Q, owner, name)
+    issues, issues_unread = read_all("issues", "issues", ISSUES_Q, owner, name)
+    pulls, pulls_unread = read_all("pulls", "pullRequests", PULLS_Q, owner, name)
     line("INFO", f"{repo}: {len(issues)} issues and {len(pulls)} pull requests read")
+    for what, notes in (("issue", issues_unread), ("pull request", pulls_unread)):
+        for note in notes:
+            line("SKIP", f"{what} {note}")
     items = [(i, "issue") for i in issues] + [(p, "pull request") for p in pulls]
     known = {x["number"] for x, _ in items if isinstance(x.get("number"), int)}
 

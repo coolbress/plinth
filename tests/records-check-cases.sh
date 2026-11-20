@@ -41,7 +41,9 @@ page2 = [
     issue(8, ["task"], "See #2, `#9999` and x/y#3.\n\n```\n#8888 /Users/carol/in-a-fence\n```\n"
                        "Ran in /Users/alice/work and /home/runner/work and /home/ubuntu/x and /Users/<you>/x, on github.com/home/page.\n"
                        "Also v1.2/x#3, #500, #9, #10, x/y#4, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n"
-                       "GitHub staff say so in [community discussion #121836](https://github.com/orgs/community/discussions/121836).\n",
+                       "GitHub staff say so in [community discussion #121836](https://github.com/orgs/community/discussions/121836).\n"
+                       # Four spaces after a blank line is an indented code block; in a list, the item's next paragraph.
+                       "\nExample:\n\n    See #66666\n\n- a list item\n\n    whose second paragraph names #600\n",
           state="OPEN", reason=None),
     issue(11, [], "a" * 59000, state="OPEN", reason=None),
     # Three UTF-8 bytes per character: near the limit in bytes only.
@@ -65,12 +67,16 @@ w = lambda p, d: open(f"{api}/{p}", "w").write(json.dumps(d))
 w("graphql/issues-1.json", conn("issues", page1, True))
 w("graphql/issues-2.json", conn("issues", page2, False))
 w("graphql/pulls-1.json", conn("pullRequests", pulls, False))
+# A page with data and an error for one record, that record null.
+part = conn("pullRequests", pulls + [None], False)
+part["errors"] = [{"type": "INTERNAL", "path": ["repository", "pullRequests", "nodes", 4], "message": "Something went wrong."}]
+w("pulls-partial.json", part)
 nf = lambda f: {"type": "NOT_FOUND", "path": ["repository", f], "message": f"Could not resolve to a {f}."}
 # Data and NOT_FOUND errors in one answer: each field read on its own.
 w("graphql/refs-o-r-1.json", {"data": {"repository": {
     "i": {"nodes": [{"number": 12}]}, "p": {"nodes": [{"number": 23}]}, "dd": {"nodes": [{"number": 10}]},
-    "n9": None, "d9": None, "n10": None, "d10": {"number": 10}, "n500": None, "d500": None}},
-    "errors": [nf(f) for f in ("n9", "d9", "n10", "n500", "d500")]})
+    "n9": None, "d9": None, "n10": None, "d10": {"number": 10}, "n500": None, "d500": None, "n600": None, "d600": None}},
+    "errors": [nf(f) for f in ("n9", "d9", "n10", "n500", "d500", "n600", "d600")]})
 w("graphql/refs-x-y-1.json", {"data": {"repository": {
     "i": {"nodes": [{"number": 100}]}, "p": {"nodes": []}, "dd": {"nodes": []},
     "n3": {"__typename": "Issue"}, "d3": None, "n4": None, "d4": None}},
@@ -136,6 +142,8 @@ has "a repository that cannot be read is a SKIP for its references" "SKIP  gone/
 hasnt "an HTML entity is not a reference" "#39"
 hasnt "a link's anchor is not a reference" "#77"
 hasnt "a link's text is not a reference" "121836"
+hasnt "#N in an indented code block is not a reference" "66666"
+has "an indented list paragraph is text, its #N read" "ref: #600 resolves to nothing"
 has "a home path is named by line and form" "home-path: $U/issues/8 line 6: a home path (/Users/<name>)"
 has "a home path in a code fence is public too" "home-path: $U/issues/8 line 4: a home path (/Users/<name>)"
 hasnt "the home path line never repeats what matched" "alice"
@@ -149,7 +157,7 @@ has "a merged pull request with no trailer is an INFO, not a violation" "INFO  t
 hasnt "a closed unmerged pull request is not judged" "pull/23"
 has "unticked criteria are for a person to read, with the file" "INFO  for a person to read: 1 completed issues leave acceptance criteria unticked (heading from .github/ISSUE_TEMPLATE/task.yml)"
 has "the unticked criterion's line is listed; [X] is ticked" "INFO    $U/issues/3 line 8"
-has "the last line counts per rule and not verified" "-- ref 2, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 0 rules not checked; 3 not verified"
+has "the last line counts per rule and not verified" "-- ref 3, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 0 rules not checked; 3 not verified"
 hasnt "nothing says missing" "missing"
 
 # ---- Another ending heading: judged against it, not against plinth's.
@@ -180,6 +188,15 @@ rm -r "$api/repos/o/.github/contents/.github/ISSUE_TEMPLATE" "$api/repos/o/.gith
 gl="$work/gl"; mkdir -p "$gl"; printf 'host: gitlab\n' >"$gl/.copier-answers.yml"
 run --root "$gl"
 [ "$rc" = 0 ] && [ "$out" = "  INFO  GitLab: not read" ] && ok "a GitLab checkout prints one line, GitLab: not read" || bad "GitLab: rc $rc: $out"
+
+# ---- A record GitHub answered with null and an error: not verified, never dropped.
+mv "$api/graphql/pulls-1.json" "$work/pulls-1.json"; cp "$api/pulls-partial.json" "$api/graphql/pulls-1.json"
+run --root "$plinthlike"
+[ "$rc" = 0 ] && ok "a page with one record's error still runs to the end" || bad "partial page: exit $rc: $out"
+has "the four records read are counted" "o/r: 12 issues and 4 pull requests read"
+has "the record with an error is a SKIP, named" "SKIP  pull request record 5 on page 1 not verified: GitHub answered an error for it (Something went wrong.)"
+has "and counted as not verified" "; 0 rules not checked; 4 not verified"
+mv "$work/pulls-1.json" "$api/graphql/pulls-1.json"
 
 # ---- Could not run: non-zero, and only then.
 out="$(RECORDS_CHECK_API_DIR="$api" python3 "$checker" --root "$none" 2>&1)"; rc=$?
