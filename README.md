@@ -155,12 +155,13 @@ Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
 ## What you get
 
-Five skills, prefixed `/plinth:`:
+Six skills, prefixed `/plinth:`:
 
 | Skill | Does | Who can call it |
 | --- | --- | --- |
 | `new-project <owner>/<name>` | Creates a repository with the required checks enforced; if a wall step fails it deletes the repository when the token allows and prints the URL when it cannot | You only: type `/` and pick it. The agent cannot see or run it; an agent saying it is not installed usually means the line was typed as text (`/plinth:arsenal` shows what is installed) |
 | `floor-check [owner/name]` | Reads an existing repository against the same floor the CI job checks, the live ruleset, whether it is behind the template plinth is tested with today, and what this machine's Claude Code settings say about the sandbox; lists each miss with one fix; changes nothing | You or the agent |
+| `records-check [owner/name]` | Counts what is out of place in the issue and pull-request records, judged by the repository's own written conventions: references to nothing, home paths, bodies near GitHub's size limit, completed issues with no ending, merged pull requests with no AI trailer; lists unticked acceptance criteria for a person to read; changes nothing | You or the agent |
 | `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; on a conflict it recommends a resolution for each file and applies it only on your word, before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
 | `guide` | Explains in plain words, in your language, where your repository is, how to use the tools of that step and the next from the arsenal's table, and the one command to type next; the whole way, every step in depth, until the first merge or with `/plinth:guide map`; changes nothing | You only: type `/` and pick it |
