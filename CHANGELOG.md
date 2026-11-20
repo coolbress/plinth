@@ -46,6 +46,16 @@ pull requests and have no tag.
   `template/Dockerfile.jinja` (#975). `scripts/raise-template-pin.sh` and
   [How to upgrade the template pin](docs/how-to/upgrade-the-template-pin.md)
   name the copy.
+- Where `ci / test` stops at its time limit, and wherever plinth says to
+  raise `test-timeout-minutes` (the input's description, the job's error
+  and summary lines on GitHub and GitLab, `required-checks.md` and
+  `gitlab-ci.md`), it now says to measure first: `uv run pytest
+  --durations=20` lists the slowest tests, and when a few take most of the
+  time, make them faster; raise the limit when none stands out and the time moves
+  between runs of the same commit, which comes from the runner (#983). No
+  input, job, check name or default changes: `tests/python-ci-contract.txt`
+  is unchanged, so raising a project's `uses:` pins, or a GitLab include's
+  `ref`, brings the new lines and asks nothing else of it.
 
 ## [2.37.0] - 2026-11-19
 

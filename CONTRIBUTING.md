@@ -72,7 +72,10 @@ The link check is left out on purpose.
 version it has, the check needs network, and the sites it asks can answer
 differently from one hour to the next, so a local pass does not promise a
 pass there. Both skip the hosts in `.lycheeignore`, each of which refuses
-every automated request. To look before pushing anyway, with a lychee of your own:
+every automated request. `ci / docs` also checks the links that failed once
+more after a minute, so a host that fails only some requests does not fail it,
+while a page that is gone fails both times. A link to one of this repository's
+own commits is looked up in the checkout's history instead of on github.com. To look before pushing anyway, with a lychee of your own:
 
 ```bash
 lychee --no-progress --exclude-path .scratch -- './**/*.md'   # network; not the pinned build

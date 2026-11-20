@@ -176,7 +176,10 @@ lowers the highest issue number it reads.
 `working-directory`, `max-diff-lines`, `deps-fail-on-severity`,
 `diff-size-exclude`, `extra-python-versions` and `test-timeout-minutes`,
 with `python-ci.yml`'s meanings and defaults. `test-timeout-minutes` is the
-`test` job's `timeout:`. For 0 or less GitLab's duration parser returns no
+`test` job's `timeout:`. Before raising it, measure what takes the time:
+`uv run pytest --durations=20` lists the slowest tests, and when a few take
+most of it, make them faster; raise it when none stands out and the time moves
+between runs of the same commit, which comes from the runner. For 0 or less GitLab's duration parser returns no
 duration (read in its source, not run on GitLab.com), so GitLab's own
 message about the job's timeout comes before the script that names the
 input. A runner whose own limit is shorter stops the job first. `floor-check-required-checks` has no GitLab
