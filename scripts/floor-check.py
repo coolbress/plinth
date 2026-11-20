@@ -4251,6 +4251,42 @@ def none_found(what: str) -> None:
     result("INFO", f"{what}; no other credential found by these rules; best effort, see the guide's list")
 
 
+def check_workflow_scope(accounts: object, env_tokens: list[str]) -> None:
+    """Whether the active github.com login holds `workflow` (#986), read from
+    the `scopes` gh 2.103.3 lists beside it in `gh auth status --json hosts`
+    ("gist, read:org, repo, workflow"), never from the token. With it the agent
+    can push a change to .github/workflows/, the checks included: a WARN, not a
+    FAIL, since the setup needs it until the first pull request is merged. A
+    fine-grained token lists no scopes, so none listed is not verified."""
+    active = [a for a in accounts if isinstance(a, dict) and a.get("active")] if isinstance(accounts, list) else []
+    if not active:
+        result("SKIP", "the permissions of the agent's gh login not verified: "
+               "`gh auth status --json hosts` could not be read or names no active github.com account")
+        return
+    login, scopes = str(active[0].get("login", "?")), active[0].get("scopes")
+    aside = (f" ({' and '.join(env_tokens)} is set: the token in use may not have these scopes)" if env_tokens else "")
+    if scopes is None:   # not listed at all, as for a fine-grained token
+        scopes = []
+    elif isinstance(scopes, str):
+        scopes = scopes.split(",")
+    if not isinstance(scopes, list) or not all(isinstance(s, str) for s in scopes):
+        result("SKIP", f"the permissions of the agent's gh login ({login}) not verified: "
+               f"the scopes `gh auth status` lists for it could not be read{aside}")
+        return
+    listed = [s.strip() for s in scopes if s.strip()]
+    if not listed:
+        result("SKIP", f"the permissions of the agent's gh login ({login}) not verified: "
+               f"`gh auth status` lists no scopes for it (a fine-grained token lists none){aside}")
+        return
+    if "workflow" in listed:
+        result("WARN", f"the agent's gh login ({login}) holds `workflow`: it can push a change to `.github/workflows/`, "
+               f"the checks included{aside}")
+        result("INFO", "  once the first pull request is merged, give the agent a token without it: "
+               "docs/how-to/give-the-agent-a-token.md")
+    else:
+        result("INFO", f"the agent's gh login ({login}) lists its scopes without `workflow`{aside}")
+
+
 def check_credentials(root: Path, host: str = "github") -> None:
     """What on this machine can push to github.com besides the token the agent
     was given (#336). Measured with gh 2.101.0 and git 2.55.0: a second account
@@ -4284,6 +4320,7 @@ def check_credentials(root: Path, host: str = "github") -> None:
     if gitlab:
         result("SKIP", "the login glab stores for gitlab.com not verified: glab's configuration is not read here; "
                "`glab auth status --hostname gitlab.com` shows it")
+        result("SKIP", "the permissions of the agent's glab login not verified: glab's token scopes are not read here")
     else:
         env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
         try:
@@ -4314,6 +4351,7 @@ def check_credentials(root: Path, host: str = "github") -> None:
             else:
                 none_found(f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
                            + (f": {logins[0]}" if logins else ""))
+        check_workflow_scope(accounts, env_tokens)
 
     g: subprocess.CompletedProcess[str] | None
     try:
