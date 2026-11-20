@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.38.0] - 2026-11-20
+
+A new `backend`, `data-ml` or `web` project no longer fails its `image` job from 2026-11-22: new projects render plinth-template v1.47.0, whose run stage applies Debian's published updates at build, so `zlib1g`'s CVE-2026-85091 is fixed though no rebuilt official `python:3.12-slim` carries it yet; building the image now needs network access to Debian's mirrors. The same release gives every project's `docs/agents/issue-tracker.md` the table of where each kind of record goes. `/plinth:records-check` is new: a read-only count of what is out of place in a repository's issue and pull-request records, judged by the repository's own written conventions, never by plinth's when the repository has its own. plinth's `e2e` repeats the test repository's scan warnings and failed jobs' errors before it deletes it, and `canary-web`'s base images follow the pinned template's. Wherever plinth says to raise `test-timeout-minutes`, it now says to measure first with `uv run pytest --durations=20`; that wording is in `python-ci.yml` and the GitLab include, so a project sees it after raising its `uses:` pins or include `ref`, with no input, job or check name changed.
+
+tested with plinth-template v1.47.0
+
 ### Added
 
 - `/plinth:records-check` counts what is out of place in a repository's
@@ -5573,7 +5579,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.37.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.38.0...HEAD
+[2.38.0]: https://github.com/coolbress/plinth/releases/tag/v2.38.0
 [2.37.0]: https://github.com/coolbress/plinth/releases/tag/v2.37.0
 [2.36.0]: https://github.com/coolbress/plinth/releases/tag/v2.36.0
 [2.35.0]: https://github.com/coolbress/plinth/releases/tag/v2.35.0
