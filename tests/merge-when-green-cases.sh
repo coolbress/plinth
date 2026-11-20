@@ -26,12 +26,35 @@ case "$1 $2" in
     esac ;;
   "pr checks") case "$*" in *--watch*) exit 0 ;; *) out "$fx/checks.json" ;; esac ;;
   "pr merge")
+    # GitHub answers 409 to --match-head-commit on a head that is not the
+    # pull request's now; merge_head stands for a commit pushed meanwhile.
+    for ((i=0; i<${#args[@]}; i++)); do [ "${args[$i]}" = --match-head-commit ] && want="${args[$((i+1))]}"; done
+    now="$(cat "$fx/merge_head" 2>/dev/null || jq -r .headRefOid "$fx/pr.json")"
+    if [ -n "${want:-}" ] && [ "$want" != "$now" ]; then
+      echo "GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)" >&2; exit 1
+    fi
     rc="$(cat "$fx/merge_rc" 2>/dev/null || echo 0)"
     [ "$rc" = 0 ] && printf '%s\n' "$*" >"$fx/merged"
     [ ! -f "$fx/merge_err" ] || cat "$fx/merge_err" >&2
     exit "$rc" ;;
   api*)
     case "$*" in
+      *"/compare/"*)
+        # One behind_by per call from $fx/behind, the last one repeating.
+        [ -s "$fx/behind" ] || { echo "HTTP 404" >&2; exit 1; }
+        printf '{"behind_by":%s}' "$(head -n1 "$fx/behind")" >"$fx/compare.json"
+        [ "$(wc -l <"$fx/behind")" -le 1 ] || { sed 1d "$fx/behind" >"$fx/b" && mv "$fx/b" "$fx/behind"; }
+        out "$fx/compare.json" ;;
+      *"/update-branch"*)
+        [[ "$*" =~ expected_head_sha=([0-9a-z]+) ]] || { echo "HTTP 422: no expected_head_sha" >&2; exit 1; }
+        if [ "${BASH_REMATCH[1]}" != "$(jq -r .headRefOid "$fx/pr.json")" ] || [ -f "$fx/update_moved" ]; then
+          echo "gh: expected head sha didn't match current head ref. (HTTP 422)" >&2; exit 1
+        fi
+        if [ -f "$fx/new_head" ]; then
+          jq --arg h "$(cat "$fx/new_head")" '.headRefOid = $h' "$fx/pr.json" >"$fx/p" && mv "$fx/p" "$fx/pr.json"
+          [ ! -f "$fx/checks-new.json" ] || cp "$fx/checks-new.json" "$fx/checks.json"
+        fi
+        echo '{"message":"Updating pull request branch.","url":"https://github.com/o/r/pull/7"}' ;;
       *"/actions/jobs/"*"/rerun"*)
         rc="$(cat "$fx/rerun_rc" 2>/dev/null || echo 0)"
         [ "$rc" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$rc"; }
@@ -80,7 +103,7 @@ pass=0; fail=0
 run() { # <merge|stop> <label> [script args...]
   local want="$1" label="$2"; shift 2
   local got rc
-  PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_ANALYZE_WAIT=0 bash "$script" 7 --repo o/r "$@" >"$FX/out" 2>&1; rc=$?
+  PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_ANALYZE_WAIT=0 MERGE_UPDATE_WAIT=0 bash "$script" 7 --repo o/r "$@" >"$FX/out" 2>&1; rc=$?
   if [ -f "$FX/merged" ]; then got=merge; else got=stop; fi
   # A merge exits 0; a stop exits non-zero and leaves no merge call behind.
   local ok=no
@@ -529,6 +552,60 @@ after_case main-unread 0 "the merge commit's runs cannot be read: merged, exit 0
 grep -q '^code scanning on main at abc: not read' "$FX/out"; check "  and it says not read" $?
 setup main-plain; run merge "a merge with every check green"
 ! grep -q 'runs -f head_sha=abc' "$FX/calls" && ! grep -q '^code scanning' "$FX/out"; check "  waits for no analysis on the base branch" $?
+
+echo "-- --update (#997): a pull request behind its base is brought up to date, then merged on the new head"
+H2=2222222222222222222222222222222222222222
+H3=3333333333333333333333333333333333333333
+upd() { # <label> <status>: one assertion
+  if [ "$2" = 0 ]; then pass=$((pass+1)); echo "  PASS  update $1"; else fail=$((fail+1)); echo "  FAIL  update $1"; sed 's/^/        /' "$FX/out"; fi
+}
+behind_pr() { # <case> <behind_by per compare call...>: GitHub moves the head to $H2 on the update
+  setup "$1"; shift; printf '%s\n' "$@" >"$FX/behind"; echo "$H2" >"$FX/new_head"
+}
+behind_pr upd-ok 3 0
+run merge "behind by 3, --update: updated, checks read again, merged" --update
+grep -qE "^api -X PUT repos/o/r/pulls/7/update-branch -f expected_head_sha=$H\$" "$FX/calls"; upd "the update names the head it read as the expected head" $?
+grep -q -- "--match-head-commit $H2" "$FX/merged"; upd "the merge pins the new head, not the one before the update" $?
+grep -qx "update: head is now $H2" "$FX/out"; upd "it says the new head" $?
+[ "$(grep -c '/compare/main\.\.\.' "$FX/calls")" = 2 ] && grep -q "compare/main\.\.\.$H2 " "$FX/calls"; upd "behind is read again on the new head, before the merge" $?
+[ "$(grep -n -m1 'update-branch' "$FX/calls" | cut -d: -f1)" -lt "$(grep -n -m1 '^pr checks .*--watch' "$FX/calls" | cut -d: -f1)" ] && s=0 || s=1
+upd "the checks are waited for after the update" $s
+
+behind_pr upd-redafter 3 0; printf '[{"name":"ci / install","state":"FAILURE"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks-new.json"
+run stop "behind, --update: a check red on the new head stops" --update
+
+behind_pr upd-pushed 3 0; echo "$H3" >"$FX/merge_head"
+run stop "a merge attempted on a head that is no longer the pull request's is refused (must not pass)" --update
+grep -q -- "--match-head-commit $H2" "$FX/calls" && grep -q 'Head branch was modified' "$FX/out"; upd "  GitHub refused the merge on that head, and the refusal is printed" $?
+
+behind_pr upd-moved 3 0; touch "$FX/update_moved"
+run stop "the head moved before the update: GitHub refuses it (422) and nothing merges" --update
+grep -q "expected head sha didn't match" "$FX/out" && grep -q 'GitHub refused to update the branch' "$FX/out"; upd "  it says GitHub refused the update, with GitHub's answer" $?
+
+behind_pr upd-again 3 2
+run stop "behind again just before the merge: stops, does not update twice" --update
+grep -q "behind main again" "$FX/out"; upd "  it says it is behind again" $?
+[ "$(grep -c 'update-branch' "$FX/calls")" = 1 ]; upd "  and it updated once only" $?
+
+behind_pr upd-stuck 3 0; rm "$FX/new_head"
+run stop "the update is accepted but the head never moves: stops" --update
+grep -q "head is still $H" "$FX/out"; upd "  it says the head did not move" $?
+
+behind_pr upd-current 0
+run merge "not behind, --update: nothing updated, merged on the head" --update
+! grep -q 'update-branch' "$FX/calls" && grep -q -- "--match-head-commit $H" "$FX/merged"; upd "  no update call, the head it read is merged" $?
+
+setup upd-unread
+run stop "--update and how far behind cannot be read: stops" --update
+! grep -q 'update-branch' "$FX/calls"; upd "  and nothing is updated" $?
+
+setup upd-round
+PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round --update >"$FX/out" 2>&1
+[ "$?" = 2 ]; upd "--update with --round: usage, exit 2 (--round only reads)" $?
+
+behind_pr upd-off 3 0
+run merge "behind, no --update: merged as before, on the head it read"
+! grep -qE 'compare/|update-branch' "$FX/calls" && ! grep -qi 'behind\|^update' "$FX/out"; upd "  without --update: no new call and no new line" $?
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
