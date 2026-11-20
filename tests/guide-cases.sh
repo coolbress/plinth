@@ -90,6 +90,19 @@ if [ "$1" = api ] && [ "$2" = repos/o/r/actions/permissions ]; then
     *) echo "gh: Resource not accessible by personal access token (HTTP 403)" >&2; exit 1 ;;
   esac
 fi
+# gh pr view <n> --json mergeStateStatus (#998): the second read of a pull
+# request GitHub answered UNKNOWN for; reread.json maps a number to what it
+# says then, else open.json's own. MOCK_VIEW_LOG counts the calls.
+if [ "$1" = pr ] && [ "$2" = view ]; then
+  [ -z "${MOCK_VIEW_LOG:-}" ] || echo view >> "$MOCK_VIEW_LOG"
+  set -o pipefail
+  if [ -f "$MOCK_DIR/reread.json" ] && jq -e --arg n "$3" 'has($n)' "$MOCK_DIR/reread.json" >/dev/null; then
+    jq --arg n "$3" '{mergeStateStatus: .[$n]}' "$MOCK_DIR/reread.json"
+  else
+    jq --argjson n "$3" '.[] | select(.number == $n) | {mergeStateStatus}' "$MOCK_DIR/open.json"
+  fi | jq -r "$jqf"
+  exit
+fi
 # As gh before 2.94.0 does (#909): MOCK_OLD_GH refuses subIssuesSummary.
 case ",$fields," in *,subIssuesSummary,*) [ -n "${MOCK_OLD_GH:-}" ] && { echo "Unknown JSON field: \"subIssuesSummary\"" >&2; exit 1; } ;; esac
 # As GitHub does (#906): a list asking for each pull request's commits asks
@@ -1066,6 +1079,85 @@ next="$(awk '/^# /{on=1} on' "$root/skills/arsenal/SKILL.md" | tr '\n' ' ' | gre
 [ -n "$next" ] && grep -qF -- '/plinth:guide' <<<"$next" &&
   ok "arsenal: the sentence on what to type next names /plinth:guide" ||
   bad "arsenal: the sentence on what to type next does not name /plinth:guide: ${next:-none found}"
+
+# ── the next pull request to merge (#998) ────────────────────────────────
+# Past the first merge, with two or more of a person's pull requests open, the
+# state names one to merge: CLEAN first, then BEHIND oldest first, then
+# BLOCKED, then checks still running; a draft, a failing check, DIRTY or a
+# Blocked by naming an open issue or pull request never. UNKNOWN is read once
+# more, then said as not read. The step-5 route follows the candidate.
+prm() { # <number> <age in seconds> <ready|draft> <pass|fail|run> <mergeStateStatus> [<body>]
+  local checks
+  case "$4" in
+    pass) checks='[{"status":"COMPLETED","conclusion":"SUCCESS"}]' ;;
+    fail) checks='[{"status":"COMPLETED","conclusion":"FAILURE"}]' ;;
+    *) checks='[{"status":"IN_PROGRESS","conclusion":""}]' ;;
+  esac
+  jq -nc --argjson n "$1" --arg c "$(ago "$2")" --argjson d "$([ "$3" = draft ] && echo true || echo false)" \
+    --argjson k "$checks" --arg s "$5" --arg b "${6:-}" --arg h "$(printf '%040d' "$1")" \
+    '{number: $n, title: "feat: change \($n)", body: $b, isDraft: $d, author: {login: "someone", is_bot: false},
+      headRefOid: $h, statusCheckRollup: $k, createdAt: $c, mergeStateStatus: $s}'
+}
+cannot="merge next cannot know: whether two pull requests green alone break main together; which one depends on another, unless its Blocked by says so; which session owns each; whether the person wants it merged now"
+d="$(repo merge-next)"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+put "$d/open.json" "$(prm 5 9000 ready pass BEHIND)" "$(prm 6 60 ready pass CLEAN)"
+state "CLEAN before BEHIND, however old: #6, with what it cannot know" "$d" \
+  "merge next: #6, green and up to date (CLEAN); the person says merge #6" \
+  "  #5: green, behind main (BEHIND)" "$cannot" \
+  "where: A pull request with checks running (step 5)" "note: pull request #6, checks pass; /run once they are green"
+put "$d/open.json" "$(prm 5 1000 ready pass BEHIND)" "$(prm 6 5000 ready pass BEHIND)"
+state "two BEHIND: the oldest first, not the lowest number" "$d" \
+  "merge next: #6, green, behind main (BEHIND); the person says merge #6" "  #5: green, behind main (BEHIND)"
+put "$d/open.json" "$(prm 5 9000 ready pass BLOCKED)" "$(prm 6 60 ready pass BEHIND)"
+state "BEHIND before BLOCKED" "$d" \
+  "merge next: #6, green, behind main (BEHIND); the person says merge #6" \
+  "  #5: green, merging blocked by a rule such as a required review (BLOCKED)"
+put "$d/open.json" "$(prm 5 9000 ready run BLOCKED)" "$(prm 6 60 ready pass BLOCKED)"
+state "BLOCKED and green before checks still running" "$d" \
+  "merge next: #6, green, merging blocked by a rule such as a required review (BLOCKED); the person says merge #6" \
+  "  #5: checks still running"
+put "$d/open.json" "$(prm 5 9000 draft pass CLEAN)" "$(prm 6 60 ready run BLOCKED)"
+state "a draft is never the candidate, nor the pull request step 5 names" "$d" \
+  "merge next: #6, checks still running; the person says merge #6" "  #5: never: a draft" \
+  "note: pull request #6, checks pending; /run once they are green"
+put "$d/open.json" "$(prm 5 9000 ready pass DIRTY)" "$(prm 6 60 ready run BLOCKED)"
+state "DIRTY is never the candidate" "$d" \
+  "merge next: #6, checks still running; the person says merge #6" "  #5: never: conflicts with main (DIRTY)"
+put "$d/open.json" "$(prm 5 9000 ready fail BLOCKED)" "$(prm 6 60 ready pass CLEAN)"
+state "a failing check is never the candidate; the failing one still routes to Something broke" "$d" \
+  "merge next: #6, green and up to date (CLEAN); the person says merge #6" "  #5: never: a check fails" \
+  "where: Something broke (step 7)"
+put "$d/open.json" "$(prm 5 60 ready pass CLEAN $'## Blocked by\n\n#6')" "$(prm 6 9000 ready pass BEHIND)"
+state "a Blocked by naming an open pull request: never, while it is open" "$d" \
+  "merge next: #6, green, behind main (BEHIND); the person says merge #6" "  #5: never: waits on #6 (its Blocked by)"
+put "$d/open.json" "$(prm 5 60 ready pass UNKNOWN)" "$(prm 6 9000 ready pass BEHIND)"
+printf '{"5":"CLEAN"}' > "$d/reread.json"; log="$work/view.log"; : > "$log"
+out="$(GUIDE_REREAD_WAIT=0 MOCK_VIEW_LOG="$log" MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "merge next: #5, green and up to date (CLEAN); the person says merge #5" <<<"$out" && [ "$(grep -c . "$log")" = 1 ] &&
+  ok "UNKNOWN read once more: CLEAN the second time, so it leads" || { bad "UNKNOWN re-read ($(grep -c . "$log") reads)"; grep -A3 '^merge next' <<<"$out" | sed 's/^/        /'; }
+printf '{"5":"UNKNOWN"}' > "$d/reread.json"; : > "$log"
+out="$(GUIDE_REREAD_WAIT=0 MOCK_VIEW_LOG="$log" MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "merge next: #6, green, behind main (BEHIND); the person says merge #6" <<<"$out" &&
+  grep -qxF "  #5: not read (UNKNOWN, read twice)" <<<"$out" && [ "$(grep -c . "$log")" = 1 ] &&
+  ok "UNKNOWN twice: said as not read, read only once more" || { bad "UNKNOWN twice ($(grep -c . "$log") reads)"; grep -A3 '^merge next' <<<"$out" | sed 's/^/        /'; }
+printf '{"5":"UNKNOWN"}' > "$d/reread.json"; : > "$log"
+put "$d/open.json" "$(prm 5 60 ready pass CLEAN)" "$(prm 6 9000 ready pass BEHIND)"
+GUIDE_REREAD_WAIT=0 MOCK_VIEW_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+[ "$(grep -c . "$log")" = 0 ] && ok "no UNKNOWN: no second read" || bad "a second read with no UNKNOWN"
+rm "$d/reread.json"
+put "$d/open.json" "$(prm 5 9000 draft pass CLEAN)" "$(prm 6 60 draft run BLOCKED)"
+state "every one a draft: none, and each line says why" "$d" \
+  "merge next: none of the 2 open; each line below says why" "  #5: never: a draft" "  #6: never: a draft"
+put "$d/open.json" "$(prm 6 60 ready pass CLEAN)"
+state "one pull request open: no merge-next lines" "$d" "!merge next" "where: A pull request with checks running (step 5)"
+d="$(repo merge-next-first)"
+put "$d/open.json" "$(prm 5 9000 ready pass BEHIND)" "$(prm 6 60 ready pass CLEAN '')"
+state "before the first merge: the first pull request's own route, no merge-next lines" "$d" "!merge next" \
+  "where: Repository made, its first pull request open (step 1)"
+if grep -qF '`merge next:`' "$root/skills/guide/SKILL.md" && grep -qF '`merge next cannot know:`' "$root/skills/guide/SKILL.md"
+then ok "the skill says to show the candidate as merge #N with what it cannot know"
+else bad "the skill does not say how to show merge next and what it cannot know"; fi
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"
