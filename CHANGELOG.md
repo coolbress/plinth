@@ -18,8 +18,10 @@ pull requests and have no tag.
   (`CLEAN`) first, then green but behind `main` (`BEHIND`) oldest first, then
   green and `BLOCKED` by a rule, then checks still running. A draft, a failing
   check, a conflict (`DIRTY`), or a `Blocked by` naming an open issue or pull
-  request is never named, nor one with no checks on it yet; `UNKNOWN` is read
-  once more, then said as not read. The guide shows it as `merge #N` with one
+  request is never named, nor one with no checks on it yet; a `Blocked by`
+  number past the 100 open items read is read by number, and one that cannot
+  be read leaves the pull request not ranked; `UNKNOWN` is read once more,
+  then said as not read. The guide shows it as `merge #N` with one
   line of what it cannot know, and step 5's note follows it, so a draft is
   named there only when every open one is a draft. It reads and names; it
   merges nothing.
