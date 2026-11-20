@@ -152,7 +152,13 @@ if [ "$update" = 1 ]; then
         || stop "GitHub accepted the update, but the head is still $old after $wait second(s); run this again once it has moved"
       sleep "$poll"
     done
+    # Only the commit the update made: its first parent is the head this run
+    # read. Any other head (a push meanwhile) was never read here, and without
+    # --update --match-head-commit would have refused it.
+    parent="$(gh api "repos/$repo/commits/$head" --jq '.parents[0].sha')" || stop "cannot read the parent of $head"
+    [ "$parent" = "$old" ] || stop "the head is now $head, whose first parent is ${parent:-none}, not $old: a commit was pushed besides the update. Read it, then run this again."
     echo "update: head is now $head"
+    t0=$SECONDS   # the checks get their own wait, not what the head left of it
     while [ -z "$(gh pr checks "$pr" -R "$repo" --json name --jq '.[].name' 2>/dev/null)" ] && [ $((SECONDS - t0)) -lt "$wait" ]; do
       sleep "$poll"
     done

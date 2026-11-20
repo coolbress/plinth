@@ -51,10 +51,15 @@ case "$1 $2" in
           echo "gh: expected head sha didn't match current head ref. (HTTP 422)" >&2; exit 1
         fi
         if [ -f "$fx/new_head" ]; then
+          jq -r .headRefOid "$fx/pr.json" >"$fx/old_head"
           jq --arg h "$(cat "$fx/new_head")" '.headRefOid = $h' "$fx/pr.json" >"$fx/p" && mv "$fx/p" "$fx/pr.json"
           [ ! -f "$fx/checks-new.json" ] || cp "$fx/checks-new.json" "$fx/checks.json"
         fi
         echo '{"message":"Updating pull request branch.","url":"https://github.com/o/r/pull/7"}' ;;
+      *"/commits/"*)
+        # The first parent of the head the update made: the head before it, unless $fx/parent says otherwise.
+        p="$(cat "$fx/parent" 2>/dev/null || cat "$fx/old_head")"
+        printf '{"parents":[{"sha":"%s"}]}' "$p" >"$fx/commit.json"; out "$fx/commit.json" ;;
       *"/actions/jobs/"*"/rerun"*)
         rc="$(cat "$fx/rerun_rc" 2>/dev/null || echo 0)"
         [ "$rc" = 0 ] || { echo "HTTP 403: Resource not accessible" >&2; exit "$rc"; }
@@ -581,6 +586,10 @@ grep -q -- "--match-head-commit $H2" "$FX/calls" && grep -q 'Head branch was mod
 behind_pr upd-moved 3 0; touch "$FX/update_moved"
 run stop "the head moved before the update: GitHub refuses it (422) and nothing merges" --update
 grep -q "expected head sha didn't match" "$FX/out" && grep -q 'GitHub refused to update the branch' "$FX/out"; upd "  it says GitHub refused the update, with GitHub's answer" $?
+
+behind_pr upd-other 3 0; echo "$H3" >"$FX/parent"
+run stop "the new head is not the update's (its first parent is not the head read): stops (must not pass)" --update
+grep -q "first parent is $H3, not $H" "$FX/out"; upd "  it says whose parent it is" $?
 
 behind_pr upd-again 3 2
 run stop "behind again just before the merge: stops, does not update twice" --update
