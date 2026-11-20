@@ -33,9 +33,10 @@ pull requests and have no tag.
   `zlib1g`'s CVE-2026-85091: the run stage applies Debian's published
   updates at build, since no rebuilt official `python:3.12-slim` carries the
   fix yet, and building the image now needs network access to Debian's
-  mirrors. Its `docs/agents/issue-tracker.md` also says in one place where
-  each kind of record goes (coolbress/plinth-template#269). An existing
-  project gets both through `/plinth:template-update`.
+  mirrors. Every archetype's `docs/agents/issue-tracker.md` also says in one
+  place where each kind of record goes (coolbress/plinth-template#269), and
+  a project that chose Railway gets a README that no longer says a trial is
+  planned. An existing project gets these through `/plinth:template-update`.
 - plinth's `e2e` run now repeats what the test repository's jobs said before
   it deletes that repository (#975). The `image` job's scan warnings become
   `::warning::` lines and job summary entries, one per package with its CVEs
