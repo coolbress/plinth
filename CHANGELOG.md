@@ -40,6 +40,13 @@ pull requests and have no tag.
   `template/Dockerfile.jinja` (#975). `scripts/raise-template-pin.sh` and
   [How to upgrade the template pin](docs/how-to/upgrade-the-template-pin.md)
   name the copy.
+- `ci / diff-size` over the limit, on GitHub and on GitLab, says to split the
+  change into pull requests that land one after another, each branched from
+  `main` after the one before it merged, and no longer to stack them each
+  against the one below (#988): under squash merges the upper pull requests
+  of a stack conflict once a lower one changes. Only the words change: no
+  input, job, check name or limit, and `tests/python-ci-contract.txt` is
+  unchanged.
 
 ## [2.37.0] - 2026-11-19
 

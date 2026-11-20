@@ -992,7 +992,7 @@ diff-size:
         if [ "$PLINTH_MAX_DIFF_LINES" -le 0 ]; then
           say "pass: diff size, measured and not enforced (max-diff-lines is 0): ${total} lines"
         elif [ "$total" -gt "$PLINTH_MAX_DIFF_LINES" ]; then
-          echo "Over the limit. Split the change along its dependency chain into a stack (data, then API, then wiring, then UX)."
+          echo "Over the limit. Split the change along its dependency chain (data, then API, then wiring, then UX) into merge requests that land one after another, each branched from main after the one before it merged."
           say "fail: diff size, ${total} lines, over the limit of ${PLINTH_MAX_DIFF_LINES}"; plinth_failed=1
         else
           say "pass: diff size, ${total} lines, within the limit of ${PLINTH_MAX_DIFF_LINES}"

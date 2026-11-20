@@ -1309,13 +1309,15 @@ jobs:
           fi
 
           if [ "$total" -gt "$MAX_LINES" ]; then
-            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it into a stack of pull requests, each against the one below: https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it into pull requests that land one after another, each branched from main after the one before it merged: https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
             {
               echo
               echo "**Over the limit.** Docs and lockfiles are already excluded from this number."
               echo
-              echo "How to split: cut the change along its dependency chain into a stack"
-              echo "(data, then API, then wiring, then UX). Each layer can have a different reviewer."
+              echo "How to split: cut the change along its dependency chain (data, then API,"
+              echo "then wiring, then UX) into pull requests that land one after another,"
+              echo "each branched from main after the one before it merged. Each piece can have"
+              echo "a different reviewer."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi

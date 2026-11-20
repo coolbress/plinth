@@ -149,7 +149,15 @@ measure() { # <label> <base> <head>
   (cd "$r" && env GITHUB_STEP_SUMMARY="$work/sum" MAX_LINES=400 EXCLUDE="" WORKDIR=. BASE_SHA="$2" HEAD_SHA="$3" bash -e "$work/measure.sh") > "$work/out" 2>&1
   seen "$1" 1 "$?" "$work/out"
 }
-measure "over the limit" "$base" "$head"
+: > "$work/sum"; measure "over the limit" "$base" "$head"
+# How to split (#988): pieces that land one after another, each from main
+# after the one before it merged, not a stack whose upper pull requests
+# conflict once a lower one is squash-merged.
+for f in out sum; do
+  if grep -qF "land one after another" "$work/$f" && grep -qF "each branched from main after the one before it" "$work/$f" \
+     && ! grep -qiE "stack|each against the one below" "$work/$f"; then ok "over the limit: the $f says to land the pieces one after another"
+  else bad "over the limit: the $f does not say to land the pieces one after another" "$(cat "$work/$f")"; fi
+done
 measure "the diff cannot be computed" 0000000000000000000000000000000000000000 "$head"
 names() { # <label> <want exit> <base> <head>
   (cd "$r" && env GITHUB_STEP_SUMMARY="$work/sum" BODY="" BASE_SHA="$3" HEAD_SHA="$4" CHANGES_FILE="$work/changes.json" WEB=false python3 "$work/names.py") > "$work/out" 2>&1
