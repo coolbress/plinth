@@ -466,35 +466,46 @@ jobs:
           }
           # A link to this repository's own commit page is checked against the
           # checkout's history, not github.com, which lychee skips: two such
-          # pages answered 503 to both runs, 60 seconds apart (#971). A link
-          # whose path is not a hexadecimal SHA, or whose SHA is no commit
-          # here, fails.
-          commit_links() { # commit_links <Markdown files>
-            local bad=0 url sha
+          # pages answered 503 to both runs, 60 seconds apart, and to 42 and
+          # 47 of 120 requests from the runners (#971). lychee lists the links
+          # it skips (--dump), as it parsed them, so a link it skips under
+          # another spelling (GitHub.com, :443, a .. segment) is looked up as
+          # well. A path that is no hexadecimal SHA fails, and so does a SHA
+          # that is not in main's history as of the base (HEAD^1): a commit
+          # only on a branch would pass here and fail on main once squashed.
+          commit_links() { # commit_links <lychee input arguments>
+            local out bad=0 url sha
+            out="$("$d/lychee" --dump -v --no-progress --exclude "^$repo/commit/" "$@")" \
+              || { echo "::error::lychee could not list the links to check"; return 1; }
             while IFS= read -r url; do
               sha="$(sed -nE "s|^$repo/commit/([0-9a-f]{7,40})([?#].*)?\$|\\1|p" <<<"$url")"
-              if [ -z "$sha" ] || ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
-                echo "::error::$url names no commit in this repository's history"; bad=1
+              if [ -z "$sha" ] || ! git merge-base --is-ancestor "$sha" HEAD^1 2>/dev/null; then
+                echo "::error::$url names no commit in main's history"; bad=1
               fi
-            done < <(grep -ohE "$repo/commit/[^])>\"'<[:space:]]*" -- "$@" | sort -u)
+            done < <(sed -nE "s|^($repo/commit/[^ ]*) .*\[excluded\]\$|\1|p" <<<"$out" | sort -u)
             return "$bad"
           }
-          mapfile -t md < <(git ls-files -- '*.md' ':!:canary-template/')
-          commit_links "${md[@]}"
+          commit_links --exclude-path '(^|/)canary-template/' -- './**/*.md'
           check 60 --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" --exclude-path '(^|/)canary-template/' \
             --exclude "^$repo/commit/" \
             --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
-          # The commit-link check on three fixtures: a commit in the history
-          # passes, and a SHA that is no commit here and a path that is no SHA
-          # each fail, so the check cannot pass a link it did not look up.
+          # The commit-link check on fixtures: a commit in main's history
+          # passes; a SHA that is no commit, a commit off main's history, a
+          # path that is no SHA and a missing SHA behind a host spelled
+          # GitHub.com each fail, so the check cannot pass a link it skipped.
           fc="$RUNNER_TEMP/commit-links"; mkdir -p "$fc"
-          echo "[here](https://github.com/coolbress/plinth/commit/$(git rev-parse HEAD^1))" >"$fc/ok.md"
-          echo "[gone](https://github.com/coolbress/plinth/commit/0000000000000000000000000000000000000000)" >"$fc/gone.md"
-          echo "[branch](https://github.com/coolbress/plinth/commit/main)" >"$fc/branch.md"
-          commit_links "$fc/ok.md" || { echo "::error::a link to a commit in the history failed"; exit 1; }
-          for x in gone branch; do
-            if commit_links "$fc/$x.md" >/dev/null; then
-              echo "::error::the commit-link check passed $fc/$x.md, which names no commit here"; exit 1
+          u='https://github.com/coolbress/plinth/commit'
+          off="$(GIT_AUTHOR_NAME=f GIT_AUTHOR_EMAIL=f@f GIT_COMMITTER_NAME=f GIT_COMMITTER_EMAIL=f@f \
+            git commit-tree "HEAD^1^{tree}" -p HEAD^1 -m 'fixture: a commit off main')"
+          echo "[here]($u/$(git rev-parse HEAD^1))" >"$fc/ok.md"
+          echo "[gone]($u/0000000000000000000000000000000000000000)" >"$fc/gone.md"
+          echo "[off]($u/$off)" >"$fc/off.md"
+          echo "[branch]($u/main)" >"$fc/branch.md"
+          echo "[case](https://GitHub.com/coolbress/plinth/commit/0000000000000000000000000000000000000000)" >"$fc/case.md"
+          commit_links -- "$fc/ok.md" || { echo "::error::a link to a commit in main's history failed"; exit 1; }
+          for x in gone off branch case; do
+            if commit_links -- "$fc/$x.md" >/dev/null; then
+              echo "::error::the commit-link check passed $fc/$x.md, which names no commit in main's history"; exit 1
             fi
           done
           # The second run on two fixtures, offline: a link still missing fails
