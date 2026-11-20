@@ -24,7 +24,15 @@ case "$1 $2" in
       *"state,mergeCommit"*) out "$fx/after.json" ;;
       *) out "$fx/pr.json" ;;
     esac ;;
-  "pr checks") case "$*" in *--watch*) exit 0 ;; *) out "$fx/checks.json" ;; esac ;;
+  "pr checks")
+    case "$*" in
+      *--watch*) exit 0 ;;
+      *)
+        # checks_late: how many more reads see no checks yet on the new head.
+        n="$(cat "$fx/checks_late" 2>/dev/null || echo 0)"
+        if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$fx/checks_late"; echo '[]' >"$fx/none.json"; out "$fx/none.json"
+        else out "$fx/checks.json"; fi ;;
+    esac ;;
   "pr merge")
     # GitHub answers 409 to --match-head-commit on a head that is not the
     # pull request's now; merge_head stands for a commit pushed meanwhile.
@@ -54,6 +62,7 @@ case "$1 $2" in
           jq -r .headRefOid "$fx/pr.json" >"$fx/old_head"
           jq --arg h "$(cat "$fx/new_head")" '.headRefOid = $h' "$fx/pr.json" >"$fx/p" && mv "$fx/p" "$fx/pr.json"
           [ ! -f "$fx/checks-new.json" ] || cp "$fx/checks-new.json" "$fx/checks.json"
+          [ ! -f "$fx/checks_late_n" ] || cp "$fx/checks_late_n" "$fx/checks_late"
         fi
         echo '{"message":"Updating pull request branch.","url":"https://github.com/o/r/pull/7"}' ;;
       *"/commits/"*)
@@ -575,6 +584,12 @@ grep -qx "update: head is now $H2" "$FX/out"; upd "it says the new head" $?
 [ "$(grep -c '/compare/main\.\.\.' "$FX/calls")" = 2 ] && grep -q "compare/main\.\.\.$H2 " "$FX/calls"; upd "behind is read again on the new head, before the merge" $?
 [ "$(grep -n -m1 'update-branch' "$FX/calls" | cut -d: -f1)" -lt "$(grep -n -m1 '^pr checks .*--watch' "$FX/calls" | cut -d: -f1)" ] && s=0 || s=1
 upd "the checks are waited for after the update" $s
+
+behind_pr upd-late 3 0; echo 1 >"$FX/checks_late_n"
+PATH="$work/bin:$PATH" MERGE_POLL=1 MERGE_ANALYZE_WAIT=0 MERGE_UPDATE_WAIT=5 bash "$script" 7 --repo o/r --update >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 0 ] && grep -q -- "--match-head-commit $H2" "$FX/merged" 2>/dev/null \
+  && [ "$(grep -c '^pr checks 7 -R o/r --json name --jq' "$FX/calls")" -ge 2 ]
+upd "no checks on the new head at first, then some: it reads again until they show, then merges" $?
 
 behind_pr upd-redafter 3 0; printf '[{"name":"ci / install","state":"FAILURE"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks-new.json"
 run stop "behind, --update: a check red on the new head stops" --update

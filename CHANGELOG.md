@@ -45,8 +45,9 @@ pull requests and have no tag.
   its base branch up to date before merging it (#997): the branch update
   names the head it read (GitHub refuses if the head moved), the checks are
   waited for on the new head, and the merge pins that head. Behind again just
-  before the merge, it stops instead of updating twice. Without `--update`
-  nothing changes. `CLAUDE.md` gains the rule it serves: when several pull
+  before the merge, it stops instead of updating twice. In a repository with
+  a third-party reviewer, each `--update` makes a head the reviewer has not
+  seen, so it waits for another review. Without `--update` nothing changes. `CLAUDE.md` gains the rule it serves: when several pull
   requests are open, only the named session (or the person) merges, one at a
   time; other sessions do not bring their own pull request up to date.
 
