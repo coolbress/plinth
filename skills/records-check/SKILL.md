@@ -38,7 +38,14 @@ records not verified.
   that repository has used), `home-path` (a home path in a body, by line and
   form; it never prints what followed the prefix, and neither do you),
   `body-size` (a body at 90% or more of GitHub's 65,536 limit, in characters
-  or UTF-8 bytes).
+  or UTF-8 bytes). Each `ref` `WARN` or `SKIP` line names the records the
+  reference was read in. What `ref` cannot see: a bare `#N` meant for another
+  repository whose number also exists here resolves, so it passes. A table
+  of another repository's numbers written as bare `#N`, or a `#236` that
+  links to the wrong issue here, looks like a right link from this
+  repository's records alone. The `ref` `PASS` line means every reference
+  read resolves or is a `SKIP` above, not that each points where it was
+  meant to.
 - **Conventions**, judged only against what the repository's own files say:
   its issue and pull-request templates (local, else the owner's `.github`),
   `CONTRIBUTING.md`, `docs/agents/issue-tracker.md`, `AGENTS.md`. Each line

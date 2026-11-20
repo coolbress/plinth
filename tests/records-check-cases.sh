@@ -85,6 +85,10 @@ w("graphql/refs-x-y-1.json", {"data": {"repository": {
     "i": {"nodes": [{"number": 100}]}, "p": {"nodes": []}, "dd": {"nodes": []},
     "n3": {"__typename": "Issue"}, "d3": None, "n4": None, "d4": None}},
     "errors": [nf(f) for f in ("d3", "n4", "d4")]})
+# The same answer with an error, not NOT_FOUND, for one reference's field.
+err = json.loads(json.dumps(json.load(open(f"{api}/graphql/refs-x-y-1.json"))))
+err["errors"] = [nf("d3"), nf("d4"), {"type": "INTERNAL", "path": ["repository", "n4"], "message": "Something went wrong."}]
+w("refs-x-y-error.json", err)
 w("graphql/refs-gone-repo-1.json", {"data": {"repository": None},
     "errors": [{"type": "NOT_FOUND", "path": ["repository"], "message": "Could not resolve to a Repository."}]})
 w("repos/o/r/issues/9.json", {"__status": 410})
@@ -141,8 +145,8 @@ hasnt "#N in inline code is not a reference" "9999"
 hasnt "#N in a code fence is not a reference" "8888"
 hasnt "owner/repo#N that resolves is not named" "x/y#3"
 hasnt "a path whose first part cannot be an owner is not a reference" "v1.2/x"
-has "owner/repo#N not found at or below that repository's highest number is a SKIP" "SKIP  x/y#4 not verified: status 404 at or below the highest number, 100"
-has "a repository that cannot be read is a SKIP for its references" "SKIP  gone/repo#1 not verified: gone/repo could not be read (NOT_FOUND)"
+has "owner/repo#N not found at or below that repository's highest number is a SKIP" "SKIP  x/y#4 not verified: status 404 at or below the highest number, 100, referenced in $U/issues/8"
+has "a repository that cannot be read is a SKIP for its references" "SKIP  gone/repo#1 not verified: gone/repo could not be read (NOT_FOUND), referenced in $U/issues/8"
 hasnt "an HTML entity is not a reference" "#39"
 hasnt "a link's anchor is not a reference" "#77"
 hasnt "a link's text is not a reference" "121836"
@@ -192,6 +196,12 @@ rm -r "$api/repos/o/.github/contents/.github/ISSUE_TEMPLATE" "$api/repos/o/.gith
 gl="$work/gl"; mkdir -p "$gl"; printf 'host: gitlab\n' >"$gl/.copier-answers.yml"
 run --root "$gl"
 [ "$rc" = 0 ] && [ "$out" = "  INFO  GitLab: not read" ] && ok "a GitLab checkout prints one line, GitLab: not read" || bad "GitLab: rc $rc: $out"
+
+# ---- One reference's field answered with an error: not verified, and where it was read.
+cp "$api/graphql/refs-x-y-1.json" "$work/refs-x-y-1.json"; cp "$api/refs-x-y-error.json" "$api/graphql/refs-x-y-1.json"
+run --root "$plinthlike"
+has "a reference GitHub answered an error for is a SKIP, with where it was read" "SKIP  x/y#4 not verified: GitHub answered an error for it, referenced in $U/issues/8"
+cp "$work/refs-x-y-1.json" "$api/graphql/refs-x-y-1.json"
 
 # ---- A record GitHub answered with null and an error: not verified, never dropped.
 mv "$api/graphql/pulls-1.json" "$work/pulls-1.json"; cp "$api/pulls-partial.json" "$api/graphql/pulls-1.json"
