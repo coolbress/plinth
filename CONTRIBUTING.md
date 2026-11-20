@@ -74,7 +74,7 @@ differently from one hour to the next, so a local pass does not promise a
 pass there. Both skip the hosts in `.lycheeignore`, each of which refuses
 every automated request. `ci / docs` also checks the links that failed once
 more after a minute, so a host that fails only some requests does not fail it,
-while a page that is gone fails both times (temporary, to be reverted: [a page that does not exist](https://www.nngroup.com/articles/no-such-page-971/)). To look before pushing anyway, with a lychee of your own:
+while a page that is gone fails both times. To look before pushing anyway, with a lychee of your own:
 
 ```bash
 lychee --no-progress --exclude-path .scratch -- './**/*.md'   # network; not the pinned build
