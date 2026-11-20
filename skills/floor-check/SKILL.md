@@ -65,6 +65,15 @@ tell the user the machine is clean. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `GIT_CON
 variable, when set, is a SKIP naming it: the configuration it hides is not
 read. SSH keys are a SKIP every time, the other one with no way to
 verify it here: GitHub's settings say which keys push, not this machine.
+It also reads the scopes `gh auth status` lists for the active github.com
+account: `workflow` among them is a WARN naming the login, since it lets the
+agent push a change to `.github/workflows/`, the checks included; scopes
+without it are an INFO; none listed (a fine-grained token lists none) or an
+answer not read is a SKIP, never a PASS. With `GH_TOKEN` or `GITHUB_TOKEN`
+set, the line says the stored login's scopes may not be the ones in use. On
+GitLab glab's token scopes are a SKIP. The `workflow` WARN is expected
+before the first pull request is merged; its fix is a token without
+`workflow` once that pull request is merged.
 Relay the WARN lines with the fix from
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`; never run a logout or
 delete a credential yourself.

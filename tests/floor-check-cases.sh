@@ -1239,6 +1239,65 @@ for bad_gh in "" "not json" '{"nohosts":1}'; do
   else bad "--credentials: gh answering '${bad_gh:-(failure)}' is not a SKIP"; printf '%s\n' "$out" | grep gh | sed 's/^/        /'; fi
 done
 [ "$skipped" = 3 ] && ok "--credentials: gh failing, or answering what is not its JSON, is not verified"
+# The active account's scopes, as gh 2.103.3 lists them (#986): `workflow` lets
+# the agent push a change to .github/workflows/, the checks included. A WARN
+# with the how-to; scopes without it an INFO; none listed (a fine-grained
+# token), or an answer not read, a SKIP, never a PASS.
+wf='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scopes":"gist, read:org, read:packages, repo, workflow"}]}}'
+nowf='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scopes":"gist, read:org, repo"}]}}'
+noscope='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scopes":""}]}}'
+out="$(credrun FAKE_GH="$wf")"; rc=$?
+if [ "$rc" = 0 ] && grep -q "WARN  the agent's gh login (me) holds \`workflow\`: it can push a change to \`.github/workflows/\`, the checks included" <<<"$out" \
+   && grep -q "INFO  .*docs/how-to/give-the-agent-a-token.md" <<<"$out" && ! grep -q "PASS  .*\`workflow\`" <<<"$out"
+then ok "--credentials: an active gh login holding \`workflow\` is a WARN naming the login and the how-to, and does not fail the run"
+else bad "--credentials workflow scope (rc=$rc)"; printf '%s\n' "$out" | grep -iE 'workflow|scope|gh' | sed 's/^/        /'; fi
+# The inactive account's scopes are not the agent's: only the active one counts.
+out="$(credrun FAKE_GH='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scopes":"repo"},{"login":"other","active":false,"state":"success","scopes":"repo, workflow"}]}}')"
+grep -q "INFO  the agent's gh login (me) lists its scopes without \`workflow\`" <<<"$out" && ! grep -q "holds \`workflow\`" <<<"$out" \
+  && ok "--credentials: only the active account's scopes are read" || { bad "--credentials inactive account's workflow"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; }
+out="$(credrun FAKE_GH="$nowf")"
+grep -q "INFO  the agent's gh login (me) lists its scopes without \`workflow\`" <<<"$out" && ! grep -qE "(WARN|SKIP|PASS)  .*\`workflow\`" <<<"$out" \
+  && ok "--credentials: scopes listed without \`workflow\` are an INFO" || { bad "--credentials scopes without workflow"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; }
+skipped=0
+for case_gh in "$noscope" "$one" '{"hosts":{"github.com":[{"login":"me","active":true,"scopes":" , "}]}}'; do
+  out="$(credrun FAKE_GH="$case_gh")"
+  if grep -q "SKIP  the permissions of the agent's gh login (me) not verified: \`gh auth status\` lists no scopes for it (a fine-grained token lists none)" <<<"$out" \
+    && ! grep -qE "(WARN|INFO|PASS)  .*\`workflow\`" <<<"$out"; then skipped=$((skipped+1))
+  else bad "--credentials: no scopes in '$case_gh' is not a SKIP"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; fi
+done
+[ "$skipped" = 3 ] && ok "--credentials: no scopes listed, empty or absent, is a SKIP saying a fine-grained token lists none, never a PASS"
+skipped=0
+for case_gh in '{"hosts":{"github.com":[{"login":"me","active":true,"scopes":7}]}}' '{"hosts":{"github.com":[{"login":"me","active":true,"scopes":["repo",{}]}]}}'; do
+  out="$(credrun FAKE_GH="$case_gh")"
+  if grep -q "SKIP  the permissions of the agent's gh login (me) not verified: the scopes \`gh auth status\` lists for it could not be read" <<<"$out" \
+    && ! grep -qE "(WARN|INFO|PASS)  .*\`workflow\`" <<<"$out"; then skipped=$((skipped+1))
+  else bad "--credentials: unreadable scopes in '$case_gh' are not a SKIP"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; fi
+done
+[ "$skipped" = 2 ] && ok "--credentials: scopes in a form not read are a SKIP saying so, never a PASS"
+out="$(credrun FAKE_GH='{"hosts":{"github.com":[{"login":"me","active":true,"scopes":["repo","workflow"]}]}}')"
+grep -q "WARN  the agent's gh login (me) holds \`workflow\`" <<<"$out" && ok "--credentials: scopes listed as a JSON list are read too" \
+  || { bad "--credentials: scopes as a list"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; }
+out="$(credrun GH_TOKEN=secret-value-4 FAKE_GH="$noscope")"
+grep -q "SKIP  the permissions of the agent's gh login (me) not verified: .*(GH_TOKEN is set: the token in use may not have these scopes)" <<<"$out" \
+  && ok "--credentials: with GH_TOKEN set, the SKIP also says the stored login's scopes may not be in use" \
+  || { bad "--credentials: GH_TOKEN beside no scopes"; printf '%s\n' "$out" | grep -iE 'scope' | sed 's/^/        /'; }
+skipped=0
+for bad_gh in "" "not json" '{"hosts":{}}' '{"hosts":{"github.com":[{"login":"me","active":false,"scopes":"workflow"}]}}'; do
+  out="$(credrun FAKE_GH="$bad_gh")"
+  if grep -q "SKIP  the permissions of the agent's gh login not verified" <<<"$out" && ! grep -qE "(WARN|INFO|PASS)  .*\`workflow\`" <<<"$out"; then skipped=$((skipped+1))
+  else bad "--credentials: '${bad_gh:-(failure)}' leaves the login's permissions other than a SKIP"; printf '%s\n' "$out" | grep -iE 'workflow|scope|permission' | sed 's/^/        /'; fi
+done
+[ "$skipped" = 4 ] && ok "--credentials: an unread answer, or no active login, leaves the login's permissions not verified"
+# An environment token is used before the stored login: the scopes read are
+# the stored login's, and the line says they may not be the ones in use.
+seen=0
+for var in GH_TOKEN GITHUB_TOKEN; do
+  out="$(credrun "$var=secret-value-3" FAKE_GH="$wf")"
+  if grep -q "WARN  the agent's gh login (me) holds \`workflow\`.*$var is set: the token in use may not have these scopes" <<<"$out" \
+    && grep -q "WARN  $var is set" <<<"$out" && ! grep -q secret-value-3 <<<"$out"; then seen=$((seen+1))
+  else bad "--credentials: $var beside the scopes line"; printf '%s\n' "$out" | grep -iE 'workflow|TOKEN' | sed 's/^/        /'; fi
+done
+[ "$seen" = 2 ] && ok "--credentials: GH_TOKEN or GITHUB_TOKEN set keeps its WARN, and the scopes line says the stored login's may not be in use"
 # Helpers: the macOS default with no empty helper before gh's; one listed after
 # gh's; an inline `!` helper, named without its text; other hosts and plain
 # http ignored; an empty helper for a path on github.com clears nothing.
@@ -3135,6 +3194,8 @@ glcred
 has "only glab's helper for gitlab.com: an INFO, not a PASS" "INFO  git asks only glab for gitlab\.com; no other credential found"
 has "a github.com login in ~/.netrc is not gitlab.com's" "INFO  no gitlab\.com login in "
 has "the login glab stores is a SKIP" "SKIP  the login glab stores for gitlab\.com not verified"
+has "glab's token scopes are a SKIP (#986)" "SKIP  the permissions of the agent's glab login not verified"
+lacks "no gh scopes line on GitLab" "gh login"
 has "SSH points at GitLab's keys" "SKIP  SSH keys not verified here: GitLab's Preferences"
 lacks "a helper for github.com alone is not reported on GitLab" "WARN"
 lacks "gh is not asked about on GitLab" "gh stores|accounts stored in gh"
