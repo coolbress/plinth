@@ -25,6 +25,22 @@ pull requests and have no tag.
   Unticked acceptance criteria are listed for a person to read. It is not a
   CI job and changes nothing.
 
+### Changed
+
+- plinth's `e2e` run now repeats what the test repository's jobs said before
+  it deletes that repository (#975). The `image` job's scan warnings become
+  `::warning::` lines and job summary entries, one per package with its CVEs
+  and the days left before the 14-day gate fails it, so a scheduled run shows
+  a base-image finding before a release does. A failure about the first pull
+  request's jobs prints their `::error::` text, not only their links, which
+  stop working once the repository is gone.
+- `canary-web/Dockerfile`'s base images are the pinned template's: its run
+  stage moves to plinth-template v1.46.1's `python:3.12-slim` digest, and
+  `tests/template-render.sh` fails when its `FROM` lines fall behind the pin's
+  `template/Dockerfile.jinja` (#975). `scripts/raise-template-pin.sh` and
+  [How to upgrade the template pin](docs/how-to/upgrade-the-template-pin.md)
+  name the copy.
+
 ## [2.37.0] - 2026-11-19
 
 A name the template refuses now stops `/plinth:new-project` before anything is created, on GitHub as on GitLab, and the GitLab door refuses `--private` with `--public`. New projects render plinth-template v1.46.1: it refuses project names that never rendered, keeps a project's own test and `data/` files, says a defect is a `bug` whoever finds it, and raises the `backend`, `data-ml` and `web` image's `python:3.12-slim` digest past `apt` 3.0.3, which the rendered image scan refused from 2026-11-19. plinth's own CI now runs the pinned template's `cli` project through the pull request's `python-ci.yml`, and `scripts/raise-template-pin.sh` raises the pin. `/plinth:floor-check` shows the template's diff for `AGENTS.md` and `CONTRIBUTING.md`, whose sources end in `.jinja`. The eval suite grades a floor gap or an open item by what the report says of it. No reusable workflow that a project calls changed, so a project's `uses:` pins need no raise for this release; the template change comes through `/plinth:template-update`.

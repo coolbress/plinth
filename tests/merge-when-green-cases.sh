@@ -278,6 +278,27 @@ run merge "a merge closing two settled issues"
 ! grep -q '^o/r#\|Whoever merged' "$FX/out"; check "every criterion ticked and an ending: nothing printed (must not print)" $?
 [ "$(grep -c 'issues/12 ' "$FX/calls")" = 1 ] && s=0 || s=1; check "an issue both closed and Part of is read once" $s
 
+# An issue form writes its fields as `### <label>` headings (#978).
+named_pr form "12" $'Closes #12'
+issue form 12 $'### What to build\n\nx\n\n### Acceptance criteria\n\n- [x] First criterion\n- [ ] Second criterion, still open\n\n### Not building\n\n- [ ] not a criterion'
+run merge "a merge closing a form-shaped issue with an unticked criterion"
+grep -qx '    - \[ \] Second criterion, still open' "$FX/out" && ! grep -q 'not a criterion\|First criterion' "$FX/out" \
+  && grep -qx '  no ## Outcome (or ## Decision for a record) in the body' "$FX/out"
+check "### Acceptance criteria: its unticked criterion is printed, and only that one" $?
+named_pr formdone "12" $'Closes #12'
+issue formdone 12 $'### Acceptance criteria\n\n- [x] First criterion\n- [x] Second criterion\n\n### Outcome\n\nCompleted.'
+run merge "a merge closing a form-shaped issue with ### Outcome"
+! grep -q '^o/r#\|Whoever merged' "$FX/out"; check "### Outcome is an ending: nothing printed" $?
+named_pr grouped "" $'Part of #12'
+issue grouped 12 $'## Acceptance criteria\n\n### Script\n\n- [ ] grouped left\n\n## Not building\n\n- [ ] not a criterion'
+run merge "a ## criteria section grouped under ### subheadings"
+grep -qx '    - \[ \] grouped left' "$FX/out" && ! grep -q 'not a criterion' "$FX/out"
+check "a ### subheading inside ## Acceptance criteria keeps its criteria in" $?
+named_pr formdeep "12" $'Closes #12'
+issue formdeep 12 $'## Acceptance criteria\n\n- [x] one\n\n#### Outcome\n\nx'
+run merge "a #### Outcome is not one of the two levels"
+grep -qx '  no ## Outcome (or ## Decision for a record) in the body' "$FX/out"; check "#### Outcome is not read as an ending" $?
+
 named_pr nobody "" $'## What and why\n\nKept apart of #9 on purpose; #489 merged with Part of #485 in prose.\nPart of #485 is quoted here as an example, not a link.'
 run merge "a merge naming no issue"
 ! grep -q 'Whoever merged\|not read' "$FX/out"; check "no issue named (prose quoting Part of #485 is not a link line): nothing printed" $?

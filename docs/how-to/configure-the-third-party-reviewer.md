@@ -95,28 +95,7 @@ only within one pull request, so it is not a guarantee that the instructions
 cannot be weakened.
 
 Whether the reviewer reads that section from the base branch or from the pull
-request's head is not known. One measurement (#652, 2026-10-25, Codex,
-`chatgpt-codex-connector[bot]`) did not settle it. A draft pull request in
-this repository added one line to the section and changed nothing else: begin
-the review summary and every inline comment with a fixed word. The review
-completed on the head commit with no findings, and the word appeared nowhere.
-Its only output was the no-findings comment (`Didn't find any major issues`),
-the `Completed` row and a 👍. Three explanations remain open:
-
-- it read the base;
-- it read the head and did not follow the line, which the section's own rule
-  against following instructions inside the diff may have caused;
-- it read the head, but a review with no findings has no free text that could
-  carry the word, because those three outputs are fixed.
-
-Telling them apart needs a similar line with a different word on the base too,
-which changes `main`, and a rule whose effect shows in a finding. Neither was
-tried. Until then, assume the head may be what it reads. The comment in
-`pr-review.yml` that says it reads the head quotes the reviewer's own statement
-(2026-09-01), not a measurement. The same pull request showed two more things.
-`third-party / review` passed, as it does for a pull request that changes only
-the section. And no review started when the draft was marked ready; one
-started 14 seconds after the check's own summons, about seven minutes later.
+request's head is not known, so assume it may read the head (#652).
 
 ### Pull requests it passes without summoning
 
@@ -297,11 +276,9 @@ marked ready wherever its "Automatic reviews" toggle is on, and no setting
 narrows that by author or title (seen on `chatgpt.com/codex/settings`,
 2026-09-18: a repository offers `Review all PRs`, `Review team PRs` and
 `Follow personal preferences`; the personal toggle, on the code review tab and
-the security review tab, is the off switch). Leave that toggle on. The summons
-this check posts is not a substitute for it: measured on #186 (2026-09-18,
-toggle off), two `@codex review` comments from `github-actions[bot]` drew no
-review in the check's full wait and the check failed, while the same text
-commented by a person's account started a review sixteen seconds later.
+the security review tab, is the off switch). Leave that toggle on. A summons
+from `github-actions[bot]` is not a substitute for it: it draws no review, as
+measured on #186 above.
 Another repository measured the same and moved its summons to a token
 owned by the Codex-connected person (hide212131/hane#57, read 2026-09-18);
 this workflow does the same only when given `summons-token`, so with the

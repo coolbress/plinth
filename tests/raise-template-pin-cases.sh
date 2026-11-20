@@ -121,7 +121,7 @@ check "canary-template's name says the new tag and commit" 'grep -qF "name: cana
 unrel="$(awk '/^## \[Unreleased\]/ {on=1; next} /^## \[/ {on=0} on' "$work/repo/CHANGELOG.md")"
 check "[Unreleased] gains one Changed line naming the new tag" 'grep -c "renders plinth-template v9.9.9" <<<"$unrel" | grep -qx 1 && awk "/^### Changed/ {c=1} /renders plinth-template v9.9.9/ {print c+0; exit}" <<<"$unrel" | grep -qx 1'
 check "it prints that no eval suite is owed for a diff that misses what the agent reads" 'grep -q "^eval suite: not owed" "$work/out" && grep -q "from $tested" "$work/out"'
-check "it prints what is left: the re-render, the CHANGELOG text, the pull request" 'grep -q "tests/template-render.sh --write" "$work/out" && grep -q "gh release view v9.9.9" "$work/out" && grep -q "chore(new-project): render plinth-template v9.9.9" "$work/out"'
+check "it prints what is left: the re-render, canary-web's FROM lines, the CHANGELOG text, the pull request" 'grep -q "tests/template-render.sh --write" "$work/out" && grep -q "FROM lines at v9.9.9 into canary-web/Dockerfile" "$work/out" && grep -q "gh release view v9.9.9" "$work/out" && grep -q "chore(new-project): render plinth-template v9.9.9" "$work/out"'
 check "it reads the compare from the tag the last release was tested with" 'grep -q "compare/$tested\.\.\.v9\.9\.9" "$work/gh.log"'
 
 # A second raise before the release moves the same line, not a new one.
