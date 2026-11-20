@@ -184,7 +184,7 @@ def read_all(kind: str, field: str, query: str, owner: str, name: str) -> tuple[
     """Every node of one paginated list, and one note for each record GitHub
     answered with an error or null (a page can carry data and errors at once:
     that record is not verified, never dropped). CannotRun when a page is not
-    read. Fixture pages are graphql/<kind>-1.json, -2.json, ..."""
+    read, or GitHub answered an error for it outside a single record. Fixture pages are graphql/<kind>-1.json, -2.json, ..."""
     nodes: list[dict] = []
     unread: list[str] = []
     cursor = None
@@ -195,21 +195,33 @@ def read_all(kind: str, field: str, query: str, owner: str, name: str) -> tuple[
         if not isinstance(conn, dict):
             why = "; ".join(e.get("message", "") for e in (ans or {}).get("errors") or []) or "no answer"
             raise CannotRun(f"the {kind} of {owner}/{name} could not be read (page {page}: {why})")
-        # An error whose path is repository.<field>.nodes.<i>... is about record i.
+        # An error whose path is repository.<field>.nodes.<i>... is about record i;
+        # any other error (the whole nodes list, pageInfo, no path) leaves the
+        # page unread, and so does a nodes list or pageInfo that is not there.
         errs: dict[int, str] = {}
+        page_errs: list[str] = []
         for e in (ans or {}).get("errors") or []:
-            path = e.get("path") if isinstance(e, dict) else None
+            e = e if isinstance(e, dict) else {}
+            path = e.get("path")
+            msg = str(e.get("message") or "no message")
             if (isinstance(path, list) and len(path) > 3 and path[:3] == ["repository", field, "nodes"]
                     and isinstance(path[3], int)):
-                errs.setdefault(path[3], f"GitHub answered an error for it ({e.get('message') or 'no message'})")
-        for i, n in enumerate(conn.get("nodes") or []):
+                errs.setdefault(path[3], f"GitHub answered an error for it ({msg})")
+            else:
+                page_errs.append(msg)
+        page_nodes = conn.get("nodes")
+        info = conn.get("pageInfo")
+        if page_errs or not isinstance(page_nodes, list) or not isinstance(info, dict) \
+                or not isinstance(info.get("hasNextPage"), bool):
+            why = "; ".join(page_errs) or "no list of records or no page information"
+            raise CannotRun(f"the {kind} of {owner}/{name} could not be read (page {page}: {why})")
+        for i, n in enumerate(page_nodes):
             if isinstance(n, dict) and i not in errs:
                 nodes.append(n)
                 continue
             who = f"#{n['number']}" if isinstance(n, dict) and isinstance(n.get("number"), int) else f"record {i + 1}"
             unread.append(f"{who} on page {page} not verified: {errs.get(i, 'GitHub answered no record')}")
-        info = conn.get("pageInfo") or {}
-        if not info.get("hasNextPage"):
+        if not info["hasNextPage"]:
             return nodes, unread
         cursor = info.get("endCursor")
         page += 1

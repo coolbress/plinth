@@ -71,6 +71,10 @@ w("graphql/pulls-1.json", conn("pullRequests", pulls, False))
 part = conn("pullRequests", pulls + [None], False)
 part["errors"] = [{"type": "INTERNAL", "path": ["repository", "pullRequests", "nodes", 4], "message": "Something went wrong."}]
 w("pulls-partial.json", part)
+# A page whose whole list of records failed: nothing to count, so not read.
+whole = conn("pullRequests", None, False)
+whole["errors"] = [{"type": "INTERNAL", "path": ["repository", "pullRequests", "nodes"], "message": "Something went wrong."}]
+w("pulls-whole.json", whole)
 nf = lambda f: {"type": "NOT_FOUND", "path": ["repository", f], "message": f"Could not resolve to a {f}."}
 # Data and NOT_FOUND errors in one answer: each field read on its own.
 w("graphql/refs-o-r-1.json", {"data": {"repository": {
@@ -196,6 +200,10 @@ run --root "$plinthlike"
 has "the four records read are counted" "o/r: 12 issues and 4 pull requests read"
 has "the record with an error is a SKIP, named" "SKIP  pull request record 5 on page 1 not verified: GitHub answered an error for it (Something went wrong.)"
 has "and counted as not verified" "; 0 rules not checked; 4 not verified"
+cp "$api/pulls-whole.json" "$api/graphql/pulls-1.json"
+run --root "$plinthlike"
+[ "$rc" = 2 ] && grep -q "could not run: the pulls of o/r could not be read (page 1: Something went wrong.)" <<<"$out" \
+  && ok "a page whose whole list failed: exit 2, not an empty page" || bad "whole list failed: exit $rc: $out"
 mv "$work/pulls-1.json" "$api/graphql/pulls-1.json"
 
 # ---- Could not run: non-zero, and only then.
