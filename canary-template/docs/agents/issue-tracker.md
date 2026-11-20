@@ -48,7 +48,9 @@ form's label yourself.
 | A record: research, a decision, a map, a spec | blank issue; the kind is a label: `wayfinder:map`, `wayfinder:research`, `wayfinder:grilling`, or `spec` (`/plinth:new-project` creates them), plus the triage label while open | `## Question`, `## Findings`, `## Decision`, `## Used by` for research; the map and the spec keep their own shape |
 
 The body is the record and stays canonical; comments are conversation, and
-a decision made in a comment is moved into the body. Add one triage label
+a decision made in a comment is moved into the body. A decision made in a
+pull request description or a comment goes into the issue's `## Decisions` too:
+the issue is where the next session looks. Add one triage label
 from [triage-labels.md](triage-labels.md): `needs-triage` by default,
 `ready-for-agent` when the issue is fully specified.
 
@@ -121,6 +123,34 @@ Create a GitHub issue. Acceptance criteria map to checks (see `AGENTS.md`).
 
 `gh issue view <number> --comments`
 
+## Where each record goes
+
+Each kind of record has one place. Before you write one, find its row; a record
+written somewhere else is a record the next session cannot find.
+
+| What a reader asks | Where it is |
+| --- | --- |
+| What changed, and when | the commit log and the pull request |
+| Why this way, what was verified | the pull request description, which becomes the squash commit body |
+| How a ticket ended, what was not verified | that issue's `## Outcome` |
+| What was decided in a ticket | that issue's `## Decisions` |
+| How a question was researched and decided | a record issue, one question each, ending in `## Decision` |
+| A design decision to keep | an ADR, when [domain.md](domain.md)'s three conditions hold |
+| The rule itself | the spec or the standard the project keeps |
+| What is still to do, and a rule across tickets | the open issue a closed ticket's `## Outcome` links, or a map note for a ticket not cut yet; a rule across tickets in the map |
+
+A document states the rule; whether it is done is the issue's to say.
+
+A merge is not noted anywhere else: the pull request, the issue's `## Outcome` and
+`git log` record it.
+
+The map holds only what is still in force: a rule that holds across tickets, a
+note for a ticket not cut yet, or a change to the map or to a milestone's
+status. A note leaves the map when its ticket is cut.
+
+Point at another record by its issue and section or rule name, never at a dated
+line of the map: the map's lines move or leave.
+
 ## Wayfinding operations
 
 A **map** is one issue; tickets are its **child** issues. The `/wayfinder`
@@ -133,4 +163,4 @@ it. Without it, follow the steps by hand.
 - **Blocking**: GitHub native issue dependencies. `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`, where `<blocker-db-id>` is the numeric **database id** (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`), not `#number` or `node_id`. Fallback: start the child body with `Blocked by: #<n>, #<n>`. Unblocked once every blocker is closed.
 - **Frontier query**: open children of the map with no open blocker and no assignee, first in map order.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
-- **Resolve**: put the answer in the body — the shape the table above gives that child's kind, and the body is the record, a comment is not. A `research`, `prototype` or `grilling` child is a record: `## Findings` and `## Decision`, and `## Decision` is its ending, so it does not also take an `## Outcome`. A `task` child is a task like any other and ends in `## Outcome`. Then `gh issue close <n>`, then one line (gist + link) under the map's Decisions-so-far.
+- **Resolve**: put the answer in the body — the shape the table under Four kinds of issue gives that child's kind, and the body is the record, a comment is not. A `research`, `prototype` or `grilling` child is a record: `## Findings` and `## Decision`, and `## Decision` is its ending, so it does not also take an `## Outcome`. A `task` child is a task like any other and ends in `## Outcome`. Then `gh issue close <n>`. The map gains one line (gist + link) under its Decisions-so-far only when the answer is a rule that holds across tickets; a closed ticket is not noted there.

@@ -27,6 +27,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.47.0 instead of v1.46.1
+  (coolbress/plinth-template#281). A new `backend`, `data-ml` or `web`
+  project's image no longer fails its `image` job from 2026-11-22 on
+  `zlib1g`'s CVE-2026-85091: the run stage applies Debian's published
+  updates at build, since no rebuilt official `python:3.12-slim` carries the
+  fix yet, and building the image now needs network access to Debian's
+  mirrors. Every archetype's `docs/agents/issue-tracker.md` also says in one
+  place where each kind of record goes (coolbress/plinth-template#269), and
+  a project that chose Railway gets a README that no longer says a trial is
+  planned. An existing project gets these through `/plinth:template-update`.
 - `/plinth:records-check`'s `ref` lines that say a reference was not verified
   now name the records it was read in, as its `WARN` lines do, and its skill
   says what `ref` cannot see: a bare `#N` meant for another repository whose
