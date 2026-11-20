@@ -521,6 +521,11 @@ def host_of(root: Path, given: str | None) -> str:
     return "github"
 
 
+def where_read(urls: list[str]) -> str:
+    """The records a reference was read in: the first three, then "and more"."""
+    return ", ".join(urls[:3]) + (" and more" if len(urls) > 3 else "")
+
+
 def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[int]) -> None:
     """A reference that resolves to nothing: 410, or 404 above the highest
     number the repository has used (issues, pull requests, discussions)."""
@@ -530,6 +535,7 @@ def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[
         if not nums:
             continue
         o, n = repo.split("/", 1)
+        seen = refs_by_repo[repo]
         for c in range(0, len(nums), REF_CHUNK):
             chunk = nums[c:c + REF_CHUNK]
             fields = " ".join(f"n{x}:issueOrPullRequest(number:{x}){{__typename}} d{x}:discussion(number:{x}){{number}}"
@@ -545,7 +551,8 @@ def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[
             if not isinstance(data, dict):
                 for x in chunk:
                     line("SKIP", f"{repo}#{x} not verified: {repo} could not be read "
-                                 f"({'; '.join(e.get('type') or e.get('message', '') for e in errors) or 'no answer'})")
+                                 f"({'; '.join(e.get('type') or e.get('message', '') for e in errors) or 'no answer'}), "
+                                 f"referenced in {where_read(seen[x])}")
                 continue
             # A NOT_FOUND error on one field is that field's answer, not the query's.
             other = {tuple(e.get("path") or []) for e in errors if e.get("type") != "NOT_FOUND"}
@@ -555,10 +562,11 @@ def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[
                 if data.get(f"n{x}") or data.get(f"d{x}"):
                     continue
                 if any(p[:2] in (("repository", f"n{x}"), ("repository", f"d{x}")) for p in other):
-                    line("SKIP", f"{repo}#{x} not verified: GitHub answered an error for it")
+                    line("SKIP", f"{repo}#{x} not verified: GitHub answered an error for it, "
+                                 f"referenced in {where_read(seen[x])}")
                     continue
                 status, _ = rest(f"repos/{repo}/issues/{x}")
-                where = ", ".join(refs_by_repo[repo][x][:3]) + (" and more" if len(refs_by_repo[repo][x]) > 3 else "")
+                where = where_read(seen[x])
                 shown = f"#{x}" if repo == own else f"{repo}#{x}"
                 if status == 410:
                     line("WARN", f"ref: {shown} was deleted (410), referenced in {where}", "ref")
@@ -571,7 +579,7 @@ def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[
                     continue
                 else:
                     line("SKIP", f"{shown} not verified: status {status or 'no answer'} at or below the highest "
-                                 f"number, {highest}")
+                                 f"number, {highest}, referenced in {where}")
     if not bad:
         line("PASS", "ref: every #N and owner/repo#N read resolves, or is not verified above")
 
