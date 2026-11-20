@@ -41,6 +41,15 @@ pull requests and have no tag.
   `PLINTH_HEAVY_SLOTS` (2) and `PLINTH_HEAVY_WAIT` (20 minutes) govern both;
   past the wait nothing runs and the exit status is 75. CI does not queue:
   it only gains `tests/heavy-cases.sh`, with no check or job renamed.
+- `scripts/merge-when-green.sh --update` brings a pull request that is behind
+  its base branch up to date before merging it (#997): the branch update
+  names the head it read (GitHub refuses if the head moved), the checks are
+  waited for on the new head, and the merge pins that head. Behind again just
+  before the merge, it stops instead of updating twice. In a repository with
+  a third-party reviewer, each `--update` makes a head the reviewer has not
+  seen, so it waits for another review. Without `--update` nothing changes. `CLAUDE.md` gains the rule it serves: when several pull
+  requests are open, only the named session (or the person) merges, one at a
+  time; other sessions do not bring their own pull request up to date.
 
 ## [2.38.0] - 2026-11-20
 

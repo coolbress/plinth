@@ -4,7 +4,7 @@
 # person's word for this one pull request.
 #
 #   scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer]
-#                               [--reviewer-logins a,b]
+#                               [--reviewer-logins a,b] [--update]
 #   scripts/merge-when-green.sh <pr> --round [--row <row> "<why>"] [...]
 #
 # Every run first prints the review round line that `third-party / review`
@@ -57,13 +57,24 @@
 # After the merge it prints, for each issue the pull request closes or names
 # on a `Part of #N` line, the acceptance criteria still unticked and, for one it
 # closed, a missing `## Outcome`, for whoever merged to settle (#490).
+#
+# With --update (#997), first, a pull request whose head is behind its base
+# branch is brought up to date: `PUT /pulls/{n}/update-branch` with the head
+# it read as `expected_head_sha` (GitHub refuses with 422 if the head moved),
+# then the new head is read and everything above runs on it, the checks
+# waited for again. The new head is a commit the reviewer has not seen, so
+# `third-party / review` holds it as it holds any push. Just before the merge
+# it reads again whether the head is behind; if it is, something merged while
+# this waited, and it stops instead of updating twice. Without --update none
+# of this runs. Only the session the person names merges, one pull request at
+# a time; another session does not bring its own pull request up to date.
 # A merged pull request is not undone by anything here; a stop changes nothing.
 set -uo pipefail
 
-usage="usage: scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer] [--reviewer-logins a,b] [--round [--row <irreversible|issue|answer|unclassified> \"<why>\"]]"
+usage="usage: scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer] [--reviewer-logins a,b] [--update] [--round [--row <irreversible|issue|answer|unclassified> \"<why>\"]]"
 stop() { printf 'STOP: %s\n' "$@" >&2; exit 1; }
 
-pr=""; repo=""; reviewer=required; only_round=0; row=""; why=""
+pr=""; repo=""; reviewer=required; only_round=0; row=""; why=""; update=0
 # The default of `reviewer-logins` in .github/workflows/pr-review.yml.
 logins="chatgpt-codex-connector[bot]"
 while [ $# -gt 0 ]; do
@@ -72,6 +83,7 @@ while [ $# -gt 0 ]; do
     --no-reviewer) reviewer=none; shift ;;
     --reviewer-logins) logins="${2:?$usage}"; shift 2 ;;
     --round) only_round=1; shift ;;
+    --update) update=1; shift ;;
     --row)
       [ $# -ge 3 ] || { echo "$usage" >&2; exit 2; }
       case "$2" in irreversible|issue|answer|unclassified) ;; *) echo "$usage" >&2; exit 2 ;; esac
@@ -82,6 +94,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$pr" ] || { echo "$usage" >&2; exit 2; }
 [ -z "$row" ] || [ "$only_round" = 1 ] || { echo "--row goes with --round" >&2; echo "$usage" >&2; exit 2; }
+[ "$update" = 0 ] || [ "$only_round" = 0 ] || { echo "--round only reads; --update pushes" >&2; echo "$usage" >&2; exit 2; }
 [ -n "$repo" ] || repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || stop "cannot tell the repository; pass --repo owner/name"
 
 poll="${MERGE_POLL:-20}"
@@ -109,6 +122,48 @@ state="$(gh pr view "$pr" -R "$repo" --json state --jq .state)" || stop "cannot 
 # The head this run reads and merges. Everything below is about this commit.
 head="$(gh pr view "$pr" -R "$repo" --json headRefOid --jq .headRefOid)" || stop "cannot read the head of $pr"
 echo "pull request $repo#$pr, head $head"
+
+# -- --update (#997) -----------------------------------------------------------
+# How many commits of the base branch <sha> lacks; stops when it cannot tell.
+behind_by() {
+  local n
+  n="$(gh api "repos/$repo/compare/$base_ref...$1" --jq .behind_by)" && [[ "$n" =~ ^[0-9]+$ ]] \
+    || stop "cannot read whether $1 is behind $base_ref"
+  echo "$n"
+}
+if [ "$update" = 1 ]; then
+  base_ref="$(gh pr view "$pr" -R "$repo" --json baseRefName --jq .baseRefName)" && [ -n "$base_ref" ] \
+    || stop "cannot read the base branch of $pr"
+  behind="$(behind_by "$head")" || exit 1
+  if [ "$behind" = 0 ]; then
+    echo "update: $head is not behind $base_ref; nothing to update"
+  else
+    echo "update: $head is $behind commit(s) behind $base_ref; updating the branch, expecting that head"
+    out="$(gh api -X PUT "repos/$repo/pulls/$pr/update-branch" -f "expected_head_sha=$head" 2>&1)" \
+      || stop "GitHub refused to update the branch: $out" \
+              "If the expected head did not match, a commit was pushed after this run read $head: read it, then run this again."
+    # The update is asynchronous: wait for the head to move (MERGE_UPDATE_WAIT
+    # seconds, 5 minutes by default), then for checks to show on the new one.
+    old="$head"; t0=$SECONDS; wait="${MERGE_UPDATE_WAIT:-300}"
+    while :; do
+      head="$(gh pr view "$pr" -R "$repo" --json headRefOid --jq .headRefOid)" || stop "cannot read the head of $pr after the update"
+      [ "$head" = "$old" ] || break
+      [ $((SECONDS - t0)) -lt "$wait" ] \
+        || stop "GitHub accepted the update, but the head is still $old after $wait second(s); run this again once it has moved"
+      sleep "$poll"
+    done
+    # Only the commit the update made: its first parent is the head this run
+    # read. Any other head (a push meanwhile) was never read here, and without
+    # --update --match-head-commit would have refused it.
+    parent="$(gh api "repos/$repo/commits/$head" --jq '.parents[0].sha')" || stop "cannot read the parent of $head"
+    [ "$parent" = "$old" ] || stop "the head is now $head, whose first parent is ${parent:-none}, not $old: a commit was pushed besides the update. Read it, then run this again."
+    echo "update: head is now $head"
+    t0=$SECONDS   # the checks get their own wait, not what the head left of it
+    while [ -z "$(gh pr checks "$pr" -R "$repo" --json name --jq '.[].name' 2>/dev/null)" ] && [ $((SECONDS - t0)) -lt "$wait" ]; do
+      sleep "$poll"
+    done
+  fi
+fi
 
 # -- the review round ----------------------------------------------------------
 # The files pr-review.yml's step fetches, fetched the same way (a failed call
@@ -316,6 +371,13 @@ reserved_to_admin() {
   done
   return 1
 }
+# Behind again means another pull request merged while this one waited. No
+# second update: that is how two sessions keep pushing each other behind.
+if [ "$update" = 1 ]; then
+  behind="$(behind_by "$head")" || exit 1
+  [ "$behind" = 0 ] || stop "$head is behind $base_ref again ($behind commit(s)): something merged while this waited. It does not update twice." \
+    "Run this again with --update once nothing else is merging; only one session merges, one pull request at a time."
+fi
 if ! refused="$(gh pr merge "$pr" -R "$repo" --squash --match-head-commit "$head" --body "$body" 2>&1)"; then
   printf '%s\n' "$refused" >&2
   # Under the ruleset that reserves the merge to the admin (#568), a login
