@@ -57,7 +57,7 @@ spec:
       description: Python versions to test in addition to .python-version, space separated.
       default: ""
     test-timeout-minutes:
-      description: The test job's time limit in whole minutes, 1 to 360; pytest stops two minutes before it (a fifth of it under ten minutes).
+      description: The test job's time limit in whole minutes, 1 to 360; pytest stops two minutes before it (a fifth of it under ten minutes). Before raising it, measure what takes the time with uv run pytest --durations=20, and when a few tests take most of it, make them faster; raise it when none stands out and the time moves between runs of the same commit.
       type: number
       default: 10
 ---
@@ -209,14 +209,14 @@ test:
         if [ "$left" -gt 0 ]; then timeout -k 10 "$left" "$@" || rc=$?; else rc=124; fi
         if [ "$rc" = 124 ] || { [ "$rc" = 137 ] && [ "$(date +%s)" -ge $((now + left)) ]; }; then
           : > "$PLINTH_TMP/$m"
-          echo "stopped at the time limit, not at a failing test: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $plinth_margin s for the steps after it"
+          echo "stopped at the time limit, not at a failing test: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $plinth_margin s for the steps after it; measure first: uv run pytest --durations=20 lists the slowest tests, and when a few take most of the time, make them faster; raise test-timeout-minutes in the include's inputs only when none stands out and the time moves between runs of the same commit"
         fi
         return "$rc"
       }
       # After a step: when its marker is there, its fail line says the limit.
       time_limit() {
         [ -e "$PLINTH_TMP/$1" ] || return 0
-        plinth_lines[${#plinth_lines[@]} - 1]="fail: $2, stopped at the time limit: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $plinth_margin s kept for the steps after it ended it, not a failing test; raise test-timeout-minutes in the include's inputs, or make the suite faster"
+        plinth_lines[${#plinth_lines[@]} - 1]="fail: $2, stopped at the time limit: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $plinth_margin s kept for the steps after it ended it, not a failing test; measure first: uv run pytest --durations=20 lists the slowest tests, and when a few take most of the time, make them faster; raise test-timeout-minutes in the include's inputs only when none stands out and the time moves between runs of the same commit"
       }
       plinth_uv || exit 1
       cd "$PLINTH_WORKDIR" || exit 1

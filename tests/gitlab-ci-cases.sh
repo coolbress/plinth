@@ -878,6 +878,10 @@ else bad "a merge request did not run pytest under coverage (exit $rc)" "$out"$'
 tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60
 expect "pytest past what is left of the limit: Verdict says the time limit stopped it" 1 \
   "fail: pytest on .python-version, stopped at the time limit: the job's 1-minute limit (test-timeout-minutes) less 12 s kept for the steps after it ended it, not a failing test"
+case "$(printf '%s\n' "$out" | grep "fail: pytest on .python-version, stopped at the time limit")" in
+  *"uv run pytest --durations=20"*"raise test-timeout-minutes in the include's inputs"*"moves between runs of the same commit"*) ok "the Verdict's time-limit line names uv run pytest --durations=20 before raising the limit (#983)" ;;
+  *) bad "the Verdict's time-limit line does not say to measure before raising the limit" "$out" ;;
+esac
 tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60 PLINTH_EXTRA_PYTHON_VERSIONS="3.13 3.14"
 expect "pytest stopped at the limit: the extra versions do not run" 1 "not yet confirmed: pytest on 3.13 3.14, it did not run"
 tjob PLINTH_TEST_TIMEOUT_MINUTES=10 STUB_RC=1

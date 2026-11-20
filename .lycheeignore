@@ -4,7 +4,9 @@
 # CONTRIBUTING's local command both use it. One host per entry, anchored to
 # the scheme and host, with the date it was measured; never a status code
 # (accepting 403 would pass a page that really is gone). Delete an entry once
-# the host answers the check again.
+# the host answers the check again. A host that fails only some requests
+# does not belong here: ci / docs checks a failed link once more after a
+# minute, which a page that is gone fails too.
 
 # 2026-11-05: cisa.gov answers 403 to its home page, to existing pages and to
 # a page that does not exist alike, from GitHub's runners and elsewhere; it
