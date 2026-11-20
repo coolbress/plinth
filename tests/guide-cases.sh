@@ -1149,6 +1149,12 @@ rm "$d/reread.json"
 put "$d/open.json" "$(prm 5 9000 draft pass CLEAN)" "$(prm 6 60 draft run BLOCKED)"
 state "every one a draft: none, and each line says why" "$d" \
   "merge next: none of the 2 open; each line below says why" "  #5: never: a draft" "  #6: never: a draft"
+put "$d/open.json" "$(prm 5 9000 draft pass CLEAN)" "$(prm 6 60 ready pass DIRTY)"
+state "none to merge: step 5 names the ready one, not the draft" "$d" \
+  "merge next: none of the 2 open; each line below says why" "note: pull request #6, checks pass; /run once they are green"
+jq -c '.[1].statusCheckRollup = []' <<<"[$(prm 5 9000 draft pass CLEAN),$(prm 6 7200 ready pass CLEAN)]" > "$d/open.json"
+state "no checks on it: never named to merge" "$d" \
+  "merge next: none of the 2 open; each line below says why" "  #6: not ranked: no checks on it yet" "!the person says merge #6"
 put "$d/open.json" "$(prm 6 60 ready pass CLEAN)"
 state "one pull request open: no merge-next lines" "$d" "!merge next" "where: A pull request with checks running (step 5)"
 d="$(repo merge-next-first)"

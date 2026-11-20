@@ -160,7 +160,8 @@ What to keep to:
 - A `merge next:` line, printed when two or more of a person's pull requests
   are open, names the one to merge first and why (green and up to date
   first, then behind `main` oldest first, then blocked by a rule, then checks
-  still running). Show it as what the person says, `merge #N`, in words, not
+  still running; one with no checks on it yet is not ranked). Show it as
+  what the person says, `merge #N`, in words, not
   as the command; then the lines under it in plain words, each with its
   reason. With `none`, say no open pull request can be merged yet and why.
   Then say the `merge next cannot know:` line in one sentence: it is what the

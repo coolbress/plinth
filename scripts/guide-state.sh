@@ -551,7 +551,8 @@ fi
 # The next pull request to merge (#998), past the first merge with two or
 # more of a person's open: by mergeStateStatus, green and up to date (CLEAN,
 # or HAS_HOOKS) first; then green but behind main (BEHIND); then green and
-# BLOCKED by a rule; then checks still running; each of those oldest first. A
+# BLOCKED by a rule; then checks still running; each of those oldest first.
+# One with no checks on it is not ranked: nothing has checked it yet. A
 # draft, a failing check, a conflict (DIRTY), a non-passing status
 # (UNSTABLE), or a Blocked by naming an open issue or pull request: never.
 # GitHub works mergeability out on the first read and says UNKNOWN meanwhile:
@@ -584,7 +585,7 @@ if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<
       else if (st == "DIRTY") { r = 6; w = "never: conflicts with main (DIRTY)" }
       else if (ob != "") { r = 6; w = "never: waits on " ob " (its Blocked by)" }
       else if (checks == "pending") { r = 4; w = "checks still running" }
-      else if (checks == "none") { r = 4; w = "no checks yet" }
+      else if (checks == "none") { r = 5; w = "not ranked: no checks on it yet" }
       else if (st == "CLEAN" || st == "HAS_HOOKS") { r = 1; w = "green and up to date (" st ")" }
       else if (st == "BEHIND") { r = 2; w = "green, behind main (BEHIND)" }
       else if (st == "BLOCKED") { r = 3; w = "green, merging blocked by a rule such as a required review (BLOCKED)" }
@@ -676,8 +677,10 @@ elif [ -n "$people_prs" ]; then
     note="pull request #$n has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
     say "Something broke" "diagnose this: pull request #$n has a failing check"
   else
-    # The merge-next candidate when there is one (#998), never a draft.
-    n="${merge_n:-$(head -1 <<<"$people_prs" | field 1)}"
+    # The merge-next candidate when there is one (#998); else the first
+    # that is not a draft; a draft only when every one open is.
+    n="${merge_n:-$(awk -F '\t' '$3 == "ready" { print $1; exit }' <<<"$people_prs")}"
+    n="${n:-$(head -1 <<<"$people_prs" | field 1)}"
     checks="$(awk -F '\t' -v n="$n" '$1 == n { print $9; exit }' <<<"$people_prs")"
     case "$checks" in
       "no checks ran") note="pull request #$n: no checks ran on it; find out why before /run" ;;
