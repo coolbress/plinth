@@ -27,6 +27,15 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.47.0 instead of v1.46.1
+  (coolbress/plinth-template#281). A new `backend`, `data-ml` or `web`
+  project's image no longer fails its `image` job from 2026-11-22 on
+  `zlib1g`'s CVE-2026-85091: the run stage applies Debian's published
+  updates at build, since no rebuilt official `python:3.12-slim` carries the
+  fix yet, and building the image now needs network access to Debian's
+  mirrors. Its `docs/agents/issue-tracker.md` also says in one place where
+  each kind of record goes (coolbress/plinth-template#269). An existing
+  project gets both through `/plinth:template-update`.
 - plinth's `e2e` run now repeats what the test repository's jobs said before
   it deletes that repository (#975). The `image` job's scan warnings become
   `::warning::` lines and job summary entries, one per package with its CVEs
