@@ -17,6 +17,10 @@
 #   3. canary-web/Dockerfile's FROM lines are the pinned template's
 #      template/Dockerfile.jinja's, in order: copied by hand at a pin raise
 #      (#975).
+#   4. scripts/heavy.sh is the pinned template's template/scripts/heavy.sh,
+#      byte for byte (#989): one queue, one rule, for plinth and the projects.
+#      A pin whose template has no scripts/heavy.sh yet (before v1.48.0) is
+#      compared at heavy_from instead, the commit plinth copied it from.
 # Committed, not rendered in the job: a job that calls a reusable workflow
 # has no steps of its own, and python-ci.yml checks out the repository, so
 # the project it runs on has to be in the commit. The template is read from
@@ -209,6 +213,25 @@ done
 if same_froms "$work/empty" "$work/empty" >/dev/null; then bad "a template with no FROM line passes"
 else ok "a template with no FROM line fails: nothing read is not a match"; fi
 
+# same_file <template's> <plinth's>: byte for byte; prints the diff and exits
+# 1 if not, or if the template's is missing (nothing read is not a match).
+same_file() {
+  [ -f "$1" ] || { echo "        the template has no ${1##*/}"; return 1; }
+  diff -u "$1" "$2" 2>&1 | head -40 | sed 's/^/        /'
+  cmp -s "$1" "$2"
+}
+
+# ---- Must not pass: plinth's heavy.sh.
+printf '#!/usr/bin/env bash\nslots=${PLINTH_HEAVY_SLOTS:-2}\n' >"$work/tpl.heavy.sh"
+cp "$work/tpl.heavy.sh" "$work/heavy.sh"
+if same_file "$work/tpl.heavy.sh" "$work/heavy.sh" >/dev/null; then ok "a heavy.sh that is the template's passes"
+else bad "a heavy.sh that is the template's fails"; fi
+sed 's/:-2/:-4/' "$work/tpl.heavy.sh" >"$work/heavy.sh"
+if same_file "$work/tpl.heavy.sh" "$work/heavy.sh" >/dev/null; then bad "a heavy.sh with another default passes"
+else ok "a heavy.sh with another default fails"; fi
+if same_file "$work/no-such-heavy.sh" "$work/heavy.sh" >/dev/null; then bad "a template with no heavy.sh passes"
+else ok "a template with no heavy.sh fails"; fi
+
 # ---- The real ones: the template at the pinned commit.
 if ! template_checkout "$work"; then
   bad "no checkout of the template: $template_error"
@@ -251,6 +274,18 @@ else bad "ci.yml's canary-template job is not the rendered caller:"; sed 's/^/  
 if out="$(same_froms "$template_dir/template/Dockerfile.jinja" "$root/canary-web/Dockerfile")"
 then ok "canary-web/Dockerfile's FROM lines are template/Dockerfile.jinja's at $template_ref"
 else bad "canary-web/Dockerfile's FROM lines are not template/Dockerfile.jinja's at $template_at; copy the template's:"; echo "$out"; fi
+
+# Until the pin carries it, the commit plinth copied it from (plinth-template#287).
+heavy_from="c19a631782a808c3451cf3b0fd396ab9110f1f71"
+heavy_dir="$template_dir" heavy_at="$template_at"
+if [ ! -e "$template_dir/template/scripts/heavy.sh" ]; then
+  heavy_dir="$work/heavy-from" heavy_at="$template_repo@${heavy_from:0:7} (the pin, $template_ref, has none yet)"
+  template_fetch "$heavy_dir" "$template_repo" "$heavy_from" || heavy_dir=""
+fi
+if [ -z "$heavy_dir" ]; then bad "could not fetch $heavy_at to compare scripts/heavy.sh with"
+elif out="$(same_file "$heavy_dir/template/scripts/heavy.sh" "$root/scripts/heavy.sh")"
+then ok "scripts/heavy.sh is template/scripts/heavy.sh at $heavy_at"
+else bad "scripts/heavy.sh is not template/scripts/heavy.sh at $heavy_at; copy the template's:"; echo "$out"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

@@ -146,6 +146,9 @@ jobs:
       - name: Every uv pin is one release and its checksum, the template's too
         run: ./tests/uv-pin.sh
 
+      - name: scripts/heavy.sh makes a second call wait for a slot, takes back a dead one's and gives up with 75
+        run: ./tests/heavy-cases.sh
+
       # The token is the job's, so the log's `curl -v` lines show it masked.
       - name: Every github.com release download sends the token, to github.com only
         env:

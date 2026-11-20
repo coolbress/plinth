@@ -64,6 +64,28 @@ adds these numbers up and stops on its own:
   charged that amount unless you have turned on extra usage. If you log in with
   an API key, the estimate is close to what is billed.
 
+## When other heavy commands run on the machine
+
+The whole suite holds one of the machine's slots, through `scripts/heavy.sh`,
+the same queue that projects made with plinth use for their full test run
+(#989). When every slot is taken, it waits before doing anything and prints,
+once a minute, how many commands run and their process numbers (pids).
+`PLINTH_HEAVY_SLOTS` sets how many run at once (2 unless set) and
+`PLINTH_HEAVY_WAIT` how many minutes to wait (20 unless set). Past the wait the
+suite does not run: it exits with status 75 and a "did not run" line, and
+nothing is started or charged.
+
+It holds one slot for the whole suite, not one per run: the suite is one
+command, and a wait between runs would stretch it past the time the runs need.
+Each session gets a temporary folder of its own, inside its run's folder, so a
+project's `scripts/heavy.sh` inside the session counts in that session's own
+queue and does not wait for the slot the suite already holds.
+
+Where `ps` cannot see processes, as in some sandboxes, the slots cannot be
+counted and the suite stops at once with status 2. To run it there without the
+queue, set `PLINTH_HEAVY_HELD=1`, which tells it a slot is already held for it:
+`PLINTH_HEAVY_HELD=1 scripts/eval-suite.sh --smoke`.
+
 ## If it stops at the usage limit
 
 With a Claude subscription, a long suite can hit the subscription's usage limit.

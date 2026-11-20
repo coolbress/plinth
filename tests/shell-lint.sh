@@ -17,7 +17,16 @@ if ! command -v shellcheck >/dev/null; then
   echo "  FAIL  shellcheck not found: brew install shellcheck (apt-get install shellcheck)"; fail=1
 else
   v="$(shellcheck --version | sed -n 's/^version: //p')"
-  if shellcheck -x -S warning scripts/*.sh scripts/lib/*.sh scripts/pr-review/*.sh tests/*.sh tests/lib/*.sh; then echo "  PASS  shellcheck $v"
+  files=()
+  for f in scripts/*.sh scripts/lib/*.sh scripts/pr-review/*.sh tests/*.sh tests/lib/*.sh; do
+    [ "$f" = scripts/heavy.sh ] || files+=("$f")
+  done
+  if shellcheck -x -S warning "${files[@]}"; then echo "  PASS  shellcheck $v"
   else echo "  FAIL  shellcheck $v"; fail=1; fi
+  # scripts/heavy.sh is plinth-template's, byte for byte (tests/template-render.sh),
+  # so it is not edited here. SC2174 says `mkdir -p -m 700` sets the mode of the
+  # last directory only, which is the one it means: ${TMPDIR:-/tmp} exists.
+  if shellcheck -x -S warning -e SC2174 scripts/heavy.sh; then echo "  PASS  shellcheck $v: scripts/heavy.sh, all but SC2174"
+  else echo "  FAIL  shellcheck $v: scripts/heavy.sh"; fail=1; fi
 fi
 exit "$fail"

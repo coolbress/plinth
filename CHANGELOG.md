@@ -20,6 +20,14 @@ pull requests and have no tag.
   of a stack conflict once a lower one changes. Only the words change: no
   input, job, check name or limit, and `tests/python-ci-contract.txt` is
   unchanged.
+- plinth's own heavy commands wait in the same machine-wide slots as projects
+  made with plinth (#989). `scripts/heavy.sh` is a copy of plinth-template's,
+  held to the pinned template's by `tests/template-render.sh`;
+  `scripts/eval-suite.sh` holds one slot for the whole suite, and
+  `CONTRIBUTING.md`'s run of every `tests/*.sh` goes through it.
+  `PLINTH_HEAVY_SLOTS` (2) and `PLINTH_HEAVY_WAIT` (20 minutes) govern both;
+  past the wait nothing runs and the exit status is 75. CI does not queue:
+  it only gains `tests/heavy-cases.sh`, with no check or job renamed.
 
 ## [2.38.0] - 2026-11-20
 
