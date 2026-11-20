@@ -398,7 +398,9 @@ jobs:
       # new line inside the section the release just tagged (#877, #881). The
       # tags are fetched here; reading none fails the script rather than
       # finding every section unreleased. Not a pull request: a pass, reported
-      # by the script.
+      # by the script. No --depth: the checkout holds the whole history, and
+      # a shallow fetch would cut it at each tag, where the link check's
+      # ancestry look-up for commit links then stops (#971).
       - name: The pull request changes no released section of CHANGELOG.md
         env:
           EVENT: ${{ github.event_name }}
@@ -406,7 +408,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT" = pull_request ]; then
-            git fetch --no-tags --depth=1 origin '+refs/tags/v*:refs/tags/v*'
+            git fetch --no-tags origin '+refs/tags/v*:refs/tags/v*'
           fi
           ./scripts/changelog-released.py
 
