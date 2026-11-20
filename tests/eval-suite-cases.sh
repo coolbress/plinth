@@ -15,6 +15,8 @@
 # same again; --keep-caches and a failed grade keep them. A session that did not run (the
 # usage limit) is not graded and stops the suite, an existing --out resumes unless a pinned
 # value changed, and an --out under a folder with rules a session would load is refused (#864).
+# The suite holds one of the machine's slots (scripts/heavy.sh, #989): with the only one held it
+# waits, or gives up with 75 before anything runs, and its sessions queue apart from it.
 #
 # The stubs: `claude` acts out a session from EVAL_STUB_ACTIONS (one action
 # per run number) and reports EVAL_STUB_COST; `uvx` stands in for copier and
@@ -113,7 +115,7 @@ if [ "$action" = smoke-pass ]; then
 fi
 cfg_empty=no; [ -d "${GH_CONFIG_DIR:-/nonexistent}" ] && [ -z "$(ls -A "$GH_CONFIG_DIR")" ] && cfg_empty=yes
 EVAL_STUB_IN_SESSION=1 gh auth status >/dev/null 2>&1; ghs=$?
-echo "session run=$run action=$action budget=$budget cfg=$CLAUDE_CONFIG_DIR gh_token=${GH_TOKEN-unset} github_token=${GITHUB_TOKEN-unset} gh_config=${GH_CONFIG_DIR-unset} gh_config_empty=$cfg_empty gh_auth=$ghs origin=$(git remote get-url origin) agents_md=$([ -e AGENTS.md ] && echo yes || echo no) settings=$settings" >> "$EVAL_STUB_LOG"
+echo "session run=$run action=$action budget=$budget tmpdir=${TMPDIR-unset} cfg=$CLAUDE_CONFIG_DIR gh_token=${GH_TOKEN-unset} github_token=${GITHUB_TOKEN-unset} gh_config=${GH_CONFIG_DIR-unset} gh_config_empty=$cfg_empty gh_auth=$ghs origin=$(git remote get-url origin) agents_md=$([ -e AGENTS.md ] && echo yes || echo no) settings=$settings" >> "$EVAL_STUB_LOG"
 fix() { perl -pi -e 's/i\.due < today/i.due <= today/' "$1/src/probe/ledger.py"; }
 hi() { perl -pi -e 's/Hello, /Hi, /' "$1/src/probe/__init__.py"; }
 tool() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"%s","input":%s}]}}\n' "$1" "$2"; }
@@ -289,6 +291,9 @@ UV_CACHE_DIR="${UV_CACHE_DIR:-$(uv cache dir)}" UV_PYTHON_INSTALL_DIR="${UV_PYTH
 export UV_CACHE_DIR UV_PYTHON_INSTALL_DIR
 export PATH="$tmp/bin:$PATH" EVAL_STUB_LOG="$log" EVAL_STUB_ROOT="$root" HOME="$tmp/home"
 unset CLAUDE_CONFIG_DIR
+# Every case but the queue's own runs as if under a holder, so that none waits
+# for the machine's real slots.
+export PLINTH_HEAVY_HELD=1
 suite() { "$root/scripts/eval-suite.sh" "$@" > "$tmp/out.txt" 2>&1; echo $? > "$tmp/rc"; }
 rc() { cat "$tmp/rc"; }
 sessions() { grep -c '^session ' "$log"; }
@@ -1135,6 +1140,29 @@ for clash in "--task ledger" "--arm none" "--runs 1" "--model haiku" "--config-d
   check "--release with ${clash%% *} is refused: the result means one thing (exit 2)" \
     '[ "$(rc)" = 2 ] && grep -qE -- "--release (takes no|and --smoke are)" "$tmp/out.txt" && [ "$(sessions)" = 0 ] && [ ! -e "$tmp/rel5" ]' "$(cat "$tmp/out.txt")"
 done
+
+# --- the suite holds one of the machine's slots (#989)
+q="$tmp/queue"
+hold() { # <seconds>: one command holding a slot in $q's queue; its pid in $holder
+  rm -f "$q/held"; mkdir -p "$q"
+  TMPDIR="$q" "$root/scripts/heavy.sh" sh -c "touch '$q/held'; sleep $1" >/dev/null 2>&1 &
+  holder=$!
+  for _ in $(seq 1 200); do [ -e "$q/held" ] && break; sleep 0.05; done
+}
+queued() { (unset PLINTH_HEAVY_HELD; export TMPDIR="$q" PLINTH_HEAVY_SLOTS=1 PLINTH_HEAVY_WAIT="${1:-20}"; suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$out_q"); }
+hold 30
+: > "$log"; out_q="$tmp/q0"
+queued 0
+check "with the only slot held and no wait, the suite does not run: exit 75, no session, no records" \
+  '[ "$(rc)" = 75 ] && grep -q "did not run" "$tmp/out.txt" && [ "$(sessions)" = 0 ] && [ ! -e "$tmp/q0" ]' "$(cat "$tmp/out.txt")"
+kill "$holder"; wait "$holder" 2>/dev/null
+hold 3
+: > "$log"; out_q="$tmp/q1"
+queued
+check "with a wait, it waits for the holder, naming it, then runs" \
+  '[ "$(rc)" = 0 ] && grep -q "waiting for a slot: 1 running (pids $holder)" "$tmp/out.txt" && [ "$(sessions)" = 1 ]' "$(cat "$tmp/out.txt")"
+check "its session has a temporary directory of its own, so the session's queued tests do not wait for the suite's slot" \
+  'grep -q "^session run=ledger-plinth-1 .* tmpdir=$tmp/q1/runs/ledger-plinth-1/tmp " "$log"' "$(grep '^session' "$log")"
 
 echo "  $pass passed, $fail failed"
 [ "$fail" = 0 ]

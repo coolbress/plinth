@@ -84,8 +84,17 @@
 # rebuilds (the grader's CACHES: .venv and the tool caches), so the records
 # stay small (#687); --keep-caches keeps them. A run whose grade failed is left
 # whole for a person to look at. At the end the records' size is printed.
+#
+# The whole suite holds one of the machine's slots (scripts/heavy.sh, #989),
+# the queue projects made with plinth share: one holder, not one per run, so
+# no wait falls between runs. With every slot taken it waits, saying so once a
+# minute; past PLINTH_HEAVY_WAIT it exits 75 before it makes or spends
+# anything. PLINTH_HEAVY_HELD set means a slot is already held for it. Each
+# session gets a TMPDIR of its own in its run's folder, so a project's
+# scripts/heavy.sh inside it queues apart from the slot the suite holds.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+args=("$@")  # for the queue below, which runs this script again with them
 all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day owed-item guide guide-fresh guide-busy guide-reminder guide-plain guide-reminder-plain friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
@@ -252,6 +261,11 @@ if [ -n "$out" ] && [ -e "$out" ]; then
   [ -z "$changed" ] || die "refusing to resume $out, because a run under other values is not the same measurement:$changed
 Run the original command, or name a new directory."
   resuming=1
+fi
+
+if [ -z "${PLINTH_HEAVY_HELD:-}" ]; then
+  export PLINTH_HEAVY_HELD=1
+  exec "$root/scripts/heavy.sh" "$root/scripts/eval-suite.sh" ${args[@]+"${args[@]}"}
 fi
 
 made_cfg=""
@@ -439,7 +453,7 @@ run_one() { # <task> <arm> <n> <budget>
   local task="$1" arm="$2" n="$3" budget="$4" fx r rc start
   fx="$(fixture_of "$task" "$arm")"
   r="$out/runs/$task-$arm-$n"
-  mkdir -p "$r/gh"
+  mkdir -p "$r/gh" "$r/tmp"
   # A task with records gets the read-only gh, ahead of any other on the session's PATH.
   local path="$PATH"
   if [ -f "$root/eval-suite/tasks/$task/issues.json" ]; then
@@ -467,13 +481,14 @@ run_one() { # <task> <arm> <n> <budget>
   # perl's alarm is the timeout: `timeout` is not on a stock macOS.
   (cd "$r/repo" && printf '%s' "$(cat "$root/eval-suite/tasks/$task/prompt.txt")" \
     | env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u GH_HOST \
-        -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u VIRTUAL_ENV \
-        GH_CONFIG_DIR="$r/gh" CLAUDE_CONFIG_DIR="$cfg" DISABLE_AUTOUPDATER=1 PATH="$path" \
+        -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u VIRTUAL_ENV -u PLINTH_HEAVY_HELD \
+        TMPDIR="$r/tmp" GH_CONFIG_DIR="$r/gh" CLAUDE_CONFIG_DIR="$cfg" DISABLE_AUTOUPDATER=1 PATH="$path" \
         perl -e 'alarm shift; exec @ARGV or die "exec: $!"' "$session_timeout" \
         claude -p --model "$model" --permission-mode auto --output-format stream-json --verbose \
         --max-budget-usd "$budget" ${settings[@]+"${settings[@]}"}) > "$r/stream.jsonl" 2> "$r/stderr.txt"
   rc=$?
   set -e
+  rm -rf "$r/tmp"
   echo "exit=$rc seconds=$(( $(date +%s) - start ))" > "$r/exit.txt"
   # A session that ended without its result line (a timeout, a crash) reported
   # no cost; it may have spent up to its budget, so that is what it is charged.

@@ -14,12 +14,23 @@ claude plugin validate --strict skills                      # skill frontmatter
 # one checkout of plinth-template at the pinned commit, for the tests that read it
 export PLINTH_TEMPLATE_DIR="$(mktemp -d)/plinth-template" && tests/lib/template-checkout.sh "$PLINTH_TEMPLATE_DIR"
 # every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, build-cases, release-allowlist, template-render, arsenal-freshness, uv-pin and release-download-token need network
-failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
-[ -z "$failed" ] || { echo "FAILED:$failed"; false; }
+# in one of the machine's slots, waiting while other heavy commands hold them (scripts/heavy.sh)
+scripts/heavy.sh bash -c 'failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
+[ -z "$failed" ] || { echo "FAILED:$failed"; false; }'
 ```
 
 The last line is there because a loop ends with the status of its last test:
 without it a failure in the middle scrolls past and the block still ends in 0.
+
+`scripts/heavy.sh` is plinth-template's queue (#989): the whole run holds one
+of the machine's slots, shared with every project made with plinth, and waits
+while all are taken, printing once a minute how many run and their pids.
+`PLINTH_HEAVY_SLOTS` sets how many run at once (2 unless set; 1 on a small
+machine) and `PLINTH_HEAVY_WAIT` the minutes to wait (20 unless set). Past
+that, nothing runs and the status is 75 with a "did not run" line: report the
+checks as not verified. While working, run the test you touched on its own,
+without the queue, and the whole set once before a pull request. CI does not
+queue: each runner is a machine of its own.
 
 `tests/install-smoke.sh` installs plinth into a temporary Claude Code config
 directory exactly as the README says, so it needs network and a few minutes.
