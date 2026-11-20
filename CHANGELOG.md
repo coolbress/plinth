@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `ci / diff-size` over the limit, on GitHub and on GitLab, says to split the
+  change into pull requests that land one after another, each branched from
+  `main` after the one before it merged, and no longer to stack them each
+  against the one below (#988): under squash merges the upper pull requests
+  of a stack conflict once a lower one changes. Only the words change: no
+  input, job, check name or limit, and `tests/python-ci-contract.txt` is
+  unchanged.
+
 ## [2.38.0] - 2026-11-20
 
 A new `backend`, `data-ml` or `web` project no longer fails its `image` job from 2026-11-22: new projects render plinth-template v1.47.0, whose run stage applies Debian's published updates at build, so `zlib1g`'s CVE-2026-85091 is fixed though no rebuilt official `python:3.12-slim` carries it yet; building the image now needs network access to Debian's mirrors. The same release gives every project's `docs/agents/issue-tracker.md` the table of where each kind of record goes. `/plinth:records-check` is new: a read-only count of what is out of place in a repository's issue and pull-request records, judged by the repository's own written conventions, never by plinth's when the repository has its own. plinth's `e2e` repeats the test repository's scan warnings and failed jobs' errors before it deletes it, and `canary-web`'s base images follow the pinned template's. Wherever plinth says to raise `test-timeout-minutes`, it now says to measure first with `uv run pytest --durations=20`; that wording is in `python-ci.yml` and the GitLab include, so a project sees it after raising its `uses:` pins or include `ref`, with no input, job or check name changed.
