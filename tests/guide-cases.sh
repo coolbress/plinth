@@ -50,6 +50,19 @@ fi
 # The GraphQL read of native issue dependencies (#910): deps.json, in
 # GitHub's response shape, else no edges. MOCK_DEPS_FAIL fails it as a GitHub
 # that does not know the field does; MOCK_DEPS_LOG counts the calls.
+# The read of Blocked by numbers missing from the capped lists (#998): one
+# GraphQL call, an alias n<N> per number; lookup.json maps a number to its
+# state, a number it lacks comes back null. MOCK_LOOKUP_FAIL fails the call;
+# MOCK_LOOKUP_LOG counts the calls.
+if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *issueOrPullRequest* ]]; then
+  [ -z "${MOCK_LOOKUP_LOG:-}" ] || echo lookup >> "$MOCK_LOOKUP_LOG"
+  [ -n "${MOCK_LOOKUP_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  set -o pipefail
+  q="$(printf '%s\n' "$@" | grep -o 'n[0-9]*: issueOrPullRequest' | sed 's/:.*//' | paste -sd ' ' -)"
+  jq -n --arg q "$q" --slurpfile l <( [ -f "$MOCK_DIR/lookup.json" ] && cat "$MOCK_DIR/lookup.json" || echo '{}') \
+    '{data: {repository: ($q | split(" ") | map(select(. != "")) | map({key: ., value: ($l[0][.[1:]] | if . then {state: .} else null end)}) | from_entries)}}' | jq -r "$jqf"
+  exit
+fi
 if [ "$1" = api ] && [ "$2" = graphql ]; then
   [ -z "${MOCK_DEPS_LOG:-}" ] || echo deps >> "$MOCK_DEPS_LOG"
   [ -n "${MOCK_DEPS_FAIL:-}" ] && { echo "GraphQL: Field 'blockedBy' doesn't exist on type 'Issue' (repository.issues.nodes.0.blockedBy)" >&2; exit 1; }
@@ -1131,6 +1144,31 @@ state "a failing check is never the candidate; the failing one still routes to S
 put "$d/open.json" "$(prm 5 60 ready pass CLEAN $'## Blocked by\n\n#6')" "$(prm 6 9000 ready pass BEHIND)"
 state "a Blocked by naming an open pull request: never, while it is open" "$d" \
   "merge next: #6, green, behind main (BEHIND); the person says merge #6" "  #5: never: waits on #6 (its Blocked by)"
+# A blocker missing from the capped reads (the reviewer's case on #999): 101
+# open issues, so #1 is not in the newest 100 read; it is read by number, and
+# one that cannot be read leaves the pull request unranked, never unblocked.
+dc="$(repo merge-next-cap)"
+put "$dc/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+jq -n '[range(1; 102) | {number: ., title: "issue \(.)", labels: [], body: ""}]' > "$dc/issues.json"
+put "$dc/open.json" "$(prm 105 60 ready pass CLEAN $'## Blocked by\n\n#1')" "$(prm 106 9000 ready pass BEHIND)"
+printf '{"1":"OPEN"}' > "$dc/lookup.json"; log="$work/lookup.log"; : > "$log"
+out="$(MOCK_LOOKUP_LOG="$log" MOCK_DIR="$dc" "$script" "$dc" 2>&1)"
+grep -qxF "merge next: #106, green, behind main (BEHIND); the person says merge #106" <<<"$out" &&
+  grep -qxF "  #105: never: waits on #1 (its Blocked by)" <<<"$out" && [ "$(grep -c . "$log")" = 1 ] &&
+  ok "an open blocker past the 100 read: read by number in one call, so #105 waits" ||
+  { bad "an open blocker past the 100 read ($(grep -c . "$log") lookups)"; grep -A3 '^merge next' <<<"$out" | sed 's/^/        /'; }
+printf '{"1":"CLOSED"}' > "$dc/lookup.json"
+state "a closed blocker past the 100 read: not blocked" "$dc" "merge next: #105, green and up to date (CLEAN); the person says merge #105"
+state_fail() { local o; o="$(MOCK_LOOKUP_FAIL=1 MOCK_DIR="$dc" "$script" "$dc" 2>&1)"
+  grep -qxF "merge next: #106, green, behind main (BEHIND); the person says merge #106" <<<"$o" &&
+  grep -qxF "  #105: not ranked: blocker #1 not read (HTTP 502: Bad Gateway)" <<<"$o" && ok "$1" ||
+  { bad "$1"; grep -A3 '^merge next' <<<"$o" | sed 's/^/        /'; }; }
+state_fail "the blocker read failing: #105 not ranked, never unblocked"
+printf '{}' > "$dc/lookup.json"
+state "a blocker number GitHub has nothing for: not ranked" "$dc" "  #105: not ranked: blocker #1 not read (no issue or pull request by that number)"
+: > "$log"; jq '.[0].body = "## Blocked by\n\n#101"' "$dc/open.json" > "$dc/o" && mv "$dc/o" "$dc/open.json"
+MOCK_LOOKUP_LOG="$log" MOCK_DIR="$dc" "$script" "$dc" >/dev/null 2>&1
+[ ! -s "$log" ] && ok "every blocker in the reads: no lookup" || bad "a lookup with every blocker in the reads"
 put "$d/open.json" "$(prm 5 60 ready pass UNKNOWN)" "$(prm 6 9000 ready pass BEHIND)"
 printf '{"5":"CLEAN"}' > "$d/reread.json"; log="$work/view.log"; : > "$log"
 out="$(GUIDE_REREAD_WAIT=0 MOCK_VIEW_LOG="$log" MOCK_DIR="$d" "$script" "$d" 2>&1)"

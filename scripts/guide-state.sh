@@ -554,7 +554,8 @@ fi
 # BLOCKED by a rule; then checks still running; each of those oldest first.
 # One with no checks on it is not ranked: nothing has checked it yet. A
 # draft, a failing check, a conflict (DIRTY), a non-passing status
-# (UNSTABLE), or a Blocked by naming an open issue or pull request: never.
+# (UNSTABLE), or a Blocked by naming an open issue or pull request: never;
+# a Blocked by number that cannot be read: not ranked.
 # GitHub works mergeability out on the first read and says UNKNOWN meanwhile:
 # a green one so said is read once more, one call each after a short wait,
 # and said as not read if it is still UNKNOWN. What it cannot know is a line
@@ -571,19 +572,45 @@ if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<
       reread="$reread$n"$'\t'"${again:-UNKNOWN}"$'\n'
     done <<<"$unknown"
   fi
-  ranked="$(awk -F '\t' '
+  # A Blocked by number missing from the capped reads (the newest 100 open
+  # issues and pull requests) may still be open: each is read by number, in
+  # one GraphQL call. One that read does not answer leaves the pull request
+  # unranked, never unblocked.
+  open_nums="$( { field 1 <<<"$issues"; field 1 <<<"$prs"; } | grep . )"
+  missing="$(awk -F '\t' '{ k = split($12, a, ","); for (i = 1; i <= k; i++) if (a[i] != "") print a[i] }' <<<"$person_rows" |
+    sort -un | grep -vxF -f <(printf '%s\n' "$open_nums") || true)"
+  looked=""; lookup_failed=""
+  if [ -n "$missing" ]; then
+    owner="${repo%%/*}"; name="${repo#*/}"
+    asked="$(sed 's/.*/n&: issueOrPullRequest(number: &) { ... on Issue { state } ... on PullRequest { state } }/' <<<"$missing" | paste -sd ' ' -)"
+    if got="$(cd "$top" && gh api graphql -f owner="$owner" -f name="$name" \
+          -f query="query(\$owner: String!, \$name: String!) { repository(owner: \$owner, name: \$name) { $asked } }" \
+          --jq '.data.repository | to_entries[] | select(.value != null) | [(.key[1:]), .value.state] | @tsv' 2>&1)"; then
+      looked="$got"
+    else
+      lookup_failed="$(tail -1 <<<"$got" | tr '\t' ' ')"
+    fi
+  fi
+  ranked="$(awk -F '\t' -v lf="$lookup_failed" '
     FNR == 1 { f++ }
     $1 == "" { next }
     f == 1 { again[$1] = $2; next }
-    f == 2 { open[$1] = 1; next }
+    f == 2 { state_of[$1] = $2; next }
     f == 3 { open[$1] = 1; next }
+    f == 4 { open[$1] = 1; next }
     { n = $1; draft = $3; checks = $4; st = $11
-      ob = ""; k = split($12, a, ","); for (i = 1; i <= k; i++) if (a[i] in open) ob = ob (ob == "" ? "#" : ", #") a[i]
+      ob = ""; un = ""; k = split($12, a, ",")
+      for (i = 1; i <= k; i++) {
+        if (a[i] == "") continue
+        if ((a[i] in open) || ((a[i] in state_of) && state_of[a[i]] == "OPEN")) ob = ob (ob == "" ? "#" : ", #") a[i]
+        else if (!(a[i] in state_of)) un = un (un == "" ? "#" : ", #") a[i]
+      }
       if (st == "UNKNOWN" && (n in again)) st = again[n]
       if (draft == "draft") { r = 6; w = "never: a draft" }
       else if (checks == "fail") { r = 6; w = "never: a check fails" }
       else if (st == "DIRTY") { r = 6; w = "never: conflicts with main (DIRTY)" }
       else if (ob != "") { r = 6; w = "never: waits on " ob " (its Blocked by)" }
+      else if (un != "") { r = 5; w = "not ranked: blocker " un " not read (" (lf != "" ? lf : "no issue or pull request by that number") ")" }
       else if (checks == "pending") { r = 4; w = "checks still running" }
       else if (checks == "none") { r = 5; w = "not ranked: no checks on it yet" }
       else if (st == "CLEAN" || st == "HAS_HOOKS") { r = 1; w = "green and up to date (" st ")" }
@@ -593,7 +620,7 @@ if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<
       else if (st == "UNKNOWN") { r = 5; w = "not read (UNKNOWN, read twice)" }
       else { r = 5; w = "not read (" (st == "" ? "no state given" : st) ")" }
       printf "%d\t%s\t%09d\t%s\t%s\n", r, $7, n, n, w }' \
-    <(printf '%s\n' "$reread") <(printf '%s\n' "$issues") <(printf '%s\n' "$prs") - <<<"$person_rows" | sort -t $'\t' -k1,1n -k2,2 -k3,3)"
+    <(printf '%s\n' "$reread") <(printf '%s\n' "$looked") <(printf '%s\n' "$issues") <(printf '%s\n' "$prs") - <<<"$person_rows" | sort -t $'\t' -k1,1n -k2,2 -k3,3)"
   lead="$(head -1 <<<"$ranked")"
   if [ "$(field 1 <<<"$lead")" -le 4 ]; then
     merge_n="$(field 4 <<<"$lead")"
