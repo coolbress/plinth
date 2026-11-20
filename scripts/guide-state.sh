@@ -238,14 +238,19 @@ for_issues='def for_issues: [(.body // "") | scan("(?i)(?:^|[^a-z0-9_])(?:close[
   | unique | map(tostring) | join(",");'
 
 # Each read on its own, so the line names the one that failed and its error.
+# The open pull requests' columns: 1 number, 2 bot or person, 3 draft or
+# ready, 4 checks, 5 head, 6 title, 7 opened at, 8 failing checks, 9 raises
+# the plinth pin, 10 the issues it is for, 11 mergeStateStatus (#998), 12 the
+# #N its Blocked by names. mergeStateStatus is a field, not a connection: it
+# adds no node to the query's count (measured for #998).
 # Merged pull requests are read up to $read. A read that comes back full may
 # have been cut (one more cannot be told apart), so the count is of those
 # only and the line says so (#905).
 read=100
 prs=""; merged=""; issues=""; failed=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
-      --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt \
-      --jq "$rollup$raises$for_issues"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues] | @tsv' 2>&1)"; then
+      --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt,mergeStateStatus \
+      --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
       --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
@@ -543,6 +548,92 @@ if [ -n "$broken" ]; then
     echo "comments by people on pull request #$n: not read ($(tail -1 <<<"$said"))"
   fi
 fi
+# The next pull request to merge (#998), past the first merge with two or
+# more of a person's open: by mergeStateStatus, green and up to date (CLEAN,
+# or HAS_HOOKS) first; then green but behind main (BEHIND); then green and
+# BLOCKED by a rule; then checks still running; each of those oldest first.
+# One with no checks on it is not ranked: nothing has checked it yet. A
+# draft, a failing check, a conflict (DIRTY), a non-passing status
+# (UNSTABLE), or a Blocked by naming an open issue or pull request: never;
+# a Blocked by number that cannot be read: not ranked.
+# GitHub works mergeability out on the first read and says UNKNOWN meanwhile:
+# a green one so said is read once more, one call each after a short wait,
+# and said as not read if it is still UNKNOWN. What it cannot know is a line
+# of its own.
+merge_next=""; merge_n=""
+if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<"$people_prs")" -ge 2 ]; then
+  person_rows="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
+  unknown="$(awk -F '\t' '$3 == "ready" && $4 == "pass" && $11 == "UNKNOWN" { print $1 }' <<<"$person_rows")"
+  reread=""
+  if [ -n "$unknown" ]; then
+    sleep "${GUIDE_REREAD_WAIT:-3}"
+    while IFS= read -r n; do
+      again="$(cd "$top" && gh pr view "$n" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null)" || again=""
+      reread="$reread$n"$'\t'"${again:-UNKNOWN}"$'\n'
+    done <<<"$unknown"
+  fi
+  # A Blocked by number missing from the capped reads (the newest 100 open
+  # issues and pull requests) may still be open: each is read by number, in
+  # one GraphQL call. One that read does not answer leaves the pull request
+  # unranked, never unblocked.
+  open_nums="$( { field 1 <<<"$issues"; field 1 <<<"$prs"; } | grep . )"
+  missing="$(awk -F '\t' '{ k = split($12, a, ","); for (i = 1; i <= k; i++) if (a[i] != "") print a[i] }' <<<"$person_rows" |
+    sort -un | grep -vxF -f <(printf '%s\n' "$open_nums") || true)"
+  looked=""; lookup_failed=""
+  if [ -n "$missing" ]; then
+    owner="${repo%%/*}"; name="${repo#*/}"
+    asked="$(sed 's/.*/n&: issueOrPullRequest(number: &) { ... on Issue { state } ... on PullRequest { state } }/' <<<"$missing" | paste -sd ' ' -)"
+    if got="$(cd "$top" && gh api graphql -f owner="$owner" -f name="$name" \
+          -f query="query(\$owner: String!, \$name: String!) { repository(owner: \$owner, name: \$name) { $asked } }" \
+          --jq '.data.repository | to_entries[] | select(.value != null) | [(.key[1:]), .value.state] | @tsv' 2>&1)"; then
+      looked="$got"
+    else
+      lookup_failed="$(tail -1 <<<"$got" | tr '\t' ' ')"
+    fi
+  fi
+  ranked="$(awk -F '\t' -v lf="$lookup_failed" '
+    FNR == 1 { f++ }
+    $1 == "" { next }
+    f == 1 { again[$1] = $2; next }
+    f == 2 { state_of[$1] = $2; next }
+    f == 3 { open[$1] = 1; next }
+    f == 4 { open[$1] = 1; next }
+    { n = $1; draft = $3; checks = $4; st = $11
+      ob = ""; un = ""; k = split($12, a, ",")
+      for (i = 1; i <= k; i++) {
+        if (a[i] == "") continue
+        if ((a[i] in open) || ((a[i] in state_of) && state_of[a[i]] == "OPEN")) ob = ob (ob == "" ? "#" : ", #") a[i]
+        else if (!(a[i] in state_of)) un = un (un == "" ? "#" : ", #") a[i]
+      }
+      if (st == "UNKNOWN" && (n in again)) st = again[n]
+      if (draft == "draft") { r = 6; w = "never: a draft" }
+      else if (checks == "fail") { r = 6; w = "never: a check fails" }
+      else if (st == "DIRTY") { r = 6; w = "never: conflicts with main (DIRTY)" }
+      else if (ob != "") { r = 6; w = "never: waits on " ob " (its Blocked by)" }
+      else if (un != "") { r = 5; w = "not ranked: blocker " un " not read (" (lf != "" ? lf : "no issue or pull request by that number") ")" }
+      else if (checks == "pending") { r = 4; w = "checks still running" }
+      else if (checks == "none") { r = 5; w = "not ranked: no checks on it yet" }
+      else if (st == "CLEAN" || st == "HAS_HOOKS") { r = 1; w = "green and up to date (" st ")" }
+      else if (st == "BEHIND") { r = 2; w = "green, behind main (BEHIND)" }
+      else if (st == "BLOCKED") { r = 3; w = "green, merging blocked by a rule such as a required review (BLOCKED)" }
+      else if (st == "UNSTABLE") { r = 6; w = "never: a status not passing (UNSTABLE)" }
+      else if (st == "UNKNOWN") { r = 5; w = "not read (UNKNOWN, read twice)" }
+      else { r = 5; w = "not read (" (st == "" ? "no state given" : st) ")" }
+      printf "%d\t%s\t%09d\t%s\t%s\n", r, $7, n, n, w }' \
+    <(printf '%s\n' "$reread") <(printf '%s\n' "$looked") <(printf '%s\n' "$issues") <(printf '%s\n' "$prs") - <<<"$person_rows" | sort -t $'\t' -k1,1n -k2,2 -k3,3)"
+  lead="$(head -1 <<<"$ranked")"
+  if [ "$(field 1 <<<"$lead")" -le 4 ]; then
+    merge_n="$(field 4 <<<"$lead")"
+    merge_next="merge next: #$merge_n, $(field 5 <<<"$lead"); the person says merge #$merge_n"
+    rest="$(tail -n +2 <<<"$ranked")"
+  else
+    merge_next="merge next: none of the $(grep -c . <<<"$ranked") open; each line below says why"
+    rest="$ranked"
+  fi
+  [ -z "$rest" ] || merge_next="$merge_next"$'\n'"$(awk -F '\t' '{ printf "  #%s: %s\n", $4, $5 }' <<<"$rest")"
+  merge_next="$merge_next"$'\n'"merge next cannot know: whether two pull requests green alone break main together; which one depends on another, unless its Blocked by says so; which session owns each; whether the person wants it merged now"
+fi
+[ -z "$merge_next" ] || printf '%s\n' "$merge_next"
 if [ "$people_merged" -gt 0 ]; then set_mode focused "a pull request by a person has merged"
 elif [ -n "$past_first" ]; then set_mode focused "past the first merge: more merged pull requests than the $read read"
 else set_mode full "no pull request by a person has merged yet"; fi
@@ -613,7 +704,11 @@ elif [ -n "$people_prs" ]; then
     note="pull request #$n has a failing check; the agent reads its log, reproduces it and fixes the code, not the check"
     say "Something broke" "diagnose this: pull request #$n has a failing check"
   else
-    n="$(head -1 <<<"$people_prs" | field 1)"; checks="$(head -1 <<<"$people_prs" | field 9)"
+    # The merge-next candidate when there is one (#998); else the first
+    # that is not a draft; a draft only when every one open is.
+    n="${merge_n:-$(awk -F '\t' '$3 == "ready" { print $1; exit }' <<<"$people_prs")}"
+    n="${n:-$(head -1 <<<"$people_prs" | field 1)}"
+    checks="$(awk -F '\t' -v n="$n" '$1 == n { print $9; exit }' <<<"$people_prs")"
     case "$checks" in
       "no checks ran") note="pull request #$n: no checks ran on it; find out why before /run" ;;
       "checks not started yet"*) note="pull request #$n, $checks; look again in a minute, then /run once they are green" ;;

@@ -157,6 +157,15 @@ What to keep to:
   ready ticket waits on what its line names: say that, and offer none of them.
   When the line ends `GitHub's issue dependencies: not read (…)`, say the choice
   went by the issues' text alone, and guess no dependency.
+- A `merge next:` line, printed when two or more of a person's pull requests
+  are open, names the one to merge first and why (green and up to date
+  first, then behind `main` oldest first, then blocked by a rule, then checks
+  still running; one with no checks on it yet is not ranked). Show it as
+  what the person says, `merge #N`, in words, not
+  as the command; then the lines under it in plain words, each with its
+  reason. With `none`, say no open pull request can be merged yet and why.
+  Then say the `merge next cannot know:` line in one sentence: it is what the
+  person decides. Do not merge it yourself.
 - `where: not read` means the script could not read the repository: say what
   was not read, from the line that says so, and the one thing that fixes it
   (for example, logging in with `gh auth login`); name no step as the one the
