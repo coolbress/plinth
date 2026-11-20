@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:records-check` counts what is out of place in a repository's
+  issue and pull-request records, read-only (#977). Facts are judged
+  whatever the conventions say: a `#N` or `owner/repo#N` that resolves to
+  nothing, a home path in a body (by line and form, never what matched), a
+  body at 90% of GitHub's size limit. Convention items are judged only
+  against the repository's own templates, `CONTRIBUTING.md`,
+  `docs/agents/issue-tracker.md` and `AGENTS.md`, each line naming the file:
+  a completed task or bug with no ending, and a merged pull request with no
+  AI trailer, an INFO. With no convention read the line says `not checked`.
+  Unticked acceptance criteria are listed for a person to read. It is not a
+  CI job and changes nothing.
+
 ### Changed
 
 - plinth's `e2e` run now repeats what the test repository's jobs said before

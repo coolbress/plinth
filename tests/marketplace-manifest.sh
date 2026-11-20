@@ -116,8 +116,8 @@ check(all(re.fullmatch(r"\./(engineering|productivity)/[a-z-]+", s) for s in mat
       "mattpocock-skills and -extra: every skill is under engineering/ or productivity/")
 
 skills = sorted(d.name for d in (root / "skills").iterdir() if d.is_dir())
-check(skills == ["arsenal", "floor-check", "guide", "new-project", "template-update"],
-      f"plinth skills are arsenal, floor-check, guide, new-project, template-update: {skills}")
+check(skills == ["arsenal", "floor-check", "guide", "new-project", "records-check", "template-update"],
+      f"plinth skills are arsenal, floor-check, guide, new-project, records-check, template-update: {skills}")
 # The catalog description is what `/plugin` shows before install (#752): it
 # names exactly the skills under skills/, no more and no fewer.
 said = re.match(r"Skills: ([a-z0-9, -]+)\. ", plinth_says)
@@ -139,6 +139,11 @@ line = re.search(r"^disallowed-tools:(.*)$", fm, re.M)
 check(line is not None and all(t in line.group(1) for t in ("Edit", "Write", "NotebookEdit")),
       "floor-check: Edit, Write and NotebookEdit are actually removed (Bash stays; the skill needs gh)")
 check(re.search(r"^allowed-tools:", fm, re.M) is None, "floor-check: allowed-tools is not mistaken for a lock (it unlocks)")
+fm = frontmatter("records-check")
+line = re.search(r"^disallowed-tools:(.*)$", fm, re.M)
+check(line is not None and all(t in line.group(1) for t in ("Edit", "Write", "NotebookEdit")),
+      "records-check: Edit, Write and NotebookEdit are actually removed (Bash stays; the skill needs gh)")
+check(re.search(r"^allowed-tools:", fm, re.M) is None, "records-check: allowed-tools is not mistaken for a lock (it unlocks)")
 fm = frontmatter("arsenal")
 check("disable-model-invocation" not in fm, "arsenal: the model may open the catalog on its own")
 body = (root / "skills/arsenal/SKILL.md").read_text()

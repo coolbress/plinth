@@ -139,7 +139,7 @@ expect() {  # expect <plugin> <needle>...
   done
   echo "  PASS  $1: ${*:2}"
 }
-expect plinth@plinth "Skills (5)" "arsenal" "floor-check" "guide" "new-project" "template-update" "Hooks (0)"
+expect plinth@plinth "Skills (6)" "arsenal" "floor-check" "guide" "new-project" "records-check" "template-update" "Hooks (0)"
 expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
 # 15 of the 27 skills upstream ships (#520, #593, #704, #714): 6 more are listed
 # in mattpocock-skills-extra, and six are in neither (#475, #477, #714).
