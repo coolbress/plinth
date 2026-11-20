@@ -27,6 +27,7 @@ pull requests and have no tag.
 
 ### Changed
 
+<<<<<<< HEAD
 - `/plinth:new-project` renders plinth-template v1.47.0 instead of v1.46.1
   (coolbress/plinth-template#281). A new `backend`, `data-ml` or `web`
   project's image no longer fails its `image` job from 2026-11-22 on
@@ -37,6 +38,14 @@ pull requests and have no tag.
   place where each kind of record goes (coolbress/plinth-template#269), and
   a project that chose Railway gets a README that no longer says a trial is
   planned. An existing project gets these through `/plinth:template-update`.
+=======
+- `/plinth:records-check`'s `ref` lines that say a reference was not verified
+  now name the records it was read in, as its `WARN` lines do, and its skill
+  says what `ref` cannot see: a bare `#N` meant for another repository whose
+  number also exists here resolves, so `PASS` means every reference resolves,
+  not that each points where it was meant to (#987). No rule, exit status or
+  count changes.
+>>>>>>> origin/main
 - plinth's `e2e` run now repeats what the test repository's jobs said before
   it deletes that repository (#975). The `image` job's scan warnings become
   `::warning::` lines and job summary entries, one per package with its CVEs
