@@ -365,9 +365,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The merge commit and its parents: HEAD^1 is the base that the
-          # released-section step compares CHANGELOG.md with.
-          fetch-depth: 2
+          # The whole history: HEAD^1 is the base that the released-section
+          # step compares CHANGELOG.md with, and the link check looks up the
+          # commit a link to this repository's own commit page names.
+          fetch-depth: 0
 
       # First, so a description that would close the wrong issue is red
       # before the link check's download. A keyword in a sentence closes an
@@ -463,8 +464,39 @@ jobs:
             sleep "$wait"
             "$d/lychee" --cache "$@"
           }
+          # A link to this repository's own commit page is checked against the
+          # checkout's history, not github.com, which lychee skips: two such
+          # pages answered 503 to both runs, 60 seconds apart (#971). A link
+          # whose path is not a hexadecimal SHA, or whose SHA is no commit
+          # here, fails.
+          commit_links() { # commit_links <Markdown files>
+            local bad=0 url sha
+            while IFS= read -r url; do
+              sha="$(sed -nE "s|^$repo/commit/([0-9a-f]{7,40})([?#].*)?\$|\\1|p" <<<"$url")"
+              if [ -z "$sha" ] || ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+                echo "::error::$url names no commit in this repository's history"; bad=1
+              fi
+            done < <(grep -ohE "$repo/commit/[^])>\"'<[:space:]]*" -- "$@" | sort -u)
+            return "$bad"
+          }
+          mapfile -t md < <(git ls-files -- '*.md' ':!:canary-template/')
+          commit_links "${md[@]}"
           check 60 --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" --exclude-path '(^|/)canary-template/' \
+            --exclude "^$repo/commit/" \
             --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
+          # The commit-link check on three fixtures: a commit in the history
+          # passes, and a SHA that is no commit here and a path that is no SHA
+          # each fail, so the check cannot pass a link it did not look up.
+          fc="$RUNNER_TEMP/commit-links"; mkdir -p "$fc"
+          echo "[here](https://github.com/coolbress/plinth/commit/$(git rev-parse HEAD^1))" >"$fc/ok.md"
+          echo "[gone](https://github.com/coolbress/plinth/commit/0000000000000000000000000000000000000000)" >"$fc/gone.md"
+          echo "[branch](https://github.com/coolbress/plinth/commit/main)" >"$fc/branch.md"
+          commit_links "$fc/ok.md" || { echo "::error::a link to a commit in the history failed"; exit 1; }
+          for x in gone branch; do
+            if commit_links "$fc/$x.md" >/dev/null; then
+              echo "::error::the commit-link check passed $fc/$x.md, which names no commit here"; exit 1
+            fi
+          done
           # The second run on two fixtures, offline: a link still missing fails
           # both runs, so the check still fails; a link that appears during the
           # wait passes the second, so a failure that does not last passes.
