@@ -28,9 +28,14 @@ fix touches: the diff the reviewer read is not reshuffled under them.
 
 ## 2. Run the checks
 
-Run the commands in the code block at the top of `AGENTS.md`, in that order.
-That block is the only list: do not keep a second copy of the commands here or
-anywhere else.
+While the work goes on, run the tests of what changed: the pytest command in
+`AGENTS.md`'s code block without `scripts/heavy.sh`, with the file after it
+(`tests/test_<module>.py`, or `-k`). Run the commands in the code block at the top of `AGENTS.md`, in that
+order, once, before the pull request. That block is the only list: do
+not keep a second copy of the commands here or anywhere else. A check not run,
+such as one `scripts/heavy.sh` gave up on with "did not run" because the
+machine's slots stayed busy, is named under "Not verified" in the description,
+never reported as passed.
 
 - A command that fails stops the commit. Report it with its output.
 - A check that looks wrong, such as a test of the old behaviour after an
@@ -42,7 +47,7 @@ anywhere else.
 ## 3. Run the program
 
 Run `tests/test_entry_point.py` alone: the pytest command in `AGENTS.md`'s
-code block, with the file and `-v` after it. It runs
+code block without `scripts/heavy.sh`, with the file and `-v` after it. It runs
 `python -m probe` as a person does, checks that it exits 0 and
 logs "started" with a greeting, and compares what it prints with
 `tests/entry_point.expected`.
