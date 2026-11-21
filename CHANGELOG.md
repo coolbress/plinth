@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:new-project` offers a third license, `Proprietary`, which grants
+  nothing (#995): `--license=proprietary` renders the template's
+  all-rights-reserved notice as `LICENSE`, on GitHub and on GitLab. The
+  license question says what each choice grants and recommends `Proprietary`
+  for a private repository and `MIT` for a public one, and the defaults
+  follow the visibility the same way. A template before v1.48.0 carries no
+  `Proprietary`, and the door stops before creating anything.
+  `/plinth:floor-check` passes the notice as `LICENSE`.
+
 ### Changed
 
 - `/plinth:guide` names the next pull request to merge when two or more of a

@@ -112,12 +112,13 @@ case "$step" in
   # garbage is a body base64 cannot decode; nochoices decodes to a copier.yml
   # with no archetype or license choices where the door looks (#629). The
   # default has no hosting questions, as v1.26.0; hosting adds them in the
-  # shape coolbress/plinth-template#128 gave them (#677).
+  # shape coolbress/plinth-template#128 gave them (#677). The default lists
+  # Proprietary, as v1.48.0 does (coolbress/plinth-template#289); hosting does not.
   choices)       case "${MOCK_CHOICES:-ok}" in
                    garbage)   printf '!!! not base64 !!!' ;;
                    nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
                    hosting) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nhosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' | base64 ;;
-                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}" | base64 ;;
+                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}" | base64 ;;
                  esac ;;
   # The owner's shared community-health files: present, absent (404) or
   # unreadable (any other failure). `gh` prints "Not Found" on a 404.
@@ -572,6 +573,16 @@ run license-typo   err no no "unknown license: bogus"                           
 # copier refuses a license outside its choices only after the repository exists;
 # the door reads the template's own list and stops before creating anything.
 run license-unsupported err no no "the template does not carry the license GPL-3.0"          -- probe --license=gpl-3.0
+# Proprietary is no license GitHub lists (#995): the door names it itself,
+# creates the repository with no license template, and copier renders the notice.
+run proprietary ok yes no "(public, Proprietary, cli, as owner)" -- probe --license=Proprietary
+if grep -q '^uvx .*--data license=Proprietary ' "$work/home-proprietary/calls.log" && ! grep -q '^gh api /licenses/' "$work/home-proprietary/calls.log" \
+   && ! grep -q '^gh repo create .*license' "$work/home-proprietary/calls.log"
+then ok proprietary "license=Proprietary reaches copier, GitHub's license list is not asked, and the repository is created with no license"
+else bad proprietary "license=Proprietary did not reach copier alone"; grep -E '^(uvx|gh api /licenses|gh repo create)' "$work/home-proprietary/calls.log" | cut -c1-200 | sed 's/^/        /'; fi
+E="MOCK_PLAN=pro" run proprietary-private ok yes no "(private, Proprietary, cli, as owner)" -- probe --private --license=proprietary
+# A template before v1.48.0 lists no Proprietary: the door stops before creating.
+E="MOCK_CHOICES=hosting" run proprietary-old-template err no no "the template does not carry the license Proprietary" -- probe --license=proprietary
 run archetype-typo err no no "the template accepts: cli library backend data-ml web"          -- probe --archetype=service
 # The template tag must still name the commit this plinth was tested with
 # (#519): moved, gone or unreadable, the door stops before creating anything.
@@ -1520,7 +1531,7 @@ printf 'curl %s\n' "$*" >> "$GH_LOG"
 case "$*" in *"/copier.yml"*)
   case "${MOCK_GL_CHOICES:-1}" in
     down)      echo "curl: (6) Could not resolve host: raw.githubusercontent.com" >&2; exit 6 ;;
-    1)         printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' ;;
+    1)         printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' ;;
     nochoices) printf 'plinth_sha:\n  type: str\n' ;;
     *)         echo "curl: (22) The requested URL returned error: 404" >&2; exit 22 ;;
   esac ;;
@@ -1576,6 +1587,7 @@ E="MOCK_GL_LEVEL=30" gl_run gl-group-developer err no no "needs the Maintainer r
 E="MOCK_GL_LEVEL=none" gl_run gl-group-nonmember err no no "needs the Maintainer role" -- someorg/probe --host gitlab
 E="MOCK_GL_EXISTS=1" gl_run gl-exists err no no "already exists" -- probe --host gitlab
 gl_run gl-bad-license err no no "the template does not carry the license" -- probe --host gitlab --license=gpl-3.0
+gl_run gl-proprietary ok yes no "create gitlab.com/tester/probe (private, Proprietary, cli, as owner)" -- probe --host gitlab --license=proprietary
 E="MOCK_TAG=moved" gl_run gl-tag-moved err no no "names commit $(printf '%040d' 1), not $TEMPLATE_SHA, the one this plinth was tested with" -- probe --host gitlab
 E="MOCK_TAG=error" gl_run gl-tag-unread err no no "could not read which commit coolbress/plinth-template@$TEMPLATE_REF names" -- probe --host gitlab
 if grep -qF "/copier.yml" "$work/home-gl-tag-moved/calls.log"; then bad gl-tag-moved "the template's copier.yml was read although its tag names another commit"

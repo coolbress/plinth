@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--license=mit|apache-2.0] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -160,7 +160,9 @@ numbered, one question at a time. Never answer a question for the person.
    in `~/<name>`, no third-party reviewer, no code of conduct, no
    description." With `--host gitlab` given, say "private on GitLab.com" in
    place of "public on GitHub" and leave out the reviewer, the code of
-   conduct and the description, which are GitHub only.
+   conduct and the description, which are GitHub only. The license follows
+   the visibility: with `--private` given, or `--host gitlab` without
+   `--public`, say "Proprietary license" in place of "MIT license".
 
    | Label | Description |
    | --- | --- |
@@ -173,23 +175,36 @@ numbered, one question at a time. Never answer a question for the person.
    `--no-third-party-review`, `--no-code-of-conduct`, `--no-description`,
    `--license=mit` and `--dir=<home>/<name>`, with the home directory
    written out as an absolute path; with `--host gitlab` given, `--private`
-   in place of `--public`, and none of the three GitHub-only flags.
+   in place of `--public`, and none of the three GitHub-only flags; for a
+   private repository, `--license=proprietary` in place of `--license=mit`.
    **Customize** asks each choice still open, leaving out what the
    arguments give and what does not apply: the host for `web`, which is
    GitHub only, and on GitLab the reviewer, the code of conduct and the
    description, which are GitHub only.
-   Visibility and the reviewer depend on the host, so when the host is
-   still open, ask in two calls: first the host and the license, then
+   Visibility and the reviewer depend on the host, and the license's
+   recommendation on the visibility, so ask each after what it depends on.
+   When the host is still open, ask in two calls: first the host, then
    visibility and, on GitHub, the reviewer. When the host is already
-   settled, ask visibility, the reviewer and the license in one call.
+   settled, ask visibility and the reviewer in one call. Ask the license in
+   the first call made once the visibility is known: with the visibility
+   given by the arguments, in the host's call or, with the host settled
+   too, in the visibility's call; otherwise in the next call: on GitHub
+   with the code of conduct and the description still open, and alone
+   when none is open or on GitLab.
 
    - Header `Host`: "Where should the repository live?" **GitHub
      (Recommended)** (`--host=github`). **GitLab.com**: a GitLab.com
      project; needs `glab` installed and logged in (`--host=gitlab`).
-   - Header `License`: "Which license?" **MIT (Recommended)**: short, the
-     usual choice for a small project (`--license=mit`). **Apache-2.0**:
-     when a company or the project you build on asks for it
-     (`--license=apache-2.0`).
+   - Header `License`: "Which license?" Three choices, each saying what
+     it grants; for a private repository list **Proprietary
+     (Recommended)** first, for a public one **MIT (Recommended)**.
+     **MIT**: anyone may use, copy, change and sell the code, keeping your
+     copyright line; short, the usual choice for a public project
+     (`--license=mit`). **Apache-2.0**: the same, plus a patent grant; when
+     a company or the project you build on asks for it
+     (`--license=apache-2.0`). **Proprietary**: grants nothing; nobody
+     else may use, copy or share the code without your written permission
+     (`--license=proprietary`).
    - Header `Visibility`: "Public or private?" Public is `--public`,
      private `--private`, on either host. On GitHub, **Public
      (Recommended)**: the whole wall on every plan; **Private**: on GitHub

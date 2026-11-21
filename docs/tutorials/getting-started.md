@@ -112,9 +112,12 @@ you can type instead:
   `gh auth login -s repo,workflow,delete_repo,read:user`, or add it to the
   login you have with `gh auth refresh -h github.com -s read:user`. Without
   it the generator stops and prints that command.
-- `--license=apache-2.0`: the template's other licence. Take it when your
-  company, or the project you build on, asks for Apache-2.0; MIT is shorter
-  and the usual choice for a small project.
+- `--license=apache-2.0`: MIT's freedoms plus a patent grant. Take it when
+  your company, or the project you build on, asks for Apache-2.0; MIT is
+  shorter and the usual choice for a small public project.
+- `--license=proprietary`: grants nothing; nobody else may use, copy or
+  share the code without your permission. The agent recommends it with
+  `--private`.
 - `--archetype=<kind>`: `cli`, `library`, `backend`, `data-ml`, or `web` for
   a web app with a database, which costs money to run (about US $13 a month
   on Render; [where else it can run](../how-to/choose-where-a-web-app-runs.md), named
