@@ -3072,14 +3072,29 @@ def is_private(meta: dict) -> bool:
     return meta.get("private") is True
 
 
-def plan_hides_security(meta: dict) -> bool:
-    """A private repository that answers no security settings even to a login
-    that administers it (measured on a personal account's private repository,
-    #811): its plan does not expose the paid products' status, so what hangs
-    on it cannot be read from here (#1002)."""
+def hidden_security(repo: str, meta: dict, network: bool, actions_token: bool) -> str | None:
+    """Why a private repository answers no security settings to a login that
+    administers it, as far as this run can tell (#1002); None when that is not
+    the case. GitHub gives the same empty answer for a plan without its paid
+    products (measured on a personal account's private repository, #811) and
+    for a token without the Administration permission, which is how plinth has
+    the agent work after the first merge; `meta` carries the login's role,
+    never the token's permissions. So "plan" (cannot be read here) only when
+    the token is shown to read an admin-only setting, the Actions permissions;
+    otherwise "token", plain not verified, with the fix line naming a token
+    with Administration. Not read under --actions-token, whose answers on
+    these items are INFOs left to the skill."""
     perms = meta.get("permissions")
-    return (meta.get("security_and_analysis") is None and is_private(meta)
-            and isinstance(perms, dict) and perms.get("admin") is True)
+    if actions_token or not (meta.get("security_and_analysis") is None and is_private(meta)
+                             and isinstance(perms, dict) and perms.get("admin") is True):
+        return None
+    actions = api(f"repos/{repo}/actions/permissions", network)
+    readable = isinstance(actions, dict) and actions.get("allowed_actions") in ("all", "local_only", "selected")
+    return "plan" if readable else "token"
+
+
+ADMIN_TOKEN_FIX = ("  run /plinth:floor-check again with a token that has the Administration permission (read): "
+                   "GitHub answers a token without it as it answers a plan without the paid security products")
 
 
 def product_status(meta: dict, *keys: str) -> str | None:
@@ -3095,7 +3110,7 @@ def product_status(meta: dict, *keys: str) -> str | None:
     return next((s for s in ("enabled", "disabled") if s in statuses), None)
 
 
-def check_push_protection(repo: str, meta: dict, actions_token: bool = False) -> None:
+def check_push_protection(repo: str, meta: dict, actions_token: bool = False, hidden: str | None = None) -> None:
     """Is push protection on (#303)? `ci / secrets` reports a secret after the
     push, when it is already on GitHub; push protection refuses the push, for
     the secret formats GitHub knows. The door turns it on.
@@ -3121,14 +3136,21 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
         result("INFO", "push protection is not read here: the Actions token does not get the repository's security "
                        "settings; /plinth:floor-check reads it with a person's login", deferred=True)
         return
-    if plan_hides_security(meta):
+    if hidden == "plan":
         # Measured on a personal account's private repository (#811): GitHub
         # leaves the settings out even for its administrator when no
         # security product is on offer there. Still not read, so a SKIP.
         result("SKIP", "push protection not verified (GitHub answers no security settings for this private "
-                       "repository to a login that administers it: GitHub Secret Protection (a paid product for "
-                       "Team and Enterprise) not on its plan, or a token without the Administration permission. "
-                       "In its place: `ci / secrets`, which finds a secret after the push)", here=True)
+                       "repository to a login that administers it, with a token that reads its Actions "
+                       "permissions: GitHub Secret Protection (a paid product for Team and Enterprise) not on its "
+                       "plan. In its place: `ci / secrets`, which finds a secret after the push)", here=True)
+        return
+    if hidden == "token":
+        result("SKIP", "push protection not verified (GitHub answers no security settings for this private "
+                       "repository to a login that administers it, and this token was not shown to read an "
+                       "administration setting: a token without the Administration permission, or GitHub Secret "
+                       "Protection (a paid product for Team and Enterprise) not on its plan)")
+        result("INFO", ADMIN_TOKEN_FIX)
         return
     if security is None:
         result("SKIP", "push protection not verified (this token does not read the repository's security settings; "
@@ -3713,7 +3735,8 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         ok(title == "PR_TITLE" and msg == "PR_BODY",
            "squash commits carry the pull request title and description",
            f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
-    check_push_protection(repo, meta, actions_token)
+    hidden = hidden_security(repo, meta, network, actions_token)
+    check_push_protection(repo, meta, actions_token, hidden)
     check_private_reporting(repo, meta, network, actions_token, root)
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
     # The merge line is printed on these two paths as well (#583): the skill's
@@ -3837,13 +3860,20 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                        "name, which on a private repository is a defect only where GitHub Code Security is enabled, "
                        "and the Actions token does not get the repository's security settings. The licence state is "
                        "judged when /plinth:floor-check is run with a login that administers the repository", deferred=True)
-    elif plan_hides_security(meta):
+    elif hidden == "plan":
         result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
                        "which on a private repository is a defect only where GitHub Code Security is enabled "
                        "(GitHub answers no security settings for this private repository to a login that "
-                       "administers it: GitHub Code Security (a paid product for Team and Enterprise) not on its "
-                       "plan, or a token without the Administration permission. In its place: `ci / lint`'s "
+                       "administers it, with a token that reads its Actions permissions: GitHub Code Security "
+                       "(a paid product for Team and Enterprise) not on its plan. In its place: `ci / lint`'s "
                        "security rules)", here=True)
+    elif hidden == "token":
+        result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
+                       "which on a private repository is a defect only where GitHub Code Security is enabled "
+                       "(GitHub answers no security settings for this private repository to a login that "
+                       "administers it, and this token was not shown to read an administration setting: a token "
+                       "without the Administration permission, or GitHub Code Security not on its plan)")
+        result("INFO", ADMIN_TOKEN_FIX)
     else:
         why = ("this token does not read the repository's security settings; one with repository administration does"
                if meta.get("security_and_analysis") is None else
@@ -3872,7 +3902,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                            "code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
         # A CodeQL rule or check name means Code Security is there, so on
         # that repository a failed read is one a re-run can clear (#1002).
-        elif not isinstance(langs, list) and plan_hides_security(meta) and not (tools or by_name):
+        elif not isinstance(langs, list) and hidden == "plan" and not (tools or by_name):
             result("SKIP", "CodeQL default setup languages not verified (code-scanning/default-setup gave no answer "
                            "on a private repository whose plan answers no security settings to its administrator)",
                    here=True)

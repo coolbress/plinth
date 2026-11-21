@@ -283,11 +283,13 @@ security rules for CodeQL). Three kinds carry the mark: SSH keys (the
 account's settings say which push), the sandbox while Claude Code does not
 record its state, and a GitHub status a private repository's plan does not
 expose to its administrator (push protection, the CodeQL rule, the CodeQL
-default setup languages). That last kind is read from the login's role, not
-the token's permissions: a fine-grained token without the Administration
-permission gets the same answer, and the line names it, so when the person
-reads with such a token, say that one with Administration may read these.
-They stay listed, so the person knows what was not checked; they are counted
+default setup languages). That last kind is marked only when the token is
+shown to read an admin-only setting (the Actions permissions) and the
+security settings still come back empty: GitHub answers a fine-grained token
+without the Administration permission the same way, which is how the agent
+works after the first merge. Without that proof the SKIPs stay plain, with an
+INFO under them saying to run this again with a token that has
+Administration; relay that as a SKIP the person can clear. They stay listed, so the person knows what was not checked; they are counted
 inside M, never as a PASS. An exit code
 of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
 not-verified count says what was not.
@@ -385,12 +387,15 @@ never run it. The status
 sits in the repository's security settings, which a token without repository
 administration does not get: that is a SKIP, and so is a repository GitHub
 reports no status for. A private repository that answers no settings even
-to a login that administers it is a SKIP of its own, ending `[cannot be read
-here]`: GitHub Secret Protection not on its plan, or a token without the
-Administration permission (measured on a personal account's private
-repository, #811; the login's role is in the answer, the token's permissions
-are not). The CodeQL rule and its default setup languages on such a
-repository are marked the same way. `ci / floor-check` passes `--actions-token`, which
+to a login that administers it is a SKIP of its own: GitHub Secret Protection
+not on its plan, or a token without the Administration permission (measured
+on a personal account's private repository, #811; the login's role is in the
+answer, the token's permissions are not). When the same token reads the
+repository's Actions permissions, which need Administration, the plan is the
+cause and the SKIP ends `[cannot be read here]`; otherwise it stays plain, with
+an INFO naming a token with Administration as the way to read it. The CodeQL
+rule and its default setup languages on such a repository follow the same
+split. `ci / floor-check` passes `--actions-token`, which
 turns the first of those into an INFO, because the Actions token never gets
 them and no consumer could clear that SKIP: this skill, with the user's
 login, is the run that reads the item. Never pass that flag here.

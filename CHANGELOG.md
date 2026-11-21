@@ -41,12 +41,15 @@ pull requests and have no tag.
   (#1002). SSH keys, the sandbox while Claude Code does not record its state,
   and a GitHub status a private repository's plan does not expose to its
   administrator (push protection, the CodeQL rule, its default setup
-  languages) end `[cannot be read here]`, and the last line reads, for
+  languages; marked only when the token reads the repository's Actions
+  permissions, since GitHub answers a token without the Administration
+  permission the same way) end `[cannot be read here]`, and the last line reads, for
   example, `-- 0 failed, 5 not verified (4 cannot be read here)`. They stay
   SKIPs inside the not-verified count. A plugin from another marketplace is an
-  INFO instead of a SKIP: outside what plinth compares. The skill leads with
-  what the person can clear. No check name, exit status or `ci / floor-check`
-  verdict changes.
+  INFO instead of a SKIP: outside what plinth compares, so a `--plugins` run's
+  verdicts file no longer carries a line for it. The skill leads with what the
+  person can clear. No check name, exit status or `ci / floor-check` verdict
+  changes.
 
 - `ci / diff-size` over the limit, on GitHub and on GitLab, says to split the
   change into pull requests that land one after another, each branched from

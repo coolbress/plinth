@@ -829,7 +829,7 @@ admin_null() { # <admin: true|false>
   printf '%s' "$good_meta" > "$api/repos/o/r.json"
 }
 admin_null true
-has   "private, no settings answered to an administrator: a SKIP naming the plan, not the token" '^  SKIP  push protection not verified \(GitHub answers no security settings for this private repository to a login that administers it: GitHub Secret Protection \(a paid product for Team and Enterprise\) not on its plan, or a token without the Administration permission'
+has   "private, no settings answered to an administrator: a SKIP naming the plan, not the token" '^  SKIP  push protection not verified \(GitHub answers no security settings for this private repository to a login that administers it.*GitHub Secret Protection \(a paid product for Team and Enterprise\) not on its plan'
 lacks "private, no settings answered to an administrator: not blamed on the token" 'push protection not verified \(this token does not read'
 lacks "private, no settings answered to an administrator: never a PASS" '^  PASS +push protection'
 admin_null false
@@ -860,6 +860,23 @@ out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network
 printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 has   "private, no settings answered to an administrator, rule in place: a failed default setup read is plain not verified" '^  SKIP  CodeQL default setup languages not verified \(the token cannot read code-scanning/default-setup\)$'
 has   "private, no settings answered to an administrator, rule in place: only push protection counted apart" '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$'
+# A fine-grained token without the Administration permission gets the same
+# empty answer from GitHub as a plan without the products, and plinth has the
+# agent work with such a token after the first merge (#1002 review). Unless
+# the token is shown to read an admin-only setting (actions/permissions), the
+# SKIPs stay plain not verified and the fix line names a token with it.
+printf '{%s,"private":true,"permissions":{"admin":true}}' "$repo_meta" > "$api/repos/o/r.json"
+printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"
+rm "$api/repos/o/r/code-scanning/default-setup.json" "$api/repos/o/r/actions/permissions.json"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"; printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
+lacks "fine-grained token without Administration: nothing is marked as not readable here" 'cannot be read here'
+has   "fine-grained token without Administration: push protection is plain not verified, naming the token" '^  SKIP  push protection not verified \(.*Administration permission.*\)$'
+has   "fine-grained token without Administration: CodeQL is plain not verified, naming the token" '^  SKIP  main: CodeQL not verified: .*Administration permission.*\)$'
+has   "fine-grained token without Administration: the default setup languages are plain not verified" '^  SKIP  CodeQL default setup languages not verified \(the token cannot read code-scanning/default-setup\)$'
+has   "fine-grained token without Administration: the fix line names a token with it" '^  INFO    run /plinth:floor-check again with a token that has the Administration permission'
+if [ "$rc" = 0 ]; then ok "fine-grained token without Administration: the run does not fail"; else bad "the run failed (rc=$rc)"; fi
 # With the licence, a missing rule is the defect it is on a public repository.
 for key in code_security advanced_security; do
   private "$(sec enabled enabled enabled "$key")" "$rules_neither"
