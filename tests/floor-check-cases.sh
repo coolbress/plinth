@@ -2537,11 +2537,22 @@ move "$mcopy" "$pinned_api" --move-archetype library
 if [ "$rc" = 0 ] && ! grep -qE "^check-(add|drop): " "$work/print-err"; then ok "cli to library: no required check changes"
 else bad "cli to library (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
 for why in "backend|the recorded archetype is already backend" "web|web is not moved to or from here" \
-           "nope|unknown archetype nope (cli, library, backend, data-ml)"; do
+           "cli --x|'cli --x' is not an archetype's name" "CLI|'CLI' is not an archetype's name"; do
   move "$good" "$pinned_api" --move-archetype "${why%%|*}"
   if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: ${why#*|}" "$work/print-err"; then ok "--move-archetype ${why%%|*}: no line, exit 1, says why"
   else bad "--move-archetype ${why%%|*} (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 done
+# Which names are archetypes is the template's copier.yml's to say: a name of
+# the right shape that this checker does not know gets its line, for copier.
+move "$good" "$pinned_api" --move-archetype nope
+case "$printed" in
+  *" --data archetype=nope") [ "$rc" = 0 ] && ok "--move-archetype nope: the line, for copier to judge the value" || bad "--move-archetype nope: exit $rc" ;;
+  *) bad "--move-archetype nope (rc=$rc): '$printed'"; sed 's/^/        /' "$work/print-err" ;;
+esac
+xcopy="$work/move-no-archetype"; rm -rf "$xcopy"; cp -R "$good" "$xcopy"; sed -i.bak '/^archetype: /d' "$xcopy/.copier-answers.yml" && rm "$xcopy/.copier-answers.yml.bak"
+move "$xcopy" "$pinned_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: .copier-answers.yml records no archetype to move from" "$work/print-err"; then ok "--move-archetype with no recorded archetype: no line"
+else bad "--move-archetype, no recorded archetype (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 wcopy="$work/move-from-web"; rm -rf "$wcopy"; cp -R "$good" "$wcopy"; sed -i.bak 's/^archetype: backend/archetype: web/' "$wcopy/.copier-answers.yml" && rm "$wcopy/.copier-answers.yml.bak"
 move "$wcopy" "$pinned_api" --move-archetype cli
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: web is not moved to or from here" "$work/print-err"; then ok "--move-archetype from web: no line"

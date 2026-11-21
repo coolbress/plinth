@@ -2089,12 +2089,6 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
     return 1
 
 
-# The archetypes an existing project can move between (#1004). `web` is left
-# out both ways: a move to or from it also changes the hosting answers, its
-# two checks and the tag ruleset, none of which was measured.
-MOVE_ARCHETYPES = ("cli", "library", "backend", "data-ml")
-
-
 def required_extra(archetype: str) -> set[str]:
     """The required checks an archetype adds to ruleset.json's, as
     ruleset_for adds them (web aside, which a move refuses)."""
@@ -2120,15 +2114,20 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     if not answers:
         return no("no .copier-answers.yml: not made by the door, so there is no recorded archetype to move from")
     old = answers.get("archetype")
+    if not old:
+        return no(".copier-answers.yml records no archetype to move from")
+    # Which values are archetypes is the template's to say (its copier.yml),
+    # so the line carries the value as given and copier judges it. Here only
+    # the shape is held, so the value stays one word in the line.
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", new):
+        return no(f"{new!r} is not an archetype's name (lower-case letters, digits and hyphens)")
+    # `web` is left out both ways: a move to or from it also changes the
+    # hosting answers, its two checks and the tag ruleset, none of it measured.
     if "web" in (old, new):
         return no("web is not moved to or from here: its hosting answers, its two checks and its tag ruleset "
                   "change with it, and that move was not measured")
-    if new not in MOVE_ARCHETYPES:
-        return no(f"unknown archetype {new} ({', '.join(MOVE_ARCHETYPES)})")
     if old == new:
         return no(f"the recorded archetype is already {new}")
-    if old not in MOVE_ARCHETYPES:
-        return no(f"the recorded archetype {old!r} is not one a move starts from ({', '.join(MOVE_ARCHETYPES)})")
     d = template_drift(root, host, network, move=True)
     if d["state"] == "skip":
         return no(f"template drift not verified ({d['reason']})")
