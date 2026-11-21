@@ -187,8 +187,9 @@ numbered, one question at a time. Never answer a question for the person.
    visibility and, on GitHub, the reviewer. When the host is already
    settled, ask visibility and the reviewer in one call. Ask the license in
    the first call made once the visibility is known: with the visibility
-   given by the arguments, in the host's call or, with the host settled
-   too, in the visibility's call; otherwise in the next call: on GitHub
+   given by the arguments, in the first call still to make (the host's, or
+   the reviewer's), and alone when there is none; otherwise in the next
+   call: on GitHub
    with the code of conduct and the description still open, and alone
    when none is open or on GitLab.
 

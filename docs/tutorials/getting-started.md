@@ -116,8 +116,8 @@ you can type instead:
   your company, or the project you build on, asks for Apache-2.0; MIT is
   shorter and the usual choice for a small public project.
 - `--license=proprietary`: grants nothing; nobody else may use, copy or
-  share the code without your permission. The agent recommends it with
-  `--private`.
+  share the code without your permission. The agent recommends it for a
+  private repository (`--private`, or GitLab's default).
 - `--archetype=<kind>`: `cli`, `library`, `backend`, `data-ml`, or `web` for
   a web app with a database, which costs money to run (about US $13 a month
   on Render; [where else it can run](../how-to/choose-where-a-web-app-runs.md), named
