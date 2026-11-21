@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.39.0] - 2026-11-21
+
+New projects render plinth-template v1.48.0 and start at plinth v2.38.0 instead of v2.32.0; their agent runs the touched tests while working and the full suite once through a machine-wide queue, reads plinth's latest release before saying plinth lacks something, writes records in a stated language from a skeleton per kind, and merges waiting pull requests one at a time. `/plinth:new-project` offers a `Proprietary` license and recommends it for a private repository. `/plinth:guide` names the next pull request to merge when several are open, and `scripts/merge-when-green.sh --update` brings the one being merged up to date before it merges. `/plinth:floor-check --credentials` warns when the agent's `gh` login holds `workflow`, which lets it push a change to the checks. `ci / diff-size`'s message says to land a big change as pull requests one after another, not as a stack, and plinth's own eval suite and test run wait in the same machine slots as projects. No input, job or check name a project calls changed, so its `uses:` pins need no raise; the template change comes through `/plinth:template-update`.
+
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-7059049654>
+
+tested with plinth-template v1.48.0
+
 ### Added
 
 - `/plinth:new-project` offers a third license, `Proprietary`, which grants
@@ -5642,7 +5650,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.38.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.39.0...HEAD
+[2.39.0]: https://github.com/coolbress/plinth/releases/tag/v2.39.0
 [2.38.0]: https://github.com/coolbress/plinth/releases/tag/v2.38.0
 [2.37.0]: https://github.com/coolbress/plinth/releases/tag/v2.37.0
 [2.36.0]: https://github.com/coolbress/plinth/releases/tag/v2.36.0
