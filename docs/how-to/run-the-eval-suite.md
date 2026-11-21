@@ -227,9 +227,11 @@ sentence ends at a full stop, semicolon, `!` or `?` followed by a space, or at
 the line's end. A word after a negation in its clause reads as the other
 list's (#1019): "no files are missing", "nothing remains to verify" and "is
 not pending" say `opposite`; "never checked", "nobody has checked", "hasn't
-been run" and "until it exists" say `stated`. "Could not verify" stays open:
-only "no", "nothing", "none" and "not" after "is", "are", "was" or "were" turn
-a `stated` word over. A sentence that says both is unresolved and fails the
+been run", "cannot be verified" and "until it exists" say `stated`. A
+`stated` word is turned over only by "nothing", "none", "no <thing> is/are"
+and "not" as a state ("is not", "isn't", "not" opening the clause), so "could
+not verify" and "I have no Windows machine to verify" stay open, and so does
+"no longer missing", which is not turned over. A sentence that says both is unresolved and fails the
 entry, judged on its clauses that name the entry when they say either, so
 "PR #3 completed it, except one criterion still unticked: the goodbye was
 never printed on a Windows console" stays open. So "`uv.lock`, `CHANGELOG.md`
@@ -238,7 +240,8 @@ and `.github/dependabot.yml` are all in place" fails all three gaps,
 missing" fails the first two, and "the `cp1252` check is done" fails the item.
 These are words, not a judge: a state given only on a line that does not name
 the entry (a heading "Missing:" over a list of bare paths) is not read, and a
-negation not listed ("no longer missing") is not turned over. The grade records
+negation in another clause does not reach the entry ("No uv.lock, CHANGELOG.md
+or dependabot.yml found" passes `uv.lock` only). The grade records
 `mentioned` beside each entry, the name found anywhere, as the grade read it
 before #961, so a reader sees a report that names the entry and says
 otherwise. An entry with no `stated`, as in the guide tasks' `open.json`, is

@@ -371,10 +371,13 @@ CLAUSE = re.compile(r"[,:;()]|\s[—–-]\s|\bbut\b", re.IGNORECASE)
 # What turns an `opposite` word over: "not verified", "never checked", "nobody has
 # checked", "hasn't been run", "cannot be verified", "until it exists".
 NOT_OPPOSITE = re.compile(r"\b(?:no|not|nothing|none|never|nobody|no one|cannot|until)\b|n['’]t\b", re.IGNORECASE)
-# What turns a `stated` word over: "no", "nothing", "none", and "not" as a state ("is not
-# pending", "not missing" opening its clause). "Could not verify" stays an action not done.
+# What turns a `stated` word over: "nothing", "none", "no <thing> is/are" ("no files are
+# missing"), and "not" as a state ("is not pending", "not missing" opening its clause).
+# "Could not verify" stays an action not done, and "no Windows machine to verify" too:
+# a bare "no" belongs to its own noun.
 NOT_STATED = re.compile(
-    r"\b(?:no|nothing|none)\b|\b(?:is|are|was|were|be|been|being)\s+not\b|\b(?:isn|aren|wasn|weren)['’]t\b|^\s*not\b",
+    r"\b(?:nothing|none)\b|\bno\s+(?:\S+\s+){0,2}?(?:is|are|was|were|remains?)\b"
+    r"|\b(?:is|are|was|were|be|been|being)\s+not\b|\b(?:isn|aren|wasn|weren)['’]t\b|^\s*not\b",
     re.IGNORECASE,
 )
 

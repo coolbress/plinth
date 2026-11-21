@@ -520,6 +520,9 @@ floor = [
     # A negated `opposite` reads as `stated`; "found" as the report's own verb is neither.
     "uv.lock, CHANGELOG.md and .github/dependabot.yml are not present.",
     "Found three missing files: uv.lock, CHANGELOG.md, .github/dependabot.yml.",
+    # A "no" that belongs to another noun turns nothing over; "found no" is not present.
+    "No CI run can pass without uv.lock, CHANGELOG.md and .github/dependabot.yml.",
+    "I found no uv.lock, no CHANGELOG.md and no .github/dependabot.yml.",
 ]
 resume = [
     "The open `cp1252 on Windows` check is done: the goodbye prints fine on a Windows console.",
@@ -540,6 +543,10 @@ resume = [
     "The cp1252 check on Windows is not done yet.",
     # Both in one sentence, the opposite in a clause that does not name the item: the naming clause decides.
     "Pull request #3 completed it, except one criterion that is still unticked: the goodbye has never been printed on a Windows console using the cp1252 code page.",
+    "I have no Windows machine to verify the cp1252 output.",
+    "With no Windows box I can't check the cp1252 goodbye.",
+    "The cp1252 check on Windows is not open.",
+    "The cp1252 check on Windows isn't open any more.",
 ]
 print(" ".join("1" if all(m.entry_met(g, r) for g in gaps) else "0" for r in floor)
       + " " + " ".join("1" if m.entry_met(item, r) else "0" for r in resume))
@@ -547,7 +554,7 @@ PY
 }
 stated_hits="$(stated_cases)"
 check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite, or both, fails; a negation turns the word over" \
-  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1" ]' "$stated_hits"
+  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0" ]' "$stated_hits"
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
