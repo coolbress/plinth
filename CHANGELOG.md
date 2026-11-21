@@ -15,10 +15,11 @@ pull requests and have no tag.
 
 - `/plinth:template-update`'s plan prints a `Pin conflict:` line when
   `.copier-answers.yml` records a `plinth_sha` other than the pin the
-  workflows call (one raised by hand in the workflows only): with
-  `--plinth-pin tested` it names each workflow whose plinth `uses:` line
-  copier will leave in conflict and says to keep the side naming the tested
-  pin; with `--plinth-pin live` it says no conflict on that line is expected.
+  workflows call (raised in the workflows only, by Dependabot or by hand):
+  for each `--apply` line on offer it names each workflow whose plinth
+  `uses:` line copier will leave in conflict and the side to keep, the one
+  naming the pin that line carries, or says no conflict on that line is
+  expected, as for `--plinth-pin live` when every workflow calls one pin.
   Measured with copier 9.18.2 (#1015).
 
 ## [2.40.0] - 2026-11-22
