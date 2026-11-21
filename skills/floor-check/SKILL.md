@@ -37,9 +37,9 @@ through the floor's own `Read(~/.config/gh/**)` deny, with no fix a
 repository's settings can make (anthropics/claude-code#95135,
 anthropics/claude-code#67105), and `/plinth:new-project`'s copier step.
 Relay those lines as they are and do not tell the user to turn the sandbox
-on or off; on Linux and WSL2 nothing was measured. This SKIP is one the
-not-verified line below names without a way to verify it: nothing plinth
-reads can.
+on or off; on Linux and WSL2 nothing was measured. This SKIP ends
+`[cannot be read here]`: nothing plinth reads can verify it (see the report's
+not-verified line below).
 
 `--plugins` compares each plugin installed from the plinth marketplace with
 the commit its marketplace entry pins (plinth itself with the version of the
@@ -50,9 +50,11 @@ while reading the entry's new skill list, so one of its skills can report
 one command that moves it, `claude plugin update <name>@plinth --scope
 <scope>` (for a project or local install, from its project folder): give that
 line to the user and do not run it yourself. Plugins at their pin are one
-INFO line. A plugin from another marketplace, an entry or an install without a
-full commit, and plugin files this run cannot read are a SKIP, not checked:
-never tell the user those are up to date.
+INFO line. A plugin from another marketplace is one INFO line naming it:
+outside what plinth compares, not a read that failed, so it is not counted as
+not verified. An entry or an install without a full commit, and plugin files
+this run cannot read, are a SKIP, not checked. Never tell the user any of
+those is up to date.
 
 `--credentials` adds the other item of this machine: what can push to
 github.com besides the agent's token. It names `GH_TOKEN` or `GITHUB_TOKEN`
@@ -63,8 +65,8 @@ value printed. Finding none is an INFO saying so, best effort, never a PASS:
 a credential in a form the rules do not recognise is not reported, so do not
 tell the user the machine is clean. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `GIT_CONFIG` or a `GIT_CONFIG_*`
 variable, when set, is a SKIP naming it: the configuration it hides is not
-read. SSH keys are a SKIP every time, the other one with no way to
-verify it here: GitHub's settings say which keys push, not this machine.
+read. SSH keys are a SKIP every time, ending `[cannot be read here]`:
+GitHub's settings say which keys push, not this machine.
 It also reads the scopes `gh auth status` lists for the active github.com
 account: `workflow` among them is a WARN naming the login, since it lets the
 agent push a change to `.github/workflows/`, the checks included; scopes
@@ -232,7 +234,9 @@ of it:
    the checker's last line, which starts `-- N failed, M not verified`, and
    how many WARN lines there are. With no FAIL, say that no check failed in
    what was verified, and that the not-verified count is what could not be
-   verified, whether or not the checker read it.
+   verified, whether or not the checker read it. When the line goes on
+   `(K cannot be read here)`, say how many of the M the person can clear
+   (M minus K) before the K that stay; never present the M as M problems.
 2. For each FAIL, one plain sentence on what it means for the person: what
    can happen to their project or their merge while it stays, not what the
    checker compared. For example, "a pull request can merge without the
@@ -270,7 +274,23 @@ brings), so write the fix line under that item from them. SKIP lines are
 what the run could not check (offline, no `--repo`, an API error, a token
 that does not see the item); the summary counts them as `N not verified`.
 After the FAIL and WARN list, name what was not verified in one line, and
-what would verify it (a network, a login, an admin-read token). An exit code
+what would verify it (a network, a login, an admin-read token): the SKIPs
+without the mark first, since the person can clear them. Then say in one line
+that the SKIPs ending `[cannot be read here]` cannot be read from this machine
+or repository whatever is changed there, and name what stands in for each
+where its line names it (`ci / secrets` for push protection, `ci / lint`'s
+security rules for CodeQL). Three kinds carry the mark: SSH keys (the
+account's settings say which push), the sandbox while Claude Code does not
+record its state, and a GitHub status a private repository's plan does not
+expose to its administrator (push protection, the CodeQL rule, the CodeQL
+default setup languages). That last kind is marked only when the token is
+shown to read an admin-only setting (the Actions permissions) and the
+security settings still come back empty: GitHub answers a fine-grained token
+without the Administration permission the same way, which is how the agent
+works after the first merge. Without that proof the SKIPs stay plain, with an
+INFO under them saying to run this again with a token that has
+Administration; relay that as a SKIP the person can clear. They stay listed, so the person knows what was not checked; they are counted
+inside M, never as a PASS. An exit code
 of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
 not-verified count says what was not.
 `N/A` lines (a JavaScript or TypeScript repository, above) are not defects
@@ -370,7 +390,12 @@ reports no status for. A private repository that answers no settings even
 to a login that administers it is a SKIP of its own: GitHub Secret Protection
 not on its plan, or a token without the Administration permission (measured
 on a personal account's private repository, #811; the login's role is in the
-answer, the token's permissions are not). `ci / floor-check` passes `--actions-token`, which
+answer, the token's permissions are not). When the same token reads the
+repository's Actions permissions, which need Administration, the plan is the
+cause and the SKIP ends `[cannot be read here]`; otherwise it stays plain, with
+an INFO naming a token with Administration as the way to read it. The CodeQL
+rule and its default setup languages on such a repository follow the same
+split. `ci / floor-check` passes `--actions-token`, which
 turns the first of those into an INFO, because the Actions token never gets
 them and no consumer could clear that SKIP: this skill, with the user's
 login, is the run that reads the item. Never pass that flag here.

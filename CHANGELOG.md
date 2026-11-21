@@ -11,6 +11,22 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:floor-check` counts apart the SKIPs that cannot be read from here
+  (#1002). SSH keys, the sandbox while Claude Code does not record its state,
+  and a GitHub status a private repository's plan does not expose to its
+  administrator (push protection, the CodeQL rule, its default setup
+  languages; marked only when the token reads the repository's Actions
+  permissions, since GitHub answers a token without the Administration
+  permission the same way) end `[cannot be read here]`, and the last line reads, for
+  example, `-- 0 failed, 5 not verified (4 cannot be read here)`. They stay
+  SKIPs inside the not-verified count. A plugin from another marketplace is an
+  INFO instead of a SKIP: outside what plinth compares, so a `--plugins` run's
+  verdicts file no longer carries a line for it. The skill leads with what the
+  person can clear. No check name, exit status or `ci / floor-check` verdict
+  changes.
+
 ## [2.39.0] - 2026-11-21
 
 New projects render plinth-template v1.48.0 and start at plinth v2.38.0 instead of v2.32.0; their agent runs the touched tests while working and the full suite once through a machine-wide queue, reads plinth's latest release before saying plinth lacks something, writes records in a stated language from a skeleton per kind, and merges waiting pull requests one at a time. `/plinth:new-project` offers a `Proprietary` license and recommends it for a private repository. `/plinth:guide` names the next pull request to merge when several are open, and `scripts/merge-when-green.sh --update` brings the one being merged up to date before it merges. `/plinth:floor-check --credentials` warns when the agent's `gh` login holds `workflow`, which lets it push a change to the checks. `ci / diff-size`'s message says to land a big change as pull requests one after another, not as a stack, and plinth's own eval suite and test run wait in the same machine slots as projects. No input, job or check name a project calls changed, so its `uses:` pins need no raise; the template change comes through `/plinth:template-update`.

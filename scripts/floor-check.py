@@ -7,6 +7,9 @@ this same file; token, network and inputs can still make their results differ.
 An item the run could not read (offline, no --repo, an API error, a token that
 does not see it) is a SKIP, counted in the summary and never a PASS: exit 0
 says no FAIL in what was checked, and `N not verified` says what was not (#119).
+A SKIP no change on this machine or repository clears (SSH keys, the sandbox's
+unrecorded state, a GitHub status the plan does not expose) ends
+`[cannot be read here]` and is counted apart inside that number (#1002).
 Standard library only. Set FLOOR_CHECK_API_DIR to a directory of JSON files
 laid out like api.github.com paths to run the network checks against fixtures.
 
@@ -202,6 +205,11 @@ CONFIG_NAMES = {"config.yml", "config.yaml"}
 fails = 0
 skips = 0
 left = 0
+# SKIPs no change to this machine or repository clears (#1002): SSH keys, the
+# sandbox's state while Claude Code does not record it, a GitHub status the
+# repository's plan does not expose. Inside `skips`, counted apart.
+unreadable = 0
+UNREADABLE = "[cannot be read here]"
 # Items that depend on Python, on a JavaScript or TypeScript repository (#681).
 na = 0
 # One line per FAIL, SKIP and deferred INFO, in the three forms of
@@ -217,12 +225,20 @@ next_action = ""
 SKIP_NEXT = "; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
 
 
-def result(kind: str, msg: str, *, deferred: bool = False) -> None:
+def result(kind: str, msg: str, *, deferred: bool = False, here: bool = False) -> None:
     """`deferred` marks an INFO for a read this run cannot make and a run with
     a login that administers the repository does (#436): outside the
-    not-verified count (#303), counted on the summary line on its own."""
-    global fails, skips, left, na
+    not-verified count (#303), counted on the summary line on its own.
+    `here` marks a SKIP that cannot be read from this machine or repository
+    whatever the person changes there (#1002): still a SKIP in the count,
+    marked on its line and counted apart on the summary line. The verdicts
+    file keeps the line as it was, so `ci / floor-check` reads the same."""
+    global fails, skips, left, na, unreadable
+    assert not here or kind == "SKIP", "only a SKIP is marked as not readable here"
     shown = f"{msg}; {next_action}" if next_action and kind in ("FAIL", "WARN") else msg
+    if here:
+        unreadable += 1
+        shown = f"{msg} {UNREADABLE}"
     print(f"  {kind:5} {shown}")
     if kind == "N/A":
         na += 1
@@ -3056,6 +3072,31 @@ def is_private(meta: dict) -> bool:
     return meta.get("private") is True
 
 
+def hidden_security(repo: str, meta: dict, network: bool, actions_token: bool) -> str | None:
+    """Why a private repository answers no security settings to a login that
+    administers it, as far as this run can tell (#1002); None when that is not
+    the case. GitHub gives the same empty answer for a plan without its paid
+    products (measured on a personal account's private repository, #811) and
+    for a token without the Administration permission, which is how plinth has
+    the agent work after the first merge; `meta` carries the login's role,
+    never the token's permissions. So "plan" (cannot be read here) only when
+    the token is shown to read an admin-only setting, the Actions permissions;
+    otherwise "token", plain not verified, with the fix line naming a token
+    with Administration. Not read under --actions-token, whose answers on
+    these items are INFOs left to the skill."""
+    perms = meta.get("permissions")
+    if actions_token or not (meta.get("security_and_analysis") is None and is_private(meta)
+                             and isinstance(perms, dict) and perms.get("admin") is True):
+        return None
+    actions = api(f"repos/{repo}/actions/permissions", network)
+    readable = isinstance(actions, dict) and actions.get("allowed_actions") in ("all", "local_only", "selected")
+    return "plan" if readable else "token"
+
+
+ADMIN_TOKEN_FIX = ("  run /plinth:floor-check again with a token that has the Administration permission (read): "
+                   "GitHub answers a token without it as it answers a plan without the paid security products")
+
+
 def product_status(meta: dict, *keys: str) -> str | None:
     """`enabled` or `disabled` as `security_and_analysis` answers for the
     product under any of `keys`, enabled first; None when it answers neither.
@@ -3069,7 +3110,7 @@ def product_status(meta: dict, *keys: str) -> str | None:
     return next((s for s in ("enabled", "disabled") if s in statuses), None)
 
 
-def check_push_protection(repo: str, meta: dict, actions_token: bool = False) -> None:
+def check_push_protection(repo: str, meta: dict, actions_token: bool = False, hidden: str | None = None) -> None:
     """Is push protection on (#303)? `ci / secrets` reports a secret after the
     push, when it is already on GitHub; push protection refuses the push, for
     the secret formats GitHub knows. The door turns it on.
@@ -3095,15 +3136,21 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False) ->
         result("INFO", "push protection is not read here: the Actions token does not get the repository's security "
                        "settings; /plinth:floor-check reads it with a person's login", deferred=True)
         return
-    perms = meta.get("permissions")
-    if security is None and is_private(meta) and isinstance(perms, dict) and perms.get("admin") is True:
+    if hidden == "plan":
         # Measured on a personal account's private repository (#811): GitHub
         # leaves the settings out even for its administrator when no
         # security product is on offer there. Still not read, so a SKIP.
         result("SKIP", "push protection not verified (GitHub answers no security settings for this private "
-                       "repository to a login that administers it: GitHub Secret Protection (a paid product for "
-                       "Team and Enterprise) not on its plan, or a token without the Administration permission. "
-                       "In its place: `ci / secrets`, which finds a secret after the push)")
+                       "repository to a login that administers it, with a token that reads its Actions "
+                       "permissions: GitHub Secret Protection (a paid product for Team and Enterprise) not on its "
+                       "plan. In its place: `ci / secrets`, which finds a secret after the push)", here=True)
+        return
+    if hidden == "token":
+        result("SKIP", "push protection not verified (GitHub answers no security settings for this private "
+                       "repository to a login that administers it, and this token was not shown to read an "
+                       "administration setting: a token without the Administration permission, or GitHub Secret "
+                       "Protection (a paid product for Team and Enterprise) not on its plan)")
+        result("INFO", ADMIN_TOKEN_FIX)
         return
     if security is None:
         result("SKIP", "push protection not verified (this token does not read the repository's security settings; "
@@ -3688,7 +3735,8 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         ok(title == "PR_TITLE" and msg == "PR_BODY",
            "squash commits carry the pull request title and description",
            f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
-    check_push_protection(repo, meta, actions_token)
+    hidden = hidden_security(repo, meta, network, actions_token)
+    check_push_protection(repo, meta, actions_token, hidden)
     check_private_reporting(repo, meta, network, actions_token, root)
     rules = api(f"repos/{repo}/rules/branches/{branch}", network)
     # The merge line is printed on these two paths as well (#583): the skill's
@@ -3812,6 +3860,20 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                        "name, which on a private repository is a defect only where GitHub Code Security is enabled, "
                        "and the Actions token does not get the repository's security settings. The licence state is "
                        "judged when /plinth:floor-check is run with a login that administers the repository", deferred=True)
+    elif hidden == "plan":
+        result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
+                       "which on a private repository is a defect only where GitHub Code Security is enabled "
+                       "(GitHub answers no security settings for this private repository to a login that "
+                       "administers it, with a token that reads its Actions permissions: GitHub Code Security "
+                       "(a paid product for Team and Enterprise) not on its plan. In its place: `ci / lint`'s "
+                       "security rules)", here=True)
+    elif hidden == "token":
+        result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
+                       "which on a private repository is a defect only where GitHub Code Security is enabled "
+                       "(GitHub answers no security settings for this private repository to a login that "
+                       "administers it, and this token was not shown to read an administration setting: a token "
+                       "without the Administration permission, or GitHub Code Security not on its plan)")
+        result("INFO", ADMIN_TOKEN_FIX)
     else:
         why = ("this token does not read the repository's security settings; one with repository administration does"
                if meta.get("security_and_analysis") is None else
@@ -3838,6 +3900,12 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         if not isinstance(langs, list) and actions_token:
             result("INFO", "CodeQL default setup languages not read here: the Actions token cannot read "
                            "code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+        # A CodeQL rule or check name means Code Security is there, so on
+        # that repository a failed read is one a re-run can clear (#1002).
+        elif not isinstance(langs, list) and hidden == "plan" and not (tools or by_name):
+            result("SKIP", "CodeQL default setup languages not verified (code-scanning/default-setup gave no answer "
+                           "on a private repository whose plan answers no security settings to its administrator)",
+                   here=True)
         elif not isinstance(langs, list):
             result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
         else:
@@ -4058,7 +4126,7 @@ def check_sandbox() -> None:
         result("INFO", f"sandbox.enabled is true in {on}")
     else:
         result("SKIP", f"sandbox not verified: sandbox.enabled is not true in {conf}/settings.json or settings.local.json, "
-               "and /sandbox (Claude Code 2.1.278) does not write it there, so this cannot tell on from off")
+               "and /sandbox (Claude Code 2.1.278) does not write it there, so this cannot tell on from off", here=True)
     result("INFO", "  off: a `bash -c`, a `$(head -1 .env)`, a `grep -r` that names no file, or a script that opens "
            "`.env` itself still reads it; the sandbox is what closes those")
     result("INFO", "  on, macOS (measured on Claude Code 2.1.278): `gh` stops working, because the sandbox enforces the floor's "
@@ -4170,7 +4238,8 @@ def check_plugins() -> None:
     if current:
         result("INFO", "at the plinth marketplace's pin: " + ", ".join(current))
     if other:
-        result("SKIP", "plugins not checked, not from the plinth marketplace: " + ", ".join(other))
+        # Outside what this item compares, not a read that failed (#1002).
+        result("INFO", "plugins from another marketplace, outside what plinth compares: " + ", ".join(other))
 
 
 # gh's own git helper, whatever path it was installed under, and nothing else:
@@ -4429,10 +4498,10 @@ def check_credentials(root: Path, host: str = "github") -> None:
 
     if gitlab:
         result("SKIP", "SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, "
-               "say which keys push")
+               "say which keys push", here=True)
     else:
         result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
-               "say which keys push; see docs/how-to/give-the-agent-a-token.md")
+               "say which keys push; see docs/how-to/give-the-agent-a-token.md", here=True)
     result("INFO", "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file")
 
 
@@ -4773,7 +4842,8 @@ def main() -> int:
         check_credentials(root, host)
         check_database_urls(root)
 
-    print(f"-- {fails} failed, {skips} not verified" + (f", {left} left to /plinth:floor-check" if left else "")
+    print(f"-- {fails} failed, {skips} not verified" + (f" ({unreadable} cannot be read here)" if unreadable else "")
+          + (f", {left} left to /plinth:floor-check" if left else "")
           + (f", {na} do not apply" if na else ""))
     if a.verdicts:
         lines = verdicts if fails else ["pass: the floor, no FAIL in what this run read", *verdicts]
