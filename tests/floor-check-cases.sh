@@ -78,6 +78,12 @@ skips() { # <description> <expected summary tail> <checker args...>
 }
 skips "offline with --repo: the wall and the labels are counted as not verified, exit stays 0" \
   "2 not verified" --root "$good" --repo o/r --no-network
+# A read that did not happen is one the person can make: plain not verified,
+# with no count of SKIPs that cannot be read here (#1002).
+out="$(python3 "$checker" --root "$good" --repo o/r --no-network 2>&1)"
+if grep -q -- '^-- 0 failed, 2 not verified$' <<<"$out" && ! grep -q 'cannot be read here' <<<"$out"
+then ok "offline: a failed read is plain not verified, not counted as unreadable here"
+else bad "offline read marked unreadable"; grep -E 'SKIP|failed' <<<"$out" | sed 's/^/        /'; fi
 skips "offline without --repo: the unchecked wall is counted once" \
   "1 not verified" --root "$good" --no-network
 noarch="$work/noarch"; rm -rf "$noarch"; cp -R "$good" "$noarch"; rm "$noarch/.copier-answers.yml"
@@ -828,6 +834,24 @@ lacks "private, no settings answered to an administrator: not blamed on the toke
 lacks "private, no settings answered to an administrator: never a PASS" '^  PASS +push protection'
 admin_null false
 has   "private, no settings answered to a login that does not administer it: the token line" '^  SKIP  push protection not verified \(this token does not read the repository'"'"'s security settings'
+# A token that does not get the settings is one the person can change: plain
+# not verified, never marked as not readable here (#1002).
+lacks "private, settings not got by a non-admin token: not marked as not readable here" 'cannot be read here'
+admin_null true
+has   "private, no settings answered to an administrator: push protection is marked as not readable here" '^  SKIP  push protection not verified \(GitHub answers no security settings.*\[cannot be read here\]$'
+has   "private, no settings answered to an administrator: the last line counts it apart" '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$'
+# The same plan without the rule and without a readable default setup: the
+# CodeQL rule and its languages are GitHub statuses that plan does not expose.
+printf '{%s,"private":true,"permissions":{"admin":true}}' "$repo_meta" > "$api/repos/o/r.json"
+printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"; rm "$api/repos/o/r/code-scanning/default-setup.json"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+has   "private, no settings answered to an administrator, no rule: CodeQL is marked as not readable here" '^  SKIP  main: CodeQL not verified: no code_scanning rule.*GitHub answers no security settings.*\[cannot be read here\]$'
+has   "private, no settings answered to an administrator, no rule: its place is named" "^  SKIP  main: CodeQL not verified: .*In its place: \`ci / lint\`'s security rules"
+has   "private, no settings answered to an administrator: the default setup languages are marked as not readable here" '^  SKIP  CodeQL default setup languages not verified.*\[cannot be read here\]$'
+has   "private, no settings answered to an administrator, no rule: three counted apart" '^-- 0 failed, [0-9]+ not verified \(3 cannot be read here\)$'
+if [ "$rc" = 0 ]; then ok "private, no settings answered to an administrator, no rule: the run does not fail"; else bad "the run failed (rc=$rc)"; fi
 # With the licence, a missing rule is the defect it is on a public repository.
 for key in code_security advanced_security; do
   private "$(sec enabled enabled enabled "$key")" "$rules_neither"
@@ -1068,6 +1092,11 @@ for want in 'Read(~/.config/gh/\*\*)' 'anthropics/claude-code#95135' 'anthropics
   grep -q -- "$want" <<<"$under" || { bad "--sandbox: the lines under the SKIP do not name $want"; printf '%s\n' "$under" | sed 's/^/        /'; }
 done
 grep -q 'Read(~/.config/gh' <<<"$under" && ok "--sandbox: the SKIP names the gh collision, uvx, the upstream issues and the macOS scope"
+# Nothing on this machine records the sandbox's state (#1002): the SKIP stays
+# listed, marked as one that cannot be read here, and the last line counts it apart.
+if grep -qE '^  SKIP  sandbox not verified.*\[cannot be read here\]$' <<<"$out" && grep -qE -- '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$' <<<"$out"
+then ok "--sandbox: the unrecorded state is marked as not readable here and counted apart"
+else bad "--sandbox not marked"; grep -E 'sandbox not|failed' <<<"$out" | sed 's/^/        /'; fi
 rm -f "$work/conf/settings.json"
 out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -q "SKIP.*sandbox not verified" <<<"$out"; then ok "--sandbox: no settings file at all is not verified either"; else bad "--sandbox no file"; printf '%s\n' "$out" | grep sandbox | sed 's/^/        /'; fi
@@ -1142,7 +1171,7 @@ import json, sys
 p = sys.argv[1]; d = json.load(open(p)); del d["plugins"]["taste-skill@plinth"][0]["gitCommitSha"]; json.dump(d, open(p, "w"))
 PY
 plugins_run
-for want in 'SKIP  plugins not checked, not from the plinth marketplace: codex@openai-codex' \
+for want in 'INFO  plugins from another marketplace, outside what plinth compares: codex@openai-codex' \
             'SKIP  last30days@plinth (project in /p) not checked: its entry pins no full commit' \
             'SKIP  taste-skill@plinth (user) not checked: its install records no full commit' \
             'SKIP  gone@plinth (user) not checked: the plinth marketplace has no entry for it'; do
@@ -1150,6 +1179,13 @@ for want in 'SKIP  plugins not checked, not from the plinth marketplace: codex@o
 done
 grep -qE 'at the plinth.*(codex|last30days|taste-skill|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
   || ok "--plugins: another marketplace, no pinned commit, no installed commit and no entry are not checked, never at the pin"
+# Another marketplace's plugin is outside what floor-check compares, not a read
+# that failed (#1002): an INFO, out of the not-verified count.
+plugins_fixture "$pin"; plugins_run; without="$(grep -- '^-- ' <<<"$out")"
+plugins_fixture "$pin" ',"codex@openai-codex":[{"scope":"user","gitCommitSha":"'"$pin"'"}]'; plugins_run
+if [ "$rc" = 0 ] && ! grep -qE '^  SKIP .*codex' <<<"$out" && [ "$(grep -- '^-- ' <<<"$out")" = "$without" ]
+then ok "--plugins: a plugin from another marketplace is not counted as not verified"
+else bad "--plugins other marketplace counted"; grep -E 'codex|failed' <<<"$out" | sed 's/^/        /'; fi
 # A state it cannot read is one SKIP and no plugin at its pin.
 for broken in installed shape known market name; do
   plugins_fixture "$pin"
@@ -1197,6 +1233,12 @@ if [ "$rc" = 0 ] && grep -q "INFO  gh stores 1 account for github.com: me" <<<"$
    && [ "$(grep -c "no other credential found by these rules; best effort, see the guide's list" <<<"$out")" = 3 ] \
    && ! grep -qE "PASS  (gh stores|git asks|no github.com login)" <<<"$out"
 then ok "--credentials: nothing found is an INFO with the best-effort note, never a PASS; SSH still not verified"; else bad "--credentials clean"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Only the account's settings say which SSH keys push (#1002): the SKIP is
+# marked as not readable here and counted apart from the readable ones.
+if grep -qE '^  SKIP  SSH keys not verified here: GitHub.*\[cannot be read here\]$' <<<"$out" \
+   && grep -qE -- '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$' <<<"$out"
+then ok "--credentials: the SSH keys SKIP is marked as not readable here and counted apart"
+else bad "--credentials SSH not marked"; grep -E 'SSH|failed' <<<"$out" | sed 's/^/        /'; fi
 # A variable that points gh or git elsewhere hides the default configuration,
 # and the agent can unset it: not verified, named, never read as clean.
 for var in GH_CONFIG_DIR XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS; do

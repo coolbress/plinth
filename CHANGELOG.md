@@ -37,6 +37,16 @@ pull requests and have no tag.
   line of what it cannot know, and step 5's note follows it, so a draft is
   named there only when every open one is a draft. It reads and names; it
   merges nothing.
+- `/plinth:floor-check` counts apart the SKIPs that cannot be read from here
+  (#1002). SSH keys, the sandbox while Claude Code does not record its state,
+  and a GitHub status a private repository's plan does not expose to its
+  administrator (push protection, the CodeQL rule, its default setup
+  languages) end `[cannot be read here]`, and the last line reads, for
+  example, `-- 0 failed, 5 not verified (4 cannot be read here)`. They stay
+  SKIPs inside the not-verified count. A plugin from another marketplace is an
+  INFO instead of a SKIP: outside what plinth compares. The skill leads with
+  what the person can clear. No check name, exit status or `ci / floor-check`
+  verdict changes.
 
 - `ci / diff-size` over the limit, on GitHub and on GitLab, says to split the
   change into pull requests that land one after another, each branched from
