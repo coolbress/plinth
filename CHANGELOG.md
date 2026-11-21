@@ -18,6 +18,14 @@ pull requests and have no tag.
   `scripts/with-admin-token.sh` as adding one is (#1004). It is for a job
   that stops running, as an archetype move stops `image`: a required name
   that never arrives blocks every merge. `--dry-run` shows what it would drop.
+- `scripts/floor-check.py --print-update-command --move-archetype <a>` prints
+  the `copier update` line that re-renders a project under another archetype
+  at the template tag it records (#1004), and names on stderr the required
+  check the move drops or adds (`image`, between a service archetype and
+  `cli` or `library`). It needs the project at the tag plinth targets, and
+  refuses a move to or from `web`. Measured first, with copier 9.18.2 and
+  9.19.1: from `data-ml` to `cli`, copier deletes the model files the project
+  left unchanged and keeps the project's own.
 
 ### Changed
 
