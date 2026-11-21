@@ -2513,6 +2513,62 @@ else bad "--print-update-command at the target (rc=$rc, stdout '$printed')"; sed
 printed="$(python3 "$checker" --root "$loosecopy" --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "not pinned to a full commit SHA" "$work/print-err"; then ok "--print-update-command with no established pin prints no command, names the reason, exit 1"
 else bad "--print-update-command, loose pin (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+# --move-archetype (#1004): at the target tag, the same-tag line with the new
+# archetype, which copier update re-renders (measured, copier 9.18.2 and
+# 9.19.1, data-ml to cli); on stderr the required checks the move drops or adds.
+move() { # <root> <api dir> <args...>: sets printed, rc; stderr in $work/print-err
+  local r="$1" api="$2"; shift 2
+  printed="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$r" --repo o/r --print-update-command "$@" 2>"$work/print-err")"; rc=$?
+}
+move "$good" "$pinned_api" --move-archetype cli
+case "$printed" in
+  "uvx --from copier=="*" copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40$no_shared --data archetype=cli")
+    [ "$rc" = 0 ] && ok "--move-archetype cli at the target tag: the same-tag line with --data archetype=cli last" \
+      || bad "--move-archetype cli: exit $rc" ;;
+  *) bad "--move-archetype cli (rc=$rc): '$printed'"; sed 's/^/        /' "$work/print-err" ;;
+esac
+if grep -qx "check-drop: image" "$work/print-err" && ! grep -q "^check-add: " "$work/print-err"; then ok "backend to cli names the image check it drops, and none it adds"
+else bad "backend to cli, check lines"; sed 's/^/        /' "$work/print-err"; fi
+mcopy="$work/move-cli"; rm -rf "$mcopy"; cp -R "$good" "$mcopy"; sed -i.bak 's/^archetype: backend/archetype: cli/' "$mcopy/.copier-answers.yml" && rm "$mcopy/.copier-answers.yml.bak"
+move "$mcopy" "$pinned_api" --move-archetype data-ml
+if [ "$rc" = 0 ] && grep -qx "check-add: image" "$work/print-err" && ! grep -q "^check-drop: " "$work/print-err"; then ok "cli to data-ml names the image check it adds, and none it drops"
+else bad "cli to data-ml (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
+move "$mcopy" "$pinned_api" --move-archetype library
+if [ "$rc" = 0 ] && ! grep -qE "^check-(add|drop): " "$work/print-err"; then ok "cli to library: no required check changes"
+else bad "cli to library (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
+for why in "backend|the recorded archetype is already backend" "web|web is not moved to or from here" \
+           "nope|unknown archetype nope (cli, library, backend, data-ml)"; do
+  move "$good" "$pinned_api" --move-archetype "${why%%|*}"
+  if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: ${why#*|}" "$work/print-err"; then ok "--move-archetype ${why%%|*}: no line, exit 1, says why"
+  else bad "--move-archetype ${why%%|*} (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+done
+wcopy="$work/move-from-web"; rm -rf "$wcopy"; cp -R "$good" "$wcopy"; sed -i.bak 's/^archetype: backend/archetype: web/' "$wcopy/.copier-answers.yml" && rm "$wcopy/.copier-answers.yml.bak"
+move "$wcopy" "$pinned_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: web is not moved to or from here" "$work/print-err"; then ok "--move-archetype from web: no line"
+else bad "--move-archetype from web (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
+move "$pcopy" "$pinned_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: the recorded tag v1.0.0 is not $target_ref, the tag plinth targets; update the template first (/plinth:template-update), then move" "$work/print-err"
+then ok "--move-archetype behind the target tag: no line, update first"
+else bad "--move-archetype behind (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+acopy="$work/move-ahead"; rm -rf "$acopy"; cp -R "$good" "$acopy"; sed -i.bak 's/^_commit: .*/_commit: v99.0.0/' "$acopy/.copier-answers.yml" && rm "$acopy/.copier-answers.yml.bak"
+move "$acopy" "$pinned_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: the recorded tag v99.0.0 is newer than $target_ref, the tag plinth targets" "$work/print-err"
+then ok "--move-archetype ahead of the target tag: no line, says the tag is newer"
+else bad "--move-archetype ahead (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+ncopy="$work/move-no-answers"; rm -rf "$ncopy"; cp -R "$good" "$ncopy"; rm "$ncopy/.copier-answers.yml"
+move "$ncopy" "$pinned_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: no .copier-answers.yml" "$work/print-err"; then ok "--move-archetype with no answers file: no line, names the file"
+else bad "--move-archetype, no answers file (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+move "$good" "$moved_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved, not $target_sha" "$work/print-err"; then ok "--move-archetype, the target tag moved: no line (fail closed)"
+else bad "--move-archetype, moved tag (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+for bad_args in "--move-archetype cli --plinth-pin tested" "--move-archetype"; do
+  # shellcheck disable=SC2086
+  FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$good" --repo o/r --print-update-command $bad_args >/dev/null 2>&1; rc=$?
+  [ "$rc" = 2 ] && ok "--print-update-command $bad_args: a usage error" || bad "--print-update-command $bad_args: exit $rc, expected 2"
+done
+python3 "$checker" --root "$good" --move-archetype cli >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "--move-archetype without --print-update-command: a usage error" || bad "--move-archetype alone: exit $rc, expected 2"
 # ci.yml raised by hand and label.yml left where the template rendered it
 # (#793). When label.yml's commit is an ancestor of the ci job's, the update
 # carries the ci job's and says which file moves from which commit to which.

@@ -90,7 +90,10 @@ carries the owner's two answers, read as /plinth:new-project reads them
 (the owner's .github: its visibility, three pull-request template paths,
 the shared issue-template folder and each form in it, #726), true only
 while the repository has none of its own; without --repo, or with a read
-that fails, there is no line, here or from --print-update-command.
+that fails, there is no line, here or from --print-update-command. With
+--move-archetype <a>, --print-update-command prints the same-tag line with
+`--data archetype=<a>` instead, only at the target tag and never to or from
+`web`, and names on stderr the required check the move drops or adds (#1004).
 
 Beside that item, outside `ci / floor-check` (--actions-token): two or three
 more reads compare the tag this plinth targets with the latest release's and
@@ -1423,7 +1426,7 @@ def resolve_gitlab_pin(root: Path) -> tuple[str | None, str | None, str | None]:
     return sha, integrity, None
 
 
-def template_drift(root: Path, host: str | None = None, network: bool = False) -> dict:
+def template_drift(root: Path, host: str | None = None, network: bool = False, move: bool = False) -> dict:
     """Where this repository stands against the template tag plinth is
     tested with, and the one `copier update` command that moves it there
     (#219). Offline but for the one compare named at the end. The drift item below prints it; --print-update-command
@@ -1475,9 +1478,12 @@ def template_drift(root: Path, host: str | None = None, network: bool = False) -
         # templates were removed after this repository was made. copier
         # update at the same tag renders what the answer changed (measured,
         # copier 9.18.2); owner_shared decides whether it changed.
-        if (host or answers.get("host")) == "gitlab" or not any(answers.get(k) == "true" for k in OWNER_KEYS):
+        # An archetype move (#1004) is a same-tag line too.
+        if not move and ((host or answers.get("host")) == "gitlab"
+                         or not any(answers.get(k) == "true" for k in OWNER_KEYS)):
             return {**out, "state": "current"}
         state = "current"
+    out["move"] = move
 
     integrity = None
     if (host or answers.get("host")) == "gitlab":
@@ -1577,7 +1583,7 @@ def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
     if own_forms and own_pr:
         d["owner_data"] = " --data owner_has_pr_template=false --data owner_has_issue_forms=false"
         d["cmd"] = update_line(d, d["live"], d.get("integrity"))
-        if d["state"] == "current":  # its own files: a recorded true changes nothing here
+        if d["state"] == "current" and not d.get("move"):  # its own files: a recorded true changes nothing here
             d["cmd"] = None
         return
     if not owner:
@@ -1645,7 +1651,7 @@ def owner_shared(d: dict, owner: str | None, network: bool, root: Path) -> None:
     d["owner_data"] = (f" --data owner_has_pr_template={'true' if pr else 'false'}"
                        f" --data owner_has_issue_forms={'true' if forms else 'false'}")
     d["cmd"] = update_line(d, d["live"], d.get("integrity"))
-    if d["state"] == "current" and not gone:
+    if d["state"] == "current" and not gone and not d.get("move"):
         d["cmd"] = None
 
 
@@ -2081,6 +2087,75 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
         for line in pins_disagree_stop(root, network):
             print(line, file=sys.stderr)
     return 1
+
+
+# The archetypes an existing project can move between (#1004). `web` is left
+# out both ways: a move to or from it also changes the hosting answers, its
+# two checks and the tag ruleset, none of which was measured.
+MOVE_ARCHETYPES = ("cli", "library", "backend", "data-ml")
+
+
+def required_extra(archetype: str) -> set[str]:
+    """The required checks an archetype adds to ruleset.json's, as
+    ruleset_for adds them (web aside, which a move refuses)."""
+    return {IMAGE_CHECK} if archetype in CONDITIONAL_ARCHETYPES else set()
+
+
+def print_move_command(root: Path, new: str, network: bool = True, host: str | None = None,
+                       owner: str | None = None) -> int:
+    """--print-update-command --move-archetype <new> (#1004): the line that
+    re-renders this repository under another archetype at the tag it
+    records, which must be the target tag: the drift item's same-tag line,
+    the live plinth pin and the owner's answers as an update carries them,
+    then `--data archetype=<new>`. copier update deletes the old archetype's
+    files the project left unchanged and keeps the project's own (measured,
+    copier 9.18.2 and 9.19.1, data-ml to cli). On stderr, a `check-drop:`
+    line for each required check the move stops and a `check-add:` line for
+    each it starts. Exit 1 with the reason when there is no line."""
+    def no(why: str) -> int:
+        print(f"no move command: {why}", file=sys.stderr)
+        return 1
+
+    answers = copier_answers(root)
+    if not answers:
+        return no("no .copier-answers.yml: not made by the door, so there is no recorded archetype to move from")
+    old = answers.get("archetype")
+    if "web" in (old, new):
+        return no("web is not moved to or from here: its hosting answers, its two checks and its tag ruleset "
+                  "change with it, and that move was not measured")
+    if new not in MOVE_ARCHETYPES:
+        return no(f"unknown archetype {new} ({', '.join(MOVE_ARCHETYPES)})")
+    if old == new:
+        return no(f"the recorded archetype is already {new}")
+    if old not in MOVE_ARCHETYPES:
+        return no(f"the recorded archetype {old!r} is not one a move starts from ({', '.join(MOVE_ARCHETYPES)})")
+    d = template_drift(root, host, network, move=True)
+    if d["state"] == "skip":
+        return no(f"template drift not verified ({d['reason']})")
+    if d["state"] == "ahead":
+        return no(f"the recorded tag {d['recorded']} is newer than {d['target']}, the tag plinth targets; "
+                  f"move with the plinth that targets {d['recorded']}")
+    if d["state"] != "current":
+        return no(f"the recorded tag {d['recorded']} is not {d['target']}, the tag plinth targets; update the "
+                  f"template first (/plinth:template-update), then move")
+    owner_shared(d, owner, network, root)
+    for note in d.get("owner_notes", []):
+        print(note, file=sys.stderr)
+    if not d.get("cmd"):
+        return no(str(d.get("why_not") or "no line"))
+    tag, why = target_tag(d, network)
+    if tag != "pinned":
+        return no(moved_note(d, why) if tag == "moved" else
+                  f"not verified that {d['target']} still names {d['target_sha']}, the commit plinth was tested with ({why})")
+    for line in moves_lines(d):
+        print(line, file=sys.stderr)
+    if (d.get("host") or "github") != "gitlab":
+        for c in sorted(required_extra(old) - required_extra(new)):
+            print(f"check-drop: {c}", file=sys.stderr)
+        for c in sorted(required_extra(new) - required_extra(old)):
+            print(f"check-add: {c}", file=sys.stderr)
+    print(f"{d['cmd']} --data archetype={new}")
+    return 0
 
 
 def check_doc_links(root: Path) -> None:
@@ -4703,6 +4778,9 @@ def main() -> int:
     ap.add_argument("--plinth-pin", choices=("live", "tested"), default="live",
                     help="with --print-update-command: the line carrying the plinth pin the workflows call (live, "
                          "the default) or the one the target template tag was tested with (tested; only when it is newer)")
+    ap.add_argument("--move-archetype", metavar="ARCHETYPE",
+                    help="with --print-update-command: the line that re-renders this repository under ARCHETYPE at the "
+                         "tag it records, with check-drop:/check-add: lines on stderr (#1004)")
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
     ap.add_argument("--without-code-scanning", action="store_true",
@@ -4727,6 +4805,10 @@ def main() -> int:
     root = Path(a.root).resolve()
     if a.plinth_pin != "live" and not a.print_update_command:
         ap.error("--plinth-pin needs --print-update-command")
+    if a.move_archetype is not None and not a.print_update_command:
+        ap.error("--move-archetype needs --print-update-command")
+    if a.move_archetype is not None and a.plinth_pin != "live":
+        ap.error("--move-archetype carries the live plinth pin; --plinth-pin tested is for a tag update")
     if a.print_plinth_pins:
         return print_plinth_pins(root)
     if a.print_diff_size:
@@ -4735,6 +4817,9 @@ def main() -> int:
         return print_plugin_skew(root, not a.no_network, a.host)
     if a.print_behind:
         return print_behind(root, not a.no_network, a.host)
+    if a.print_update_command and a.move_archetype is not None:
+        return print_move_command(root, a.move_archetype, not a.no_network, a.host,
+                                  a.repo.split("/")[0] if a.repo else None)
     if a.print_update_command:
         return print_update_command(root, a.plinth_pin, not a.no_network, a.host,
                                     a.repo.split("/")[0] if a.repo else None)
