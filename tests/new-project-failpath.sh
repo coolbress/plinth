@@ -1819,5 +1819,27 @@ else
   else bad skill-wait "worst cases ${before} s before the wall and ${all} s in all no longer fit the skill's 16 and 26 minutes"; fi
 fi
 
+# The archetype question says what each choice produces, in the template's
+# words (coolbress/plinth-template#300): a project that only collected data on
+# a schedule was made as data-ml when the answer read "Data processing, or a
+# model you train" (#1003). Each phrase is read in its own answer's row.
+row() { grep -F "$1" "$skill" | head -n 1; }
+for pair in "(cli) |::also the choice for a tool that runs on a schedule on the owner's machine (a data collector, a pipeline)" \
+            "(cli) |::On GitHub its release workflow runs only when a tag is pushed" \
+            "(data-ml) |::A model trained here, with a model card. On GitHub a \`v*\` tag publishes the model, its metrics and the card as release files." \
+            "(data-ml) |::Data processing, collection or a pipeline with no model trained is \`cli\`." \
+            "(backend) |::A service that keeps running and answers requests, in a container." \
+            "(library) |::A package other code imports." \
+            "| A service, or a model you train |::a model trained here, with a model card. On GitHub a \`v*\` tag publishes the model, its metrics and the card as release files." \
+            "| A service, or a model you train |::Data processing, collection or a pipeline with no model trained is \`cli\`."; do
+  key="${pair%%::*}"; phrase="${pair#*::}"
+  if row "$key" | grep -qF -- "$phrase"; then ok skill-archetype "the $key row says \"$phrase\""
+  else bad skill-archetype "the skill's $key row does not say \"$phrase\""; fi
+done
+for old in 'Data processing, or a model you train' 'data processing and model training' 'Always-on server or data job'; do
+  if grep -qF -- "$old" "$skill"; then bad skill-archetype "the skill still says \"$old\""
+  else ok skill-archetype "the skill no longer says \"$old\""; fi
+done
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
