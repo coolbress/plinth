@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.40.0] - 2026-11-22
+
+An existing project made under the wrong archetype can move to another one: `/plinth:template-update --archetype <a>` re-renders it under the new archetype in a draft pull request after a plan the person confirms, which names what it deletes, adds and changes and, for a required check the move stops (`image`), the `scripts/require-check.sh --drop` command the person runs through `scripts/with-admin-token.sh`; `/plinth:floor-check --print-update-command --move-archetype <a>` prints the `copier update` line by itself. GitHub only: on GitLab `/plinth:template-update` still stops before changing anything (#1012). New projects render plinth-template v1.49.0 and start at plinth v2.39.0, and both copier's and `/plinth:new-project`'s archetype question say what each choice produces, pointing data work that trains no model at `cli`. `/plinth:floor-check` counts apart the SKIPs that cannot be read from this machine or token. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
+
+tested with plinth-template v1.49.0
+
 ### Added
 
 - `scripts/require-check.sh --drop '<check name>'` takes one required name
@@ -5705,7 +5711,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.39.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.40.0...HEAD
+[2.40.0]: https://github.com/coolbress/plinth/releases/tag/v2.40.0
 [2.39.0]: https://github.com/coolbress/plinth/releases/tag/v2.39.0
 [2.38.0]: https://github.com/coolbress/plinth/releases/tag/v2.38.0
 [2.37.0]: https://github.com/coolbress/plinth/releases/tag/v2.37.0
