@@ -13,6 +13,18 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.48.0 instead of v1.47.0.
+  A new project calls plinth v2.38.0 instead of v2.32.0 (`plinth_sha`'s
+  default moved, coolbress/plinth-template#288). Its `AGENTS.md` says to run
+  the touched tests while working and the full block once through
+  `scripts/heavy.sh`, a queue for the machine's full test runs
+  (coolbress/plinth-template#284); to read plinth's latest release before
+  saying plinth lacks something (coolbress/plinth-template#279); the records' language, with a
+  skeleton per record kind (coolbress/plinth-template#290); and that when several pull requests wait,
+  one session merges them one at a time (coolbress/plinth-template#293). `license` offers
+  `Proprietary` (coolbress/plinth-template#289), and `CONTRIBUTING.md` lands a big change as pull
+  requests one after another, not as a stack (coolbress/plinth-template#282). An existing project
+  gets these through `/plinth:template-update` and keeps its own plinth pin.
 - `/plinth:guide` names the next pull request to merge when two or more of a
   person's are open, past the first merge (#998): green and up to date
   (`CLEAN`) first, then green but behind `main` (`BEHIND`) oldest first, then
