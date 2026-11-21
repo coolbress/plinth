@@ -116,20 +116,19 @@ numbered, one question at a time. Never answer a question for the person.
 
    | Label | Description |
    | --- | --- |
-   | A terminal command (cli) | A program people install and type in a terminal. If you are not sure, choose this one. |
-   | Code other code imports (library) | Python code that other projects install and use, published as a package. |
-   | Always-on server or data job | Something that keeps running: a service or API, or data processing and model training. It also checks that its container builds and starts. |
-   | A website people log in to (web) | A website with logins and a database, on GitHub only, about $13 a month to run on Render. It also checks the container, the database changes and the production settings. |
+   | A terminal command (cli) | A command people install and run in a terminal; also the choice for a tool that runs on a schedule on the owner's machine (a data collector, a pipeline). On GitHub its release workflow runs only when a tag is pushed (`v*`, or a member's `<prefix>-v*`), so a project that never tags publishes nothing. If you are not sure, choose this one. |
+   | Code other code imports (library) | A package other code imports. |
+   | A service, or a model you train | A service that keeps running and answers requests, in a container; or a model trained here, with a model card. On GitHub a `v*` tag publishes the model, its metrics and the card as release files. Data processing, collection or a pipeline with no model trained is `cli`. It also checks that its container builds and starts. |
+   | A website people log in to (web) | A web app with logins and a database, on GitHub only. It costs money to run: about US $13 a month on Render. It also checks the container, the database changes and the production settings. |
 
    With `--host gitlab` in the arguments, leave out `web` and say once that
    web is made on GitHub only. For the third answer ask, header `Service`:
-   "Is it a backend (a service or API) or data-ml (data processing or
-   training a model)?"
+   "Is it a backend (a service or API) or data-ml (a model trained here)?"
 
    | Label | Description |
    | --- | --- |
-   | A service or API (backend) | A program that keeps running and answers requests. It also checks that its container builds and starts. |
-   | Data or a model (data-ml) | Data processing, or a model you train. It also checks the container, and comes with a model card and a test of the training. |
+   | A service or API (backend) | A service that keeps running and answers requests, in a container. It also checks that its container builds and starts. |
+   | A model you train (data-ml) | A model trained here, with a model card. On GitHub a `v*` tag publishes the model, its metrics and the card as release files. It also checks the container, and comes with a test of the training. Data processing, collection or a pipeline with no model trained is `cli`. |
 
    Every kind gets the same checks besides (title, lint, types, tests,
    build, secrets, dependencies, change size, the project's own setup) and

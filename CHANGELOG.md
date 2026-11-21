@@ -26,6 +26,13 @@ pull requests and have no tag.
   verdicts file no longer carries a line for it. The skill leads with what the
   person can clear. No check name, exit status or `ci / floor-check` verdict
   changes.
+- `/plinth:new-project`'s archetype question says what each choice produces,
+  in the words of plinth-template's `archetype` help
+  (coolbress/plinth-template#300). `data-ml` is a model trained here, with a
+  model card, which on GitHub a `v*` tag publishes as release files; a tool that collects or
+  processes data on a schedule with no model trained is `cli`, which on GitHub
+  releases only when a tag is pushed. The third `Kind` answer no longer groups data
+  processing with services (#1003). Only the question's text changed.
 
 ## [2.39.0] - 2026-11-21
 
