@@ -852,6 +852,14 @@ has   "private, no settings answered to an administrator, no rule: its place is 
 has   "private, no settings answered to an administrator: the default setup languages are marked as not readable here" '^  SKIP  CodeQL default setup languages not verified.*\[cannot be read here\]$'
 has   "private, no settings answered to an administrator, no rule: three counted apart" '^-- 0 failed, [0-9]+ not verified \(3 cannot be read here\)$'
 if [ "$rc" = 0 ]; then ok "private, no settings answered to an administrator, no rule: the run does not fail"; else bad "the run failed (rc=$rc)"; fi
+# With the rule in place Code Security is there, so a default setup read that
+# failed is one a re-run can clear: plain not verified (#1002 review).
+printf '{%s,"private":true,"permissions":{"admin":true}}' "$repo_meta" > "$api/repos/o/r.json"
+printf 'not json' > "$api/repos/o/r/code-scanning/default-setup.json"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+has   "private, no settings answered to an administrator, rule in place: a failed default setup read is plain not verified" '^  SKIP  CodeQL default setup languages not verified \(the token cannot read code-scanning/default-setup\)$'
+has   "private, no settings answered to an administrator, rule in place: only push protection counted apart" '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$'
 # With the licence, a missing rule is the defect it is on a public repository.
 for key in code_security advanced_security; do
   private "$(sec enabled enabled enabled "$key")" "$rules_neither"

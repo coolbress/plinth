@@ -283,8 +283,12 @@ security rules for CodeQL). Three kinds carry the mark: SSH keys (the
 account's settings say which push), the sandbox while Claude Code does not
 record its state, and a GitHub status a private repository's plan does not
 expose to its administrator (push protection, the CodeQL rule, the CodeQL
-default setup languages). They stay listed, so the person knows what was not
-checked; they are counted inside M, never as a PASS. An exit code
+default setup languages). That last kind is read from the login's role, not
+the token's permissions: a fine-grained token without the Administration
+permission gets the same answer, and the line names it, so when the person
+reads with such a token, say that one with Administration may read these.
+They stay listed, so the person knows what was not checked; they are counted
+inside M, never as a PASS. An exit code
 of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
 not-verified count says what was not.
 `N/A` lines (a JavaScript or TypeScript repository, above) are not defects

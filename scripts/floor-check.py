@@ -3870,7 +3870,9 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         if not isinstance(langs, list) and actions_token:
             result("INFO", "CodeQL default setup languages not read here: the Actions token cannot read "
                            "code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
-        elif not isinstance(langs, list) and plan_hides_security(meta):
+        # A CodeQL rule or check name means Code Security is there, so on
+        # that repository a failed read is one a re-run can clear (#1002).
+        elif not isinstance(langs, list) and plan_hides_security(meta) and not (tools or by_name):
             result("SKIP", "CodeQL default setup languages not verified (code-scanning/default-setup gave no answer "
                            "on a private repository whose plan answers no security settings to its administrator)",
                    here=True)
