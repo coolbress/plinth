@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The door: create a repository with the wall already up, or create nothing.
 #
-#   new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>]
+#   new-project.sh [<owner>/]<name> [--license=<spdx>|proprietary] [--archetype=<a>] [--dir=<path>]
 #                  [--private|--public] [--third-party-review|--no-third-party-review]
 #                  [--code-of-conduct=<contact>|--no-code-of-conduct]
 #                  [--description=<one line>|--no-description]
@@ -356,8 +356,13 @@ if git -C "$(dirname "$dir")" rev-parse --is-inside-work-tree >/dev/null 2>&1; t
   stop "$dir would be a repository inside the repository $(git -C "$(dirname "$dir")" rev-parse --show-toplevel)" "  fix: --dir=<a path outside it>"
 fi
 # The license is checked before creating, so a typo does not create and delete.
-spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
-  || stop "unknown license: $lic (mit, apache-2.0, gpl-3.0, ... : https://api.github.com/licenses)"
+# Proprietary grants nothing and is no license GitHub lists (#995): the door
+# names it itself, and the template's own list below decides whether it renders.
+if [ "$(tr '[:upper:]' '[:lower:]' <<<"$lic")" = proprietary ]; then spdx=Proprietary
+else
+  spdx="$(gh api "/licenses/$lic" --jq .spdx_id 2>/dev/null)" \
+    || stop "unknown license: $lic (mit, apache-2.0, gpl-3.0, proprietary, ... : https://api.github.com/licenses)"
+fi
 # The archetype and license vocabularies live in the template's copier.yml; a
 # copy here would drift. Both are read from it, because copier refuses a value
 # outside its own choices (measured: `Invalid choice for 'license': 'GPL-3.0'
