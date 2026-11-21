@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The eval suite's `floor-gaps` and `next-day` grading reads a negation
+  (#1019). "No files are missing: `uv.lock`, `CHANGELOG.md` and
+  `.github/dependabot.yml` are all present" passed all three gaps, and "the
+  Windows cp1252 check is finished. Nothing remains to verify" passed the open
+  item. A word after "no", "not", "nothing", "none" (and, for "done" words,
+  "never", "nobody", "n't", "until") in its clause now reads as the other
+  list's, and a sentence that says both fails the entry; "found" before "gaps"
+  or "missing" is the report's verb, not a file in place. Checked by hand: the
+  v2.39.0 release run's and v2.40.0 smoke run's reports, and 46 archived
+  ones, grade the same as before.
+
 ## [2.40.0] - 2026-11-22
 
 An existing project made under the wrong archetype can move to another one: `/plinth:template-update --archetype <a>` re-renders it under the new archetype in a draft pull request after a plan the person confirms, which names what it deletes, adds and changes and, for a required check the move stops (`image`), the `scripts/require-check.sh --drop` command the person runs through `scripts/with-admin-token.sh`; `/plinth:floor-check --print-update-command --move-archetype <a>` prints the `copier update` line by itself. GitHub only: on GitLab `/plinth:template-update` still stops before changing anything (#1012). New projects render plinth-template v1.49.0 and start at plinth v2.39.0, and both copier's and `/plinth:new-project`'s archetype question say what each choice produces, pointing data work that trains no model at `cli`. `/plinth:floor-check` counts apart the SKIPs that cannot be read from this machine or token. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
