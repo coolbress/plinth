@@ -152,6 +152,18 @@ out="$(python3 "$checker" --root "$dl" --no-network --verdicts "$dl.verdicts" 2>
 if [ "$rc" = 1 ] && [ -s "$dl.verdicts" ] && ! grep -q Traceback <<<"$out" && grep -q '^  PASS  LICENSE present' <<<"$out" \
   && grep -q -- '-- 1 failed' <<<"$out"; then ok "a dangling *.md link still writes the verdicts and reports the other items"
 else bad "a dangling *.md link stops the checker (rc=$rc, verdicts $( [ -s "$dl.verdicts" ] && echo written || echo missing ))"; printf '%s\n' "$out" | grep -E 'Traceback|Error|FAIL|failed' | sed 's/^/        /'; fi
+# A proprietary notice grants nothing and is still the LICENSE item (#995):
+# the item asks that the file is there, not what it grants. The text is
+# plinth-template v1.48.0's for license=Proprietary.
+pr="$work/proprietary"; rm -rf "$pr"; cp -R "$good" "$pr"
+printf '%s\n' 'Copyright (c) 2026 tester. All rights reserved.' '' \
+  'This software and its source code are proprietary and confidential. No' \
+  'license or right to use, copy, modify, merge, publish, distribute,' \
+  'sublicense or sell it is granted to anyone, except by written permission of' \
+  'the copyright holder.' > "$pr/LICENSE"
+out="$(python3 "$checker" --root "$pr" --no-network 2>&1)"
+if grep -q '^  PASS  LICENSE present' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "a proprietary notice passes the LICENSE item"
+else bad "a proprietary notice does not pass the LICENSE item"; grep -E 'LICENSE|FAIL' <<<"$out" | sed 's/^/        /'; fi
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
 plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"
 # The image check is the service archetypes' own required check (#127): the job
