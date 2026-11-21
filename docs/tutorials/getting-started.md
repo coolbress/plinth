@@ -75,10 +75,14 @@ before you answer anything. Then it asks what the command did not say, in a
 picker (a window of choices; Other lets you type an answer instead):
 
 1. **What you are making**: a terminal command (`cli`), the one to choose
-   when unsure; code other code imports (`library`); an always-on server or
-   data job, then whether it is a service or API (`backend`) or data and a
-   model (`data-ml`); or a website people log in to (`web`, then where it
-   runs).
+   when unsure, and also the choice for a tool that runs on a schedule on
+   the owner's machine (a data collector, a pipeline); code other code
+   imports (`library`); a service or a model you train, then whether it is a
+   service or API (`backend`) or a model trained here, with a model card
+   (`data-ml`; on GitHub a `v*` tag publishes the model, its metrics and the
+   card as release files); or a website people log in to (`web`, then where
+   it runs). Data processing, collection or a pipeline with no model trained
+   is `cli`.
 2. **Use the recommended defaults?** public, on GitHub, MIT licence, in
    `~/my-app`, no third-party reviewer, no code of conduct, no description.
    Yes asks nothing more. Customize asks the host (GitLab.com needs `glab`
