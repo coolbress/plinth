@@ -1,6 +1,6 @@
 ---
 name: template-update
-description: Apply the plinth-template update /plinth:floor-check reports as a draft pull request, from a worktree branched off the verified default branch. User-invoked only; it pushes a branch and opens a pull request, and it resolves a conflict only on the person's word for that file.
+description: Apply the plinth-template update /plinth:floor-check reports as a draft pull request, from a worktree branched off the verified default branch, or move the project to another archetype the same way when the person asks. User-invoked only; it pushes a branch and opens a pull request, and it resolves a conflict only on the person's word for that file.
 disable-model-invocation: true
 ---
 
@@ -197,3 +197,58 @@ the rewording to them. The
 worktree stays beside the repository (`<repository>-template-<tag>`) after the
 pull request opens. Nothing here pushes to the default branch, and nothing
 runs again on its own.
+
+## Moving to another archetype
+
+Use `--archetype <a>` when the person says the project was made under an
+archetype it does not fit: a `data-ml` project that trains nothing, for
+example, which would otherwise delete the model example by hand and still get
+it offered again by every update. Moving is the person's call: never propose
+it as the fix for a warning, and run each step only on their word. It moves
+between any two archetypes but `web`, which it does not move to or from, and
+not on GitLab, which this script does not serve. Which names are archetypes
+is the template's to say: copier refuses one it does not offer, and the plan
+stops on that before anything is written. The project must already be
+at the template tag this plinth targets: when it is behind, the plan stops
+and says to update first.
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --archetype <a>
+```
+
+The plan runs the move on a copy of the default branch outside the
+repository and prints what it deletes, adds and changes, any conflicts, and
+the CI jobs that stop. When a job that stops is a required check (`image`,
+moving from `backend` or `data-ml` to `cli` or `library`), it prints the
+`scripts/with-admin-token.sh` command that drops it. A required check that
+no longer runs blocks every merge, so the person runs that command in a
+separate terminal, with an admin token, before the move's pull request
+merges. Never run it yourself, and never with your token. When the move
+starts a check, the plan names the command that requires it once it has run
+on the default branch. Show the plan whole, and ask whether to apply exactly
+that. On a yes:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> --archetype <a> --assisted-by <agent>:<model>
+```
+
+Exit codes are as in step 3. On exit 3 the script also shows this
+repository's side of each conflict. For a `data-ml` project whose model files
+were already deleted by hand, expect three conflicts (measured with copier
+9.18.2 and 9.19.1): `pyproject.toml`, `src/<package>/__main__.py` and
+`uv.lock`. First show the person their side of each, and name any code in it
+that is theirs, beyond what the old archetype rendered and the hand deletion
+left: a function, a dependency, a subcommand. If there is any, stop there and
+ask how to keep it. Otherwise recommend the template's side for each file.
+On their word, take that side in all three, run `uv lock` in the worktree
+once `pyproject.toml` is resolved, and `git add` the three. Then run the
+`--finish` line with one `--resolved` per file, for example
+`--resolved uv.lock "the template's side, then uv lock, on the user's word"`.
+
+Files the new archetype adds, such as `tests/test_built_wheel.py` when
+moving to `cli`, go into the same commit. The description lists what the
+move deleted and added, and what a person does by hand: the required check
+to drop or add. Nothing else changes outside the files: the labels are one
+list for every archetype, and `/plinth:floor-check` reads the archetype from
+`.copier-answers.yml`, so after the move it expects the new archetype's files
+and no longer the old one's.

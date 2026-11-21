@@ -26,6 +26,16 @@ pull requests and have no tag.
   refuses a move to or from `web`. Measured first, with copier 9.18.2 and
   9.19.1: from `data-ml` to `cli`, copier deletes the model files the project
   left unchanged and keeps the project's own.
+- `/plinth:template-update --archetype <a>` moves an existing project to
+  another archetype in a draft pull request, when the person asks (#1004).
+  The plan runs the move on a copy of the default branch outside the
+  repository and prints what it deletes, adds and changes, any conflicts,
+  the CI jobs that stop, and for a required check that stops (`image`), the
+  `scripts/with-admin-token.sh scripts/require-check.sh --drop` command a
+  person runs before the move merges. A conflict shows the project's own side
+  first. No label changes with the archetype, and `/plinth:floor-check` reads
+  the new one from the answers file (measured on a real `data-ml` to `cli`
+  move: no container, `.env.example`, model card or `image` item after it).
 
 ### Changed
 

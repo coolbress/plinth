@@ -51,6 +51,15 @@ printf 'gh %s\n' "$*" >> "$GH_LOG"
 case "$*" in
   "repo view"*)         echo "o/r main" ;;
   "api repos/o/r/branches/main"*) echo "${MOCK_REMOTE_SHA:-$(git -C "$BARE" rev-parse main)}" ;;
+  "api repos/o/r/rules/branches/main"*)
+    # The rules on main, with each required check named in MOCK_REQUIRED
+    # (comma-separated), filtered by the script's own --jq as gh does (#1004).
+    [ "${MOCK_REQUIRED:-}" = unreadable ] && { echo "HTTP 403" >&2; exit 1; }
+    jqf="."; prev=""
+    for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; prev="$a"; done
+    jq -n --arg r "${MOCK_REQUIRED:-}" '[{type: "pull_request"}, {type: "required_status_checks",
+      parameters: {required_status_checks: [$r | split(",")[] | select(. != "") | {context: ., integration_id: 15368}]}}]' \
+      | jq -r "$jqf" ;;
   "pr list"*)
     # MOCK_PR_EXISTING holds the JSON GitHub would answer; the script's own
     # --jq filter is applied to it, as gh does.
@@ -74,6 +83,36 @@ printf '%s\n' "$*" > "$UVX_LOG"
 ref=""; prev=""
 for a in "$@"; do [ "$prev" = --vcs-ref ] && ref="$a"; prev="$a"; done
 [ "${MOCK_COPIER:-clean}" = fail ] && { echo "copier: something broke" >&2; exit 1; }
+printf '%s\n' "$PWD" > "$UVX_LOG.cwd.$$"
+# An archetype move (#1004), as copier 9.18.2 and 9.19.1 were measured to do
+# it from data-ml to cli: the model files the project left unchanged go, the
+# image job and the container files go, the cli test of the built wheel is
+# added untracked, and the answers record cli. MOCK_MOVE=handdel is a project
+# that deleted the model by hand: pyproject.toml, __main__.py and uv.lock are
+# left unmerged (`UU`) with markers instead.
+new=""; for a in "$@"; do case "$a" in archetype=*) new="${a#archetype=}" ;; esac; done
+if [ -n "$new" ]; then
+  [ "${MOCK_MOVE_FAIL:-}" = 1 ] && { echo "ValueError: Validation error for question 'archetype': The package name would collide" >&2; exit 1; }
+  sed -i.bak "s/^archetype: .*/archetype: $new/" .copier-answers.yml && rm .copier-answers.yml.bak
+  printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
+  rm -f Dockerfile; mkdir -p tests; printf 'def test_built_wheel():\n    pass\n' > tests/test_built_wheel.py
+  conflict() { # <path> <ours> <theirs>
+    local b o t; b="$(git hash-object -w "$1")"
+    printf '%b' "$2" > .o; printf '%b' "$3" > .t; o="$(git hash-object -w .o)"; t="$(git hash-object -w .t)"; rm .o .t
+    git update-index --force-remove "$1"
+    printf '100644 %s 1\t%s\n100644 %s 2\t%s\n100644 %s 3\t%s\n' "$b" "$1" "$o" "$1" "$t" "$1" | git update-index --index-info
+    printf 'top\n<<<<<<< before updating\n%b=======\n%b>>>>>>> after updating\nend\n' "$2" "$3" > "$1"
+  }
+  if [ "${MOCK_MOVE:-asis}" = handdel ]; then
+    conflict pyproject.toml 'dependencies = []\n' 'classifiers = ["Typing :: Typed"]\ndependencies = []\n'
+    conflict src/demo/__main__.py 'def main():\n    own_helper()\n' 'def main():\n    print(greet())\n'
+    conflict uv.lock 'lock-before\n' 'lock-after\n'
+  else
+    rm -rf MODEL_CARD.md src/demo/train.py tests/test_train.py data
+    printf 'cli pyproject\n' > pyproject.toml; printf 'cli main\n' > src/demo/__main__.py; printf 'cli lock\n' > uv.lock
+  fi
+  exit 0
+fi
 # copier records the tag a commit carries, not the commit (measured, 9.18.2).
 [ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
@@ -1212,6 +1251,131 @@ git -C "$repo" commit -q -am foreign && git -C "$repo" push -q origin main
 FLOOR_CHECK_API_DIR="$newer_api" run
 if [ "$rc" != 0 ] && ! grep -q "claude plugin" <<<"$out"; then ok "a repository the door did not make gets no plugin stop"
 else bad "foreign repository (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# ── an archetype move (#1004) ───────────────────────────────────────────
+# A data-ml project at the target tag, with the model example, the image job
+# and a file of its own, moved to cli: the plan rehearses copier outside the
+# repository and names what goes, what comes, the CI jobs that stop and the
+# command for a required check that stops; --apply makes the draft.
+move_fixture() { # <name>
+  fixture "$1"
+  printf '_commit: %s\n_src_path: gh:coolbress/plinth-template\narchetype: data-ml\n' "$target_ref" > "$repo/.copier-answers.yml"
+  printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  image:\n    runs-on: ubuntu-latest\n' "$sha40" > "$repo/.github/workflows/ci.yml"
+  mkdir -p "$repo/src/demo" "$repo/tests" "$repo/data"
+  printf 'model\n' > "$repo/MODEL_CARD.md"; printf 'train\n' > "$repo/src/demo/train.py"
+  printf 'test\n' > "$repo/tests/test_train.py"; printf 'data\n' > "$repo/data/README.md"
+  printf 'FROM x\n' > "$repo/Dockerfile"; printf 'data-ml pyproject\n' > "$repo/pyproject.toml"
+  printf 'data-ml main\n' > "$repo/src/demo/__main__.py"; printf 'data-ml lock\n' > "$repo/uv.lock"
+  printf 'def own():\n    return 1\n' > "$repo/src/demo/own.py"
+  # export-ignore leaves a path out of `git archive`: the rehearsal must see it (review on #1004).
+  printf 'tests/ export-ignore\n' > "$repo/.gitattributes"
+  git -C "$repo" add -A && git -C "$repo" commit -q -m "data-ml at the target tag" && git -C "$repo" push -q origin main
+}
+awt_of() { printf '%s\n' "$work/$1-archetype-$2"; }
+
+move_fixture move-plan; reset_logs
+base="$(git -C "$BARE" rev-parse main)"; before_status="$(git -C "$repo" status --porcelain)"
+out="$(cd "$repo" && MOCK_REQUIRED="ci / test,image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+plan_ok=1
+for want in "Archetype:  data-ml -> cli, at $target_ref" "--data archetype=cli" \
+            "Deletes:" "  MODEL_CARD.md" "  src/demo/train.py" "  tests/test_train.py" "  data/README.md" "  Dockerfile" \
+            "Adds:" "  tests/test_built_wheel.py" "CI jobs that stop:" "  .github/workflows/ci.yml: image" \
+            "Conflicts:  none" \
+            "Required check that stops running: image, required on main now. Before the move's pull request merges, a person runs, with an admin token (never the agent's):" \
+            "with-admin-token.sh $root/scripts/require-check.sh --drop --repo o/r 'image'" \
+            "--apply $base --archetype cli"; do
+  grep -qF -- "$want" <<<"$out" || { plan_ok=0; bad "the move's plan lacks: $want"; }
+done
+[ "$plan_ok" = 1 ] && [ "$rc" = 0 ] && ok "the move's plan names the files it deletes and adds, the CI job that stops, the drop command and the apply line"
+[ "$plan_ok" = 1 ] && [ "$rc" = 0 ] || printf '%s\n' "$out" | sed 's/^/        /'
+if grep -qF "  src/demo/own.py" <<<"$out"; then bad "the plan lists the project's own file"; else ok "the plan does not list the project's own file"; fi
+if [ "$(git -C "$repo" status --porcelain)" = "$before_status" ] && [ ! -e "$(awt_of move-plan cli)" ] \
+   && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-cli >/dev/null && [ "$(git -C "$BARE" rev-parse main)" = "$base" ] \
+   && ! grep -qxF "$repo" "$work"/uvx.log.cwd.* 2>/dev/null
+then ok "the plan rehearses copier outside the repository: no worktree, no branch, the checkout unchanged"
+else bad "the move's plan wrote something"; fi
+rm -f "$work"/uvx.log.cwd.*
+out="$(cd "$repo" && MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "image stops running, and no ruleset requires it on main: nothing to drop. Classic branch protection is not read" <<<"$out" && ! grep -qF -- "--drop" <<<"$out"
+then ok "a check that stops but is not required: no drop command"
+else bad "not required (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_REQUIRED=unreadable PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "whether main requires image was not read" <<<"$out" && grep -qF -- "require-check.sh --drop --repo o/r 'image'" <<<"$out"
+then ok "the required checks unread: says so, and still names the drop command"
+else bad "unread rules (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_MOVE_FAIL=1 PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -qF "Validation error for question 'archetype'" <<<"$out" && grep -qF "copier refused the move in the rehearsal" <<<"$out" \
+   && [ ! -e "$(awt_of move-plan cli)" ]
+then ok "copier refusing the move (a colliding package name) stops the plan with copier's sentence"
+else bad "refused move (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+for args in "--archetype cli --plinth-pin tested|--apply $base --archetype cli --plinth-pin tested" "--finish|--finish $work/x --archetype cli"; do
+  run ${args#*|}
+  [ "$rc" = 2 ] && ok "${args%%|*} with an archetype move: a usage error" || bad "${args#*|}: exit $rc, expected 2"
+done
+run --apply "$base" --archetype web
+if [ "$rc" = 1 ] && [ ! -e "$(awt_of move-plan web)" ] && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-web >/dev/null
+then ok "--apply with an archetype the checker refuses stops before a worktree or branch exists"
+else bad "--apply --archetype web (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+run --archetype web
+if [ "$rc" = 1 ] && grep -qF "no move command: web is not moved to or from here" <<<"$out"; then ok "a move to web stops with the checker's reason"
+else bad "move to web (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+fixture move-old; reset_logs
+run --archetype library
+if [ "$rc" = 1 ] && grep -qF "update the template first" <<<"$out" && [ ! -e "$work/uvx.log" ]; then ok "a move behind the target tag stops before copier: update first"
+else bad "move behind the tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# --apply: the move as rendered, in a draft.
+move_fixture move-apply; reset_logs
+base="$(git -C "$BARE" rev-parse main)"
+out="$(cd "$repo" && MOCK_REQUIRED="ci / test,image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype cli --assisted-by "Claude:claude-test-1" 2>&1)"; rc=$?
+wt="$(awt_of move-apply cli)"
+if [ "$rc" = 0 ] && [ "$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)" = chore/archetype-cli ] && grep -q -- "--draft" "$work/gh.log"
+then ok "--apply --archetype cli opens a draft from chore/archetype-cli"
+else bad "move apply (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+names="$(git -C "$wt" show --name-status --format= HEAD 2>/dev/null)"
+if grep -qx "D	MODEL_CARD.md" <<<"$names" && grep -qx "D	src/demo/train.py" <<<"$names" && grep -qx "D	tests/test_train.py" <<<"$names" \
+   && grep -qx "A	tests/test_built_wheel.py" <<<"$names" && ! grep -q "own.py" <<<"$names" && [ -f "$wt/src/demo/own.py" ] \
+   && grep -qx "archetype: cli" "$wt/.copier-answers.yml"
+then ok "the commit deletes the model files, adds tests/test_built_wheel.py, keeps the project's own file, and the answers record cli"
+else bad "the move's commit"; printf '%s\n' "$names" | sed 's/^/        /'; fi
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if grep -qF "chore(template): move from the data-ml archetype to cli" "$work/gh.log" \
+   && grep -qF -- "- tests/test_built_wheel.py" <<<"$(section "$work/gh.log.body" "What and why")" \
+   && grep -qF "scripts/with-admin-token.sh scripts/require-check.sh --drop --repo o/r 'image'" <<<"$body" \
+   && ! grep -qF "$root" <<<"$body"
+then ok "the description names the move, the added test, and the drop command from plinth's folder, with no local path"
+else bad "the move's description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+cp "$work/gh.log.body" "$work/move.body"; fields_pass "the description of an archetype move" "$work/move.body"
+if [ -n "${template_dir:-}" ] && [ -s "$work/form.md" ]; then
+  if said="$(form_fields "$work/form.md" "$work/move.body")"; then ok "the move's description writes every field of the form, in its order"
+  else bad "the move's description against the form"; printf '%s\n' "$said" | sed 's/^/        /'; fi
+fi
+
+# --apply on a project that deleted the model by hand: the three measured
+# conflicts stop it, showing this repository's side of each before anything
+# is resolved; resolved to the template's side, --finish opens the draft.
+move_fixture move-hand; reset_logs
+git -C "$repo" rm -rq MODEL_CARD.md src/demo/train.py tests/test_train.py data
+git -C "$repo" commit -q -m "model deleted by hand" && git -C "$repo" push -q origin main
+base="$(git -C "$BARE" rev-parse main)"
+out="$(cd "$repo" && MOCK_MOVE=handdel MOCK_REQUIRED="image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype cli 2>&1)"; rc=$?
+wt="$(awt_of move-hand cli)"
+if [ "$rc" = 3 ] && grep -qF "This repository's side of src/demo/__main__.py" <<<"$out" && grep -qF "    own_helper()" <<<"$out" \
+   && grep -qF "This repository's side of pyproject.toml" <<<"$out" && grep -qF "uv.lock: generated; after pyproject.toml is resolved, uv lock in the worktree makes it again" <<<"$out" \
+   && ! grep -q "pr create" "$work/gh.log" && ! git -C "$BARE" rev-parse -q --verify refs/heads/chore/archetype-cli >/dev/null
+then ok "the hand-deleted move stops at the three conflicts, showing this repository's side of each, nothing pushed"
+else bad "hand-deleted move (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+for f in pyproject.toml src/demo/__main__.py uv.lock; do
+  awk '/^<<<<<<< before updating$/ { s = 1; next } /^=======$/ && s { s = 2; next } /^>>>>>>> after updating$/ { s = 0; next } s != 1' "$wt/$f" > "$wt/$f.new" && mv "$wt/$f.new" "$wt/$f"
+  git -C "$wt" add "$f"
+done
+out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" \
+  --resolved pyproject.toml "the template's side, on the user's word" --resolved src/demo/__main__.py "the template's side, on the user's word" \
+  --resolved uv.lock "the template's side, then uv lock, on the user's word" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && git -C "$wt" show --name-status --format= HEAD | grep -qx "A	tests/test_built_wheel.py" \
+   && grep -qF "src/demo/__main__.py: the template's side, on the user's word" "$work/gh.log.body"
+then ok "resolved to the template's side, --finish opens the draft with the added test and each resolution"
+else bad "hand-deleted finish (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # The skill names the order once and leaves the typing to the person.
 skill="$root/skills/template-update/SKILL.md"

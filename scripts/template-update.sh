@@ -27,6 +27,15 @@
 #       (#795). Over the limit it pushes nothing (exit 4) and proposes the
 #       split: the paths of a first pull request that fits, then this one.
 #       --over-limit opens it as it is, red ci / diff-size and all.
+#   template-update.sh --archetype <a>
+#   template-update.sh --apply <base-sha> --archetype <a> [--assisted-by <agent>:<model>]
+#       An archetype move (#1004), at the tag the repository records: the
+#       checker's line with `--data archetype=<a>`. The plan runs it on a copy
+#       of the base outside the repository and prints what it deletes, adds
+#       and changes, where it conflicts, the CI jobs that stop, and for a
+#       required check that stops, the admin command a person runs before the
+#       move's pull request merges. --apply and --finish are as above; a
+#       conflict also shows this repository's side, which may hold its own code.
 #
 # The command is the checker's own line (floor-check.py
 # --print-update-command), run word for word: never a second construction of
@@ -52,9 +61,9 @@ state_name="plinth-template-update"
 # A path as a shell word, for a line the user or the skill runs as printed.
 q() { printf '%q' "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
-usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested] | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
+usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested | --archetype <a>] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 
-mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=(); over_limit=no
+mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=(); over_limit=no; move=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)       [ $# -ge 2 ] || usage; mode=apply; base_arg="$2"; shift 2 ;;
@@ -64,6 +73,7 @@ while [ $# -gt 0 ]; do
                    case "$2$3" in *$'\n'* | *$'\t'*) usage ;; esac
                    resolutions+=("$2" "$3"); shift 3 ;;
     --over-limit)  over_limit=yes; shift ;;
+    --archetype)   [ $# -ge 2 ] && [ -n "$2" ] || usage; move="$2"; shift 2 ;;
     --plinth-pin)  [ $# -ge 2 ] || usage; pin="$2"; shift 2
                    case "$pin" in live|tested) ;; *) usage ;; esac ;;
     *) usage ;;
@@ -75,6 +85,8 @@ done
 [ ${#resolutions[@]} = 0 ] || [ "$mode" = finish ] || usage
 # Opening over the limit is a choice made after reading the measurement.
 [ "$over_limit" = no ] || [ "$mode" = finish ] || usage
+# A move carries the live pin, and --finish reads the move from its record.
+[ -z "$move" ] || { [ -z "$pin" ] && [ "$mode" != finish ]; } || usage
 pin="${pin:-live}"
 
 # GitLab is not served yet (#924): everything below reads the repository
@@ -191,6 +203,50 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
   echo
   echo "Or open this update as it is, knowing ci / diff-size fails on it until it is split:"
   echo "  $(q "$0") --finish $(q "$wt") --over-limit"
+}
+
+# ── an archetype move (#1004) ───────────────────────────────────────────
+# What a person does about the required checks the move stops or starts,
+# from the record: drop one that stops before the move merges (a required
+# name that never reports blocks every merge), require one that starts once
+# it has run on the default branch. Commands under <prefix> (this script's
+# folder in the terminal, `scripts/` in a description, which is public).
+move_steps() { # <state file> <prefix>
+  local sf="$1" pre="$2" repo default c rd
+  repo="$(state_get "$sf" repo)"; default="$(state_get "$sf" default)"; rd="$(state_get "$sf" required_read)"
+  local admin="${pre}with-admin-token.sh ${pre}require-check.sh"
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if [ "$rd" != yes ]; then
+      echo "$c stops running; whether $default requires $c was not read. If it does, before the move's pull request merges: \`$admin --drop --repo $repo '$c'\`"
+    elif grep -qxF "required=$c" "$sf"; then
+      echo "Required check that stops running: $c, required on $default now. Before the move's pull request merges, a person runs, with an admin token (never the agent's): \`$admin --drop --repo $repo '$c'\`"
+    else
+      echo "$c stops running, and no ruleset requires it on $default: nothing to drop. Classic branch protection is not read; if it requires $c, a person removes it there."
+    fi
+  done < <(sed -n 's/^check_drop=//p' "$sf")
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    echo "$c starts running. Once the move is merged and $c has run on $default, to require it: \`$admin --repo $repo '$c'\`"
+  done < <(sed -n 's/^check_add=//p' "$sf")
+}
+# This repository's side of each conflict copier left, which may hold code of
+# its own: the measured hand-deleted case conflicts where a file both
+# archetypes ship was changed (pyproject.toml, __main__.py, uv.lock).
+ours_of() { # <worktree> <path>
+  case "$2" in
+    *.rej) return ;;
+    uv.lock | */uv.lock) echo "$2: generated; after pyproject.toml is resolved, uv lock in the worktree makes it again"; return ;;
+  esac
+  echo "This repository's side of $2 (read it for code of its own before taking the template's):"
+  awk '/^<<<<<<< before updating$/ { s = 1; next } /^=======$/ && s { s = 0; print "----"; next } s' "$1/$2" | sed 's/^/    /'
+}
+# The top-level jobs of a workflow file, one per line.
+jobs_of() { awk '/^jobs:/ { j = 1; next } /^[^ #]/ { j = 0 } j && /^  [A-Za-z0-9_-]+:/ { sub(/^  /, ""); sub(/:.*/, ""); print }'; }
+# The required checks on the default branch, one per line; exit 1 unread.
+required_on() { # <repo> <default>
+  gh api "repos/$1/rules/branches/$2" \
+    --jq '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context' 2>/dev/null
 }
 
 # ── finish: commit, push the branch, open the draft ─────────────────────
@@ -315,12 +371,19 @@ finish() { # <worktree>
   # At the target tag the checker gives a line only for a recorded owner
   # answer that no longer holds (#770): a re-render, not a move.
   [ "$from" != "$to" ] || title="chore(template): re-render plinth-template $to for the owner's templates"
+  local new old; new="$(state_get "$sf" archetype)"; old="$(state_get "$sf" old_archetype)"
+  [ -z "$new" ] || title="chore(template): move from the $old archetype to $new"
   local msg body; msg="$(mktemp)"; body="$(mktemp)"
   list() { if [ -n "$1" ]; then printf '%s\n' "$1" | sed '/^$/d; s/^/- /'; else echo "- none"; fi; }
   {
     echo "## What and why"
     echo
-    if [ "$from" = "$to" ]; then
+    if [ -n "$new" ]; then
+      echo "Re-renders this repository under the \`$new\` archetype instead of \`$old\`, at plinth-template"
+      echo "$to, the tag it already records, by running the command the checker gives for the move"
+      echo "(\`/plinth:template-update --archetype $new\`). copier deletes the files of the old archetype"
+      echo "that this repository left unchanged and keeps its own; \`.copier-answers.yml\` records the new one:"
+    elif [ "$from" = "$to" ]; then
       echo "Re-renders this repository at plinth-template $to, the tag it already records,"
       echo "because the owner's \`.github\` no longer publishes a pull-request template or"
       echo "issue forms it recorded as shared (\`.copier-answers.yml\` in the diff shows the"
@@ -340,6 +403,22 @@ finish() { # <worktree>
       echo "The plinth pin: unchanged; the workflows already called the one $to was tested with."
     else
       echo "The plinth pin: kept at the one the workflows called before the update (\`--plinth-pin live\`)."
+    fi
+    if [ -n "$new" ]; then
+      local names; names="$(git -C "$wt" -c core.quotePath=false diff --name-status --no-renames "${tree[@]}")"
+      echo
+      echo "Deleted by the move:"
+      echo
+      list "$(awk -F '\t' '$1 == "D" { print $2 }' <<<"$names")"
+      echo
+      echo "Added by the move:"
+      echo
+      list "$(awk -F '\t' '$1 == "A" { print $2 }' <<<"$names")"
+      echo
+      echo "By hand, by a person (each command is run from plinth's folder):"
+      echo
+      move_steps "$sf" "scripts/" | sed 's/^/- /'
+      echo "- Nothing else: no label changes with the archetype, and \`/plinth:floor-check\` reads the new archetype from \`.copier-answers.yml\`."
     fi
     if grep -q '^moves=' "$sf"; then
       echo
@@ -397,6 +476,7 @@ finish() { # <worktree>
     echo "copier's questions were answered with \`--defaults\`: each takes this"
     echo "repository's recorded answer, and a question it never answered takes the"
     echo "template's default (\`.copier-answers.yml\` in the diff shows any)."
+    [ -z "$new" ] || echo "The one answer given is \`archetype\`, as \`--data archetype=$new\`."
     echo "Not verified here: that this repository still works after the update, which is what its own checks are for."
     echo
     echo "Review: none (no review had run when this pull request opened)"
@@ -503,6 +583,8 @@ branch="chore/template-$to"
 # A re-render at the recorded tag (#770) gets its own names: the update that
 # brought the repository to $to may have left chore/template-$to behind.
 if [ "$from" = "$to" ]; then wt="$wt-owner-templates"; branch="$branch-owner-templates"; fi
+old_arch="$(git -C "$top" show "$base:.copier-answers.yml" 2>/dev/null | sed -nE "s/^archetype: *['\"]?([^'\" ]*).*/\1/p")"
+if [ -n "$move" ]; then wt="$(dirname "$top")/$(basename "$top")-archetype-$move"; branch="chore/archetype-$move"; fi
 
 # The command, from the checker, on exactly the files it reads at the base:
 # the answers file, the workflows and the repository's own issue and
@@ -512,6 +594,9 @@ if [ "$from" = "$to" ]; then wt="$wt-owner-templates"; branch="$branch-owner-tem
 # as the door's render did; a read that fails gives no line (#726).
 cmd_at() { # <dir> [live|tested]
   python3 "$checker" --root "$1" --repo "$repo" --print-update-command --plinth-pin "${2:-live}"
+}
+move_at() { # <dir>: the move's line; check-drop:/check-add:/moves: on stderr
+  python3 "$checker" --root "$1" --repo "$repo" --print-update-command --move-archetype "$move"
 }
 at_base() { # sets $tmp: the files the checker reads, as they are at the base
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
@@ -537,6 +622,65 @@ plugin_gate() {
     *) echo "the installed plinth was not compared with the latest release (the check exited $rc); going on with the template tag this plinth targets, $to" >&2 ;;
   esac
 }
+if [ "$mode" = plan ] && [ -n "$move" ]; then
+  at_base
+  plugin_gate
+  cmd="$(move_at "$tmp" 2>"$tmp/move-note")" || { cat "$tmp/move-note" >&2; exit 1; }
+  grep -vE '^(moves|check-drop|check-add): ' "$tmp/move-note" >&2
+  read -ra words <<<"$cmd"
+  # The rehearsal: a clone of the base outside this repository, checked
+  # out as --apply's worktree is (`git archive` would leave out an
+  # export-ignore path), where copier runs as --apply would run it. Nothing
+  # of it is kept; the clone borrows this repository's objects and writes
+  # none into it.
+  r="$tmp/rehearsal"
+  { git clone -q --shared --no-checkout "$top" "$r" && git -C "$r" checkout -q --detach "$base"; } \
+    || die "could not make the rehearsal clone of origin/$default; nothing was written"
+  ( cd "$r" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) > "$tmp/rehearsal.log" 2>&1 || {
+    tail -n 1 "$tmp/rehearsal.log" >&2
+    die "copier refused the move in the rehearsal (its last line above); nothing was written"
+  }
+  conflicts="$(conflicts_in "$r" HEAD)"
+  deleted="$(git -C "$r" -c core.quotePath=false ls-files --deleted | sort -u)"
+  added="$(git -C "$r" -c core.quotePath=false ls-files --others --exclude-standard | sort -u)"
+  changed="$(git -C "$r" -c core.quotePath=false diff --name-only HEAD | sort -u | grep -vxF -f <(printf '%s\n%s\n' "$deleted" "$conflicts" | sed '/^$/d') || true)"
+  stops=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    gone="$(comm -23 <(git -C "$r" show "HEAD:$f" | jobs_of | sort) <( { [ -f "$r/$f" ] && jobs_of < "$r/$f"; } | sort))"
+    while IFS= read -r j; do [ -n "$j" ] && stops="$stops$f: $j"$'\n'; done <<<"$gone"
+  done < <(git -C "$r" -c core.quotePath=false ls-tree -r --name-only HEAD -- .github/workflows)
+  listed() { if [ -n "$1" ]; then printf '%s\n' "$1" | sed '/^$/d' | indent; else echo "  none"; fi; }
+  echo "Repository: $repo, base origin/$default at $base (verified against GitHub)"
+  echo "Archetype:  $old_arch -> $move, at $to (the tag it records)"
+  echo "Worktree:   $wt (branch $branch)"
+  echo "Command:    $cmd"
+  echo "            (--defaults: each other question takes the recorded answer)"
+  sed -n 's/^moves: /Moves:      /p' "$tmp/move-note"
+  echo
+  echo "Rehearsed on a copy of origin/$default outside this repository; nothing of it is kept."
+  echo "Deletes:"; listed "$deleted"
+  echo "Adds:"; listed "$added"
+  echo "Changes:"; listed "$changed"
+  if [ -n "$conflicts" ]; then
+    echo "Conflicts (a file both archetypes ship that this repository changed; each is shown and resolved on the person's word after --apply):"
+    listed "$conflicts"
+  else
+    echo "Conflicts:  none"
+  fi
+  echo "CI jobs that stop:"; listed "$stops"
+  # The checks, as move_steps words them for the record --apply writes.
+  { printf 'repo=%s\ndefault=%s\n' "$repo" "$default"
+    sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p' "$tmp/move-note"
+    if req="$(required_on "$repo" "$default")"; then
+      echo "required_read=yes"; while IFS= read -r c; do [ -n "$c" ] && printf 'required=%s\n' "$c"; done <<<"$req"
+    fi; } > "$tmp/checks"
+  move_steps "$tmp/checks" "$(q "$here")/" | sed 's/`//g'
+  echo
+  echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
+  echo "  $(q "$0") --apply $base --archetype $move"
+  exit 0
+fi
 if [ "$mode" = plan ]; then
   at_base
   plugin_gate
@@ -581,6 +725,10 @@ at_base
 plugin_gate
 
 [ -n "$from" ] && [ -n "$to" ] || die "no _commit in .copier-answers.yml at the base, or no template_ref beside this script"
+# A move the checker refuses stops before a worktree or branch exists.
+if [ -n "$move" ]; then
+  move_at "$tmp" >/dev/null 2>"$tmp/move-check" || { cat "$tmp/move-check" >&2; die "nothing was created"; }
+fi
 [ -e "$wt" ] && die "$wt already exists: finish it ($(q "$0") --finish $(q "$wt")) or discard it (git worktree remove --force $(q "$wt") && git branch -D $branch)"
 git -C "$top" rev-parse -q --verify "refs/heads/$branch" >/dev/null \
   && die "branch $branch already exists: delete it (git branch -D $branch) or finish its worktree"
@@ -601,6 +749,22 @@ if [ -n "$dirty" ]; then
   die "left as is in $wt (git worktree remove --force $(q "$wt") && git branch -D $branch to discard)"
 fi
 
+if [ -n "$move" ]; then
+  # The move's line, read at the base as the plan read it; the check lines go
+  # to the record, for the description.
+  move_note="$(mktemp)"
+  cmd="$(move_at "$wt" 2>"$move_note")" \
+    || { cat "$move_note" >&2; rm -f "$move_note"; die "no move command at the base (above); $wt left for inspection"; }
+  grep -vE '^(moves|check-drop|check-add): ' "$move_note" >&2
+  moves="$(sed -n 's/^moves: //p' "$move_note")"
+  checks="$(sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p' "$move_note")"; rm -f "$move_note"
+  if req="$(required_on "$repo" "$default")"; then
+    checks="$checks"$'\n'"required_read=yes"
+    while IFS= read -r c; do [ -n "$c" ] && checks="$checks"$'\n'"required=$c"; done <<<"$req"
+  fi
+  case "$cmd" in *" --data archetype=$move") ;; *) die "the command does not move to $move: $cmd" ;; esac
+  pin_note=""
+else
 # The comparison is read whichever pin was chosen, for the description; only
 # --plinth-pin tested takes its line, and stops when there is none.
 note_file="$(mktemp)"
@@ -629,6 +793,7 @@ else
   [ "$live_rc" = 0 ] && cmd="$live_cmd" \
     || { grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"; die "no update command at the base (above); $wt left for inspection"; }
   grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"
+fi
 fi
 case "$cmd" in *" --vcs-ref ${to_sha:-?} "*) ;; *) die "the command does not update to $to ($to_sha): $cmd" ;; esac
 read -ra words <<<"$cmd"
@@ -689,6 +854,10 @@ sf="$(state_file "$wt")"
 {
   printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin=%s\npin_note=%s\n' \
     "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin" "$pin_note"
+  if [ -n "$move" ]; then
+    printf 'archetype=%s\nold_archetype=%s\n' "$move" "$old_arch"
+    printf '%s\n' "$checks" | sed '/^$/d'
+  fi
   while IFS= read -r p; do [ -n "$p" ] && printf 'renamed=%s\n' "$p"; done <<<"$renamed"
   while IFS= read -r p; do [ -n "$p" ] && printf 'moves=%s\n' "$p"; done <<<"$moves"
   while IFS= read -r p; do [ -n "$p" ] && printf 'not_renamed=%s\n' "$p"; done <<<"$not_renamed"
@@ -709,6 +878,11 @@ if [ -n "$conflicts" ]; then
   echo
   echo "copier left conflicts; nothing is pushed and no pull request is opened until a person resolves them:"
   indent <<<"$conflicts"
+  if [ -n "$move" ]; then
+    echo
+    while IFS= read -r p; do [ -n "$p" ] && ours_of "$wt" "$p"; done <<<"$conflicts"
+    echo
+  fi
   echo "In $wt, resolve each (remove every conflict marker, delete each .rej once applied), git add it, then run:"
   echo "  $(q "$0") --finish $(q "$wt")"
   exit 3
