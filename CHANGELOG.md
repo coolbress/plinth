@@ -39,6 +39,12 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.49.0 instead of v1.48.0.
+  A new project starts at plinth v2.39.0 instead of v2.38.0
+  (coolbress/plinth-template#302), and copier's `archetype` help says what
+  each choice produces, with data work that trains no model pointed at `cli`
+  (coolbress/plinth-template#300). No rendered `AGENTS.md`, `.claude/` or
+  `CONTRIBUTING.md` changed, so this release owes no eval suite run.
 - `/plinth:floor-check` counts apart the SKIPs that cannot be read from here
   (#1002). SSH keys, the sandbox while Claude Code does not record its state,
   and a GitHub status a private repository's plan does not expose to its
