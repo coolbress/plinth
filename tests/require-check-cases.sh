@@ -348,5 +348,36 @@ run 0 "a called job in a pinned remote workflow is added" --repo r/r 'remote / l
 run 0 "without --repo the current directory's repository is used" 'slow check'
 run 2 "no name is a usage error" --repo r/r
 
+# --drop (#1004): an archetype move stops a required job, and a required name
+# that never arrives blocks every merge. Only that one entry from Actions goes.
+ADMIN=false run 1 "--drop by a login that is not admin is stopped" --drop --repo r/r 'prep'
+said "the --drop stop names the wrapper with --drop" "scripts/with-admin-token.sh scripts/require-check.sh --drop --repo r/r 'prep'"
+unwritten "--drop not admin"
+run 0 "--drop of a name not required from Actions changes nothing" --drop --repo r/r 'never seen'
+said "it says so" "'never seen' is not required from GitHub Actions on r/r; nothing was changed."
+unwritten "--drop not required"
+run 0 "--drop --dry-run writes nothing" --drop --dry-run --repo r/r 'prep'
+said "the dry run names what it would drop" "would drop: prep"
+unwritten "--drop dry run"
+run 0 "--drop removes the one entry" --drop --repo r/r 'prep'
+if [ -e "$work/put.json" ] && jq -e '
+     (.rules | map(.type)) == ["deletion","pull_request","required_status_checks"]
+     and (.rules[2].parameters.required_status_checks == [{"context":"base","integration_id":15368}])
+     and .rules[2].parameters.strict_required_status_checks_policy == true
+     and (has("id") | not) and (has("_links") | not)' "$work/put.json" >/dev/null
+then ok "the write drops the name and keeps every other rule, entry and the strict policy"
+else bad "the write is not the old ruleset less one entry"; fi
+said "the list is printed as read back" "requires: base"
+if grep -qF "requires: prep" "$work/out"; then bad "the dropped name is still printed as required"; else ok "the dropped name is not in the list read back"; fi
+cp "$work/ruleset.orig" "$work/ruleset.drop"
+jq '.rules[2].parameters.required_status_checks += [{"context":"prep","integration_id":8329}]' "$work/ruleset.drop" > "$work/ruleset.orig"
+run 0 "--drop keeps the same name from another app" --drop --repo r/r 'prep'
+if [ -e "$work/put.json" ] && jq -e '[.rules[2].parameters.required_status_checks[] | select(.context == "prep") | .integration_id] == [8329]' "$work/put.json" >/dev/null
+then ok "only the Actions entry was dropped"
+else bad "the other app's entry did not stay alone"; fi
+cp "$work/ruleset.drop" "$work/ruleset.orig"
+PUT_FAIL=1 run 1 "--drop refused by GitHub stops" --drop --repo r/r 'prep'
+said "the refusal names the wrapper with --drop" "scripts/with-admin-token.sh scripts/require-check.sh --drop --repo r/r 'prep'"
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

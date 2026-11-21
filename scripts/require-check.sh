@@ -4,6 +4,7 @@
 #
 #   require-check.sh [--dry-run] [--repo <owner/name>] <check name>
 #   require-check.sh 'ci / web-audit'            # the repository of the current directory
+#   require-check.sh --drop [--dry-run] [--repo <owner/name>] <check name>
 #
 # Requiring a name that never arrives locks the repository: nothing merges,
 # ever. So before writing, the name must have reported on a recent commit of
@@ -17,16 +18,23 @@
 # Edits only the first ruleset (the one with the pull_request rule), adds one
 # entry to its required_status_checks and leaves every other field alone.
 #
+# --drop takes that name's entry from GitHub Actions out instead, and nothing
+# else: the same name from another app stays. It is for a job that stops
+# running, as an archetype move stops `image` (#1004): a required name that
+# never arrives blocks every merge. It checks nothing about the job, since the
+# job still runs on the default branch until the change that removes it lands.
+#
 # Everyday tokens, an agent's included, cannot change a ruleset. Run it through
 # the wrapper that asks for an admin token at the terminal:
 #   scripts/with-admin-token.sh scripts/require-check.sh '<check name>'
 set -euo pipefail
 
-usage="usage: require-check.sh [--dry-run] [--repo <owner/name>] <check name>"
-dry=0; repo=""
+usage="usage: require-check.sh [--drop] [--dry-run] [--repo <owner/name>] <check name>"
+dry=0; repo=""; drop=0; flag=""
 while :; do
   case "${1:-}" in
     --dry-run) dry=1; shift ;;
+    --drop)    drop=1; flag="--drop "; shift ;;
     --repo)    repo="${2:?$usage}"; shift 2 ;;
     -*)        echo "$usage" >&2; exit 2 ;;
     *) break ;;
@@ -56,7 +64,7 @@ admin="${info%%$'\t'*}"; branch="${info#*$'\t'}"
 if [ "$admin" != true ] || ! gh api "repos/$repo/actions/permissions" >/dev/null 2>&1; then
   stop "require-check: needs a login that administers $repo; an agent's token cannot run it.
   this login does not, so it cannot change the ruleset.
-  run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh --repo $repo '$name'"
+  run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh ${flag}--repo $repo '$name'"
 fi
 
 # shellcheck source=scripts/lib/rulesets.sh
@@ -72,6 +80,38 @@ printf '%s' "$cur" | jq -e '.rules[] | select(.type == "required_status_checks")
 from_actions='.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]
               | select(.integration_id == 15368) | .context'
 required="$(printf '%s' "$cur" | jq -r "$from_actions")"
+
+if [ "$drop" = 1 ]; then
+  printf '%s\n' "$required" | grep -qxF -- "$name" || {
+    echo "'$name' is not required from GitHub Actions on $repo; nothing was changed."
+    exit 0
+  }
+  new="$(printf '%s' "$cur" | jq --arg n "$name" '
+    {name, target, enforcement, bypass_actors, conditions, rules}
+    | .rules |= map(
+        if .type == "required_status_checks" then
+          .parameters.required_status_checks |= map(select((.context == $n and .integration_id == 15368) | not))
+        else . end)
+  ')"
+  echo "-- $repo (ruleset $id, branch $branch)"
+  if [ "$dry" = 1 ]; then
+    echo "   would drop: $name"
+    echo "   (--dry-run: nothing written)"
+    exit 0
+  fi
+  if ! err="$(printf '%s' "$new" | gh api "repos/$repo/rulesets/$id" -X PUT --input - 2>&1 >/dev/null)"; then
+    stop "GitHub refused the change: ${err:-no reason given}.
+  this login cannot change rulesets on $repo; run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh ${flag}--repo $repo '$name'"
+  fi
+  back="$(gh api "repos/$repo/rulesets/$id" 2>/dev/null)" \
+    || { echo "   sent, but the ruleset could not be read back; look at Settings > Rules > Rulesets." >&2; exit 1; }
+  printf '%s' "$back" | jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[]
+                               | "   requires: \(.context)  (app \(.integration_id // "any"))"'
+  if printf '%s' "$back" | jq -r "$from_actions" | grep -qxF -- "$name"; then
+    echo "   sent, but '$name' from GitHub Actions is still in the list GitHub returns." >&2; exit 1
+  fi
+  exit 0
+fi
 if printf '%s\n' "$required" | grep -qxF -- "$name"; then
   echo "'$name' is already required from GitHub Actions on $repo; nothing was changed."
   exit 0
@@ -143,7 +183,7 @@ if [ "$dry" = 1 ]; then
 fi
 if ! err="$(printf '%s' "$new" | gh api "repos/$repo/rulesets/$id" -X PUT --input - 2>&1 >/dev/null)"; then
   stop "GitHub refused the change: ${err:-no reason given}.
-  this login cannot change rulesets on $repo; run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh --repo $repo '$name'"
+  this login cannot change rulesets on $repo; run it again with an admin token: scripts/with-admin-token.sh scripts/require-check.sh ${flag}--repo $repo '$name'"
 fi
 # The list as GitHub now holds it, read back, not as sent.
 back="$(gh api "repos/$repo/rulesets/$id" 2>/dev/null)" \
