@@ -705,6 +705,28 @@ if [ "$mode" = plan ]; then
     echo "With the tested pin: $tested_cmd"
     sed -n 's/^recommended: /Recommended: /p' "$tmp/pin-note"
   fi
+  # A pin raised by hand in the workflows and not in the answers file
+  # (#1015): copier's old render names the recorded plinth_sha, the project
+  # the live one, and a line carrying a third leaves each plinth uses: line
+  # copier renders in conflict. Said here, before anything is written; the
+  # person still resolves it after --apply. Only the files whose plinth
+  # uses: name the live pin are named; one copier does not render (a
+  # workflow the project added) has nothing to conflict with.
+  recorded="$(sed -nE "s/^plinth_sha: *['\"]?([0-9a-fA-F]{40})['\"]? *$/\1/p" "$tmp/.copier-answers.yml" 2>/dev/null | head -n 1 | tr 'A-F' 'a-f')"
+  carried() { sed -nE 's/.* --data plinth_sha=([0-9a-fA-F]{40})( .*)?$/\1/p' <<<"$1" | tr 'A-F' 'a-f'; }
+  live_pin="$(carried "$cmd")"; tested_pin="$(carried "${tested_cmd:-}")"
+  if [ -n "$recorded" ] && [ -n "$live_pin" ] && [ "$recorded" != "$live_pin" ]; then
+    echo "Pin conflict: .copier-answers.yml records plinth_sha $recorded; the workflows call $live_pin."
+    if [ -n "$tested_pin" ] && [ "$tested_pin" != "$recorded" ]; then
+      at_live="$(python3 "$checker" --root "$tmp" --print-plinth-pins \
+        | awk -v p="$live_pin" 'tolower($2) == p && !s[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }')"
+      echo "            with --plinth-pin tested, copier leaves the plinth uses: line in conflict in ${at_live:-no workflow read}"
+      echo "            (those of them the template renders); keep the side naming $tested_pin, the pin that line carries."
+      echo "            with --plinth-pin live, no conflict on that line is expected: it carries the pin the workflows call."
+    else
+      echo "            The update carries the pin the workflows call, so no conflict on that line is expected."
+    fi
+  fi
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
   if [ -n "$tested_cmd" ]; then

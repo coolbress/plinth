@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:template-update`'s plan prints a `Pin conflict:` line when
+  `.copier-answers.yml` records a `plinth_sha` other than the pin the
+  workflows call (one raised by hand in the workflows only): with
+  `--plinth-pin tested` it names each workflow whose plinth `uses:` line
+  copier will leave in conflict and says to keep the side naming the tested
+  pin; with `--plinth-pin live` it says no conflict on that line is expected.
+  Measured with copier 9.18.2 (#1015).
+
 ## [2.40.0] - 2026-11-22
 
 An existing project made under the wrong archetype can move to another one: `/plinth:template-update --archetype <a>` re-renders it under the new archetype in a draft pull request after a plan the person confirms, which names what it deletes, adds and changes and, for a required check the move stops (`image`), the `scripts/require-check.sh --drop` command the person runs through `scripts/with-admin-token.sh`; `/plinth:floor-check --print-update-command --move-archetype <a>` prints the `copier update` line by itself. GitHub only: on GitLab `/plinth:template-update` still stops before changing anything (#1012). New projects render plinth-template v1.49.0 and start at plinth v2.39.0, and both copier's and `/plinth:new-project`'s archetype question say what each choice produces, pointing data work that trains no model at `cli`. `/plinth:floor-check` counts apart the SKIPs that cannot be read from this machine or token. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
