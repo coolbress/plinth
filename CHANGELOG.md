@@ -11,6 +11,14 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/require-check.sh --drop '<check name>'` takes one required name
+  from GitHub Actions off the default branch's ruleset, through
+  `scripts/with-admin-token.sh` as adding one is (#1004). It is for a job
+  that stops running, as an archetype move stops `image`: a required name
+  that never arrives blocks every merge. `--dry-run` shows what it would drop.
+
 ### Changed
 
 - `/plinth:floor-check` counts apart the SKIPs that cannot be read from here

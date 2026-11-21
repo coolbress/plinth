@@ -80,9 +80,19 @@ Each refusal says what to fix, and changes nothing.
 
 ## Undo it
 
-In the repository on GitHub: **Settings → Rules → Rulesets**, open the
-ruleset, and remove the name under **Require status checks to pass**. That
-also needs administration.
+`--drop` takes the name off again, through the same wrapper:
+
+```bash
+scripts/with-admin-token.sh scripts/require-check.sh --drop '<check name>'
+```
+
+It removes only that name's entry from GitHub Actions; the same name from
+another app stays, and so does every other rule. It checks nothing about the
+job, so use it for a job that stops running, such as `image` after an
+archetype move: a required name that never arrives holds every pull request.
+`--dry-run` shows what it would drop. On GitHub, the same is **Settings →
+Rules → Rulesets**, the ruleset, and the name under **Require status checks
+to pass**. Both need administration.
 
 The checks plinth itself requires, and what each one means, are in
 [Required checks](../reference/required-checks.md).
