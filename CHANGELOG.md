@@ -11,6 +11,45 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:template-update`'s plan prints a `Pin conflict:` line when
+  `.copier-answers.yml` records a `plinth_sha` other than the pin the
+  workflows call (raised in the workflows only, by Dependabot or by hand):
+  for each `--apply` line on offer it names each workflow whose plinth
+  `uses:` line copier will leave in conflict and the side to keep, the one
+  naming the pin that line carries, or says no conflict on that line is
+  expected, as for `--plinth-pin live` when every workflow calls one pin.
+  Measured with copier 9.18.2 (#1015).
+
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.49.1 instead of v1.49.0
+  (coolbress/plinth-template#304). A new `Proprietary` `cli` or `library`
+  releases to GitHub only: its release workflow has no PyPI job, and its
+  README and `docs/how-to/publish-a-release.md` say where a release's files
+  go and how to install them. A new project starts at plinth v2.40.1, since
+  `plinth_sha`'s default moved there. `/plinth:arsenal` says the same of a
+  `Proprietary` release.
+
+### Fixed
+
+- The eval suite's `floor-gaps` and `next-day` grading reads a negation
+  (#1019). "No files are missing: `uv.lock`, `CHANGELOG.md` and
+  `.github/dependabot.yml` are all present" passed all three gaps, and "the
+  Windows cp1252 check is finished. Nothing remains to verify" passed the open
+  item. A negation now turns over the next state word in its clause, and the
+  words joined to it by "and", "or", "nor" or a comma ("never checked or
+  verified"), not a new predicate ("and is still pending"): a
+  "missing" or "open" word after "nothing", "none", "no longer", "no `<thing>`
+  is/are" or "is not" reads as present or done, a "present" or "done" word
+  after "no", "not", "n't", "never", "nobody", "no one", "cannot" or "until"
+  reads as missing or open, and a sentence that says both fails the entry.
+  "Found" before "gaps", "missing", "no" or "that" is the report's verb, not a
+  file in place, and "is not open" closes the item. Checked by hand: the
+  v2.39.0 release run's and v2.40.0 smoke run's reports, and 54 older
+  ones, grade the same as before.
+
 ## [2.40.1] - 2026-11-22
 
 An archetype move with `/plinth:template-update --archetype <a>` no longer deletes a file of the old archetype that the project changed without saying so: the plan lists each such file apart, and `--apply` stops until each is named with `--keep` or `--drop`. Anyone who moved a project with v2.40.0 should check that move's pull request for a deleted file the project had changed. No input, job or check name a project calls changed, so its `uses:` pins need no raise.

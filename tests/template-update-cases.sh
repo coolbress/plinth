@@ -534,6 +534,70 @@ if [ "$rc" = 0 ] && ! grep -q "With the tested pin" <<<"$out" && ! grep -q -- "-
 then ok "the tested pin not read: the plan prints one line, one --apply line, and says it was not read"
 else bad "plan with one pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
+# A pin raised by hand in the workflows, not in the answers file (#1015):
+# copier's old render names the recorded plinth_sha, so a line carrying a
+# third pin leaves each plinth uses: line it renders in conflict. The plan
+# says so before anything is written, and which side to keep.
+recorded="$(printf '%040d' 6)"
+handraised() { # <name> <recorded plinth_sha>: answers record it, ci.yml and label.yml call $sha40
+  fixture "$1"
+  printf 'plinth_sha: %s\n' "$2" >> "$repo/.copier-answers.yml"
+  printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/label.yml@%s\n' "$sha40" > "$repo/.github/workflows/label.yml"
+  printf 'jobs:\n  own:\n    runs-on: ubuntu-latest\n' > "$repo/.github/workflows/own.yml"
+  git -C "$repo" add -A && git -C "$repo" commit -q -m "raise the pin by hand" && git -C "$repo" push -q origin main
+}
+handraised pinhand "'$recorded'  # quoted, with a comment"; reset_logs
+pinrun "$pin_api"
+conflict_line="$(grep -A2 "^ *with --plinth-pin tested" <<<"$out" | tr '\n' ' ')"
+if [ "$rc" = 0 ] && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40" <<<"$out" \
+   && grep -q "ci.yml, label.yml" <<<"$conflict_line" && ! grep -q "own.yml" <<<"$conflict_line" \
+   && grep -q "keep the side naming $tested" <<<"$conflict_line" \
+   && grep -q "with --plinth-pin live, the update carries the pin the workflows call: no conflict on that line is expected" <<<"$out" \
+   && [ ! -e "$work/uvx.log" ]
+then ok "a pin raised by hand and a third carried: the plan names each workflow whose uses: line will conflict and the side to keep"
+else bad "hand-raised pin, tested carried (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The plan's line only names files; nothing is written before --apply.
+if [ "$(grep -n "^Pin conflict:" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "^Nothing has been written" <<<"$out" | cut -d: -f1)" ]
+then ok "the expected conflict is said before the --apply lines"
+else bad "pin conflict line placement"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# Only the live line on offer (a live pin newer than the tested one): it
+# carries the workflows' pin, so no conflict on that line.
+reset_logs; pinrun "$behind_api"
+if [ "$rc" = 0 ] && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40" <<<"$out" \
+   && grep -q "no conflict on that line is expected" <<<"$out" && ! grep -q "keep the side" <<<"$out"
+then ok "a pin raised by hand, the live pin carried: the plan says no conflict on that line is expected"
+else bad "hand-raised pin, live carried (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The recorded plinth_sha equal to the workflows': nothing new.
+handraised pinrecorded "$sha40"; reset_logs
+pinrun "$pin_api"
+if [ "$rc" = 0 ] && ! grep -q "Pin conflict" <<<"$out" && grep -q "^With the tested pin:" <<<"$out"
+then ok "the recorded plinth_sha equal to the workflows' pin: the plan says nothing of a pin conflict"
+else bad "recorded equal to live (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The tested pin is the recorded one (a pin lowered by hand): that line
+# conflicts nowhere, but moves no pin either, and the plan says so.
+handraised pinrecordedtested "$tested"; reset_logs
+pinrun "$pin_api"
+if [ "$rc" = 0 ] && grep -q "^ *with --plinth-pin tested, the update carries the recorded pin itself: .*moves no pin" <<<"$out" \
+   && ! grep -q "keep the side" <<<"$out"
+then ok "the tested pin equal to the recorded one: the plan says that line moves no pin, and names no conflict"
+else bad "tested equal to recorded (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# An answers file with CRLF line endings: the recorded pin is still read.
+handraised pincrlf "$recorded"
+sed -i.bak $'s/$/\r/' "$repo/.copier-answers.yml" && rm "$repo/.copier-answers.yml.bak"
+git -C "$repo" commit -q -am crlf && git -C "$repo" push -q origin main; reset_logs
+pinrun "$pin_api"
+if [ "$rc" = 0 ] && grep -q $'\r' "$repo/.copier-answers.yml" \
+   && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40\.$" <<<"$out" \
+   && grep -q "keep the side naming $tested" <<<"$out"
+then ok "an answers file with CRLF line endings: the recorded pin is read and the conflict named"
+else bad "CRLF answers file (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# No plinth_sha recorded at all (every older fixture): nothing new either.
+fixture pinnorecord; reset_logs
+pinrun "$pin_api"
+if [ "$rc" = 0 ] && ! grep -q "Pin conflict" <<<"$out"
+then ok "no plinth_sha recorded: the plan says nothing of a pin conflict"
+else bad "no recorded pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
 for choice in tested live default; do
   fixture "pin$choice"; reset_logs
   base="$(git -C "$BARE" rev-parse main)"
@@ -968,6 +1032,19 @@ if grep -qxF "Moves:      label.yml from $old_pin to $sha40, the commit the ci j
    && ! grep -q "^moves: " <<<"$out"
 then ok "the plan says which file moves from which commit to which, once"
 else bad "plan, Moves line"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The same, with a third pin recorded (#1015): label.yml meets the recorded
+# pin, its own and the carried one, so it conflicts; ci.yml does not.
+two_fixture pins-recorded; reset_logs
+printf 'plinth_sha: %s\n' "$(printf '%040d' 6)" >> "$repo/.copier-answers.yml"
+git -C "$repo" commit -q -am record && git -C "$repo" push -q origin main
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$work/api-behind" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "^Pin conflict: .*the workflows call $sha40 and $old_pin\.$" <<<"$out" \
+   && grep -q "^ *The update leaves the plinth uses: line in conflict in label.yml (" <<<"$out" \
+   && grep -q "keep the side naming $sha40" <<<"$out"
+then ok "a Moves: file at an older pin with a third pin recorded: the plan names it as a conflict, and ci.yml not"
+else bad "plan, moves with a recorded pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+repo="$work/pins-behind"; BARE="$work/pins-behind.git"; export BARE   # back to the case the apply below reads
+reset_logs
 reset_logs
 out="$(cd "$repo" && MOCK_PINS=move FLOOR_CHECK_API_DIR="$work/api-behind" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
 wt="$(wt_of pins-behind)"; body="$(cat "$work/gh.log.body" 2>/dev/null)"
@@ -1489,6 +1566,10 @@ else bad "the skill's review step"; fi
 if grep -qF 'GitLab is not served yet' <<<"$skill_text"
 then ok "the skill says GitLab is not served yet (#924)"
 else bad "the skill's GitLab line"; fi
+if grep -qF 'prints a `Pin conflict:` line' <<<"$skill_text" && grep -qF 'Tell the user this before asking for the yes' <<<"$skill_text" \
+   && grep -qF "A plinth \`uses:\` line the plan's \`Pin conflict:\` line named is that conflict" <<<"$skill_text"
+then ok "the skill tells the person of the expected pin conflict before the yes, and which side to recommend (#1015)"
+else bad "the skill's pin conflict lines"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
