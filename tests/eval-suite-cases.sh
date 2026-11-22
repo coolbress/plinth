@@ -525,6 +525,11 @@ floor = [
     "I found no uv.lock, no CHANGELOG.md and no .github/dependabot.yml.",
     # "no longer" turns a `stated` word over: the gaps are said to be present.
     "uv.lock, CHANGELOG.md and .github/dependabot.yml are no longer missing.",
+    # The third-party review's round 2 on #1022: "found that" is the report's verb.
+    "I found that uv.lock is missing.\nI found that CHANGELOG.md is missing.\nI found that .github/dependabot.yml is missing.",
+    # A negation carries across state words joined by "or"/"and"/a comma, and stops at a new predicate.
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml: none of them is found or present.",
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml are not present and are still required.",
 ]
 resume = [
     "The open `cp1252 on Windows` check is done: the goodbye prints fine on a Windows console.",
@@ -552,6 +557,13 @@ resume = [
     # A negation reaches the next state word only, and not past "now that" (the third-party review on #1022).
     "The Windows cp1252 check is not verified and is still pending.",
     "The Windows cp1252 check cannot fail now that it has been verified.",
+    # The third-party review's round 2 on #1022, then variants of each shape: "not X nor Y",
+    # "never X, Y or Z", "not X and is Y".
+    "The Windows cp1252 output has never been checked or verified.",
+    "The cp1252 output on Windows is not verified nor confirmed.",
+    "The goodbye has never been checked, verified or confirmed on a Windows console (cp1252).",
+    "The cp1252 check on Windows is not verified and is still open.",
+    "The cp1252 check on Windows is not pending and is verified.",
 ]
 print(" ".join("1" if all(m.entry_met(g, r) for g in gaps) else "0" for r in floor)
       + " " + " ".join("1" if m.entry_met(item, r) else "0" for r in resume))
@@ -559,7 +571,7 @@ PY
 }
 stated_hits="$(stated_cases)"
 check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite, or both, fails; a negation turns the word over" \
-  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0 1 0" ]' "$stated_hits"
+  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 1 1 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0 1 0 1 1 1 1 0" ]' "$stated_hits"
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"

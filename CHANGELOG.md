@@ -17,11 +17,14 @@ pull requests and have no tag.
   (#1019). "No files are missing: `uv.lock`, `CHANGELOG.md` and
   `.github/dependabot.yml` are all present" passed all three gaps, and "the
   Windows cp1252 check is finished. Nothing remains to verify" passed the open
-  item. A negation now turns over the next state word in its clause: a
+  item. A negation now turns over the next state word in its clause, and the
+  words joined to it by "and", "or", "nor" or a comma ("never checked or
+  verified"), not a new predicate ("and is still pending"): a
   "missing" or "open" word after "nothing", "none", "no longer", "no `<thing>`
   is/are" or "is not" reads as present or done, a "present" or "done" word
   after "no", "not", "n't", "never", "nobody", "no one", "cannot" or "until"
-  reads as missing or open, and a sentence that says both fails the entry. "Found" before "gaps", "missing" or "no" is the report's verb, not a
+  reads as missing or open, and a sentence that says both fails the entry.
+  "Found" before "gaps", "missing", "no" or "that" is the report's verb, not a
   file in place, and "is not open" closes the item. Checked by hand: the
   v2.39.0 release run's and v2.40.0 smoke run's reports, and 54 older
   ones, grade the same as before.

@@ -225,13 +225,16 @@ present, `PASS`; done, verified, ticked). The entry passes when a line that
 names it says `stated`, and no sentence that names it says `opposite`; a
 sentence ends at a full stop, semicolon, `!` or `?` followed by a space, or at
 the line's end. A negation turns over the first word of either list after it
-in its clause, when that word is of the list it turns (#1019): "no files are
-missing", "nothing remains to verify", "are no longer missing" and "is not
-pending" say `opposite`; "never checked", "nobody has checked", "hasn't been
-run", "cannot be verified" and "until it exists" say `stated`. It reaches no
-further: "is not verified and is still pending" stays open, and a clause ends
-at "now that", "because", "since" or "so" too, so "cannot fail now that it has
-been verified" says done. A `stated` word is turned over only by "nothing",
+in its clause, when that word is of the list it turns, and each next word of
+that list joined to it by "and", "or", "nor" or a comma alone (#1019): "no
+files are missing", "nothing remains to verify", "are no longer missing" and
+"is not pending" say `opposite`; "never checked", "never checked, verified or
+confirmed", "nobody has checked", "hasn't been run", "cannot be verified" and
+"until it exists" say `stated`. It stops at a new predicate, so "is not
+verified and is still pending" stays open and "is not pending and is
+verified" says done, and at a clause's end, which "now that", "because",
+"since" or "so" also make, so "cannot fail now that it has been verified" says
+done. A `stated` word is turned over only by "nothing",
 "none", "no longer", "no `<thing>` is/are" and "not" as a state ("is not",
 "isn't", "not" opening the clause), so "could not verify" and "I have no
 Windows machine to verify" stay open. A sentence that says both is unresolved
