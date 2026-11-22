@@ -1200,7 +1200,7 @@ hold 3
 : > "$log"; out_q="$tmp/q1"
 queued
 check "with a wait, it waits for the holder, naming it, then runs" \
-  '[ "$(rc)" = 0 ] && grep -q "waiting for a slot: 1 running (pids $holder)" "$tmp/out.txt" && [ "$(sessions)" = 1 ]' "$(cat "$tmp/out.txt")"
+  '[ "$(rc)" = 0 ] && grep -q "waiting for a slot: 0 ahead, 1 running (pid $holder for " "$tmp/out.txt" && [ "$(sessions)" = 1 ]' "$(cat "$tmp/out.txt")"
 check "its session has a temporary directory of its own, so the session's queued tests do not wait for the suite's slot" \
   'grep -q "^session run=ledger-plinth-1 .* tmpdir=$tmp/q1/runs/ledger-plinth-1/tmp " "$log"' "$(grep '^session' "$log")"
 
