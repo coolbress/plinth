@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.41.0] - 2026-11-23
+
+A `Proprietary` `cli` or `library` made by `/plinth:new-project` releases to GitHub only, with no PyPI step; a project made with an earlier plinth gets it through `/plinth:template-update` and should check its `release.yml`. New projects render plinth-template v1.50.1: `scripts/heavy.sh` serves waiters in arrival order, says where each is in the queue, and queues a sandboxed Claude Code session with the others (it needs `perl`; without it a test does not run and exits 75). `/plinth:template-update`'s plan says before applying when a hand-raised plinth pin will conflict, and an archetype move that adds a required check (`cli` or `library` to `backend` or `data-ml`) can merge: `ci / floor-check` reads the check not yet required as a SKIP until the default branch records the new archetype, and the plan gives the order. The eval suite's grading reads a negation. A pull request's local run is the tests it touched and those its change reaches; CI runs every test. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
+
+tested with plinth-template v1.50.1
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-7081824843>
+
 ### Added
 
 - `/plinth:template-update`'s plan prints a `Pin conflict:` line when
@@ -5787,7 +5794,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.40.1...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.41.0...HEAD
+[2.41.0]: https://github.com/coolbress/plinth/releases/tag/v2.41.0
 [2.40.1]: https://github.com/coolbress/plinth/releases/tag/v2.40.1
 [2.40.0]: https://github.com/coolbress/plinth/releases/tag/v2.40.0
 [2.39.0]: https://github.com/coolbress/plinth/releases/tag/v2.39.0
