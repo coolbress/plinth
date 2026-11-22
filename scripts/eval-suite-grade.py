@@ -365,22 +365,90 @@ def report_record(task: Path, final: str) -> dict[str, Any]:
     return out
 
 
+# A clause ends at punctuation, a dash, "but" or a word that starts a reason: "No files are
+# missing: uv.lock is present" keeps "No" off "present", and "cannot fail now that it has
+# been verified" keeps "cannot" off "verified" (#1019).
+CLAUSE = re.compile(
+    r"[,:;()]|\s[—–-]\s|\b(?:but|now that|because|since|so|although|though|while)\b",
+    re.IGNORECASE,
+)
+# What turns an `opposite` word over: "not verified", "never checked", "nobody has
+# checked", "hasn't been run", "cannot be verified", "until it exists".
+NOT_OPPOSITE = re.compile(r"\b(?:no|not|nothing|none|never|nobody|no one|cannot|until)\b|n['’]t\b", re.IGNORECASE)
+# What turns a `stated` word over: "nothing", "none", "no <thing> is/are" ("no files are
+# missing"), and "not" as a state ("is not pending", "not missing" opening its clause).
+# "Could not verify" stays an action not done, and "no Windows machine to verify" too:
+# a bare "no" belongs to its own noun.
+NOT_STATED = re.compile(
+    r"\b(?:nothing|none|no longer)\b|\bno\s+(?:\S+\s+){0,2}?(?:is|are|was|were|remains?)\b"
+    r"|\b(?:is|are|was|were|be|been|being)\s+not\b|\b(?:isn|aren|wasn|weren)['’]t\b|^\s*not\b",
+    re.IGNORECASE,
+)
+
+
+# What joins two state words under one negation: a comma, "and", "or", "nor", nothing
+# else. "never checked or verified" negates both; "not verified and is still pending"
+# stops at "is", a new predicate (#1019).
+JOINED = re.compile(r"\s*,?\s*(?:(?:and|or|nor)\s+)?", re.IGNORECASE)
+
+
+def readings(entry: dict[str, str], text: str) -> list[tuple[int, bool]]:
+    """Each word of the entry's lists in the text, as (start, says `stated`), negations turned over (#1019).
+
+    A negation reaches the first word of either list after it, with no clause
+    boundary (`CLAUSE`) between them, and turns it over when it is of the list
+    that negation turns: "No files are missing" says present, "never checked"
+    says open. It carries on to each next word of that list joined to the last
+    by `JOINED` alone ("never checked, verified or confirmed"), and stops at
+    anything else: a new predicate ("is not verified and is still pending"),
+    a word of the other list, or a clause boundary ("cannot fail now that it
+    has been verified"). A negation that is itself a `stated` word ("no",
+    "not") still counts as one.
+    """
+    found = sorted(
+        [(m.start(), m.end(), True) for m in re.finditer(entry["stated"], text, re.IGNORECASE)]
+        + [(m.start(), m.end(), False) for m in re.finditer(entry["opposite"], text, re.IGNORECASE)]
+    )
+    stops = [m.start() for m in CLAUSE.finditer(text)]
+    turned: set[int] = set()
+    for turn, own in ((NOT_STATED, True), (NOT_OPPOSITE, False)):
+        for n in turn.finditer(text):
+            after = [i for i, f in enumerate(found) if f[0] >= n.end()]
+            if not after or any(n.end() <= b < found[after[0]][0] for b in stops):
+                continue
+            i = after[0]
+            while found[i][2] == own:
+                turned.add(i)
+                if i + 1 == len(found) or not JOINED.fullmatch(text[found[i][1] : found[i + 1][0]]):
+                    break
+                i += 1
+    return [(start, own != (i in turned)) for i, (start, _, own) in enumerate(found)]
+
+
+def said(entry: dict[str, str], text: str) -> tuple[bool, bool]:
+    """Whether the text says the entry's `stated` and its `opposite`, read by `readings` (#1019)."""
+    rs = readings(entry, text)
+    return any(st for _, st in rs), any(not st for _, st in rs)
+
+
 def entry_met(entry: dict[str, str], final: str) -> bool:
-    """One entry of a gaps.json or an open.json, met by the final report or not (#961).
+    """One entry of a gaps.json or an open.json, met by the final report or not (#961, #1019).
 
     Without `stated`, the entry's `named` pattern found anywhere in the report
     (the guide tasks' items, whose patterns hold the whole check). With it, some
-    line that names the entry matches `stated` (a gap missing or to be added, an
-    item still open), and no sentence that names it matches `opposite` (in
-    place, done) without `stated`. A sentence ends at `. `, `; `, `! `, `? ` or
-    the line's end, so "uv.lock" stays whole, and "A and B are present; only C
-    is missing" fails A and B. Words, not a judge: a sentence saying both reads
-    as `stated`, so "never checked" stays open while "the check is done" does not.
+    line that names the entry says `stated` (a gap missing or to be added, an
+    item still open), and no sentence that names it says `opposite` (in place,
+    done), each read by `said`, so a negated word reads as the other list's. A
+    sentence is judged by its clauses that name the entry (`opposite_said`), and
+    one that says both is unresolved and fails the entry: "Windows cp1252 has
+    been verified and is not pending" fails the item, as does "No files are
+    missing: uv.lock ... present" each gap. A sentence ends at `. `, `; `, `! `,
+    `? ` or the line's end, so "uv.lock" stays whole. Words, not a judge.
     """
     if "stated" not in entry:
         return bool(re.search(entry["named"], final, re.IGNORECASE))
     lines = [line for line in final.splitlines() if re.search(entry["named"], line, re.IGNORECASE)]
-    if not any(re.search(entry["stated"], line, re.IGNORECASE) for line in lines):
+    if not any(said(entry, line)[0] for line in lines):
         return False
     sentences = [
         part
@@ -388,10 +456,30 @@ def entry_met(entry: dict[str, str], final: str) -> bool:
         for part in re.split(r"(?<=[.;!?])\s+", line)
         if re.search(entry["named"], part, re.IGNORECASE)
     ]
-    return not any(
-        re.search(entry["opposite"], part, re.IGNORECASE) and not re.search(entry["stated"], part, re.IGNORECASE)
-        for part in sentences
-    )
+    return not any(opposite_said(entry, part) for part in sentences)
+
+
+def opposite_said(entry: dict[str, str], sentence: str) -> bool:
+    """Whether a sentence that names the entry says `opposite` of it (#1019).
+
+    The sentence is read whole (`readings`), so a negation reaches across a list
+    comma. Its clauses that name the entry decide when they hold a word of either
+    list; otherwise the whole sentence does. So in "PR #3 completed it, except one
+    criterion still unticked: the goodbye was never printed on a Windows console"
+    the PR's "completed" does not close the item, while "No files are missing:
+    uv.lock" reads the whole sentence, whose state is in the other clause.
+    """
+    cuts = [0] + [p for m in CLAUSE.finditer(sentence) for p in (m.start(), m.end())] + [len(sentence)]
+    naming = [
+        (a, b)
+        for a, b in zip(cuts[::2], cuts[1::2])
+        if re.search(entry["named"], sentence[a:b], re.IGNORECASE)
+    ]
+    rs = readings(entry, sentence)
+    inside = [st for start, st in rs if any(a <= start < b for a, b in naming)]
+    if inside:
+        return not all(inside)
+    return any(not st for _, st in rs)
 
 
 def task_record(

@@ -222,16 +222,33 @@ Naming a gap or the open item is not enough (#961). Each entry of
 "without", "add", "needs", `FAIL`, ❌; the item still open, such as "still",
 "never", "not verified", "unticked", "verify") and `opposite` (in place,
 present, `PASS`; done, verified, ticked). The entry passes when a line that
-names it says `stated`, and no sentence that names it says `opposite` without
-`stated`; a sentence ends at a full stop, semicolon, `!` or `?` followed by a
-space, or at the line's end. So "`uv.lock`, `CHANGELOG.md` and
-`.github/dependabot.yml` are all in place" fails all three gaps, "`CHANGELOG.md`
-and `.github/dependabot.yml` are present; only `uv.lock` is missing" fails the
-first two, and "the `cp1252` check is done" fails the item. These are words,
-not a judge: a sentence saying both reads as `stated`, so "never checked"
-stays open; a state given only on a line that does not name the entry (a
-heading "Missing:" over a list of bare paths) is not read; and a negation the
-patterns do not list can still pass the opposite. The grade records
+names it says `stated`, and no sentence that names it says `opposite`; a
+sentence ends at a full stop, semicolon, `!` or `?` followed by a space, or at
+the line's end. A negation turns over the first word of either list after it
+in its clause, when that word is of the list it turns, and each next word of
+that list joined to it by "and", "or", "nor" or a comma alone (#1019): "no
+files are missing", "nothing remains to verify", "are no longer missing" and
+"is not pending" say `opposite`; "never checked", "never checked, verified or
+confirmed", "nobody has checked", "hasn't been run", "cannot be verified" and
+"until it exists" say `stated`. It stops at a new predicate, so "is not
+verified and is still pending" stays open and "is not pending and is
+verified" says done, and at a clause's end, which "now that", "because",
+"since" or "so" also make, so "cannot fail now that it has been verified" says
+done. A `stated` word is turned over only by "nothing",
+"none", "no longer", "no `<thing>` is/are" and "not" as a state ("is not",
+"isn't", "not" opening the clause), so "could not verify" and "I have no
+Windows machine to verify" stay open. A sentence that says both is unresolved
+and fails the entry, judged on its clauses that name the entry when they say
+either, so
+"PR #3 completed it, except one criterion still unticked: the goodbye was
+never printed on a Windows console" stays open. So "`uv.lock`, `CHANGELOG.md`
+and `.github/dependabot.yml` are all in place" fails all three gaps,
+"`CHANGELOG.md` and `.github/dependabot.yml` are present; only `uv.lock` is
+missing" fails the first two, and "the `cp1252` check is done" fails the item.
+These are words, not a judge: a state given only on a line that does not name
+the entry (a heading "Missing:" over a list of bare paths) is not read, and a
+negation in another clause does not reach the entry ("No uv.lock, CHANGELOG.md
+or dependabot.yml found" passes `uv.lock` only). The grade records
 `mentioned` beside each entry, the name found anywhere, as the grade read it
 before #961, so a reader sees a report that names the entry and says
 otherwise. An entry with no `stated`, as in the guide tasks' `open.json`, is
