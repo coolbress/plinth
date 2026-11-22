@@ -24,13 +24,18 @@ pull requests and have no tag.
 
 ### Changed
 
-- `/plinth:new-project` renders plinth-template v1.49.1 instead of v1.49.0
+- `/plinth:new-project` renders plinth-template v1.50.0 instead of v1.49.0
   (coolbress/plinth-template#304). A new `Proprietary` `cli` or `library`
   releases to GitHub only: its release workflow has no PyPI job, and its
   README and `docs/how-to/publish-a-release.md` say where a release's files
   go and how to install them. A new project starts at plinth v2.40.1, since
   `plinth_sha`'s default moved there. `/plinth:arsenal` says the same of a
   `Proprietary` release.
+  It also carries v1.50.0's `scripts/heavy.sh`, which serves waiters in
+  arrival order and prints each one's place in the queue
+  (coolbress/plinth-template#308); plinth's own copy is the same file, and
+  CONTRIBUTING.md's lines on the queue say so. The queue is per `TMPDIR`, so a
+  sandboxed session does not share it (coolbress/plinth-template#311).
 
 ### Fixed
 

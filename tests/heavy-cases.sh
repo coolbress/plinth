@@ -44,8 +44,8 @@ rc=$?
 wait "$first"
 check "with one slot, a second call waits until the first ends, then runs" \
   '[ "$rc" = 0 ] && [ "$(tr "\n" " " <"$tmp/$c/log")" = "first second " ]' "rc=$rc; log: $(cat "$tmp/$c/log"); $(cat "$tmp/$c/err")"
-check "its wait line names how many run and their pids" \
-  'grep -q "waiting for a slot: 1 running (pids $first)" "$tmp/$c/err"' "$(cat "$tmp/$c/err")"
+check "its wait line names its place, what runs and for how long" \
+  'grep -q "waiting for a slot: 0 ahead, 1 running (pid $first for 0 min)" "$tmp/$c/err"' "$(cat "$tmp/$c/err")"
 
 # ---- a slot whose pid is gone is taken back
 c="dead"; mkdir -p "$tmp/$c"

@@ -13,24 +13,65 @@ claude plugin validate --strict skills                      # skill frontmatter
 ./scripts/check-ruleset.sh                                  # the wall the door applies
 # one checkout of plinth-template at the pinned commit, for the tests that read it
 export PLINTH_TEMPLATE_DIR="$(mktemp -d)/plinth-template" && tests/lib/template-checkout.sh "$PLINTH_TEMPLATE_DIR"
-# every test; install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases, build-cases, release-allowlist, template-render, arsenal-freshness, uv-pin and release-download-token need network
-# in one of the machine's slots, waiting while other heavy commands hold them (scripts/heavy.sh)
-scripts/heavy.sh bash -c 'failed=; for t in tests/*.sh; do "./$t" || failed="$failed $t"; done
-[ -z "$failed" ] || { echo "FAILED:$failed"; false; }'
+# the tests this change touched or reaches (below), each on its own; in place of <test> name each one
+./tests/<test>.sh
 ```
 
-The last line is there because a loop ends with the status of its last test:
-without it a failure in the middle scrolls past and the block still ends in 0.
+Before a pull request, the local run is the tests the change touched and the
+tests it reaches; CI runs every `tests/*.sh` on each pull request, on runners
+that share nothing with this machine. Every test is a `run:` step of
+`plinth-ci.yml`, which `ci.yml` calls on each pull request.
+`tests/all-tests-are-wired.sh` fails when a `tests/*.sh` is a `run:` step in
+no workflow; it does not check that the workflow runs on a pull request, so a
+step moved to a workflow that does not is for the reviewer to catch.
 
-`scripts/heavy.sh` is plinth-template's queue (#989): the whole run holds one
-of the machine's slots, shared with every project made with plinth, and waits
-while all are taken, printing once a minute how many run and their pids.
-`PLINTH_HEAVY_SLOTS` sets how many run at once (2 unless set; 1 on a small
-machine) and `PLINTH_HEAVY_WAIT` the minutes to wait (20 unless set). Past
-that, nothing runs and the status is 75 with a "did not run" line: report the
-checks as not verified. While working, run the test you touched on its own,
-without the queue, and the whole set once before a pull request. CI does not
-queue: each runner is a machine of its own.
+A change reaches the `tests/*.sh` that name a file it changed, or a script
+that calls it:
+
+```bash
+git diff --name-only origin/main...HEAD                  # what changed
+grep -l -F -e '<changed file>' -e '<script that calls it>' tests/*.sh
+```
+
+A test can reach a file only through a shared library under `tests/lib/` or
+`scripts/lib/`, which the test never names. For a changed library, grep for
+the library's own name too: in `tests/*.sh` for the tests that source it, and
+in `scripts/` for the scripts that do, then for those scripts' names in
+`tests/*.sh`. A change to a Markdown file reaches the tests that read every
+one: `markdownlint`, `de-jargon` and `doc-pinned-facts`.
+
+The whole set, for whoever wants it locally, queues each test on its own in
+`scripts/heavy.sh`, plinth-template's queue (#989), so the slot goes back
+between tests and another project's heavy command can take it.
+install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases,
+build-cases, release-allowlist, template-render, arsenal-freshness, uv-pin and
+release-download-token need network:
+
+```bash
+bash -c 'failed=; notrun=; for t in tests/*.sh; do scripts/heavy.sh "./$t"; s=$?
+case $s in 0) ;; 75) notrun="$notrun $t" ;; *) failed="$failed $t" ;; esac; done
+[ -z "$notrun" ] || echo "DID NOT RUN (no free slot):$notrun"
+[ -z "$failed" ] || echo "FAILED:$failed"
+[ -z "$failed$notrun" ]'
+```
+
+The last lines are there because a loop ends with the status of its last
+test: without them a failure in the middle scrolls past and the block still
+ends in 0. The block ends non-zero when any test failed or did not run, and
+names each under its own heading.
+
+The queue's slots are shared with every project made with plinth that runs
+under the same `TMPDIR` (a sandboxed session has its own). A test waits while
+all are taken, in the order it arrived, and `scripts/heavy.sh` prints once a
+minute how many wait ahead and what runs for how long. `PLINTH_HEAVY_SLOTS`
+sets how many run at once (2 unless set; 1 on a small machine) and
+`PLINTH_HEAVY_WAIT` the minutes each test waits (20 unless set). Past that, or
+as soon as the commands it saw end say it would, the test does not run and
+`scripts/heavy.sh` exits 75 with a "did not run" line, which the block lists
+under "DID NOT RUN", not as failed or passed: report those tests as not
+verified. A test that itself exits 75 lands there too; run it on its own to
+tell. A single test run while working needs no queue. CI does not queue:
+each runner is a machine of its own.
 
 `tests/install-smoke.sh` installs plinth into a temporary Claude Code config
 directory exactly as the README says, so it needs network and a few minutes.
@@ -57,7 +98,7 @@ its own, so a network error there is the fetch failing, not a test.
 `tests/template-update-cases.sh` takes minutes rather than seconds.
 Everything else runs offline in seconds.
 
-That list is every step of `ci / install`, `ci / docs` and `ci / tools` but
+The whole set, with the commands above it, is every step of `ci / install`, `ci / docs` and `ci / tools` but
 one, the link check. CodeQL and the `canary`, `canary-web` and
 `canary-template` jobs run only on GitHub.
 
