@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.49.1 instead of v1.49.0
+  (coolbress/plinth-template#304). A new `Proprietary` `cli` or `library`
+  releases to GitHub only: its release workflow has no PyPI job, and its
+  README and `docs/how-to/publish-a-release.md` say where a release's files
+  go and how to install them. A new project starts at plinth v2.40.1, since
+  `plinth_sha`'s default moved there. `/plinth:arsenal` says the same of a
+  `Proprietary` release.
+
 ### Fixed
 
 - The eval suite's `floor-gaps` and `next-day` grading reads a negation
