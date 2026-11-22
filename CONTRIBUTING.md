@@ -60,11 +60,13 @@ test: without them a failure in the middle scrolls past and the block still
 ends in 0. The block ends non-zero when any test failed or did not run, and
 names each under its own heading.
 
-The queue's slots are the machine's, shared with every project made with
-plinth. A test waits while all are taken, and `scripts/heavy.sh` prints once
-a minute how many run and their pids. `PLINTH_HEAVY_SLOTS` sets how many run
-at once (2 unless set; 1 on a small machine) and `PLINTH_HEAVY_WAIT` the
-minutes each test waits (20 unless set). Past that, the test does not run and
+The queue's slots are shared with every project made with plinth that runs
+under the same `TMPDIR` (a sandboxed session has its own). A test waits while
+all are taken, in the order it arrived, and `scripts/heavy.sh` prints once a
+minute how many wait ahead and what runs for how long. `PLINTH_HEAVY_SLOTS`
+sets how many run at once (2 unless set; 1 on a small machine) and
+`PLINTH_HEAVY_WAIT` the minutes each test waits (20 unless set). Past that, or
+as soon as the commands it saw end say it would, the test does not run and
 `scripts/heavy.sh` exits 75 with a "did not run" line, which the block lists
 under "DID NOT RUN", not as failed or passed: report those tests as not
 verified. A test that itself exits 75 lands there too; run it on its own to
