@@ -777,6 +777,44 @@ if [ "$mode" = plan ]; then
     echo "With the tested pin: $tested_cmd"
     sed -n 's/^recommended: /Recommended: /p' "$tmp/pin-note"
   fi
+  # A pin raised in the workflows (by Dependabot or by hand) and not in the
+  # answers file (#1015): copier's old render names the recorded plinth_sha,
+  # so a workflow whose plinth pin is neither that one nor the one a line
+  # carries meets three pins, and its plinth uses: line is left in conflict
+  # (measured, copier 9.18.2). Said here, for each line on offer, before
+  # anything is written; the person still resolves it after --apply. Files
+  # copier does not render (a workflow the project added) have nothing to
+  # conflict with, which the line says; a `Moves:` file at an older pin
+  # conflicts too, since copier runs on it as it stands.
+  recorded="$(tr -d '\r' < "$tmp/.copier-answers.yml" 2>/dev/null \
+    | sed -nE "s/^plinth_sha:[[:space:]]*['\"]?([0-9a-fA-F]{40})['\"]?([[:space:]#].*)?$/\1/p" | head -n 1 | tr 'A-F' 'a-f')"
+  carried() { sed -nE 's/.* --data plinth_sha=([0-9a-fA-F]{40})( .*)?$/\1/p' <<<"$1" | tr 'A-F' 'a-f'; }
+  live_pin="$(carried "$cmd")"; tested_pin="$(carried "${tested_cmd:-}")"
+  pins_now="$( [ -z "$recorded" ] || python3 "$checker" --root "$tmp" --print-plinth-pins | awk '$2 !~ /^unread$/ { print $1, tolower($2) }')"
+  called="$(awk '!s[$2]++ { printf "%s%s", (n++ ? " and " : ""), $2 }' <<<"$pins_now")"
+  in_conflict() { # <carried pin>: the files whose plinth pin is neither the recorded one nor it
+    awk -v r="$recorded" -v c="$1" '$2 != r && $2 != c && !s[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }' <<<"$pins_now"
+  }
+  pin_says() { # <what the line is> <carried pin>
+    local files; files="$(in_conflict "$2")"
+    if [ "$2" = "$recorded" ]; then
+      echo "            $1 carries the recorded pin itself: copier keeps the pin each workflow calls, so that line moves no pin."
+    elif [ -n "$files" ]; then
+      echo "            $1 leaves the plinth uses: line in conflict in $files (those of them the template renders);"
+      echo "            keep the side naming $2, the pin that line carries (copier's \`after updating\` side)."
+    else
+      echo "            $1 carries the pin the workflows call: no conflict on that line is expected."
+    fi
+  }
+  if [ -n "$recorded" ] && [ -n "$live_pin" ] && [ -n "$(in_conflict "$recorded")" ]; then
+    echo "Pin conflict: .copier-answers.yml records plinth_sha $recorded; the workflows call $called."
+    if [ -n "$tested_pin" ]; then
+      pin_says "with --plinth-pin tested, the update" "$tested_pin"
+      pin_says "with --plinth-pin live, the update" "$live_pin"
+    else
+      pin_says "The update" "$live_pin"
+    fi
+  fi
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
   if [ -n "$tested_cmd" ]; then

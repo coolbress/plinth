@@ -11,6 +11,17 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Added
+
+- `/plinth:template-update`'s plan prints a `Pin conflict:` line when
+  `.copier-answers.yml` records a `plinth_sha` other than the pin the
+  workflows call (raised in the workflows only, by Dependabot or by hand):
+  for each `--apply` line on offer it names each workflow whose plinth
+  `uses:` line copier will leave in conflict and the side to keep, the one
+  naming the pin that line carries, or says no conflict on that line is
+  expected, as for `--plinth-pin live` when every workflow calls one pin.
+  Measured with copier 9.18.2 (#1015).
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.49.1 instead of v1.49.0

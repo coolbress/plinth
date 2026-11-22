@@ -72,6 +72,18 @@ line saying in one sentence what moving to the tested pin gains, and two
 moved backwards: the plan then prints one `--apply` line and no
 recommendation.
 
+When `.copier-answers.yml` records a `plinth_sha` other than a pin the
+workflows call (raised in the workflows only, by Dependabot or by hand), the
+plan prints a `Pin conflict:` line, with one line under it for each
+`--apply` line on offer. copier's old render names the recorded pin, so a
+workflow whose plinth pin is neither the recorded one nor the one a line
+carries has its plinth `uses:` line left in conflict: with the tested pin,
+each workflow the plan names; the side to keep is the one naming the pin
+that line carries (copier's `after updating` side). A line that carries the
+pin every workflow calls, the live one usually, leaves no conflict on that
+line (measured with copier 9.18.2, #1015). Tell the user this before asking
+for the yes, so an exit 3 on those files is the conflict they were told of.
+
 ## 2. The user's yes
 
 Ask the user whether to apply exactly that plan. Invoking this skill is not
@@ -123,7 +135,9 @@ the plan; then show the plan again and ask again.
      or the `.rej` beside its file) and say in plain words what the template
      changed and what this repository changed. Recommend one resolution:
      the template's side, the repository's side, or a combination you name
-     (which lines from each). Give its reason in one sentence.
+     (which lines from each). Give its reason in one sentence. A plinth
+     `uses:` line the plan's `Pin conflict:` line named is that conflict:
+     recommend the side naming the pin the command carried.
   2. Wait for the user's word on each file. Their word names the file, or
      answers a question about that one file: "yes to CONTRIBUTING.md",
      "the template's side for both". Silence, or a general "go ahead" or
