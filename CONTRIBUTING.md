@@ -19,8 +19,11 @@ export PLINTH_TEMPLATE_DIR="$(mktemp -d)/plinth-template" && tests/lib/template-
 
 Before a pull request, the local run is the tests the change touched and the
 tests it reaches; CI runs every `tests/*.sh` on each pull request, on runners
-that share nothing with this machine. `tests/all-tests-are-wired.sh` fails
-when a `tests/*.sh` is a `run:` step in no workflow, so that stays true.
+that share nothing with this machine. Every test is a `run:` step of
+`plinth-ci.yml`, which `ci.yml` calls on each pull request.
+`tests/all-tests-are-wired.sh` fails when a `tests/*.sh` is a `run:` step in
+no workflow; it does not check that the workflow runs on a pull request, so a
+step moved to a workflow that does not is for the reviewer to catch.
 
 A change reaches the `tests/*.sh` that name a file it changed, or a script
 that calls it:
@@ -64,7 +67,8 @@ at once (2 unless set; 1 on a small machine) and `PLINTH_HEAVY_WAIT` the
 minutes each test waits (20 unless set). Past that, the test does not run and
 `scripts/heavy.sh` exits 75 with a "did not run" line, which the block lists
 under "DID NOT RUN", not as failed or passed: report those tests as not
-verified. A single test run while working needs no queue. CI does not queue:
+verified. A test that itself exits 75 lands there too; run it on its own to
+tell. A single test run while working needs no queue. CI does not queue:
 each runner is a machine of its own.
 
 `tests/install-smoke.sh` installs plinth into a temporary Claude Code config
