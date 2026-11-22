@@ -514,6 +514,22 @@ floor = [
     "| uv.lock | ❌ |\n| CHANGELOG.md | ❌ |\n| .github/dependabot.yml | ❌ |",
     # The state in the next sentence of the line, and "until it exists": both missing.
     "`.github/dependabot.yml`, `CHANGELOG.md`: ci.yml relies on them. Without them nothing updates.\n`uv.lock` missing. CI cannot pass until the lockfile exists.",
+    # A negated `stated` reads as `opposite` (#1019): "no files are missing" says present.
+    "No files are missing: uv.lock, CHANGELOG.md and .github/dependabot.yml are all present.",
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml are not missing.",
+    # A negated `opposite` reads as `stated`; "found" as the report's own verb is neither.
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml are not present.",
+    "Found three missing files: uv.lock, CHANGELOG.md, .github/dependabot.yml.",
+    # A "no" that belongs to another noun turns nothing over; "found no" is not present.
+    "No CI run can pass without uv.lock, CHANGELOG.md and .github/dependabot.yml.",
+    "I found no uv.lock, no CHANGELOG.md and no .github/dependabot.yml.",
+    # "no longer" turns a `stated` word over: the gaps are said to be present.
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml are no longer missing.",
+    # The third-party review's round 2 on #1022: "found that" is the report's verb.
+    "I found that uv.lock is missing.\nI found that CHANGELOG.md is missing.\nI found that .github/dependabot.yml is missing.",
+    # A negation carries across state words joined by "or"/"and"/a comma, and stops at a new predicate.
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml: none of them is found or present.",
+    "uv.lock, CHANGELOG.md and .github/dependabot.yml are not present and are still required.",
 ]
 resume = [
     "The open `cp1252 on Windows` check is done: the goodbye prints fine on a Windows console.",
@@ -524,14 +540,38 @@ resume = [
     "The cp1252 on Windows check is done; I did not need to change anything.",
     "Open item: check the cp1252 output on a Windows console.",
     "Next step: verify the goodbye on a Windows console (cp1252) before closing.",
+    # The two #1019 reproduced, then a negated `opposite` and a negated action, all still open.
+    "The Windows cp1252 check is finished. Nothing remains to verify.",
+    "Windows cp1252 has been verified and is not pending.",
+    "The goodbye was never checked on a Windows console using the cp1252 code page.",
+    "Nobody has checked that the goodbye prints on a Windows console (code page cp1252).",
+    "The goodbye hasn't been checked on a Windows console (cp1252).",
+    "I could not verify the cp1252 output on a Windows console here.",
+    "The cp1252 check on Windows is not done yet.",
+    # Both in one sentence, the opposite in a clause that does not name the item: the naming clause decides.
+    "Pull request #3 completed it, except one criterion that is still unticked: the goodbye has never been printed on a Windows console using the cp1252 code page.",
+    "I have no Windows machine to verify the cp1252 output.",
+    "With no Windows box I can't check the cp1252 goodbye.",
+    "The cp1252 check on Windows is not open.",
+    "The cp1252 check on Windows isn't open any more.",
+    # A negation reaches the next state word only, and not past "now that" (the third-party review on #1022).
+    "The Windows cp1252 check is not verified and is still pending.",
+    "The Windows cp1252 check cannot fail now that it has been verified.",
+    # The third-party review's round 2 on #1022, then variants of each shape: "not X nor Y",
+    # "never X, Y or Z", "not X and is Y".
+    "The Windows cp1252 output has never been checked or verified.",
+    "The cp1252 output on Windows is not verified nor confirmed.",
+    "The goodbye has never been checked, verified or confirmed on a Windows console (cp1252).",
+    "The cp1252 check on Windows is not verified and is still open.",
+    "The cp1252 check on Windows is not pending and is verified.",
 ]
 print(" ".join("1" if all(m.entry_met(g, r) for g in gaps) else "0" for r in floor)
       + " " + " ".join("1" if m.entry_met(item, r) else "0" for r in resume))
 PY
 }
 stated_hits="$(stated_cases)"
-check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite fails" \
-  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 0 0 1 1" ]' "$stated_hits"
+check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite, or both, fails; a negation turns the word over" \
+  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 1 1 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0 1 0 1 1 1 1 0" ]' "$stated_hits"
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
