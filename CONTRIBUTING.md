@@ -60,8 +60,9 @@ test: without them a failure in the middle scrolls past and the block still
 ends in 0. The block ends non-zero when any test failed or did not run, and
 names each under its own heading.
 
-The queue's slots are shared with every project made with plinth that runs
-under the same `TMPDIR` (a sandboxed session has its own). A test waits while
+The queue's slots are shared with every project made with plinth on the
+machine, sandboxed Claude Code sessions included (it needs `perl`; without it
+the test does not run and exits 75). A test waits while
 all are taken, in the order it arrived, and `scripts/heavy.sh` prints once a
 minute how many wait ahead and what runs for how long. `PLINTH_HEAVY_SLOTS`
 sets how many run at once (2 unless set; 1 on a small machine) and

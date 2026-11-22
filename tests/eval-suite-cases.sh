@@ -115,7 +115,7 @@ if [ "$action" = smoke-pass ]; then
 fi
 cfg_empty=no; [ -d "${GH_CONFIG_DIR:-/nonexistent}" ] && [ -z "$(ls -A "$GH_CONFIG_DIR")" ] && cfg_empty=yes
 EVAL_STUB_IN_SESSION=1 gh auth status >/dev/null 2>&1; ghs=$?
-echo "session run=$run action=$action budget=$budget tmpdir=${TMPDIR-unset} cfg=$CLAUDE_CONFIG_DIR gh_token=${GH_TOKEN-unset} github_token=${GITHUB_TOKEN-unset} gh_config=${GH_CONFIG_DIR-unset} gh_config_empty=$cfg_empty gh_auth=$ghs origin=$(git remote get-url origin) agents_md=$([ -e AGENTS.md ] && echo yes || echo no) settings=$settings" >> "$EVAL_STUB_LOG"
+echo "session run=$run action=$action budget=$budget tmpdir=${TMPDIR-unset} heavy_dir=${PLINTH_HEAVY_DIR-unset} cfg=$CLAUDE_CONFIG_DIR gh_token=${GH_TOKEN-unset} github_token=${GITHUB_TOKEN-unset} gh_config=${GH_CONFIG_DIR-unset} gh_config_empty=$cfg_empty gh_auth=$ghs origin=$(git remote get-url origin) agents_md=$([ -e AGENTS.md ] && echo yes || echo no) settings=$settings" >> "$EVAL_STUB_LOG"
 fix() { perl -pi -e 's/i\.due < today/i.due <= today/' "$1/src/probe/ledger.py"; }
 hi() { perl -pi -e 's/Hello, /Hi, /' "$1/src/probe/__init__.py"; }
 tool() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"%s","input":%s}]}}\n' "$1" "$2"; }
@@ -1185,17 +1185,17 @@ done
 q="$tmp/queue"
 hold() { # <seconds>: one command holding a slot in $q's queue; its pid in $holder
   rm -f "$q/held"; mkdir -p "$q"
-  TMPDIR="$q" "$root/scripts/heavy.sh" sh -c "touch '$q/held'; sleep $1" >/dev/null 2>&1 &
+  TMPDIR="$q" PLINTH_HEAVY_DIR="$q" "$root/scripts/heavy.sh" sh -c "touch '$q/held'; sleep $1" >/dev/null 2>&1 &
   holder=$!
   for _ in $(seq 1 200); do [ -e "$q/held" ] && break; sleep 0.05; done
 }
-queued() { (unset PLINTH_HEAVY_HELD; export TMPDIR="$q" PLINTH_HEAVY_SLOTS=1 PLINTH_HEAVY_WAIT="${1:-20}"; suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$out_q"); }
-hold 30
+queued() { (unset PLINTH_HEAVY_HELD; export TMPDIR="$q" PLINTH_HEAVY_DIR="$q" PLINTH_HEAVY_SLOTS=1 PLINTH_HEAVY_WAIT="${1:-20}"; suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 1 --out "$out_q"); }
+hold 5
 : > "$log"; out_q="$tmp/q0"
 queued 0
 check "with the only slot held and no wait, the suite does not run: exit 75, no session, no records" \
   '[ "$(rc)" = 75 ] && grep -q "did not run" "$tmp/out.txt" && [ "$(sessions)" = 0 ] && [ ! -e "$tmp/q0" ]' "$(cat "$tmp/out.txt")"
-kill "$holder"; wait "$holder" 2>/dev/null
+wait "$holder" 2>/dev/null # ends by itself: killing heavy.sh leaves its command holding the lock (plinth-template v1.50.1)
 hold 3
 : > "$log"; out_q="$tmp/q1"
 queued
@@ -1203,6 +1203,8 @@ check "with a wait, it waits for the holder, naming it, then runs" \
   '[ "$(rc)" = 0 ] && grep -q "waiting for a slot: 0 ahead, 1 running (pid $holder for " "$tmp/out.txt" && [ "$(sessions)" = 1 ]' "$(cat "$tmp/out.txt")"
 check "its session has a temporary directory of its own, so the session's queued tests do not wait for the suite's slot" \
   'grep -q "^session run=ledger-plinth-1 .* tmpdir=$tmp/q1/runs/ledger-plinth-1/tmp " "$log"' "$(grep '^session' "$log")"
+check "its session's heavy.sh queue is in that directory too, not the machine's shared one" \
+  'grep -q "^session run=ledger-plinth-1 .* heavy_dir=$tmp/q1/runs/ledger-plinth-1/tmp " "$log"' "$(grep '^session' "$log")"
 
 echo "  $pass passed, $fail failed"
 [ "$fail" = 0 ]
