@@ -228,7 +228,7 @@ the line's end. A word after a negation in its clause reads as the other
 list's (#1019): "no files are missing", "nothing remains to verify" and "is
 not pending" say `opposite`; "never checked", "nobody has checked", "hasn't
 been run", "cannot be verified" and "until it exists" say `stated`. A
-`stated` word is turned over only by "nothing", "none", "no <thing> is/are"
+`stated` word is turned over only by "nothing", "none", "no `<thing>` is/are"
 and "not" as a state ("is not", "isn't", "not" opening the clause), so "could
 not verify" and "I have no Windows machine to verify" stay open, and so does
 "no longer missing", which is not turned over. A sentence that says both is unresolved and fails the
