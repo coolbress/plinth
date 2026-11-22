@@ -244,7 +244,8 @@ starts a check (`image`, moving from `cli` or `library` to `backend` or
 The plan says whether the plinth the workflows call lets the move's own
 `ci / floor-check` pass meanwhile. If it does, the order is: merge the move,
 let the check run on the default branch, then the person requires it with the
-command the plan names. If that plinth is older, the plan says to raise the
+command the plan names. If the default branch already requires the check,
+there is nothing to add. Otherwise, if that plinth is older, the plan says to raise the
 plinth pin first and gives no `--apply` line, and `--apply` refuses the move:
 tell the person that, and plan the move again once the pin is raised.
 

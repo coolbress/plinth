@@ -155,6 +155,18 @@ state_file() { printf '%s/%s\n' "$(git -C "$1" rev-parse --absolute-git-dir)" "$
 state_get() { sed -n "s/^$2=//p" "$1" | head -n 1; }
 # The version of the plinth this script is from, which reads a check an
 # archetype move adds as not required yet (#1017).
+# The checks a move starts that the default branch does not require yet,
+# from a record (check_add=, required_read=, required=): every one when the
+# required checks were not read. One already required (a project's own
+# `image` job) passes any plinth's floor check (Codex review on #1029).
+unrequired_adds() { # <record file>
+  local c
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    grep -qx 'required_read=yes' "$1" && grep -qxF "required=$c" "$1" && continue
+    printf '%s\n' "$c"
+  done < <(sed -n 's/^check_add=//p' "$1")
+}
 plinth_version() { sed -nE 's/^[[:space:]]*"version":[[:space:]]*"([^"]+)".*/\1/p' "$here/../.claude-plugin/plugin.json" | head -n 1; }
 # A file's content as git would store it, or `-` when it is gone.
 blob() { git -C "$1" hash-object -- "$2" 2>/dev/null || echo -; }
@@ -248,6 +260,10 @@ move_steps() { # <state file> <prefix>
   done < <(sed -n 's/^check_drop=//p' "$sf")
   while IFS= read -r c; do
     [ -n "$c" ] || continue
+    if [ "$rd" = yes ] && grep -qxF "required=$c" "$sf"; then
+      echo "$c starts running, and $default already requires it: nothing to add, and the move's ci / floor-check finds it required."
+      continue
+    fi
     case "${af%% *}" in
       held) echo "$c starts running. The move's pull request passes ci / floor-check before $c is required: the plinth its workflows call (${pin:0:12}) reads a check the move adds as not required yet. Once the move is merged and $c has run on $default, a person requires it, with an admin token (never the agent's): \`$admin --repo $repo '$c'\`; until then ci / floor-check fails on $default and on every pull request brought up to date with it." ;;
       fails) echo "$c starts running, and the plinth the workflows call (${pin:0:12}) fails the move's ci / floor-check until $c is required, which require-check.sh refuses before $c has run on $default. Raise the plinth pin first: merge a pull request that moves every coolbress/plinth uses: line to plinth v$ver or later (Dependabot's, or one by hand), then plan the move again." ;;
@@ -757,7 +773,7 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
     fi; } > "$tmp/checks"
   move_steps "$tmp/checks" "$(q "$here")/" | sed 's/`//g'
   echo
-  if grep -q '^add_floor=fails ' "$tmp/checks"; then
+  if grep -q '^add_floor=fails ' "$tmp/checks" && [ -n "$(unrequired_adds "$tmp/checks")" ]; then
     echo "Nothing has been written (the fetch moved only origin/$default). Raise the plinth pin first (above);"
     echo "--apply refuses this move until the workflows call a plinth that passes its ci / floor-check."
     exit 0
@@ -856,8 +872,16 @@ plugin_gate
 if [ -n "$move" ]; then
   rehearsed="$(move_at "$tmp" 2>"$tmp/move-check")" || { cat "$tmp/move-check" >&2; die "nothing was created"; }
   # A move whose pull request its own ci / floor-check would fail (#1017).
-  if floor="$(sed -n 's/^check-add-floor: fails //p' "$tmp/move-check")" && [ -n "$floor" ]; then
-    die "the plinth the workflows call (${floor:0:12}) fails this move's ci / floor-check until $(sed -n 's/^check-add: //p' "$tmp/move-check" | paste -sd, -) is required, which cannot happen before the move merges; raise the plinth pin to v$(plinth_version) or later first, then plan the move again. Nothing was created"
+  floor="$(sed -n 's/^check-add-floor: fails //p' "$tmp/move-check")"
+  if [ -n "$floor" ]; then
+    { sed -n 's/^check-add: /check_add=/p' "$tmp/move-check"
+      if req="$(required_on "$repo" "$default")"; then
+        echo "required_read=yes"; while IFS= read -r c; do [ -n "$c" ] && printf 'required=%s\n' "$c"; done <<<"$req"
+      fi; } > "$tmp/adds"
+    unreq="$(unrequired_adds "$tmp/adds" | paste -sd, -)"
+  fi
+  if [ -n "$floor" ] && [ -n "$unreq" ]; then
+    die "the plinth the workflows call (${floor:0:12}) fails this move's ci / floor-check until $unreq is required, which cannot happen before the move merges; raise the plinth pin to v$(plinth_version) or later first, then plan the move again. Nothing was created"
   fi
   # The changed files the move deletes (#1016), from the rehearsal the plan
   # ran: each named once, with --keep or --drop, and nothing else named.

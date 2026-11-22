@@ -1568,7 +1568,7 @@ move_cli() { # <name>
   base="$(git -C "$BARE" rev-parse main)"
 }
 plinth_ver="$(sed -nE 's/^[[:space:]]*"version":[[:space:]]*"([^"]+)".*/\1/p' "$root/.claude-plugin/plugin.json" | head -n 1)"
-move_cli move-add; reset_logs
+move_cli move-add; reset_logs; add_at=("$repo" "$BARE" "$base")
 out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
 held_line="image starts running. The move's pull request passes ci / floor-check before image is required: the plinth its workflows call (${sha40:0:12}) reads a check the move adds as not required yet. Once the move is merged and image has run on main, a person requires it, with an admin token (never the agent's): $root/scripts/with-admin-token.sh $root/scripts/require-check.sh --repo o/r 'image'; until then ci / floor-check fails on main and on every pull request brought up to date with it."
 if [ "$rc" = 0 ] && grep -qxF "$held_line" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out" \
@@ -1586,6 +1586,19 @@ if [ "$rc" = 1 ] && grep -qF "raise the plinth pin to v$plinth_ver or later firs
    && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-backend >/dev/null && ! grep -q "pr create" "$work/gh.log"
 then ok "--apply refuses that move before a worktree or branch exists (#1017)"
 else bad "--apply with the rule missing (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A cli project that already requires its own `image` job (Codex review on
+# #1029): any plinth's floor check finds it required, so no pin raise.
+move_cli move-add-req; reset_logs
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$fails_api" MOCK_REQUIRED="ci / test,image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "image starts running, and main already requires it: nothing to add" <<<"$out" \
+   && grep -qF -- "--apply $base --archetype backend" <<<"$out" && ! grep -qF "Raise the plinth pin first" <<<"$out"
+then ok "image already required: the plan asks for no pin raise and gives the apply line, whatever the plinth"
+else bad "a move that adds an image already required (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$fails_api" MOCK_REQUIRED="ci / test,image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "image starts running, and main already requires it" "$work/gh.log.body"
+then ok "and --apply opens the move's draft"
+else bad "--apply with image already required (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+repo="${add_at[0]}"; BARE="${add_at[1]}"; base="${add_at[2]}"; reset_logs
 out="$(cd "$repo" && MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -qF "image starts running; whether the plinth the workflows call passes the move's ci / floor-check before image is required was not read (scripts/floor-check.py at that commit could not be read). This plinth (v$plinth_ver) does" <<<"$out" \
    && grep -qF -- "--apply $base --archetype backend" <<<"$out"
