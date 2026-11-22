@@ -2156,7 +2156,8 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     data-ml to cli); template-update.sh stops on a changed one until the
     person says which to keep. On stderr, a `check-drop:`
     line for each required check the move stops and a `check-add:` line for
-    each it starts. Exit 1 with the reason when there is no line."""
+    each it starts, then one `check-add-floor:` line saying whether the
+    plinth the workflows call passes the move's own floor check (#1017). Exit 1 with the reason when there is no line."""
     def no(why: str) -> int:
         print(f"no move command: {why}", file=sys.stderr)
         return 1
@@ -4850,7 +4851,7 @@ def main() -> int:
                          "the default) or the one the target template tag was tested with (tested; only when it is newer)")
     ap.add_argument("--move-archetype", metavar="ARCHETYPE",
                     help="with --print-update-command: the line that re-renders this repository under ARCHETYPE at the "
-                         "tag it records, with check-drop:/check-add: lines on stderr (#1004)")
+                         "tag it records, with check-drop:/check-add:/check-add-floor: lines on stderr (#1004, #1017)")
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
     ap.add_argument("--without-code-scanning", action="store_true",

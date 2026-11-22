@@ -249,9 +249,9 @@ move_steps() { # <state file> <prefix>
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     case "${af%% *}" in
-      held) echo "$c starts running. The move's pull request passes ci / floor-check before $c is required: the plinth its workflows call (${pin:0:12}) reads a check the move adds as not required yet. Once the move is merged and $c has run on $default, a person requires it, with an admin token (never the agent's): \`$admin --repo $repo '$c'\`" ;;
+      held) echo "$c starts running. The move's pull request passes ci / floor-check before $c is required: the plinth its workflows call (${pin:0:12}) reads a check the move adds as not required yet. Once the move is merged and $c has run on $default, a person requires it, with an admin token (never the agent's): \`$admin --repo $repo '$c'\`; until then ci / floor-check fails on $default and on every pull request brought up to date with it." ;;
       fails) echo "$c starts running, and the plinth the workflows call (${pin:0:12}) fails the move's ci / floor-check until $c is required, which require-check.sh refuses before $c has run on $default. Raise the plinth pin first: merge a pull request that moves every coolbress/plinth uses: line to plinth v$ver or later (Dependabot's, or one by hand), then plan the move again." ;;
-      *) echo "$c starts running; whether the plinth the workflows call passes the move's ci / floor-check before $c is required was not read${af:+ (${af#* * })}. A plinth from v$ver on does; an older one fails it, and the plinth pin is raised first. Once the move is merged and $c has run on $default, to require it: \`$admin --repo $repo '$c'\`" ;;
+      *) echo "$c starts running; whether the plinth the workflows call passes the move's ci / floor-check before $c is required was not read${af:+ (${af#* * })}. This plinth (v$ver) does, and one from before it may fail it; then the plinth pin is raised first. Once the move is merged and $c has run on $default, to require it: \`$admin --repo $repo '$c'\`" ;;
     esac
   done < <(sed -n 's/^check_add=//p' "$sf")
 }
