@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.40.1] - 2026-11-22
+
+An archetype move with `/plinth:template-update --archetype <a>` no longer deletes a file of the old archetype that the project changed without saying so: the plan lists each such file apart, and `--apply` stops until each is named with `--keep` or `--drop`. Anyone who moved a project with v2.40.0 should check that move's pull request for a deleted file the project had changed. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
+
+tested with plinth-template v1.49.0
+
 ### Fixed
 
 - `/plinth:template-update --archetype <a>` no longer lets copier delete a
@@ -5723,7 +5729,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.40.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.40.1...HEAD
+[2.40.1]: https://github.com/coolbress/plinth/releases/tag/v2.40.1
 [2.40.0]: https://github.com/coolbress/plinth/releases/tag/v2.40.0
 [2.39.0]: https://github.com/coolbress/plinth/releases/tag/v2.39.0
 [2.38.0]: https://github.com/coolbress/plinth/releases/tag/v2.38.0
