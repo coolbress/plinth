@@ -569,6 +569,16 @@ if [ "$rc" = 0 ] && grep -q "^ *with --plinth-pin tested, the update carries the
    && ! grep -q "keep the side" <<<"$out"
 then ok "the tested pin equal to the recorded one: the plan says that line moves no pin, and names no conflict"
 else bad "tested equal to recorded (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# An answers file with CRLF line endings: the recorded pin is still read.
+handraised pincrlf "$recorded"
+sed -i.bak $'s/$/\r/' "$repo/.copier-answers.yml" && rm "$repo/.copier-answers.yml.bak"
+git -C "$repo" commit -q -am crlf && git -C "$repo" push -q origin main; reset_logs
+pinrun "$pin_api"
+if [ "$rc" = 0 ] && grep -q $'\r' "$repo/.copier-answers.yml" \
+   && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40\.$" <<<"$out" \
+   && grep -q "keep the side naming $tested" <<<"$out"
+then ok "an answers file with CRLF line endings: the recorded pin is read and the conflict named"
+else bad "CRLF answers file (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # No plinth_sha recorded at all (every older fixture): nothing new either.
 fixture pinnorecord; reset_logs
 pinrun "$pin_api"
