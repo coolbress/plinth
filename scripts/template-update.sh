@@ -153,6 +153,21 @@ conflicts_in() { # <worktree> <base>
 indent() { sed 's/^/  /'; }
 state_file() { printf '%s/%s\n' "$(git -C "$1" rev-parse --absolute-git-dir)" "$state_name"; }
 state_get() { sed -n "s/^$2=//p" "$1" | head -n 1; }
+# The version of the plinth this script is from, which reads a check an
+# archetype move adds as not required yet (#1017).
+# The checks a move starts that the default branch does not require yet,
+# from a record (check_add=, required_read=, required=): every one when the
+# required checks were not read. One already required (a project's own
+# `image` job) passes any plinth's floor check (Codex review on #1029).
+unrequired_adds() { # <record file>
+  local c
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    grep -qx 'required_read=yes' "$1" && grep -qxF "required=$c" "$1" && continue
+    printf '%s\n' "$c"
+  done < <(sed -n 's/^check_add=//p' "$1")
+}
+plinth_version() { sed -nE 's/^[[:space:]]*"version":[[:space:]]*"([^"]+)".*/\1/p' "$here/../.claude-plugin/plugin.json" | head -n 1; }
 # A file's content as git would store it, or `-` when it is gone.
 blob() { git -C "$1" hash-object -- "$2" 2>/dev/null || echo -; }
 # The files that differ from <base>: tracked changes and new files.
@@ -224,9 +239,14 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
 # name that never reports blocks every merge), require one that starts once
 # it has run on the default branch. Commands under <prefix> (this script's
 # folder in the terminal, `scripts/` in a description, which is public).
+# A check the move starts cannot be required before the move merges, so the
+# move's own `ci / floor-check` passes only with a plinth that reads it as
+# not required yet (#1017): add_floor says whether the one the workflows
+# call does.
 move_steps() { # <state file> <prefix>
-  local sf="$1" pre="$2" repo default c rd
+  local sf="$1" pre="$2" repo default c rd af pin ver
   repo="$(state_get "$sf" repo)"; default="$(state_get "$sf" default)"; rd="$(state_get "$sf" required_read)"
+  af="$(state_get "$sf" add_floor)"; pin="$(cut -d ' ' -f 2 <<<"$af")"; ver="$(plinth_version)"
   local admin="${pre}with-admin-token.sh ${pre}require-check.sh"
   while IFS= read -r c; do
     [ -n "$c" ] || continue
@@ -240,7 +260,15 @@ move_steps() { # <state file> <prefix>
   done < <(sed -n 's/^check_drop=//p' "$sf")
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    echo "$c starts running. Once the move is merged and $c has run on $default, to require it: \`$admin --repo $repo '$c'\`"
+    if [ "$rd" = yes ] && grep -qxF "required=$c" "$sf"; then
+      echo "$c starts running, and $default already requires it: nothing to add, and the move's ci / floor-check finds it required."
+      continue
+    fi
+    case "${af%% *}" in
+      held) echo "$c starts running. The move's pull request passes ci / floor-check before $c is required: the plinth its workflows call (${pin:0:12}) reads a check the move adds as not required yet. Once the move is merged and $c has run on $default, a person requires it, with an admin token (never the agent's): \`$admin --repo $repo '$c'\`; until then ci / floor-check fails on $default and on every pull request brought up to date with it." ;;
+      fails) echo "$c starts running, and the plinth the workflows call (${pin:0:12}) fails the move's ci / floor-check until $c is required, which require-check.sh refuses before $c has run on $default. Raise the plinth pin first: merge a pull request that moves every coolbress/plinth uses: line to plinth v$ver or later (Dependabot's, or one by hand), then plan the move again." ;;
+      *) echo "$c starts running; whether the plinth the workflows call passes the move's ci / floor-check before $c is required was not read${af:+ (${af#* * })}. This plinth (v$ver) does, and one from before it may fail it; then the plinth pin is raised first. Once the move is merged and $c has run on $default, to require it: \`$admin --repo $repo '$c'\`" ;;
+    esac
   done < <(sed -n 's/^check_add=//p' "$sf")
 }
 # This repository's side of each conflict copier left, which may hold code of
@@ -704,7 +732,7 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   at_base
   plugin_gate
   cmd="$(move_at "$tmp" 2>"$tmp/move-note")" || { cat "$tmp/move-note" >&2; exit 1; }
-  grep -vE '^(moves|check-drop|check-add): ' "$tmp/move-note" >&2
+  grep -vE '^(moves|check-drop|check-add|check-add-floor): ' "$tmp/move-note" >&2
   rehearse "$cmd"
   added="$(git -C "$r" -c core.quotePath=false ls-files --others --exclude-standard | sort -u)"
   changed="$(git -C "$r" -c core.quotePath=false diff --name-only HEAD | sort -u | grep -vxF -f <(printf '%s\n%s\n' "$deleted" "$conflicts" | sed '/^$/d') || true)"
@@ -739,12 +767,17 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   echo "CI jobs that stop:"; listed "$stops"
   # The checks, as move_steps words them for the record --apply writes.
   { printf 'repo=%s\ndefault=%s\n' "$repo" "$default"
-    sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p' "$tmp/move-note"
+    sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p' "$tmp/move-note"
     if req="$(required_on "$repo" "$default")"; then
       echo "required_read=yes"; while IFS= read -r c; do [ -n "$c" ] && printf 'required=%s\n' "$c"; done <<<"$req"
     fi; } > "$tmp/checks"
   move_steps "$tmp/checks" "$(q "$here")/" | sed 's/`//g'
   echo
+  if grep -q '^add_floor=fails ' "$tmp/checks" && [ -n "$(unrequired_adds "$tmp/checks")" ]; then
+    echo "Nothing has been written (the fetch moved only origin/$default). Raise the plinth pin first (above);"
+    echo "--apply refuses this move until the workflows call a plinth that passes its ci / floor-check."
+    exit 0
+  fi
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
   echo "  $(q "$0") --apply $base --archetype $move"
   if [ -n "$owned" ]; then
@@ -838,6 +871,18 @@ plugin_gate
 # A move the checker refuses stops before a worktree or branch exists.
 if [ -n "$move" ]; then
   rehearsed="$(move_at "$tmp" 2>"$tmp/move-check")" || { cat "$tmp/move-check" >&2; die "nothing was created"; }
+  # A move whose pull request its own ci / floor-check would fail (#1017).
+  floor="$(sed -n 's/^check-add-floor: fails //p' "$tmp/move-check")"
+  if [ -n "$floor" ]; then
+    { sed -n 's/^check-add: /check_add=/p' "$tmp/move-check"
+      if req="$(required_on "$repo" "$default")"; then
+        echo "required_read=yes"; while IFS= read -r c; do [ -n "$c" ] && printf 'required=%s\n' "$c"; done <<<"$req"
+      fi; } > "$tmp/adds"
+    unreq="$(unrequired_adds "$tmp/adds" | paste -sd, -)"
+  fi
+  if [ -n "$floor" ] && [ -n "$unreq" ]; then
+    die "the plinth the workflows call (${floor:0:12}) fails this move's ci / floor-check until $unreq is required, which cannot happen before the move merges; raise the plinth pin to v$(plinth_version) or later first, then plan the move again. Nothing was created"
+  fi
   # The changed files the move deletes (#1016), from the rehearsal the plan
   # ran: each named once, with --keep or --drop, and nothing else named.
   rehearse "$rehearsed"
@@ -884,9 +929,9 @@ if [ -n "$move" ]; then
   move_note="$(mktemp)"
   cmd="$(move_at "$wt" 2>"$move_note")" \
     || { cat "$move_note" >&2; rm -f "$move_note"; die "no move command at the base (above); $wt left for inspection"; }
-  grep -vE '^(moves|check-drop|check-add): ' "$move_note" >&2
+  grep -vE '^(moves|check-drop|check-add|check-add-floor): ' "$move_note" >&2
   moves="$(sed -n 's/^moves: //p' "$move_note")"
-  checks="$(sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p' "$move_note")"; rm -f "$move_note"
+  checks="$(sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p' "$move_note")"; rm -f "$move_note"
   if req="$(required_on "$repo" "$default")"; then
     checks="$checks"$'\n'"required_read=yes"
     while IFS= read -r c; do [ -n "$c" ] && checks="$checks"$'\n'"required=$c"; done <<<"$req"
