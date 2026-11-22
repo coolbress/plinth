@@ -90,6 +90,18 @@ printf '%s\n' "$PWD" > "$UVX_LOG.cwd.$$"
 # added untracked, and the answers record cli. MOCK_MOVE=handdel is a project
 # that deleted the model by hand: pyproject.toml, __main__.py and uv.lock are
 # left unmerged (`UU`) with markers instead.
+# `copier recopy` into a folder holding only the answers file is the old
+# archetype's own render at the recorded tag (#1016): the data-ml files as
+# move_fixture writes them. Logged apart, so UVX_LOG keeps the update line.
+case " $* " in *" copier recopy "*)
+  printf '%s\n' "$*" > "$UVX_LOG.recopy"
+  [ "${MOCK_RECOPY_FAIL:-}" = 1 ] && { echo "copier: the template could not be fetched" >&2; exit 1; }
+  dst="${!#}"; [ -f "$dst/.copier-answers.yml" ] || { echo "mock recopy: no answers file in $dst" >&2; exit 1; }
+  mkdir -p "$dst/src/demo" "$dst/tests" "$dst/data"
+  printf 'model\n' > "$dst/MODEL_CARD.md"; printf 'train\n' > "$dst/src/demo/train.py"
+  printf 'test\n' > "$dst/tests/test_train.py"; printf 'data\n' > "$dst/data/README.md"; printf 'FROM x\n' > "$dst/Dockerfile"
+  exit 0 ;;
+esac
 new=""; for a in "$@"; do case "$a" in archetype=*) new="${a#archetype=}" ;; esac; done
 if [ -n "$new" ]; then
   [ "${MOCK_MOVE_FAIL:-}" = 1 ] && { echo "ValueError: Validation error for question 'archetype': The package name would collide" >&2; exit 1; }
@@ -1366,6 +1378,9 @@ done
 [ "$plan_ok" = 1 ] && [ "$rc" = 0 ] && ok "the move's plan names the files it deletes and adds, the CI job that stops, the drop command and the apply line"
 [ "$plan_ok" = 1 ] && [ "$rc" = 0 ] || printf '%s\n' "$out" | sed 's/^/        /'
 if grep -qF "  src/demo/own.py" <<<"$out"; then bad "the plan lists the project's own file"; else ok "the plan does not list the project's own file"; fi
+if ! grep -qF "Changed by this repository" <<<"$out" && ! grep -qF -- "--keep" <<<"$out" && [ -s "$work/uvx.log.recopy" ]
+then ok "every deleted file as the old archetype rendered it: deleted as before, nothing new in the plan (#1016)"
+else bad "unchanged deletes (#1016)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 if [ "$(git -C "$repo" status --porcelain)" = "$before_status" ] && [ ! -e "$(awt_of move-plan cli)" ] \
    && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-cli >/dev/null && [ "$(git -C "$BARE" rev-parse main)" = "$base" ] \
    && ! grep -qxF "$repo" "$work"/uvx.log.cwd.* 2>/dev/null
@@ -1422,6 +1437,11 @@ if grep -qF "chore(template): move from the data-ml archetype to cli" "$work/gh.
    && ! grep -qF "$root" <<<"$body"
 then ok "the description names the move, the added test, and the drop command from plinth's folder, with no local path"
 else bad "the move's description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+what_why="$(section "$work/gh.log.body" "What and why" | tr '\n' ' ')"
+if ! grep -qF "left unchanged and keeps its own" <<<"$what_why" \
+   && grep -qF "none of the files it deletes had been changed by this repository" <<<"$what_why"
+then ok "the description says what copier deletes, and that none of it was changed here (#1016)"
+else bad "the move's sentence (#1016)"; printf '%s\n' "$what_why" | sed 's/^/        /'; fi
 cp "$work/gh.log.body" "$work/move.body"; fields_pass "the description of an archetype move" "$work/move.body"
 if [ -n "${template_dir:-}" ] && [ -s "$work/form.md" ]; then
   if said="$(form_fields "$work/form.md" "$work/move.body")"; then ok "the move's description writes every field of the form, in its order"
@@ -1446,6 +1466,10 @@ for f in pyproject.toml src/demo/__main__.py uv.lock; do
   awk '/^<<<<<<< before updating$/ { s = 1; next } /^=======$/ && s { s = 2; next } /^>>>>>>> after updating$/ { s = 0; next } s != 1' "$wt/$f" > "$wt/$f.new" && mv "$wt/$f.new" "$wt/$f"
   git -C "$wt" add "$f"
 done
+# As a move a plinth before #1016 left at its conflicts: its record carries
+# no comparison, and the description must not claim one (review on #1016).
+sf="$(git -C "$wt" rev-parse --absolute-git-dir)/plinth-template-update"
+grep -v '^compared=' "$sf" > "$sf.old" && mv "$sf.old" "$sf"
 out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" \
   --resolved pyproject.toml "the template's side, on the user's word" --resolved src/demo/__main__.py "the template's side, on the user's word" \
   --resolved uv.lock "the template's side, then uv lock, on the user's word" 2>&1)"; rc=$?
@@ -1453,6 +1477,69 @@ if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && git -C "$wt" show --na
    && grep -qF "src/demo/__main__.py: the template's side, on the user's word" "$work/gh.log.body"
 then ok "resolved to the template's side, --finish opens the draft with the added test and each resolution"
 else bad "hand-deleted finish (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+what_why="$(section "$work/gh.log.body" "What and why" | tr '\n' ' ')"
+if grep -qF "was not compared" <<<"$what_why" && ! grep -qF "none of the files it deletes had been changed" <<<"$what_why"
+then ok "a record with no comparison: the description says it was not compared (review on #1016)"
+else bad "no comparison recorded"; printf '%s\n' "$what_why" | sed 's/^/        /'; fi
+
+# A file only the old archetype ships, changed by the project (#1016):
+# copier deletes it all the same, reporting no conflict. The plan lists it
+# apart; --apply stops before anything is written until each is named,
+# --keep restoring it after copier, --drop letting it go.
+move_changed() { # <name>
+  move_fixture "$1"
+  printf 'own line\n' >> "$repo/src/demo/train.py"; printf 'own card line\n' >> "$repo/MODEL_CARD.md"
+  git -C "$repo" commit -q -am "the project's own training code" && git -C "$repo" push -q origin main
+  base="$(git -C "$BARE" rev-parse main)"
+}
+move_changed move-own; reset_logs
+out="$(cd "$repo" && MOCK_REQUIRED="image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+apart="$(awk '/^Changed by this repository/ { f = 1; next } /^[^ ]/ { f = 0 } f' <<<"$out")"
+dels="$(awk '/^Deletes:/ { f = 1; next } /^[^ ]/ { f = 0 } f' <<<"$out")"
+if [ "$rc" = 0 ] && [ "$apart" = "$(printf '  MODEL_CARD.md\n  src/demo/train.py')" ] \
+   && ! grep -qxF "  src/demo/train.py" <<<"$dels" && ! grep -qxF "  MODEL_CARD.md" <<<"$dels" && grep -qxF "  tests/test_train.py" <<<"$dels" \
+   && grep -qF -- "--keep <path>" <<<"$out" && grep -qF -- "--drop <path>" <<<"$out"
+then ok "the plan lists the changed files the move deletes apart, with --keep and --drop"
+else bad "changed files in the plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+wt="$(awt_of move-own cli)"
+stops_clean() { # <what>
+  if [ "$rc" = 1 ] && [ ! -e "$wt" ] && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-cli >/dev/null \
+     && ! grep -q "pr create" "$work/gh.log"
+  then ok "$1"; else bad "$1 (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+}
+run --apply "$base" --archetype cli
+stops_clean "--apply with neither named stops before a worktree or branch exists"
+grep -qF "src/demo/train.py" <<<"$out" && grep -qF "MODEL_CARD.md" <<<"$out" && grep -qF -- "--keep" <<<"$out" \
+  && ok "and names each changed file and the choice" || bad "the stop names the files"
+run --apply "$base" --archetype cli --keep src/demo/train.py
+stops_clean "--apply with one of two named stops"
+grep -qF "MODEL_CARD.md" <<<"$out" && ok "and names the one left" || bad "the one left is named"
+run --apply "$base" --archetype cli --keep src/demo/train.py --drop MODEL_CARD.md --keep tests/test_train.py
+stops_clean "--keep for a file the move deletes unchanged stops"
+run --apply "$base" --archetype cli --keep src/demo/train.py --drop src/demo/train.py --drop MODEL_CARD.md
+stops_clean "a file both kept and dropped stops"
+for args in "--keep src/demo/train.py" "--archetype cli --drop MODEL_CARD.md" "--apply $base --keep src/demo/train.py"; do
+  run $args
+  [ "$rc" = 2 ] && ok "$args outside --apply --archetype: a usage error" || bad "$args: exit $rc, expected 2"
+done
+run --apply "$base" --archetype cli --keep src/demo/train.py --drop MODEL_CARD.md --assisted-by "Claude:claude-test-1"
+names="$(git -C "$wt" show --name-status --format= HEAD 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && ! grep -q "	src/demo/train.py$" <<<"$names" && grep -qx "D	MODEL_CARD.md" <<<"$names" \
+   && grep -qx "D	tests/test_train.py" <<<"$names" \
+   && [ "$(git -C "$wt" show HEAD:src/demo/train.py 2>/dev/null)" = "$(printf 'train\nown line')" ]
+then ok "--keep restores the file after copier and the commit carries it; --drop deletes it"
+else bad "keep and drop (rc=$rc)"; printf '%s\n%s\n' "$out" "$names" | sed 's/^/        /'; fi
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+what_why="$(section "$work/gh.log.body" "What and why" | tr '\n' ' ')"
+if grep -qF -- "- src/demo/train.py: kept (\`--keep\`)" <<<"$body" && grep -qF -- "- MODEL_CARD.md: deleted (\`--drop\`)" <<<"$body" \
+   && grep -qF "only as the person chose" <<<"$what_why" && ! grep -qF "left unchanged and keeps its own" <<<"$what_why"
+then ok "the description names each changed file with the person's choice"
+else bad "keep and drop in the description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+move_changed move-recopy; reset_logs
+out="$(cd "$repo" && MOCK_RECOPY_FAIL=1 PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -qF "the old archetype's render" <<<"$out" && ! grep -q "^Deletes:" <<<"$out"
+then ok "the old render failing stops the plan: no Deletes list that could not be compared"
+else bad "recopy failing (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # The skill names the order once and leaves the typing to the person.
 skill="$root/skills/template-update/SKILL.md"

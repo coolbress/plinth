@@ -2102,8 +2102,10 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     records, which must be the target tag: the drift item's same-tag line,
     the live plinth pin and the owner's answers as an update carries them,
     then `--data archetype=<new>`. copier update deletes the old archetype's
-    files the project left unchanged and keeps the project's own (measured,
-    copier 9.18.2 and 9.19.1, data-ml to cli). On stderr, a `check-drop:`
+    files, changed by the project or not, with no conflict for a changed one
+    (#1016), and keeps the project's own (measured, copier 9.18.2 and 9.19.1,
+    data-ml to cli); template-update.sh stops on a changed one until the
+    person says which to keep. On stderr, a `check-drop:`
     line for each required check the move stops and a `check-add:` line for
     each it starts. Exit 1 with the reason when there is no line."""
     def no(why: str) -> int:
