@@ -90,8 +90,10 @@
 # no wait falls between runs. With every slot taken it waits, saying so once a
 # minute; past PLINTH_HEAVY_WAIT it exits 75 before it makes or spends
 # anything. PLINTH_HEAVY_HELD set means a slot is already held for it. Each
-# session gets a TMPDIR of its own in its run's folder, so a project's
-# scripts/heavy.sh inside it queues apart from the slot the suite holds.
+# session gets a TMPDIR and a PLINTH_HEAVY_DIR of its own in its run's folder,
+# so a project's scripts/heavy.sh inside it queues apart from the slot the
+# suite holds (from plinth-template v1.50.1 the queue no longer follows TMPDIR
+# alone: it lives in /tmp/claude-<uid> unless PLINTH_HEAVY_DIR names a place).
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 args=("$@")  # for the queue below, which runs this script again with them
@@ -482,7 +484,7 @@ run_one() { # <task> <arm> <n> <budget>
   (cd "$r/repo" && printf '%s' "$(cat "$root/eval-suite/tasks/$task/prompt.txt")" \
     | env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u GH_HOST \
         -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u VIRTUAL_ENV -u PLINTH_HEAVY_HELD \
-        TMPDIR="$r/tmp" GH_CONFIG_DIR="$r/gh" CLAUDE_CONFIG_DIR="$cfg" DISABLE_AUTOUPDATER=1 PATH="$path" \
+        TMPDIR="$r/tmp" PLINTH_HEAVY_DIR="$r/tmp" GH_CONFIG_DIR="$r/gh" CLAUDE_CONFIG_DIR="$cfg" DISABLE_AUTOUPDATER=1 PATH="$path" \
         perl -e 'alarm shift; exec @ARGV or die "exec: $!"' "$session_timeout" \
         claude -p --model "$model" --permission-mode auto --output-format stream-json --verbose \
         --max-budget-usd "$budget" ${settings[@]+"${settings[@]}"}) > "$r/stream.jsonl" 2> "$r/stderr.txt"

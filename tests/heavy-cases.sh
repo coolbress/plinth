@@ -27,7 +27,7 @@ appears() { local _; for _ in $(seq 1 200); do [ -e "$1" ] && return 0; sleep 0.
 # background, with the case's TMPDIR; its pid is in $started.
 start() {
   mkdir -p "$tmp/$1/tmp"
-  env TMPDIR="$tmp/$1/tmp" "${@:3}" /bin/bash "$heavy" sh -c "$2" >>"$tmp/$1/background.out" 2>&1 &
+  env TMPDIR="$tmp/$1/tmp" PLINTH_HEAVY_DIR="$tmp/$1/tmp" "${@:3}" /bin/bash "$heavy" sh -c "$2" >>"$tmp/$1/background.out" 2>&1 &
   started=$!; pids+=("$started")
 }
 
@@ -39,7 +39,7 @@ c="wait"; mkdir -p "$tmp/$c"
 start $c "touch $tmp/$c/started; sleep 2; echo first >> $tmp/$c/log" PLINTH_HEAVY_SLOTS=1
 first=$started
 appears "$tmp/$c/started"
-TMPDIR="$tmp/$c/tmp" PLINTH_HEAVY_SLOTS=1 /bin/bash "$heavy" sh -c "echo second >> $tmp/$c/log" 2>"$tmp/$c/err"
+TMPDIR="$tmp/$c/tmp" PLINTH_HEAVY_DIR="$tmp/$c/tmp" PLINTH_HEAVY_SLOTS=1 /bin/bash "$heavy" sh -c "echo second >> $tmp/$c/log" 2>"$tmp/$c/err"
 rc=$?
 wait "$first"
 check "with one slot, a second call waits until the first ends, then runs" \
@@ -53,7 +53,7 @@ start $c "touch $tmp/$c/started; exec sleep 60" PLINTH_HEAVY_SLOTS=1
 holder=$started
 appears "$tmp/$c/started"
 kill -9 "$holder"; wait "$holder" 2>/dev/null
-TMPDIR="$tmp/$c/tmp" PLINTH_HEAVY_SLOTS=1 PLINTH_HEAVY_WAIT=0 /bin/bash "$heavy" sh -c "touch $tmp/$c/ran" 2>"$tmp/$c/err"
+TMPDIR="$tmp/$c/tmp" PLINTH_HEAVY_DIR="$tmp/$c/tmp" PLINTH_HEAVY_SLOTS=1 PLINTH_HEAVY_WAIT=0 /bin/bash "$heavy" sh -c "touch $tmp/$c/ran" 2>"$tmp/$c/err"
 rc=$?
 check "a killed holder's slot is taken back: the next call runs" '[ "$rc" = 0 ] && [ -e "$tmp/$c/ran" ]' "rc=$rc; $(cat "$tmp/$c/err")"
 
@@ -61,7 +61,7 @@ check "a killed holder's slot is taken back: the next call runs" '[ "$rc" = 0 ] 
 c="busy"; mkdir -p "$tmp/$c"
 start $c "touch $tmp/$c/started; exec sleep 60" PLINTH_HEAVY_SLOTS=1
 appears "$tmp/$c/started"
-TMPDIR="$tmp/$c/tmp" PLINTH_HEAVY_SLOTS=1 PLINTH_HEAVY_WAIT=0 /bin/bash "$heavy" sh -c "touch $tmp/$c/ran" 2>"$tmp/$c/err"
+TMPDIR="$tmp/$c/tmp" PLINTH_HEAVY_DIR="$tmp/$c/tmp" PLINTH_HEAVY_SLOTS=1 PLINTH_HEAVY_WAIT=0 /bin/bash "$heavy" sh -c "touch $tmp/$c/ran" 2>"$tmp/$c/err"
 rc=$?
 check "a wait limit of 0 on a busy slot: exit 75, \"did not run\", and the command did not run" \
   '[ "$rc" = 75 ] && grep -q "did not run" "$tmp/$c/err" && [ ! -e "$tmp/$c/ran" ]' "rc=$rc; $(cat "$tmp/$c/err")"
