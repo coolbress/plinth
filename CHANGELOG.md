@@ -34,6 +34,18 @@ pull requests and have no tag.
 
 ### Fixed
 
+- An archetype move that adds a required check (`cli` or `library` to
+  `backend` or `data-ml`, which adds `image`) can merge (#1017). Its own
+  `ci / floor-check` failed with `required checks dropped: ['image']`, and
+  `image` cannot be required before it has run on the default branch. The
+  floor check now reads a check that this checkout's recorded archetype runs
+  and the default branch's does not as a SKIP naming the `require-check.sh`
+  command, not a FAIL; once the default branch records that archetype too,
+  it is a FAIL again. `/plinth:template-update --archetype <a>` says whether
+  the plinth the workflows call has that rule: if it does, merge, let the
+  check run, then require it; if not, raise the plinth pin first, and
+  `--apply` refuses the move until then. Checked on mocked GitHub responses
+  only.
 - The eval suite's `floor-gaps` and `next-day` grading reads a negation
   (#1019). "No files are missing: `uv.lock`, `CHANGELOG.md` and
   `.github/dependabot.yml` are all present" passed all three gaps, and "the

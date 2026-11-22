@@ -2080,6 +2080,47 @@ if grep -qE "PASS  main: all 12 expected checks are required" <<<"$out" && ! gre
 else bad "the full web wall does not pass"; printf '%s\n' "$out" | grep -E 'FAIL|expected checks' | sed 's/^/        /'; fi
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 
+# An archetype move that adds a check (#1017): the move's own pull request
+# records backend while main still records cli and requires cli's nine, and
+# `image` cannot be required before it has run on main. A SKIP that names the
+# command, only while main's recorded archetype lacks the check and this
+# checkout's has it; once main records it too, the FAIL is back.
+cli_rules="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype cli | jq -c '[.rules[] | . + {ruleset_source_type: "Repository", ruleset_id: 1}]')"
+on_main="$api/repos/o/r/contents/.copier-answers.yml?ref=main.json"
+main_records() { printf '{"encoding":"base64","content":"%s"}' "$(printf '_commit: %s\narchetype: %s\n' "$target_ref" "$1" | base64 | tr -d '\n')" > "$on_main"; }
+move_wall() { FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1; }
+printf '%s' "$cli_rules" > "$api/repos/o/r/rules/branches/main.json"
+rm -f "$on_main"; out="$(move_wall)"
+if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out"; then ok "a move's wall seen failing: main's archetype not read, image not required, a FAIL (#1017)"
+else bad "no answers on main: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
+main_records cli; out="$(move_wall)"
+if grep -qF "SKIP  main: required check image not required yet: this checkout records the backend archetype, which runs it, and main records cli, which does not (an archetype move). Once it is merged and image has run on main, a person requires it (repository administration): scripts/with-admin-token.sh scripts/require-check.sh --repo o/r 'image'" <<<"$out" \
+   && ! grep -q "required checks dropped" <<<"$out" && ! grep -q "PASS  main: all .* expected checks are required" <<<"$out"
+then ok "main records cli, the checkout backend: image is a SKIP naming the command, not a FAIL (#1017)"
+else bad "a move to backend: not the SKIP"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image|expected checks' | sed 's/^/        /'; fi
+main_records backend; out="$(move_wall)"
+if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out" && ! grep -q "not required yet" <<<"$out"
+then ok "once main records backend too, image not required is a FAIL again (#1017)"
+else bad "main at backend: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
+main_records data-ml; out="$(move_wall)"
+if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out"; then ok "main records data-ml, which runs image too: a FAIL, not a move's SKIP"
+else bad "main at data-ml: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
+printf 'not json' > "$on_main"; out="$(move_wall)"
+if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out"; then ok "main's answers unreadable: a FAIL, never a SKIP read from nothing"
+else bad "unreadable answers on main: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
+main_records cli
+jq -c 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != "ci / lint")) else . end)' <<<"$cli_rules" > "$api/repos/o/r/rules/branches/main.json"
+out="$(move_wall)"
+if grep -qF "FAIL  main: required checks dropped: ['ci / lint']" <<<"$out" && grep -qF "SKIP  main: required check image not required yet" <<<"$out" \
+   && grep -qF "upgrade-ruleset.sh o/r 'ci / lint:15368'" <<<"$out" && ! grep -qF "'image:15368'" <<<"$out"
+then ok "a move that also drops another check: that one is a FAIL, image alone the SKIP"
+else bad "a move with another check dropped"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image|upgrade' | sed 's/^/        /'; fi
+rm -f "$on_main"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+# The move's plan asks whether the plinth a project calls has this rule by
+# this line in its floor-check.py; the line must stay what it looks for.
+grep -q '^def archetype_gained(' "$checker" && ok "floor-check.py still carries the line a move's plan looks for (#1017)" \
+  || bad "floor-check.py lost the def archetype_gained( line the move's plan reads"
+
 # #221: run at the root of a repository whose project is one directory down,
 # the checker reports two files missing that do exist. The answer is --project,
 # so the FAIL line names it when exactly one directory below --root holds a

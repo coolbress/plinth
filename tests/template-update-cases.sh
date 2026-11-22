@@ -106,6 +106,12 @@ new=""; for a in "$@"; do case "$a" in archetype=*) new="${a#archetype=}" ;; esa
 if [ -n "$new" ]; then
   [ "${MOCK_MOVE_FAIL:-}" = 1 ] && { echo "ValueError: Validation error for question 'archetype': The package name would collide" >&2; exit 1; }
   sed -i.bak "s/^archetype: .*/archetype: $new/" .copier-answers.yml && rm .copier-answers.yml.bak
+  # A move to backend (#1017): the image job and its Dockerfile come, nothing goes.
+  if [ "$new" = backend ]; then
+    printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  image:\n    runs-on: ubuntu-latest\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
+    printf 'FROM x\n' > Dockerfile
+    exit 0
+  fi
   printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
   rm -f Dockerfile; mkdir -p tests; printf 'def test_built_wheel():\n    pass\n' > tests/test_built_wheel.py
   conflict() { # <path> <ours> <theirs>
@@ -1540,6 +1546,58 @@ out="$(cd "$repo" && MOCK_RECOPY_FAIL=1 PATH="$work/bin:$PATH" GH_LOG="$work/gh.
 if [ "$rc" = 1 ] && grep -qF "the old archetype's render" <<<"$out" && ! grep -q "^Deletes:" <<<"$out"
 then ok "the old render failing stops the plan: no Deletes list that could not be compared"
 else bad "recopy failing (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# A move that adds a required check (#1017): cli to backend starts `image`,
+# which require-check.sh refuses before it has run on main, while the move's
+# own `ci / floor-check` reads the new archetype. The plan says whether the
+# plinth the workflows call passes it (its floor-check.py at that commit
+# carries the rule), and the order: merge, let image run, then require it;
+# with an older plinth, raise the pin first, and --apply refuses the move.
+floor_at_pin() { # <api dir> <has the rule: yes|no>
+  local text='def other():'; [ "$2" = yes ] && text='def archetype_gained(repo):'
+  mkdir -p "$1/repos/coolbress/plinth/contents/scripts"; tag_names "$1" "$target_sha"
+  printf '{"encoding":"base64","content":"%s"}' "$(printf '%s\n    pass\n' "$text" | base64 | tr -d '\n')" \
+    > "$1/repos/coolbress/plinth/contents/scripts/floor-check.py?ref=$sha40.json"
+}
+held_api="$work/api-floor-held"; floor_at_pin "$held_api" yes
+fails_api="$work/api-floor-fails"; floor_at_pin "$fails_api" no
+move_cli() { # <name>
+  fixture "$1"
+  printf '_commit: %s\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' "$target_ref" > "$repo/.copier-answers.yml"
+  git -C "$repo" commit -q -am "cli at the target tag" && git -C "$repo" push -q origin main
+  base="$(git -C "$BARE" rev-parse main)"
+}
+plinth_ver="$(sed -nE 's/^[[:space:]]*"version":[[:space:]]*"([^"]+)".*/\1/p' "$root/.claude-plugin/plugin.json" | head -n 1)"
+move_cli move-add; reset_logs
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+held_line="image starts running. The move's pull request passes ci / floor-check before image is required: the plinth its workflows call (${sha40:0:12}) reads a check the move adds as not required yet. Once the move is merged and image has run on main, a person requires it, with an admin token (never the agent's): $root/scripts/with-admin-token.sh $root/scripts/require-check.sh --repo o/r 'image'"
+if [ "$rc" = 0 ] && grep -qxF "$held_line" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out" \
+   && [ "$(grep -n -- "--apply $base" <<<"$out" | cut -d: -f1)" -gt "$(grep -nF "image starts running" <<<"$out" | cut -d: -f1)" ] \
+   && ! grep -q "check-add" <<<"$out"
+then ok "a move to backend, with a plinth that has the rule: merge, let image run on main, then require it, in that order (#1017)"
+else bad "a move that adds image, rule held (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "image starts running, and the plinth the workflows call (${sha40:0:12}) fails the move's ci / floor-check until image is required, which require-check.sh refuses before image has run on main. Raise the plinth pin first: merge a pull request that moves every coolbress/plinth uses: line to plinth v$plinth_ver or later" <<<"$out" \
+   && grep -qF "Raise the plinth pin first (above);" <<<"$out" && ! grep -qF -- "--apply $base" <<<"$out" && ! grep -qF "require-check.sh --repo" <<<"$out"
+then ok "with a plinth that lacks the rule, the plan says to raise the plinth pin first and gives no apply line (#1017)"
+else bad "a move that adds image, rule missing (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -qF "raise the plinth pin to v$plinth_ver or later first" <<<"$out" && [ ! -e "$(awt_of move-add backend)" ] \
+   && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-backend >/dev/null && ! grep -q "pr create" "$work/gh.log"
+then ok "--apply refuses that move before a worktree or branch exists (#1017)"
+else bad "--apply with the rule missing (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "image starts running; whether the plinth the workflows call passes the move's ci / floor-check before image is required was not read (scripts/floor-check.py at that commit could not be read). A plinth from v$plinth_ver on does" <<<"$out" \
+   && grep -qF -- "--apply $base --archetype backend" <<<"$out"
+then ok "the plinth at the pin unread: says so, names the version that passes, and still gives the apply line"
+else bad "a move that adds image, plinth unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend --assisted-by "Claude:claude-test-1" 2>&1)"; rc=$?
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -qF "chore(template): move from the cli archetype to backend" "$work/gh.log" \
+   && grep -qF -- "- image starts running. The move's pull request passes ci / floor-check before image is required" <<<"$body" \
+   && grep -qF "\`scripts/with-admin-token.sh scripts/require-check.sh --repo o/r 'image'\`" <<<"$body" && ! grep -qF "$root" <<<"$body"
+then ok "the move's description gives the same order, with the command from plinth's folder (#1017)"
+else bad "the description of a move that adds image (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
 
 # The skill names the order once and leaves the typing to the person.
 skill="$root/skills/template-update/SKILL.md"
