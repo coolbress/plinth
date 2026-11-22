@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.49.1 instead of v1.49.0
+  (coolbress/plinth-template#304). A new `Proprietary` `cli` or `library`
+  releases to GitHub only: its release workflow has no PyPI job, and its
+  README and `docs/how-to/publish-a-release.md` say where a release's files
+  go and how to install them. A new project starts at plinth v2.40.1, since
+  `plinth_sha`'s default moved there. `/plinth:arsenal` says the same of a
+  `Proprietary` release.
+
 ## [2.40.1] - 2026-11-22
 
 An archetype move with `/plinth:template-update --archetype <a>` no longer deletes a file of the old archetype that the project changed without saying so: the plan lists each such file apart, and `--apply` stops until each is named with `--keep` or `--drop`. Anyone who moved a project with v2.40.0 should check that move's pull request for a deleted file the project had changed. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
