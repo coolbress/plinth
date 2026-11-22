@@ -7,8 +7,9 @@ machine. `CLAUDE.md` is a symlink to this file.
 ## Checks
 
 The commands are in [CONTRIBUTING.md](CONTRIBUTING.md#run-the-checks): three `claude plugin validate --strict`
-calls, `scripts/check-ruleset.sh`, and every `tests/*.sh`. While working, run the tests you touched; the
-full set once, before opening a pull request, through `scripts/heavy.sh` as that block does.
+calls, `scripts/check-ruleset.sh`, and the tests. Before a pull request, the local run is the tests the change
+touched and those it reaches (that page says how to find them); CI runs every `tests/*.sh`. The full set
+locally is optional, and its block queues each test in `scripts/heavy.sh` on its own.
 
 ## Always
 
