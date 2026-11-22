@@ -26,6 +26,24 @@ pull requests and have no tag.
   v2.39.0 release run's and v2.40.0 smoke run's reports, and 54 older
   ones, grade the same as before.
 
+## [2.40.1] - 2026-11-22
+
+An archetype move with `/plinth:template-update --archetype <a>` no longer deletes a file of the old archetype that the project changed without saying so: the plan lists each such file apart, and `--apply` stops until each is named with `--keep` or `--drop`. Anyone who moved a project with v2.40.0 should check that move's pull request for a deleted file the project had changed. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
+
+tested with plinth-template v1.49.0
+
+### Fixed
+
+- `/plinth:template-update --archetype <a>` no longer lets copier delete a
+  file of the old archetype that the project changed without saying so
+  (#1016). copier deletes it as readily as an unchanged one and reports no
+  conflict. The plan now compares each deleted file with copier's own render
+  of the recorded answers at the recorded tag and lists the ones that differ
+  apart, and `--apply` stops before writing anything until each is named:
+  `--keep <path>` restores it after copier as the project's own file,
+  `--drop <path>` lets it go. The pull request description names each with
+  the choice made.
+
 ## [2.40.0] - 2026-11-22
 
 An existing project made under the wrong archetype can move to another one: `/plinth:template-update --archetype <a>` re-renders it under the new archetype in a draft pull request after a plan the person confirms, which names what it deletes, adds and changes and, for a required check the move stops (`image`), the `scripts/require-check.sh --drop` command the person runs through `scripts/with-admin-token.sh`; `/plinth:floor-check --print-update-command --move-archetype <a>` prints the `copier update` line by itself. GitHub only: on GitLab `/plinth:template-update` still stops before changing anything (#1012). New projects render plinth-template v1.49.0 and start at plinth v2.39.0, and both copier's and `/plinth:new-project`'s archetype question say what each choice produces, pointing data work that trains no model at `cli`. `/plinth:floor-check` counts apart the SKIPs that cannot be read from this machine or token. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
@@ -5726,7 +5744,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.40.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.40.1...HEAD
+[2.40.1]: https://github.com/coolbress/plinth/releases/tag/v2.40.1
 [2.40.0]: https://github.com/coolbress/plinth/releases/tag/v2.40.0
 [2.39.0]: https://github.com/coolbress/plinth/releases/tag/v2.39.0
 [2.38.0]: https://github.com/coolbress/plinth/releases/tag/v2.38.0

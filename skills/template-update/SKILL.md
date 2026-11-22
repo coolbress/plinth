@@ -225,11 +225,22 @@ no longer runs blocks every merge, so the person runs that command in a
 separate terminal, with an admin token, before the move's pull request
 merges. Never run it yourself, and never with your token. When the move
 starts a check, the plan names the command that requires it once it has run
-on the default branch. Show the plan whole, and ask whether to apply exactly
-that. On a yes:
+on the default branch.
+
+copier deletes a file of the old archetype that the project changed as
+readily as one it left alone, and reports no conflict for it. The plan
+compares each file the move deletes with the old archetype's own render, and
+lists the ones that differ apart: "Changed by this repository, and the move
+deletes them". For each, show the person what they changed
+(`git diff` against the old archetype's version, or the file itself) and ask
+whether to keep it (`--keep <path>`: restored after copier, as the project's
+own file) or let it go (`--drop <path>`). Never choose for them: `--apply`
+stops before writing anything until each is named once.
+
+Show the plan whole, and ask whether to apply exactly that. On a yes:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> --archetype <a> --assisted-by <agent>:<model>
+${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> --archetype <a> [--keep <path> | --drop <path>]... --assisted-by <agent>:<model>
 ```
 
 Exit codes are as in step 3. On exit 3 the script also shows this
@@ -248,7 +259,7 @@ once `pyproject.toml` is resolved, and `git add` the three. Then run the
 Files the new archetype adds, such as `tests/test_built_wheel.py` when
 moving to `cli`, go into the same commit. The description lists what the
 move deleted and added, and what a person does by hand: the required check
-to drop or add. Nothing else changes outside the files: the labels are one
+to drop or add, and each changed file with the person's choice. Nothing else changes outside the files: the labels are one
 list for every archetype, and `/plinth:floor-check` reads the archetype from
 `.copier-answers.yml`, so after the move it expects the new archetype's files
 and no longer the old one's.
