@@ -2095,6 +2095,55 @@ def required_extra(archetype: str) -> set[str]:
     return {IMAGE_CHECK} if archetype in CONDITIONAL_ARCHETYPES else set()
 
 
+def archetype_gained(repo: str, branch: str, archetype: str | None, answers: str, network: bool) -> tuple[set[str], str | None]:
+    """The required checks the archetype this checkout records runs and the
+    one <branch> records does not, with <branch>'s archetype (#1017): an
+    archetype move under way, whose new check cannot be required before it
+    has run on <branch> (require-check.sh refuses a name that never reported
+    there). Empty when the two are the same or <branch>'s answers cannot be
+    read: a missing check then stays a FAIL."""
+    if not archetype:
+        return set(), None
+    data = api(f"repos/{repo}/contents/{answers}?ref={urllib.parse.quote(branch, safe='')}", network)
+    if not (isinstance(data, dict) and data.get("encoding") == "base64" and isinstance(data.get("content"), str)):
+        return set(), None
+    try:
+        text = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+    except ValueError:
+        return set(), None
+    m = re.search(r"^archetype:\s*(\S+)", text, re.MULTILINE)
+    old = m.group(1).strip("'\"") if m else None
+    if not old or old == archetype:
+        return set(), old
+    return required_extra(archetype) - required_extra(old), old
+
+
+# How a move's plan tells whether the plinth a project calls has the rule
+# above: its floor-check.py at that commit carries this line (#1017).
+GAINED_RULE = re.compile(r"^def archetype_gained\(", re.MULTILINE)
+
+
+def gained_rule_at(cmd: str, network: bool) -> str:
+    """Whether the move's own `ci / floor-check` passes a check the move adds
+    (#1017): it runs the floor-check.py of the plinth commit the workflows
+    call, which the line carries as plinth_sha. `held <sha>` when that file
+    has the rule, `fails <sha>` when it does not, `unread <sha or ?> <why>`."""
+    m = re.search(r"--data plinth_sha=([0-9a-fA-F]{40})\b", cmd)
+    if not m:
+        return "unread ? the line carries no plinth_sha"
+    pin = m.group(1).lower()
+    data = api(f"repos/{PLINTH_REPO}/contents/scripts/floor-check.py?ref={pin}", network)
+    text = None
+    if isinstance(data, dict) and data.get("encoding") == "base64" and isinstance(data.get("content"), str):
+        try:
+            text = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+        except ValueError:
+            text = None
+    if text is None:
+        return f"unread {pin} scripts/floor-check.py at that commit could not be read"
+    return f"{'held' if GAINED_RULE.search(text) else 'fails'} {pin}"
+
+
 def print_move_command(root: Path, new: str, network: bool = True, host: str | None = None,
                        owner: str | None = None) -> int:
     """--print-update-command --move-archetype <new> (#1004): the line that
@@ -2107,7 +2156,8 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     data-ml to cli); template-update.sh stops on a changed one until the
     person says which to keep. On stderr, a `check-drop:`
     line for each required check the move stops and a `check-add:` line for
-    each it starts. Exit 1 with the reason when there is no line."""
+    each it starts, then one `check-add-floor:` line saying whether the
+    plinth the workflows call passes the move's own floor check (#1017). Exit 1 with the reason when there is no line."""
     def no(why: str) -> int:
         print(f"no move command: {why}", file=sys.stderr)
         return 1
@@ -2153,8 +2203,11 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     if (d.get("host") or "github") != "gitlab":
         for c in sorted(required_extra(old) - required_extra(new)):
             print(f"check-drop: {c}", file=sys.stderr)
-        for c in sorted(required_extra(new) - required_extra(old)):
+        added = sorted(required_extra(new) - required_extra(old))
+        for c in added:
             print(f"check-add: {c}", file=sys.stderr)
+        if added:
+            print(f"check-add-floor: {gained_rule_at(d['cmd'], network)}", file=sys.stderr)
     print(f"{d['cmd']} --data archetype={new}")
     return 0
 
@@ -3758,8 +3811,13 @@ def check_owner_copy(root: Path, owner: str | None, network: bool, key: str, nam
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
                sources: dict[str, int | None] | None = None, actions_token: bool = False,
-               merge: dict | None = None, not_applying: list[str] | None = None, root: Path | None = None) -> None:
-    """not_applying: on a JavaScript or TypeScript repository (#681), the
+               merge: dict | None = None, not_applying: list[str] | None = None, root: Path | None = None,
+               archetype: str | None = None, answers: str = ".copier-answers.yml") -> None:
+    """archetype: the one this checkout records (None when --archetype
+    overrode it), compared with the one the default branch records at
+    <answers> for a check an archetype move gains (#1017).
+
+    not_applying: on a JavaScript or TypeScript repository (#681), the
     expected checks only python-ci.yml runs, already left out of `expected`.
     When nothing is left, the required-checks rule is not asked for either,
     and CodeQL's default setup is asked to analyse that language, not Python."""
@@ -3860,7 +3918,19 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                 live.setdefault(c["context"], set()).add(c.get("integration_id"))
     have = set(live)
     missing = [c for c in expected if c not in live]
-    if not checks:
+    # A check the archetype gains in this checkout and not on the default
+    # branch (#1017): the move's own pull request, where it cannot be
+    # required yet. Said with the command, never passed; once the default
+    # branch records the archetype too, it is a missing check as any other.
+    gained, old = archetype_gained(repo, branch, archetype, answers, network) if checks and missing else (set(), None)
+    held = [c for c in missing if c in gained]
+    missing = [c for c in missing if c not in gained]
+    for c in held:
+        result("SKIP", f"{branch}: required check {c} not required yet: this checkout records the {archetype} archetype, "
+                       f"which runs it, and {branch} records {old}, which does not (an archetype move). Once it is merged "
+                       f"and {c} has run on {branch}, a person requires it (repository administration): "
+                       f"scripts/with-admin-token.sh scripts/require-check.sh --repo {repo} '{c}'")
+    if not checks or (held and not missing):
         pass
     elif not ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
               f"{branch}: required checks dropped: {missing}") and sources is not None \
@@ -4781,7 +4851,7 @@ def main() -> int:
                          "the default) or the one the target template tag was tested with (tested; only when it is newer)")
     ap.add_argument("--move-archetype", metavar="ARCHETYPE",
                     help="with --print-update-command: the line that re-renders this repository under ARCHETYPE at the "
-                         "tag it records, with check-drop:/check-add: lines on stderr (#1004)")
+                         "tag it records, with check-drop:/check-add:/check-add-floor: lines on stderr (#1004, #1017)")
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
     ap.add_argument("--without-code-scanning", action="store_true",
@@ -4911,7 +4981,8 @@ def main() -> int:
             sources = {c: pinned.get(c, common) for c in expected}
         result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
         merge = json.loads(read(Path(a.merge_ruleset))) if a.merge_ruleset else None
-        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying, root)
+        check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying, root,
+                   None if a.archetype else archetype, (project / ".copier-answers.yml").relative_to(root).as_posix())
         check_actions_allowlist(root, a.repo, network, a.actions_token)
         check_actions_token(a.repo, network, a.actions_token)
         check_tag_ruleset(a.repo, archetype, network, a.actions_token, project)

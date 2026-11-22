@@ -238,8 +238,16 @@ moving from `backend` or `data-ml` to `cli` or `library`), it prints the
 no longer runs blocks every merge, so the person runs that command in a
 separate terminal, with an admin token, before the move's pull request
 merges. Never run it yourself, and never with your token. When the move
-starts a check, the plan names the command that requires it once it has run
-on the default branch.
+starts a check (`image`, moving from `cli` or `library` to `backend` or
+`data-ml`), it cannot be required before the move merges, since
+`require-check.sh` refuses a name that has not run on the default branch.
+The plan says whether the plinth the workflows call lets the move's own
+`ci / floor-check` pass meanwhile. If it does, the order is: merge the move,
+let the check run on the default branch, then the person requires it with the
+command the plan names. If the default branch already requires the check,
+there is nothing to add. Otherwise, if that plinth is older, the plan says to raise the
+plinth pin first and gives no `--apply` line, and `--apply` refuses the move:
+tell the person that, and plan the move again once the pin is raised.
 
 copier deletes a file of the old archetype that the project changed as
 readily as one it left alone, and reports no conflict for it. The plan
