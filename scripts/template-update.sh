@@ -28,7 +28,7 @@
 #       split: the paths of a first pull request that fits, then this one.
 #       --over-limit opens it as it is, red ci / diff-size and all.
 #   template-update.sh --archetype <a>
-#   template-update.sh --apply <base-sha> --archetype <a> [--assisted-by <agent>:<model>]
+#   template-update.sh --apply <base-sha> --archetype <a> [--keep <path> | --drop <path>]... [--assisted-by <agent>:<model>]
 #       An archetype move (#1004), at the tag the repository records: the
 #       checker's line with `--data archetype=<a>`. The plan runs it on a copy
 #       of the base outside the repository and prints what it deletes, adds
@@ -36,6 +36,13 @@
 #       required check that stops, the admin command a person runs before the
 #       move's pull request merges. --apply and --finish are as above; a
 #       conflict also shows this repository's side, which may hold its own code.
+#       copier deletes a file of the old archetype the project changed as
+#       readily as one it left alone, reporting no conflict (measured, copier
+#       9.18.2, #1016). Both the plan and --apply compare each deleted file
+#       with copier's own render of the recorded answers at the recorded tag;
+#       one that differs is listed apart, and --apply stops before writing
+#       anything until each is named once: --keep restores it after copier, as
+#       the project's own file; --drop lets the move delete it.
 #
 # The command is the checker's own line (floor-check.py
 # --print-update-command), run word for word: never a second construction of
@@ -61,9 +68,9 @@ state_name="plinth-template-update"
 # A path as a shell word, for a line the user or the skill runs as printed.
 q() { printf '%q' "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
-usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested | --archetype <a>] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
+usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested | --archetype <a> [--keep <path> | --drop <path>]...] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 
-mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=(); over_limit=no; move=""
+mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=(); over_limit=no; move=""; chosen_files=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)       [ $# -ge 2 ] || usage; mode=apply; base_arg="$2"; shift 2 ;;
@@ -73,6 +80,10 @@ while [ $# -gt 0 ]; do
                    case "$2$3" in *$'\n'* | *$'\t'*) usage ;; esac
                    resolutions+=("$2" "$3"); shift 3 ;;
     --over-limit)  over_limit=yes; shift ;;
+    --keep | --drop)
+                   [ $# -ge 2 ] && [ -n "$2" ] || usage
+                   case "$2" in *$'\n'* | *$'\t'*) usage ;; esac
+                   chosen_files+=("${1#--}"$'\t'"$2"); shift 2 ;;
     --archetype)   [ $# -ge 2 ] && [ -n "$2" ] || usage; move="$2"; shift 2 ;;
     --plinth-pin)  [ $# -ge 2 ] || usage; pin="$2"; shift 2
                    case "$pin" in live|tested) ;; *) usage ;; esac ;;
@@ -87,6 +98,8 @@ done
 [ "$over_limit" = no ] || [ "$mode" = finish ] || usage
 # A move carries the live pin, and --finish reads the move from its record.
 [ -z "$move" ] || { [ -z "$pin" ] && [ "$mode" != finish ]; } || usage
+# What becomes of a changed file the move deletes is said where copier runs.
+[ ${#chosen_files[@]} = 0 ] || { [ "$mode" = apply ] && [ -n "$move" ]; } || usage
 pin="${pin:-live}"
 
 # GitLab is not served yet (#924): everything below reads the repository
@@ -381,8 +394,18 @@ finish() { # <worktree>
     if [ -n "$new" ]; then
       echo "Re-renders this repository under the \`$new\` archetype instead of \`$old\`, at plinth-template"
       echo "$to, the tag it already records, by running the command the checker gives for the move"
-      echo "(\`/plinth:template-update --archetype $new\`). copier deletes the files of the old archetype"
-      echo "that this repository left unchanged and keeps its own; \`.copier-answers.yml\` records the new one:"
+      echo "(\`/plinth:template-update --archetype $new\`). copier deletes the files of the old archetype that the"
+      echo "new one does not render, and keeps the files that are this repository's own;"
+      # Said only as compared: a move applied by a plinth before #1016 left
+      # no record of a comparison, and its description must not claim one.
+      if grep -qE '^(keep|drop)=' "$sf"; then
+        echo "and an old archetype file this repository changed, it deletes only as the person chose (below);"
+      elif grep -qx 'compared=yes' "$sf"; then
+        echo "none of the files it deletes had been changed by this repository (each was compared with the old archetype's render at $to);"
+      else
+        echo "whether this repository had changed any of the files it deletes was not compared (the move was applied by a plinth before #1016);"
+      fi
+      echo "\`.copier-answers.yml\` records the new one:"
     elif [ "$from" = "$to" ]; then
       echo "Re-renders this repository at plinth-template $to, the tag it already records,"
       echo "because the owner's \`.github\` no longer publishes a pull-request template or"
@@ -410,6 +433,13 @@ finish() { # <worktree>
       echo "Deleted by the move:"
       echo
       list "$(awk -F '\t' '$1 == "D" { print $2 }' <<<"$names")"
+      if grep -qE '^(keep|drop)=' "$sf"; then
+        echo
+        echo "Changed by this repository, and the move would delete them; each as the person chose:"
+        echo
+        sed -n 's/^keep=\(.*\)/- \1: kept (`--keep`), restored after copier as this repository'"'"'s own file/p
+                s/^drop=\(.*\)/- \1: deleted (`--drop`), on the person'"'"'s word/p' "$sf"
+      fi
       echo
       echo "Added by the move:"
       echo
@@ -622,17 +652,16 @@ plugin_gate() {
     *) echo "the installed plinth was not compared with the latest release (the check exited $rc); going on with the template tag this plinth targets, $to" >&2 ;;
   esac
 }
-if [ "$mode" = plan ] && [ -n "$move" ]; then
-  at_base
-  plugin_gate
-  cmd="$(move_at "$tmp" 2>"$tmp/move-note")" || { cat "$tmp/move-note" >&2; exit 1; }
-  grep -vE '^(moves|check-drop|check-add): ' "$tmp/move-note" >&2
-  read -ra words <<<"$cmd"
-  # The rehearsal: a clone of the base outside this repository, checked
-  # out as --apply's worktree is (`git archive` would leave out an
-  # export-ignore path), where copier runs as --apply would run it. Nothing
-  # of it is kept; the clone borrows this repository's objects and writes
-  # none into it.
+# The rehearsal of the move <cmd> (in $tmp, after at_base): a clone of the
+# base outside this repository, checked out as --apply's worktree is (`git
+# archive` would leave out an export-ignore path), where copier runs as
+# --apply would run it. Nothing of it is kept; the clone borrows this
+# repository's objects and writes none into it. Sets $r, $conflicts,
+# $deleted and $owned: the deleted files whose content at the base is not
+# the old archetype's render (#1016).
+rehearse() { # <cmd>
+  local words prefix ref p
+  read -ra words <<<"$1"
   r="$tmp/rehearsal"
   { git clone -q --shared --no-checkout "$top" "$r" && git -C "$r" checkout -q --detach "$base"; } \
     || die "could not make the rehearsal clone of origin/$default; nothing was written"
@@ -642,6 +671,41 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   }
   conflicts="$(conflicts_in "$r" HEAD)"
   deleted="$(git -C "$r" -c core.quotePath=false ls-files --deleted | sort -u)"
+  owned=""
+  [ -n "$deleted" ] || return 0
+  # The old archetype's render: copier's own, of the answers recorded at the
+  # base, at the tag they record (a move runs only at the target tag, the
+  # one the line fetches), into a folder holding nothing else. The same
+  # copier as the line; `recopy` renders without merging, so the folder is
+  # exactly what the template gave this repository (measured, 9.18.2).
+  prefix="${1%% copier update *}"; ref="$(sed -nE 's/.* --vcs-ref ([^ ]+).*/\1/p' <<<"$1")"
+  [ "$prefix" != "$1" ] && [ -n "$ref" ] || die "the move's line is not the copier update this script reads: $1"
+  read -ra words <<<"$prefix"
+  mkdir "$tmp/old-render" && git -C "$r" show HEAD:.copier-answers.yml > "$tmp/old-render/.copier-answers.yml" \
+    || die "could not read .copier-answers.yml at the base; nothing was written"
+  ( cd "$tmp/old-render" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" copier recopy --defaults --overwrite --quiet \
+      --vcs-ref "$ref" . < /dev/null ) > "$tmp/old-render.log" 2>&1 || {
+    tail -n 1 "$tmp/old-render.log" >&2
+    die "copier could not make the old archetype's render to compare the deleted files with (its last line above); nothing was written"
+  }
+  # A path the render does not hold, or holds otherwise, is this
+  # repository's change: listed, never deleted unasked.
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if [ -L "$tmp/old-render/$p" ]; then
+      [ "$(readlink "$tmp/old-render/$p")" = "$(git -C "$r" show "HEAD:$p")" ] && continue
+    elif [ -f "$tmp/old-render/$p" ]; then
+      git -C "$r" show "HEAD:$p" | cmp -s - "$tmp/old-render/$p" && continue
+    fi
+    owned="$owned$p"$'\n'
+  done <<<"$deleted"
+}
+if [ "$mode" = plan ] && [ -n "$move" ]; then
+  at_base
+  plugin_gate
+  cmd="$(move_at "$tmp" 2>"$tmp/move-note")" || { cat "$tmp/move-note" >&2; exit 1; }
+  grep -vE '^(moves|check-drop|check-add): ' "$tmp/move-note" >&2
+  rehearse "$cmd"
   added="$(git -C "$r" -c core.quotePath=false ls-files --others --exclude-standard | sort -u)"
   changed="$(git -C "$r" -c core.quotePath=false diff --name-only HEAD | sort -u | grep -vxF -f <(printf '%s\n%s\n' "$deleted" "$conflicts" | sed '/^$/d') || true)"
   stops=""
@@ -659,7 +723,11 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   sed -n 's/^moves: /Moves:      /p' "$tmp/move-note"
   echo
   echo "Rehearsed on a copy of origin/$default outside this repository; nothing of it is kept."
-  echo "Deletes:"; listed "$deleted"
+  echo "Deletes:"; listed "$(grep -vxF -f <(printf '%s\n' "$owned" | sed '/^$/d') <<<"$deleted" || true)"
+  if [ -n "$owned" ]; then
+    echo "Changed by this repository, and the move deletes them (copier reports no conflict for these):"
+    listed "$owned"
+  fi
   echo "Adds:"; listed "$added"
   echo "Changes:"; listed "$changed"
   if [ -n "$conflicts" ]; then
@@ -679,6 +747,10 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
   echo "  $(q "$0") --apply $base --archetype $move"
+  if [ -n "$owned" ]; then
+    echo "  with each changed file above named once, as the person chooses: --keep <path> restores it after"
+    echo "  copier, as this repository's own file; --drop <path> lets the move delete it. Without, --apply stops."
+  fi
   exit 0
 fi
 if [ "$mode" = plan ]; then
@@ -727,7 +799,26 @@ plugin_gate
 [ -n "$from" ] && [ -n "$to" ] || die "no _commit in .copier-answers.yml at the base, or no template_ref beside this script"
 # A move the checker refuses stops before a worktree or branch exists.
 if [ -n "$move" ]; then
-  move_at "$tmp" >/dev/null 2>"$tmp/move-check" || { cat "$tmp/move-check" >&2; die "nothing was created"; }
+  rehearsed="$(move_at "$tmp" 2>"$tmp/move-check")" || { cat "$tmp/move-check" >&2; die "nothing was created"; }
+  # The changed files the move deletes (#1016), from the rehearsal the plan
+  # ran: each named once, with --keep or --drop, and nothing else named.
+  rehearse "$rehearsed"
+  keeps=""; drops=""; unnamed=""; refused=""
+  for c in ${chosen_files+"${chosen_files[@]}"}; do
+    f="${c#*$'\t'}"
+    if ! grep -qxF -- "$f" <<<"$owned"; then refused="$refused  $f: not a file this repository changed that the move deletes"$'\n'
+    elif grep -qxF -- "$f" <<<"$keeps$drops"; then refused="$refused  $f: named more than once"$'\n'
+    elif [ "${c%%$'\t'*}" = keep ]; then keeps="$keeps$f"$'\n'
+    else drops="$drops$f"$'\n'; fi
+  done
+  while IFS= read -r f; do
+    [ -n "$f" ] && ! grep -qxF -- "$f" <<<"$keeps$drops" && unnamed="$unnamed  $f"$'\n'
+  done <<<"$owned"
+  if [ -n "$refused$unnamed" ]; then
+    [ -z "$refused" ] || printf 'template-update: refused:\n%s' "$refused" >&2
+    [ -z "$unnamed" ] || printf 'template-update: changed by this repository, and the move deletes them; copier reports no conflict for these:\n%s' "$unnamed" >&2
+    die "name each changed file once, as the person chooses: --keep <path> restores it after copier, as this repository's own file; --drop <path> lets the move delete it. Nothing was created"
+  fi
 fi
 [ -e "$wt" ] && die "$wt already exists: finish it ($(q "$0") --finish $(q "$wt")) or discard it (git worktree remove --force $(q "$wt") && git branch -D $branch)"
 git -C "$top" rev-parse -q --verify "refs/heads/$branch" >/dev/null \
@@ -763,6 +854,7 @@ if [ -n "$move" ]; then
     while IFS= read -r c; do [ -n "$c" ] && checks="$checks"$'\n'"required=$c"; done <<<"$req"
   fi
   case "$cmd" in *" --data archetype=$move") ;; *) die "the command does not move to $move: $cmd" ;; esac
+  [ "$cmd" = "$rehearsed" ] || die "the move's line in the worktree is not the one rehearsed ($rehearsed); $wt left for inspection"
   pin_note=""
 else
 # The comparison is read whichever pin was chosen, for the description; only
@@ -826,6 +918,21 @@ if [ -n "$moves" ]; then
   fi
 fi
 
+# The changed files the person chose to keep (#1016), as they are at the
+# base. Each was rehearsed as deleted; one copier did not delete here is a
+# run that differs from the rehearsal, and a stop.
+if [ -n "$move" ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    { [ ! -e "$wt/$f" ] && [ ! -L "$wt/$f" ]; } \
+      || die "copier did not delete $f here, as the rehearsal did; nothing committed or pushed, $wt left as copier left it"
+  done <<<"$keeps$drops"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    git -C "$wt" checkout -q "$base" -- "$f" || die "restoring $f failed in $wt; nothing committed or pushed"
+  done <<<"$keeps"
+fi
+
 # The glossary's name follows the template (#714). copier never touches the
 # repository's own glossary, a file /domain-modeling wrote, so when the
 # updated docs/agents/domain.md names GLOSSARY.md and the root still holds
@@ -855,7 +962,9 @@ sf="$(state_file "$wt")"
   printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin=%s\npin_note=%s\n' \
     "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin" "$pin_note"
   if [ -n "$move" ]; then
-    printf 'archetype=%s\nold_archetype=%s\n' "$move" "$old_arch"
+    printf 'archetype=%s\nold_archetype=%s\ncompared=yes\n' "$move" "$old_arch"
+    while IFS= read -r p; do [ -n "$p" ] && printf 'keep=%s\n' "$p"; done <<<"$keeps"
+    while IFS= read -r p; do [ -n "$p" ] && printf 'drop=%s\n' "$p"; done <<<"$drops"
     printf '%s\n' "$checks" | sed '/^$/d'
   fi
   while IFS= read -r p; do [ -n "$p" ] && printf 'renamed=%s\n' "$p"; done <<<"$renamed"
