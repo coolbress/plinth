@@ -224,15 +224,19 @@ Naming a gap or the open item is not enough (#961). Each entry of
 present, `PASS`; done, verified, ticked). The entry passes when a line that
 names it says `stated`, and no sentence that names it says `opposite`; a
 sentence ends at a full stop, semicolon, `!` or `?` followed by a space, or at
-the line's end. A word after a negation in its clause reads as the other
-list's (#1019): "no files are missing", "nothing remains to verify" and "is
-not pending" say `opposite`; "never checked", "nobody has checked", "hasn't
-been run", "cannot be verified" and "until it exists" say `stated`. A
-`stated` word is turned over only by "nothing", "none", "no `<thing>` is/are"
-and "not" as a state ("is not", "isn't", "not" opening the clause), so "could
-not verify" and "I have no Windows machine to verify" stay open, and so does
-"no longer missing", which is not turned over. A sentence that says both is unresolved and fails the
-entry, judged on its clauses that name the entry when they say either, so
+the line's end. A negation turns over the first word of either list after it
+in its clause, when that word is of the list it turns (#1019): "no files are
+missing", "nothing remains to verify", "are no longer missing" and "is not
+pending" say `opposite`; "never checked", "nobody has checked", "hasn't been
+run", "cannot be verified" and "until it exists" say `stated`. It reaches no
+further: "is not verified and is still pending" stays open, and a clause ends
+at "now that", "because", "since" or "so" too, so "cannot fail now that it has
+been verified" says done. A `stated` word is turned over only by "nothing",
+"none", "no longer", "no `<thing>` is/are" and "not" as a state ("is not",
+"isn't", "not" opening the clause), so "could not verify" and "I have no
+Windows machine to verify" stay open. A sentence that says both is unresolved
+and fails the entry, judged on its clauses that name the entry when they say
+either, so
 "PR #3 completed it, except one criterion still unticked: the goodbye was
 never printed on a Windows console" stays open. So "`uv.lock`, `CHANGELOG.md`
 and `.github/dependabot.yml` are all in place" fails all three gaps,

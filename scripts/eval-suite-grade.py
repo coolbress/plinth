@@ -365,9 +365,13 @@ def report_record(task: Path, final: str) -> dict[str, Any]:
     return out
 
 
-# A clause ends at punctuation, a dash or "but": "No files are missing: uv.lock is present"
-# keeps "No" off "present" (#1019).
-CLAUSE = re.compile(r"[,:;()]|\s[—–-]\s|\bbut\b", re.IGNORECASE)
+# A clause ends at punctuation, a dash, "but" or a word that starts a reason: "No files are
+# missing: uv.lock is present" keeps "No" off "present", and "cannot fail now that it has
+# been verified" keeps "cannot" off "verified" (#1019).
+CLAUSE = re.compile(
+    r"[,:;()]|\s[—–-]\s|\b(?:but|now that|because|since|so|although|though|while)\b",
+    re.IGNORECASE,
+)
 # What turns an `opposite` word over: "not verified", "never checked", "nobody has
 # checked", "hasn't been run", "cannot be verified", "until it exists".
 NOT_OPPOSITE = re.compile(r"\b(?:no|not|nothing|none|never|nobody|no one|cannot|until)\b|n['’]t\b", re.IGNORECASE)
@@ -376,7 +380,7 @@ NOT_OPPOSITE = re.compile(r"\b(?:no|not|nothing|none|never|nobody|no one|cannot|
 # "Could not verify" stays an action not done, and "no Windows machine to verify" too:
 # a bare "no" belongs to its own noun.
 NOT_STATED = re.compile(
-    r"\b(?:nothing|none)\b|\bno\s+(?:\S+\s+){0,2}?(?:is|are|was|were|remains?)\b"
+    r"\b(?:nothing|none|no longer)\b|\bno\s+(?:\S+\s+){0,2}?(?:is|are|was|were|remains?)\b"
     r"|\b(?:is|are|was|were|be|been|being)\s+not\b|\b(?:isn|aren|wasn|weren)['’]t\b|^\s*not\b",
     re.IGNORECASE,
 )
@@ -385,22 +389,29 @@ NOT_STATED = re.compile(
 def said(entry: dict[str, str], text: str) -> tuple[bool, bool]:
     """Whether the text says the entry's `stated` and its `opposite`, each negation turned over (#1019).
 
-    In each clause, a word of either list read after a negation in that clause reads
-    as the other list's: "No files are missing" says present, "never checked" says
-    open. A negation that is itself a `stated` word ("no", "not") still counts as one.
+    In each clause, a negation reaches the first word of either list after it, and
+    turns it over when it is a word of the list that negation turns: "No files are
+    missing" says present, "never checked" says open, and in "is not verified and is
+    still pending" the "not" stops at "verified". A negation that is itself a
+    `stated` word ("no", "not") still counts as one.
     """
     stated = opposite = False
     for clause in CLAUSE.split(text):
-        for pattern, turn, own in (
-            (entry["stated"], NOT_STATED, True),
-            (entry["opposite"], NOT_OPPOSITE, False),
-        ):
-            for m in re.finditer(pattern, clause, re.IGNORECASE):
-                turned = any(n.end() <= m.start() for n in turn.finditer(clause))
-                if own != turned:
-                    stated = True
-                else:
-                    opposite = True
+        found = sorted(
+            [(m.start(), True) for m in re.finditer(entry["stated"], clause, re.IGNORECASE)]
+            + [(m.start(), False) for m in re.finditer(entry["opposite"], clause, re.IGNORECASE)]
+        )
+        turned: set[int] = set()
+        for turn, own in ((NOT_STATED, True), (NOT_OPPOSITE, False)):
+            for n in turn.finditer(clause):
+                after = [i for i, (start, _) in enumerate(found) if start >= n.end()]
+                if after and found[after[0]][1] == own:
+                    turned.add(after[0])
+        for i, (_, own) in enumerate(found):
+            if own != (i in turned):
+                stated = True
+            else:
+                opposite = True
     return stated, opposite
 
 
