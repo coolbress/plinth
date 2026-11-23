@@ -246,8 +246,9 @@ admin_cmd() { # <dir or empty> <file name> <command>
   printf '#!/usr/bin/env bash\n# Written by template-update.sh (plinth): run it in a terminal of your own,\n# not through `!`; with-admin-token.sh asks there for an admin token.\n%s\n' "$3" > "$1/$2.sh"
   printf 'the file below, which holds the command, in a separate terminal, not through `!` (with-admin-token.sh asks for the token at a terminal, which `!` does not give it):\n    bash %s' "$1/$2.sh"
 }
-# A check name as part of a file name.
-slug() { printf '%s' "$1" | tr -c 'A-Za-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c 1-40; }
+# A check name as part of a file name, cut to 24 characters: the `bash` line
+# stays under 120 even in mktemp's fallback under macOS's $TMPDIR.
+slug() { printf '%s' "$1" | tr -c 'A-Za-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c 1-24; }
 # What a person does about the required checks the move stops or starts,
 # from the record: drop one that stops before the move merges (a required
 # name that never reports blocks every merge), require one that starts once

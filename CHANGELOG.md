@@ -39,7 +39,8 @@ pull requests and have no tag.
   carries a trailing comment (`# v2.41.0`, as Dependabot writes it) will
   conflict, though both sides name the same pin: the template renders the
   line with none, so copier sees this repository's line changed (#1045).
-  The plan said nothing when the pins matched.
+  The plan said no conflict was expected on that line, or, with the
+  workflows at the recorded pin, nothing.
 - `/plinth:template-update --archetype`'s plan reads the repository's
   Actions allowlist and names each action the moved workflows use that it
   refuses, with the `scripts/with-admin-token.sh gh api` command a person
