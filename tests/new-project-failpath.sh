@@ -695,6 +695,27 @@ holds_form() {
   then ok "$case_name" "$what has the form's four fields in order, and ci / pr-title's check warns about neither"
   else bad "$case_name" "$what against the form"; printf '%s\n%s\n' "$fields" "$says" | sed 's/^/        /'; fi
 }
+# not_verified <what> <description file> <case>: the template's own line, worded as
+# its CONTRIBUTING.md step 5 gives it (#1020): one `Not verified: ` line, the last
+# of How it was verified before `Review:`, saying the checks had not run, and no
+# other wording of it ("Not checked yet:", "Not verified yet:").
+not_verified() {
+  local what="$1" file="$2" case_name="$3" verified
+  verified="$(awk '$0 == "## How it was verified" { f = 1; next } /^## / { f = 0 } f' "$file" | grep -v '^$')"
+  if [ "$(grep -c '^Not verified: ' <<<"$verified")" = 1 ] \
+     && [ "$(grep -B1 '^Review: ' <<<"$verified" | head -1)" = "$(grep '^Not verified: ' <<<"$verified")" ] \
+     && grep '^Not verified: ' <<<"$verified" | grep -q "had not run" \
+     && ! grep -qE '^Not (checked|verified) (yet|here)' "$file"
+  then ok "$case_name" "$what ends How it was verified with the template's Not verified: line"
+  else bad "$case_name" "$what's Not verified: line"; sed 's/^/        /' "$file"; fi
+}
+# The owner's form has its own fields, but the rendered CONTRIBUTING.md still
+# asks for the Not verified: line (#1020).
+pr_body shared-pr-only > "$work/shared-pr-only.md"
+if [ "$(grep -c '^Not verified: ' "$work/shared-pr-only.md")" = 1 ] && grep '^Not verified: ' "$work/shared-pr-only.md" | grep -q "had not run" \
+   && ! grep -qE '^Not (checked|verified) (yet|here)' "$work/shared-pr-only.md"
+then ok shared-pr-only "the first pull request carries the template's Not verified: line under the owner's template too"
+else bad shared-pr-only "the Not verified: line"; sed 's/^/        /' "$work/shared-pr-only.md"; fi
 E="PLINTH_ASSISTED_BY=Claude:claude-opus-5-5" run gh-assisted ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
 if [ "$(pr_last gh-assisted)" = "Assisted-by: Claude:claude-opus-5-5" ]
 then ok gh-assisted "an AI-assisted run ends the first pull request's description with its Assisted-by line"
@@ -1063,8 +1084,9 @@ check "the first pull request says what has not been verified yet" \
   'grep -q "the checks have not run" "$log"'
 pr_body none > "$work/first-pr.md"
 holds_form "the first pull request" "$work/first-pr.md" none
-check "What I checked myself says it is not a person's check, what the door read back (cli: the tag ruleset too), and that the checks had not run" \
-  'sed -n "/^## What I checked myself$/,/^## How it was verified$/p" "$work/first-pr.md" > "$work/first-pr-checked.md"; grep -q "^Not a person.s check" "$work/first-pr-checked.md" && grep -qF "default branch reads back as \`main\`" "$work/first-pr-checked.md" && grep -q "merge ruleset and the tag ruleset read back" "$work/first-pr-checked.md" && grep -q "own checks had not run on this pull request" "$work/first-pr-checked.md"'
+not_verified "the first pull request" "$work/first-pr.md" none
+check "What I checked myself says it is not a person's check and what the door read back (cli: the tag ruleset too)" \
+  'sed -n "/^## What I checked myself$/,/^## How it was verified$/p" "$work/first-pr.md" > "$work/first-pr-checked.md"; grep -q "^Not a person.s check" "$work/first-pr-checked.md" && grep -qF "default branch reads back as \`main\`" "$work/first-pr-checked.md" && grep -q "merge ruleset and the tag ruleset read back" "$work/first-pr-checked.md"'
 check "with PLINTH_ASSISTED_BY unset, the first pull request carries no Assisted-by line (#767)" \
   '[ -s "$log" ] && ! grep -q "Assisted-by" "$log"'
 check "labels with a colon in the name are created with a hex colour (wayfinder:map)" 'grep -q "label create wayfinder:map --repo tester/probe --color 5319e7" "$log"'
@@ -1747,8 +1769,9 @@ if grep -qF -- '-X POST projects/555/merge_requests -f source_branch=docs/first-
 then ok gl-plan "opens one merge request from docs/first-mr, in the template's shape, with First day in README.md"
 else bad gl-plan "the first merge request is not what #534 says"; grep -E -- 'merge_requests|first-mr' "$o/calls.log" | cut -c1-200 | sed 's/^/        /'; sed 's/^/        desc: /' "$o/mr-description" 2>/dev/null | head -20; fi
 holds_form "the first merge request" "$o/mr-description" gl-plan
-if grep -q "^Not a person.s check" "$o/mr-description" && grep -q "protection and its merge settings read back as set" "$o/mr-description" && grep -q "pipeline had not run on this merge request" "$o/mr-description"
-then ok gl-plan "What I checked myself says it is not a person's check, what the door read back, and that the pipeline had not run"
+not_verified "the first merge request" "$o/mr-description" gl-plan
+if grep -q "^Not a person.s check" "$o/mr-description" && grep -q "protection and its merge settings read back as set" "$o/mr-description"
+then ok gl-plan "What I checked myself says it is not a person's check and what the door read back"
 else bad gl-plan "What I checked myself"; sed 's/^/        /' "$o/mr-description"; fi
 want_tail='  first merge request: https://gitlab.com/tester/probe/-/merge_requests/1
   first pipeline on main: success: https://gitlab.com/tester/probe/-/pipelines/77'

@@ -553,8 +553,6 @@ finish() { # <worktree>
     if [ -n "$pin_note" ]; then echo "- The plan's plinth pin line: ${pin_note#plinth pin: }"
     else echo "- The plan's plinth pin line: the plan printed none."; fi
     echo
-    echo "Not checked yet: this repository's own checks had not run when it was opened, and the script waits for none of them."
-    echo
     echo "## How it was verified"
     echo
     echo "This script resolved no conflict; how each was resolved is what \`--resolved\`"
@@ -563,7 +561,10 @@ finish() { # <worktree>
     echo "repository's recorded answer, and a question it never answered takes the"
     echo "template's default (\`.copier-answers.yml\` in the diff shows any)."
     [ -z "$new" ] || echo "The one answer given is \`archetype\`, as \`--data archetype=$new\`."
-    echo "Not verified here: that this repository still works after the update, which is what its own checks are for."
+    # The template's own line, in the words its CONTRIBUTING.md step 5 gives
+    # (#1020): what was not checked is said once, here.
+    echo
+    echo "Not verified: that this repository still works after the update, which is what its own checks are for; they had not run when this pull request opened, and the script waits for none of them."
     echo
     echo "Review: none (no review had run when this pull request opened)"
     if [ -n "$assisted" ]; then echo; echo "Assisted-by: $assisted"; fi

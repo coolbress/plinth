@@ -350,9 +350,19 @@ fields_pass "the description of a clean update" "$work/clean.body"
 checked="$(section "$work/clean.body" "What I checked myself")"
 if grep -q "^Not a person's check" <<<"$checked" && ! grep -qi "no person" <<<"$checked" && tr '\n' ' ' <<<"$checked" | grep -q "conflict marker in a file the update changed" \
    && grep -q "reviewable lines" <<<"$checked" && grep -qi "plinth pin" <<<"$checked" \
-   && grep -qF "own checks had not run" <<<"$checked"
-then ok "What I checked myself says what the script checked (conflicts, size, pin), that it is not a person's check, and that the project's checks had not run"
+   && ! grep -q "^Not checked yet" <<<"$checked"
+then ok "What I checked myself says what the script checked (conflicts, size, pin) and that it is not a person's check, and leaves what was not checked to the Not verified line"
 else bad "What I checked myself"; printf '%s\n' "$checked" | sed 's/^/        /'; fi
+# The template's own line, worded as its CONTRIBUTING.md step 5 gives it (#1020):
+# one `Not verified: ` line, the last of How it was verified before `Review:`.
+verified="$(section "$work/clean.body" "How it was verified" | grep -v '^$')"
+if [ "$(grep -c '^Not verified: ' <<<"$verified")" = 1 ] \
+   && [ "$(grep -B1 '^Review: ' <<<"$verified" | head -1)" = "$(grep '^Not verified: ' <<<"$verified")" ] \
+   && grep '^Not verified: ' <<<"$verified" | grep -q "still works after the update" \
+   && grep '^Not verified: ' <<<"$verified" | grep -q "had not run" \
+   && ! grep -qE '^Not (verified here|checked yet)' "$work/clean.body"
+then ok "How it was verified ends with the template's Not verified: line, saying the repository's own checks had not run"
+else bad "the Not verified: line"; printf '%s\n' "$verified" | sed 's/^/        /'; fi
 if grep -qx 'Review: none (no review had run when this pull request opened)' "$work/clean.body"
 then ok "the Review: line says no review has run"
 else bad "the Review: line"; sed 's/^/        /' "$work/clean.body"; fi
