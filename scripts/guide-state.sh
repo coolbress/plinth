@@ -159,7 +159,8 @@ fi
 # What the project started with off and does not have yet (#763), from the
 # one list new-project.sh prints at creation. Said once the mode is known
 # (#908): in full, every item; in focused, how many, and only the ones whose
-# line says to do them now.
+# line says to do them now. In full the skill says the count, and each item
+# only when asked for the map (#1035): the list is printed for it to count.
 off_said=""
 if off="$("$plugin/scripts/off-by-default.sh" "${archetype:-none}" "$top" 2>&1)"; then
   if [ -n "$off" ]; then

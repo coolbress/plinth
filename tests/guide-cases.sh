@@ -983,6 +983,39 @@ then ok "the skill says to give the why: line's reason and no other"; else bad "
 if grep -qF 'look again in a minute' "$root/skills/guide/SKILL.md" && grep -qF '`no checks ran`: no' "$root/skills/guide/SKILL.md"
 then ok "the skill says checks not started yet and no checks ran in plain words"; else bad "the skill does not say what an empty rollup means"; fi
 
+# ── the answer's order (#1035) ───────────────────────────────────────────
+# In both modes: where the project is and why, then the one command, then
+# this step and the next, then the rest of the way. The off-by-default items
+# are one line in part 1; every item is said only at the end of part 4, on map.
+guide_md="$root/skills/guide/SKILL.md"
+part() { # <n>: the text of "Say it"'s numbered part n, its lines joined
+  awk -v n="$1" '/^## Say it/{on=1} on && /^## / && !/^## Say it/{exit}
+    on && /^[0-9]\. \*\*/{cur=substr($0,1,1)} on && /^What to keep to:/{cur=""}
+    on && cur==n' "$guide_md" | tr '\n' ' ' | tr -s ' '
+}
+parts="$(awk '/^## Say it/{on=1} on && /^[0-9]\. \*\*/' "$guide_md" | sed -E 's/^([0-9])\. \*\*([^*]*)\*\*.*/\1 \2/')"
+want="1 Where the project is now, and why
+2 The one next step
+3 This step and the next, in depth.
+4 The rest of the way."
+[ "$parts" = "$want" ] && grep -qF 'Four parts, in this order, in both modes' "$guide_md" &&
+  ok "the skill's four parts: where and why, the command, this step and the next, the rest" ||
+  { bad "the skill's parts are not in #1035's order:"; sed 's/^/        /' <<<"$parts"; }
+p1="$(part 1)"; p2="$(part 2)"; p3="$(part 3)"; p4="$(part 4)"
+grep -qF 'failing checks' <<<"$p1" && grep -qF 'not known yet' <<<"$p1" &&
+  ok "part 1 says the failing check and its cause, before the command" || bad "part 1 does not hold the failing check"
+grep -qF 'in one line, in both modes' <<<"$p1" && grep -qF 'not a paragraph each' <<<"$p1" &&
+  ! grep -qF 'when it is worth turning on' <<<"$p1" &&
+  ok "part 1: what started off is one line in both modes, no item described" || bad "part 1 still describes each off-by-default item"
+grep -qF 'one code block' <<<"$p2" && grep -qF '`command:`' <<<"$p2" &&
+  ok "part 2 is the command, in the one code block" || bad "part 2 is not the command"
+grep -qF 'whole way' <<<"$p3" && grep -qF 'heading' <<<"$p3" && grep -qF '`mode: full`' <<<"$p3" &&
+  ok "part 3 opens the whole way under a heading in mode: full" || bad "part 3 has no whole-way heading"
+grep -qF 'when it is worth turning on' <<<"$p4" && grep -qF 'asked for the whole way' <<<"$p4" &&
+  ok "part 4 ends with every off-by-default item, only on map" || bad "part 4 does not hold the items for map"
+grep -qF 'say so in part 2, after the command' "$guide_md" &&
+  ok "the token step is said in the command's part" || bad "the token step names the wrong part"
+
 # ── how much of the way (#908) ───────────────────────────────────────────
 # mode: full before a person's merge, on map, or with the state not read;
 # focused otherwise. Each reason, and map turning a busy project to full.
