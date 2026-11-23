@@ -21,7 +21,8 @@ and merge the pull request the generator opens for you.
 - `delete_repo` is an opt-in: `gh auth refresh -h github.com -s delete_repo`
   adds it to that login. With it, a run that fails deletes the repository it
   created, and the login can delete any repository it administers. Without
-  it the generator prints `rollback: off` and goes on; a run that fails then
+  it the generator prints `rollback: off` and goes on (a private repository
+  whose plan it cannot read is the exception: see `--private` below); a run that fails then
   leaves the repository and prints its settings page for you to delete it,
   as the last bullet under [Create the repository](#create-the-repository) says.
 - The login command runs from inside a Claude Code session too: it prints a
@@ -128,7 +129,10 @@ you can type instead:
   the login above does not ask for: log in with
   `gh auth login -s repo,workflow,read:user`, or add it to the
   login you have with `gh auth refresh -h github.com -s read:user`. Without
-  it the generator stops and prints that command.
+  it the generator stops and prints that command. For an organization the
+  plan is often unreadable (it is shown to the organization's owners), and
+  then the run needs the rollback: without `delete_repo` it stops before
+  creating anything and prints `gh auth refresh -h github.com -s delete_repo`.
 - `--license=apache-2.0`: MIT's freedoms plus a patent grant. Take it when
   your company, or the project you build on, asks for Apache-2.0; MIT is
   shorter and the usual choice for a small public project.

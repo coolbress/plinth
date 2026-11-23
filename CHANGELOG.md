@@ -33,7 +33,9 @@ pull requests and have no tag.
   `delete_repo` is an opt-in on its own line,
   `gh auth refresh -h github.com -s delete_repo`: with it a failed run
   deletes the repository it created; without it the repository stays and
-  the run prints where to delete it, as before. `/plinth:new-project`'s
+  the run prints where to delete it, as before, and a private repository
+  whose plan cannot be read (usually an organization's) stops before
+  anything is created and asks for it, as before. `/plinth:new-project`'s
   scope and fine-grained-token stops ask for `repo,workflow` and name the
   opt-in apart; the README and the skill say the same.
   `tests/doc-pinned-facts.sh` holds the tutorial's first login to the
