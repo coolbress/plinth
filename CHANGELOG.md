@@ -13,6 +13,13 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.50.2 instead of v1.50.1:
+  a project whose package name is longer than 11 characters starts with
+  `ci / lint` green (coolbress/plinth-template#315; names of 47 characters
+  or more are coolbress/plinth-template#318), and new projects call plinth
+  v2.41.0 (`plinth_sha`'s default moved from 7b773c2 to 15ae0a9). No job,
+  check, question or action changed; `AGENTS.md` and `.claude/` are
+  unchanged, so no eval suite run is owed.
 - `/plinth:new-project` asks who may see the project on its own, before the
   `Defaults` question, when neither `--public` nor `--private` is given:
   "Who may see this project's code?", anyone on the internet or only the
