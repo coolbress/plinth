@@ -2120,6 +2120,14 @@ rm -f "$on_main"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/mai
 # this line in its floor-check.py; the line must stay what it looks for.
 grep -q '^def archetype_gained(' "$checker" && ok "floor-check.py still carries the line a move's plan looks for (#1017)" \
   || bad "floor-check.py lost the def archetype_gained( line the move's plan reads"
+# Likewise python-ci.yml's line opening the rule that leaves release.yml out
+# of a move's diff-size count (#1044), read with floor-check.py's own pattern.
+python3 - "$checker" "$root/.github/workflows/python-ci.yml" <<'PY' && ok "python-ci.yml still carries the line a move's plan looks for (#1044)" \
+  || bad "python-ci.yml lost the line SIZE_RULE looks for (#1044)"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("fc", sys.argv[1]); fc = importlib.util.module_from_spec(spec); spec.loader.exec_module(fc)
+sys.exit(0 if len(fc.SIZE_RULE.findall(open(sys.argv[2], encoding="utf-8").read())) == 1 else 1)
+PY
 
 # #221: run at the root of a repository whose project is one directory down,
 # the checker reports two files missing that do exist. The answer is --project,

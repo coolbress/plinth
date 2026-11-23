@@ -11,6 +11,27 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A move between an archetype that publishes to PyPI (`cli`, `library`) and
+  one that publishes an image (`backend`, `data-ml`) reaches the default
+  branch without a hand edit (#1044). The template rewrites
+  `.github/workflows/release.yml` whole: 560 to 576 lines, over
+  `ci / diff-size`'s default 400 by itself, and either half of a split
+  inside it is 442 lines or more (measured on plinth-template v1.50.1 and
+  v1.50.2). `ci / diff-size` now leaves that file out of the count in a pull
+  request whose `.copier-answers.yml` changes `archetype:` and keeps
+  `_commit:`, naming it with its lines on the count's line and in the
+  summary; the `archetype:` change is already put to an admin as a change
+  to the checks. `/plinth:template-update --archetype` counts as the plinth
+  the workflows call counts: with one that has the rule, the rest of the
+  move splits by file and `release.yml` lands with `.copier-answers.yml` in
+  the last part; with an older one, whose count the move's last pull request
+  could not pass, the plan says to raise the plinth pin first and `--apply`
+  refuses. A project gets the rule by raising both `coolbress/plinth`
+  `uses:` lines to the release that carries it. GitLab's `diff-size` is
+  unchanged: moves are GitHub only.
+
 ## [2.42.0] - 2026-11-23
 
 `/plinth:guide` opens with where the project is and the next command, with the map after it: in the guide tasks the command moved from line 26–54 of the answer to line 10–16. `/plinth:new-project` asks who may see the project on its own, before the bundled defaults, and the license follows the answer. New projects render plinth-template v1.50.2, so a package name up to 46 characters starts with `ci / lint` green, and they call plinth v2.41.0. `/plinth:template-update --archetype` names the actions the Actions allowlist refuses after a move and the command that allows them. Each admin command is written to a file and printed as one short `bash <file>` line to run in a separate terminal. The plan also says when a pin line's version comment will conflict. The descriptions it and `/plinth:new-project` open carry the template's `Not verified:` line. The eval suite's grading reads a list under a heading. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
