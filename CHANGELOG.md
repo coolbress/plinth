@@ -18,6 +18,14 @@ pull requests and have no tag.
   15ae0a9 to d374071). No rendered file changed; `AGENTS.md` and `.claude/`
   are unchanged, so no eval suite run is owed.
 
+- `/plinth:new-project` refuses a repository name longer than 46 characters
+  (the owner or namespace not counted), on GitHub and GitLab.com, before it
+  reads a tool or a login and before anything is rendered or created (#1053).
+  Its one line says the length, the limit, and why: the new project's package
+  takes the same name, and a longer one makes the project's own lint check
+  fail (coolbress/plinth-template#318). The skill states the limit where it
+  asks for the name. A name of 46 characters or fewer runs as before.
+
 ### Fixed
 
 - A move between an archetype that publishes to PyPI (`cli`, `library`) and

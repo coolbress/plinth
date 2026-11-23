@@ -859,6 +859,21 @@ else bad apache "the license did not reach copier, or its text was fetched over 
 run name-refused   err no no "The package name 'class' derived from 'class' is a Python keyword" -- class
 grep -qF "nothing was created on GitHub" "$work/home-name-refused/out" \
   && ok name-refused "the stop says nothing was created on GitHub" || bad name-refused "the stop does not say nothing was created on GitHub"
+# A name of 47 characters or more renders a project whose own lint check is red
+# (coolbress/plinth-template#318): the door refuses it before any tool, login,
+# render or create, with the length, the limit and why (#1053). The owner does
+# not count; 46 passes, here and under an owner.
+n46="$(printf 'p%.0s' {1..46})"; n47="$(printf 'p%.0s' {1..47})"
+long_why="the name is 47 characters; the limit is 46: a longer name makes the new project's own lint check fail"
+run name-47        err no no "$long_why" -- "$n47"
+run name-47-owner  err no no "$long_why" -- "someorg/$n47"
+run name-47-pre    err no no "$long_why" -- "$n47" --preflight
+for c in name-47 name-47-owner name-47-pre; do
+  if grep -qE '^(gh|uvx|git) ' "$work/home-$c/calls.log"; then bad "$c" "a call ran before the refusal:"; sed 's/^/        /' "$work/home-$c/calls.log"
+  else ok "$c" "refused before any gh, git or copier call"; fi
+done
+run name-46        ok yes no "create tester/$n46" -- "$n46"
+run name-46-owner  ok yes no "create someorg/$n46" -- "someorg/$n46"
 E="FAIL_AT=copier" run copier          err no no "mock copier: refusing on purpose"     -- probe
 E="MOCK_PLAN=pro FAIL_AT=copier" run private-copier err no no "mock copier: refusing on purpose" -- probe --private
 # A create that fails after the render: gh was asked (created=yes in run's
@@ -1631,6 +1646,19 @@ if grep -qF "raw.githubusercontent.com/coolbress/plinth-template/$TEMPLATE_SHA/c
 then ok gl-plan "the template's copier.yml is read, and the template rendered, at the tag's pinned commit (#519)"
 else bad gl-plan "the template's copier.yml is not read at the pinned commit"; fi
 gl_run gl-bad-arch err no no "unknown archetype: service" -- probe --host gitlab --archetype=service
+# The same limit on GitLab (#1053): refused before glab is asked anything.
+gl_run gl-name-47 err no no "$long_why" -- "$n47" --host gitlab
+gl_run gl-name-47-group err no no "$long_why" -- "someorg/sub/$n47" --host gitlab
+for c in gl-name-47 gl-name-47-group; do
+  if grep -qE '^(glab|uvx|git) ' "$work/home-$c/calls.log"; then bad "$c" "a call ran before the refusal:"; sed 's/^/        /' "$work/home-$c/calls.log"
+  else ok "$c" "refused before any glab, git or copier call"; fi
+done
+# 46 passes the check: the run goes on to GitLab's read of the project (the
+# mock answers that read for probe only, so the run stops there).
+gl_run gl-name-46 err no no "" -- "$n46" --host gitlab
+if grep -qF "projects/tester%2F$n46" "$work/home-gl-name-46/calls.log" && ! grep -qF "the limit is 46" "$work/home-gl-name-46/out"
+then ok gl-name-46 "46 characters pass the check and reach GitLab's project read"
+else bad gl-name-46 "46 characters did not reach GitLab's project read"; sed 's/^/        /' "$work/home-gl-name-46/out"; fi
 # The web archetype is GitHub only (#615): refused before any tool or login
 # is read, so not one call reaches GitLab, and the message says why.
 gl_run gl-web err no no "the web archetype is GitHub only: its deployment and checks are built for GitHub" -- probe --host gitlab --archetype=web

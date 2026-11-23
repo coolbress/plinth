@@ -108,7 +108,12 @@ numbered, one question at a time. Never answer a question for the person.
 
 1. **The name**, when the arguments carry none, in text (it has no choices):
    "What should the repository be called? (`name`, or `owner/name` for an
-   organization)".
+   organization; the name at most 46 characters)". The limit counts the name
+   only, not the owner: the new project's Python package takes the same name,
+   and from 47 characters lines of its code pass the 100 its own lint check
+   allows, so that check would fail from the first commit. A longer name is
+   asked again here, with that reason; the script refuses it too, before it
+   reads or creates anything.
 2. **The archetype**, when there is no `--archetype=`. Never choose `cli` for
    them in silence. Ask it in two steps.
 

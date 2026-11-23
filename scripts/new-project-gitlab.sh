@@ -79,6 +79,8 @@ case "$vis_said" in *+*-*|*-*+*) echo "--private and --public: choose one"$'\n'"
 # template's own validator says the same, later (#615).
 [ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
   "  fix: drop --host gitlab to make it on GitHub, or choose another archetype for GitLab"
+# The name's length, as on GitHub: the last path segment, before glab is read (#1053).
+[ -z "$target" ] || name_fits "${target##*/}"
 
 json() { # <python expression on d> < json: the value, or nothing when the input is not JSON
   python3 -c 'import json,sys

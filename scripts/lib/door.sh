@@ -4,6 +4,18 @@
 
 # A preflight stop: the message and its fix on stderr, exit 2, nothing created.
 stop() { printf '%s\n' "$@" >&2; exit 2; }
+# name_fits <name>: stops when the repository name (the owner or namespace not
+# counted) is longer than 46 characters. The template names the Python package
+# after it, and from 47 lines of the rendered code pass ruff's 100, so the new
+# project's own lint check is red from its first commit
+# (coolbress/plinth-template#318). The door holds the limit, not the template's
+# validator: `copier update` validates the recorded answer again, and would
+# refuse an existing project with a longer name (coolbress/plinth-template#323).
+name_limit=46
+name_fits() {
+  [ "${#1}" -le "$name_limit" ] || stop "the name is ${#1} characters; the limit is $name_limit: a longer name makes the new project's own lint check fail, because its Python package takes the same name and lines of the rendered code then pass the 100 characters the check allows; nothing was read or created" \
+    "  fix: choose a name of $name_limit characters or fewer"
+}
 warn() { printf 'warning: %s\n' "$1" >&2; }
 # below <floor> <version>: true when version sorts before floor.
 below() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" != "$1" ]; }
