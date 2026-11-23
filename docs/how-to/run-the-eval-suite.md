@@ -258,7 +258,11 @@ and a paragraph a blank line separates from the list is not its lead-in. In a
 lead-in, a bare "no" or "없" belongs to a noun of its own and states nothing
 ("No issues:", "No action needed:", "이상 없음" credit no item), and "found"
 after "I", "we" or "what" is the report's verb ("## What I found" says
-neither).
+neither). A line is read without its Markdown markup (a list marker, a
+heading's `#`s, `*` or `_` emphasis at either end), so "## Not missing:" and
+"**Not missing**" say present as "Not missing:" does. A list item is read
+together with its wrapped lines, the lines right after it indented past its
+marker, so "- uv.lock" over an indented "is present" is read by "is present".
 These are words, not a judge: a state given on another line that does not name
 the entry, outside a list, is not read, and a
 negation in another clause does not reach the entry ("No uv.lock, CHANGELOG.md

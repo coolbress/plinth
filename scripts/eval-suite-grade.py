@@ -448,16 +448,20 @@ def entry_met(entry: dict[str, str], final: str) -> bool:
     (`lead_in`) says, read by `lead_said` (#1032): under "Missing files:" or
     "누락된 파일 목록" it says `stated`, under "Present:" `opposite`, and under
     "Files checked:" nothing, so it credits nothing; an item with a state word of
-    its own is read by its own words. Words, not a judge.
+    its own is read by its own words. Each line is read without its Markdown
+    markup (`bare`), and a list item with its wrapped lines (`item_text`), so
+    "## Not missing:" says present and "- uv.lock" over an indented "is present"
+    is read by "is present". Words, not a judge.
     """
     if "stated" not in entry:
         return bool(re.search(entry["named"], final, re.IGNORECASE))
     all_lines = final.splitlines()
     lines: list[str] = []
     leads: list[str] = []
-    for at, line in enumerate(all_lines):
-        if not re.search(entry["named"], line, re.IGNORECASE):
+    for at, raw in enumerate(all_lines):
+        if not re.search(entry["named"], raw, re.IGNORECASE):
             continue
+        line = item_text(all_lines, at)
         lead = lead_in(all_lines, at)
         if lead is not None and not readings(entry, line):
             leads.append(lead)
@@ -509,8 +513,38 @@ def lead_in(lines: list[str], at: int) -> str | None:
             continue
         if blank and not HEADING.search(line):
             return None
-        return LIST_ITEM.sub("", line, count=1)
+        return bare(line)
     return None
+
+
+# Markdown around a line's words: a list marker, a heading's `#`s, and `*` or `_` emphasis at
+# either end ("## Not missing:", "**Not missing**", "- **Not missing:**").
+MARKUP = re.compile(r"^\s*(?:(?:[-*+•]|\d+[.)])\s+)?(?:#{1,6}\s+)?[*_]*|[*_\s]*$")
+
+
+def bare(line: str) -> str:
+    """The line without its Markdown markup (`MARKUP`), so a "not" opening it opens its clause (#1032)."""
+    return MARKUP.sub("", line)
+
+
+def item_text(lines: list[str], at: int) -> str:
+    """The line at `lines[at]` as `entry_met` reads it, without its markup (`bare`) (#1032).
+
+    A list item is read with its wrapped lines: the lines right after it that are
+    not blank, not list items, and indented past its marker, joined by spaces, so
+    "- uv.lock" over an indented "is present" reads "uv.lock is present".
+    """
+    item = LIST_ITEM.match(lines[at])
+    if not item:
+        return bare(lines[at])
+    indent = len(item.group(1).expandtabs())
+    parts = [lines[at]]
+    for line in lines[at + 1 :]:
+        lead = line[: len(line) - len(line.lstrip())]
+        if not line.strip() or LIST_ITEM.match(line) or len(lead.expandtabs()) <= indent:
+            break
+        parts.append(line.strip())
+    return bare(" ".join(parts))
 
 
 # What a heading's words say of something else: a bare "no" or "없" belongs to a noun of its own

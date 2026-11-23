@@ -21,7 +21,8 @@ pull requests and have no tag.
   as its lead-in line, parent item or heading says: missing or open passes,
   present or done fails, and a heading that says neither credits nothing; a
   bare "no" or "없" in it ("No issues:", "이상 없음") and "What I found" say
-  neither. Checked by hand: the 30 entries of the v2.41.0 release and smoke runs'
+  neither. A line is read without its Markdown markup ("## Not missing:"),
+  and a list item with its wrapped lines. Checked by hand: the 30 entries of the v2.41.0 release and smoke runs'
   reports grade the same as before.
 
 ## [2.41.0] - 2026-11-23

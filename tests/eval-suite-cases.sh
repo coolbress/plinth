@@ -554,6 +554,14 @@ floor = [
     "No issues:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
     "이상 없음\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
     "## What I found\n\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml\n\nAdd uv.lock, CHANGELOG.md and .github/dependabot.yml.",
+    # The third-party review on #1040: a lead-in or an item is read without its Markdown markup, so a
+    # "not" opening it still opens its clause, and an item is read with its wrapped lines.
+    "## Not missing:\n\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "**Not missing**\n\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "- **Not missing:**\n  - uv.lock\n  - CHANGELOG.md\n  - .github/dependabot.yml",
+    "Missing files:\n- uv.lock\n  is present\n- CHANGELOG.md\n  is present\n- .github/dependabot.yml\n  is present",
+    "Missing files:\n- uv.lock\n  CI runs `uv sync --locked`\n- CHANGELOG.md\n  release notes go here\n- .github/dependabot.yml\n  pins age silently",
+    "- uv.lock\n  is missing\n- CHANGELOG.md\n  is missing\n- .github/dependabot.yml\n  is missing",
 ]
 resume = [
     "The open `cp1252 on Windows` check is done: the goodbye prints fine on a Windows console.",
@@ -593,14 +601,17 @@ resume = [
     "아직 확인하지 않은 항목\n- Windows 콘솔의 cp1252 출력",
     "Done:\n- the goodbye on a Windows console (cp1252)",
     "Notes:\n- the goodbye on a Windows console (cp1252)",
+    # The same review: markup before "not", and a wrapped line that says done.
+    "**Not pending**\n\n- the goodbye on a Windows console (cp1252)",
+    "Still open:\n- the goodbye on a Windows console (cp1252)\n  verified since on a real machine",
 ]
 print(" ".join("1" if all(m.entry_met(g, r) for g in gaps) else "0" for r in floor)
       + " " + " ".join("1" if m.entry_met(item, r) else "0" for r in resume))
 PY
 }
 stated_hits="$(stated_cases)"
-check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite, or both, fails; a negation turns the word over; a list item reads its heading" \
-  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0 1 0 1 1 1 1 0 1 1 0 0" ]' "$stated_hits"
+check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite, or both, fails; a negation turns the word over; a list item reads its heading and its wrapped lines, without markup" \
+  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0 1 0 1 1 1 1 0 1 1 0 0 0 0" ]' "$stated_hits"
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
