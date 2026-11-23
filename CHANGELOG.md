@@ -44,6 +44,20 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:template-update --archetype`'s plan writes each command a person
+  runs with an admin token to a file outside the repository and prints
+  `bash <that file>`, a line of under 120 characters, saying to run it in
+  a separate terminal, not through `!` (#1045). The allowlist command ran
+  past 300 characters: pasted from a chat it broke into pieces that each
+  failed, and through `!` `with-admin-token.sh` has no terminal to ask for
+  the token. The description keeps the command inline, from plinth's
+  folder.
+- `/plinth:template-update`'s plan says when a plinth `uses:` line that
+  carries a trailing comment (`# v2.41.0`, as Dependabot writes it) will
+  conflict, though both sides name the same pin: the template renders the
+  line with none, so copier sees this repository's line changed (#1045).
+  The plan said no conflict was expected on that line, or, with the
+  workflows at the recorded pin, nothing.
 - `/plinth:template-update --archetype`'s plan reads the repository's
   Actions allowlist and names each action the moved workflows use that it
   refuses, with the `scripts/with-admin-token.sh gh api` command a person

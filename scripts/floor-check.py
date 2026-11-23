@@ -1321,6 +1321,21 @@ def print_plinth_pins(root: Path) -> int:
     return 0
 
 
+def print_plinth_comments(root: Path) -> int:
+    """--print-plinth-comments (#1045): each coolbress/plinth `uses:` of the
+    workflow files that carries a trailing comment (`@<sha> # v2.41.0`, as
+    Dependabot writes it), one `<file> <ref>` line each, read as
+    --print-plinth-pins reads them. The template renders the line with no
+    comment, so copier's three-way merge sees this repository's line changed;
+    template-update.sh says, before --apply, where that conflicts."""
+    for p in workflow_files(root):
+        for _, _, line in yaml_lines(read(p)):
+            m = USES_LINE.match(line)
+            if m and m.group(2).lower().startswith(f"{PLINTH_REPO}/") and "#" in line[m.end(2):]:
+                print(f"{p.name} {m.group(2).rpartition('@')[2]}")
+    return 0
+
+
 def moves_lines(d: dict) -> list[str]:
     """One line per file the update moves forward to the ci job's commit (#793)."""
     return [f"moves: {f} from {old} to {new}, the commit the ci job calls ({old} is an ancestor of it)"
@@ -4913,6 +4928,9 @@ def main() -> int:
     ap.add_argument("--print-plinth-pins", action="store_true",
                     help="print each coolbress/plinth uses: of the workflow files as `<file> <ref>`, or `<file> unread "
                          "line <n>` for a uses: this checker cannot read, and exit 0 (#793)")
+    ap.add_argument("--print-plinth-comments", action="store_true",
+                    help="print each coolbress/plinth uses: of the workflow files that carries a trailing comment as "
+                         "`<file> <ref>`, and exit 0 (#1045)")
     ap.add_argument("--print-plugin-skew", action="store_true",
                     help="compare the template tag this plinth targets with the latest release's and the CI pin's: exit 3 "
                          "with what to type when it is older, else exit 0, a failed read said on stderr (#843)")
@@ -4960,6 +4978,8 @@ def main() -> int:
         ap.error("--move-archetype carries the live plinth pin; --plinth-pin tested is for a tag update")
     if a.print_plinth_pins:
         return print_plinth_pins(root)
+    if a.print_plinth_comments:
+        return print_plinth_comments(root)
     if a.print_refused_actions:
         return print_refused_actions(root, a.repo, not a.no_network)
     if a.print_diff_size:
