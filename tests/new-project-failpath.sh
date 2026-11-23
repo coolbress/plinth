@@ -1841,5 +1841,50 @@ for old in 'Data processing, or a model you train' 'data processing and model tr
   else ok skill-archetype "the skill no longer says \"$old\""; fi
 done
 
+# Visibility is asked alone, before the bundled defaults (#1033): "the
+# recommended defaults" read as "leave the technical choices to plinth", and a
+# team-internal tool started public under MIT. The defaults then name no
+# visibility, Yes adds no visibility flag, and Customize does not ask it again.
+vis_q="$(grep -nF 'Header `Visibility`: "Who may see this project'"'"'s code?"' "$skill" | head -n 1 | cut -d: -f1)"
+def_q="$(grep -nF 'header `Defaults`' "$skill" | head -n 1 | cut -d: -f1)"
+if [ -n "$vis_q" ] && [ -n "$def_q" ] && [ "$vis_q" -lt "$def_q" ]
+then ok skill-visibility "the visibility question, worded as who may see the code, comes before the Defaults question"
+else bad skill-visibility "the visibility question (line ${vis_q:-none}) is not before the Defaults question (line ${def_q:-none})"; fi
+if grep -c 'Header `Visibility`' "$skill" | grep -qx 1
+then ok skill-visibility "visibility is asked in one place only, not again under Customize"
+else bad skill-visibility "the skill asks visibility in more than one place"; fi
+for pair in "| Anyone on the internet (public) |::the license recommended is MIT" \
+            "| Anyone on the internet (public) |::On GitHub the whole wall stands on every plan" \
+            "| Only people you add (private) |::the license recommended is Proprietary" \
+            "| Only people you add (private) |::On GitHub Free a private repository cannot keep the ruleset, so plinth stops before creating it" \
+            "| Only people you add (private) |::On GitLab.com this is plinth's default"; do
+  key="${pair%%::*}"; phrase="${pair#*::}"
+  if row "$key" | grep -qF -- "$phrase"; then ok skill-visibility "the $key row says \"$phrase\""
+  else bad skill-visibility "the skill's $key row does not say \"$phrase\""; fi
+done
+# Asked before the host, step 4 recommends GitHub's public; GitLab.com picked
+# under Customize asks it again with GitLab's private first (the review of #1033).
+if grep -qF 'visibility came from step 4, not from the arguments, ask step 4 again as' "$skill"
+then ok skill-visibility "GitLab.com chosen under Customize asks visibility again in GitLab's terms"
+else bad skill-visibility "the skill does not ask visibility again when GitLab.com is chosen after step 4"; fi
+if grep -qF 'The answer becomes `--public` or `--private`, on either host.' "$skill"
+then ok skill-visibility "the visibility answer becomes a flag, so the command said before the run asks it no more"
+else bad skill-visibility "the skill does not turn the visibility answer into --public or --private"; fi
+# The Defaults step, from its heading to the Host question, names no
+# visibility and adds no visibility flag; its license follows the answer.
+defaults_step="$(sed -n '/^5\. \*\*The recommended defaults\.\*\*/,/Header `Host`/p' "$skill")"
+if printf '%s\n' "$defaults_step" | grep -qF 'header `Defaults`'
+then ok skill-visibility "the Defaults step is read as step 5, up to the Host question"
+else bad skill-visibility "the Defaults step is not step 5 as this test reads it, so the checks below read nothing"; defaults_step=""; fi
+for old in 'public on GitHub' 'private on GitLab.com' '`--public`' '`--private`'; do
+  if printf '%s\n' "$defaults_step" | grep -qF -- "$old"; then bad skill-visibility "the Defaults step still says \"$old\""
+  else ok skill-visibility "the Defaults step no longer says \"$old\""; fi
+done
+for phrase in 'It never names the visibility.' 'for a private project, say "Proprietary license" in place of "MIT' \
+              'for a private project, `--license=proprietary`'; do
+  if printf '%s\n' "$defaults_step" | grep -qF -- "$phrase"; then ok skill-visibility "the Defaults step says \"$phrase\""
+  else bad skill-visibility "the Defaults step does not say \"$phrase\""; fi
+done
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
