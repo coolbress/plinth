@@ -13,9 +13,13 @@ permissions:
 
 jobs:
   # Tier 1, the installer's journey: what the README says, typed on a clean runner.
+  # The limit leaves a third of itself after the slowest green run, so a slow
+  # runner does not cancel a green job (#1041: 25 green runs of 30 took 14.1
+  # to 19.9 minutes under a limit of 20), and stays under 40, so a step that
+  # hangs is still cancelled. Measure again before moving it either way.
   install:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
