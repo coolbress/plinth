@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- `/plinth:template-update --archetype`'s plan reads the repository's
+  Actions allowlist and names each action the moved workflows use that it
+  refuses, with the `scripts/with-admin-token.sh gh api` command a person
+  runs before the move's pull request merges; the description's by-hand
+  list carries it. `/plinth:new-project` allows only the release actions of
+  the archetype it renders, so `data-ml` to `cli` left
+  `pypa/gh-action-pypi-publish` refused and `cli` to `backend` left docker's
+  two image actions refused: the first run that used one ended in
+  `startup_failure` with no job, though the move's checks were green. An
+  allowlist that allows them is said, and one not read is said as not read
+  (#1018).
+
 ## [2.41.0] - 2026-11-23
 
 A `Proprietary` `cli` or `library` made by `/plinth:new-project` releases to GitHub only, with no PyPI step; a project made with an earlier plinth gets it through `/plinth:template-update` and should check its `release.yml`. New projects render plinth-template v1.50.1: `scripts/heavy.sh` serves waiters in arrival order, says where each is in the queue, and queues a sandboxed Claude Code session with the others (it needs `perl`; without it a test does not run and exits 75). `/plinth:template-update`'s plan says before applying when a hand-raised plinth pin will conflict, and an archetype move that adds a required check (`cli` or `library` to `backend` or `data-ml`) can merge: `ci / floor-check` reads the check not yet required as a SKIP until the default branch records the new archetype, and the plan gives the order. The eval suite's grading reads a negation. A pull request's local run is the tests it touched and those its change reaches; CI runs every test. No input, job or check name a project calls changed, so its `uses:` pins need no raise.

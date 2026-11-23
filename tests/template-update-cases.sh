@@ -110,9 +110,16 @@ if [ -n "$new" ]; then
   if [ "$new" = backend ]; then
     printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  image:\n    runs-on: ubuntu-latest\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
     printf 'FROM x\n' > Dockerfile
+    # Its image workflows call docker's actions, which the door allows only
+    # for backend (#1018).
+    printf 'jobs:\n  image:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: docker/setup-buildx-action@%s\n      - uses: docker/build-push-action@%s\n' \
+      "$(printf '%040d' 7)" "$(printf '%040d' 7)" > .github/workflows/release.yml
     exit 0
   fi
   printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
+  # cli's release.yml publishes with pypa's action, which the door allows only
+  # for cli and library (#1018).
+  printf 'jobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: pypa/gh-action-pypi-publish@%s\n' "$(printf '%040d' 7)" > .github/workflows/release.yml
   rm -f Dockerfile; mkdir -p tests; printf 'def test_built_wheel():\n    pass\n' > tests/test_built_wheel.py
   conflict() { # <path> <ours> <theirs>
     local b o t; b="$(git hash-object -w "$1")"
@@ -1422,6 +1429,42 @@ run --archetype library
 if [ "$rc" = 1 ] && grep -qF "update the template first" <<<"$out" && [ ! -e "$work/uvx.log" ]; then ok "a move behind the target tag stops before copier: update first"
 else bad "move behind the tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
+# The Actions allowlist (#1018): the door allows only the release actions of
+# the archetype it renders, and a move does not change the setting. The plan
+# names each action the moved workflows use that the allowlist refuses, with
+# the command a person runs; one that allows them, or one not read, is said.
+allowlist_at() { # <api dir> <pattern>...: a selected-actions allowlist, as the door sets it
+  local d="$1"; shift
+  mkdir -p "$d/repos/o/r/actions/permissions"; [ -e "$d/repos/coolbress/plinth-template" ] || tag_names "$d" "$target_sha"
+  printf '{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}\n' > "$d/repos/o/r/actions/permissions.json"
+  printf '{"github_owned_allowed":true,"verified_allowed":false,"patterns_allowed":%s}\n' \
+    "$(printf '%s\n' "$@" | jq -R . | jq -sc .)" > "$d/repos/o/r/actions/permissions/selected-actions.json"
+}
+allow_cmd() { # <prefix> <pattern>...: the command the plan gives, under <prefix>
+  local pre="$1" w="" a; shift
+  for a in "$@"; do w="$w -f 'patterns_allowed[]=$a'"; done
+  printf '%swith-admin-token.sh gh api -X PUT repos/o/r/actions/permissions/selected-actions -F github_owned_allowed=true -F verified_allowed=false%s\n' "$pre" "$w"
+}
+dataml_api="$work/api-allow-data-ml"; allowlist_at "$dataml_api" 'coolbress/plinth/*'
+move_fixture move-allow-data-ml; reset_logs; base="$(git -C "$BARE" rev-parse main)"
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$dataml_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "The Actions allowlist refuses pypa/gh-action-pypi-publish (.github/workflows/release.yml line 5), which the workflows use after the move" <<<"$out" \
+   && grep -qF "$(allow_cmd "$root/scripts/" 'coolbress/plinth/*' 'pypa/gh-action-pypi-publish@*')" <<<"$out" \
+   && [ "$(grep -n -- "--apply $base" <<<"$out" | cut -d: -f1)" -gt "$(grep -nF "The Actions allowlist refuses" <<<"$out" | cut -d: -f1)" ]
+then ok "data-ml to cli under data-ml's allowlist: the plan names pypa's publish action and the command that allows it (#1018)"
+else bad "data-ml to cli, allowlist refuses (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+dataml_ok_api="$work/api-allow-data-ml-ok"; allowlist_at "$dataml_ok_api" 'coolbress/plinth/*' 'pypa/gh-action-pypi-publish@*'
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$dataml_ok_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "The Actions allowlist lets every action the workflows use after the move start (2 uses): nothing to allow." <<<"$out" \
+   && ! grep -qF "allowlist refuses" <<<"$out" && ! grep -qF "actions/permissions/selected-actions" <<<"$out"
+then ok "an allowlist that already allows them: said, and no command (#1018)"
+else bad "allowlist allows (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "Whether the Actions allowlist lets every action the workflows use after the move start was not read" <<<"$out" \
+   && ! grep -qF "actions/permissions/selected-actions" <<<"$out" && grep -qF -- "--apply $base --archetype cli" <<<"$out"
+then ok "an allowlist that cannot be read: the plan says it was not read, and still gives the apply line (#1018)"
+else bad "allowlist unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
 # --apply: the move as rendered, in a draft.
 move_fixture move-apply; reset_logs
 base="$(git -C "$BARE" rev-parse main)"
@@ -1612,6 +1655,23 @@ if [ "$rc" = 0 ] && grep -qF "chore(template): move from the cli archetype to ba
 then ok "the move's description gives the same order, with the command from plinth's folder (#1017)"
 else bad "the description of a move that adds image (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
 
+# cli to backend under cli's allowlist (#1018): docker's two actions are
+# refused, and the command keeps what the allowlist already allows.
+cli_api="$work/api-allow-cli"; cp -R "$held_api" "$cli_api"; allowlist_at "$cli_api" 'coolbress/plinth/*' 'pypa/gh-action-pypi-publish@*'
+backend_allow="$(allow_cmd "" 'coolbress/plinth/*' 'pypa/gh-action-pypi-publish@*' 'docker/build-push-action@*' 'docker/setup-buildx-action@*')"
+move_cli move-allow; reset_logs
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$cli_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "The Actions allowlist refuses docker/setup-buildx-action (.github/workflows/release.yml line 5), docker/build-push-action (.github/workflows/release.yml line 6), which the workflows use after the move" <<<"$out" \
+   && grep -qF "$root/scripts/$backend_allow" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out"
+then ok "cli to backend under cli's allowlist: the plan names docker's two actions and one command that keeps pypa's (#1018)"
+else bad "cli to backend, allowlist refuses (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$cli_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend --assisted-by "Claude:claude-test-1" 2>&1)"; rc=$?
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -qF -- "- The Actions allowlist refuses docker/setup-buildx-action" <<<"$body" \
+   && grep -qF "\`scripts/$backend_allow\`" <<<"$body" && ! grep -qF "$root" <<<"$body"
+then ok "the move's description carries the allowlist command in its by-hand list, from plinth's folder (#1018)"
+else bad "the description's allowlist line (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
+
 # The skill names the order once and leaves the typing to the person.
 skill="$root/skills/template-update/SKILL.md"
 skill_steps="$(grep -E '^[1-4]\. `(claude plugin|/reload-plugins|/plinth:template-update)' "$skill" | sed -E 's/^[1-4]\. `([^`]*)`.*/\1/')"
@@ -1634,6 +1694,10 @@ else bad "the skill's fields"; fi
 if grep -qF "run the project's default review" <<<"$skill_text" && grep -qF 'replace the `Review:` line with what ran' <<<"$skill_text"
 then ok "the skill says the agent runs the default review and replaces the Review: line with what ran"
 else bad "the skill's review step"; fi
+if ! grep -qF 'Nothing else changes outside the files' <<<"$skill_text" \
+   && grep -qF 'Outside the files, only the required checks and the Actions allowlist change with the archetype' <<<"$skill_text"
+then ok "the skill says the Actions allowlist changes with the archetype too (#1018)"
+else bad "the skill's outside-the-files sentence"; fi
 if grep -qF 'GitLab is not served yet' <<<"$skill_text"
 then ok "the skill says GitLab is not served yet (#924)"
 else bad "the skill's GitLab line"; fi
