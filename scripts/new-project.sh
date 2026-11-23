@@ -31,8 +31,8 @@
 # before anything exists:
 #   1 tools       claude >= 2.1.274, git >= 2.37, uv, gh logged in (warnings: token
 #                 in the environment, native Windows)
-#   2 token       classic: scopes repo and workflow; delete_repo is optional and
-#                 without it rollback is off. Fine-grained: the admin path, because
+#   2 token       classic: scopes repo and workflow; delete_repo is an opt-in the
+#                 fixes name apart (#1034), and without it rollback is off. Fine-grained: the admin path, because
 #                 its reach over a repository that does not exist yet cannot be read.
 #   3 owner       exists; your own login or an organization you belong to
 #   4 visibility  the repository must not exist yet. --private: an owner on
@@ -225,8 +225,9 @@ if grep -qi '^x-oauth-scopes:' <<<"$headers"; then
   [ -z "$missing" ] || stop "gh's token lacks the scope(s) ${missing%,} (it has: ${scopes:-none})" \
     ${env_first:+"  $env_first"} \
     ${env_where:+"  $env_where"} \
-    ${env_first:+"  then, if gh holds no login of its own: gh auth login -s repo,workflow,delete_repo instead of the refresh below"} \
-    "  fix: gh auth refresh -h github.com -s repo,workflow,delete_repo   (delete_repo is optional: it lets a failed run delete what it created)" \
+    ${env_first:+"  then, if gh holds no login of its own: gh auth login -s repo,workflow instead of the refresh below"} \
+    "  fix: gh auth refresh -h github.com -s repo,workflow" \
+    "  optional, apart: gh auth refresh -h github.com -s delete_repo lets a failed run delete the repository it created, and lets the login delete any repository it administers; without it a failed run leaves the repository and prints where to delete it" \
     "  it runs here, in Claude Code too, typed after ! (! gh auth refresh ...): it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  a personal access token instead: https://github.com/settings/tokens with the same scopes"
   has_scope delete_repo || rollback="off (no delete_repo scope; on failure the repository stays: delete it at $url/settings)"
@@ -238,7 +239,7 @@ elif [ "$preflight" = 1 ]; then
   stop "gh is using a fine-grained token; whether it reaches a repository that does not exist yet cannot be read" \
     ${env_first:+"  $env_first"} \
     ${env_where:+"  $env_where"} \
-    "  fix: gh auth login -s repo,workflow,delete_repo   (browser login)" \
+    "  fix: gh auth login -s repo,workflow   (browser login; delete_repo is an opt-in, added apart: it lets a failed run delete what it created)" \
     "  it runs here, in Claude Code too, typed after ! (! gh auth login ...): it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  to keep the fine-grained token instead: run the door with every choice given; it stops here and prints the command for a separate terminal window"
 else
@@ -269,7 +270,7 @@ else
     "  1. log gh in through a browser with the scopes the door reads, then run the door again where you ran it:" \
     ${env_first:+"     $env_first"} \
     ${env_where:+"     $env_where"} \
-    "       gh auth login -s repo,workflow,delete_repo" \
+    "       gh auth login -s repo,workflow" \
     "     it runs in Claude Code too, typed after ! (! gh auth login ...): it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  2. run the door with an admin token, typed at a prompt (never on the command line)," \
     "     in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
@@ -280,7 +281,7 @@ else
     "       $token_link" \
     ${kind_note:+"     $kind_note"} \
     "     the one choice left there: Repository access \"All repositories\" (a repository that does not exist yet is not selectable)" \
-    "     or classic: scopes repo, workflow, delete_repo (https://github.com/settings/tokens)"
+    "     or classic: scopes repo and workflow, and delete_repo if a failed run should delete what it created (https://github.com/settings/tokens)"
 fi
 
 if [ "$preflight" = 1 ]; then

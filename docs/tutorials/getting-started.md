@@ -10,15 +10,21 @@ and merge the pull request the generator opens for you.
   generator checks all five and names the missing one. Installing the plugin needs git 2.37 or
   newer: an older one (the macOS system git can be 2.30) fails with
   `index.lock: File exists`. `brew install git` fixes it.
-- Log in to GitHub with `gh auth login -s repo,workflow,delete_repo`
-  (browser login). The default scopes lack `workflow`, which the generator
-  needs. `delete_repo` is optional: with it, a run that fails deletes the
-  repository it created; without it the generator prints `rollback: off` and
-  goes on, as the last bullet under [Create the repository](#create-the-repository) says.
-  The same login is administration on every repository you own, and an
-  agent working with it can change a repository's rules or delete it
-  ([who can change the wall](../explanation/concepts.md#about-who-can-change-the-wall)).
-  The command runs from inside a Claude Code session too: it prints a
+- Log in to GitHub. The login you create the project with can administer
+  every repository your account owns, not only the new one, and an agent
+  working with it can change a repository's rules
+  ([who can change the wall](../explanation/concepts.md#about-who-can-change-the-wall));
+  after the first merge the agent moves to a token without that, as the
+  `administration:` line and [Next](#next) say. The login the run needs is
+  `gh auth login -s repo,workflow` (browser login). The default scopes lack
+  `workflow`, which the generator needs.
+- `delete_repo` is an opt-in: `gh auth refresh -h github.com -s delete_repo`
+  adds it to that login. With it, a run that fails deletes the repository it
+  created, and the login can delete any repository it administers. Without
+  it the generator prints `rollback: off` and goes on; a run that fails then
+  leaves the repository and prints its settings page for you to delete it,
+  as the last bullet under [Create the repository](#create-the-repository) says.
+- The login command runs from inside a Claude Code session too: it prints a
   one-time code and a URL, and a browser finishes it. No terminal is needed
   and nothing secret is typed. Do not export `GH_TOKEN`; an agent session can
   read the environment.
@@ -120,7 +126,7 @@ you can type instead:
   ([Before you start](#before-you-start)). On a personal account the
   generator reads your plan first, which needs the `read:user` scope that
   the login above does not ask for: log in with
-  `gh auth login -s repo,workflow,delete_repo,read:user`, or add it to the
+  `gh auth login -s repo,workflow,read:user`, or add it to the
   login you have with `gh auth refresh -h github.com -s read:user`. Without
   it the generator stops and prints that command.
 - `--license=apache-2.0`: MIT's freedoms plus a patent grant. Take it when
@@ -148,7 +154,7 @@ you can type instead:
 If a check fails it stops there and prints the fix; the agent shows it and
 says what each line means. A fix that is a command you type goes into
 Claude Code's prompt with `!` in front, for example
-`! gh auth refresh -h github.com -s repo,workflow,delete_repo`: the command
+`! gh auth refresh -h github.com -s repo,workflow`: the command
 runs here and its output lands in the conversation. After installing a
 program such as `uv`, quit Claude Code (`/exit`) and start it again, or it
 does not see the new program. Four you may meet:
@@ -156,17 +162,18 @@ does not see the new program. Four you may meet:
 - `uv is not installed`: run the printed `curl … | sh` line with `!`, then
   restart Claude Code and type `/plinth:new-project` again.
 - `gh's token lacks the scope(s)`: run the printed
-  `gh auth refresh -h github.com -s repo,workflow,delete_repo`. Like the
+  `gh auth refresh -h github.com -s repo,workflow`. Like the
   login, it runs from inside Claude Code, prints a one-time code and a URL,
   and a browser finishes it. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if
   either is set: `gh` uses them before any login it stores. If that leaves
   `gh` with no login, the refresh has nothing to refresh: run
-  `gh auth login -s repo,workflow,delete_repo` instead.
+  `gh auth login -s repo,workflow` instead. The stop also names the
+  `delete_repo` opt-in on its own line, as in [Before you start](#before-you-start).
 - `gh is using a fine-grained token`: either of two fixes. The browser login
   is shorter, but its token is scoped `repo` across the account rather than
   to selected repositories; the admin-token path keeps the fine-grained
   token's narrow reach.
-  1. `gh auth login -s repo,workflow,delete_repo`, as in
+  1. `gh auth login -s repo,workflow`, as in
      [Before you start](#before-you-start), then run the generator again
      where you ran it. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if either
      is set: `gh` uses them before any login it stores. They usually come

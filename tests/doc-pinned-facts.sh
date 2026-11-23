@@ -241,6 +241,42 @@ for path in sorted([*(p for p in docs.glob("*.md") if p.name != "CHANGELOG.md"),
 if fails == before:
     print(f"  PASS  the three questions: listed in step 5, said on all {named} line(s) that name them")
 
+# 9. The first login (#1034): the tutorial's first `gh auth login -s` asks for
+# the scopes new-project.sh stops without and nothing else, after a sentence
+# that says the login administers the account's other repositories too; and no
+# login or refresh that asks for those scopes, in a page or in the door's own
+# stops, carries delete_repo, which stays an opt-in named on its own.
+need = re.search(r"^  for s in ([a-z ]+); do has_scope ", src, re.M)
+need = need.group(1).split() if need else []
+if not need:
+    fail("scripts/new-project.sh has no `for s in <scopes>; do has_scope` line: the scopes it needs cannot be read")
+gs_rel = "docs/tutorials/getting-started.md"
+gs = (docs / gs_rel).read_text(encoding="utf-8")
+first = re.search(r"gh auth login -s ([a-z:_,]+)", gs)
+if not first:
+    fail(f"{gs_rel} shows no `gh auth login -s` command")
+elif need:
+    at = gs.count("\n", 0, first.start()) + 1
+    if first.group(1).split(",") != need:
+        fail(f"{gs_rel}:{at} the first login asks for {first.group(1)}; the door needs {','.join(need)}")
+    elif not re.search(r"administer", gs[gs.find("## Before you start"):first.start()]):
+        fail(f"{gs_rel}:{at} the first login comes before any sentence that says it can administer the account's other repositories")
+    else:
+        print(f"  PASS  {gs_rel}: the first login asks for {first.group(1)}, after saying what it can administer")
+login = re.compile(r"gh auth (?:login|refresh)\b[^`\"\n]*?-s ([a-z:_,]+)")
+pages = [("scripts/new-project.sh", src),
+         *((p.relative_to(docs).as_posix(), p.read_text(encoding="utf-8"))
+           for p in [docs / "README.md", *sorted((docs / "docs").rglob("*.md")), *sorted((docs / "skills").rglob("*.md"))]
+           if p.is_file())]
+before = fails
+for rel, text in pages:
+    for m in login.finditer(text):
+        got = m.group(1).split(",")
+        if need and all(s in got for s in need) and "delete_repo" in got:
+            fail(f"{rel}:{text.count(chr(10), 0, m.start()) + 1} offers {m.group(0)}: delete_repo is an opt-in, named apart from the scopes the run needs")
+if fails == before and need:
+    print(f"  PASS  no login or refresh that asks for {','.join(need)} carries delete_repo")
+
 print(f"  PASS  {stated} stated check count(s) read; expected "
       + ", ".join(f"{a or 'other'} {n}" for a, n in want.items()) if not fails else
       f"-- {fails} failed")
@@ -323,4 +359,8 @@ copy; sed -i.bak 's/"Can I see it?", "What did the reviewer say?" |/"Can I see i
 expect_fail_at "an arsenal cell that names the three questions and says two" "skills/arsenal/SKILL.md:$(tool_line '"Can I see it?" |' skills/arsenal/SKILL.md)"
 copy; printf '\nThen ask the three questions.\n' >>"$tmp/docs/skills/guide/SKILL.md"
 expect_fail "a line that names the three questions and says none" skills/guide/SKILL.md
+copy; sed -i.bak '1,/gh auth login -s repo,workflow`/s/gh auth login -s repo,workflow`/gh auth login -s repo,workflow,delete_repo`/' "$tmp/docs/docs/tutorials/getting-started.md"
+expect_fail_at "a first login that asks for delete_repo" "docs/tutorials/getting-started.md:$(tool_line 'gh auth login -s repo,workflow,delete_repo' docs/tutorials/getting-started.md)"
+copy; printf '\nfix: `! gh auth refresh -h github.com -s repo,workflow,delete_repo`\n' >>"$tmp/docs/skills/new-project/SKILL.md"
+expect_fail "a refresh that asks for delete_repo with the needed scopes" skills/new-project/SKILL.md
 exit "$status"

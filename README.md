@@ -200,7 +200,7 @@ When `gh` holds a fine-grained token, the generator stops and names two
 fixes. The browser login is shorter, but its token is scoped `repo` across the
 account rather than to selected repositories; the admin-token path keeps the
 fine-grained token's narrow reach. The first is
-`gh auth login -s repo,workflow,delete_repo`, which runs inside Claude Code
+`gh auth login -s repo,workflow`, which runs inside Claude Code
 (a one-time code and a URL, finished in a browser), after which the generator
 runs wherever it is started. Unset `GH_TOKEN` and `GITHUB_TOKEN` first if
 either is set: `gh` uses them before any login it stores. Remove them from the
