@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.42.0] - 2026-11-23
+
+`/plinth:guide` opens with where the project is and the next command, with the map after it: in the guide tasks the command moved from line 26–54 of the answer to line 10–16. `/plinth:new-project` asks who may see the project on its own, before the bundled defaults, and the license follows the answer. New projects render plinth-template v1.50.2, so a package name up to 46 characters starts with `ci / lint` green, and they call plinth v2.41.0. `/plinth:template-update --archetype` names the actions the Actions allowlist refuses after a move and the command that allows them. Each admin command is written to a file and printed as one short `bash <file>` line to run in a separate terminal. The plan also says when a pin line's version comment will conflict. The descriptions it and `/plinth:new-project` open carry the template's `Not verified:` line. The eval suite's grading reads a list under a heading. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
+
+tested with plinth-template v1.50.2
+eval suite not run: plinth-template v1.50.1 to v1.50.2 changes no `AGENTS.md` or `.claude/` file, only rendered code and tests; the guide change was measured with the guide tasks on <https://github.com/coolbress/plinth/issues/647#issuecomment-7097285616>
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.50.2 instead of v1.50.1:
@@ -5871,7 +5878,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.41.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.42.0...HEAD
+[2.42.0]: https://github.com/coolbress/plinth/releases/tag/v2.42.0
 [2.41.0]: https://github.com/coolbress/plinth/releases/tag/v2.41.0
 [2.40.1]: https://github.com/coolbress/plinth/releases/tag/v2.40.1
 [2.40.0]: https://github.com/coolbress/plinth/releases/tag/v2.40.0
