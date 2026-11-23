@@ -1003,7 +1003,7 @@ if [ "$has_pr" = yes ]; then
   # and this pull request exists to be merged in a minute, not to be a record.
   first_pr_body="Opened by /plinth:new-project to prove the wall: every required check must be green before the merge button enables. It adds a First day section to README.md and nothing else.
 
-Not verified yet: at the moment this is written the checks have not run. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+Not verified: the checks, which had not run when this was written. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
 
 $first_day
 
@@ -1022,11 +1022,11 @@ Not a person's check: this is only what /plinth:new-project read as it opened th
 - The default branch reads back as \`main\`.
 - GitHub accepted each ruleset, and $read_back.
 
-Not checked yet: this repository's own checks had not run on this pull request when this was written.
-
 ## How it was verified
 
 Nothing yet: at the moment this is written the checks have not run on this pull request. That is what this pull request is for. A red check: open its Details and read the last lines of the log. Tutorial: $tutorial
+
+Not verified: this repository's own checks, which had not run on this pull request when this was written.
 
 Review: none (no review had run when this pull request opened)
 
