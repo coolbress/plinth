@@ -1,6 +1,6 @@
 """The entry point as a person runs it, in its own process:
 
-    python -m probe
+    python -m <package>
 
 The package's own test calls `greet` in this process; nothing there runs the
 program. This test does: it exits 0, its log line says "started" and carries
@@ -29,6 +29,9 @@ from typing import Any
 
 EXPECTED = Path(__file__).with_name("entry_point.expected")
 
+#: What `python -m` runs, and the name argparse prints.
+PACKAGE = "probe"
+
 #: Fields that change from run to run, left out of the comparison.
 VARYING = ("time",)
 
@@ -36,7 +39,7 @@ VARYING = ("time",)
 def run(*args: str) -> subprocess.CompletedProcess[str]:
     # The interpreter running pytest, so the program sees the same environment.
     return subprocess.run(  # noqa: S603
-        [sys.executable, "-m", "probe", *args],
+        [sys.executable, "-m", PACKAGE, *args],
         capture_output=True,
         text=True,
         check=False,
@@ -88,7 +91,7 @@ def test_the_result_goes_to_stdout_and_the_logs_to_stderr() -> None:
 def test_help_prints_the_usage_and_logs_nothing() -> None:
     done = run("--help")
     assert done.returncode == 0, done.stderr
-    assert done.stdout.startswith("usage: probe "), done.stdout
+    assert done.stdout.startswith(f"usage: {PACKAGE} "), done.stdout
     assert "--version" in done.stdout
     assert done.stderr == ""
 
@@ -98,7 +101,7 @@ def test_version_prints_the_installed_version() -> None:
 
     done = run("--version")
     assert done.returncode == 0, done.stderr
-    assert done.stdout == f"probe {version('probe')}\n"
+    assert done.stdout == f"{PACKAGE} {version(PACKAGE)}\n"
     assert done.stderr == ""
 
 
@@ -106,4 +109,4 @@ def test_a_wrong_option_exits_2_with_the_usage_on_stderr() -> None:
     done = run("--no-such-option")
     assert done.returncode == 2
     assert done.stdout == ""
-    assert "usage: probe " in done.stderr
+    assert f"usage: {PACKAGE} " in done.stderr
