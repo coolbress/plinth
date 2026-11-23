@@ -1041,8 +1041,8 @@ out="$(MOCK_DIR="$work/idle" "$script" map "$work/idle" 2>&1)"
 grep -qx 'last merge: #7 on 2026-10-27 by person: feat: x' <<<"$out" && ok "map before the directory still reads that directory" ||
   bad "map before the directory: $(grep -E '^(repository|last merge)' <<<"$out")"
 
-# Off by default by mode: focused says how many and names only a step to do
-# now; full, every item. The project with the reviewer's caller has both kinds.
+# Off by default: without map, in either mode, how many and only a step to do
+# now (#1050); on map, every item. The project with the reviewer's caller has both kinds.
 put "$d2/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 out="$(MOCK_DIR="$d2" "$script" "$d2" 2>&1)"
 full="$(MOCK_DIR="$d2" "$script" "$d2" map 2>&1)"
