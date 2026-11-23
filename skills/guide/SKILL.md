@@ -93,10 +93,10 @@ before the way it is part of.
    answer when `mode:` says the person asked for the whole way (`map`),
    otherwise `/plinth:guide map`. A `none left off` or `not read` there is
    said as it is. Under that line, only the items whose line starts
-   `to do, if not done yet`, each with its steps; name no other here. With
-   `mode: full` the script prints every item: the others are not a paragraph
-   each in this part, and they are said at all only at the end of part 4,
-   when the person asked for the whole way.
+   `to do, if not done yet`, each with its steps; name no other here. The
+   script prints every item only on `map`: even then the others are not a
+   paragraph each in this part, and they are said at all only at the end of
+   part 4.
 2. **The one next step**, from `next:`, and the command from `command:`,
    copied exactly as printed, in the one code block of your answer; never a
    command or instruction of your own in its place, and no second code block

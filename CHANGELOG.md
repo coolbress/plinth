@@ -28,6 +28,15 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:guide` without `map` no longer has each item that started off to
+  hold back when it shows the whole way (before the first merge, or with the
+  state not read) (#1050). `scripts/guide-state.sh` prints there the one
+  count line it prints in focused mode, plus any step whose line says to do
+  it now; every item is printed only on `map`, as before. In the eval suite's
+  run after #1035, all three `guide-fresh` answers opened with the count and
+  then listed all seven items anyway, following the script's output rather
+  than the skill.
+
 - A move between an archetype that publishes to PyPI (`cli`, `library`) and
   one that publishes an image (`backend`, `data-ml`) reaches the default
   branch without a hand edit (#1044). The template rewrites
