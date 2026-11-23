@@ -136,12 +136,29 @@ numbered, one question at a time. Never answer a question for the person.
    `--archetype=cli`, `library`, `backend`, `data-ml` or `web`.
 3. **Where a web app runs**, for `web` only: the question in
    [Where a web app runs](#where-a-web-app-runs), unchanged.
-4. **The recommended defaults.** Of host (`--host=`), visibility
-   (`--private`/`--public`), the third-party reviewer
-   (`--third-party-review`/`--no-third-party-review`), the code of conduct
-   (`--code-of-conduct=`/`--no-code-of-conduct`), the description
+4. **Who may see the project**, when neither `--public` nor `--private` is
+   given: ask it alone, before the defaults, since it decides the license
+   recommended, what the wall can hold on the account's plan and who can
+   read the code. Header `Visibility`: "Who may see this project's code?"
+   With `--host gitlab` given, list **Only people you add (private)
+   (Recommended)** first; otherwise **Anyone on the internet (public)
+   (Recommended)**.
+
+   | Label | Description |
+   | --- | --- |
+   | Anyone on the internet (public) | Anyone can read the code; the license recommended is MIT. On GitHub the whole wall stands on every plan. On GitLab.com, anyone can read it. |
+   | Only people you add (private) | Only you and the people you add can read it; the license recommended is Proprietary. On GitHub Free a private repository cannot keep the ruleset, so plinth stops before creating it; on a paid plan it has no CodeQL or push protection unless the account has GitHub Code Security and Secret Protection; on a personal account, plinth reads the plan first, which needs the `read:user` permission on your GitHub login (it says the command that adds it). On GitLab.com this is plinth's default, since the free plan protects a private project's main branch. |
+
+   The answer becomes `--public` or `--private`, on either host. With
+   `--host gitlab` given, leave out the GitHub sentences; with
+   `--host github` given, or the archetype `web`, leave out the GitLab.com
+   ones. In text, the same question with the two choices numbered.
+5. **The recommended defaults.** Of host (`--host=`), the third-party
+   reviewer (`--third-party-review`/`--no-third-party-review`), the code of
+   conduct (`--code-of-conduct=`/`--no-code-of-conduct`), the description
    (`--description=`/`--no-description`), license (`--license=`) and
-   directory (`--dir=`), take the ones the arguments do not give. First,
+   directory (`--dir=`), take the ones the arguments do not give. The
+   visibility is known by now, from the arguments or step 4. First,
    when the code of conduct is among them and the host is not GitLab, read
    whether the owner already publishes one:
 
@@ -155,13 +172,13 @@ numbered, one question at a time. Never answer a question for the person.
    line (`no`, or `unknown: …`) leaves it to ask; the script stops on its
    own if the lookup fails again. If nothing is left, ask nothing. Otherwise
    ask one question, header `Defaults`, naming only those left with their
-   defaults: "Use the recommended defaults? public on GitHub, MIT license,
-   in `~/<name>`, no third-party reviewer, no code of conduct, no
-   description." With `--host gitlab` given, say "private on GitLab.com" in
-   place of "public on GitHub" and leave out the reviewer, the code of
-   conduct and the description, which are GitHub only. The license follows
-   the visibility: with `--private` given, or `--host gitlab` without
-   `--public`, say "Proprietary license" in place of "MIT license".
+   defaults: "Use the recommended defaults? GitHub, MIT license, in
+   `~/<name>`, no third-party reviewer, no code of conduct, no
+   description." It never names the visibility. With `--host gitlab`
+   given, leave out the host, the reviewer, the code of conduct and the
+   description, which are GitHub only. The license follows the visibility:
+   for a private project, say "Proprietary license" in place of "MIT
+   license".
 
    | Label | Description |
    | --- | --- |
@@ -170,27 +187,31 @@ numbered, one question at a time. Never answer a question for the person.
 
    Every answer becomes a flag, a default included, so that the command
    said before the run (below) asks nothing when typed again. **Yes** adds
-   the flag for each default still open: `--host=github`, `--public`,
+   the flag for each default still open: `--host=github`,
    `--no-third-party-review`, `--no-code-of-conduct`, `--no-description`,
    `--license=mit` and `--dir=<home>/<name>`, with the home directory
-   written out as an absolute path; with `--host gitlab` given, `--private`
-   in place of `--public`, and none of the three GitHub-only flags; for a
-   private repository, `--license=proprietary` in place of `--license=mit`.
+   written out as an absolute path; with `--host gitlab` given, none of the
+   three GitHub-only flags; for a private project, `--license=proprietary`
+   in place of `--license=mit`.
    **Customize** asks each choice still open, leaving out what the
    arguments give and what does not apply: the host for `web`, which is
    GitHub only, and on GitLab the reviewer, the code of conduct and the
    description, which are GitHub only.
-   Visibility and the reviewer depend on the host, and the license's
-   recommendation on the visibility, so ask each after what it depends on.
-   When the host is still open, ask in two calls: first the host, then
-   visibility and, on GitHub, the reviewer. When the host is already
-   settled, ask visibility and the reviewer in one call. Ask the license in
-   the first call made once the visibility is known: with the visibility
-   given by the arguments, in the first call still to make (the host's, or
-   the reviewer's), and alone when there is none; otherwise in the next
-   call: on GitHub
-   with the code of conduct and the description still open, and alone
-   when none is open or on GitLab.
+   The reviewer depends on the host, so ask it after the host. When the
+   host is still open, ask in two calls: first the host and the license,
+   then, on GitHub, the reviewer, the code of conduct and the description.
+   When the host is already settled (given, or GitHub for `web`), ask them
+   all in one call: the license and, on GitHub, the reviewer, the code of
+   conduct and the description.
+   Step 4 recommends public while the host is open, which is GitHub's
+   recommendation. So when the host chosen here is GitLab.com and the
+   visibility came from step 4, not from the arguments, ask step 4 again as
+   the second call, alone, in GitLab's terms with **Only people you add
+   (private) (Recommended)** first. Its answer replaces the first one. The
+   license's recommendation depends on that answer, so wait for it: when it
+   changes the visibility and the license was asked in the first call, ask
+   the license again in a call of its own, after that answer, with the new
+   recommendation first; its answer replaces the first license.
 
    - Header `Host`: "Where should the repository live?" **GitHub
      (Recommended)** (`--host=github`). **GitLab.com**: a GitLab.com
@@ -205,17 +226,6 @@ numbered, one question at a time. Never answer a question for the person.
      (`--license=apache-2.0`). **Proprietary**: grants nothing; nobody
      else may use, copy or share the code without your written permission
      (`--license=proprietary`).
-   - Header `Visibility`: "Public or private?" Public is `--public`,
-     private `--private`, on either host. On GitHub, **Public
-     (Recommended)**: the whole wall on every plan; **Private**: on GitHub
-     Free a private repository cannot keep the ruleset, so plinth stops
-     before creating it; on a paid plan it has no CodeQL or push protection
-     unless the account has GitHub Code Security and Secret Protection; on
-     a personal account, plinth reads the plan first, which needs the
-     `read:user` permission on your GitHub login (it says the command that
-     adds it). On GitLab, **Private (Recommended)**: plinth's default there,
-     since GitLab.com's free plan protects a private project's main branch;
-     **Public**: anyone can read it.
    - Header `Reviewer`, on GitHub only, asked as a fact the person knows,
      not a preference: "Is a code reviewer, such as Codex's, already
      connected to your GitHub account?" **No, or not sure (Recommended)**:
@@ -224,10 +234,6 @@ numbered, one question at a time. Never answer a question for the person.
      `third-party / review` result, which reports and is not required, so a
      pull request still merges without it. The last lines then say what to
      do right away: turn the reviewer on for the new repository.
-
-   Then, on GitHub, ask the code of conduct and the description still open
-   in one call:
-
    - Header `Conduct`: "Add a code of conduct?" **No (Recommended)**:
      `--no-code-of-conduct`; most small projects start without one, and
      `/plinth:floor-check` does not ask for it. **Yes, the Contributor

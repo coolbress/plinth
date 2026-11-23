@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` asks who may see the project on its own, before the
+  `Defaults` question, when neither `--public` nor `--private` is given:
+  "Who may see this project's code?", anyone on the internet or only the
+  people you add, each answer saying the license it recommends and what it
+  means for the wall (GitHub Free stops before a private repository;
+  GitLab.com's default is private). The `Defaults` question no longer names
+  the visibility, and the license it names follows the answer: MIT for
+  public, Proprietary for private. Read as "leave the technical choices to
+  plinth", the recommended defaults could start a team-internal tool public
+  under MIT. The answer is still a flag in the command said
+  before the run (#1033).
+
 ### Fixed
 
 - `/plinth:template-update --archetype`'s plan reads the repository's

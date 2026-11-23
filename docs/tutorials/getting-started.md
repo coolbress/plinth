@@ -83,14 +83,21 @@ picker (a window of choices; Other lets you type an answer instead):
    card as release files); or a website people log in to (`web`, then where
    it runs). Data processing, collection or a pipeline with no model trained
    is `cli`.
-2. **Use the recommended defaults?** public, on GitHub, MIT licence, in
-   `~/my-app`, no third-party reviewer, no code of conduct, no description.
-   Yes asks nothing more. Customize asks the host (GitLab.com needs `glab`
-   installed and logged in) and the licence; then public or private, whose
-   recommendation depends on the host, and on GitHub whether a code reviewer
-   such as Codex's is already connected to your account; then, on GitHub, a
-   code of conduct (with a contact; not asked when your account's own applies)
-   and a one-line description; then the folder,
+2. **Who may see this project's code?** Anyone on the internet (public,
+   recommended on GitHub; the licence recommended is MIT), or only you and
+   the people you add (private; the licence recommended is Proprietary). On
+   GitHub Free a private repository cannot keep the ruleset, so the
+   generator stops before creating it; on GitLab.com private is the
+   default.
+3. **Use the recommended defaults?** GitHub, MIT licence (Proprietary for a
+   private project), in `~/my-app`, no third-party reviewer, no code of
+   conduct, no description. Yes asks nothing more. Customize asks the host
+   (GitLab.com needs `glab` installed and logged in; choosing it asks who
+   may see the code again, with private recommended, and the licence again
+   after it when that answer changed) and the licence; then,
+   on GitHub, whether a code reviewer such as Codex's is already connected
+   to your account, a code of conduct (with a contact; not asked when your
+   account's own applies) and a one-line description; then the folder,
    with `~/my-app` offered and any other path typed into Other.
 
 Where the picker cannot be shown (`claude -p`), the same questions come as
