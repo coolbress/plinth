@@ -147,6 +147,8 @@ for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' 
 # stop, warn, below, choices_of, read_into and unread_why, shared with the GitLab door.
 # shellcheck source=scripts/lib/door.sh
 . "$here/lib/door.sh"
+# The name's length, before any tool or login is read (#1053).
+[ -z "$target" ] || name_fits "${target#*/}"
 
 # ── 1 tools ──────────────────────────────────────────────────────────────
 command -v git >/dev/null || stop "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
