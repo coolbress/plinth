@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The eval suite's `floor-gaps` and `next-day` grading reads a list under a
+  heading (#1032). `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml`
+  listed one per line under "Missing files:" or "누락된 파일 목록" passed none
+  of the three gaps, since no line that named a file said it was missing. A
+  list item that names the entry and holds no state word of its own now reads
+  as its lead-in line, parent item or heading says: missing or open passes,
+  present or done fails, and a heading that says neither credits nothing; a
+  bare "no" or "없" in it ("No issues:", "이상 없음") and "What I found" say
+  neither. Checked by hand: the 30 entries of the v2.41.0 release and smoke runs'
+  reports grade the same as before.
+
 ## [2.41.0] - 2026-11-23
 
 A `Proprietary` `cli` or `library` made by `/plinth:new-project` releases to GitHub only, with no PyPI step; a project made with an earlier plinth gets it through `/plinth:template-update` and should check its `release.yml`. New projects render plinth-template v1.50.1: `scripts/heavy.sh` serves waiters in arrival order, says where each is in the queue, and queues a sandboxed Claude Code session with the others (it needs `perl`; without it a test does not run and exits 75). `/plinth:template-update`'s plan says before applying when a hand-raised plinth pin will conflict, and an archetype move that adds a required check (`cli` or `library` to `backend` or `data-ml`) can merge: `ci / floor-check` reads the check not yet required as a SKIP until the default branch records the new archetype, and the plan gives the order. The eval suite's grading reads a negation. A pull request's local run is the tests it touched and those its change reaches; CI runs every test. No input, job or check name a project calls changed, so its `uses:` pins need no raise.

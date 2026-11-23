@@ -443,12 +443,27 @@ def entry_met(entry: dict[str, str], final: str) -> bool:
     one that says both is unresolved and fails the entry: "Windows cp1252 has
     been verified and is not pending" fails the item, as does "No files are
     missing: uv.lock ... present" each gap. A sentence ends at `. `, `; `, `! `,
-    `? ` or the line's end, so "uv.lock" stays whole. Words, not a judge.
+    `? ` or the line's end, so "uv.lock" stays whole. A list item that names the
+    entry and holds no word of either list is read as its heading or lead-in line
+    (`lead_in`) says, read by `lead_said` (#1032): under "Missing files:" or
+    "누락된 파일 목록" it says `stated`, under "Present:" `opposite`, and under
+    "Files checked:" nothing, so it credits nothing; an item with a state word of
+    its own is read by its own words. Words, not a judge.
     """
     if "stated" not in entry:
         return bool(re.search(entry["named"], final, re.IGNORECASE))
-    lines = [line for line in final.splitlines() if re.search(entry["named"], line, re.IGNORECASE)]
-    if not any(said(entry, line)[0] for line in lines):
+    all_lines = final.splitlines()
+    lines: list[str] = []
+    leads: list[str] = []
+    for at, line in enumerate(all_lines):
+        if not re.search(entry["named"], line, re.IGNORECASE):
+            continue
+        lead = lead_in(all_lines, at)
+        if lead is not None and not readings(entry, line):
+            leads.append(lead)
+        else:
+            lines.append(line)
+    if not any(said(entry, line)[0] for line in lines) and not any(lead_said(entry, lead)[0] for lead in leads):
         return False
     sentences = [
         part
@@ -456,7 +471,68 @@ def entry_met(entry: dict[str, str], final: str) -> bool:
         for part in re.split(r"(?<=[.;!?])\s+", line)
         if re.search(entry["named"], part, re.IGNORECASE)
     ]
+    if any(lead_said(entry, lead)[1] for lead in leads):
+        return False
     return not any(opposite_said(entry, part) for part in sentences)
+
+
+LIST_ITEM = re.compile(r"^(\s*)(?:[-*+•]|\d+[.)])\s+")
+# A line a list hangs from across a blank line: a Markdown heading, a line ending in a
+# colon, or a line that is bold and nothing else ("**Missing files**").
+HEADING = re.compile(r"^\s*#{1,6}\s|:[\s*_]*$|^\s*(?:\*\*|__)[^*_]+(?:\*\*|__)\s*:?\s*$")
+
+
+def lead_in(lines: list[str], at: int) -> str | None:
+    """The heading or lead-in line the list item at `lines[at]` hangs from, or None (#1032).
+
+    Above the item, its siblings, their sub-items and their wrapped lines (indented
+    past the item) are passed over, blank lines between them too; the first line
+    above them is the lead-in when it is a list item indented less (the parent
+    item, "- Missing:"), or any other line with text ("누락된 파일 목록"). Past a
+    blank line, only a heading counts (`HEADING`): a paragraph a blank line
+    separates from the list is not read as its lead-in. A line that is not a list
+    item has none.
+    """
+    item = LIST_ITEM.match(lines[at])
+    if not item:
+        return None
+    indent = len(item.group(1).expandtabs())
+    blank = False
+    for line in reversed(lines[:at]):
+        if not line.strip():
+            blank = True
+            continue
+        other = LIST_ITEM.match(line)
+        depth = len((other.group(1) if other else line[: len(line) - len(line.lstrip())]).expandtabs())
+        if depth > indent or (other and depth == indent):
+            blank = False
+            continue
+        if blank and not HEADING.search(line):
+            return None
+        return LIST_ITEM.sub("", line, count=1)
+    return None
+
+
+# What a heading's words say of something else: a bare "no" or "없" belongs to a noun of its own
+# ("No issues:", "No action needed:", "이상 없음"), and "found" after "I", "we" or "what" is the
+# report's verb ("## What I found"), so neither is read as a state of the items below (#1032).
+LEAD_ASIDE = re.compile(r"no\b|없", re.IGNORECASE)
+LEAD_VERB = re.compile(r"\b(?:I|we|what)\s+$", re.IGNORECASE)
+
+
+def lead_said(entry: dict[str, str], lead: str) -> tuple[bool, bool]:
+    """Whether a lead-in line says `stated` and `opposite` of the items below it (#1032).
+
+    Read by `readings`, as `said` reads a line, less the words `LEAD_ASIDE` and
+    `LEAD_VERB` set aside. Either list's word decides: "Missing files:" passes the
+    items, "Present:" fails them, and one that says both fails them.
+    """
+    rs = [
+        (start, st)
+        for start, st in readings(entry, lead)
+        if not LEAD_ASIDE.match(lead, start) and not LEAD_VERB.search(lead[:start])
+    ]
+    return any(st for _, st in rs), any(not st for _, st in rs)
 
 
 def opposite_said(entry: dict[str, str], sentence: str) -> bool:

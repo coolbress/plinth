@@ -530,6 +530,30 @@ floor = [
     # A negation carries across state words joined by "or"/"and"/a comma, and stops at a new predicate.
     "uv.lock, CHANGELOG.md and .github/dependabot.yml: none of them is found or present.",
     "uv.lock, CHANGELOG.md and .github/dependabot.yml are not present and are still required.",
+    # A list item with no state word of its own reads its heading or lead-in line (#1032): the three
+    # texts #1032 reproduced, "Not found:", a Markdown heading, a bold one and a parent item.
+    "Missing files: uv.lock, CHANGELOG.md, .github/dependabot.yml",
+    "Missing files:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "누락된 파일 목록\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "Not found:\n- `uv.lock`\n- `CHANGELOG.md`\n- `.github/dependabot.yml`",
+    "## Missing\n\n1. uv.lock\n2. CHANGELOG.md\n3. .github/dependabot.yml",
+    "**Missing files**\n\n* uv.lock\n* CHANGELOG.md\n* .github/dependabot.yml",
+    "- Missing:\n  - uv.lock\n  - CHANGELOG.md\n  - .github/dependabot.yml",
+    # A heading that says present, or neither, credits nothing; an item's own words win over its heading;
+    # the same list under both headings contradicts itself; a paragraph across a blank line is no lead-in.
+    "Present files:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "## Already in place\n\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "- Found:\n  - uv.lock\n  - CHANGELOG.md\n  - .github/dependabot.yml",
+    "Files checked:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "Missing files:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml is present",
+    "Missing:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml\n\nIn place:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "The project is missing a few files.\n\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    # The fresh-context review on #1032: a lead-in's bare "no" or "없" belongs to a noun of its own and
+    # states nothing, and "What I found" is the report's verb, not a file in place.
+    "Missing:\n- uv.lock\n\nNo action needed:\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "No issues:\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "이상 없음\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml",
+    "## What I found\n\n- uv.lock\n- CHANGELOG.md\n- .github/dependabot.yml\n\nAdd uv.lock, CHANGELOG.md and .github/dependabot.yml.",
 ]
 resume = [
     "The open `cp1252 on Windows` check is done: the goodbye prints fine on a Windows console.",
@@ -564,14 +588,19 @@ resume = [
     "The goodbye has never been checked, verified or confirmed on a Windows console (cp1252).",
     "The cp1252 check on Windows is not verified and is still open.",
     "The cp1252 check on Windows is not pending and is verified.",
+    # The item under a heading (#1032): still open in English and Korean, done, and neither.
+    "Still open:\n- the goodbye on a Windows console (cp1252)",
+    "아직 확인하지 않은 항목\n- Windows 콘솔의 cp1252 출력",
+    "Done:\n- the goodbye on a Windows console (cp1252)",
+    "Notes:\n- the goodbye on a Windows console (cp1252)",
 ]
 print(" ".join("1" if all(m.entry_met(g, r) for g in gaps) else "0" for r in floor)
       + " " + " ".join("1" if m.entry_met(item, r) else "0" for r in resume))
 PY
 }
 stated_hits="$(stated_cases)"
-check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite, or both, fails; a negation turns the word over" \
-  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 1 1 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0 1 0 1 1 1 1 0" ]' "$stated_hits"
+check "a gap passes only when said missing, an open item only when said open; naming either while saying the opposite, or both, fails; a negation turns the word over; a list item reads its heading" \
+  '[ "$stated_hits" = "0 0 0 1 1 0 1 1 1 0 0 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 1 0 0 1 1 0 0 1 1 0 0 1 1 1 1 1 1 1 1 0 0 1 0 1 1 1 1 0 1 1 0 0" ]' "$stated_hits"
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
