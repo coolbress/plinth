@@ -24,6 +24,14 @@ pull requests and have no tag.
   plinth", the recommended defaults could start a team-internal tool public
   under MIT. The answer is still a flag in the command said
   before the run (#1033).
+- `/plinth:guide` opens with where the project is and why, then the one
+  command to type, in both modes; this step and the next in depth, and the
+  rest of the way, come after it. Before the first merge they sit under a
+  heading that says they are the whole way. What started off is one line
+  there too, the count and that `/plinth:guide map` names each; every item
+  is said, at the end, only when asked with `map`. The release run's guide
+  answers reached the command on line 26 to 54 of 28 to 57, after the whole
+  map (#1035).
 
 ### Fixed
 

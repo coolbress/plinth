@@ -4,10 +4,9 @@ What a project made by `/plinth:new-project` starts with turned off, when each
 is worth turning on, and where the steps are. `/plinth:new-project` prints
 these as its last lines and `/plinth:guide` says them, both from the table
 below through `scripts/off-by-default.sh`; an item added here reaches both.
-The guide says every item until the project's first pull request by a person
-is merged, when it could not read the project's pull requests, or when asked
-with `/plinth:guide map`; otherwise, how many there are, and by name only a
-step its line says to do now.
+The guide says how many there are, in one line near its start, and by name
+only a step its line says to do now; every item is said, at the end of its
+answer, only when asked with `/plinth:guide map`.
 The guide gives "How an item is sorted" as its reason, in these words.
 
 ## How an item is sorted
