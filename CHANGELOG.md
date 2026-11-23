@@ -49,6 +49,13 @@ pull requests and have no tag.
   neither. A line is read without its Markdown markup ("## Not missing:"),
   and a list item with its wrapped lines. Checked by hand: the 30 entries of the v2.41.0 release and smoke runs'
   reports grade the same as before.
+- The descriptions `/plinth:template-update` and `/plinth:new-project` open
+  end *How it was verified* with the template's own `Not verified: …` line,
+  as its CONTRIBUTING.md step 5 words it (#1020). They said the same under
+  "Not verified here:", "Not checked yet:" or "Not verified yet:", so a
+  review reading the project's rules asked for the line, and adding it by
+  hand reran the checks. "Not checked yet:" under *What I checked myself* is
+  gone: it said again what the new line says.
 
 ## [2.41.0] - 2026-11-23
 

@@ -447,11 +447,11 @@ Not a person's check: this is only what /plinth:new-project read as it opened th
 
 - main's protection and its merge settings read back as set: no push, Maintainers merge, no force push; pipeline must succeed, skipped not counted, squash, fast-forward.
 
-Not checked yet: this project's own pipeline had not run on this merge request when this was written.
-
 ## How it was verified
 
 Nothing yet: when this was written the pipeline had not run on this merge request, and running it is what this merge request is for. A failed job: open it and read the last lines of its log.
+
+Not verified: this project's own pipeline, which had not run on this merge request when this was written.
 
 Review: none (no review had run when this merge request opened)
 
