@@ -268,6 +268,28 @@ refused action with the `scripts/with-admin-token.sh gh api` command that
 allows it. The person runs it, as for a required check, before the move's
 pull request merges. When the allowlist cannot be read, the plan says so.
 
+`release.yml` is rewritten whole by a move between an archetype that
+publishes to PyPI (`cli`, `library`) and one that publishes an image
+(`backend`, `data-ml`): 560 to 576 lines, more than `ci / diff-size`'s
+default limit of 400 by itself, and no split by file can cut one file
+(measured on plinth-template v1.50.1 and v1.50.2, #1044). `ci / diff-size`
+from a plinth with the rule leaves it out of the count in the pull request
+that changes `archetype:` and keeps `_commit:`, and names it in its summary;
+that pull request's `archetype:` change already asks an admin's approval
+when the account that pushed is not an admin. The plan says which applies:
+
+- The plinth the workflows call has the rule: nothing to do. On exit 4,
+  follow the split as in step 3. `release.yml` stays with
+  `.copier-answers.yml` in the last part, listed as not counted, and that
+  part opens within the limit. Never cut `release.yml` by hand.
+- It does not: the plan says to raise the plinth pin first and gives no
+  `--apply` line, and `--apply` refuses the move. Tell the person, and plan
+  the move again once a pull request moving every `coolbress/plinth` `uses:`
+  line to the version the plan names is merged.
+- It was not read: the plan says so and still gives the `--apply` line. Tell
+  the person the move's last part fails `ci / diff-size` if that plinth is
+  older than the version the plan names.
+
 copier deletes a file of the old archetype that the project changed as
 readily as one it left alone, and reports no conflict for it. The plan
 compares each file the move deletes with the old archetype's own render, and

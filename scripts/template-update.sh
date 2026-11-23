@@ -26,7 +26,10 @@
 #       does, with the ci job's own max-diff-lines and diff-size-exclude
 #       (#795). Over the limit it pushes nothing (exit 4) and proposes the
 #       split: the paths of a first pull request that fits, then this one.
-#       --over-limit opens it as it is, red ci / diff-size and all.
+#       --over-limit opens it as it is, red ci / diff-size and all. A move's
+#       release.yml is left out of that count as the plinth the workflows
+#       call leaves it out (#1044); with one that counts it, a release.yml
+#       over the limit by itself stops the plan and --apply.
 #   template-update.sh --archetype <a>
 #   template-update.sh --apply <base-sha> --archetype <a> [--keep <path> | --drop <path>]... [--assisted-by <agent>:<model>]
 #       An archetype move (#1004), at the tag the repository records: the
@@ -199,6 +202,11 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
   echo "Over the limit: $total reviewable lines, against the limit of $max that ci / diff-size would apply"
   echo "(excluded from the count: $exclude). The update is committed in $wt; nothing was pushed."
   echo
+  # An archetype move's release.yml over the limit by itself, counted because
+  # the plinth the workflows call does not leave it out (#1044).
+  local rel_alone=""
+  [ -z "$(state_get "$sf" archetype)" ] || [ "$(state_get "$sf" size_move | cut -d ' ' -f 1)" = held ] || rel_alone="$(printf '%s\n' ${rest+"${rest[@]}"} \
+    | awk -v f="$rel_wf" -v m="$max" 'index($0, f " (") == 1 { n = substr($0, length(f) + 3); sub(/\)$/, "", n); if (n + 0 > m + 0) print n }')"
   if [ ${#first[@]} = 0 ]; then
     echo "No file fits under the limit on its own, so no split by file is proposed."
   else
@@ -207,6 +215,7 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
     for f in "${first[@]}"; do echo "  $f"; done
     echo "This update keeps the rest:"
     for f in ${rest+"${rest[@]}"}; do echo "  $f"; done
+    [ -z "${rel_n:-}" ] || echo "  $rel_wf ($rel_n, not counted: an archetype move, #1044)"
     [ "$restn" -le "$max" ] || echo "  (still over the limit: after the first is merged, --finish proposes the next split)"
     echo
     # The first number whose branch (local or on origin, as last fetched)
@@ -227,6 +236,19 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
     echo "Once it is merged, this update follows it:"
     echo "  git -C $(q "$wt") fetch origin $(q "$default") && git -C $(q "$wt") merge --no-edit origin/$(q "$default")"
     echo "  $(q "$0") --finish $(q "$wt")"
+  fi
+  if [ -n "$rel_alone" ]; then
+    echo
+    echo "$rel_wf alone is $rel_alone lines, and no split by file cuts one file. plinth v$(plinth_version) and later leave it out of"
+    echo "ci / diff-size's count in the pull request that changes archetype: (#1044)."
+    local sm; sm="$(state_get "$sf" size_move)"
+    if [ "${sm%% *}" = fails ]; then
+      echo "The plinth the workflows call ($(cut -d ' ' -f 2 <<<"$sm" | cut -c 1-12)) counts it: raise the plinth pin to that version or later first."
+    else
+      echo "Whether the plinth the workflows call does was not read when the move was applied${sm:+ (${sm#* * })}, and --finish does not read it again."
+      echo "If it does, its ci / diff-size leaves the file out: once the rest is split off, open this part with --over-limit (below)"
+      echo "and that check decides; if it is older, raise the plinth pin to that version or later first."
+    fi
   fi
   echo
   echo "Or open this update as it is, knowing ci / diff-size fails on it until it is split:"
@@ -325,6 +347,50 @@ ours_of() { # <worktree> <path>
   echo "This repository's side of $2 (read it for code of its own before taking the template's):"
   awk '/^<<<<<<< before updating$/ { s = 1; next } /^=======$/ && s { s = 0; print "----"; next } s' "$1/$2" | sed 's/^/    /'
 }
+# release.yml in a move (#1044): the template renders it whole for each
+# archetype, and between one that publishes to PyPI and one that publishes an
+# image, either half of a split inside it is 442 lines or more. ci /
+# diff-size from a plinth with the rule leaves it out of the count when
+# .copier-answers.yml changes archetype: and keeps _commit:, and this script
+# counts as the plinth the workflows call does.
+rel_wf=".github/workflows/release.yml"
+# A one-word value of .copier-answers.yml at <rev> (empty: the index), read as
+# ci / diff-size reads it; nothing when absent.
+answer_at() { # <worktree> <rev> <key>
+  { git -C "$1" show "$2:.copier-answers.yml" 2>/dev/null || true; } \
+    | sed -nE "s/^$3:[[:space:]]*['\"]?([A-Za-z0-9._-]+)['\"]?[[:space:]]*(#.*)?$/\1/p" | head -n 1
+}
+# "<lines> <max>" when the rehearsed move changes release.yml by more than
+# the moved ci job's max-diff-lines, counted with its diff-size-exclude (a
+# project that excludes the file already has nothing over: Codex review on
+# #1052), the count reading the whole repository; nothing otherwise, or when
+# those inputs are not read.
+release_over() { # <rehearsal: copier's changes uncommitted on HEAD>
+  local cfg max droot exclude n pats=() p spec=("$rel_wf")
+  cfg="$(python3 "$checker" --root "$1" --print-diff-size 2>/dev/null)" || return 0
+  max="$(sed -n 's/^max=//p' <<<"$cfg")"; droot="$(sed -n 's/^root=//p' <<<"$cfg")"; droot="${droot%/}"
+  exclude="$(sed -n 's/^exclude=//p' <<<"$cfg")"
+  { [ -z "$droot" ] || [ "$droot" = . ]; } && [ "$max" -gt 0 ] || return 0
+  [ -z "$exclude" ] || read -r -a pats <<<"$exclude"
+  for p in ${pats+"${pats[@]}"}; do spec+=(":(exclude)$p"); done
+  if git -C "$1" cat-file -e "HEAD:$rel_wf" 2>/dev/null; then
+    n="$(git -C "$1" diff --numstat HEAD -- "${spec[@]}" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')"
+  elif [ -n "$(git -C "$1" ls-files --others -- "${spec[@]}")" ]; then n="$(wc -l < "$1/$rel_wf" | tr -d ' ')"
+  else n=0; fi
+  [ "$n" -le "$max" ] || echo "$n $max"
+}
+# What the plan says of it: <size_move record> <lines> <max>. Exit 1 when the
+# plinth the workflows call counts it, so the move waits for a pin raise.
+release_says() {
+  local sm="$1" pin; pin="$(cut -d ' ' -f 2 <<<"$sm")"
+  local head="$rel_wf changes $2 lines, over ci / diff-size's limit of $3 by itself, and a split by file cannot cut one file"
+  case "${sm%% *}" in
+    held) echo "$head. The plinth the workflows call (${pin:0:12}) leaves it out of the count in the pull request that changes archetype: (#1044), and --finish counts the same way, so the rest splits by file." ;;
+    fails) echo "$head. The plinth the workflows call (${pin:0:12}) counts it, so the move's last pull request would fail ci / diff-size however it is split. Raise the plinth pin first: merge a pull request that moves every coolbress/plinth uses: line to plinth v$(plinth_version) or later (Dependabot's, or one by hand), then plan the move again."
+           return 1 ;;
+    *) echo "$head. Whether the plinth the workflows call leaves it out of the count in the move's pull request was not read${sm:+ (${sm#* * })}. This plinth (v$(plinth_version)) does; with one from before it, the move's last pull request fails ci / diff-size, and the plinth pin is raised first." ;;
+  esac
+}
 # The top-level jobs of a workflow file, one per line.
 jobs_of() { awk '/^jobs:/ { j = 1; next } /^[^ #]/ { j = 0 } j && /^  [A-Za-z0-9_-]+:/ { sub(/^  /, ""); sub(/:.*/, ""); print }'; }
 # The required checks on the default branch, one per line; exit 1 unread.
@@ -407,6 +473,20 @@ finish() { # <worktree>
     if [ -n "$droot" ] && [ "$droot" != . ]; then prefix="$droot/"; spec=("$droot"); fi
     [ -z "$exclude" ] || read -r -a pats <<<"$exclude"
     for p in ${pats+"${pats[@]}"}; do spec+=(":(exclude)$prefix$p"); done
+    # release.yml in a move (#1044), left out as ci / diff-size at the
+    # plinth the workflows call leaves it out: that plinth has the rule, the
+    # count reads the whole repository, and .copier-answers.yml changes
+    # archetype: and keeps _commit: against the merge base, so in the part
+    # that carries the answers file, which a split keeps for the last.
+    local rel_n="" at=""; [ "$committed" = yes ] && at=HEAD   # "" reads the index
+    local a_was a_now c_was c_now
+    a_was="$(answer_at "$wt" "$mb" archetype)"; a_now="$(answer_at "$wt" "$at" archetype)"
+    c_was="$(answer_at "$wt" "$mb" _commit)"; c_now="$(answer_at "$wt" "$at" _commit)"
+    if [ -z "$prefix" ] && [ "$(state_get "$sf" size_move | cut -d ' ' -f 1)" = held ] \
+       && [ -n "$a_was" ] && [ -n "$a_now" ] && [ "$a_was" != "$a_now" ] && [ -n "$c_was" ] && [ "$c_was" = "$c_now" ]; then
+      rel_n="$(git -C "$wt" diff --numstat "${tree[@]}" -- "$rel_wf" "${spec[@]:1}" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')"
+      if [ "${rel_n:-0}" -gt 0 ]; then spec+=(":(exclude)$rel_wf"); else rel_n=""; fi
+    fi
     local numstat total=0 a d
     numstat="$(git -C "$wt" diff --numstat "${tree[@]}" -- "${spec[@]}")" || die "the diff could not be counted in $wt"
     while read -r a d _; do
@@ -422,6 +502,9 @@ finish() { # <worktree>
     else
       split=yes
       size_line="\`ci / diff-size\`, counted here before pushing: $total reviewable lines, over the limit of $max (excluded: \`$exclude\`); nothing was pushed, and a split was proposed."
+    fi
+    if [ -n "$rel_n" ]; then
+      size_line="$size_line \`$rel_wf\` ($rel_n lines) is not in that count: an archetype move, which \`ci / diff-size\` at the plinth the workflows call leaves out of it, and lists the \`archetype:\` change under changes to the checks (#1044)."
     fi
   else
     size_line="\`ci / diff-size\` was not counted here before pushing ($cfg); its own run counts it."
@@ -776,7 +859,7 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   at_base
   plugin_gate
   cmd="$(move_at "$tmp" 2>"$tmp/move-note")" || { cat "$tmp/move-note" >&2; exit 1; }
-  grep -vE '^(moves|check-drop|check-add|check-add-floor): ' "$tmp/move-note" >&2
+  grep -vE '^(moves|check-drop|check-add|check-add-floor|diff-size-move): ' "$tmp/move-note" >&2
   rehearse "$cmd"
   added="$(git -C "$r" -c core.quotePath=false ls-files --others --exclude-standard | sort -u)"
   changed="$(git -C "$r" -c core.quotePath=false diff --name-only HEAD | sort -u | grep -vxF -f <(printf '%s\n%s\n' "$deleted" "$conflicts" | sed '/^$/d') || true)"
@@ -811,7 +894,7 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   echo "CI jobs that stop:"; listed "$stops"
   # The checks, as move_steps words them for the record --apply writes.
   { printf 'repo=%s\ndefault=%s\n' "$repo" "$default"
-    sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p' "$tmp/move-note"
+    sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p; s/^diff-size-move: /size_move=/p' "$tmp/move-note"
     if req="$(required_on "$repo" "$default")"; then
       echo "required_read=yes"; while IFS= read -r c; do [ -n "$c" ] && printf 'required=%s\n' "$c"; done <<<"$req"
     fi
@@ -823,12 +906,20 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
     || die "could not make a folder for the admin commands"
   move_steps "$tmp/checks" "$(q "$here")/" "$admin_dir" | sed 's/`//g'
   rmdir "$admin_dir" 2>/dev/null && admin_dir=""
+  size_wait=no; over="$(release_over "$r")"
+  # shellcheck disable=SC2086 # "<lines> <max>", two words
+  [ -z "$over" ] || release_says "$(state_get "$tmp/checks" size_move)" $over || size_wait=yes
   wrote="Nothing has been written (the fetch moved only origin/$default)."
   [ -z "$admin_dir" ] || wrote="Nothing has been written in the repository (the fetch moved only origin/$default; the admin commands above are files in $admin_dir)."
   echo
   if grep -q '^add_floor=fails ' "$tmp/checks" && [ -n "$(unrequired_adds "$tmp/checks")" ]; then
     echo "$wrote Raise the plinth pin first (above);"
     echo "--apply refuses this move until the workflows call a plinth that passes its ci / floor-check."
+    exit 0
+  fi
+  if [ "$size_wait" = yes ]; then
+    echo "$wrote Raise the plinth pin first (above);"
+    echo "--apply refuses this move until the workflows call a plinth whose ci / diff-size leaves $rel_wf out of the move's count."
     exit 0
   fi
   echo "$wrote To apply it, on the user's word:"
@@ -964,6 +1055,12 @@ if [ -n "$move" ]; then
   # The changed files the move deletes (#1016), from the rehearsal the plan
   # ran: each named once, with --keep or --drop, and nothing else named.
   rehearse "$rehearsed"
+  # A release.yml over the limit by itself, which the plinth the workflows
+  # call counts (#1044): its last pull request could not pass ci / diff-size.
+  over="$(release_over "$r")"
+  if [ -n "$over" ] && grep -q '^diff-size-move: fails ' "$tmp/move-check"; then
+    die "$rel_wf changes ${over% *} lines, over ci / diff-size's limit of ${over#* } by itself, and the plinth the workflows call ($(sed -n 's/^diff-size-move: fails //p' "$tmp/move-check" | cut -c 1-12)) counts it in the move's pull request; raise the plinth pin to v$(plinth_version) or later first, then plan the move again. Nothing was created"
+  fi
   # The allowlist against the moved workflows, for the description (#1018).
   actions_rec="$(actions_of "$r")"
   keeps=""; drops=""; unnamed=""; refused=""
@@ -1009,9 +1106,9 @@ if [ -n "$move" ]; then
   move_note="$(mktemp)"
   cmd="$(move_at "$wt" 2>"$move_note")" \
     || { cat "$move_note" >&2; rm -f "$move_note"; die "no move command at the base (above); $wt left for inspection"; }
-  grep -vE '^(moves|check-drop|check-add|check-add-floor): ' "$move_note" >&2
+  grep -vE '^(moves|check-drop|check-add|check-add-floor|diff-size-move): ' "$move_note" >&2
   moves="$(sed -n 's/^moves: //p' "$move_note")"
-  checks="$(sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p' "$move_note")"; rm -f "$move_note"
+  checks="$(sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p; s/^diff-size-move: /size_move=/p' "$move_note")"; rm -f "$move_note"
   if req="$(required_on "$repo" "$default")"; then
     checks="$checks"$'\n'"required_read=yes"
     while IFS= read -r c; do [ -n "$c" ] && checks="$checks"$'\n'"required=$c"; done <<<"$req"

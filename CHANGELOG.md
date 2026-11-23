@@ -13,6 +13,11 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.50.3 instead of v1.50.2:
+  new projects call plinth v2.42.0 (`plinth_sha`'s default moved from
+  15ae0a9 to d374071). No rendered file changed; `AGENTS.md` and `.claude/`
+  are unchanged, so no eval suite run is owed.
+
 - `/plinth:new-project` refuses a repository name longer than 46 characters
   (the owner or namespace not counted), on GitHub and GitLab.com, before it
   reads a tool or a login and before anything is rendered or created (#1053).
@@ -20,6 +25,27 @@ pull requests and have no tag.
   takes the same name, and a longer one makes the project's own lint check
   fail (coolbress/plinth-template#318). The skill states the limit where it
   asks for the name. A name of 46 characters or fewer runs as before.
+
+### Fixed
+
+- A move between an archetype that publishes to PyPI (`cli`, `library`) and
+  one that publishes an image (`backend`, `data-ml`) reaches the default
+  branch without a hand edit (#1044). The template rewrites
+  `.github/workflows/release.yml` whole: 560 to 576 lines, over
+  `ci / diff-size`'s default 400 by itself, and either half of a split
+  inside it is 442 lines or more (measured on plinth-template v1.50.1 and
+  v1.50.2). `ci / diff-size` now leaves that file out of the count in a pull
+  request whose `.copier-answers.yml` changes `archetype:` and keeps
+  `_commit:`, naming it with its lines on the count's line and in the
+  summary; the `archetype:` change is already put to an admin as a change
+  to the checks. `/plinth:template-update --archetype` counts as the plinth
+  the workflows call counts: with one that has the rule, the rest of the
+  move splits by file and `release.yml` lands with `.copier-answers.yml` in
+  the last part; with an older one, whose count the move's last pull request
+  could not pass, the plan says to raise the plinth pin first and `--apply`
+  refuses. A project gets the rule by raising both `coolbress/plinth`
+  `uses:` lines to the release that carries it. GitLab's `diff-size` is
+  unchanged: moves are GitHub only.
 
 ## [2.42.0] - 2026-11-23
 

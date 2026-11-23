@@ -2159,6 +2159,33 @@ def gained_rule_at(cmd: str, network: bool) -> str:
     return f"{'held' if GAINED_RULE.search(text) else 'fails'} {pin}"
 
 
+# How a move's plan tells whether the python-ci.yml a project calls leaves
+# release.yml out of ci / diff-size's count of an archetype move (#1044): the
+# comment opening that rule in its Measure step.
+SIZE_RULE = re.compile(r"^\s*# An archetype move \(#1044\)", re.MULTILINE)
+
+
+def size_rule_at(cmd: str, network: bool) -> str:
+    """Whether the move's own `ci / diff-size` leaves release.yml out of the
+    count (#1044): it runs the python-ci.yml of the plinth commit the
+    workflows call, which the line carries as plinth_sha. `held <sha>`,
+    `fails <sha>` or `unread <sha or ?> <why>`, as gained_rule_at says."""
+    m = re.search(r"--data plinth_sha=([0-9a-fA-F]{40})\b", cmd)
+    if not m:
+        return "unread ? the line carries no plinth_sha"
+    pin = m.group(1).lower()
+    data = api(f"repos/{PLINTH_REPO}/contents/.github/workflows/python-ci.yml?ref={pin}", network)
+    text = None
+    if isinstance(data, dict) and data.get("encoding") == "base64" and isinstance(data.get("content"), str):
+        try:
+            text = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+        except ValueError:
+            text = None
+    if text is None:
+        return f"unread {pin} .github/workflows/python-ci.yml at that commit could not be read"
+    return f"{'held' if SIZE_RULE.search(text) else 'fails'} {pin}"
+
+
 def print_move_command(root: Path, new: str, network: bool = True, host: str | None = None,
                        owner: str | None = None) -> int:
     """--print-update-command --move-archetype <new> (#1004): the line that
@@ -2172,7 +2199,9 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     person says which to keep. On stderr, a `check-drop:`
     line for each required check the move stops and a `check-add:` line for
     each it starts, then one `check-add-floor:` line saying whether the
-    plinth the workflows call passes the move's own floor check (#1017). Exit 1 with the reason when there is no line."""
+    plinth the workflows call passes the move's own floor check (#1017), and
+    a `diff-size-move:` line saying whether its ci / diff-size leaves
+    release.yml out of the move's count (#1044). Exit 1 with the reason when there is no line."""
     def no(why: str) -> int:
         print(f"no move command: {why}", file=sys.stderr)
         return 1
@@ -2223,6 +2252,7 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
             print(f"check-add: {c}", file=sys.stderr)
         if added:
             print(f"check-add-floor: {gained_rule_at(d['cmd'], network)}", file=sys.stderr)
+        print(f"diff-size-move: {size_rule_at(d['cmd'], network)}", file=sys.stderr)
     print(f"{d['cmd']} --data archetype={new}")
     return 0
 
@@ -4944,7 +4974,7 @@ def main() -> int:
                          "the default) or the one the target template tag was tested with (tested; only when it is newer)")
     ap.add_argument("--move-archetype", metavar="ARCHETYPE",
                     help="with --print-update-command: the line that re-renders this repository under ARCHETYPE at the "
-                         "tag it records, with check-drop:/check-add:/check-add-floor: lines on stderr (#1004, #1017)")
+                         "tag it records, with check-drop:/check-add:/check-add-floor:/diff-size-move: lines on stderr (#1004, #1017, #1044)")
     ap.add_argument("--print-refused-actions", action="store_true",
                     help="print each uses: of the workflow files that --repo's Actions allowlist refuses as `refused:` "
                          "lines, then the `allow:` call, or `allowed: <n>`; exit 1, with the reason, when not read (#1018)")
