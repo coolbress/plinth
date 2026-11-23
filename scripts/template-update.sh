@@ -361,16 +361,21 @@ answer_at() { # <worktree> <rev> <key>
     | sed -nE "s/^$3:[[:space:]]*['\"]?([A-Za-z0-9._-]+)['\"]?[[:space:]]*(#.*)?$/\1/p" | head -n 1
 }
 # "<lines> <max>" when the rehearsed move changes release.yml by more than
-# the moved ci job's max-diff-lines, the count reading the whole repository;
-# nothing otherwise, or when those inputs are not read.
+# the moved ci job's max-diff-lines, counted with its diff-size-exclude (a
+# project that excludes the file already has nothing over: Codex review on
+# #1052), the count reading the whole repository; nothing otherwise, or when
+# those inputs are not read.
 release_over() { # <rehearsal: copier's changes uncommitted on HEAD>
-  local cfg max droot n
+  local cfg max droot exclude n pats=() p spec=("$rel_wf")
   cfg="$(python3 "$checker" --root "$1" --print-diff-size 2>/dev/null)" || return 0
   max="$(sed -n 's/^max=//p' <<<"$cfg")"; droot="$(sed -n 's/^root=//p' <<<"$cfg")"; droot="${droot%/}"
+  exclude="$(sed -n 's/^exclude=//p' <<<"$cfg")"
   { [ -z "$droot" ] || [ "$droot" = . ]; } && [ "$max" -gt 0 ] || return 0
+  [ -z "$exclude" ] || read -r -a pats <<<"$exclude"
+  for p in ${pats+"${pats[@]}"}; do spec+=(":(exclude)$p"); done
   if git -C "$1" cat-file -e "HEAD:$rel_wf" 2>/dev/null; then
-    n="$(git -C "$1" diff --numstat HEAD -- "$rel_wf" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')"
-  elif [ -f "$1/$rel_wf" ]; then n="$(wc -l < "$1/$rel_wf" | tr -d ' ')"
+    n="$(git -C "$1" diff --numstat HEAD -- "${spec[@]}" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')"
+  elif [ -n "$(git -C "$1" ls-files --others -- "${spec[@]}")" ]; then n="$(wc -l < "$1/$rel_wf" | tr -d ' ')"
   else n=0; fi
   [ "$n" -le "$max" ] || echo "$n $max"
 }
@@ -479,7 +484,7 @@ finish() { # <worktree>
     c_was="$(answer_at "$wt" "$mb" _commit)"; c_now="$(answer_at "$wt" "$at" _commit)"
     if [ -z "$prefix" ] && [ "$(state_get "$sf" size_move | cut -d ' ' -f 1)" = held ] \
        && [ -n "$a_was" ] && [ -n "$a_now" ] && [ "$a_was" != "$a_now" ] && [ -n "$c_was" ] && [ "$c_was" = "$c_now" ]; then
-      rel_n="$(git -C "$wt" diff --numstat "${tree[@]}" -- "$rel_wf" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')"
+      rel_n="$(git -C "$wt" diff --numstat "${tree[@]}" -- "$rel_wf" "${spec[@]:1}" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')"
       if [ "${rel_n:-0}" -gt 0 ]; then spec+=(":(exclude)$rel_wf"); else rel_n=""; fi
     fi
     local numstat total=0 a d

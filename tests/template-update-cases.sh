@@ -112,6 +112,9 @@ if [ -n "$new" ]; then
   # A move to backend (#1017): the image job and its Dockerfile come, nothing goes.
   if [ "$new" = backend ]; then
     printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  image:\n    runs-on: ubuntu-latest\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
+    # MOCK_CI_EXCLUDE: the project's own diff-size-exclude, kept by the move (review on #1052).
+    [ -z "${MOCK_CI_EXCLUDE:-}" ] || printf '    with:\n      diff-size-exclude: "%s"\n' "$MOCK_CI_EXCLUDE" \
+      | sed -i.bak '3r /dev/stdin' .github/workflows/ci.yml && rm -f .github/workflows/ci.yml.bak
     printf 'FROM x\n' > Dockerfile
     # Its image workflows call docker's actions, which the door allows only
     # for backend (#1018).
@@ -1823,6 +1826,18 @@ if [ "$rc" = 4 ] && grep -qF ".github/workflows/release.yml alone is 556 lines" 
    && grep -qF "open this part with --over-limit (below)" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
 then ok "applied with the plinth unread: --finish counts release.yml, says it does not read the plinth again, and names --over-limit (review on #1044)"
 else bad "release.yml over the limit, rule unread, --apply (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The project's own diff-size-exclude already leaves release.yml out (Codex
+# review on #1052): nothing to refuse, whatever the plinth.
+move_cli_big move-size-excluded; reset_logs
+own_exclude="*.md *.lock .github/workflows/release.yml"
+out="$(cd "$repo" && MOCK_CI_EXCLUDE="$own_exclude" MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$size_fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && ! grep -qF "release.yml changes" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out"
+then ok "release.yml in the project's own diff-size-exclude: the plan asks for no pin raise and gives the apply line"
+else bad "release.yml excluded by the project, plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_CI_EXCLUDE="$own_exclude" MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$size_fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 4 ] && ! grep -qF "raise the plinth pin" <<<"$out" && ! grep -qF "release.yml alone" <<<"$out" && [ -e "$(awt_of move-size-excluded backend)" ]
+then ok "and --apply goes ahead: the rest is over the limit and split by file"
+else bad "release.yml excluded by the project, --apply (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 move_cli move-size-small; reset_logs
 out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$size_fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && ! grep -qF "release.yml changes" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out"

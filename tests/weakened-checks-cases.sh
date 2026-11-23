@@ -641,6 +641,8 @@ first "an archetype move: release.yml not counted, named with its lines and why"
   '^- pass: diff size, 3 lines, within the limit of 10; \.github/workflows/release\.yml, 35 lines, not counted: an archetype move from cli to backend at v1\.50\.1, the tag \.copier-answers\.yml records, and the template renders that file whole for each archetype; the archetype: change is listed under changes to the checks$'
 [ "$rc" = 0 ] && grep -q '| Not counted, an archetype move | .github/workflows/release.yml, 35 lines' <<<"$sum" \
   && ok "an archetype move: exit 0, and the summary's table has the row" || bad "an archetype move: exit $rc or no table row" "$sum"
+verdict diff-size "Measure the reviewable diff" MAX_LINES=10 EXCLUDE=".github/workflows/release.yml" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "an archetype move whose release.yml diff-size-exclude already leaves out: nothing said about it (review on #1052)" '^- pass: diff size, 3 lines, within the limit of 10$'
 move_repo backend v1.50.2
 verdict diff-size "Measure the reviewable diff" MAX_LINES=10 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
 first "archetype and _commit both change (an update, not a move): release.yml counted" '^- fail: diff size, 40 lines, over the limit of 10$'
