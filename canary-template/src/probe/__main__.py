@@ -55,8 +55,14 @@ def configure(level: int = logging.INFO) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="probe", description="Greet someone.")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {version('probe')}")
+    # The name alone on its line: ruff's line length does not count a line
+    # that has nothing to break, so a package name of any length fits.
+    parser = argparse.ArgumentParser(
+        prog="probe",
+        description="Greet someone.",
+    )
+    # prog is the distribution's name as well.
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version(parser.prog)}")
     parser.add_argument("name", nargs="?", default="world", help="who to greet (default: world)")
     args = parser.parse_args(argv)
     configure()

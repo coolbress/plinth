@@ -164,7 +164,7 @@ Six skills, prefixed `/plinth:`:
 | `records-check [owner/name]` | Counts what is out of place in the issue and pull-request records, judged by the repository's own written conventions: references to nothing, home paths, bodies near GitHub's size limit, completed issues with no ending, merged pull requests with no AI trailer; lists unticked acceptance criteria for a person to read; changes nothing | You or the agent |
 | `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; on a conflict it recommends a resolution for each file and applies it only on your word, before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
-| `guide` | Explains in plain words, in your language, where your repository is, how to use the tools of that step and the next from the arsenal's table, and the one command to type next; the whole way, every step in depth, until the first merge or with `/plinth:guide map`; changes nothing | You only: type `/` and pick it |
+| `guide` | Explains in plain words, in your language, where your repository is and the one command to type next, then how to use the tools of that step and the next from the arsenal's table; the whole way, every step in depth, until the first merge or with `/plinth:guide map`; changes nothing | You only: type `/` and pick it |
 
 Every skill only you can start, these and the dependencies' together, is on
 [one list in the arsenal](skills/arsenal/SKILL.md#skills-only-the-person-can-start).
@@ -219,7 +219,7 @@ and otherwise prints the repository to delete; a step it can go on without,
 such as a label, is named and left. If the create's own answer is lost, it
 does neither, so check whether the repository exists (its failure paths run in CI against a mocked
 `gh`). It renders
-[plinth-template v1.50.1](https://github.com/coolbress/plinth-template/releases/tag/v1.50.1),
+[plinth-template v1.50.2](https://github.com/coolbress/plinth-template/releases/tag/v1.50.2),
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its files, has
 created a repository on real GitHub, merged its first pull request and deleted

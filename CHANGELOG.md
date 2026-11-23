@@ -13,6 +13,13 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.50.2 instead of v1.50.1:
+  a project whose package name is longer than 11 characters starts with
+  `ci / lint` green (coolbress/plinth-template#315; names of 47 characters
+  or more are coolbress/plinth-template#318), and new projects call plinth
+  v2.41.0 (`plinth_sha`'s default moved from 7b773c2 to 15ae0a9). No job,
+  check, question or action changed; `AGENTS.md` and `.claude/` are
+  unchanged, so no eval suite run is owed.
 - `/plinth:new-project` asks who may see the project on its own, before the
   `Defaults` question, when neither `--public` nor `--private` is given:
   "Who may see this project's code?", anyone on the internet or only the
@@ -24,6 +31,16 @@ pull requests and have no tag.
   plinth", the recommended defaults could start a team-internal tool public
   under MIT. The answer is still a flag in the command said
   before the run (#1033).
+- `/plinth:guide` opens with where the project is and why, then the one
+  command to type, in both modes; this step and the next in depth, and the
+  rest of the way, come after it. When the guide shows the whole way (before
+  the first merge, on `map`, or with the state not read) they sit under a
+  heading that says so. What started off is one line in both modes, the
+  count and that `/plinth:guide map` names each, plus any step its line says
+  to do now; every item is said, at the end, only when asked with `map`, and
+  no longer before the first merge or with the state not read. The release run's guide
+  answers reached the command on line 26 to 54 of 28 to 57, after the whole
+  map (#1035).
 
 ### Fixed
 
