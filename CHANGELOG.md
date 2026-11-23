@@ -13,6 +13,17 @@ pull requests and have no tag.
 
 ### Fixed
 
+- `/plinth:template-update --archetype`'s plan reads the repository's
+  Actions allowlist and names each action the moved workflows use that it
+  refuses, with the `scripts/with-admin-token.sh gh api` command a person
+  runs before the move's pull request merges; the description's by-hand
+  list carries it. `/plinth:new-project` allows only the release actions of
+  the archetype it renders, so `data-ml` to `cli` left
+  `pypa/gh-action-pypi-publish` refused and `cli` to `backend` left docker's
+  two image actions refused: the first run that used one ended in
+  `startup_failure` with no job, though the move's checks were green. An
+  allowlist that allows them is said, and one not read is said as not read
+  (#1018).
 - The eval suite's `floor-gaps` and `next-day` grading reads a list under a
   heading (#1032). `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml`
   listed one per line under "Missing files:" or "누락된 파일 목록" passed none

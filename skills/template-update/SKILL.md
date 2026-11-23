@@ -249,6 +249,17 @@ there is nothing to add. Otherwise, if that plinth is older, the plan says to ra
 plinth pin first and gives no `--apply` line, and `--apply` refuses the move:
 tell the person that, and plan the move again once the pin is raised.
 
+The Actions allowlist does not move with the archetype either.
+`/plinth:new-project` allows the release actions of the archetype it
+renders, so after a move `release.yml` or the image workflows can call an
+action the allowlist refuses (`pypa/gh-action-pypi-publish` moving to `cli`,
+`docker/setup-buildx-action` and `docker/build-push-action` moving to
+`backend`). Such a run ends in `startup_failure` with no job, though the
+move's own checks were green. The plan reads the allowlist and names each
+refused action with the `scripts/with-admin-token.sh gh api` command that
+allows it. The person runs it, as for a required check, before the move's
+pull request merges. When the allowlist cannot be read, the plan says so.
+
 copier deletes a file of the old archetype that the project changed as
 readily as one it left alone, and reports no conflict for it. The plan
 compares each file the move deletes with the old archetype's own render, and
@@ -281,7 +292,9 @@ once `pyproject.toml` is resolved, and `git add` the three. Then run the
 Files the new archetype adds, such as `tests/test_built_wheel.py` when
 moving to `cli`, go into the same commit. The description lists what the
 move deleted and added, and what a person does by hand: the required check
-to drop or add, and each changed file with the person's choice. Nothing else changes outside the files: the labels are one
+to drop or add, the actions to allow, and each changed file with the
+person's choice. Outside the files, only the required checks and the Actions
+allowlist change with the archetype: the labels are one
 list for every archetype, and `/plinth:floor-check` reads the archetype from
 `.copier-answers.yml`, so after the move it expects the new archetype's files
 and no longer the old one's.

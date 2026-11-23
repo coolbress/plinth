@@ -3395,6 +3395,94 @@ def allowlist_allows(value: str, patterns: list[str]) -> bool:
     return any(isinstance(p, str) and not p.startswith("!") and fnmatch.fnmatchcase(v, p.lower()) for p in patterns)
 
 
+def read_allowlist(repo: str, network: bool):
+    """(permissions, allowed_actions, selected-actions) as GitHub answers
+    them; (None, None, None) when not read. selected-actions is read only
+    when the policy is `selected`."""
+    perms = api(f"repos/{repo}/actions/permissions", network)
+    allowed = perms.get("allowed_actions") if isinstance(perms, dict) else None
+    selected = api(f"repos/{repo}/actions/permissions/selected-actions", network) if allowed == "selected" else None
+    if allowed not in ("all", "local_only", "selected") or (allowed == "selected" and not isinstance(selected, dict)):
+        return None, None, None
+    return perms, allowed, selected
+
+
+def refused_by(uses: list[tuple[str, int, str]], allowed: str, selected) -> tuple[list[tuple[str, int, str]], list[str]]:
+    """The uses (file, line, value; no docker:// image, no local ./ path)
+    the policy refuses, and its patterns_allowed."""
+    if allowed == "all":
+        return [], []
+    if allowed == "local_only":
+        return list(uses), []
+    assert isinstance(selected, dict)
+    listed = selected.get("patterns_allowed")
+    patterns = [p for p in listed if isinstance(p, str)] if isinstance(listed, list) else []
+    owned = selected.get("github_owned_allowed") is True
+    return [(f, n, v) for f, n, v in uses
+            if not (owned and v.split("/", 1)[0].lower() in GITHUB_OWNED) and not allowlist_allows(v, patterns)], patterns
+
+
+def print_refused_actions(root: Path, repo: str | None, network: bool = True) -> int:
+    """--print-refused-actions (#1018): for template-update.sh's archetype
+    move, run on the rehearsal of the move. The door allows only the actions
+    of the archetype it renders (new-project.sh), and a move changes files,
+    not the setting. One line per finding on stdout: `refused: <file> line
+    <n> <action>` for each use the allowlist refuses, then `allow: <command>`,
+    the gh call that allows them (patterns_allowed is replaced as a whole, so
+    it carries the patterns already there, in the -f form new-project.sh
+    uses, which reads nothing from stdin: with-admin-token.sh reads the token
+    from stdin when there is no terminal); `allowed: <n>` when every use
+    starts; `skip: <why>` for what is not judged (an image, a uses: this
+    checker cannot read, a blocking pattern). Exit 1 with the reason on
+    stderr when the allowlist is not read."""
+    if not repo:
+        print("no --repo: the Actions allowlist is a repository's setting", file=sys.stderr)
+        return 1
+    uses: list[tuple[str, int, str]] = []
+    skips: list[str] = []
+    for p in workflow_files(root):
+        rel = p.relative_to(root).as_posix()
+        for n, v, readable in iter_uses(read(p)):
+            if not readable:
+                skips.append(f"{rel} line {n}: a uses: in a form this checker does not read")
+            elif v.startswith("docker://"):
+                skips.append(f"{rel} line {n} {v}: whether the allowlist lets an image run is not judged")
+            elif not v.startswith("./"):
+                uses.append((rel, n, v))
+    perms, allowed, selected = read_allowlist(repo, network)
+    if perms is None:
+        print("GitHub gave no answer this checker reads; a login with repository administration reads it", file=sys.stderr)
+        return 1
+    if perms.get("enabled") is False:
+        print("skip: GitHub Actions is turned off on this repository: no workflow runs")
+        return 0
+    refused, patterns = refused_by(uses, allowed, selected)
+    blocking = [p for p in patterns if p.startswith("!")]
+    if blocking and uses:
+        skips.append("it carries the blocking pattern" + ("s " if len(blocking) > 1 else " ") + ", ".join(blocking)
+                     + ", and GitHub documents no order between blocking and allowing patterns")
+    for s in skips:
+        print(f"skip: {s}")
+    for f, n, v in refused:
+        print(f"refused: {f} line {n} {v.split('@', 1)[0]}")
+    if not refused:
+        if not skips:
+            print(f"allowed: {len(uses)}")
+        return 0
+    if allowed != "selected":
+        print(f"allow: gh api -X PUT repos/{repo}/actions/permissions -F enabled=true -f allowed_actions=selected")
+        return 0
+    assert isinstance(selected, dict)
+    add = sorted({v.split("@", 1)[0] + "@*" for _, _, v in refused})
+    words = ["gh", "api", "-X", "PUT", f"repos/{repo}/actions/permissions/selected-actions",
+             "-F", f"github_owned_allowed={'true' if selected.get('github_owned_allowed') is True else 'false'}",
+             "-F", f"verified_allowed={'true' if selected.get('verified_allowed') is True else 'false'}"]
+    for pat in [*patterns, *add]:
+        words += ["-f", f"patterns_allowed[]={pat}"]
+    print("allow: " + " ".join(shlex.quote(w) for w in words))
+    return 0
+
+
 def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token: bool = False) -> None:
     """Would every action the workflows use start (#747)? The door lets only
     GitHub-owned actions and the patterns it names run. A `uses:` outside
@@ -3430,10 +3518,8 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
                 uses.append((rel, n, v))
     if not uses and not unread:
         return
-    perms = api(f"repos/{repo}/actions/permissions", network)
-    allowed = perms.get("allowed_actions") if isinstance(perms, dict) else None
-    selected = api(f"repos/{repo}/actions/permissions/selected-actions", network) if allowed == "selected" else None
-    if allowed not in ("all", "local_only", "selected") or (allowed == "selected" and not isinstance(selected, dict)):
+    perms, allowed, selected = read_allowlist(repo, network)
+    if perms is None:
         if actions_token:
             result("INFO", "the Actions allowlist is not read here: /plinth:floor-check reads it with a login "
                            "that administers the repository", deferred=True)
@@ -3446,18 +3532,7 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
         return
     docker = [(f, n, v) for f, n, v in uses if v.startswith("docker://")]
     uses = [(f, n, v) for f, n, v in uses if not v.startswith("docker://")]
-    patterns: list[str] = []
-    if allowed == "all":
-        refused = []
-    elif allowed == "local_only":
-        refused = uses
-    else:
-        assert isinstance(selected, dict)
-        listed = selected.get("patterns_allowed")
-        patterns = [p for p in listed if isinstance(p, str)] if isinstance(listed, list) else []
-        owned = selected.get("github_owned_allowed") is True
-        refused = [(f, n, v) for f, n, v in uses
-                   if not (owned and v.split("/", 1)[0].lower() in GITHUB_OWNED) and not allowlist_allows(v, patterns)]
+    refused, patterns = refused_by(uses, allowed, selected)
     for f, n, v in docker:
         result("SKIP", f"{f}: line {n} {v}: whether the Actions allowlist lets an image run is not judged here")
     for f in sorted({f for f, _ in unread}):
@@ -4852,6 +4927,9 @@ def main() -> int:
     ap.add_argument("--move-archetype", metavar="ARCHETYPE",
                     help="with --print-update-command: the line that re-renders this repository under ARCHETYPE at the "
                          "tag it records, with check-drop:/check-add:/check-add-floor: lines on stderr (#1004, #1017)")
+    ap.add_argument("--print-refused-actions", action="store_true",
+                    help="print each uses: of the workflow files that --repo's Actions allowlist refuses as `refused:` "
+                         "lines, then the `allow:` call, or `allowed: <n>`; exit 1, with the reason, when not read (#1018)")
     ap.add_argument("--print-ruleset", action="store_true",
                     help="print --ruleset as the door applies it for --archetype (the image check added for a service archetype), and exit")
     ap.add_argument("--without-code-scanning", action="store_true",
@@ -4882,6 +4960,8 @@ def main() -> int:
         ap.error("--move-archetype carries the live plinth pin; --plinth-pin tested is for a tag update")
     if a.print_plinth_pins:
         return print_plinth_pins(root)
+    if a.print_refused_actions:
+        return print_refused_actions(root, a.repo, not a.no_network)
     if a.print_diff_size:
         return print_diff_size(root)
     if a.print_plugin_skew:
