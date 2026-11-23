@@ -624,6 +624,36 @@ verdict diff-size "$marker_step" FETCH=success BASE_SHA="$base" HEAD_SHA="$(git 
 first "conflict markers, one added: fail, the log names the file" '^- fail: conflict markers, a line the pull request adds is one'
 if [ "$rc" = 1 ] && grep -q '^src/m.py:6: ' <<<"$out"; then ok "conflict markers, one added: exit 1, src/m.py:6 in the log"
 else bad "conflict markers, one added: expected exit 1 and src/m.py:6" "rc=$rc"$'\n'"$out"; fi
+# An archetype move (#1044): release.yml is left out of the count when
+# .copier-answers.yml changes archetype: and keeps _commit:, and only then.
+move_repo() { # <archetype at head> <_commit at head>: a 30-line release.yml rewritten to 5, one line of src
+  new_repo
+  printf '_commit: v1.50.1\narchetype: cli\n' > "$r/.copier-answers.yml"
+  for i in $(seq 30); do printf 'old: %s\n' "$i"; done > "$r/.github/workflows/release.yml"
+  commit; base="$(git -C "$r" rev-parse HEAD)"
+  printf '_commit: %s\narchetype: %s\n' "$2" "$1" > "$r/.copier-answers.yml"
+  for i in $(seq 5); do printf 'new: %s\n' "$i"; done > "$r/.github/workflows/release.yml"
+  printf 'y = 2\n' >> "$r/src/m.py"; commit; dir="$r"
+}
+move_repo backend v1.50.1
+verdict diff-size "Measure the reviewable diff" MAX_LINES=10 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "an archetype move: release.yml not counted, named with its lines and why" \
+  '^- pass: diff size, 3 lines, within the limit of 10; \.github/workflows/release\.yml, 35 lines, not counted: an archetype move from cli to backend at v1\.50\.1, the tag \.copier-answers\.yml records, and the template renders that file whole for each archetype; the archetype: change is listed under changes to the checks$'
+[ "$rc" = 0 ] && grep -q '| Not counted, an archetype move | .github/workflows/release.yml, 35 lines' <<<"$sum" \
+  && ok "an archetype move: exit 0, and the summary's table has the row" || bad "an archetype move: exit $rc or no table row" "$sum"
+move_repo backend v1.50.2
+verdict diff-size "Measure the reviewable diff" MAX_LINES=10 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "archetype and _commit both change (an update, not a move): release.yml counted" '^- fail: diff size, 40 lines, over the limit of 10$'
+move_repo cli v1.50.1
+verdict diff-size "Measure the reviewable diff" MAX_LINES=10 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "release.yml rewritten with archetype: unchanged: counted" '^- fail: diff size, 36 lines, over the limit of 10$'
+move_repo backend v1.50.1
+verdict diff-size "Measure the reviewable diff" MAX_LINES=10 EXCLUDE="" WORKDIR=src BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "an archetype move under another working-directory: nothing said about release.yml, which is not counted there" '^- pass: diff size, 1 lines, within the limit of 10$'
+move_repo backend v1.50.1
+git -C "$r" rm -q --cached .copier-answers.yml; git -C "$r" commit -qm 'answers file deleted'
+verdict diff-size "Measure the reviewable diff" MAX_LINES=10 EXCLUDE="" WORKDIR=. BASE_SHA="$base" HEAD_SHA="$(git -C "$r" rev-parse HEAD)"
+first "the answers file deleted at the head: no archetype read there, release.yml counted" '^- fail: diff size, 38 lines, over the limit of 10$'
 dir=""
 
 echo "-- verdict lines: ci / deps"

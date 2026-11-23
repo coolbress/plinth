@@ -44,6 +44,24 @@ pull requests and have no tag.
 
 ### Fixed
 
+- A move between an archetype that publishes to PyPI (`cli`, `library`) and
+  one that publishes an image (`backend`, `data-ml`) reaches the default
+  branch without a hand edit (#1044). The template rewrites
+  `.github/workflows/release.yml` whole: 560 to 576 lines, over
+  `ci / diff-size`'s default 400 by itself, and either half of a split
+  inside it is 442 lines or more (measured on plinth-template v1.50.1 and
+  v1.50.2). `ci / diff-size` now leaves that file out of the count in a pull
+  request whose `.copier-answers.yml` changes `archetype:` and keeps
+  `_commit:`, naming it with its lines on the count's line and in the
+  summary; the `archetype:` change is already put to an admin as a change
+  to the checks. `/plinth:template-update --archetype` counts as the plinth
+  the workflows call counts: with one that has the rule, the rest of the
+  move splits by file and `release.yml` lands with `.copier-answers.yml` in
+  the last part; with an older one, whose count the move's last pull request
+  could not pass, the plan says to raise the plinth pin first and `--apply`
+  refuses. A project gets the rule by raising both `coolbress/plinth`
+  `uses:` lines to the release that carries it. GitLab's `diff-size` is
+  unchanged: moves are GitHub only.
 - `/plinth:template-update --archetype`'s plan writes each command a person
   runs with an admin token to a file outside the repository and prints
   `bash <that file>`, a line of under 120 characters, saying to run it in

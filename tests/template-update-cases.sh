@@ -117,6 +117,14 @@ if [ -n "$new" ]; then
     # for backend (#1018).
     printf 'jobs:\n  image:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: docker/setup-buildx-action@%s\n      - uses: docker/build-push-action@%s\n' \
       "$(printf '%040d' 7)" "$(printf '%040d' 7)" > .github/workflows/release.yml
+    # MOCK_RELEASE=big (#1044): as the template renders the move, release.yml
+    # rewritten whole (the cli one is 450 lines here, this 100 more), and
+    # 450 lines in two files, so the move needs a split by file without it.
+    if [ "${MOCK_RELEASE:-}" = big ]; then
+      for i in $(seq 1 100); do echo "      # image step $i"; done >> .github/workflows/release.yml
+      mkdir -p src; for i in $(seq 1 300); do echo "i$i = $i"; done > src/serve.py
+      for i in $(seq 1 150); do echo "s$i = $i"; done > src/store.py
+    fi
     exit 0
   fi
   printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
@@ -1745,6 +1753,75 @@ if [ "$rc" = 0 ] && grep -qF -- "- The Actions allowlist refuses docker/setup-bu
    && grep -qF "\`scripts/$backend_allow\`" <<<"$body" && ! grep -qF "$root" <<<"$body"
 then ok "the move's description carries the allowlist command in its by-hand list, from plinth's folder (#1018)"
 else bad "the description's allowlist line (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
+
+# A move whose release.yml alone is over ci / diff-size's 400 (#1044), as
+# #1017's cli to backend run was: the template rewrites it whole. A plinth
+# whose ci / diff-size leaves it out of the count in the pull request that
+# changes archetype: lets the rest split by file and the last part open
+# within the limit; with one that counts it, the plan says to raise the pin
+# first and --apply refuses.
+size_at_pin() { # <api dir> <has the rule: yes|no>
+  local text='# Measure'; [ "$2" = yes ] && text='          # An archetype move (#1044): .copier-answers.yml changes archetype:'
+  mkdir -p "$1/repos/coolbress/plinth/contents/.github/workflows"
+  printf '{"encoding":"base64","content":"%s"}' "$(printf '%s\n' "$text" | base64 | tr -d '\n')" \
+    > "$1/repos/coolbress/plinth/contents/.github/workflows/python-ci.yml?ref=$sha40.json"
+}
+size_held_api="$work/api-size-held"; cp -R "$held_api" "$size_held_api"; size_at_pin "$size_held_api" yes
+size_fails_api="$work/api-size-fails"; cp -R "$held_api" "$size_fails_api"; size_at_pin "$size_fails_api" no
+move_cli_big() { # <name>
+  move_cli "$1"
+  for i in $(seq 1 450); do echo "      # pypi step $i"; done > "$repo/.github/workflows/release.yml"
+  git -C "$repo" add -A && git -C "$repo" commit -q -m "cli's release.yml" && git -C "$repo" push -q origin main
+  base="$(git -C "$BARE" rev-parse main)"
+}
+rel_said="changes 556 lines, over ci / diff-size's limit of 400 by itself, and a split by file cannot cut one file"
+move_cli_big move-size; reset_logs
+out="$(cd "$repo" && MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$size_held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF ".github/workflows/release.yml $rel_said. The plinth the workflows call (${sha40:0:12}) leaves it out of the count in the pull request that changes archetype: (#1044)" <<<"$out" \
+   && grep -qF -- "--apply $base --archetype backend" <<<"$out" && ! grep -q "diff-size-move" <<<"$out"
+then ok "a move whose release.yml alone is over 400, plinth with the rule: the plan says it is left out of the count, and gives the apply line (#1044)"
+else bad "release.yml over the limit, rule held, plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$size_held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend --assisted-by "Claude:claude-test-1" 2>&1)"; rc=$?
+wt="$(awt_of move-size backend)"
+first="$(sed -n '/^Proposed split/,/^This update keeps/p' <<<"$out")"
+rest="$(sed -n '/^This update keeps/,/^$/p' <<<"$out")"
+if [ "$rc" = 4 ] && grep -q "^Over the limit: 4[0-9][0-9] reviewable lines, against the limit of 400" <<<"$out" \
+   && grep -qxF "  src/serve.py" <<<"$first" && grep -qF "  .copier-answers.yml (" <<<"$rest" \
+   && grep -qxF "  .github/workflows/release.yml (556, not counted: an archetype move, #1044)" <<<"$rest" && ! grep -q "release.yml" <<<"$first" \
+   && ! grep -q "pr create" "$work/gh.log"
+then ok "--apply counts the move without release.yml and proposes a split by file, release.yml kept with the answers file"
+else bad "release.yml over the limit, rule held, split (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+( set -e; while IFS= read -r l; do eval "$l"; done < <(sed -n '/^To make the first/,/^then open/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+git -C "$BARE" update-ref refs/heads/main "$(git -C "$wt-part-1" rev-parse HEAD)"   # the first part is merged
+( while IFS= read -r l; do eval "$l"; done < <(sed -n '/^Once it is merged/,/^$/p' <<<"$out" | sed -n 's/^  \(git .*\)$/\1/p') ) >/dev/null 2>&1
+reset_logs; run --finish "$wt" --assisted-by "Claude:claude-test-1"
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log" && grep -qF "counted here before pushing: 152 reviewable lines, within the limit of 400" <<<"$body" \
+   && grep -qF "\`.github/workflows/release.yml\` (556 lines) is not in that count: an archetype move" <<<"$body" \
+   && git -C "$wt" diff --name-only "$(git -C "$BARE" rev-parse main)" HEAD | grep -qx ".github/workflows/release.yml"
+then ok "run as printed, the first part merged, the move's last part opens within the limit with release.yml, saying it is not counted (#1044)"
+else bad "release.yml over the limit, rule held, last part (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; printf '%s\n' "$body" | sed 's/^/        /'; fi
+move_cli_big move-size-fails; reset_logs
+out="$(cd "$repo" && MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$size_fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF ".github/workflows/release.yml $rel_said. The plinth the workflows call (${sha40:0:12}) counts it, so the move's last pull request would fail ci / diff-size however it is split. Raise the plinth pin first" <<<"$out" \
+   && grep -qF "whose ci / diff-size leaves .github/workflows/release.yml out of the move's count" <<<"$out" && ! grep -qF -- "--apply $base" <<<"$out"
+then ok "with a plinth that counts it, the plan says to raise the plinth pin first and gives no apply line (#1044)"
+else bad "release.yml over the limit, rule missing, plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$size_fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -qF "raise the plinth pin to v$plinth_ver or later first" <<<"$out" && [ ! -e "$(awt_of move-size-fails backend)" ] \
+   && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-backend >/dev/null && ! grep -q "pr create" "$work/gh.log"
+then ok "--apply refuses that move before a worktree or branch exists (#1044)"
+else bad "release.yml over the limit, rule missing, --apply (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF ".github/workflows/release.yml $rel_said. Whether the plinth the workflows call leaves it out of the count in the move's pull request was not read (.github/workflows/python-ci.yml at that commit could not be read). This plinth (v$plinth_ver) does" <<<"$out" \
+   && grep -qF -- "--apply $base --archetype backend" <<<"$out"
+then ok "the plinth's python-ci.yml unread: the plan says so, names the version that does, and gives the apply line"
+else bad "release.yml over the limit, rule unread, plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+move_cli move-size-small; reset_logs
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$size_fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && ! grep -qF "release.yml changes" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out"
+then ok "a release.yml within the limit: the plan says nothing of it, whatever the plinth"
+else bad "release.yml within the limit, plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # The skill names the order once and leaves the typing to the person.
 skill="$root/skills/template-update/SKILL.md"

@@ -1269,6 +1269,39 @@ jobs:
             spec+=(":(exclude)${prefix}${p}")
           done
 
+          # An archetype move (#1044): .copier-answers.yml changes archetype:
+          # and keeps _commit:, the move at the recorded tag that
+          # /plinth:template-update makes. The template renders release.yml
+          # whole for each archetype, and between one that publishes to PyPI
+          # and one that publishes an image it shares 89 lines, so either
+          # half of a split inside it is 442 lines or more (measured on
+          # plinth-template v1.50.1 and v1.50.2, in the issue). It is left
+          # out of the count, named in the summary with its lines. The
+          # archetype: change is listed by the step that asks an admin to
+          # approve a change to the checks (#586), so a head an admin did
+          # not push stays red until an admin approves it. Anything that
+          # cannot be read counts the file.
+          moved=""
+          answer() {  # <rev> <key>: a one-word value of .copier-answers.yml, or nothing
+            { git show "$1:.copier-answers.yml" 2>/dev/null || true; } \
+              | sed -nE "s/^$2:[[:space:]]*['\"]?([A-Za-z0-9._-]+)['\"]?[[:space:]]*(#.*)?$/\1/p" | head -n 1
+          }
+          # Only where the count reads the whole repository: under another
+          # working-directory, .github/ is not counted anyway.
+          if [ -z "$prefix" ] && mb="$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null)"; then
+            a_was="$(answer "$mb" archetype)"; a_now="$(answer "$HEAD_SHA" archetype)"
+            c_was="$(answer "$mb" _commit)"; c_now="$(answer "$HEAD_SHA" _commit)"
+            if [ -n "$a_was" ] && [ -n "$a_now" ] && [ "$a_was" != "$a_now" ] \
+               && [ -n "$c_was" ] && [ "$c_was" = "$c_now" ]; then
+              rel=".github/workflows/release.yml"
+              n_rel="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "$rel" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')" || n_rel=0
+              if [ "$n_rel" -gt 0 ]; then
+                spec+=(":(exclude)$rel")
+                moved="$rel, ${n_rel} lines, not counted: an archetype move from ${a_was} to ${a_now} at ${c_now}, the tag .copier-answers.yml records, and the template renders that file whole for each archetype; the archetype: change is listed under changes to the checks"
+              fi
+            fi
+          fi
+
           # Three dots (base...head): changes since the merge base, which is
           # what GitHub shows on the PR.
           if ! numstat="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "${spec[@]}")"; then
@@ -1288,13 +1321,15 @@ jobs:
           done <<< "$numstat"
           total=$((added + removed))
 
+          note="${moved:+; $moved}"
           if [ "$MAX_LINES" -le 0 ]; then
-            say "pass: diff size, measured and not enforced (max-diff-lines is 0): ${total} lines"
+            say "pass: diff size, measured and not enforced (max-diff-lines is 0): ${total} lines${note}"
           elif [ "$total" -gt "$MAX_LINES" ]; then
-            say "fail: diff size, ${total} lines, over the limit of ${MAX_LINES}"
+            say "fail: diff size, ${total} lines, over the limit of ${MAX_LINES}${note}"
           else
-            say "pass: diff size, ${total} lines, within the limit of ${MAX_LINES}"
+            say "pass: diff size, ${total} lines, within the limit of ${MAX_LINES}${note}"
           fi
+          [ -z "$moved" ] || echo "Not counted: $moved"
           {
             echo
             echo "### Diff size"
@@ -1304,6 +1339,7 @@ jobs:
             echo "| Reviewable change | **${total} lines** (+${added} / -${removed}) |"
             echo "| Limit | ${MAX_LINES} lines |"
             echo "| Excluded from the count | \`${EXCLUDE}\` |"
+            [ -z "$moved" ] || echo "| Not counted, an archetype move | ${moved} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$MAX_LINES" -le 0 ]; then
