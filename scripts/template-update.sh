@@ -270,6 +270,34 @@ move_steps() { # <state file> <prefix>
       *) echo "$c starts running; whether the plinth the workflows call passes the move's ci / floor-check before $c is required was not read${af:+ (${af#* * })}. This plinth (v$ver) does, and one from before it may fail it; then the plinth pin is raised first. Once the move is merged and $c has run on $default, to require it: \`$admin --repo $repo '$c'\`" ;;
     esac
   done < <(sed -n 's/^check_add=//p' "$sf")
+  # The Actions allowlist (#1018): the door set it for the old archetype,
+  # and the move changes files, not the setting.
+  local refused allow n s
+  refused="$(sed -n 's/^action_refused=//p' "$sf" | sed -E 's/^(.*) ([^ ]+)$/\2 (\1)/' | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')"
+  allow="$(state_get "$sf" action_allow)"
+  if [ -n "$refused" ]; then
+    local then=""; case "$allow" in *"/actions/permissions "*) then=", then plans the move again for the allowlist itself" ;; esac
+    echo "The Actions allowlist refuses $refused, which the workflows use after the move: a run that uses one ends in startup_failure, with no job and no message saying why. Before the move's pull request merges, a person runs, with an admin token (never the agent's): \`${pre}with-admin-token.sh $allow\`$then"
+  fi
+  while IFS= read -r s; do
+    [ -n "$s" ] && echo "The Actions allowlist, not judged for the workflows after the move: $s."
+  done < <(sed -n 's/^action_skip=//p' "$sf")
+  n="$(state_get "$sf" actions_allowed)"
+  [ -z "$n" ] || echo "The Actions allowlist lets every action the workflows use after the move start ($n uses): nothing to allow."
+  if grep -q '^actions_unread=' "$sf"; then
+    echo "Whether the Actions allowlist lets every action the workflows use after the move start was not read ($(state_get "$sf" actions_unread)). One it refuses ends its run in startup_failure, with no job; \`/plinth:floor-check\`, run with a login that administers the repository, names each and the command that allows it."
+  fi
+}
+# The record's lines for the Actions allowlist against the workflows in <dir>
+# (the rehearsal of the move): what floor-check.py --print-refused-actions
+# says, or that it was not read.
+actions_of() { # <dir>
+  local said why rc=0
+  why="$(mktemp)"
+  said="$(python3 "$checker" --root "$1" --repo "$repo" --print-refused-actions 2>"$why")" || rc=$?
+  if [ "$rc" != 0 ]; then printf 'actions_unread=%s\n' "$(head -n 1 "$why")"; rm -f "$why"; return 0; fi
+  rm -f "$why"
+  sed -n 's/^refused: /action_refused=/p; s/^allow: /action_allow=/p; s/^skip: /action_skip=/p; s/^allowed: /actions_allowed=/p' <<<"$said"
 }
 # This repository's side of each conflict copier left, which may hold code of
 # its own: the measured hand-deleted case conflicts where a file both
@@ -770,7 +798,8 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
     sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p' "$tmp/move-note"
     if req="$(required_on "$repo" "$default")"; then
       echo "required_read=yes"; while IFS= read -r c; do [ -n "$c" ] && printf 'required=%s\n' "$c"; done <<<"$req"
-    fi; } > "$tmp/checks"
+    fi
+    actions_of "$r"; } > "$tmp/checks"
   move_steps "$tmp/checks" "$(q "$here")/" | sed 's/`//g'
   echo
   if grep -q '^add_floor=fails ' "$tmp/checks" && [ -n "$(unrequired_adds "$tmp/checks")" ]; then
@@ -886,6 +915,8 @@ if [ -n "$move" ]; then
   # The changed files the move deletes (#1016), from the rehearsal the plan
   # ran: each named once, with --keep or --drop, and nothing else named.
   rehearse "$rehearsed"
+  # The allowlist against the moved workflows, for the description (#1018).
+  actions_rec="$(actions_of "$r")"
   keeps=""; drops=""; unnamed=""; refused=""
   for c in ${chosen_files+"${chosen_files[@]}"}; do
     f="${c#*$'\t'}"
@@ -1049,6 +1080,7 @@ sf="$(state_file "$wt")"
     while IFS= read -r p; do [ -n "$p" ] && printf 'keep=%s\n' "$p"; done <<<"$keeps"
     while IFS= read -r p; do [ -n "$p" ] && printf 'drop=%s\n' "$p"; done <<<"$drops"
     printf '%s\n' "$checks" | sed '/^$/d'
+    printf '%s\n' "$actions_rec" | sed '/^$/d'
   fi
   while IFS= read -r p; do [ -n "$p" ] && printf 'renamed=%s\n' "$p"; done <<<"$renamed"
   while IFS= read -r p; do [ -n "$p" ] && printf 'moves=%s\n' "$p"; done <<<"$moves"
