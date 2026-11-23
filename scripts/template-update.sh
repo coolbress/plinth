@@ -240,8 +240,15 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
   if [ -n "$rel_alone" ]; then
     echo
     echo "$rel_wf alone is $rel_alone lines, and no split by file cuts one file. plinth v$(plinth_version) and later leave it out of"
-    echo "ci / diff-size's count in the pull request that changes archetype: (#1044); the plinth the workflows call"
-    echo "($(state_get "$sf" size_move | cut -d ' ' -f 2 | cut -c 1-12)) was not read as one that does. Once the workflows call such a plinth, --finish counts it that way."
+    echo "ci / diff-size's count in the pull request that changes archetype: (#1044)."
+    local sm; sm="$(state_get "$sf" size_move)"
+    if [ "${sm%% *}" = fails ]; then
+      echo "The plinth the workflows call ($(cut -d ' ' -f 2 <<<"$sm" | cut -c 1-12)) counts it: raise the plinth pin to that version or later first."
+    else
+      echo "Whether the plinth the workflows call does was not read when the move was applied${sm:+ (${sm#* * })}, and --finish does not read it again."
+      echo "If it does, its ci / diff-size leaves the file out: once the rest is split off, open this part with --over-limit (below)"
+      echo "and that check decides; if it is older, raise the plinth pin to that version or later first."
+    fi
   fi
   echo
   echo "Or open this update as it is, knowing ci / diff-size fails on it until it is split:"

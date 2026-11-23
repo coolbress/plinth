@@ -1817,6 +1817,12 @@ if [ "$rc" = 0 ] && grep -qF ".github/workflows/release.yml $rel_said. Whether t
    && grep -qF -- "--apply $base --archetype backend" <<<"$out"
 then ok "the plinth's python-ci.yml unread: the plan says so, names the version that does, and gives the apply line"
 else bad "release.yml over the limit, rule unread, plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+out="$(cd "$repo" && MOCK_RELEASE=big FLOOR_CHECK_API_DIR="$held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 4 ] && grep -qF ".github/workflows/release.yml alone is 556 lines" <<<"$out" \
+   && grep -qF "was not read when the move was applied (.github/workflows/python-ci.yml at that commit could not be read), and --finish does not read it again." <<<"$out" \
+   && grep -qF "open this part with --over-limit (below)" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
+then ok "applied with the plinth unread: --finish counts release.yml, says it does not read the plinth again, and names --over-limit (review on #1044)"
+else bad "release.yml over the limit, rule unread, --apply (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 move_cli move-size-small; reset_logs
 out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$size_fails_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && ! grep -qF "release.yml changes" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out"
