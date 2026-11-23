@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` renders plinth-template v1.50.3 instead of v1.50.2:
+  new projects call plinth v2.42.0 (`plinth_sha`'s default moved from
+  15ae0a9 to d374071). No rendered file changed; `AGENTS.md` and `.claude/`
+  are unchanged, so no eval suite run is owed.
+
 ### Fixed
 
 - A move between an archetype that publishes to PyPI (`cli`, `library`) and
