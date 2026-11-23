@@ -26,6 +26,22 @@ pull requests and have no tag.
   fail (coolbress/plinth-template#318). The skill states the limit where it
   asks for the name. A name of 46 characters or fewer runs as before.
 
+- The first login the getting-started tutorial gives is
+  `gh auth login -s repo,workflow`, the scopes `/plinth:new-project` needs,
+  after a sentence saying that login can administer the account's other
+  repositories and where the agent moves to a token without that (#1034).
+  `delete_repo` is an opt-in on its own line,
+  `gh auth refresh -h github.com -s delete_repo`: with it a failed run
+  deletes the repository it created; without it the repository stays and
+  the run prints where to delete it, as before, and a private repository
+  whose plan cannot be read (usually an organization's) stops before
+  anything is created and asks for it, as before. `/plinth:new-project`'s
+  scope and fine-grained-token stops ask for `repo,workflow` and name the
+  opt-in apart; the README and the skill say the same.
+  `tests/doc-pinned-facts.sh` holds the tutorial's first login to the
+  scopes the door stops without. What `delete_repo` does when granted is
+  unchanged.
+
 ### Fixed
 
 - `/plinth:guide` without `map` no longer has each item that started off to

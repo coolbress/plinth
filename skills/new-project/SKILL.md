@@ -70,7 +70,7 @@ Two lines get a fuller sentence:
 When the fix is a command the person types (`gh auth login …`,
 `gh auth refresh …`, `curl … | sh`, `claude update`, `brew install git`),
 show it in its own code block with `!` in front, for example
-`! gh auth refresh -h github.com -s repo,workflow,delete_repo`, and say in
+`! gh auth refresh -h github.com -s repo,workflow`, and say in
 the person's language: type it into Claude Code's prompt, `!` included; it
 runs the command here and its output lands in the conversation. For
 `gh auth`, add that it prints a one-time code and a URL, the URL opens in

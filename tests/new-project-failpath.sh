@@ -403,7 +403,7 @@ E="MOCK_SCOPES=repo" run pre-scope err no no "lacks the scope(s) workflow" -- --
 E="MOCK_NOAUTH=1"    run pre-noauth err no no "gh is not logged in" -- --preflight
 # The admin-token path needs the whole command, which the questions make: the
 # preflight stop names the browser login and says the run prints that path.
-E="MOCK_FINE=1"      run pre-fine err no no "gh auth login -s repo,workflow,delete_repo" -- --preflight
+E="MOCK_FINE=1"      run pre-fine err no no "gh auth login -s repo,workflow" -- --preflight
 if grep -qF "with-admin-token.sh" "$work/home-pre-fine/out" || ! grep -qF "prints the command" "$work/home-pre-fine/out"
 then bad pre-fine "the preflight fine-grained stop prints a command with --preflight in it, or does not say the run prints it"; sed 's/^/        /' "$work/home-pre-fine/out"
 else ok pre-fine "names the browser login; the admin-token command is left to the run"; fi
@@ -412,11 +412,19 @@ else ok pre-fine "names the browser login; the admin-token command is left to th
 if grep -qF "! gh auth refresh" "$work/home-pre-scope/out" && grep -qF "restart Claude Code" "$work/home-pre-no-uv/out"
 then ok pre-bang "the scope fix shows the ! form, the uv fix says to restart"
 else bad pre-bang "no ! form in the scope stop, or no restart after uv"; cat "$work/home-pre-scope/out" "$work/home-pre-no-uv/out" | sed 's/^/        /'; fi
+# The fix asks for the scopes the run needs; delete_repo is an opt-in on its
+# own line, with what it adds and what a failed run without it leaves (#1034).
+if grep -qF "fix: gh auth refresh -h github.com -s repo,workflow" "$work/home-pre-scope/out" \
+   && grep -qF "optional, apart: gh auth refresh -h github.com -s delete_repo lets a failed run delete the repository it created" "$work/home-pre-scope/out" \
+   && grep -qF "without it a failed run leaves the repository and prints where to delete it" "$work/home-pre-scope/out" \
+   && ! grep -qF "repo,workflow,delete_repo" "$work/home-pre-scope/out" "$work/home-pre-fine/out"
+then ok pre-scope "the fix asks for repo,workflow; delete_repo is named apart, with what a failed run leaves without it"
+else bad pre-scope "the scope or fine-grained stop asks for delete_repo with the needed scopes, or names no opt-in"; cat "$work/home-pre-scope/out" "$work/home-pre-fine/out" | sed 's/^/        /'; fi
 # The install needs git 2.37 (tests/install-smoke.sh); the door asks the same.
 E="MOCK_GIT_VERSION=2.36.1" run git-236 err no no "git 2.36.1 is too old (2.37 or newer" -- --preflight
 # The separate terminal is one of two fixes, not a property of the door: a
 # browser login with the scopes the door reads runs it in the session (#228).
-if grep -qF "gh auth login -s repo,workflow,delete_repo" "$work/home-fine-grained/out"
+if grep -qF "gh auth login -s repo,workflow" "$work/home-fine-grained/out"
 then ok fine-grained "the stop also names the browser-login fix"
 else bad fine-grained "the stop names only the admin-token fix"; fi
 # Fix 2's token can be pre-filled: a creation link for the owner with the five
@@ -464,7 +472,7 @@ then bad fine-grained "the unset line appears with no token in the environment"
 else ok fine-grained "no unset line without an environment token"; fi
 # With the environment token unset, gh may hold no login at all, and
 # `gh auth refresh` works only on a stored one: the line names the login (#246).
-if grep -qF "gh auth login -s repo,workflow,delete_repo" "$work/home-scope-missing-env/out" \
+if grep -qF "gh auth login -s repo,workflow" "$work/home-scope-missing-env/out" \
    && ! grep -qF "gh auth login -s" "$work/home-scope-missing/out"
 then ok scope-missing-env "names gh auth login for when no login is stored, only with an environment token"
 else bad scope-missing-env "the scope stop does not name gh auth login for an environment-token-only user"; fi
