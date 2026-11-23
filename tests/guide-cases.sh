@@ -1057,12 +1057,31 @@ out="$(MOCK_DIR="$d3" "$script" "$d3" 2>&1)"
 if grep -qE '^off by default: [0-9]+ left off; /plinth:guide map names each$' <<<"$out" && ! grep -qE '^  (off|started off|to do)' <<<"$out"
 then ok "focused with nothing to do now: the count alone, no item named"
 else bad "focused, nothing to do now:"; grep -A4 '^off by default' <<<"$out" | sed 's/^/        /'; fi
+# Full without map (#1050): the count line focused prints, and only a step to
+# do now; the items are the map's. The answer then has nothing to hold back.
+off_count_only() { # <case> <out>: the count line, no off or started-off item, the rule
+  if grep -qE '^off by default: [0-9]+ left off; /plinth:guide map names each$' <<<"$2" && ! grep -qx 'off by default:' <<<"$2" &&
+     ! grep -qE '^  (off|started off)' <<<"$2" && grep -q '^  why: ' <<<"$2" && grep -q '^mode: full ' <<<"$2"
+  then ok "$1"; else bad "$1:"; grep -E '^mode: |^off by default|^  ' <<<"$2" | head -8 | sed 's/^/        /'; fi
+}
 out="$(MOCK_DIR="$work/created" "$script" "$work/created" 2>&1)"
-grep -qx 'off by default:' <<<"$out" && grep -q '^  off: The third-party reviewer' <<<"$out" &&
-  ok "full before the first merge: every off-by-default item" || bad "full before the first merge: $(grep -A3 '^off by default' <<<"$out")"
+off_count_only "full before the first merge, no map: the count line, no item" "$out"
+! grep -qE '^  to do' <<<"$out" && ok "full before the first merge, nothing to do now: no step named either" ||
+  bad "full, nothing to do now, names a step: $(grep -E '^  to do' <<<"$out")"
 out="$(MOCK_GH_FAIL=1 MOCK_DIR="$work/idle" "$script" "$work/idle" 2>&1)"
-grep -qx 'off by default:' <<<"$out" && grep -q '^  off: ' <<<"$out" &&
-  ok "full with the state not read: every off-by-default item" || bad "not read, off-by-default: $(grep -A3 '^off by default' <<<"$out")"
+off_count_only "full with the state not read, no map: the count line, no item" "$out"
+d4="$(repo cli-full-caller)"; mkdir -p "$d4/.github/workflows"; : > "$d4/.github/workflows/third-party.yml"
+out="$(MOCK_DIR="$d4" "$script" "$d4" 2>&1)"
+full="$(MOCK_DIR="$d4" "$script" "$d4" map 2>&1)"
+n="$(awk '/^off by default:$/{on=1; next} on && /^  why: /{exit} on' <<<"$full" | grep -c .)"
+off_count_only "full before the first merge with the reviewer's caller: the count line" "$out"
+if grep -qxF "off by default: $n left off; /plinth:guide map names each" <<<"$out" && [ "$n" -ge 3 ] &&
+   grep -qF '  to do, if not done yet (whether it is done is not read): Turn on Codex code review for this repository' <<<"$out"
+then ok "full without map: the map's count ($n), and the step to do now still named"
+else bad "full without map, to do now:"; grep -A4 '^off by default' <<<"$out" | sed 's/^/        /'; fi
+if grep -qx 'off by default:' <<<"$full" && [ "$(grep -cE '^  (off|started off|to do)' <<<"$full")" = "$n" ]
+then ok "full with map: every off-by-default item, as before"
+else bad "full with map:"; grep -A6 '^off by default' <<<"$full" | sed 's/^/        /'; fi
 
 # then: the row the table's Then cell names, on every path that has a step.
 state "then: after /implement, the pull request row" "$work/unlabelled" \

@@ -157,10 +157,10 @@ if [ "$(answer host)" = gitlab ]; then
 fi
 
 # What the project started with off and does not have yet (#763), from the
-# one list new-project.sh prints at creation. Said once the mode is known
-# (#908): in full, every item; in focused, how many, and only the ones whose
-# line says to do them now. In full the skill says the count, and each item
-# only when asked for the map (#1035): the list is printed for it to count.
+# one list new-project.sh prints at creation. On map, every item; otherwise,
+# in either mode (#908), how many, and only the ones whose line says to do
+# them now (#1050). The skill says each item only when asked for the map
+# (#1035), so the list is printed only then.
 off_said=""
 if off="$("$plugin/scripts/off-by-default.sh" "${archetype:-none}" "$top" 2>&1)"; then
   if [ -n "$off" ]; then
@@ -173,7 +173,7 @@ fi
 say_off() {
   local now
   if [ -n "$off_said" ]; then echo "off by default: $off_said"; return; fi
-  if [ "$mode" = full ]; then
+  if [ -n "$map" ]; then
     echo "off by default:"; sed 's/^/  /' <<<"$off"
   else
     now="$(grep '^to do, if not done yet' <<<"$off")"
