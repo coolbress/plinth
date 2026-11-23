@@ -93,7 +93,8 @@ picker (a window of choices; Other lets you type an answer instead):
    private project), in `~/my-app`, no third-party reviewer, no code of
    conduct, no description. Yes asks nothing more. Customize asks the host
    (GitLab.com needs `glab` installed and logged in; choosing it asks who
-   may see the code again, with private recommended) and the licence; then,
+   may see the code again, with private recommended, and the licence again
+   after it when that answer changed) and the licence; then,
    on GitHub, whether a code reviewer such as Codex's is already connected
    to your account, a code of conduct (with a contact; not asked when your
    account's own applies) and a one-line description; then the folder,

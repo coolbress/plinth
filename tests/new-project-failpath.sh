@@ -1867,6 +1867,16 @@ done
 if grep -qF 'visibility came from step 4, not from the arguments, ask step 4 again as' "$skill"
 then ok skill-visibility "GitLab.com chosen under Customize asks visibility again in GitLab's terms"
 else bad skill-visibility "the skill does not ask visibility again when GitLab.com is chosen after step 4"; fi
+# The license's recommendation depends on that new answer, so one picker call
+# cannot carry both: the license comes in a call of its own after it (#1043's
+# review). "in the same call" let a private project keep MIT's recommendation.
+reask="$(sed -n '/visibility came from step 4, not from the arguments/,/^$/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+if printf '%s\n' "$reask" | grep -qF 'ask the license again in a call of its own, after that answer'
+then ok skill-visibility "a changed visibility asks the license again in a call of its own, after the answer"
+else bad skill-visibility "the visibility asked again does not leave the license to a call after its answer"; fi
+if printf '%s\n' "$reask" | grep -qF 'in the same call'
+then bad skill-visibility "the visibility asked again still asks the license in the same call"
+else ok skill-visibility "the visibility asked again does not ask the license in the same call"; fi
 if grep -qF 'The answer becomes `--public` or `--private`, on either host.' "$skill"
 then ok skill-visibility "the visibility answer becomes a flag, so the command said before the run asks it no more"
 else bad skill-visibility "the skill does not turn the visibility answer into --public or --private"; fi

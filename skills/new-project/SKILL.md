@@ -206,10 +206,12 @@ numbered, one question at a time. Never answer a question for the person.
    Step 4 recommends public while the host is open, which is GitHub's
    recommendation. So when the host chosen here is GitLab.com and the
    visibility came from step 4, not from the arguments, ask step 4 again as
-   the second call, in GitLab's terms with **Only people you add (private)
-   (Recommended)** first. Its answer replaces the first one; when it changes
-   the visibility and the license was asked in the first call, ask the
-   license again in the same call, with the new recommendation first.
+   the second call, alone, in GitLab's terms with **Only people you add
+   (private) (Recommended)** first. Its answer replaces the first one. The
+   license's recommendation depends on that answer, so wait for it: when it
+   changes the visibility and the license was asked in the first call, ask
+   the license again in a call of its own, after that answer, with the new
+   recommendation first; its answer replaces the first license.
 
    - Header `Host`: "Where should the repository live?" **GitHub
      (Recommended)** (`--host=github`). **GitLab.com**: a GitLab.com
