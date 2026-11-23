@@ -30,6 +30,9 @@ sha40="$(printf '%040d' 7)"
 no_shared=" --data owner_has_pr_template=false --data owner_has_issue_forms=false"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+# The plan's admin command files (#1045) go here, not under /tmp, but in the
+# one case that reads the default.
+mkdir -p "$work/admin"; export TEMPLATE_UPDATE_ADMIN_TMP="$work/admin"
 # The checker's GitHub reads come from fixtures, never the network: a
 # missing file answers 404, so the tested pin is "not read" unless a case
 # writes one (#511). Each directory answers that the target tag still names
@@ -620,6 +623,48 @@ pinrun "$pin_api"
 if [ "$rc" = 0 ] && ! grep -q "Pin conflict" <<<"$out"
 then ok "no plinth_sha recorded: the plan says nothing of a pin conflict"
 else bad "no recorded pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A version comment on the plinth uses: line (#1045), as Dependabot writes it
+# and plinth's README shows it: the template renders the line with none, so
+# once the line carries another pin than the recorded one, copier meets two
+# changed sides and leaves the line in conflict, even where both name the
+# same pin. The plan says so, and that either side runs the same plinth.
+commented() { # <file>...: a `# v2.41.0` after each plinth pin
+  local f
+  for f in "$@"; do sed -i.bak 's/^\(    uses: coolbress\/plinth\/.*@[0-9a-f]*\)$/\1 # v2.41.0/' "$repo/.github/workflows/$f" && rm "$repo/.github/workflows/$f.bak"; done
+  git -C "$repo" commit -q -am "a version comment" && git -C "$repo" push -q origin main
+}
+handraised pincomment "$recorded"; commented ci.yml label.yml; reset_logs
+pinrun "$behind_api"
+said="$(grep -A2 "^ *The update leaves" <<<"$out" | tr '\n' ' ')"
+if [ "$rc" = 0 ] && grep -q "# v2.41.0" "$repo/.github/workflows/ci.yml" \
+   && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40" <<<"$out" \
+   && grep -q "in conflict in ci.yml, label.yml " <<<"$said" && grep -q "both sides name $sha40: they differ only by the trailing comment" <<<"$said" \
+   && ! grep -q "no conflict on that line is expected" <<<"$out" && [ ! -e "$work/uvx.log" ]
+then ok "a pin raised by hand with a version comment, the live pin carried: the plan says the line conflicts by the comment alone (#1045)"
+else bad "a commented pin, live carried (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# One file with the comment, one without: only the commented one is named.
+handraised pincommentone "$recorded"; commented label.yml; reset_logs
+pinrun "$behind_api"
+if [ "$rc" = 0 ] && grep -q "in conflict in label.yml (" <<<"$out" && ! grep -q "in conflict in ci.yml" <<<"$out"
+then ok "only the workflow whose line carries a comment is named (#1045)"
+else bad "one commented file (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The workflows at the recorded pin, with a comment: the tested line moves
+# the pin, and the commented line conflicts; the live line moves nothing.
+handraised pincommentrecorded "$sha40"; commented ci.yml label.yml; reset_logs
+pinrun "$pin_api"
+if [ "$rc" = 0 ] && grep -q "^Pin conflict: .*records plinth_sha $sha40; the workflows call $sha40" <<<"$out" \
+   && grep -A1 "^ *with --plinth-pin tested, the update leaves" <<<"$out" | grep -q "keep the side naming $tested" \
+   && grep -q "^ *with --plinth-pin live, the update carries the recorded pin itself" <<<"$out"
+then ok "the recorded pin with a version comment: the tested line's conflict is said, the live line moves no pin (#1045)"
+else bad "a commented recorded pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A comment on another line of the file, not the uses: line, changes nothing.
+handraised pincommentelse "$recorded"
+printf '# v2.41.0 is the version\n' >> "$repo/.github/workflows/ci.yml"
+git -C "$repo" commit -q -am "a comment elsewhere" && git -C "$repo" push -q origin main; reset_logs
+pinrun "$behind_api"
+if [ "$rc" = 0 ] && grep -q "no conflict on that line is expected" <<<"$out" && ! grep -q "trailing comment" <<<"$out"
+then ok "a comment elsewhere in the file: no conflict said (#1045)"
+else bad "a comment elsewhere (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 for choice in tested live default; do
   fixture "pin$choice"; reset_logs
@@ -1385,9 +1430,27 @@ move_fixture() { # <name>
 }
 awt_of() { printf '%s\n' "$work/$1-archetype-$2"; }
 
+# The plan writes each admin command to a file and prints `bash <file>`
+# (#1045): what the plan says, then each file it names, as a person reads it.
+with_admin() { # <plan output>
+  printf '%s\n' "$1"
+  sed -n 's/^    bash \(.*\.sh\)$/\1/p' <<<"$1" | while IFS= read -r f; do cat "$f"; done
+}
 move_fixture move-plan; reset_logs
 base="$(git -C "$BARE" rev-parse main)"; before_status="$(git -C "$repo" status --porcelain)"
-out="$(cd "$repo" && MOCK_REQUIRED="ci / test,image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+# The one case that reads the default folder for the admin commands.
+out="$(cd "$repo" && unset TEMPLATE_UPDATE_ADMIN_TMP && MOCK_REQUIRED="ci / test,image" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+plan_said="$out"; out="$(with_admin "$out")"
+# Each line naming a command a person runs with an admin token fits 120
+# characters, and the line before it says where to run it (#1045).
+admin_files="$(sed -n 's/^    bash \(.*\.sh\)$/\1/p' <<<"$plan_said")"
+long="$(awk '/^    bash / && length($0) > 120' <<<"$plan_said")"
+if [ "$rc" = 0 ] && [ -n "$admin_files" ] && [ "$(wc -l <<<"$admin_files" | tr -d ' ')" = 1 ] && [ -z "$long" ] && [[ "$admin_files" == /tmp/plinth-admin.* ]] \
+   && grep -B1 '^    bash ' <<<"$plan_said" | head -n 1 | grep -qF "in a separate terminal, not through !" \
+   && grep -qxF "$root/scripts/with-admin-token.sh $root/scripts/require-check.sh --drop --repo o/r 'image'" "$admin_files"
+then ok "the drop command is a file outside the repository: the plan prints bash <file> in $(awk '/^    bash /{ print length($0) }' <<<"$plan_said") characters, to run in a separate terminal (#1045)"
+else bad "the admin command file (rc=$rc)"; printf '%s\n' "$plan_said" | sed 's/^/        /'; fi
+[ -z "$admin_files" ] || { rm -f "$admin_files"; rmdir "$(dirname "$admin_files")"; }
 plan_ok=1
 for want in "Archetype:  data-ml -> cli, at $target_ref" "--data archetype=cli" \
             "Deletes:" "  MODEL_CARD.md" "  src/demo/train.py" "  tests/test_train.py" "  data/README.md" "  Dockerfile" \
@@ -1414,7 +1477,7 @@ out="$(cd "$repo" && MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$w
 if [ "$rc" = 0 ] && grep -qF "image stops running, and no ruleset requires it on main: nothing to drop. Classic branch protection is not read" <<<"$out" && ! grep -qF -- "--drop" <<<"$out"
 then ok "a check that stops but is not required: no drop command"
 else bad "not required (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-out="$(cd "$repo" && MOCK_REQUIRED=unreadable PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+out="$(cd "$repo" && MOCK_REQUIRED=unreadable PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?; out="$(with_admin "$out")"
 if [ "$rc" = 0 ] && grep -qF "whether main requires image was not read" <<<"$out" && grep -qF -- "require-check.sh --drop --repo o/r 'image'" <<<"$out"
 then ok "the required checks unread: says so, and still names the drop command"
 else bad "unread rules (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
@@ -1457,7 +1520,7 @@ allow_cmd() { # <prefix> <pattern>...: the command the plan gives, under <prefix
 }
 dataml_api="$work/api-allow-data-ml"; allowlist_at "$dataml_api" 'coolbress/plinth/*'
 move_fixture move-allow-data-ml; reset_logs; base="$(git -C "$BARE" rev-parse main)"
-out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$dataml_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$dataml_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype cli 2>&1)"; rc=$?; out="$(with_admin "$out")"
 if [ "$rc" = 0 ] && grep -qF "The Actions allowlist refuses pypa/gh-action-pypi-publish (.github/workflows/release.yml line 5), which the workflows use after the move" <<<"$out" \
    && grep -qF "$(allow_cmd "$root/scripts/" 'coolbress/plinth/*' 'pypa/gh-action-pypi-publish@*')" <<<"$out" \
    && [ "$(grep -n -- "--apply $base" <<<"$out" | cut -d: -f1)" -gt "$(grep -nF "The Actions allowlist refuses" <<<"$out" | cut -d: -f1)" ]
@@ -1623,8 +1686,9 @@ move_cli() { # <name>
 plinth_ver="$(sed -nE 's/^[[:space:]]*"version":[[:space:]]*"([^"]+)".*/\1/p' "$root/.claude-plugin/plugin.json" | head -n 1)"
 move_cli move-add; reset_logs; add_at=("$repo" "$BARE" "$base")
 out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$held_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
-held_line="image starts running. The move's pull request passes ci / floor-check before image is required: the plinth its workflows call (${sha40:0:12}) reads a check the move adds as not required yet. Once the move is merged and image has run on main, a person requires it, with an admin token (never the agent's): $root/scripts/with-admin-token.sh $root/scripts/require-check.sh --repo o/r 'image'; until then ci / floor-check fails on main and on every pull request brought up to date with it."
-if [ "$rc" = 0 ] && grep -qxF "$held_line" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out" \
+out="$(with_admin "$out")"
+held_line="image starts running. The move's pull request passes ci / floor-check before image is required: the plinth its workflows call (${sha40:0:12}) reads a check the move adds as not required yet; until image is required, ci / floor-check fails on main and on every pull request brought up to date with it. Once the move is merged and image has run on main, a person requires it, with an admin token (never the agent's): the file below, which holds the command, in a separate terminal, not through ! (with-admin-token.sh asks for the token at a terminal, which ! does not give it):"
+if [ "$rc" = 0 ] && grep -qxF "$held_line" <<<"$out" && grep -qxF "$root/scripts/with-admin-token.sh $root/scripts/require-check.sh --repo o/r 'image'" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out" \
    && [ "$(grep -n -- "--apply $base" <<<"$out" | cut -d: -f1)" -gt "$(grep -nF "image starts running" <<<"$out" | cut -d: -f1)" ] \
    && ! grep -q "check-add" <<<"$out"
 then ok "a move to backend, with a plinth that has the rule: merge, let image run on main, then require it, in that order (#1017)"
@@ -1670,7 +1734,7 @@ else bad "the description of a move that adds image (rc=$rc)"; printf '%s\n%s\n'
 cli_api="$work/api-allow-cli"; cp -R "$held_api" "$cli_api"; allowlist_at "$cli_api" 'coolbress/plinth/*' 'pypa/gh-action-pypi-publish@*'
 backend_allow="$(allow_cmd "" 'coolbress/plinth/*' 'pypa/gh-action-pypi-publish@*' 'docker/build-push-action@*' 'docker/setup-buildx-action@*')"
 move_cli move-allow; reset_logs
-out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$cli_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$cli_api" MOCK_REQUIRED="ci / test" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?; out="$(with_admin "$out")"
 if [ "$rc" = 0 ] && grep -qF "The Actions allowlist refuses docker/setup-buildx-action (.github/workflows/release.yml line 5), docker/build-push-action (.github/workflows/release.yml line 6), which the workflows use after the move" <<<"$out" \
    && grep -qF "$root/scripts/$backend_allow" <<<"$out" && grep -qF -- "--apply $base --archetype backend" <<<"$out"
 then ok "cli to backend under cli's allowlist: the plan names docker's two actions and one command that keeps pypa's (#1018)"
@@ -1715,6 +1779,10 @@ if grep -qF 'prints a `Pin conflict:` line' <<<"$skill_text" && grep -qF 'Tell t
    && grep -qF "A plinth \`uses:\` line the plan's \`Pin conflict:\` line named is that conflict" <<<"$skill_text"
 then ok "the skill tells the person of the expected pin conflict before the yes, and which side to recommend (#1015)"
 else bad "the skill's pin conflict lines"; fi
+if grep -qF 'carries a trailing comment' <<<"$skill_text" && grep -qF 'give the person that line as printed' <<<"$skill_text" \
+   && grep -qF 'through `!` `with-admin-token.sh` has no terminal' <<<"$skill_text"
+then ok "the skill says a version comment conflicts, and relays the bash <file> line for a separate terminal (#1045)"
+else bad "the skill's #1045 lines"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

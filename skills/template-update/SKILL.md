@@ -81,8 +81,12 @@ carries has its plinth `uses:` line left in conflict: with the tested pin,
 each workflow the plan names; the side to keep is the one naming the pin
 that line carries (copier's `after updating` side). A line that carries the
 pin every workflow calls, the live one usually, leaves no conflict on that
-line (measured with copier 9.18.2, #1015). Tell the user this before asking
-for the yes, so an exit 3 on those files is the conflict they were told of.
+line (measured with copier 9.18.2, #1015). A plinth `uses:` line that
+carries a trailing comment (`# v2.41.0`, as Dependabot writes it) is
+changed too, since the template renders none: the plan names those files
+as in conflict though both sides name the same pin, and either side runs
+the same plinth (#1045). Tell the user this before asking for the yes, so
+an exit 3 on those files is the conflict they were told of.
 
 ## 2. The user's yes
 
@@ -233,11 +237,15 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --archetype <a>
 The plan runs the move on a copy of the default branch outside the
 repository and prints what it deletes, adds and changes, any conflicts, and
 the CI jobs that stop. When a job that stops is a required check (`image`,
-moving from `backend` or `data-ml` to `cli` or `library`), it prints the
+moving from `backend` or `data-ml` to `cli` or `library`), it names the
 `scripts/with-admin-token.sh` command that drops it. A required check that
 no longer runs blocks every merge, so the person runs that command in a
 separate terminal, with an admin token, before the move's pull request
-merges. Never run it yourself, and never with your token. When the move
+merges. Never run it yourself, and never with your token. The plan writes
+each such command to a file outside the repository and prints a short
+`bash <that file>` line (#1045): give the person that line as printed. A
+command of 300 characters pasted from a chat breaks into pieces, and
+through `!` `with-admin-token.sh` has no terminal to ask for the token. When the move
 starts a check (`image`, moving from `cli` or `library` to `backend` or
 `data-ml`), it cannot be required before the move merges, since
 `require-check.sh` refuses a name that has not run on the default branch.

@@ -234,6 +234,20 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
 }
 
 # ── an archetype move (#1004) ───────────────────────────────────────────
+# A command a person runs with an admin token (#1045). In a description it is
+# written inline (under `scripts/`, which is public). In the plan, where the
+# command names this script's folder and the allowlist's runs past 300
+# characters, a line pasted from a chat into a terminal breaks: it goes into
+# a file in <dir>, and the plan prints `bash <that file>`, its own line, with
+# where to run it. with-admin-token.sh prompts for the token at a terminal,
+# so not through `!`, where it has none.
+admin_cmd() { # <dir or empty> <file name> <command>
+  if [ -z "$1" ]; then printf '`%s`' "$3"; return; fi
+  printf '#!/usr/bin/env bash\n# Written by template-update.sh (plinth): run it in a terminal of your own,\n# not through `!`; with-admin-token.sh asks there for an admin token.\n%s\n' "$3" > "$1/$2.sh"
+  printf 'the file below, which holds the command, in a separate terminal, not through `!` (with-admin-token.sh asks for the token at a terminal, which `!` does not give it):\n    bash %s' "$1/$2.sh"
+}
+# A check name as part of a file name.
+slug() { printf '%s' "$1" | tr -c 'A-Za-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c 1-40; }
 # What a person does about the required checks the move stops or starts,
 # from the record: drop one that stops before the move merges (a required
 # name that never reports blocks every merge), require one that starts once
@@ -243,17 +257,17 @@ split_proposal() { # <wt> <merge-base> <total> <max> <exclude> <branch> <repo> <
 # move's own `ci / floor-check` passes only with a plinth that reads it as
 # not required yet (#1017): add_floor says whether the one the workflows
 # call does.
-move_steps() { # <state file> <prefix>
-  local sf="$1" pre="$2" repo default c rd af pin ver
+move_steps() { # <state file> <prefix> [<dir>: write each admin command there, as admin_cmd does]
+  local sf="$1" pre="$2" dir="${3:-}" repo default c rd af pin ver k=0
   repo="$(state_get "$sf" repo)"; default="$(state_get "$sf" default)"; rd="$(state_get "$sf" required_read)"
   af="$(state_get "$sf" add_floor)"; pin="$(cut -d ' ' -f 2 <<<"$af")"; ver="$(plinth_version)"
   local admin="${pre}with-admin-token.sh ${pre}require-check.sh"
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     if [ "$rd" != yes ]; then
-      echo "$c stops running; whether $default requires $c was not read. If it does, before the move's pull request merges: \`$admin --drop --repo $repo '$c'\`"
+      k=$((k + 1)); echo "$c stops running; whether $default requires $c was not read. If it does, before the move's pull request merges, a person runs, with an admin token (never the agent's): $(admin_cmd "$dir" "$k-drop-$(slug "$c")" "$admin --drop --repo $repo '$c'")"
     elif grep -qxF "required=$c" "$sf"; then
-      echo "Required check that stops running: $c, required on $default now. Before the move's pull request merges, a person runs, with an admin token (never the agent's): \`$admin --drop --repo $repo '$c'\`"
+      k=$((k + 1)); echo "Required check that stops running: $c, required on $default now. Before the move's pull request merges, a person runs, with an admin token (never the agent's): $(admin_cmd "$dir" "$k-drop-$(slug "$c")" "$admin --drop --repo $repo '$c'")"
     else
       echo "$c stops running, and no ruleset requires it on $default: nothing to drop. Classic branch protection is not read; if it requires $c, a person removes it there."
     fi
@@ -265,9 +279,9 @@ move_steps() { # <state file> <prefix>
       continue
     fi
     case "${af%% *}" in
-      held) echo "$c starts running. The move's pull request passes ci / floor-check before $c is required: the plinth its workflows call (${pin:0:12}) reads a check the move adds as not required yet. Once the move is merged and $c has run on $default, a person requires it, with an admin token (never the agent's): \`$admin --repo $repo '$c'\`; until then ci / floor-check fails on $default and on every pull request brought up to date with it." ;;
+      held) k=$((k + 1)); echo "$c starts running. The move's pull request passes ci / floor-check before $c is required: the plinth its workflows call (${pin:0:12}) reads a check the move adds as not required yet; until $c is required, ci / floor-check fails on $default and on every pull request brought up to date with it. Once the move is merged and $c has run on $default, a person requires it, with an admin token (never the agent's): $(admin_cmd "$dir" "$k-require-$(slug "$c")" "$admin --repo $repo '$c'")" ;;
       fails) echo "$c starts running, and the plinth the workflows call (${pin:0:12}) fails the move's ci / floor-check until $c is required, which require-check.sh refuses before $c has run on $default. Raise the plinth pin first: merge a pull request that moves every coolbress/plinth uses: line to plinth v$ver or later (Dependabot's, or one by hand), then plan the move again." ;;
-      *) echo "$c starts running; whether the plinth the workflows call passes the move's ci / floor-check before $c is required was not read${af:+ (${af#* * })}. This plinth (v$ver) does, and one from before it may fail it; then the plinth pin is raised first. Once the move is merged and $c has run on $default, to require it: \`$admin --repo $repo '$c'\`" ;;
+      *) k=$((k + 1)); echo "$c starts running; whether the plinth the workflows call passes the move's ci / floor-check before $c is required was not read${af:+ (${af#* * })}. This plinth (v$ver) does, and one from before it may fail it; then the plinth pin is raised first. Once the move is merged and $c has run on $default, to require it, a person runs, with an admin token (never the agent's): $(admin_cmd "$dir" "$k-require-$(slug "$c")" "$admin --repo $repo '$c'")" ;;
     esac
   done < <(sed -n 's/^check_add=//p' "$sf")
   # The Actions allowlist (#1018): the door set it for the old archetype,
@@ -277,7 +291,7 @@ move_steps() { # <state file> <prefix>
   allow="$(state_get "$sf" action_allow)"
   if [ -n "$refused" ]; then
     local then=""; case "$allow" in *"/actions/permissions "*) then=", then plans the move again for the allowlist itself" ;; esac
-    echo "The Actions allowlist refuses $refused, which the workflows use after the move: a run that uses one ends in startup_failure, with no job and no message saying why. Before the move's pull request merges, a person runs, with an admin token (never the agent's): \`${pre}with-admin-token.sh $allow\`$then"
+    echo "The Actions allowlist refuses $refused, which the workflows use after the move: a run that uses one ends in startup_failure, with no job and no message saying why. Before the move's pull request merges, a person runs, with an admin token (never the agent's)$then: $(admin_cmd "$dir" allow-actions "${pre}with-admin-token.sh $allow")"
   fi
   while IFS= read -r s; do
     [ -n "$s" ] && echo "The Actions allowlist, not judged for the workflows after the move: $s."
@@ -801,14 +815,22 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
       echo "required_read=yes"; while IFS= read -r c; do [ -n "$c" ] && printf 'required=%s\n' "$c"; done <<<"$req"
     fi
     actions_of "$r"; } > "$tmp/checks"
-  move_steps "$tmp/checks" "$(q "$here")/" | sed 's/`//g'
+  # Each admin command in a file of its own, outside the repository, under a
+  # short path: the line naming it stays under 120 characters (#1045). The
+  # tests set TEMPLATE_UPDATE_ADMIN_TMP to a folder of their own.
+  admin_dir="$(mktemp -d "${TEMPLATE_UPDATE_ADMIN_TMP:-/tmp}/plinth-admin.XXXXXX" 2>/dev/null || mktemp -d)" \
+    || die "could not make a folder for the admin commands"
+  move_steps "$tmp/checks" "$(q "$here")/" "$admin_dir" | sed 's/`//g'
+  rmdir "$admin_dir" 2>/dev/null && admin_dir=""
+  wrote="Nothing has been written (the fetch moved only origin/$default)."
+  [ -z "$admin_dir" ] || wrote="Nothing has been written in the repository (the fetch moved only origin/$default; the admin commands above are files in $admin_dir)."
   echo
   if grep -q '^add_floor=fails ' "$tmp/checks" && [ -n "$(unrequired_adds "$tmp/checks")" ]; then
-    echo "Nothing has been written (the fetch moved only origin/$default). Raise the plinth pin first (above);"
+    echo "$wrote Raise the plinth pin first (above);"
     echo "--apply refuses this move until the workflows call a plinth that passes its ci / floor-check."
     exit 0
   fi
-  echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
+  echo "$wrote To apply it, on the user's word:"
   echo "  $(q "$0") --apply $base --archetype $move"
   if [ -n "$owned" ]; then
     echo "  with each changed file above named once, as the person chooses: --keep <path> restores it after"
@@ -855,21 +877,46 @@ if [ "$mode" = plan ]; then
   live_pin="$(carried "$cmd")"; tested_pin="$(carried "${tested_cmd:-}")"
   pins_now="$( [ -z "$recorded" ] || python3 "$checker" --root "$tmp" --print-plinth-pins | awk '$2 !~ /^unread$/ { print $1, tolower($2) }')"
   called="$(awk '!s[$2]++ { printf "%s%s", (n++ ? " and " : ""), $2 }' <<<"$pins_now")"
-  in_conflict() { # <carried pin>: the files whose plinth pin is neither the recorded one nor it
-    awk -v r="$recorded" -v c="$1" '$2 != r && $2 != c && !s[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }' <<<"$pins_now"
+  # A trailing comment (`# v2.41.0`, as Dependabot writes it, #1045) is a
+  # change to the line as well: the template renders none. Once the line
+  # carries another pin than the recorded one, copier's merge meets two
+  # changed sides there too and leaves it in conflict, even where both sides
+  # name the same pin (seen on a project's live run, copier 9.18.2).
+  commented="$( [ -z "$recorded" ] || python3 "$checker" --root "$tmp" --print-plinth-comments | awk '{ print $1, tolower($2) }')"
+  in_conflict() { # <carried pin>: the files whose line names neither pin, or the recorded one with a comment
+    awk -v r="$recorded" -v c="$1" 'NR == FNR { if (c != r && $2 == r) k[$1] = 1; next }
+      ($2 != r && $2 != c || k[$1]) && !s[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }' \
+      <(printf '%s\n' "$commented") <(printf '%s\n' "$pins_now")
+  }
+  only_comment() { # <carried pin>: the files whose line names it, with a comment the render does not carry
+    [ "$1" != "$recorded" ] || return 0
+    awk -v c="$1" '$2 == c && !s[$1]++ { printf "%s%s", (n++ ? ", " : ""), $1 }' <<<"$commented"
   }
   pin_says() { # <what the line is> <carried pin>
-    local files; files="$(in_conflict "$2")"
+    local files only; files="$(in_conflict "$2")"; only="$(only_comment "$2")"
     if [ "$2" = "$recorded" ]; then
       echo "            $1 carries the recorded pin itself: copier keeps the pin each workflow calls, so that line moves no pin."
-    elif [ -n "$files" ]; then
+      return
+    fi
+    if [ -n "$files" ]; then
       echo "            $1 leaves the plinth uses: line in conflict in $files (those of them the template renders);"
       echo "            keep the side naming $2, the pin that line carries (copier's \`after updating\` side)."
-    else
-      echo "            $1 carries the pin the workflows call: no conflict on that line is expected."
     fi
+    if [ -n "$only" ]; then
+      echo "            $1 leaves the plinth uses: line in conflict in $only (those of them the template renders),"
+      echo "            though both sides name $2: they differ only by the trailing comment, which the template does not"
+      echo "            render. Either side runs the same plinth; this repository's (\`before updating\`) keeps the comment."
+    fi
+    [ -n "$files$only" ] || echo "            $1 carries the pin the workflows call: no conflict on that line is expected."
   }
-  if [ -n "$recorded" ] && [ -n "$live_pin" ] && [ -n "$(in_conflict "$recorded")" ]; then
+  offered_conflicts() { # whether a line on offer leaves a plinth uses: line in conflict
+    local c
+    for c in "$live_pin" ${tested_pin:+"$tested_pin"}; do
+      [ -n "$(in_conflict "$c")$(only_comment "$c")" ] && return 0
+    done
+    return 1
+  }
+  if [ -n "$recorded" ] && [ -n "$live_pin" ] && { [ -n "$(in_conflict "$recorded")" ] || offered_conflicts; }; then
     echo "Pin conflict: .copier-answers.yml records plinth_sha $recorded; the workflows call $called."
     if [ -n "$tested_pin" ]; then
       pin_says "with --plinth-pin tested, the update" "$tested_pin"
