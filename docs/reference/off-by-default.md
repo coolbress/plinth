@@ -2,7 +2,7 @@
 
 What a project made by `/plinth:new-project` starts with turned off, when each
 is worth turning on, and where the steps are. `/plinth:new-project` prints
-these as its last lines and `/plinth:guide` says them, both from the table
+these as its last lines and `/plinth:guide` counts them, both from the table
 below through `scripts/off-by-default.sh`; an item added here reaches both.
 The guide says how many there are, in one line near its start, and by name
 only a step its line says to do now; every item is said, at the end of its
