@@ -245,8 +245,26 @@ never printed on a Windows console" stays open. So "`uv.lock`, `CHANGELOG.md`
 and `.github/dependabot.yml` are all in place" fails all three gaps,
 "`CHANGELOG.md` and `.github/dependabot.yml` are present; only `uv.lock` is
 missing" fails the first two, and "the `cp1252` check is done" fails the item.
-These are words, not a judge: a state given only on a line that does not name
-the entry (a heading "Missing:" over a list of bare paths) is not read, and a
+A list item that names the entry and holds no word of either list is read as
+its heading or lead-in line says (#1032): the line just above the list
+("Missing files:", "Not found:", "누락된 파일 목록"), a parent item ("- Missing:"),
+or, across a blank line, a Markdown heading, a bold line or a line ending in a
+colon. So `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` listed one per
+line under "Missing files:" pass all three gaps, under "Present files:" or "##
+Already in place" fail them, and under "Files checked:", which says neither,
+fail them too. An item with a state word of its own is read by its own words
+("- .github/dependabot.yml is present" under "Missing files:" fails that gap),
+and a paragraph a blank line separates from the list is not its lead-in. In a
+lead-in, a bare "no" or "없" belongs to a noun of its own and states nothing
+("No issues:", "No action needed:", "이상 없음" credit no item), and "found"
+after "I", "we" or "what" is the report's verb ("## What I found" says
+neither). A line is read without its Markdown markup (a list marker, a
+heading's `#`s, `*` or `_` emphasis at either end), so "## Not missing:" and
+"**Not missing**" say present as "Not missing:" does. A list item is read
+together with its wrapped lines, the lines right after it indented past its
+marker, so "- uv.lock" over an indented "is present" is read by "is present".
+These are words, not a judge: a state given on another line that does not name
+the entry, outside a list, is not read, and a
 negation in another clause does not reach the entry ("No uv.lock, CHANGELOG.md
 or dependabot.yml found" passes `uv.lock` only). The grade records
 `mentioned` beside each entry, the name found anywhere, as the grade read it
@@ -258,7 +276,9 @@ before and after it are not compared cell by cell without saying so. Checked
 by hand, not by a test: 108 entries of archived final reports (30
 `floor-gaps` runs, among them the v2.36.0 smoke run's two, and 18 `next-day`
 runs, none from the v2.35.0 release run, whose reports were not kept) grade
-the same as before. It records the files the session changed, so a reader can
+the same as before. Reading a list item by its heading (#1032) was checked the
+same way: the 30 entries of the v2.41.0 release and smoke runs' `floor-gaps`
+and `next-day` reports grade the same as before it. It records the files the session changed, so a reader can
 see whether it started the next ticket, and every `gh` call it made. A shell
 profile that puts another `gh` first on the PATH would hide the stand-in, so
 a run whose commands ran `gh`, or the guide's script, which runs it, while the stand-in logged no call is counted

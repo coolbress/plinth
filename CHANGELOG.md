@@ -24,6 +24,17 @@ pull requests and have no tag.
   `startup_failure` with no job, though the move's checks were green. An
   allowlist that allows them is said, and one not read is said as not read
   (#1018).
+- The eval suite's `floor-gaps` and `next-day` grading reads a list under a
+  heading (#1032). `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml`
+  listed one per line under "Missing files:" or "누락된 파일 목록" passed none
+  of the three gaps, since no line that named a file said it was missing. A
+  list item that names the entry and holds no state word of its own now reads
+  as its lead-in line, parent item or heading says: missing or open passes,
+  present or done fails, and a heading that says neither credits nothing; a
+  bare "no" or "없" in it ("No issues:", "이상 없음") and "What I found" say
+  neither. A line is read without its Markdown markup ("## Not missing:"),
+  and a list item with its wrapped lines. Checked by hand: the 30 entries of the v2.41.0 release and smoke runs'
+  reports grade the same as before.
 
 ## [2.41.0] - 2026-11-23
 
