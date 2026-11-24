@@ -168,6 +168,7 @@ behind_lines=""
 if [ "$(answer host)" = gitlab ]; then
   behind
   echo "repository: GitLab; the guide reads GitHub only, so issues and merge requests were not read"
+  echo "so far: not read (the guide reads GitHub only)"
   set_mode full "the state was not read"
   echo
   echo "where: not read"
@@ -838,7 +839,7 @@ if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ -z "${pages_name
   reach="$(admin_reach in_repo_gh "$repo" "?" "?")"
   case "$reach" in
     none) ;;
-    admin) echo "token step: not done: the credential gh uses in this session reaches the Administration of $repo, so the agent can still change the checks; before going on, follow the three pages of $step1, in order: $pages" ;;
+    admin) token_open=yes; echo "token step: not done: the credential gh uses in this session reaches the Administration of $repo, so the agent can still change the checks; before going on, follow the three pages of $step1, in order: $pages" ;;
     read) echo "token step: not verified: the credential gh uses in this session reads the Administration of $repo, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
     *) echo "token step: not verified: ${reach#unknown: }; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
   esac
@@ -847,5 +848,103 @@ fi
 # project is at stays the one above.
 if [ -n "$template_behind" ] && [ "$said_cmd" != /plinth:template-update ]; then
   echo "step 9: template $template_behind, the tag this plinth targets: /plinth:template-update, typed"
+fi
+
+# The latest completed run of ci.yml on main (#1076): pass, fail, none, or
+# not read with why. A failing one is a problem; the route stays as above.
+# Its own read: failing, it leaves every other line as it is.
+problems=""
+[ -z "$broken" ] || problems="a check fails on pull request #$(field 1 <<<"$broken")"
+[ -z "${token_open:-}" ] || problems="${problems:+$problems; }the token step is not done"
+if run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=1" \
+      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)"; then
+  if [ -z "$run" ]; then echo "main ci: none (no completed run of ci.yml on main)"
+  else
+    IFS=$'\t' read -r run_id run_end run_on <<<"$run"
+    case "$run_end" in
+      success|neutral|skipped) echo "main ci: pass (run $run_id, $run_on)" ;;
+      *) echo "main ci: fail (run $run_id, $run_on, ${run_end:-no conclusion}): gh run view $run_id --log-failed"
+         problems="${problems:+$problems; }main's latest CI run fails (run $run_id)" ;;
+    esac
+  fi
+else
+  echo "main ci: not read ($(tail -1 <<<"$run" | tr '\t' ' '))"
+fi
+echo "problems: ${problems:-none}"
+
+# What happened so far (#1076), from one GraphQL call: when the repository
+# was made and last pushed to (a push to any branch, a bot's too), the true
+# totals, and the records below. Its own read: failing, started, so far and
+# totals say not read and every other line stays as it is. The events that
+# count, each a date, a reference, a kind and the record's title as recorded:
+#   - the repository's creation;
+#   - the first merge by a person: the earliest merged of the first 20 pull
+#     requests opened that a person (not a Bot) wrote, or of the merged ones
+#     read above when that read was not cut (nexusbt's first merge was
+#     Dependabot's);
+#   - closed records: issues labelled spec or wayfinder:* (not
+#     wayfinder:task), among the 50 closed issues updated last;
+#   - releases (not drafts) and tags with no release, the 10 newest of each;
+#   - feat: merges by people, from the merged pull requests read above.
+# Every other merge is counted only. The newest five are printed, newest
+# first; with a problem open, only the totals line.
+history_q='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+  createdAt pushedAt
+  mergedPulls: pullRequests(states: MERGED) { totalCount }
+  closedIssues: issues(states: CLOSED) { totalCount }
+  records: issues(states: CLOSED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title closedAt labels(first: 20) { nodes { name } } } }
+  releases(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) { totalCount nodes { tagName name isDraft publishedAt createdAt } }
+  tags: refs(refPrefix: "refs/tags/", first: 10, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { totalCount
+    nodes { name target { ... on Commit { committedDate } ... on Tag { tagger { date } } } } }
+  firstMerges: pullRequests(states: MERGED, first: 20, orderBy: {field: CREATED_AT, direction: ASC}) { nodes { number title mergedAt author { __typename login } } }
+} }'
+history_jq='def clean: gsub("[\t\n\r]"; " ");
+  def ago: ((now - fromdate) / 86400 | floor | if . < 0 then 0 else . end) as $d | "\(.[0:10]) (\($d) day\(if $d == 1 then "" else "s" end) ago)";
+  def many($n; $w): "\($n) \($w)\(if $n == 1 then "" else "s" end)";
+  .data.repository as $r
+  | (["started", "started: \($r.createdAt | ago); last activity: \(($r.pushedAt // $r.createdAt) | ago)"],
+     ["totals", "totals: \($r.mergedPulls.totalCount) merged, \(many($r.closedIssues.totalCount; "closed issue")), \(many($r.releases.totalCount; "release")), \(many($r.tags.totalCount; "tag"))"],
+     ["event", $r.createdAt[0:10], $repo, "created", ""],
+     ($r.records.nodes[] | ([.labels.nodes[].name | select(. == "spec" or (startswith("wayfinder:") and . != "wayfinder:task"))] | first) as $l
+       | select($l != null and .closedAt != null) | ["event", .closedAt[0:10], "#\(.number)", "closed \($l)", (.title | clean)]),
+     ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt)[0:10], .tagName, "release", ((.name // "") | clean)]),
+     ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
+       | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", $at[0:10], .name, "tag", ""]),
+     ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
+       | ["first", .mergedAt[0:10], "#\(.number)", (.title | clean)]))
+  | @tsv'
+if history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f query="$history_q" \
+      --jq "\"$repo\" as \$repo | $history_jq" 2>&1)"; then
+  awk -F '\t' '$1 == "started" { print $2 }' <<<"$history"
+  if [ -n "$problems" ]; then
+    echo "so far: counts only while a problem is open"
+  else
+    # The first merge by a person: the earliest of the GraphQL read's, and of
+    # the merged ones read above unless that read was cut.
+    events="$( { awk -F '\t' '$1 == "event" || $1 == "first"' <<<"$history"
+        [ -n "$past_first" ] || awk -F '\t' '$2 == "person" { print "first\t" $3 "\t#" $1 "\t" $4 }' <<<"$merged"
+        awk -F '\t' '$2 == "person" && $4 ~ /^feat(\([^)]*\))?!?:/ { print "event\t" $3 "\t#" $1 "\tmerged\t" $4 }' <<<"$merged"; } |
+      awk -F '\t' '
+        $1 == "first" { if (fd == "" || $2 < fd) { fd = $2; fr = $3; ft = $4 }; next }
+        $2 != "" { n++; d[n] = $2; r[n] = $3; k[n] = $4; t[n] = $5 }
+        END {
+          if (fd != "") { n++; d[n] = fd; r[n] = fr; k[n] = "first merge by a person"; t[n] = ft; first = fr }
+          for (i = 1; i <= n; i++) {
+            # One line per pull request: its first merge, not also its feat: merge.
+            if (k[i] == "merged" && r[i] == first) continue
+            printf "%s\t%s\t%s\t%s\n", d[i], r[i], k[i], t[i]
+          }
+        }' | sort -t $'\t' -k1,1r -s)"
+    total="$(grep -c . <<<"$events" || true)"
+    if [ "$total" -eq 0 ]; then echo "so far: none recorded"
+    else
+      echo "so far: the newest $([ "$total" -lt 5 ] && echo "$total" || echo 5) of $total events, newest first:"
+      head -5 <<<"$events" | awk -F '\t' '{ printf "  %s %s %s%s\n", $1, $2, $3, ($4 == "" ? "" : ": " $4) }'
+    fi
+  fi
+  awk -F '\t' '$1 == "totals" { print $2 }' <<<"$history"
+else
+  why="$(tail -1 <<<"$history" | tr '\t' ' ')"
+  printf 'started: not read (%s)\nso far: not read (%s)\ntotals: not read (%s)\n' "$why" "$why" "$why"
 fi
 finish

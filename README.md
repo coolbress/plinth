@@ -164,7 +164,7 @@ Six skills, prefixed `/plinth:`:
 | `records-check [owner/name]` | Counts what is out of place in the issue and pull-request records, judged by the repository's own written conventions: references to nothing, home paths, bodies near GitHub's size limit, completed issues with no ending, merged pull requests with no AI trailer; lists unticked acceptance criteria for a person to read; changes nothing | You or the agent |
 | `template-update` | Applies the template update `floor-check` reports: runs its `copier update` line in a worktree beside the repository, branched from the verified default branch, and opens a draft pull request; on a conflict it recommends a resolution for each file and applies it only on your word, before anything is pushed | You only, and it asks before it writes |
 | `arsenal` | Catalog of the tools below: what, when, cost | You or the agent |
-| `guide` | Explains in plain words, in your language, where your repository is and the one command to type next, then how to use the tools of that step and the next from the arsenal's table; the whole way, every step in depth, with `/plinth:guide map`; changes nothing | You only: type `/` and pick it |
+| `guide` | Explains in plain words, in your language, the one command to type next, then what is open and what happened so far, copied from the record; before the first merge, how to use the tools of that step and the next from the arsenal's table; the whole way, every step in depth, with `/plinth:guide map`; changes nothing | You only: type `/` and pick it |
 
 Every skill only you can start, these and the dependencies' together, is on
 [one list in the arsenal](skills/arsenal/SKILL.md#skills-only-the-person-can-start).

@@ -60,6 +60,25 @@ fi
 # GraphQL call, an alias n<N> per number; lookup.json maps a number to its
 # state, a number it lacks comes back null. MOCK_LOOKUP_FAIL fails the call;
 # MOCK_LOOKUP_LOG counts the calls.
+# The history read (#1076): one GraphQL call, its query naming mergedPulls,
+# answered from history.json in GitHub's response shape, else a project
+# created 2026-10-01 with nothing recorded. MOCK_HISTORY_FAIL fails it.
+if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *mergedPulls* ]]; then
+  [ -n "${MOCK_HISTORY_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  set -o pipefail
+  if [ -f "$MOCK_DIR/history.json" ]; then cat "$MOCK_DIR/history.json"
+  else echo '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":0},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[]}}}}'
+  fi | jq -r "$jqf"
+  exit
+fi
+# The latest completed run of ci.yml on main (#1076): runs.json in the REST
+# shape, else none. MOCK_RUNS_FAIL fails it.
+if [ "$1" = api ] && [[ "$2" == repos/o/r/actions/workflows/ci.yml/runs* ]]; then
+  [ -n "${MOCK_RUNS_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  set -o pipefail
+  if [ -f "$MOCK_DIR/runs.json" ]; then cat "$MOCK_DIR/runs.json"; else echo '{"total_count":0,"workflow_runs":[]}'; fi | jq -r "$jqf"
+  exit
+fi
 if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *issueOrPullRequest* ]]; then
   [ -z "${MOCK_LOOKUP_LOG:-}" ] || echo lookup >> "$MOCK_LOOKUP_LOG"
   [ -n "${MOCK_LOOKUP_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
@@ -1080,10 +1099,10 @@ then ok "the skill says to give the why: line's reason and no other"; else bad "
 if grep -qF 'look again in a minute' "$root/skills/guide/SKILL.md" && grep -qF '`no checks ran`: no' "$root/skills/guide/SKILL.md"
 then ok "the skill says checks not started yet and no checks ran in plain words"; else bad "the skill does not say what an empty rollup means"; fi
 
-# ── the answer's order (#1035) ───────────────────────────────────────────
-# In both modes: where the project is and why, then the one command, then
-# this step and the next, then the rest of the way. The off-by-default items
-# are one line in part 1; every item is said only at the end of part 4, on map.
+# ── the answer's order (#1035, #1076) ────────────────────────────────────
+# In both modes: the header, what blocks, the one command, then, what is open,
+# so far, the rest of the way. The off-by-default items are one line in part
+# 5; every item is said only at the end of part 7, on map.
 guide_md="$root/skills/guide/SKILL.md"
 part() { # <n>: the text of "Say it"'s numbered part n, its lines joined
   awk -v n="$1" '/^## Say it/{on=1} on && /^## / && !/^## Say it/{exit}
@@ -1091,27 +1110,34 @@ part() { # <n>: the text of "Say it"'s numbered part n, its lines joined
     on && cur==n' "$guide_md" | tr '\n' ' ' | tr -s ' '
 }
 parts="$(awk '/^## Say it/{on=1} on && /^[0-9]\. \*\*/' "$guide_md" | sed -E 's/^([0-9])\. \*\*([^*]*)\*\*.*/\1 \2/')"
-want="1 Where the project is now, and why
-2 The one next step
-3 This step and the next, in depth.
-4 The rest of the way."
-[ "$parts" = "$want" ] && grep -qF 'Four parts, in this order, in both modes' "$guide_md" &&
-  ok "the skill's four parts: where and why, the command, this step and the next, the rest" ||
-  { bad "the skill's parts are not in #1035's order:"; sed 's/^/        /' <<<"$parts"; }
-p1="$(part 1)"; p2="$(part 2)"; p3="$(part 3)"; p4="$(part 4)"
-grep -qF 'failing checks' <<<"$p1" && grep -qF 'not known yet' <<<"$p1" &&
-  ok "part 1 says the failing check and its cause, before the command" || bad "part 1 does not hold the failing check"
-grep -qF 'in one line, in both modes' <<<"$p1" && grep -qF 'not a paragraph each' <<<"$p1" &&
-  ! grep -qF 'when it is worth turning on' <<<"$p1" &&
-  ok "part 1: what started off is one line in both modes, no item described" || bad "part 1 still describes each off-by-default item"
-grep -qF 'one code block' <<<"$p2" && grep -qF '`command:`' <<<"$p2" &&
-  ok "part 2 is the command, in the one code block" || bad "part 2 is not the command"
-grep -qF 'whole way' <<<"$p3" && grep -qF 'heading' <<<"$p3" && grep -qF '`mode: full`' <<<"$p3" &&
-  ok "part 3 opens the whole way under a heading in mode: full" || bad "part 3 has no whole-way heading"
-grep -qF 'when it is worth turning on' <<<"$p4" && grep -qF 'asked for the whole way' <<<"$p4" &&
-  ok "part 4 ends with every off-by-default item, only on map" || bad "part 4 does not hold the items for map"
-grep -qF 'say so in part 2, after the command' "$guide_md" &&
-  ok "the token step is said in the command's part" || bad "the token step names the wrong part"
+want="1 The header line.
+2 Blocking problems.
+3 The one next step
+4 Then.
+5 Open now.
+6 So far.
+7 The rest of the way."
+[ "$parts" = "$want" ] && grep -qF 'Seven parts, in this order, in both modes' "$guide_md" &&
+  ok "the skill's seven parts: header, problems, the command, then, open now, so far, the rest" ||
+  { bad "the skill's parts are not in #1076's order:"; sed 's/^/        /' <<<"$parts"; }
+p1="$(part 1)"; p2="$(part 2)"; p3="$(part 3)"; p4="$(part 4)"; p5="$(part 5)"; p6="$(part 6)"; p7="$(part 7)"
+grep -qF '`started:`' <<<"$p1" && grep -qF 'absolute date' <<<"$p1" &&
+  ok "part 1: the header gives the start and the last activity as dates" || bad "part 1 is not the header"
+grep -qF 'failing checks' <<<"$p2" && grep -qF 'not known yet' <<<"$p2" && grep -qF '`problems:`' <<<"$p2" &&
+  ok "part 2 says the failing check and its cause, before the command" || bad "part 2 does not hold the failing check"
+grep -qF 'one code block' <<<"$p3" && grep -qF '`command:`' <<<"$p3" &&
+  ok "part 3 is the command, in the one code block" || bad "part 3 is not the command"
+grep -qF 'whole way' <<<"$p4" && grep -qF 'heading' <<<"$p4" && grep -qF '`mode: focused`, no step is explained in depth' <<<"$p4" &&
+  ok "part 4: the depth only in mode: full, the whole way under a heading on map" || bad "part 4 does not hold the depth rule"
+grep -qF 'in one line, in both modes' <<<"$p5" && grep -qF 'not a paragraph each' <<<"$p5" &&
+  ! grep -qF 'when it is worth turning on' <<<"$p5" &&
+  ok "part 5: what started off is one line in both modes, no item described" || bad "part 5 still describes each off-by-default item"
+grep -qF '`so far:`' <<<"$p6" && grep -qF 'counts only' <<<"$p6" &&
+  ok "part 6: so far as printed, counts only with a problem" || bad "part 6 is not so far"
+grep -qF 'when it is worth turning on' <<<"$p7" && grep -qF 'asked for the whole way' <<<"$p7" &&
+  ok "part 7 ends with every off-by-default item, only on map" || bad "part 7 does not hold the items for map"
+grep -qF 'say so in part 2, as a blocking problem' "$guide_md" &&
+  ok "the token step is said in the problems' part" || bad "the token step names the wrong part"
 
 # ── how much of the way (#908) ───────────────────────────────────────────
 # mode: full before a person's merge, on map, or with the state not read;
@@ -1381,6 +1407,105 @@ state "before the first merge: the first pull request's own route, no merge-next
 if grep -qF '`merge next:`' "$root/skills/guide/SKILL.md" && grep -qF '`merge next cannot know:`' "$root/skills/guide/SKILL.md"
 then ok "the skill says to show the candidate as merge #N with what it cannot know"
 else bad "the skill does not say how to show merge next and what it cannot know"; fi
+
+# ── what happened so far (#1076) ─────────────────────────────────────────
+# One GraphQL call gives the start, the last push, the true totals, the closed
+# records, the releases and tags, and the first merges; the merged pull
+# requests already read give the feat: merges. Eight events count here, five
+# are printed, newest first, titles as recorded.
+d="$(repo so-far)"
+put "$d/merged.json" "$(pr 1 'chore(deps): bump x' true SUCCESS)" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)" \
+  "$(pr 3 'feat: x' false SUCCESS)" "$(pr 5 'feat(ledger): totals, in cents' false SUCCESS)" \
+  "$(pr 6 'chore(deps): bump y' true SUCCESS)" "$(pr 8 'fix: keep cents' false SUCCESS)"
+cat > "$d/history.json" <<'JSON'
+{"data":{"repository":{"createdAt":"2026-10-01T09:00:00Z","pushedAt":"2026-10-28T12:00:00Z",
+ "mergedPulls":{"totalCount":6},"closedIssues":{"totalCount":4},
+ "records":{"nodes":[
+   {"number":20,"title":"The ledger","closedAt":"2026-10-24T10:00:00Z","labels":{"nodes":[{"name":"spec"}]}},
+   {"number":21,"title":"Which store, and why","closedAt":"2026-10-26T10:00:00Z","labels":{"nodes":[{"name":"wayfinder:research"}]}},
+   {"number":22,"title":"A ticket","closedAt":"2026-10-27T10:00:00Z","labels":{"nodes":[{"name":"wayfinder:task"}]}},
+   {"number":23,"title":"A plain issue","closedAt":"2026-10-28T10:00:00Z","labels":{"nodes":[]}}]},
+ "releases":{"totalCount":1,"nodes":[{"tagName":"v1.0.0","name":"First release","isDraft":false,"publishedAt":"2026-10-27T10:00:00Z","createdAt":"2026-10-27T10:00:00Z"}]},
+ "tags":{"totalCount":2,"nodes":[{"name":"v1.0.0","target":{"committedDate":"2026-10-27T09:00:00Z"}},{"name":"v0.9.0","target":{"tagger":{"date":"2026-10-20T09:00:00Z"}}}]},
+ "firstMerges":{"nodes":[{"number":1,"title":"chore(deps): bump x","mergedAt":"2026-10-21T00:00:00Z","author":{"__typename":"Bot","login":"dependabot"}},
+   {"number":2,"title":"docs: first pull request through the wall","mergedAt":"2026-10-22T00:00:00Z","author":{"__typename":"User","login":"someone"}}]}}}}
+JSON
+days() { jq -nr --arg t "$1" '($t | (now - fromdate) / 86400 | floor) as $d | "\($t[0:10]) (\($d) day\(if $d == 1 then "" else "s" end) ago)"'; }
+state "so far: the newest five of eight events, titles as recorded, then the true totals" "$d" \
+  "started: $(days 2026-10-01T09:00:00Z); last activity: $(days 2026-10-28T12:00:00Z)" \
+  "so far: the newest 5 of 8 events, newest first:" \
+  "  2026-10-27 v1.0.0 release: First release" \
+  "  2026-10-26 #21 closed wayfinder:research: Which store, and why" \
+  "  2026-10-25 #5 merged: feat(ledger): totals, in cents" \
+  "  2026-10-24 #20 closed spec: The ledger" \
+  "  2026-10-23 #3 merged: feat: x" \
+  "totals: 6 merged, 4 closed issues, 1 release, 2 tags" \
+  "problems: none" "main ci: none (no completed run of ci.yml on main)"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+[ "$(grep -cE '^  20[0-9]{2}-[0-9]{2}-[0-9]{2} ' <<<"$out")" = 5 ] && ok "so far: five event lines, no more" ||
+  { bad "so far: $(grep -cE '^  20[0-9]{2}-' <<<"$out") event lines"; grep -A9 '^so far' <<<"$out" | sed 's/^/        /'; }
+# Which events count, all eight: the creation, the first merge by a person
+# (Dependabot's #1 merged first and is not it), the closed spec and wayfinder
+# record (not wayfinder:task, not an unlabelled issue), the release, the tag
+# with no release, the feat: merges by people. fix: and Dependabot's merges
+# are counted only.
+printf '{"data":{"repository":%s}}' "$(jq '.data.repository | .releases.nodes = [] | .records.nodes[0].closedAt = "2026-08-31T00:00:00Z" | .records.nodes[1].closedAt = "2026-09-01T00:00:00Z" | .tags.nodes[0].target.committedDate = "2026-09-02T00:00:00Z"' "$d/history.json")" > "$d/h2"
+jq '.data.repository.releases.nodes = [{"tagName":"v1.0.0","name":"","isDraft":false,"publishedAt":"2026-09-03T00:00:00Z"}]' "$d/h2" > "$d/history.json"
+put "$d/merged.json" "$(pr 1 'chore(deps): bump x' true SUCCESS)" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+state "so far: which events count, each kind once; the spec is the sixth" "$d" \
+  "so far: the newest 5 of 6 events, newest first:" \
+  "  2026-10-22 #2 first merge by a person: docs: first pull request through the wall" \
+  "  2026-10-20 v0.9.0 tag" \
+  "  2026-10-01 o/r created" \
+  "  2026-09-03 v1.0.0 release" \
+  "  2026-09-01 #21 closed wayfinder:research: Which store, and why" \
+  "!#22" "!#23" "!#1 " "!v1.0.0 tag"
+rm "$d/h2"
+# With a problem open, the history is the counts line only.
+put "$d/open.json" "$(pr 9 'feat: y' false FAILURE)"
+state "a failing check: the counts line, no event" "$d" \
+  "so far: counts only while a problem is open" "totals: 6 merged, 4 closed issues, 1 release, 2 tags" \
+  "problems: a check fails on pull request #9" "!  2026-10-22 #2" "!the newest"
+printf '[]' > "$d/open.json"
+
+# The latest completed run of ci.yml on main: pass, fail (a problem), none,
+# not read; each leaves the route as it was.
+base="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+route() { grep -E '^(where|next|tool|before|command|note|then|mode): ' <<<"$1"; }
+printf '{"total_count":1,"workflow_runs":[{"id":77,"conclusion":"success","created_at":"2026-10-28T10:00:00Z"}]}' > "$d/runs.json"
+state "main ci: pass" "$d" "main ci: pass (run 77, 2026-10-28)" "problems: none"
+printf '{"total_count":1,"workflow_runs":[{"id":78,"conclusion":"failure","created_at":"2026-10-28T11:00:00Z"}]}' > "$d/runs.json"
+state "main ci: fail is a problem; the history is the counts line" "$d" \
+  "main ci: fail (run 78, 2026-10-28, failure): gh run view 78 --log-failed" \
+  "problems: main's latest CI run fails (run 78)" "so far: counts only while a problem is open" "!  2026-10-"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+[ "$(route "$out")" = "$(route "$base")" ] && ok "main ci failing leaves the route as it was" || bad "main ci failing changed the route"
+rm "$d/runs.json"
+out="$(MOCK_RUNS_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "main ci: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "so far: the newest 5 of 6 events, newest first:" <<<"$out" &&
+  [ "$(route "$out")" = "$(route "$base")" ] && ! grep -q '^where: not read' <<<"$out" &&
+  ok "the main run read failing: main ci not read, the rest unchanged" || { bad "the main run read failing"; sed 's/^/        /' <<<"$out" | head -30; }
+# The history read failing: its lines say so; nothing else moves.
+out="$(MOCK_HISTORY_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+others() { grep -vE '^(started|so far|totals|last activity): |^  20[0-9]{2}-[0-9]{2}-[0-9]{2} ' <<<"$1"; }
+grep -qxF "so far: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "totals: not read (HTTP 502: Bad Gateway)" <<<"$out" &&
+  grep -qxF "started: not read (HTTP 502: Bad Gateway)" <<<"$out" && [ "$(others "$out")" = "$(others "$base")" ] &&
+  ok "the history read failing: started, so far and totals not read, the rest unchanged" ||
+  { bad "the history read failing"; diff <(others "$base") <(others "$out") | head; grep -E '^(started|so far|totals)' <<<"$out" | sed 's/^/        /'; }
+state "GitLab: so far not read" "$work/gitlab" "so far: not read (the guide reads GitHub only)"
+
+# The skill's answer (#1076): seven parts, four status words, no bar, so far
+# only as printed, the depth rule, the /clear line, the gloss rule.
+grep -qF '/9' <<<"$(awk '/^## Say it/{on=1} on' "$guide_md")" && bad "the answer's shape names an n/9 fraction" ||
+  ok "the answer's shape has no n/9 fraction"
+for w in '`✓ done`' '`… in progress`' '`‖ waiting`' '`✗ failed`' 'no bar, no fraction' \
+         'only from the `so far:` lines, titles as printed' 'this step and the next in depth only with `mode: full` or'; do
+  grep -qF -- "$w" "$guide_md" && ok "the skill says: $w" || bad "the skill does not say: $w"
+done
+grep -qF 'clears this answer too' "$guide_md" && grep -qF '`before: /clear`' "$guide_md" &&
+  ok "the skill says /clear takes the answer with it, and /plinth:guide brings it back" || bad "no /clear line in the skill"
+grep -qF 'Next action cell' <<<"$(grep -F 'first time you use a command' "$guide_md")" &&
+  ok "the skill glosses a command's first use from its Next action cell" || bad "no gloss rule in the skill"
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"

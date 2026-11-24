@@ -444,7 +444,8 @@ What to do with the output:
   the pull request URL, wait for the checks, and merge with squash. On
   GitHub, end with one line in the person's language: try typing
   `/plinth:guide` in the new repository's folder; it names the command to
-  type next and explains this step and the next in plain words, and
+  type next and, until the first merge, explains this step and the next in
+  plain words, and
   `/plinth:guide map` shows the whole way.
 
 Do not edit the generated repository in this session.
