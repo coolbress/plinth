@@ -285,6 +285,12 @@ put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false S
 put "$d/open.json" "$(pr 6 'feat: monthly totals' false run)"
 put "$d/issues.json" "$(issue 5 'Show monthly totals' ready-for-agent)"
 expect "a pull request open comes before the issue it closes" "$d" "A pull request with checks running (step 5)" "/run" "note: pull request #6, checks pending"
+# The step 5 row the guide prints offers the built-in security pass (#1080).
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+if grep -q '^| A pull request with checks running (step 5) | .*`/security-review` (built in' <<<"$out" &&
+   grep -q '^tool: .*`/security-review` (built in' <<<"$out"
+then ok "step 5: the printed row and its tool line offer /security-review"
+else bad "step 5: no /security-review in the printed row"; grep -E '^(tool:|\| A pull request)' <<<"$out" | sed 's/^/        /'; fi
 put "$d/open.json" "$(pr 6 'feat: monthly totals' false FAILURE)"
 expect "a pull request with a failing check: something broke, not wait" "$d" "Something broke (step 7)" \
   "diagnose this: pull request #6 has a failing check" "#6 ready, checks fail"
