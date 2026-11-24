@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A command printed to be pasted shows Hangul as typed (#1065). On macOS's
+  bash 3.2, `printf %q` printed part of a Hangul argument as escaped bytes,
+  so the line could not be read off the screen. `/plinth:new-project`'s
+  "public instead" command at the private-plan stops, the GitLab door's
+  `cd <directory>` lines, the commands `scripts/template-update.sh` prints
+  and the retry line of `scripts/merge-when-green.sh` now quote with the
+  admin-token command's single quotes, from one function in
+  `scripts/lib/shell-word.sh`. A value with a space or a quote is printed
+  inside single quotes where it had backslashes (`'My Project'`, not
+  `My\ Project`); pasted, it is the same argument.
+
 ## [2.44.0] - 2026-11-24
 
 `/plinth:guide` finds a `ready-for-agent` ticket older than the newest 100 open issues instead of saying `/grilling` while one is ready, and says when that read failed or came back full. Without `map`, it prints only the arsenal rows of the step the project is at and the next one, so its answers are shorter (19–20 lines for a ready ticket, against 28–30) with the command where it was. `/plinth:new-project` keeps a visibility already answered when GitLab.com is chosen under Customize, and says on the Host question that the guide and template updates are partly manual on GitLab.com. New projects render plinth-template v1.50.4: a GitLab project's `AGENTS.md` names its issues and merge requests instead of `/plinth:guide`, a `web` project's note example refuses a blank note and says why, and new projects call plinth v2.43.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
@@ -60,17 +73,6 @@ eval suite not run: plinth-template v1.50.3 to v1.50.4 changes `AGENTS.md` in it
   ticket was not read in place of `/grilling`; the routes before `/grilling`
   are unchanged. That read takes the newest 100 `ready-for-agent` issues, and
   the line says so when it comes back full.
-
-- A command printed to be pasted shows Hangul as typed (#1065). On macOS's
-  bash 3.2, `printf %q` printed part of a Hangul argument as escaped bytes,
-  so the line could not be read off the screen. `/plinth:new-project`'s
-  "public instead" command at the private-plan stops, the GitLab door's
-  `cd <directory>` lines, the commands `scripts/template-update.sh` prints
-  and the retry line of `scripts/merge-when-green.sh` now quote with the
-  admin-token command's single quotes, from one function in
-  `scripts/lib/shell-word.sh`. A value with a space or a quote is printed
-  inside single quotes where it had backslashes (`'My Project'`, not
-  `My\ Project`); pasted, it is the same argument.
 
 ## [2.43.0] - 2026-11-24
 
