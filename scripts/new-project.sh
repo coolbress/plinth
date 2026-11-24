@@ -442,17 +442,20 @@ fi
 # The template's own refusals of the name for this archetype, read from the
 # same copier.yml (#1067): copier would refuse them at the render, after every
 # question; here they stop a --check, so a refused name is never suggested.
+if [ -z "$copier_yml" ] && [ "$check" = 1 ]; then
+  stop "could not read the template's copier.yml, so the name '$name' is not checked; nothing was created" "  $(unread_why)" "  fix: run it again"
+fi
 if [ -n "$copier_yml" ]; then
   if ! refused="$(python3 "$here/template-names.py" "$name" "$arch" <<<"$copier_yml")"; then
     case "$refused" in
-      "copier.yml's validators"*) warn "could not read the template's name rules: $refused; copier decides (a refusal creates nothing)" ;;
+      "copier.yml's validators"*)
+        # A --check that cannot read the rules has not checked the name:
+        # it says so and fails, so the skill never offers an unchecked name.
+        [ "$check" != 1 ] || stop "could not read the template's name rules, so the name '$name' is not checked: $refused; nothing was created" "  fix: run it again; copier still refuses a bad name at the render, before anything is created"
+        warn "could not read the template's name rules: $refused; copier decides (a refusal creates nothing)" ;;
       *) stop "the template refuses the name '$name' for the $arch archetype: $refused; nothing was created" "  fix: choose another name" ;;
     esac
   fi
-fi
-if [ "$check" = 1 ]; then
-  echo "check: ok ($repo, $visibility, $arch, folder $dir; nothing was created)"
-  exit 0
 fi
 # Where a web app runs (#677): `render`, or a place plinth lists and does not
 # deploy to or check, passed as copier's `hosting` and `hosting_elsewhere`.
@@ -499,6 +502,13 @@ if [ "$review" = 1 ]; then
       "  fix: drop --third-party-review and add it later: $review_howto"
   fi
   review_data=(--data third_party_review=true)
+fi
+# A --check stops here: every validation before the ruleset has run (the
+# name, the archetype and license, where a web app runs, the reviewer), and
+# nothing below has been created yet.
+if [ "$check" = 1 ]; then
+  echo "check: ok ($repo, $visibility, $arch, folder $dir; nothing was created)"
+  exit 0
 fi
 
 # The ruleset for this archetype. ruleset.json is the wall every archetype

@@ -469,6 +469,11 @@ no_writes check-reserved
 run check-reserved-cli ok no no "check: ok (tester/train, public, cli" -- train --archetype=cli --check
 run check-keyword err no no "the template refuses the name 'class' for the cli archetype" -- class --check
 E="MOCK_PLAN=free" run check-free err no no "is on GitHub Free" -- probe --private --check
+# Review on #1089: a --check that cannot read the name rules fails rather
+# than passing a name it did not check, and the hosting and reviewer
+# validations run before a --check says ok.
+E="MOCK_VALIDATORS=/dev/null" run check-unread-rules err no no "so the name 'class' is not checked" -- class --check
+run check-hosting err no no "--hosting is for --archetype=web only" -- probe --archetype=cli --hosting=home --check
 if grep -F "public instead" "$work/home-check-free/out" | grep -qF -- "--check"
 then bad check-free "the command offered for public instead carries --check"
 else ok check-free "the command offered for public instead does not carry --check"; fi
