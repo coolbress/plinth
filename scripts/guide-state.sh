@@ -2,8 +2,10 @@
 # What /plinth:guide reads (#710): the repository's state, what it started
 # with off (#763), the row of the arsenal's "Where you are, and what to do
 # next" table that state points to, the reasons it may give (#834), and the
-# table: on `map` every row, otherwise only the rows of the step the project
-# is at and the step after it (#1060), whose cells the guide explains. For a pull request with a failing check it names the checks
+# rows of the step the project is at and the step after it (#1060), whose
+# cells the guide explains. On `map`, a one-screen map of the whole way in
+# their place (#1087); on `map <step>`, that step's rows in depth; on
+# `features`, every item the project started with off, from files only. For a pull request with a failing check it names the checks
 # that failed, whose each one is, and how many comments people left (#903).
 # It says whether the template tag and the plinth pin are behind, from
 # floor-check's own reads (#904). For an open spec it reads whether any
@@ -15,7 +17,13 @@
 # doing now of what started off.
 # Read-only: it runs git and gh reads, nothing else.
 #
-#   guide-state.sh [<dir>] [map]   # default: the current directory; map: the whole way, every row
+#   guide-state.sh [<dir>] [map [<step>]]   # default: the current directory;
+#                                           # map: the one-screen map of the whole way;
+#                                           # map <step>: that step in depth (1 to 9, or a name)
+#   guide-state.sh [<dir>] features         # every item that started off; reads files only
+#
+# With `map`, a word that names a step is the step, before or after the
+# folder; one that names no step and no folder is exit 2.
 #
 # The rows are copied from skills/arsenal/SKILL.md as they stand, never from
 # a list of its own, so the guide cannot name a step or tool the table does
@@ -26,15 +34,74 @@ plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/admin-reach.sh
 . "$plugin/scripts/lib/admin-reach.sh" 2>/dev/null || { echo "guide-state: no $plugin/scripts/lib/admin-reach.sh" >&2; exit 1; }
 arsenal="$plugin/skills/arsenal/SKILL.md"
-dir="."; map=""
+dir="."; map=""; step=""; features=""
+# With `map` anywhere, a word that names a step (1 to 9, or a name below) is
+# the step, before or after the folder, even where a folder has that name;
+# any other word is the folder, or, when it names no folder, a step that
+# does not exist (exit 2 below).
+step_word() { case "$1" in [1-9]|create|setup|token|account|idea|spec|plan|ticket|implement|checks|review|merge|broke|fix|back|stop|update|maintain|release|deploy|operate|retro|retrospective|end|handover) return 0 ;; esac; return 1; }
+for a in "$@"; do [ "$a" = map ] && map=yes; done
 for a in "$@"; do
-  case "$a" in map) map=yes ;; *) dir="$a" ;; esac
+  case "$a" in
+    map) ;;
+    features) features=yes ;;
+    *) if [ -n "$map" ] && [ -z "$step" ] && { step_word "$a" || [ ! -d "$a" ]; }; then step="$a"; else dir="$a"; fi ;;
+  esac
 done
+
+# features (#1087): every item the project started with off, with when it
+# is worth turning on, from scripts/off-by-default.sh alone: files, no gh, so
+# it answers offline and on GitLab too.
+if [ -n "$features" ]; then
+  echo "plinth guide state (read-only)"
+  f_arch=none; f_dir=""
+  if f_top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)"; then
+    f_dir="$f_top"
+    f_arch="$(sed -nE "s/^archetype: *['\"]?([^'\"]*)['\"]? *\$/\1/p" "$f_top/.copier-answers.yml" 2>/dev/null | head -1)"
+    f_arch="${f_arch:-none}"
+  fi
+  echo "features: every item ${f_dir:+this project }started with off${f_dir:- (no repository here: the items every archetype starts with off)}, and when each is worth turning on"
+  if f_off="$("$plugin/scripts/off-by-default.sh" "$f_arch" ${f_dir:+"$f_dir"} 2>&1)"; then
+    if [ -n "$f_off" ]; then sed 's/^/  /' <<<"$f_off"; else echo "  none left off"; fi
+  else
+    echo "  not read ($(head -1 <<<"$f_off"))"
+  fi
+  if f_why="$("$plugin/scripts/off-by-default.sh" --why 2>&1)"; then echo "  why: $f_why"
+  else echo "  why: not read ($(head -1 <<<"$f_why"))"; fi
+  exit 0
+fi
 
 # The table names files under ${CLAUDE_PLUGIN_ROOT}; the person gets the path.
 table="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" |
   awk -v r="$plugin" '{ gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r); print }')"
 [ -n "$table" ] || { echo "guide-state: no table under 'Where you are, and what to do next' in $arsenal" >&2; exit 1; }
+
+# step_rows <step>: the Where cell of each row `map <step>` prints, one per
+# line: for 1 to 9 the rows marked "(step N)"; for a name, the step it is
+# a word for. The names are the script's only words for a step; each row's
+# own words come from the table.
+step_names="create, token, idea, spec, ticket, checks, merge, broke, back, update, release, operate, retro, end"
+step_rows() {
+  local n="" start=""
+  case "$1" in
+    [1-9]) n="$1" ;;
+    create|setup) n=1 ;; token|account) start="First pull request merged" ;;
+    idea) n=2 ;; spec|plan) n=3 ;; ticket|implement) n=4 ;; checks|review) n=5 ;; merge) n=6 ;;
+    broke|fix) n=7 ;; back|stop) n=8 ;; update|maintain) n=9 ;;
+    release|deploy) start="A merged change to put out" ;; operate) start="The project in use" ;;
+    retro|retrospective) start="Looking back on a piece of work" ;; end|handover) start="Ending the project" ;;
+    *) return 2 ;;
+  esac
+  printf '%s\n' "$table" | awk -F ' \\| ' -v n="$n" -v s="| $start" '
+    { c = $1; sub(/^\| /, "", c) }
+    n != "" && c ~ ("\\(step " n "\\)$") { print c }
+    n == "" && index($0, s) == 1 { print c; exit }'
+}
+if [ -n "$step" ]; then
+  rows_of_step="$(step_rows "$step")"
+  [ $? -ne 2 ] || { echo "guide-state: no step '$step'; a step is 1 to 9, or one of: $step_names" >&2; exit 2; }
+  [ -n "$rows_of_step" ] || { echo "guide-state: the arsenal's table has no row for step '$step'" >&2; exit 1; }
+fi
 
 # row <start of the "Where you are" cell>: the row's six cells, one per line:
 # where, next action, tool, how to use it, what it leaves, then.
@@ -66,14 +133,15 @@ whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
 # command is typed as printed; $before (typed first) and $note go with it.
 # `then:` is the step after this one (#908): the row the table's Then cell
 # names (`-` there is none), unless the state names another.
-before=""; note=""; said_cmd=""; shown=""
+before=""; note=""; said_cmd=""; shown=""; where_cell=""
 # show <row start>: that row goes in the table printed without map (#1060).
 show() { shown="$shown$(printf '%s\n' "$table" | awk -v p="| $1" 'index($0, p) == 1' | head -1)"$'\n'; }
 say() {
   local cells after
   cells="$(row "$1")" || exit 1
   show "$1"
-  echo "where: $(sed -n 1p <<<"$cells")"
+  where_cell="$(sed -n 1p <<<"$cells")"
+  echo "where: $where_cell"
   echo "next: $(sed -n 2p <<<"$cells")"
   echo "tool: $(sed -n 3p <<<"$cells")"
   [ -z "$before" ] || echo "before: $before"
@@ -95,17 +163,158 @@ mode=full; mode_why="no pull request by a person has merged yet"
 set_mode() { if [ -n "$map" ]; then mode=full; mode_why="asked for the whole way (map)"; else mode="$1"; mode_why="$2"; fi; }
 set_mode "$mode" "$mode_why"
 
+# What the map's marks read (#1087), each set where its line is printed:
+# made (made by plinth: yes|no), first_merged (yes|no), token_mark,
+# repo_name, merged_total and releases_total (the totals: line), archetype.
+folder_name="no repository yet"; hosting=""; prs_read=""; made=""; first_merged=""; token_mark=""; repo_name=""; merged_total=""; releases_total=""; archetype=""
+behind_lines=""; bot_prs=""; choice=""
+
+# cmds_of <How to use it cell>: what a map line says to type: each command in
+# backticks (a slash command, `merge #N`, `diagnose this: …`), not one said
+# to come before it ("before `/clear`"); a cell that starts "Nothing to
+# type", its first clause.
+cmds_of() {
+  case "$1" in "Nothing to type"*) printf 'nothing%s\n' "${1#Nothing}" | sed 's/; .*//'; return ;; esac
+  grep -oE '(before )?`[^`]+`' <<<"$1" | grep -v '^before ' | tr -d '`' |
+    grep -E '^(/[a-z][a-z0-9:._-]*( .*)?|merge #N|diagnose this.*)$' | awk '!seen[$0]++' | paste -sd ',' - | sed 's/,/, /g'
+}
+# name_of <Where cell>: the cell without its closing "(…)".
+name_of() { sed -E 's/ \([^()]*\)$//' <<<"$1"; }
+# release_said: what goes out on a version tag for this archetype, from the
+# release row's Next action cell: a web app's clause, or the tag's lead and
+# the archetype's own clause; the whole cell when neither is found.
+release_said() {
+  local next lead items mine
+  next="$(row "A merged change to put out" | sed -n 2p)"
+  if [ "$archetype" = web ]; then
+    # Render unless the answers name another place; then the Tool cell's words.
+    if [ -z "${hosting:-}" ] || [ "$hosting" = render ]; then printf '%s\n' "${next%%; *}"
+    else row "A merged change to put out" | sed -n 3p | grep -oE 'plinth does not deploy a `web` app that runs anywhere else' || printf '%s\n' "$next"; fi
+    return
+  fi
+  items="${next#*; }"; lead="${items%%, \`*}"
+  mine="$(awk -v a="\`$archetype\`" '{ n = split($0, p, /, `/); for (i = 2; i <= n; i++) if (index("`" p[i], a)) { print "`" p[i]; exit } }' <<<"$items")"
+  if [ -n "$archetype" ] && [ -n "$mine" ]; then printf '%s, %s\n' "$lead" "$mine"; else printf '%s\n' "$next"; fi
+}
+# map_line <mark> <number> <Where cell or name> <command> [<Where cell>]:
+# one line; the row the project is at gets ▶, its own command, and why now.
+map_line() {
+  local mark="$1" num="$2" name="$3" cmd="$4" at="${5:-$3}"
+  # A Where cell loses its "(step N)"; a name of the map's own keeps its words.
+  if [ "$at" = "$name" ]; then name="$(name_of "$name")"
+  else name="$(tr '[:lower:]' '[:upper:]' <<<"${name:0:1}")${name:1}"; fi
+  if [ -n "$where_cell" ] && [ "$at" = "$where_cell" ]; then
+    printf '  ▶ %s %s: %s (you are here)\n' "${num:- }" "$name" "${before:+$before, then }$said_cmd"
+    printf '      why now: %s\n' "$why_now"
+  else
+    printf '  %s %s %s: %s\n' "${mark:- }" "${num:- }" "$name" "$cmd"
+  fi
+}
+# map_row <mark> <number> <row start>: map_line from the row's cells.
+map_row() {
+  local cells; cells="$(row "$3")" || exit 1
+  map_line "$1" "$2" "$(sed -n 1p <<<"$cells")" "$(cmds_of "$(sed -n 4p <<<"$cells")")"
+}
+step_row() { printf '%s\n' "$table" | awk -F ' \\| ' -v n="$1" '{ c = $1; sub(/^\| /, "", c) } c ~ ("\\(step " n "\\)$") { print c; exit }'; }
+
+# print_map (#1087): the map, about 30 lines, between "map:" and the next
+# line not indented. Each line's name and command are the table's.
+print_map() {
+  local first pages names cells n9 m n i r page dir_of
+  merged="${merged_total:+$merged_total changes merged}"; merged="${merged:-changes merged: not read}"
+  so_far="${merged_total:+$merged_total merged so far}"; so_far="${so_far:-merged so far: not read}"
+  releases="${releases_total:+$releases_total release$([ "$releases_total" = 1 ] || echo s) so far}"; releases="${releases:-releases so far: not read}"
+  why_now="$note"
+  if [ -z "$why_now" ] && [ "$where_cell" = "$(row "A ticket ready" | sed -n 1p)" ]; then
+    why_now="$(sed -n 's/^ticket to take: //p' <<<"$choice")"
+  fi
+  [ -n "$why_now" ] || why_now="$(row "${where_cell:-No repository yet}" | sed -n 2p)"
+  echo "map:"
+  if [ -n "$where_cell" ]; then
+    echo "  ${repo_name:-$folder_name}: now $where_cell; $merged"
+  else
+    echo "  ${repo_name:-$folder_name}: where it is was not read; $merged"
+  fi
+  echo "  legend: ▶ you are here  ✓ done  ✗ needs attention  · not yet"
+  echo "  Once (setup)"
+  first="$(row "No repository yet")" || exit 1
+  m=""; [ "$made" = yes ] && m="✓"
+  n="$(sed -n 2p <<<"$first")"
+  map_line "$m" 1 "${n%%; *}" "$(cmds_of "$(sed -n 4p <<<"$first")")" "$(sed -n 1p <<<"$first")"
+  cells="$(row "Repository made, its first pull request open")" || exit 1
+  case "$first_merged" in yes) m="✓" ;; no) m="·" ;; *) m="" ;; esac
+  [ "$where_cell" = "$(sed -n 1p <<<"$first")" ] && m="·"
+  map_line "$m" 1 "${n#*; }" "$(cmds_of "$(sed -n 4p <<<"$cells")")" "$(sed -n 1p <<<"$cells")"
+  # The three things before step 2, named by the first merge row's Next
+  # action and paged by its Tool cell, in the same order.
+  cells="$(row "First pull request merged")" || exit 1
+  names="$(sed -n 2p <<<"$cells")"; names="${names#*: }"
+  pages="$(sed -n 3p <<<"$cells")"; pages="$(grep -oE '`[^`]+`' <<<"${pages%%; *}" | tr -d '`')"
+  [ "$(awk -F ', ' '{ print NF }' <<<"$names")" = 3 ] && [ "$(grep -c . <<<"$pages")" = 3 ] ||
+    { echo "guide-state: the arsenal's row 'First pull request merged' no longer names three things and three pages" >&2; exit 1; }
+  dir_of="$(dirname "$(sed -n 1p <<<"$pages")")"
+  for i in 1 2 3; do
+    page="$(sed -n "${i}p" <<<"$pages")"; [ "$i" = 1 ] || page="$dir_of/$page"
+    case "$i" in 1) m="$token_mark" ;; *) m="·" ;; esac
+    if [ "$i" = 1 ]; then map_line "$m" 1 "$(awk -F ', ' -v i="$i" '{ print $i }' <<<"$names")" "$page" "$(sed -n 1p <<<"$cells")"
+    else map_line "$m" 1 "$(awk -F ', ' -v i="$i" '{ print $i }' <<<"$names")" "$page" "-"; fi
+  done
+  echo "  Each ticket (repeat)"
+  for i in 2 3 4 5 6; do r="$(step_row "$i")"; [ -n "$r" ] || { echo "guide-state: the arsenal's table has no row for step $i" >&2; exit 1; }; map_row "" "$i" "$r"; done
+  echo "  ↻ next ticket: back to 4; a new idea: back to 2 ($so_far)"
+  echo "  When needed"
+  for i in 7 8; do r="$(step_row "$i")"; [ -n "$r" ] || exit 1; map_row "" "" "$r"; done
+  # Step 9 (#1087): ✗ when the template or the plinth pin is behind or a
+  # dependency pull request is open, ✓ when both read current and the open
+  # pull requests were read with none of Dependabot's; else no mark.
+  n9=""
+  if grep -qE '^(template: [^,]+, behind |plinth pin: [^,]+, behind )' <<<"$behind_lines" || [ -n "$bot_prs" ]; then n9="✗"
+  elif [ -n "${prs_read:-}" ] && grep -qE '^template: [^,]+, the tag this plinth targets$' <<<"$behind_lines" &&
+       grep -qE '^plinth pin: [^,]+, at v[0-9.]+, the latest plinth release$' <<<"$behind_lines"; then n9="✓"; fi
+  map_row "$n9" 9 "$(step_row 9)"
+  cells="$(row "A merged change to put out")" || exit 1
+  map_line "" "" "$(sed -n 1p <<<"$cells")" "$(release_said) ($releases)"
+  for r in "The project in use" "Looking back on a piece of work" "Ending the project"; do map_row "" "" "$r"; done
+  if [ -z "$said_cmd" ]; then echo "  next command: not read"
+  elif [[ "$said_cmd" == none:* ]]; then echo "  next command: $said_cmd"
+  else
+    echo "  next command:"
+    [ -z "$before" ] || echo "    $before"
+    echo "    $said_cmd"
+  fi
+  echo "  /plinth:guide map <step>: one step in depth; a step is 1 to 9, or one of: $step_names"
+  echo "  /plinth:guide features: every feature that started off, and when it is worth turning on"
+}
+
+# print_depth (#1087): `map <step>`: each of the step's rows in depth, its
+# six cells as the table has them; the command too where the project is.
+print_depth() {
+  local start cells here
+  while IFS= read -r start; do
+    cells="$(row "$start")" || exit 1
+    here=""; [ "$(sed -n 1p <<<"$cells")" = "$where_cell" ] && here=yes
+    echo "step: $(sed -n 1p <<<"$cells")${here:+ (you are here)}"
+    echo "  purpose: $(sed -n 2p <<<"$cells")"
+    echo "  how: $(sed -n 4p <<<"$cells")"
+    echo "  tool: $(sed -n 3p <<<"$cells")"
+    echo "  it leaves: $(sed -n 5p <<<"$cells")"
+    echo "  then: $(sed -n 6p <<<"$cells")"
+    [ -z "$here" ] || echo "  next command: ${before:+$before, then }$said_cmd"
+  done <<<"$rows_of_step"
+}
+
 finish() {
   echo "mode: $mode ($mode_why)"
   echo
   printf '%s\n' "$whys"
   echo
-  if [ -n "$map" ]; then
-    echo "table: every row"
-    printf '%s\n' "$table"
+  if [ -n "$step" ]; then
+    print_depth
+  elif [ -n "$map" ]; then
+    print_map
   else
     # The header and its rule, then the rows said above; none when no step was.
-    echo "table: this step and the next only; /plinth:guide map prints every row"
+    echo "table: this step and the next only; /plinth:guide map shows the whole way"
     head -2 <<<"$table"
     printf '%s' "$shown" | awk 'NF && !seen[$0]++'
     # What goes out on a version tag stays said in every answer (#908), from
@@ -127,7 +336,7 @@ if ! git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
   say "No repository yet" "/plinth:new-project <owner>/<name>"
   finish
 fi
-top="$(git -C "$dir" rev-parse --show-toplevel)"
+top="$(git -C "$dir" rev-parse --show-toplevel)"; folder_name="$(basename "$top")"
 answers="$top/.copier-answers.yml"
 answer() { sed -nE "s/^$1: *['\"]?([^'\"]*)['\"]? *\$/\\1/p" "$answers" 2>/dev/null | head -1; }
 
@@ -138,6 +347,7 @@ template_repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$plugin/scripts/new
 [ -n "$template_repo" ] || { echo "guide-state: no template_repo in $plugin/scripts/new-project.sh" >&2; exit 1; }
 src="$(answer _src_path)"
 if [ ! -f "$answers" ] || [ "$src" != "gh:$template_repo" ]; then
+  made=no
   if [ -f "$answers" ]; then echo "made by plinth: no (.copier-answers.yml names ${src:-no} template, not gh:$template_repo)"
   else echo "made by plinth: no (no .copier-answers.yml)"; fi
   set_mode full "the state was not read: pull requests are read only on a repository plinth made"
@@ -146,7 +356,7 @@ if [ ! -f "$answers" ] || [ "$src" != "gh:$template_repo" ]; then
   finish
 fi
 archetype="$(answer archetype)"; hosting="$(answer hosting)"; place="$(answer hosting_elsewhere)"
-echo "made by plinth: yes, template $(answer _commit)"
+made=yes; echo "made by plinth: yes, template $(answer _commit)"
 echo "archetype: ${archetype:-not recorded}"
 [ "$archetype" = web ] && echo "hosting: ${hosting:-render (no answer recorded)}${place:+ ($place)}"
 
@@ -176,10 +386,9 @@ if [ "$(answer host)" = gitlab ]; then
 fi
 
 # What the project started with off and does not have yet (#763), from the
-# one list new-project.sh prints at creation. On map, every item; otherwise,
-# in either mode (#908), how many, and only the ones whose line says to do
-# them now (#1050). The skill says each item only when asked for the map
-# (#1035), so the list is printed only then.
+# one list new-project.sh prints at creation: in either mode (#908), how
+# many, and only the ones whose line says to do them now (#1050); every item
+# is the features view's (#1087), printed above without any gh read.
 off_said=""
 if off="$("$plugin/scripts/off-by-default.sh" "${archetype:-none}" "$top" 2>&1)"; then
   if [ -n "$off" ]; then
@@ -192,13 +401,9 @@ fi
 say_off() {
   local now
   if [ -n "$off_said" ]; then echo "off by default: $off_said"; return; fi
-  if [ -n "$map" ]; then
-    echo "off by default:"; sed 's/^/  /' <<<"$off"
-  else
-    now="$(grep '^to do, if not done yet' <<<"$off")"
-    echo "off by default: $(grep -c . <<<"$off") left off; /plinth:guide map names each"
-    [ -z "$now" ] || sed 's/^/  /' <<<"$now"
-  fi
+  now="$(grep '^to do, if not done yet' <<<"$off")"
+  echo "off by default: $(grep -c . <<<"$off") left off; /plinth:guide features names each"
+  [ -z "$now" ] || sed 's/^/  /' <<<"$now"
   echo "  why: $off_why"
 }
 
@@ -210,7 +415,7 @@ if ! repo="$(cd "$top" && gh repo view --json nameWithOwner --jq .nameWithOwner 
   echo "where: not read"
   finish
 fi
-echo "repository: $repo"
+echo "repository: $repo"; repo_name="$repo"
 behind
 
 # A check run has status and conclusion; a commit status has only state.
@@ -269,6 +474,7 @@ for_issues='def for_issues: [(.body // "") | scan("(?i)(?:^|[^a-z0-9_])(?:close[
 read=100
 prs=""; merged=""; issues=""; failed=""
 issue_rows="$kind$refs$blockers"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind, blockers] | @tsv'
+prs_read=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt,mergeStateStatus \
       --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv' 2>&1)"; then
@@ -279,6 +485,7 @@ elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json n
 elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body --jq "$issue_rows" 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
 fi
+[ -n "$failed" ] || prs_read=yes
 if [ -n "$failed" ]; then
   echo "issues and pull requests: not read ($failed)"
   set_mode full "the state was not read"; say_off
@@ -565,7 +772,8 @@ if [ -n "$merged" ]; then
 else
   echo "last merge: none"
 fi
-echo "first pull request merged: $([ "$people_merged" -gt 0 ] || [ -n "$past_first" ] && echo yes || echo no) ($counted)"
+first_merged="$([ "$people_merged" -gt 0 ] || [ -n "$past_first" ] && echo yes || echo no)"
+echo "first pull request merged: $first_merged ($counted)"
 
 # The pull request "Something broke" names (#903): which checks failed, and
 # whose each one is. A check named "<job> / <anything>" is plinth's when <job>
@@ -831,15 +1039,18 @@ fi
 # stays admin for the owner after the token step. admin: not done; none: no
 # line; read, or a reach that could not be read: not verified, with why.
 # Before the first merge the step is still ahead, and on its own row the pages
-# are already named: no read, no line.
+# are already named: no read, no line. The map's token mark (#1087) is that
+# read's: ✓ none, ✗ admin, no mark for read or unknown; · before the first
+# merge.
+[ "$first_merged" = yes ] || token_mark="·"
 if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ -z "${pages_named:-}" ]; then
   cells="$(row "First pull request merged")" || exit 1
   pages="$(sed -n 3p <<<"$cells")"; pages="${pages%%; *}"; step1="$(sed -n 1p <<<"$cells")"
   in_repo_gh() { (cd "$top" && gh "$@"); }
   reach="$(admin_reach in_repo_gh "$repo" "?" "?")"
   case "$reach" in
-    none) ;;
-    admin) token_open=yes; echo "token step: not done: the credential gh uses in this session reaches the Administration of $repo, so the agent can still change the checks; before going on, follow the three pages of $step1, in order: $pages" ;;
+    none) token_mark="✓" ;;
+    admin) token_open=yes; token_mark="✗"; echo "token step: not done: the credential gh uses in this session reaches the Administration of $repo, so the agent can still change the checks; before going on, follow the three pages of $step1, in order: $pages" ;;
     read) echo "token step: not verified: the credential gh uses in this session reads the Administration of $repo, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
     *) echo "token step: not verified: ${reach#unknown: }; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
   esac
@@ -951,7 +1162,9 @@ if history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo
       head -5 <<<"$events" | awk -F '\t' '{ printf "  %s %s %s%s\n", $1, $2, $3, ($4 == "" ? "" : ": " $4) }'
     fi
   fi
-  awk -F '\t' '$1 == "totals" { print $2 }' <<<"$history"
+  totals="$(awk -F '\t' '$1 == "totals" { print $2 }' <<<"$history")"; printf '%s\n' "$totals"
+  merged_total="$(sed -nE 's/^totals: ([0-9]+) merged, .*/\1/p' <<<"$totals")"
+  releases_total="$(sed -nE 's/.*, ([0-9]+) releases?, .*/\1/p' <<<"$totals")"
 else
   why="$(tail -1 <<<"$history" | tr '\t' ' ')"
   printf 'started: not read (%s)\nso far: not read (%s)\ntotals: not read (%s)\n' "$why" "$why" "$why"
