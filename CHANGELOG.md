@@ -37,6 +37,18 @@ pull requests and have no tag.
   The step depth now shows only before the first merge or on `map`, which
   partly reverses #908. No progress bar and no step fraction (#1076).
 
+- `ci / deps` on a private GitHub repository without GitHub Code Security,
+  where GitHub refuses dependency review, now checks the dependency versions
+  a pull request adds instead of reporting "not yet confirmed": osv-scanner
+  2.6.0 (downloaded and checked against its SHA-256, the same as the GitLab
+  `deps` job's) compares `uv.lock` at the head with `uv.lock` at the merge
+  base against one offline copy of the OSV database, and the job fails on an
+  added version with an advisory at `deps-fail-on-severity` or above, or
+  when the scan cannot run. Such a repository's pull requests can now go red
+  where the check was green. A public repository, or a private one where the
+  review is served, runs `dependency-review-action` as before. The check
+  name and every input stay (#1073).
+
 ### Fixed
 
 - A command printed to be pasted shows Hangul as typed (#1065). On macOS's

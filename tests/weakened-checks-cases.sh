@@ -662,9 +662,11 @@ echo "-- verdict lines: ci / deps"
 verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR=someone
 first "not a pull request: pass, does not apply" '^- pass: dependency review, does not apply \(not a pull request'
 warned "not a pull request: no warning" 0
-verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped SEVERITY=high ACTOR=someone
-first "refused on a private repository: not yet confirmed, Dependabot alerts after the merge" '^- not yet confirmed: dependency review, GitHub refuses it .*; Dependabot alerts report one after the merge$'
-warned "refused: one warning, the same text" 1
+verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped OSV=skipped SEVERITY=high ACTOR=someone
+first "refused, osv-scanner stopped by an earlier step: not yet confirmed (#1073)" '^- not yet confirmed: dependency review, osv-scanner did not run because an earlier step failed'
+warned "refused, osv-scanner stopped: one warning, the same text" 1
+verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped OSV=failure SEVERITY=high ACTOR=someone
+first "refused, osv-scanner failed with no line of its own: fail, never a pass" '^- fail: dependency review, the scan could not run'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=success SEVERITY=moderate ACTOR=someone
 first "reviewed: pass, at the input's severity" '^- pass: dependency review, no added dependency version with an advisory at moderate or above$'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=failure SEVERITY=high ACTOR=someone

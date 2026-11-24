@@ -133,7 +133,7 @@ workflow:
       plinth_osv() {
         local d="$PLINTH_TMP/osv" f=osv-scanner_linux_amd64
         mkdir -p "$d" &&
-          curl -fsSL --retry 3 -o "$d/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/$f" &&
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/$f" &&
           echo "${OSV_SCANNER_SHA256}  $d/osv-scanner" | sha256sum -c - &&
           chmod +x "$d/osv-scanner" &&
           export PATH="$d:$PATH"
