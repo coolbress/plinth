@@ -13,6 +13,14 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:guide` without `map` reads only the two rows of the arsenal's
+  table it explains, the step the project is at and the one after it, in
+  both modes, and a `release:` line with what goes out on a version tag:
+  371 words of state on plinth's own checkout instead of 1,717. So the rest
+  of the way is that release line and one line pointing to
+  `/plinth:guide map`, also before the first merge; `map` still prints and
+  explains every row (#1060).
+
 - `/plinth:new-project`, when GitLab.com is chosen under Customize after the
   visibility was answered, keeps that answer and says in one line what
   changes on GitLab; it no longer asks the visibility, then the license,
