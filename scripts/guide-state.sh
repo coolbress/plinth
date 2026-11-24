@@ -851,12 +851,14 @@ if [ -n "$template_behind" ] && [ "$said_cmd" != /plinth:template-update ]; then
 fi
 
 # The latest completed run of ci.yml on main (#1076): pass, fail, none, or
-# not read with why. A failing one is a problem; the route stays as above.
+# not read with why. Pushes only: a pull request from a fork's own main
+# branch also has head branch main. A failing one is a problem; the route
+# stays as above.
 # Its own read: failing, it leaves every other line as it is.
 problems=""
 [ -z "$broken" ] || problems="a check fails on pull request #$(field 1 <<<"$broken")"
 [ -z "${token_open:-}" ] || problems="${problems:+$problems; }the token step is not done"
-if run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=1" \
+if run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
       --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)"; then
   if [ -z "$run" ]; then echo "main ci: none (no completed run of ci.yml on main)"
   else
