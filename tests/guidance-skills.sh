@@ -6,7 +6,11 @@
 # plinth's skills, a skill of a dependency plugin.json names (as the
 # marketplace mounts it), a Claude Code built-in the table uses, or, in the
 # table only, marked "(listed)". Each of the three also names `/retro`, the
-# retrospective's tool. The template's end-or-hand-over form is read against
+# retrospective's tool. The built-ins #1080 placed stay marked "(built in" in
+# their rows: `/security-review` at step 5, `/resume` and `/recap` (same
+# machine only) at step 8, `/insights` on the retrospective row, `/doctor`
+# under "Something broke"; and `/debug`, which debugs Claude Code, appears
+# in the table only as that one clause, never as a tool for the app. The template's end-or-hand-over form is read against
 # the installed skills by tests/install-smoke.sh, which has them.
 # Must-not-pass cases run first.
 set -uo pipefail
@@ -16,7 +20,7 @@ import json, re, sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-BUILT_IN = {"clear", "design", "run", "context"}
+BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug"}
 plugin = json.loads((root / ".claude-plugin/plugin.json").read_text())
 entries = {e["name"]: e for e in json.loads((root / ".claude-plugin/marketplace.json").read_text())["plugins"]}
 default = {"plinth:" + d.name for d in (root / "skills").iterdir() if d.is_dir()}
@@ -57,6 +61,32 @@ def problems(arsenal, howto, guide):
     for where, text in (("the arsenal", arsenal), ("the how-to", howto), ("the guide", guide)):
         if "`/retro`" not in text:
             out.append(f"{where} does not name `/retro`, the retrospective's tool")
+    out += built_ins(rows)
+    return out
+
+
+# The one clause the table may say `/debug` in (#1080).
+DEBUG_CLAUSE = "`/debug` (built in) is for Claude Code itself, not the app"
+# The row's start, then what it must say: a built-in and its mark (#1080).
+PLACED = (("| A pull request with checks running (step 5) |", "`/security-review` (built in"),
+          ("| Stopping, or coming back (step 8) |", "`/resume` and `/recap` (built in, same machine only"),
+          ("| Looking back on a piece of work (retrospective) |", "`/insights` (built in"),
+          ("| Something broke (step 7) |", "`/doctor` (built in"),
+          ("| Something broke (step 7) |", DEBUG_CLAUSE))
+
+
+def built_ins(rows):
+    out = []
+    for start, says in PLACED:
+        row = next((r for r in rows if r.startswith(start)), None)
+        if row is None:
+            out.append(f"no row starting {start!r}")
+        elif says not in row:
+            out.append(f"the row {start!r} no longer says {says!r}")
+    for r in rows:
+        # "`/debug" with no closing backtick: `/debug <args>` counts too.
+        if r.count("`/debug") != r.count(DEBUG_CLAUSE):
+            out.append(f"a 'Where you are' cell names `/debug` other than as {DEBUG_CLAUSE!r}: {r[:60]}")
     return out
 
 
@@ -103,6 +133,22 @@ case("must fail: the how-to no longer names /retro",
      problems(arsenal, howto.replace("`/retro`", "it"), guide), "the how-to does not name `/retro`")
 case("must fail: retro is not in the default install",
      problems_without("retro"), "names /retro, which the default install does not carry")
+step5 = "| A pull request with checks running (step 5) |"
+broke = "| Something broke (step 7) |"
+case("must fail: /security-review leaves the step 5 row",
+     problems(arsenal.replace("`/security-review` (built in", "a security pass (built in"), howto, guide),
+     "no longer says '`/security-review` (built in'")
+case("must fail: a cell offers /debug for the app",
+     problems(arsenal.replace(broke, broke + " Type `/debug` to find the app's bug;", 1), howto, guide),
+     "names `/debug` other than")
+case("must fail: a cell offers /debug with arguments for the app",
+     problems(arsenal.replace(broke, broke + " type `/debug the app's crash`;", 1), howto, guide),
+     "names `/debug` other than")
+case("must fail: the /debug clause loses 'not the app'",
+     problems(arsenal.replace(DEBUG_CLAUSE, "`/debug` (built in) debugs it"), howto, guide), "names `/debug` other than")
+case("must fail: step 8 drops 'same machine only'",
+     problems(arsenal.replace("(built in, same machine only", "(built in"), howto, guide), "/recap")
+assert step5 in arsenal and broke in arsenal, "a row #1080 placed a built-in in moved; update this test"
 case("the arsenal's table, the how-to and the guide name only default skills, and /retro",
      problems(arsenal, howto, guide), None)
 print(f"-- {fails} failed")

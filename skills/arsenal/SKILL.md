@@ -29,14 +29,14 @@ project's folder: it reads the project and names the step; the page is the long 
 | An idea in your own words (step 2) | An interview, then an issue saying what "done" means | `/grilling`, with `domain-modeling` for `GLOSSARY.md`; `/grill-with-docs` (listed) | Type `/grilling` with the idea, before any code, and answer its questions one at a time | An issue that says what "done" means | A ticket ready |
 | A job bigger than one session (step 3) | A plan in one issue, cut into tickets | `/to-spec`, then `/to-tickets`, or `/wayfinder` when the way is unclear, each typed | Type `/to-spec` to write the plan as one issue, then `/to-tickets #N` with that issue's number | A spec issue, and ticket issues cut from it that `/implement` takes one at a time | A ticket ready |
 | A ticket ready (step 4) | A fresh session, test first, one ticket | `/clear`, then `/implement #N`; a page: `/design-taste-frontend`; dense product UI: `/design` | Type `/clear`, then `/implement #N` with the ticket's number: one ticket per session | A tested commit on a branch, from which the pull request is opened | A pull request with checks running |
-| A pull request with checks running (step 5) | Wait for green, then the three questions, and see it run | The required checks; `/run`; the fresh-context review's findings in the description (a subagent given the diff, the criteria and the rules, not the conversation); the third-party reviewer's comments, when it is on | Wait for every check to be green, then ask the three questions of `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, step 5: "What shows it works, and what did you not check?", "Can I see it?" (type `/run` to see the change working), "What did the reviewer say?" (read the review's findings in the description) | The checks' results on the pull request, and the change seen running | Green, and seen working |
+| A pull request with checks running (step 5) | Wait for green, then the three questions, and see it run | The required checks; `/run`; the fresh-context review's findings in the description (a subagent given the diff, the criteria and the rules, not the conversation); the third-party reviewer's comments, when it is on; `/security-review` (built in, nothing to install): a security pass over what the branch changes, before you merge | Wait for every check to be green, then ask the three questions of `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, step 5: "What shows it works, and what did you not check?", "Can I see it?" (type `/run` to see the change working), "What did the reviewer say?" (read the review's findings in the description); before you merge, type `/security-review`: it reads the diff against `origin`'s default branch for injection, log-in and data-exposure risks, so the project needs an `origin` remote | The checks' results on the pull request, and the change seen running | Green, and seen working |
 | Green, and seen working (step 6) | The person says "merge", for that pull request | The decision report; `/plinth:floor-check` says whether the merge is guidance or a boundary | Say `merge #N` with the pull request's number: the person says it, the agent never merges on its own | One squashed commit on `main`, and the pull request closed | A ticket ready |
-| Something broke (step 7) | Reproduce, a failing test, then the fix | `diagnosing-bugs` ("diagnose this"); `/triage` for issues someone else opened | Say `diagnose this: …` with what broke (a failing check, an error); type `/plinth:floor-check` when a plinth job fails on a plinth older than its latest release; type `/triage` on issues someone else opened | A failing test that shows the bug, then the fix in a pull request; `/triage` leaves the issue labelled | A pull request with checks running |
-| Stopping, or coming back (step 8) | Put what is left in issues and pull requests; ask "where is this, what's next?" | The record; `/plinth:records-check` counts what is out of place in it, read-only, by the repository's own conventions; `/handoff` to move work to another tool or person | Before you stop, leave what is left in issues and pull requests; coming back, type `/plinth:guide`; at a milestone's end or coming back, type `/plinth:records-check`; type `/handoff` before another tool or person takes over | Issues and pull requests that say where the work is; `/handoff` a temporary file | A ticket ready |
+| Something broke (step 7) | Reproduce, a failing test, then the fix | `diagnosing-bugs` ("diagnose this"); `/triage` for issues someone else opened; when Claude Code itself misbehaves, `/doctor` (built in), a checkup of its install, settings, extensions and `CLAUDE.md`; `/debug` (built in) is for Claude Code itself, not the app | Say `diagnose this: …` with what broke (a failing check, an error); type `/plinth:floor-check` when a plinth job fails on a plinth older than its latest release; type `/triage` on issues someone else opened; type `/doctor` when Claude Code, not the app, misbehaves | A failing test that shows the bug, then the fix in a pull request; `/triage` leaves the issue labelled | A pull request with checks running |
+| Stopping, or coming back (step 8) | Put what is left in issues and pull requests; ask "where is this, what's next?" | The record; `/plinth:records-check` counts what is out of place in it, read-only, by the repository's own conventions; `/handoff` to move work to another tool or person; `/resume` and `/recap` (built in, same machine only): back to an earlier conversation, and a one-line summary of this one | Before you stop, leave what is left in issues and pull requests; coming back, type `/plinth:guide`; at a milestone's end or coming back, type `/plinth:records-check`; type `/handoff` before another tool or person takes over; on the same machine, type `/resume` to go back to an earlier conversation or `/recap` for a one-line summary, while on any machine the issues and pull requests stay the record | Issues and pull requests that say where the work is; `/handoff` a temporary file | A ticket ready |
 | Between pieces of work (step 9) | Dependency updates on green; the template update after a plinth release, or when the monthly reminder issue opens | Dependabot; `/plinth:floor-check`, then `/plinth:template-update`, typed; the reminder is an issue titled "Template update available: …", from template v1.39.0 on GitHub, and what to type for it is `/plinth:template-update`; `/improve-codebase-architecture`; `/ponytail-audit` (listed) | Say `merge #N` for each Dependabot pull request on green, one at a time; type `/plinth:floor-check`, then `/plinth:template-update` when it or the monthly issue says the template is behind | Dependencies and the template brought up to date, each in a merged pull request | An idea in your own words |
 | A merged change to put out (release and deploy, after step 6) | A `web` app on Render goes out by itself once `main` is green; on a version tag the person pushes, `cli` and `library` publish to PyPI (a `Proprietary` one attaches its files to a GitHub release instead), `backend` its image to GHCR, `data-ml` its model as a GitHub release | Render, from `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`; plinth does not deploy a `web` app that runs anywhere else; the others: the project's `docs/how-to/publish-a-release.md` and its `.github/workflows/release.yml`, on GitHub; a GitLab project has neither | Nothing to type for a `web` app on Render; for the others, push a version tag as the project's `docs/how-to/publish-a-release.md` says | A new version: the app live, or a package, an image or a release for the tag | The project in use |
 | The project in use (operate) | Read the host's logs when something looks wrong; keep the spend limits and the restore you tried | The host's dashboard; `${CLAUDE_PLUGIN_ROOT}/docs/how-to/set-four-things-by-hand.md`, whose "After the first deploy" names an uptime monitor and an error tracker with a free plan each. Neither is installed: the person sets them up in the service's own account | Nothing to type: open the host's dashboard when something looks wrong | Nothing in the repository; what went wrong becomes an issue | Something broke |
-| Looking back on a piece of work (retrospective) | In the session you are looking back on, before you clear it, ask what to change for the next run; keep what you agree with as a rule or a check, written into an issue | `/retro`, typed: it reads the session and suggests rules and checks, most serious first, and changes nothing; at the end of a project, the end-or-hand-over form's questions | Type `/retro` in the session you are looking back on, before `/clear`, and keep the suggestions you agree with | Suggested rules and checks; the ones you keep go into an issue | A ticket ready |
+| Looking back on a piece of work (retrospective) | In the session you are looking back on, before you clear it, ask what to change for the next run; keep what you agree with as a rule or a check, written into an issue | `/retro`, typed: it reads the session and suggests rules and checks, most serious first, and changes nothing; at the end of a project, the end-or-hand-over form's questions; `/insights` (built in): an HTML report of recent sessions on this machine and where they go wrong, not in cloud sessions | Type `/retro` in the session you are looking back on, before `/clear`, and keep the suggestions you agree with; type `/insights` to see where recent sessions on this machine went wrong | Suggested rules and checks; the ones you keep go into an issue | A ticket ready |
 | Ending the project, or handing it over (end) | Do what the README says from step 2: data deleted or handed over, keys revoked, users told; what is left goes in issues | The README; the record; `/handoff` when another person or tool takes it over | Nothing to type: follow the README from step 2; type `/handoff` when another person or tool takes it over | Data deleted or handed over, keys revoked, users told, and what is left in issues | - |
 | A `web` project to put online (after step 1) | Choose where it runs: Render, built and checked by plinth, or a listed place whose steps and risks become the person's | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md` | Nothing to type: read the page and choose where it runs | The choice, made in the project | An idea in your own words |
 | Correcting the agent the same way again (any step) | A line in `AGENTS.md`, then a reviewer rule, then a test that fails on the old mistake | `${CLAUDE_PLUGIN_ROOT}/docs/how-to/turn-a-correction-into-a-rule.md` | Nothing to type: follow the page, the cheapest rung first | A line in `AGENTS.md`, a reviewer rule or a test, in a pull request | - |
@@ -147,7 +147,14 @@ see it:
 
 Built into Claude Code, nothing to install: `/design` for screen mockups and
 layouts before building, `/dataviz` for charts, `/security-review` for a
-security pass over pending changes. For product UI (dashboards, dense forms)
+security pass over the branch's changes before the merge (step 5; the
+template's required CodeQL check still runs), `/resume` and `/recap` to come
+back on the same machine (step 8; on another machine the issues and pull
+requests are the record), `/insights` for where recent sessions on this
+machine went wrong (looking back), and `/doctor` when Claude Code itself
+misbehaves. `/debug` turns on Claude Code's own debug log and reads it: it
+debugs Claude Code, never the app, so it is not offered when the app breaks
+(#1080). For product UI (dashboards, dense forms)
 use `/design` first; `taste-skill` puts dashboards, admin panels and dense
 product UI outside its scope and names a design system for them (Fluent,
 Carbon, Atlassian, Polaris).
@@ -161,6 +168,8 @@ Carbon, Atlassian, Polaris).
 | `last30days` | What people said about a topic in the last 30 days | Finding candidates and recent reactions, when you want that research. Not for deciding; verify with `/research` | ~90 tokens always on, ~90k per call, a `SessionStart` hook (~0.4 s) | [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) (MIT) |
 | `ponytail` | The full ponytail plugin with its hooks: the least-code mode every turn, its review, and the audit too | Only if you want the mode enforced every turn | 3 hooks, ~1k tokens | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT) |
 | `impeccable` | A design with a point of view; writes a product record (`PRODUCT.md`) and a design record (`DESIGN.md`) | A page that should be remembered, when you will answer its questions: five of them and 43 minutes on the page where `taste-skill` asked none and took five (one measurement, 2026-09-12) | Hooks, agents and skills written into the repository (`.claude/`, `.github/`); no plinth pin | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) |
+| `claude-security` | Anthropic's security scan of the whole repository, or of the changes, at an effort you choose; other agents try to disprove each finding before it is reported, and it can draft patch files it never applies. Each scan writes a `CLAUDE-SECURITY-<timestamp>/` folder into the repository (the report as Markdown, JSONL and SARIF, a stamp of the commit scanned, and `patches/` when asked), with its own `.gitignore`, so the folder stays out of commits until you delete that file | A scan of the whole repository, which `/security-review` (one diff) and the required CodeQL check do not give: before a first release, or after a large change | Hooks: `UserPromptExpansion` (its banner), `PostToolUse` on `git push` and `gh pr create` (suggests a scan; `CLAUDE_SECURITY_SCAN_TIP=off` stops it) and on its own scripts with `PostToolUseFailure` (usage counts, sent through Claude Code's telemetry), `PermissionRequest` (closes its question after 60 s unanswered); tokens not measured; no plinth pin | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/claude-security) (Anthropic, all rights reserved) |
+| `sentry` | Sentry's own plugin: eight skills (set Sentry up in the app, read an issue's stack trace, alerts, releases) and Sentry's MCP server (`mcp.sentry.dev`, over HTTP), declared in its `plugin.json` | After the first deploy, when the project uses Sentry as the error tracker `${CLAUDE_PLUGIN_ROOT}/docs/how-to/set-four-things-by-hand.md` suggests: read the errors it caught from the session | A Sentry account; no hooks in its tree at `73e5354`, the commit the official marketplace pins; 8 skills in the listing, tokens not measured; no plinth pin | [getsentry/plugin-claude](https://github.com/getsentry/plugin-claude) (MIT) |
 
 `mattpocock-skills-extra` installs with
 `claude plugin install mattpocock-skills-extra@plinth` and adds its six
@@ -174,7 +183,15 @@ hook, and these two do. Impeccable is
 not in plinth's marketplace: run `npx impeccable install` from the project
 root, which writes the hooks, agents and skills above into the repository. Its
 own marketplace plugin loaded hooks and agents but did not register its skill
-on Claude Code 2.1.269.
+on Claude Code 2.1.269. `claude-security` and `sentry` are not in plinth's
+marketplace either: install them from Anthropic's official one with
+`claude plugin install claude-security@claude-plugins-official` or
+`claude plugin install sentry@claude-plugins-official` (in a session,
+`/plugin install` with the same name, then `/reload-plugins`); if Claude Code
+says that marketplace is not found, run
+`claude plugin marketplace add anthropics/claude-plugins-official` first.
+Both were read on their repositories on 2026-11-24 (#1080); adding either to
+plinth's marketplace would pin it to a full commit SHA.
 
 Every third-party entry is pinned to a commit in this repository's
 `.claude-plugin/marketplace.json`; the licenses are listed in `NOTICE`.
@@ -244,6 +261,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | Concern | Problem | Tool | Who | How to use it | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | Proof | A green that did not check the property | The required checks; the three questions | CI; person | Ask the three questions of `${CLAUDE_PLUGIN_ROOT}/docs/how-to/run-a-project.md`, step 5, of every green: "What shows it works, and what did you not check?", "Can I see it?", "What did the reviewer say?" | every run; each recorded false green was caught by the person looking (U1 23, 26; U2 13; #403 record 3) |
+| Safety | An injection, log-in or data-exposure risk in the change | `/security-review` (built in) | person | Type it before you merge: it reads the diff against `origin`'s default branch, so it needs an `origin` remote; the required CodeQL check still runs | 0 |
 | Use | Can I see it running | Built-in `/run`; the built-in `/verify` is shadowed by the template's (#476) | person or agent | Type `/run`, or ask to see it running | `run` 1 (U2) |
 | Proof | What no check asserts | `third-party / review` | CI | Turn on the reviewer (configure-the-third-party-reviewer.md) | off in the observed runs |
 | Use | A `web` page that some people cannot use: no label, too little contrast, a slow load | `ci / web-audit`: Lighthouse CI and axe-core on `/` and the log-in page; reports, never fails, required by no ruleset | CI | Nothing to type on a `web` project: read the job's summary on the pull request. Automated checks catch only part of accessibility, so also try the page with the keyboard alone and a screen reader | 0; no recorded run had it (#709) |
@@ -255,7 +273,9 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | 6 | Safety | The agent merging unasked | The rule in the generated `AGENTS.md` | text | Merge yourself, or say so each time | RC1 merged unasked twice; RC2, #403 asked |
 | 7 | Proof | A fix with no reproduction, or one that weakens a check | `diagnosing-bugs` | agent | Say "diagnose this" with the report | 0; reproduce-first via text (U1, U2, RC1) |
 | 7 | Flow | Issues other people open | `/triage` | person | Type it on the new issues | 0; no outside issue arrived |
+| 7 | Health | Claude Code itself misbehaving, not the app | `/doctor` (built in); `/debug` (built in) is for Claude Code itself, not the app | person | Type `/doctor` for a checkup of the install, settings, extensions and `CLAUDE.md`; never `/debug` for a bug in the app | 0 |
 | 8 | Memory | State lost with the chat or the machine | The record; ask "where is this, what's next" | text | Ask it in a new session | met 4 of 4 (U1, U2, RC1, #403) |
+| 8 | Memory | Coming back on the same machine | `/resume` and `/recap` (built in, same machine only) | person | `/resume` returns to an earlier conversation, `/recap` says this one in a line; across machines the issues and pull requests stay the record | 0 |
 | 8 | Memory | Work moving to another tool or person | `/handoff`; it writes a temporary file whose path the next session needs, so the issue and pull request stay the first record | person | Type it before you stop | 0; none moved |
 
 ### 9 Healthy, and any step
@@ -267,6 +287,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | 9 | Stewardship | Code that grew more than it needs | `/ponytail-audit` (listed) | person | Type it every week or two | 0 |
 | 9 | Health | Shallow modules, hard-to-test seams | `/improve-codebase-architecture` (uses `codebase-design`); the hardest for a beginner: engineer vocabulary, a design interview, an HTML report | person | Type it after a burst of work | 0 |
 | After | Health | How the work went, for the next round | `/retro` (calls `writing-for-agents`) | person | Type it in the session you are looking back on, before `/clear`; it suggests rules and checks, and you choose which to keep | 0; new in #714 |
+| After | Health | Where recent sessions go wrong | `/insights` (built in) | person | Type it for an HTML report of recent sessions on this machine; not in cloud sessions | 0 |
 | Any | Flow | Which skill now | `/ask-matt` (listed: it routes to listed skills, #593) | person | Type it with where you are | 0 |
 | Any | Use | An answer that did not land | `/wait-what` (listed) | person | Type it after the answer | 0 |
 | Any | Use | Which tool for a concern | `/plinth:arsenal` | agent or person | Ask, or type it | 3 agent, 2 typed |
@@ -285,7 +306,8 @@ what a tool has to show to be added or kept. The exceptions below are the
 known gaps, not a certificate that every other tool was checked against every
 criterion; `last30days` and Impeccable, for instance, are listed for rows
 `research` and `design-taste-frontend` also answer. The other rows name
-what plinth does not select: Claude Code's built-ins (`/clear`, `/run`), the
+what plinth does not select: Claude Code's built-ins (`/clear`, `/run`,
+`/security-review`, `/resume`, `/recap`, `/insights`, `/doctor`), the
 generated repository's text and its `verify` skill (shipped by
 plinth-template at a release tag), the required checks, `third-party / review`
 and Dependabot. They are the wall or the platform, and the criteria do not
@@ -326,9 +348,12 @@ Named exceptions:
   the part measured so far. Impeccable's cost is stated as what it writes into
   the repository, not in tokens.
 - **Not pinned by plinth** (criterion 3): Impeccable, listed with its own
-  installer, which writes into the repository.
-- **Listed, not installed** (criterion 4): `last30days` and `ponytail` run
-  hooks; Impeccable is outside plinth's marketplace; `mattpocock-skills-extra`
+  installer, which writes into the repository; `claude-security` and
+  `sentry`, listed with the official marketplace's install line, which pins
+  `sentry` and serves `claude-security` from its own tree.
+- **Listed, not installed** (criterion 4): `last30days`, `ponytail` and
+  `claude-security` run hooks; Impeccable and `sentry` are outside plinth's
+  marketplace, and `sentry` needs a Sentry account; `mattpocock-skills-extra`
   runs none; #520 moved its skills here on these four criteria and their
   measured cost, since no run compared a set with them and one without, and
   `/ask-matt` routes to them (#593); #702 moved five of them back into the
