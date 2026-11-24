@@ -2,7 +2,8 @@
 # What /plinth:guide reads (#710): the repository's state, what it started
 # with off (#763), the row of the arsenal's "Where you are, and what to do
 # next" table that state points to, the reasons it may give (#834), and the
-# table itself. For a pull request with a failing check it names the checks
+# table: on `map` every row, otherwise only the rows of the step the project
+# is at and the step after it (#1060), whose cells the guide explains. For a pull request with a failing check it names the checks
 # that failed, whose each one is, and how many comments people left (#903).
 # It says whether the template tag and the plinth pin are behind, from
 # floor-check's own reads (#904). For an open spec it reads whether any
@@ -14,7 +15,7 @@
 # doing now of what started off.
 # Read-only: it runs git and gh reads, nothing else.
 #
-#   guide-state.sh [<dir>] [map]   # default: the current directory; map: the whole way
+#   guide-state.sh [<dir>] [map]   # default: the current directory; map: the whole way, every row
 #
 # The rows are copied from skills/arsenal/SKILL.md as they stand, never from
 # a list of its own, so the guide cannot name a step or tool the table does
@@ -65,10 +66,13 @@ whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
 # command is typed as printed; $before (typed first) and $note go with it.
 # `then:` is the step after this one (#908): the row the table's Then cell
 # names (`-` there is none), unless the state names another.
-before=""; note=""; said_cmd=""
+before=""; note=""; said_cmd=""; shown=""
+# show <row start>: that row goes in the table printed without map (#1060).
+show() { shown="$shown$(printf '%s\n' "$table" | awk -v p="| $1" 'index($0, p) == 1' | head -1)"$'\n'; }
 say() {
   local cells after
   cells="$(row "$1")" || exit 1
+  show "$1"
   echo "where: $(sed -n 1p <<<"$cells")"
   echo "next: $(sed -n 2p <<<"$cells")"
   echo "tool: $(sed -n 3p <<<"$cells")"
@@ -79,6 +83,7 @@ say() {
   after="${3:-$(sed -n 6p <<<"$cells")}"
   if [ "$after" != - ]; then
     after="$(row "$after")" || exit 1
+    show "$(sed -n 1p <<<"$after")"
     echo "then: $(sed -n 1p <<<"$after") -> $(sed -n 3p <<<"$after")"
   fi
 }
@@ -95,8 +100,21 @@ finish() {
   echo
   printf '%s\n' "$whys"
   echo
-  echo "table:"
-  printf '%s\n' "$table"
+  if [ -n "$map" ]; then
+    echo "table: every row"
+    printf '%s\n' "$table"
+  else
+    # The header and its rule, then the rows said above; none when no step was.
+    echo "table: this step and the next only; /plinth:guide map prints every row"
+    head -2 <<<"$table"
+    printf '%s' "$shown" | awk 'NF && !seen[$0]++'
+    # What goes out on a version tag stays said in every answer (#908), from
+    # the release row's Next action cell, though its row is the map's.
+    if [ -n "$shown" ] && ! grep -qF "| A merged change to put out" <<<"$shown"; then
+      cells="$(row "A merged change to put out")" || exit 1
+      echo "release: $(sed -n 1p <<<"$cells"): $(sed -n 2p <<<"$cells")"
+    fi
+  fi
   exit 0
 }
 

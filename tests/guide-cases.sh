@@ -174,12 +174,24 @@ issue() { local l=""; [ -z "$3" ] || l="{\"name\":\"$3\"}"; printf '{"number":%s
 # Every command a case printed, for the check that each is a command of the
 # arsenal's table, `merge #N` or `none:` (#908).
 printed="$work/commands"; : > "$printed"
+# Without map, the table holds only the rows of the step `where:` names and
+# the one `then:` names (#1060): its header, then at most those two rows.
+# two_rows <output>: no other row; exit 1 names the first one that is not.
+two_rows() {
+  awk '/^where: /{ w = substr($0, 8) } /^then: /{ t = substr($0, 7); sub(/ -> .*/, "", t) }
+    /^table: /{ on = 1; next } on && /^\| / {
+      c = $0; sub(/^\| /, "", c); sub(/ \| .*/, "", c)
+      if (c == "Where you are" || c == "---") next
+      n++; if (c != w && c != t) { print "a row beyond this step and the next: " c; bad = 1; exit }
+    }
+    END { if (!bad && n > 2) { print n " rows"; bad = 1 } exit bad }' <<<"$1"
+}
 # expect <case> <dir> <where starts with> <command line> [<other expected line>]
 expect() {
   local out; out="$(MOCK_DIR="$2" "$script" "$2" 2>&1)"; local rc=$?
   awk '/^where: /{ w = substr($0, 8) } /^command: /{ print w "\t" substr($0, 10) }' <<<"$out" >> "$printed"
   if [ "$rc" -eq 0 ] && grep -qF "where: $3" <<<"$out" && grep -qxF "command: $4" <<<"$out" &&
-     { [ -z "${5:-}" ] || grep -qF -- "$5" <<<"$out"; } && grep -qx 'table:' <<<"$out"; then
+     { [ -z "${5:-}" ] || grep -qF -- "$5" <<<"$out"; } && grep -q '^table: ' <<<"$out" && two_rows "$out" >/dev/null; then
     ok "$1"
   else
     bad "$1 (wanted where: $3 / command: $4${5:+ / $5}; exit $rc)"; sed 's/^/        /' <<<"$out" | head -14
@@ -1040,6 +1052,36 @@ mode_is "mode: map before the directory works too" "$work/idle" "mode: full (ask
 out="$(MOCK_DIR="$work/idle" "$script" map "$work/idle" 2>&1)"
 grep -qx 'last merge: #7 on 2026-10-27 by person: feat: x' <<<"$out" && ok "map before the directory still reads that directory" ||
   bad "map before the directory: $(grep -E '^(repository|last merge)' <<<"$out")"
+
+# The table (#1060): without map, this step's row and the next one's, in
+# either mode; on map, every row of the arsenal's table, as before.
+table_of() { awk '/^table: /{ on = 1; next } on && /^\| /' <<<"$1"; }
+whole="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" |
+  awk -v r="$root" '{ gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r); print }')"
+for d in idle created plain; do
+  out="$(MOCK_DIR="$work/$d" "$script" "$work/$d" map 2>&1)"
+  [ "$(table_of "$out")" = "$whole" ] && grep -qx 'table: every row' <<<"$out" && ! grep -q '^release: ' <<<"$out" &&
+    ok "map ($d): the whole table, every row" || bad "map ($d): not the whole table ($(table_of "$out" | grep -c .) rows)"
+done
+# The release on a tag stays said without map (#908): the release row's
+# where and Next action cells on a release: line, not its row in the table.
+rel="$(awk -F ' \\| ' 'index($0, "| A merged change to put out") == 1 { sub(/^\| /, "", $1); print $1; print $2; exit }' <<<"$whole")"
+for d in "$work/idle" "$work/created" "$work/plain" "$work/other"; do
+  out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+  rows="$(table_of "$out" | sed -n '3,$p' | grep -c .)"
+  if why="$(two_rows "$out")" && [ "$rows" -ge 1 ] && [ "$(table_of "$out" | sed -n 1p)" = "$(sed -n 1p <<<"$whole")" ] &&
+     grep -qx 'table: this step and the next only; /plinth:guide map prints every row' <<<"$out" &&
+     grep -qxF "release: $(sed -n 1p <<<"$rel"): $(sed -n 2p <<<"$rel")" <<<"$out"; then
+    ok "no map ($(basename "$d"), $(grep '^mode: ' <<<"$out" | cut -c7-11)): the header, this step's row and the next one's ($rows)"
+  else bad "no map ($(basename "$d")): ${why:-$rows rows}"; table_of "$out" | cut -c1-60 | sed 's/^/        /'; fi
+done
+out="$(MOCK_DIR="$work/idle" MOCK_GH_FAIL=1 "$script" "$work/idle" 2>&1)"
+if grep -qx 'table: this step and the next only; /plinth:guide map prints every row' <<<"$out" &&
+   [ -z "$(table_of "$out" | sed -n '3,$p')" ] && grep -qx 'where: not read' <<<"$out" && ! grep -q '^release: ' <<<"$out"; then
+  ok "where: not read, no map: no row of the table"
+else bad "where: not read printed rows: $(table_of "$out" | sed -n '3,$p' | cut -c1-60)"; fi
+out="$(MOCK_DIR="$work/idle" MOCK_GH_FAIL=1 "$script" "$work/idle" map 2>&1)"
+[ "$(table_of "$out")" = "$whole" ] && ok "where: not read, on map: the whole table" || bad "where: not read on map: not the whole table"
 
 # Off by default: without map, in either mode, how many and only a step to do
 # now (#1050); on map, every item. The project with the reviewer's caller has both kinds.

@@ -11,6 +11,16 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:guide` without `map` reads only the two rows of the arsenal's
+  table it explains, the step the project is at and the one after it, in
+  both modes, and a `release:` line with what goes out on a version tag:
+  371 words of state on plinth's own checkout instead of 1,717. So the rest
+  of the way is that release line and one line pointing to
+  `/plinth:guide map`, also before the first merge; `map` still prints and
+  explains every row (#1060).
+
 ## [2.43.0] - 2026-11-24
 
 An archetype move between one that publishes to PyPI (`cli`, `library`) and one that publishes an image (`backend`, `data-ml`) reaches the default branch without a hand edit. `ci / diff-size` leaves the rewritten `release.yml` out of the count in a pull request that changes `archetype:`, so `/plinth:template-update --finish` splits the move by file. A project gets this by raising both `coolbress/plinth` `uses:` lines to this release; the plan says so when the called plinth lacks it. `/plinth:new-project` refuses a repository name longer than 46 characters before it creates anything, because a longer one makes the new project's lint check fail. The first login asks only for `repo` and `workflow`, and `delete_repo` is a separate opt-in. In full mode, `/plinth:guide` says how many features are off by default and points at `map` instead of listing each. New projects render plinth-template v1.50.3 and call plinth v2.42.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise unless it wants the archetype-move rule.
