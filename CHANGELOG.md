@@ -24,6 +24,19 @@ pull requests and have no tag.
   member, the plan, and the names the archetype's template refuses, read
   from its `copier.yml` (#1067).
 
+- `/plinth:guide` answers in seven parts: a header with the start date and
+  the last activity as dates, what blocks, the one command, then, what is
+  open, what happened so far, and the way to the map. The script prints a
+  `started:` line, a `so far:` block of at most five events (the creation,
+  the first merge by a person, closed specs and wayfinder records, releases
+  and tags, `feat:` merges by people), each with its title as recorded, and
+  a `totals:` line (merged, closed issues, releases, tags) from one GraphQL
+  call; a `main ci:` line with the latest completed run of `ci.yml` on
+  `main`, which fails as a problem; and a `problems:` line. With a problem,
+  so far is the totals only. Each new read fails on its own `not read` line.
+  The step depth now shows only before the first merge or on `map`, which
+  partly reverses #908. No progress bar and no step fraction (#1076).
+
 ### Fixed
 
 - A command printed to be pasted shows Hangul as typed (#1065). On macOS's

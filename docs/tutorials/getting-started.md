@@ -265,9 +265,11 @@ approve its `gh pr merge` command: approving it is your merge, as in
 Then do what the `next:` line said: `cd ~/my-app`, and there
 `git switch main && git pull` first (the generator left the checkout on the
 pull request's branch, and the next session starts from `main`). Then
-`claude`, and type `/plinth:guide`: it names the command to type next and
-explains, in plain words, the step you are at and the next one, each with its
-tool and how to use it. `/plinth:guide map` shows the whole way, every step
+`claude`, and type `/plinth:guide`: it names the command to type next and,
+until this first pull request is merged, explains in plain words the step you
+are at and the next one, each with its tool and how to use it. After the
+first merge it says the command, what is open and what happened so far,
+without that depth. `/plinth:guide map` shows the whole way, every step
 with its tool and how to use it; it is worth reading once before this first
 merge.
 
