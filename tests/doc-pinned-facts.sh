@@ -99,9 +99,9 @@ for page in pages:
                          f"{a or 'an archetype without a service'}; floor-check.py's ruleset has {want[a]}")
 # 3. The tools the door stops without, as the two install pages list them.
 src = (root / "scripts/new-project.sh").read_text(encoding="utf-8")
-tools = re.findall(r"^command -v ([a-z0-9]+)\s+>/dev/null \|\| stop ", src, re.M)
+tools = re.findall(r"^command -v ([a-z0-9]+)\s+>/dev/null \|\| (?:stop|miss) ", src, re.M)
 if not tools:
-    fail("scripts/new-project.sh has no `command -v <tool> >/dev/null || stop` line")
+    fail("scripts/new-project.sh has no `command -v <tool> >/dev/null || miss` line")
 def listed(rel, start, stop):
     text = (docs / rel).read_text(encoding="utf-8")
     i = text.find(start)

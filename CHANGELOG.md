@@ -13,6 +13,17 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` asks the host first, beside each host's readiness
+  read without changing anything (`new-project.sh --readiness`), then what
+  you want to make in your own words, recommends an archetype quoting them,
+  and only then asks the name and the visibility. The preflight names every
+  missing item at once, git's identity for the first commit among them,
+  instead of stopping at the first. Each suggested or typed name, and private
+  at its answer, is checked before it is shown or taken
+  (`new-project.sh <name> --check`): taken, a folder in the way, not a
+  member, the plan, and the names the archetype's template refuses, read
+  from its `copier.yml` (#1067).
+
 - `/plinth:guide` answers in seven parts: a header with the start date and
   the last activity as dates, what blocks, the one command, then, what is
   open, what happened so far, and the way to the map. The script prints a
@@ -25,6 +36,28 @@ pull requests and have no tag.
   so far is the totals only. Each new read fails on its own `not read` line.
   The step depth now shows only before the first merge or on `map`, which
   partly reverses #908. No progress bar and no step fraction (#1076).
+
+### Fixed
+
+- A command printed to be pasted shows Hangul as typed (#1065). On macOS's
+  bash 3.2, `printf %q` printed part of a Hangul argument as escaped bytes,
+  so the line could not be read off the screen. `/plinth:new-project`'s
+  "public instead" command at the private-plan stops, the GitLab door's
+  `cd <directory>` lines, the commands `scripts/template-update.sh` prints
+  and the retry line of `scripts/merge-when-green.sh` now quote with the
+  admin-token command's single quotes, from one function in
+  `scripts/lib/shell-word.sh`. A value with a space or a quote is printed
+  inside single quotes where it had backslashes (`'My Project'`, not
+  `My\ Project`); pasted, it is the same argument.
+
+## [2.44.0] - 2026-11-24
+
+`/plinth:guide` finds a `ready-for-agent` ticket older than the newest 100 open issues instead of saying `/grilling` while one is ready, and says when that read failed or came back full. Without `map`, it prints only the arsenal rows of the step the project is at and the next one, so its answers are shorter (19–20 lines for a ready ticket, against 28–30) with the command where it was. `/plinth:new-project` keeps a visibility already answered when GitLab.com is chosen under Customize, and says on the Host question that the guide and template updates are partly manual on GitLab.com. New projects render plinth-template v1.50.4: a GitLab project's `AGENTS.md` names its issues and merge requests instead of `/plinth:guide`, a `web` project's note example refuses a blank note and says why, and new projects call plinth v2.43.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
+
+tested with plinth-template v1.50.4
+eval suite not run: plinth-template v1.50.3 to v1.50.4 changes `AGENTS.md` in its GitLab branch only and no `.claude/` file, and the eval suite renders with the defaults (GitHub); the guide change was measured with the guide tasks on <https://github.com/coolbress/plinth/issues/647#issuecomment-7126400970>
+
+### Changed
 
 - `/plinth:new-project` renders plinth-template v1.50.4 instead of v1.50.3:
   a `web` project's note example refuses a blank note and says why, and a
@@ -6002,7 +6035,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.43.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.44.0...HEAD
+[2.44.0]: https://github.com/coolbress/plinth/releases/tag/v2.44.0
 [2.43.0]: https://github.com/coolbress/plinth/releases/tag/v2.43.0
 [2.42.0]: https://github.com/coolbress/plinth/releases/tag/v2.42.0
 [2.41.0]: https://github.com/coolbress/plinth/releases/tag/v2.41.0

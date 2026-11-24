@@ -3,7 +3,40 @@
 # scripts/new-project-gitlab.sh (GitLab.com, #353). Sourced, never run.
 
 # A preflight stop: the message and its fix on stderr, exit 2, nothing created.
-stop() { printf '%s\n' "$@" >&2; exit 2; }
+# The misses collected before it (miss, below) come first, so one run names
+# every item that is missing, not only the first (#1067).
+stop() {
+  local total=$((n_miss + 1))
+  [ "$total" -lt 2 ] || printf '%s things to fix; nothing was created:\n' "$total" >&2
+  [ "$n_miss" = 0 ] || printf '%s\n' "${misses[@]}" >&2
+  printf '%s\n' "$@" >&2; exit 2
+}
+# miss <line>...: a missing tool, login, scope or identity, kept for one stop
+# that names them all (#1067). The first line is the problem, the indented ones
+# its fix, as for stop. misses_stop stops with them when there are any.
+misses=(); n_miss=0
+miss() { misses+=("$@"); n_miss=$((n_miss + 1)); }
+misses_stop() {
+  [ "$n_miss" != 0 ] || return 0
+  [ "$n_miss" -lt 2 ] || printf '%s things to fix; nothing was created:\n' "$n_miss" >&2
+  printf '%s\n' "${misses[@]}" >&2; exit 2
+}
+# git_identity: a miss when git cannot name the author or the committer of the
+# first commit. The GitHub door creates the repository before it commits, so a
+# machine where git cannot work out an identity would fail after the create;
+# the GitLab door commits first (#1067). Read in /, where no repository's own
+# configuration applies: the doors commit in a new folder, with the global one.
+git_identity() {
+  local v err
+  for v in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
+    if ! err="$(git -C / var "$v" 2>&1 >/dev/null)"; then
+      miss "git cannot tell who makes the first commit ($(grep -m1 '^fatal:' <<<"$err" || echo "git var $v failed"))" \
+        "  fix: git config --global user.name \"Your Name\"" \
+        "  fix: git config --global user.email \"you@example.com\""
+      return 0
+    fi
+  done
+}
 # name_fits <name>: stops when the repository name (the owner or namespace not
 # counted) is longer than 46 characters. The template names the Python package
 # after it, and from 47 lines of the rendered code pass ruff's 100, so the new
