@@ -208,19 +208,22 @@ numbered, one question at a time. Never answer a question for the person.
    When the host is already settled (given, or GitHub for `web`), ask them
    all in one call: the license and, on GitHub, the reviewer, the code of
    conduct and the description.
-   Step 4 recommends public while the host is open, which is GitHub's
-   recommendation. So when the host chosen here is GitLab.com and the
-   visibility came from step 4, not from the arguments, ask step 4 again as
-   the second call, alone, in GitLab's terms with **Only people you add
-   (private) (Recommended)** first. Its answer replaces the first one. The
-   license's recommendation depends on that answer, so wait for it: when it
-   changes the visibility and the license was asked in the first call, ask
-   the license again in a call of its own, after that answer, with the new
-   recommendation first; its answer replaces the first license.
+   The visibility answered in step 4 stands when the host chosen here is
+   GitLab.com: do not ask it again. Instead, say in one line what changes on
+   GitLab, the GitLab.com sentence of the row that was answered: a public
+   project is readable by anyone, and a private one is plinth's default
+   there, since the free plan protects its main branch. The license follows
+   the same answer, so it is not asked again either. The one answer GitLab
+   cannot take is a project more visible than its group: a project is kept
+   no more visible than its group, and the run stops before creating
+   anything and names the fix, as any stop does.
 
    - Header `Host`: "Where should the repository live?" **GitHub
      (Recommended)** (`--host=github`). **GitLab.com**: a GitLab.com
-     project; needs `glab` installed and logged in (`--host=gitlab`).
+     project; needs `glab` installed and logged in (`--host=gitlab`). On
+     GitLab.com the next-step guide and template updates are partly manual:
+     `/plinth:guide` reads GitHub only, and the project's `AGENTS.md` names
+     where the next work is instead.
    - Header `License`: "Which license?" Three choices, each saying what
      it grants; for a private repository list **Proprietary
      (Recommended)** first, for a public one **MIT (Recommended)**.

@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project`, when GitLab.com is chosen under Customize after the
+  visibility was answered, keeps that answer and says in one line what
+  changes on GitLab; it no longer asks the visibility, then the license,
+  again (#1061). A project more visible than its group is still the run's
+  stop before anything is created. The Host question's GitLab.com choice
+  says the next-step guide and template updates are partly manual there:
+  `/plinth:guide` reads GitHub only (#1012 is the full answer).
+  plinth-template's companion change makes a GitLab project's `AGENTS.md`
+  say where the next work is instead of sending the agent to the guide; it
+  reaches new projects when plinth's template pin is raised.
+
 ### Fixed
 
 - `/plinth:guide` no longer misses a `ready-for-agent` ticket older than the

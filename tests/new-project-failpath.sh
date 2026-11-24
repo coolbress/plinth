@@ -1921,21 +1921,30 @@ for pair in "| Anyone on the internet (public) |::the license recommended is MIT
   if row "$key" | grep -qF -- "$phrase"; then ok skill-visibility "the $key row says \"$phrase\""
   else bad skill-visibility "the skill's $key row does not say \"$phrase\""; fi
 done
-# Asked before the host, step 4 recommends GitHub's public; GitLab.com picked
-# under Customize asks it again with GitLab's private first (the review of #1033).
-if grep -qF 'visibility came from step 4, not from the arguments, ask step 4 again as' "$skill"
-then ok skill-visibility "GitLab.com chosen under Customize asks visibility again in GitLab's terms"
-else bad skill-visibility "the skill does not ask visibility again when GitLab.com is chosen after step 4"; fi
-# The license's recommendation depends on that new answer, so one picker call
-# cannot carry both: the license comes in a call of its own after it (#1043's
-# review). "in the same call" let a private project keep MIT's recommendation.
-reask="$(sed -n '/visibility came from step 4, not from the arguments/,/^$/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
-if printf '%s\n' "$reask" | grep -qF 'ask the license again in a call of its own, after that answer'
-then ok skill-visibility "a changed visibility asks the license again in a call of its own, after the answer"
-else bad skill-visibility "the visibility asked again does not leave the license to a call after its answer"; fi
-if printf '%s\n' "$reask" | grep -qF 'in the same call'
-then bad skill-visibility "the visibility asked again still asks the license in the same call"
-else ok skill-visibility "the visibility asked again does not ask the license in the same call"; fi
+# GitLab.com picked under Customize keeps the visibility step 4 stated and says
+# only what changes there (#1061); #1033's review had asked it again. The one
+# answer GitLab cannot take, a project more visible than its group, is the
+# run's stop before anything is created, not a second question.
+keep="$(sed -n '/visibility answered in step 4 stands/,/^$/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+if printf '%s\n' "$keep" | grep -qF 'host chosen here is GitLab.com: do not ask it again'
+then ok skill-visibility "GitLab.com chosen under Customize keeps the visibility already answered"
+else bad skill-visibility "the skill does not keep the visibility when GitLab.com is chosen after step 4"; fi
+for phrase in 'say in one line what changes on GitLab' 'The license follows the same answer, so it is not asked again' \
+              'no more visible than its group' 'stops before creating anything'; do
+  if printf '%s\n' "$keep" | grep -qF -- "$phrase"; then ok skill-visibility "the kept visibility says \"$phrase\""
+  else bad skill-visibility "the kept visibility does not say \"$phrase\""; fi
+done
+flat="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
+for old in 'ask step 4 again' 'ask the license again'; do
+  if printf '%s\n' "$flat" | grep -qF -- "$old"; then bad skill-visibility "the skill still says \"$old\""
+  else ok skill-visibility "the skill no longer says \"$old\""; fi
+done
+# Where the host is chosen, GitLab.com says the next-step guide and template
+# updates are partly manual there: the guide reads GitHub only (#1061, #1012).
+host_q="$(sed -n '/Header `Host`: "Where should the repository live?"/,/Header `License`/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+if printf '%s\n' "$host_q" | grep -qF 'the next-step guide and template updates are partly manual'
+then ok skill-host "the Host question's GitLab.com choice says guide and update are partly manual there"
+else bad skill-host "the Host question does not say the guide and template updates are partly manual on GitLab.com"; fi
 if grep -qF 'The answer becomes `--public` or `--private`, on either host.' "$skill"
 then ok skill-visibility "the visibility answer becomes a flag, so the command said before the run asks it no more"
 else bad skill-visibility "the skill does not turn the visibility answer into --public or --private"; fi
