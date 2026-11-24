@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` asks the host first, beside each host's readiness
+  read without changing anything (`new-project.sh --readiness`), then what
+  you want to make in your own words, recommends an archetype quoting them,
+  and only then asks the name and the visibility. The preflight names every
+  missing item at once, git's identity for the first commit among them,
+  instead of stopping at the first. Each suggested or typed name, and private
+  at its answer, is checked before it is shown or taken
+  (`new-project.sh <name> --check`): taken, a folder in the way, not a
+  member, the plan, and the names the archetype's template refuses, read
+  from its `copier.yml` (#1067).
+
 ### Fixed
 
 - A command printed to be pasted shows Hangul as typed (#1065). On macOS's
