@@ -887,6 +887,38 @@ grep -qxF 'ticket to take: not read: none of the newest 100 open issues can be t
   ok "the ready-for-agent read failing: the next ticket said not read, not /grilling" ||
   { bad "the ready-for-agent read failing"; grep -E 'ticket|where|command|note' <<<"$out" | sed 's/^/        /'; }
 awk '/^where: /{ w = substr($0, 8) } /^command: /{ print w "\t" substr($0, 10) }' <<<"$out" >> "$printed"
+# Older tickets' blockers are older still: read by number, one closed no
+# longer blocks; one that read does not answer still does.
+jq -n '[{number: 5, title: "Old ticket", labels: [{name: "ready-for-agent"}], body: "Blocked by: #3"}]
+  + [range(10; 110) | {number: ., title: "r\(.)", labels: [{name: "wayfinder:research"}], body: ""}]' > "$d/issues.json"
+printf '{"3":"CLOSED"}' > "$d/lookup.json"
+state "that older ticket's blocker, older than both reads, closed: read by number, not blocking" "$d" \
+  "command: /implement #5" "ticket to take: #5, not blocked (#3 is closed); the only ready-for-agent ticket left"
+printf '{"3":"OPEN"}' > "$d/lookup.json"
+state "that blocker read open: still blocks" "$d" \
+  "command: /grilling" "ticket to take: none; every ready-for-agent ticket waits: #5 on #3"
+out="$(MOCK_LOOKUP_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF 'ready-for-agent issues past the newest 100 open, read on their own: #5; their blockers missing from both reads: not read (HTTP 502: Bad Gateway), so they still block' <<<"$out" &&
+  grep -qxF 'ticket to take: none; every ready-for-agent ticket waits: #5 on #3 (not in the open issues read)' <<<"$out" &&
+  ok "that blocker's state not read: still blocks, and said so" ||
+  { bad "older blocker not read"; grep -E 'ready-for|ticket|command' <<<"$out" | sed 's/^/        /'; }
+rm "$d/lookup.json"
+# The failed read takes /grilling's place only: an issue to triage still routes.
+older
+jq 'map(if .number == 50 then .labels = [{name: "needs-triage"}] else . end)' "$d/issues.json" > "$d/x.json" && mv "$d/x.json" "$d/issues.json"
+out="$(MOCK_LABEL_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF 'command: /triage' <<<"$out" && grep -q '^ticket to take: not read: ' <<<"$out" &&
+  ok "the ready-for-agent read failing next to an issue to triage: /triage, the ticket line still not read" ||
+  { bad "label read failing with triage"; grep -E 'ticket|where|command' <<<"$out" | sed 's/^/        /'; }
+awk '/^where: /{ w = substr($0, 8) } /^command: /{ print w "\t" substr($0, 10) }' <<<"$out" >> "$printed"
+# The label read cut at 100 too: said.
+jq -n '[{number: 1, title: "Oldest", labels: [{name: "ready-for-agent"}], body: ""}]
+  + [range(2; 102) | {number: ., title: "b\(.)", labels: [{name: "ready-for-agent"}], body: "Blocked by: #300"}]
+  + [range(200; 301) | {number: ., title: "r\(.)", labels: [{name: "wayfinder:research"}], body: ""}]' > "$d/issues.json"
+state "the ready-for-agent read full too: said that older ones were not read" "$d" \
+  "ready-for-agent issues past the newest 100 open, read on their own: $(seq 2 101 | sed 's/^/#/' | paste -sd ' ' -); that read came back full (100), so older ones were not read" \
+  "command: /grilling"
+older
 log="$work/label.log"
 : > "$log"; MOCK_LABEL_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
 [ "$(grep -c . "$log")" = 1 ] && ok "nothing to take in a full read: the ready-for-agent issues read once" || bad "nothing to take in a full read: label read $(grep -c . "$log") times"

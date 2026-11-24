@@ -403,9 +403,13 @@ read_order() {
 # on their own (the newest 100 of them), and those older than the first read
 # join the choice with the same skips. They do not lower the lowest number
 # the first read saw: a blocker older than that, missing from it, is still
-# not known to be closed. A failed read leaves the next ticket not read.
+# not known to be closed, unless read by number: the older tickets' blockers
+# missing from both reads are, in one GraphQL call, and one read CLOSED or
+# MERGED no longer blocks; one that read does not answer still blocks. A
+# failed read of the ready-for-agent issues leaves the next ticket not read,
+# said in place of /grilling.
 full="$([ "$(grep -c . <<<"$issues" || true)" -ge 100 ] && echo 1)"
-older=""; older_failed=""; older_read=""
+older=""; older_failed=""; older_read=""; older_full=""; states=""; states_failed=""
 choose() {
 read_deps; read_order
 choice="$(awk -F '\t' -v full="$full" '
@@ -422,6 +426,7 @@ choice="$(awk -F '\t' -v full="$full" '
   f == 2 { if (!($1 in rank)) { rank[$1] = ++nr; spec[$1] = $2 }; next }
   f == 3 { native[$1] = native[$1] "," $2; nopen[$2] = 1; next }
   f == 4 { past[$1] = 1; next }
+  f == 5 { if ($2 == "OPEN") nopen[$1] = 1; else shut[$1] = 1; next }
   { open[$1] = 1; if (!($1 in past) && (min == "" || $1 + 0 < min + 0)) min = $1
     if ($4 != "ticket") next
     t[++n] = $1; ready[$1] = (("," $2 ",") ~ /,ready-for-agent,/)
@@ -437,7 +442,7 @@ choice="$(awk -F '\t' -v full="$full" '
       for (i = 1; i <= k; i++) {
         if (a[i] ~ /#/) ob = ob " " a[i]
         else if ((a[i] in open) || (a[i] in nopen)) ob = ob " #" a[i]
-        else if (full && a[i] + 0 < min + 0) ob = ob " #" a[i] "~"
+        else if (full && a[i] + 0 < min + 0 && !(a[i] in shut)) ob = ob " #" a[i] "~"
         else closed = closed " #" a[i]
       }
       if (ob != "") { why = said(substr(ob, 2)); gsub(/~/, " (not in the open issues read)", why) }
@@ -464,7 +469,7 @@ choice="$(awk -F '\t' -v full="$full" '
     if (nb) s = s "; blocked by an open issue: " substr(bl, 3)
     if (np) s = s "; in an open pull request: " substr(tk, 3)
     print "skipped: " (nb + np ? s : "none")
-  }' <(printf '%s\n' "$prs") <(printf '%s\n' "$order") <(printf '%s\n' "$deps") <(field 1 <<<"$older") - \
+  }' <(printf '%s\n' "$prs") <(printf '%s\n' "$order") <(printf '%s\n' "$deps") <(field 1 <<<"$older") <(printf '%s\n' "$states") - \
     <<<"$issues${older:+$'\n'$older}")"
 pick="$(awk -F '\t' '$1 == "pick" { print $2 }' <<<"$choice")"
 fallback="$(awk -F '\t' '$1 == "fallback" { print $2 }' <<<"$choice")"
@@ -474,8 +479,22 @@ if [ -z "$pick" ] && [ -n "$full" ]; then
   older_read=yes
   if got="$(cd "$top" && gh issue list --state open --label ready-for-agent --limit 100 --json number,title,labels,body --jq "$issue_rows" 2>&1)"; then
     older="$(awk -F '\t' 'FNR == NR { seen[$1] = 1; next } $1 != "" && !($1 in seen)' <(printf '%s\n' "$issues") - <<<"$got")"
+    [ "$(grep -c . <<<"$got" || true)" -lt 100 ] || older_full=yes
     if [ -n "$older" ]; then
       ready_n=$((ready_n + $(awk -F '\t' '$4 == "ticket"' <<<"$older" | grep -c . || true)))
+      missing="$(awk -F '\t' '$4 == "ticket" { k = split($5, a, ","); for (i = 1; i <= k; i++) if (a[i] != "") print a[i] }' <<<"$older" |
+        sort -un | grep -vxF -f <( { field 1 <<<"$issues"; field 1 <<<"$older"; } | grep . ) || true)"
+      if [ -n "$missing" ]; then
+        owner="${repo%%/*}"; name="${repo#*/}"
+        asked="$(sed 's/.*/n&: issueOrPullRequest(number: &) { ... on Issue { state } ... on PullRequest { state } }/' <<<"$missing" | paste -sd ' ' -)"
+        if got="$(cd "$top" && gh api graphql -f owner="$owner" -f name="$name" \
+              -f query="query(\$owner: String!, \$name: String!) { repository(owner: \$owner, name: \$name) { $asked } }" \
+              --jq '.data.repository | to_entries[] | select(.value != null) | [(.key[1:]), .value.state] | @tsv' 2>&1)"; then
+          states="$got"
+        else
+          states_failed="$(tail -1 <<<"$got" | tr '\t' ' ')"
+        fi
+      fi
       choose
     fi
   else
@@ -509,7 +528,10 @@ if [ -n "$not_tickets" ]; then echo "open issues that are not tickets, never for
 if [ -n "$older_failed" ]; then
   echo "ticket to take: not read: none of the newest 100 open issues can be taken, and the ready-for-agent issues past them were not read ($older_failed)"
 elif [ -n "$older_read" ]; then
-  echo "ready-for-agent issues past the newest 100 open, read on their own: $( [ -n "$older" ] && field 1 <<<"$older" | sed 's/^/#/' | paste -sd ' ' - || echo none)"
+  l="ready-for-agent issues past the newest 100 open, read on their own: $( [ -n "$older" ] && field 1 <<<"$older" | sed 's/^/#/' | paste -sd ' ' - || echo none)"
+  [ -z "$older_full" ] || l="$l; that read came back full (100), so older ones were not read"
+  [ -z "$states_failed" ] || l="$l; their blockers missing from both reads: not read ($states_failed), so they still block"
+  echo "$l"
 fi
 grep -E '^(ticket to take|skipped): ' <<<"$choice" | { [ -z "$older_failed" ] && cat || grep -v '^ticket to take: '; } | while IFS= read -r l; do
   case "$l" in "ticket to take: "*) [ -z "$deps_failed" ] || l="$l; GitHub's issue dependencies: not read ($deps_failed)" ;; esac
@@ -754,10 +776,6 @@ elif [ -n "$people_prs" ]; then
   fi
 elif [ -n "$pick" ]; then
   before="/clear"; say "A ticket ready" "/implement #$pick"
-elif [ -n "$older_failed" ]; then
-  # Not /grilling (#1059): a ticket may be ready past the newest 100.
-  note="the ready-for-agent issues past the newest 100 open were not read ($older_failed); look again, or list them with gh issue list --label ready-for-agent"
-  say "A ticket ready" "none: the next ticket was not read"
 elif n="$(labelled needs-triage "$issues")" && [ -n "$n" ]; then
   note="issue #$n"; say "Something broke" "/triage"
 elif n="$(awk -F '\t' '$2 == "none"' <<<"$specs" | head -1 | field 1)" && [ -n "$n" ]; then
@@ -776,6 +794,10 @@ elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
 elif [ -n "$bot_prs" ]; then
   note="then Dependabot's pull requests ($(field 1 <<<"$bot_prs" | sed 's/^/#/' | paste -sd ' ' -)), one at a time, each merged on green on the person's word"
   say "Between pieces of work" "/plinth:floor-check"
+elif [ -n "$older_failed" ]; then
+  # In place of /grilling (#1059): a ticket may be ready past the newest 100.
+  note="the ready-for-agent issues past the newest 100 open were not read ($older_failed); look again, or list them with gh issue list --label ready-for-agent"
+  say "A ticket ready" "none: the next ticket was not read"
 else
   say "An idea in your own words" "/grilling"
 fi
