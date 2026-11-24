@@ -169,13 +169,17 @@ if [ "$coc" = 1 ] && { [ -z "${coc_contact//[[:space:]]/}" ] || [[ "$coc_contact
   echo "--code-of-conduct= needs one line: the email address or web page reports go to"$'\n'"$usage" >&2; exit 2; fi
 if [[ "$desc" == *$'\n'* ]] || [ "${#desc}" -gt 350 ]; then
   echo "--description is one line of at most 350 characters (got ${#desc})"$'\n'"$usage" >&2; exit 2; fi
-# The same request as a public one, for the stops that offer it.
-public_cmd="/plinth:new-project"
-for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' "$a")"; done
-
 # stop, warn, below, choices_of, read_into and unread_why, shared with the GitLab door.
 # shellcheck source=scripts/lib/door.sh
 . "$here/lib/door.sh"
+# sq: an argument as one shell word, for every command printed to be pasted.
+# shellcheck source=scripts/lib/shell-word.sh
+. "$here/lib/shell-word.sh"
+# The same request as a public one, for the stops that offer it. Each argument
+# quoted as the admin-token command's are, so a description with Hangul, a
+# space or a quote is printed as typed (#1065).
+public_cmd="/plinth:new-project"
+for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(sq "$a")"; done
 # The name's length, before any tool or login is read (#1053).
 [ -z "$target" ] || name_fits "${target#*/}"
 
@@ -298,9 +302,8 @@ else
   # The command is pasted into another shell: each argument quoted, so a
   # description or contact with a space or a quote reads back as one, and the
   # Assisted-by the skill set carried, so the run there keeps it (#923).
-  # Single quotes, not printf %q: macOS's bash 3.2 %q escapes some bytes of
-  # Hangul and prints the rest raw, and the line no longer shows as text.
-  sq() { case "$1" in ''|*[!A-Za-z0-9._/=:@%+,-]*) local s=${1//\'/\'\\\'\'}; printf "'%s'" "$s" ;; *) printf '%s' "$1" ;; esac; }
+  # sq (scripts/lib/shell-word.sh) single-quotes, where printf %q would
+  # print Hangul as escaped bytes on macOS's bash 3.2.
   admin_args=""
   for a in "$@"; do admin_args="$admin_args${admin_args:+ }$(sq "$a")"; done
   admin_env=""
@@ -315,7 +318,7 @@ else
     "     it runs in Claude Code too, typed after ! (! gh auth login ...): it prints a one-time code and a URL, and a browser finishes it; nothing secret is typed" \
     "  2. run the door with an admin token, typed at a prompt (never on the command line)," \
     "     in a separate terminal window (not through ! in Claude Code: that has no terminal to prompt at):" \
-    "    P=$(printf '%q' "$here")" \
+    "    P=$(sq "$here")" \
     "    $admin_env\"\$P/with-admin-token.sh\" \"\$P/new-project.sh\" \\" \
     "      $admin_args" \
     "     the token, fine-grained, pre-filled for $owner (7 days; its${kind_note:+ repository} permissions already set):" \

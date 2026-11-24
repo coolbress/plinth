@@ -599,6 +599,17 @@ if grep -qF "needs GitHub Pro" "$work/home-private/out" && grep -qxF "  public i
    && grep -qxF "  public instead, with the whole wall: /plinth:new-project probe --archetype=backend" "$work/home-private-first/out"
 then ok private "the stop gives the reason and the public command, with the other arguments kept"
 else bad private "the stop lacks the reason or the public command"; sed 's/^/        /' "$work/home-private/out" "$work/home-private-first/out"; fi
+# The public command is copied off a screen and pasted: a description with
+# Hangul, a space and a quote is printed as typed, inside single quotes, and
+# read back by a shell it is the run's arguments without --private (#1065).
+E="MOCK_PLAN=free"    run private-quoted err no no "tester is on GitHub Free"                -- probe --private "--description=it's 매일 모으기" --archetype=backend
+public_line="$(sed -n 's/^  public instead, with the whole wall: //p' "$work/home-private-quoted/out")"
+if [ "$public_line" = "/plinth:new-project probe '--description=it'\\''s 매일 모으기' --archetype=backend" ]
+then ok private-quoted "the public command prints Hangul, a space and a quote as typed"
+else bad private-quoted "the public command is not printed as typed: $public_line"; fi
+if [ "$(bash -c "printf 'ARG=%s\n' ${public_line#/plinth:new-project }")" = "$(printf 'ARG=%s\n' probe "--description=it's 매일 모으기" --archetype=backend)" ]
+then ok private-quoted "the public command, read back by bash, is the run's arguments without --private"
+else bad private-quoted "the public command does not read back as the run's arguments: $public_line"; fi
 E="MOCK_PLAN=free"    run private-org-free err no no "needs GitHub Team or Enterprise"       -- someorg/probe --private
 # A classic token reads its own plan with read:user, which gh's default login
 # does not carry: asking for it stops a Free account here, where otherwise the
@@ -1918,10 +1929,15 @@ then ok gl-mr-fail "the description the call sent is kept for the command that o
 else bad gl-mr-fail "the recovery command would open a different merge request"; fi
 E="FAIL_AT=push-branch" gl_run gl-mr-push-fail ok yes no "first merge request: not opened (the push of docs/first-mr failed: mock git: branch push refused on purpose)" -- probe --host gitlab
 # A --dir with a space: every printed cd is quoted, so it runs when pasted.
-spaced="$work/home-gl-mr-spaced/My Project"; spaced_q="$(printf %q "$spaced")"
+spaced="$work/home-gl-mr-spaced/My Project"; spaced_q="'$spaced'"
 E="FAIL_AT=push-branch" gl_run gl-mr-spaced ok yes no "push and open it: cd $spaced_q && git push -u origin docs/first-mr" -- probe --host gitlab "--dir=$spaced"
 grep -qF "  next: cd $spaced_q && claude" "$work/home-gl-mr-spaced/out" \
   && ok gl-mr-spaced "the next line quotes the directory too" || bad gl-mr-spaced "the next line does not quote the directory"
+# A --dir with Hangul: the cd shows the directory as typed, not as escaped bytes (#1065).
+hangul_dir="$work/home-gl-mr-hangul/내 프로젝트"
+E="FAIL_AT=push-branch" gl_run gl-mr-hangul ok yes no "push and open it: cd '$hangul_dir' && git push -u origin docs/first-mr" -- probe --host gitlab "--dir=$hangul_dir"
+grep -qF "  next: cd '$hangul_dir' && claude" "$work/home-gl-mr-hangul/out" \
+  && ok gl-mr-hangul "the next line prints the directory as typed too" || bad gl-mr-hangul "the next line does not print the directory as typed"
 grep -q -- '-X POST projects/555/merge_requests ' "$work/home-gl-mr-push-fail/calls.log" \
   && bad gl-mr-push-fail "a merge request was asked for after its branch failed to push" || ok gl-mr-push-fail "no merge request without its branch"
 E="MOCK_GL_BASELINE=running PLINTH_FIRST_PR_WAIT=20" gl_run gl-baseline-running ok yes no "first pipeline on main: not confirmed: still running after 20 s: https://gitlab.com/tester/probe/-/pipelines/77" -- probe --host gitlab
