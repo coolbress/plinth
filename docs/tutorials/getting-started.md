@@ -76,36 +76,48 @@ one line with what it is about to do, for example:
 create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.50.4 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
 ```
 
-Before any question, the generator checks the tools and your GitHub login
-and its token, so a missing `uv` or a login without `workflow` stops it
-before you answer anything. Then it asks what the command did not say, in a
-picker (a window of choices; Other lets you type an answer instead):
+Before any question, the generator reads whether `gh` and `glab` are
+installed and logged in, and as whom, without changing anything. Then it asks
+what the command did not say, in a picker (a window of choices; Other lets you
+type an answer instead):
 
-1. **What you are making**: a terminal command (`cli`), the one to choose
-   when unsure, and also the choice for a tool that runs on a schedule on
-   the owner's machine (a data collector, a pipeline); code other code
-   imports (`library`); a service or a model you train, then whether it is a
-   service or API (`backend`) or a model trained here, with a model card
-   (`data-ml`; on GitHub a `v*` tag publishes the model, its metrics and the
-   card as release files); or a website people log in to (`web`, then where
-   it runs). Data processing, collection or a pipeline with no model trained
-   is `cli`.
-2. **Who may see this project's code?** Anyone on the internet (public,
-   recommended on GitHub; the licence recommended is MIT), or only you and
-   the people you add (private; the licence recommended is Proprietary). On
-   GitHub Free a private repository cannot keep the ruleset, so the
-   generator stops before creating it; on GitLab.com private is the
-   default.
-3. **Use the recommended defaults?** GitHub, MIT licence (Proprietary for a
-   private project), in `~/my-app`, no third-party reviewer, no code of
-   conduct, no description. Yes asks nothing more. Customize asks the host
-   (GitLab.com needs `glab` installed and logged in; choosing it asks who
-   may see the code again, with private recommended, and the licence again
-   after it when that answer changed) and the licence; then,
-   on GitHub, whether a code reviewer such as Codex's is already connected
-   to your account, a code of conduct (with a contact; not asked when your
-   account's own applies) and a one-line description; then the folder,
-   with `~/my-app` offered and any other path typed into Other.
+1. **Where should the repository live?** GitHub (recommended) or GitLab.com,
+   each with what was just read beside it, for example "✓ gh logged in as
+   you". Then it checks that host's tools, git's identity for the first
+   commit, and the login and its token, and lists every item missing at once,
+   each with its fix; say "done" and it checks again.
+2. **What do you want to make?** A sentence or two in your own words; "I
+   don't know" is an answer too. When that leaves the kind open, it asks how
+   it will be used, or whether it trains a model.
+3. **The kind it recommends**, with your words quoted as the reason and what
+   it makes and does not make: a terminal command (`cli`), the one to choose
+   when unsure, and also the choice for a tool that runs on a schedule on the
+   owner's machine (a data collector, a pipeline); code other code imports
+   (`library`); a service or API (`backend`); a model trained here, with a
+   model card (`data-ml`; on GitHub a `v*` tag publishes the model, its
+   metrics and the card as release files); or a website people log in to
+   (`web`, then where it runs). Data processing, collection or a pipeline
+   with no model trained is `cli`. Accept it, pick another kind, or say you
+   are not sure (`cli`).
+4. **The name**, when the command gave none: two or three suggestions in
+   English that say what step 2 meant, each already checked (free, a folder
+   not in the way, a name the kind's template takes); Other takes your own,
+   checked at once.
+5. **Who may see this project's code?** Anyone on the internet can read and
+   copy it (public, recommended on GitHub; the licence recommended is MIT),
+   or only you and the people you add (private; the licence recommended is
+   Proprietary; recommended when your description mentions a company's,
+   a customer's or personal data). On GitHub Free a private repository
+   cannot keep the ruleset: the generator reads your plan at this answer and
+   offers public instead, upgrading and starting again, or stopping. On
+   GitLab.com private is the default.
+6. **Use the recommended defaults?** MIT licence (Proprietary for a private
+   project), in `~/my-app`, no third-party reviewer, no code of conduct, no
+   description. Yes asks nothing more. Customize asks the licence; then, on
+   GitHub, whether a code reviewer such as Codex's is already connected to
+   your account, a code of conduct (with a contact; not asked when your
+   account's own applies) and a one-line description; then the folder, with
+   `~/my-app` offered and any other path typed into Other.
 
 Where the picker cannot be shown (`claude -p`), the same questions come as
 text, numbered.
@@ -253,9 +265,11 @@ approve its `gh pr merge` command: approving it is your merge, as in
 Then do what the `next:` line said: `cd ~/my-app`, and there
 `git switch main && git pull` first (the generator left the checkout on the
 pull request's branch, and the next session starts from `main`). Then
-`claude`, and type `/plinth:guide`: it names the command to type next and
-explains, in plain words, the step you are at and the next one, each with its
-tool and how to use it. `/plinth:guide map` shows the whole way, every step
+`claude`, and type `/plinth:guide`: it names the command to type next and,
+until this first pull request is merged, explains in plain words the step you
+are at and the next one, each with its tool and how to use it. After the
+first merge it says the command, what is open and what happened so far,
+without that depth. `/plinth:guide map` shows the whole way, every step
 with its tool and how to use it; it is worth reading once before this first
 merge.
 

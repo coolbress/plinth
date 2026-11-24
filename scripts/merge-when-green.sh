@@ -73,6 +73,9 @@ set -uo pipefail
 
 usage="usage: scripts/merge-when-green.sh <pr> [--repo owner/name] [--no-reviewer] [--reviewer-logins a,b] [--update] [--round [--row <irreversible|issue|answer|unclassified> \"<why>\"]]"
 stop() { printf 'STOP: %s\n' "$@" >&2; exit 1; }
+# sq: a value as one shell word, for the retry command printed below.
+# shellcheck source=scripts/lib/shell-word.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/shell-word.sh" || stop "no lib/shell-word.sh beside this script"
 
 pr=""; repo=""; reviewer=required; only_round=0; row=""; why=""; update=0
 # The default of `reviewer-logins` in .github/workflows/pr-review.yml.
@@ -214,8 +217,8 @@ if [ "$only_round" = 1 ]; then
     [ "$spent" = yes ] || echo "The round could not be read, so it may be past the budget."
     echo "Before pushing a fix, write the finding's row and why (When to stop):" >&2
     # The same target as this run, so the retry reads the same round.
-    again="scripts/merge-when-green.sh $pr --repo $(printf '%q' "$repo")"
-    [ "$logins" = "chatgpt-codex-connector[bot]" ] || again+=" --reviewer-logins $(printf '%q' "$logins")"
+    again="scripts/merge-when-green.sh $pr --repo $(sq "$repo")"
+    [ "$logins" = "chatgpt-codex-connector[bot]" ] || again+=" --reviewer-logins $(sq "$logins")"
     echo "  $again --round --row <irreversible|issue|answer|unclassified> \"<why>\"" >&2
     echo "  irreversible: irreversible, or reaches other people; judge by what the diff does, not the reviewer's label" >&2
     exit 1

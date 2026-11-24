@@ -239,7 +239,7 @@ PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/ou
 check "round 7, --round with no row: prints the line, asks for the row, exits 1, merges nothing" $?
 grep -qF -- 'merge-when-green.sh 7 --repo o/r --round --row' "$FX/out"; check "the suggested retry keeps --repo" $?
 PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round --reviewer-logins 'chatgpt-codex-connector[bot],other' >"$FX/out" 2>&1
-grep -qF -- '--repo o/r --reviewer-logins chatgpt-codex-connector\[bot\]\,other --round --row' "$FX/out"; check "the suggested retry keeps --reviewer-logins" $?
+grep -qF -- "--repo o/r --reviewer-logins 'chatgpt-codex-connector[bot],other' --round --row" "$FX/out"; check "the suggested retry keeps --reviewer-logins" $?
 ! grep -qE '^pr (merge|checks|comment|edit|review|ready)|--method (POST|PATCH|PUT|DELETE)|(^| )-X ' "$FX/calls"; check "--round makes only read calls" $?
 ! grep -q '^checks:' "$FX/out"; check "--round does not wait for the checks" $?
 

@@ -13,6 +13,30 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` asks the host first, beside each host's readiness
+  read without changing anything (`new-project.sh --readiness`), then what
+  you want to make in your own words, recommends an archetype quoting them,
+  and only then asks the name and the visibility. The preflight names every
+  missing item at once, git's identity for the first commit among them,
+  instead of stopping at the first. Each suggested or typed name, and private
+  at its answer, is checked before it is shown or taken
+  (`new-project.sh <name> --check`): taken, a folder in the way, not a
+  member, the plan, and the names the archetype's template refuses, read
+  from its `copier.yml` (#1067).
+
+- `/plinth:guide` answers in seven parts: a header with the start date and
+  the last activity as dates, what blocks, the one command, then, what is
+  open, what happened so far, and the way to the map. The script prints a
+  `started:` line, a `so far:` block of at most five events (the creation,
+  the first merge by a person, closed specs and wayfinder records, releases
+  and tags, `feat:` merges by people), each with its title as recorded, and
+  a `totals:` line (merged, closed issues, releases, tags) from one GraphQL
+  call; a `main ci:` line with the latest completed run of `ci.yml` on
+  `main`, which fails as a problem; and a `problems:` line. With a problem,
+  so far is the totals only. Each new read fails on its own `not read` line.
+  The step depth now shows only before the first merge or on `map`, which
+  partly reverses #908. No progress bar and no step fraction (#1076).
+
 - `ci / deps` on a private GitHub repository without GitHub Code Security,
   where GitHub refuses dependency review, now checks the dependency versions
   a pull request adds instead of reporting "not yet confirmed": osv-scanner
@@ -24,6 +48,19 @@ pull requests and have no tag.
   where the check was green. A public repository, or a private one where the
   review is served, runs `dependency-review-action` as before. The check
   name and every input stay (#1073).
+
+### Fixed
+
+- A command printed to be pasted shows Hangul as typed (#1065). On macOS's
+  bash 3.2, `printf %q` printed part of a Hangul argument as escaped bytes,
+  so the line could not be read off the screen. `/plinth:new-project`'s
+  "public instead" command at the private-plan stops, the GitLab door's
+  `cd <directory>` lines, the commands `scripts/template-update.sh` prints
+  and the retry line of `scripts/merge-when-green.sh` now quote with the
+  admin-token command's single quotes, from one function in
+  `scripts/lib/shell-word.sh`. A value with a space or a quote is printed
+  inside single quotes where it had backslashes (`'My Project'`, not
+  `My\ Project`); pasted, it is the same argument.
 
 ## [2.44.0] - 2026-11-24
 
