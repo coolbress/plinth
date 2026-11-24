@@ -255,23 +255,23 @@ put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false S
 put "$d/issues.json" "$(issue 4 'Ask the user for their name' '')" "$(issue 5 'Show monthly totals' ready-for-agent)"
 expect "an issue open: the ready-for-agent one, not the lowest number" "$d" "A ticket ready (step 4)" "/implement #5" "before: /clear"
 grep -q "hosting: render" <<<"$(MOCK_DIR="$d" "$script" "$d")" && ok "a web project says where it runs" || bad "web: no hosting line"
-# What it started with off (#763), through scripts/off-by-default.sh. Past
-# the first merge the whole list is the map's (#908).
-out="$(MOCK_DIR="$d" "$script" "$d" map)"
-if grep -qx 'off by default:' <<<"$out" && grep -q '^  off: The third-party reviewer' <<<"$out" && grep -q '^  started off .*: HSTS preload' <<<"$out"
+# What it started with off (#763), through scripts/off-by-default.sh. The
+# whole list is the features view's (#1087), no longer the map's.
+out="$(MOCK_DIR="$d" "$script" "$d" features)"
+if grep -q '^features: ' <<<"$out" && grep -q '^  off: The third-party reviewer' <<<"$out" && grep -q '^  started off .*: HSTS preload' <<<"$out"
 then ok "a web project names the reviewer and HSTS as off"; else bad "web: off-by-default lines"; sed 's/^/        /' <<<"$out" | head -14; fi
 d2="$(repo cli-off)"
-out="$(MOCK_DIR="$d2" "$script" "$d2" map)"
+out="$(MOCK_DIR="$d2" "$script" "$d2" features)"
 if grep -q '^  off: The third-party reviewer' <<<"$out" && ! grep -q 'HSTS' <<<"$out"
 then ok "a cli project names the reviewer, not the web item"; else bad "cli: off-by-default lines"; fi
 # The told rows (#772): a sign the project has drops its row; one with no
 # sign is said to have started off, since whether it is on is not read.
-: > "$d2/SUPPORT.md"; out="$(MOCK_DIR="$d2" "$script" "$d2" map)"; rm "$d2/SUPPORT.md"
+: > "$d2/SUPPORT.md"; out="$(MOCK_DIR="$d2" "$script" "$d2" features)"; rm "$d2/SUPPORT.md"
 if ! grep -q 'A support file' <<<"$out" && grep -q '^  off: Sponsorship' <<<"$out" && grep -q '^  started off (whether it is on now is not read): Topics' <<<"$out"
 then ok "a cli project with SUPPORT.md: that row is gone, sponsorship is off, topics started off"
 else bad "the told rows in the guide"; grep -iE 'support|sponsor|topics' <<<"$out" | sed 's/^/        /'; fi
 mkdir -p "$d2/.github/workflows"; : > "$d2/.github/workflows/third-party.yml"
-out="$(MOCK_DIR="$d2" "$script" "$d2" map)"
+out="$(MOCK_DIR="$d2" "$script" "$d2" features)"
 # The reviewer itself is not listed; the steps a project with its caller still
 # has (#765) are, as started off, since none of them can be read from files.
 if ! grep -qF 'The third-party reviewer (' <<<"$out" && [ "$(grep -cE 'started off \(whether it is on now is not read\): (The summons token|Requiring the third-party reviewer)' <<<"$out")" = 2 ] \
@@ -1127,15 +1127,15 @@ grep -qF 'failing checks' <<<"$p2" && grep -qF 'not known yet' <<<"$p2" && grep 
   ok "part 2 says the failing check and its cause, before the command" || bad "part 2 does not hold the failing check"
 grep -qF 'one code block' <<<"$p3" && grep -qF '`command:`' <<<"$p3" &&
   ok "part 3 is the command, in the one code block" || bad "part 3 is not the command"
-grep -qF 'whole way' <<<"$p4" && grep -qF 'heading' <<<"$p4" && grep -qF '`mode: focused`, no step is explained in depth' <<<"$p4" &&
-  ok "part 4: the depth only in mode: full, the whole way under a heading on map" || bad "part 4 does not hold the depth rule"
+grep -qF '`map <step>`' <<<"$p4" && grep -qF '`mode: focused`, no step is explained in depth' <<<"$p4" &&
+  ok "part 4: the depth only in mode: full or on map <step>" || bad "part 4 does not hold the depth rule"
 grep -qF 'in one line, in both modes' <<<"$p5" && grep -qF 'not a paragraph each' <<<"$p5" &&
   ! grep -qF 'when it is worth turning on' <<<"$p5" &&
   ok "part 5: what started off is one line in both modes, no item described" || bad "part 5 still describes each off-by-default item"
 grep -qF '`so far:`' <<<"$p6" && grep -qF 'counts only' <<<"$p6" &&
   ok "part 6: so far as printed, counts only with a problem" || bad "part 6 is not so far"
-grep -qF 'when it is worth turning on' <<<"$p7" && grep -qF 'asked for the whole way' <<<"$p7" &&
-  ok "part 7 ends with every off-by-default item, only on map" || bad "part 7 does not hold the items for map"
+grep -qF '`release:`' <<<"$p7" && grep -qF '`/plinth:guide map`' <<<"$p7" && ! grep -qF 'when it is worth turning on' <<<"$p7" &&
+  ok "part 7 keeps the release: line and the pointer to the map, and lists no off-by-default item" || bad "part 7 lost the release: line or the map pointer"
 grep -qF 'say so in part 2, as a blocking problem' "$guide_md" &&
   ok "the token step is said in the problems' part" || bad "the token step names the wrong part"
 
@@ -1165,14 +1165,14 @@ grep -qx 'last merge: #7 on 2026-10-27 by person: feat: x' <<<"$out" && ok "map 
   bad "map before the directory: $(grep -E '^(repository|last merge)' <<<"$out")"
 
 # The table (#1060): without map, this step's row and the next one's, in
-# either mode; on map, every row of the arsenal's table, as before.
+# either mode; on map, no row (#1087): the map's lines stand in for it.
 table_of() { awk '/^table: /{ on = 1; next } on && /^\| /' <<<"$1"; }
 whole="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" |
   awk -v r="$root" '{ gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r); print }')"
 for d in idle created plain; do
   out="$(MOCK_DIR="$work/$d" "$script" "$work/$d" map 2>&1)"
-  [ "$(table_of "$out")" = "$whole" ] && grep -qx 'table: every row' <<<"$out" && ! grep -q '^release: ' <<<"$out" &&
-    ok "map ($d): the whole table, every row" || bad "map ($d): not the whole table ($(table_of "$out" | grep -c .) rows)"
+  [ -z "$(table_of "$out")" ] && ! grep -q '^table: ' <<<"$out" && grep -qx 'map:' <<<"$out" && ! grep -q '^release: ' <<<"$out" &&
+    ok "map ($d): the map's lines, no row of the table" || bad "map ($d): $(table_of "$out" | grep -c .) rows, map block: $(grep -c '^map:$' <<<"$out")"
 done
 # The release on a tag stays said without map (#908): the release row's
 # where and Next action cells on a release: line, not its row in the table.
@@ -1192,28 +1192,28 @@ if grep -qx 'table: this step and the next only; /plinth:guide map prints every 
   ok "where: not read, no map: no row of the table"
 else bad "where: not read printed rows: $(table_of "$out" | sed -n '3,$p' | cut -c1-60)"; fi
 out="$(MOCK_DIR="$work/idle" MOCK_GH_FAIL=1 "$script" "$work/idle" map 2>&1)"
-[ "$(table_of "$out")" = "$whole" ] && ok "where: not read, on map: the whole table" || bad "where: not read on map: not the whole table"
+[ -z "$(table_of "$out")" ] && grep -qx 'map:' <<<"$out" && ok "where: not read, on map: the map's lines, no row" || bad "where: not read on map: $(table_of "$out" | grep -c .) rows"
 
-# Off by default: without map, in either mode, how many and only a step to do
-# now (#1050); on map, every item. The project with the reviewer's caller has both kinds.
+# Off by default: in either mode, how many and only a step to do now (#1050);
+# every item in the features view (#1087). The project with the reviewer's caller has both kinds.
 put "$d2/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 out="$(MOCK_DIR="$d2" "$script" "$d2" 2>&1)"
-full="$(MOCK_DIR="$d2" "$script" "$d2" map 2>&1)"
-n="$(awk '/^off by default:$/{on=1; next} on && /^  why: /{exit} on' <<<"$full" | grep -c .)"
-if grep -qxF "off by default: $n left off; /plinth:guide map names each" <<<"$out" &&
+full="$(MOCK_DIR="$d2" "$script" "$d2" features 2>&1)"
+n="$(awk '/^features: /{on=1; next} on && /^  why: /{exit} on' <<<"$full" | grep -c .)"
+if grep -qxF "off by default: $n left off; /plinth:guide features names each" <<<"$out" &&
    grep -qF '  to do, if not done yet (whether it is done is not read): Turn on Codex code review for this repository' <<<"$out" &&
    ! grep -qE '^  (off|started off)' <<<"$out" && grep -q '^  why: ' <<<"$out" && [ "$n" -ge 3 ]
 then ok "focused: the off-by-default count ($n), only the step to do now named, and the rule"
 else bad "focused off-by-default:"; grep -A6 '^off by default' <<<"$out" | sed 's/^/        /'; fi
 d3="$(repo cli-quiet)"; put "$d3/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 out="$(MOCK_DIR="$d3" "$script" "$d3" 2>&1)"
-if grep -qE '^off by default: [0-9]+ left off; /plinth:guide map names each$' <<<"$out" && ! grep -qE '^  (off|started off|to do)' <<<"$out"
+if grep -qE '^off by default: [0-9]+ left off; /plinth:guide features names each$' <<<"$out" && ! grep -qE '^  (off|started off|to do)' <<<"$out"
 then ok "focused with nothing to do now: the count alone, no item named"
 else bad "focused, nothing to do now:"; grep -A4 '^off by default' <<<"$out" | sed 's/^/        /'; fi
 # Full without map (#1050): the count line focused prints, and only a step to
 # do now; the items are the map's. The answer then has nothing to hold back.
 off_count_only() { # <case> <out>: the count line, no off or started-off item, the rule
-  if grep -qE '^off by default: [0-9]+ left off; /plinth:guide map names each$' <<<"$2" && ! grep -qx 'off by default:' <<<"$2" &&
+  if grep -qE '^off by default: [0-9]+ left off; /plinth:guide features names each$' <<<"$2" && ! grep -qx 'off by default:' <<<"$2" &&
      ! grep -qE '^  (off|started off)' <<<"$2" && grep -q '^  why: ' <<<"$2" && grep -q '^mode: full ' <<<"$2"
   then ok "$1"; else bad "$1:"; grep -E '^mode: |^off by default|^  ' <<<"$2" | head -8 | sed 's/^/        /'; fi
 }
@@ -1225,16 +1225,20 @@ out="$(MOCK_GH_FAIL=1 MOCK_DIR="$work/idle" "$script" "$work/idle" 2>&1)"
 off_count_only "full with the state not read, no map: the count line, no item" "$out"
 d4="$(repo cli-full-caller)"; mkdir -p "$d4/.github/workflows"; : > "$d4/.github/workflows/third-party.yml"
 out="$(MOCK_DIR="$d4" "$script" "$d4" 2>&1)"
-full="$(MOCK_DIR="$d4" "$script" "$d4" map 2>&1)"
-n="$(awk '/^off by default:$/{on=1; next} on && /^  why: /{exit} on' <<<"$full" | grep -c .)"
+full="$(MOCK_DIR="$d4" "$script" "$d4" features 2>&1)"
+n="$(awk '/^features: /{on=1; next} on && /^  why: /{exit} on' <<<"$full" | grep -c .)"
 off_count_only "full before the first merge with the reviewer's caller: the count line" "$out"
-if grep -qxF "off by default: $n left off; /plinth:guide map names each" <<<"$out" && [ "$n" -ge 3 ] &&
+if grep -qxF "off by default: $n left off; /plinth:guide features names each" <<<"$out" && [ "$n" -ge 3 ] &&
    grep -qF '  to do, if not done yet (whether it is done is not read): Turn on Codex code review for this repository' <<<"$out"
 then ok "full without map: the map's count ($n), and the step to do now still named"
 else bad "full without map, to do now:"; grep -A4 '^off by default' <<<"$out" | sed 's/^/        /'; fi
-if grep -qx 'off by default:' <<<"$full" && [ "$(grep -cE '^  (off|started off|to do)' <<<"$full")" = "$n" ]
-then ok "full with map: every off-by-default item, as before"
-else bad "full with map:"; grep -A6 '^off by default' <<<"$full" | sed 's/^/        /'; fi
+if grep -q '^features: ' <<<"$full" && [ "$(grep -cE '^  (off|started off|to do)' <<<"$full")" = "$n" ]
+then ok "features: every off-by-default item"
+else bad "features:"; grep -A6 '^features' <<<"$full" | sed 's/^/        /'; fi
+out="$(MOCK_DIR="$d4" "$script" "$d4" map 2>&1)"
+if grep -qxF "off by default: $n left off; /plinth:guide features names each" <<<"$out" && ! grep -qE '^  (off|started off):' <<<"$out"
+then ok "map: the off-by-default count line, no item: the items are the features view's"
+else bad "map, off by default:"; grep -A4 '^off by default' <<<"$out" | sed 's/^/        /'; fi
 
 # then: the row the table's Then cell names, on every path that has a step.
 state "then: after /implement, the pull request row" "$work/unlabelled" \
@@ -1519,6 +1523,141 @@ grep -qF 'clears this answer too' "$guide_md" && grep -qF '`before: /clear`' "$g
   ok "the skill says /clear takes the answer with it, and /plinth:guide brings it back" || bad "no /clear line in the skill"
 grep -qF 'Next action cell' <<<"$(grep -F 'first time you use a command' "$guide_md")" &&
   ok "the skill glosses a command's first use from its Next action cell" || bad "no gloss rule in the skill"
+
+# ── the map (#1087) ──────────────────────────────────────────────────────
+# `map` prints a one-screen map (title, legend, three groups, the return
+# line, the next command, the footer), each line's name and command from the
+# table's rows; `map <step>` one step in depth; `features` every item that
+# started off, from files only. Marks only from the reads the issue names.
+map_of() { awk '/^map:$/{ on = 1; next } on && /^  /{ print; next } on { exit }' <<<"$1"; }
+# has <case> <output> <line start>...: each start begins a line of the map;
+# a start with a leading ! begins none.
+has() {
+  local c="$1" o="$2" m s miss=""; shift 2; m="$(map_of "$o")"
+  for s in "$@"; do
+    if [ "${s:0:1}" = '!' ]; then awk -v p="${s:1}" 'index($0, p) == 1 { f = 1 } END { exit !f }' <<<"$m" && miss="$miss
+        has: ${s:1}"
+    else awk -v p="$s" 'index($0, p) == 1 { f = 1 } END { exit !f }' <<<"$m" || miss="$miss
+        missing: $s"; fi
+  done
+  if [ -z "$miss" ]; then ok "$c"; else bad "$c$miss"; sed 's/^/        /' <<<"$m"; fi
+}
+target="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
+release v2.31.0
+pin_at="$(printf 'b%039d' 1)"
+printf '{"status":"identical","ahead_by":0,"behind_by":0}' > "$api/compare/$pin_at...v2.31.0?per_page=1&page=2.json"
+
+out="$(MOCK_DIR="$work/idle" "$script" "$work/idle" map 2>&1)"
+has "map, past the first merge: the title, the legend, the three groups, the return line, the next command, the footer" "$out" \
+  "  o/r: now An idea in your own words (step 2); " \
+  "  legend: ▶ you are here  ✓ done  ✗ needs attention  · not yet" \
+  "  Once (setup)" "  Each ticket (repeat)" "  When needed" \
+  "  ↻ next ticket: back to 4; a new idea: back to 2 (" \
+  "  next command:" "    /grilling" \
+  "  /plinth:guide map <step>: " "  /plinth:guide features: "
+has "map: create and the first merge done, read from the lines the script prints" "$out" \
+  "  ✓ 1 Create it with the wall: /plinth:new-project <owner>/<name>" \
+  "  ✓ 1 Merge its first pull request on green: merge #N"
+has "map: the step the project is at, marked, with one line on why now" "$out" \
+  "  ▶ 2 An idea in your own words: /grilling (you are here)" "      why now: "
+has "map: the loop's other steps, each with its command and no mark: they recur" "$out" \
+  "    3 A job bigger than one session: /to-spec, /to-tickets #N" \
+  "    4 A ticket ready: /clear, /implement #N" \
+  "    5 A pull request with checks running: /run" \
+  "    6 Green, and seen working: merge #N" "!  ✓ 4" "!  ✓ 5"
+has "map: when needed, unnumbered except step 9, release for this archetype, /retro named" "$out" \
+  "      Something broke: diagnose this: " "      Stopping, or coming back: /plinth:guide" \
+  "      A merged change to put out: on a version tag the person pushes, \`cli\` and \`library\` publish to PyPI" \
+  "      The project in use: " "      Looking back on a piece of work: /retro" "      Ending the project, or handing it over: " \
+  "!    7 " "!    8 "
+grep -qF '`backend`' <<<"$(map_of "$out")" && bad "map: the release line names another archetype's release" || ok "map: the release line names only this archetype's"
+has "map: the own-account step and the things set by hand: not yet, since nothing reads them" "$out" \
+  "  · 1 The agent's own account (recommended): " "  · 1 Four things by hand: "
+n="$(map_of "$out" | grep -c .)"
+[ "$n" -ge 25 ] && [ "$n" -le 35 ] && ok "map: one screen ($n lines)" || bad "map: $n lines, not about 30"
+"$names" "$arsenal" <(map_of "$out") >/dev/null && ok "map: every command it names is in the table" || bad "map names a command outside the table"
+
+out="$(MOCK_DIR="$work/created" "$script" "$work/created" map 2>&1)"
+has "map, before the first merge: created done, the first merge here, the token not yet" "$out" \
+  "  ✓ 1 Create it with the wall: " "  ▶ 1 Merge its first pull request on green: merge #2 (you are here)" \
+  "  · 1 A token that cannot change the checks: " "  /plinth:guide map <step>: " "!  ▶ 2"
+has "map, before the first merge: the next command is the ▶ row's" "$out" "  next command:" "    merge #2"
+out="$(MOCK_DIR="$work/plain" "$script" "$work/plain" map 2>&1)"
+has "map, no repository: create is here, nothing done" "$out" \
+  "  ▶ 1 Create it with the wall: /plinth:new-project <owner>/<name> (you are here)" "  · 1 Merge its first pull request on green: " "!  ✓"
+
+d="$(repo map-ticket)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+put "$d/issues.json" "$(issue 5 'Show monthly totals' ready-for-agent)"
+out="$(MOCK_ADMIN=true MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: the token step needs attention when the credential reaches Administration" "$out" \
+  "  ✗ 1 A token that cannot change the checks: " "  ▶ 4 A ticket ready: /clear, then /implement #5 (you are here)" "      why now: #5, not blocked"
+has "map: the next command after /clear, as on the ▶ row" "$out" "  next command:" "    /clear" "    /implement #5"
+out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: the token step done when the credential does not reach Administration" "$out" "  ✓ 1 A token that cannot change the checks: "
+out="$(MOCK_ADMIN_FAIL=1 MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: the admin-reach read unknown: the token step has no mark" "$out" "    1 A token that cannot change the checks: "
+out="$(MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=ok MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: the admin-reach read says read: the token step has no mark" "$out" "    1 A token that cannot change the checks: "
+out="$(MOCK_GH_FAIL=1 MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map, where not read: no ▶, the title says so" "$out" "  map-ticket: where it is was not read" "!  ▶" "  next command: not read"
+
+# Step 9: ✗ behind or a dependency pull request open, ✓ current, else no mark.
+put "$d/open.json" "$(pr 10 'chore(deps): bump y' true SUCCESS)"
+out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: step 9 needs attention with a dependency pull request open" "$out" "  ✗ 9 Between pieces of work: " "  ▶ 4 "
+printf '[]' > "$d/open.json"
+printf '_commit: %s\n_src_path: gh:coolbress/plinth-template\narchetype: backend\n' "$target" > "$d/.copier-answers.yml"
+out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: step 9 unmarked when the pin is not read and nothing is behind" "$out" "    9 Between pieces of work: " \
+  "      A merged change to put out: on a version tag the person pushes, \`backend\` its image to GHCR"
+mkdir -p "$d/.github/workflows"
+printf 'name: CI\non: pull_request\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s # v2.31.0\n' "$pin_at" > "$d/.github/workflows/ci.yml"
+out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: step 9 done when the template and the pin are current and no dependency pull request is open" "$out" "  ✓ 9 Between pieces of work: "
+printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' > "$d/.copier-answers.yml"
+out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: step 9 needs attention when the template is behind" "$out" "  ✗ 9 Between pieces of work: "
+
+# map <step>: one step in depth, before or after the folder; features.
+depth() { awk '/^step: /{ on = 1 } on' <<<"$1"; }
+want4="step: A ticket ready (step 4) (you are here)
+  purpose: $(awk -F ' \\| ' 'index($0, "| A ticket ready") == 1 { print $2 }' "$arsenal")"
+for form in "map 4" "map ticket" "DIR map 4" "map 4 DIR"; do
+  args="${form//DIR/$d}"
+  # shellcheck disable=SC2086
+  out="$(cd "$d" && MOCK_DIR="$d" "$script" $args 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && [ "$(depth "$out" | head -2)" = "$want4" ] && grep -qxF '  next command: /clear, then /implement #5' <<<"$out" &&
+     grep -q '^repository: o/r' <<<"$out" && ! grep -qx 'map:' <<<"$out" && [ -z "$(table_of "$out")" ]
+  then ok "$form: step 4 in depth, with the command, in the folder read"
+  else bad "$form (exit $rc):"; depth "$out" | head -8 | sed 's/^/        /'; grep -E '^repository' <<<"$out" | sed 's/^/        /'; fi
+done
+out="$(MOCK_DIR="$d" "$script" "$d" map merge 2>&1)"
+grep -qx 'step: Green, and seen working (step 6)' <<<"$out" && grep -q '^  how: ' <<<"$out" && grep -q '^  tool: ' <<<"$out" &&
+  grep -q '^  it leaves: ' <<<"$out" && grep -q '^  then: ' <<<"$out" && ! grep -q '^  next command: ' <<<"$out" &&
+  ok "map merge: step 6 in depth, no command: it is not the current step" || { bad "map merge:"; depth "$out" | sed 's/^/        /'; }
+out="$(MOCK_DIR="$d" "$script" "$d" map 1 2>&1)"
+[ "$(grep -c '^step: .*(step 1)' <<<"$out")" = 4 ] && ok "map 1: the four rows of step 1" || bad "map 1: $(grep -c '^step: ' <<<"$out") step blocks"
+out="$(MOCK_DIR="$d" "$script" "$d" map release 2>&1)"
+grep -q '^step: A merged change to put out (release and deploy' <<<"$out" && ok "map release: the release row" || bad "map release: $(grep '^step' <<<"$out")"
+out="$(MOCK_DIR="$d" "$script" "$d" map nonsense 2>&1)"; rc=$?
+[ "$rc" -eq 2 ] && grep -qF "guide-state: no step 'nonsense'" <<<"$out" && ok "map with an unknown step: exit 2, named" || bad "map nonsense: exit $rc: $(head -2 <<<"$out")"
+
+full="$(MOCK_GH_FAIL=1 MOCK_DIR="$d" "$script" "$d" features 2>&1)"; rc=$?
+want="$("$root/scripts/off-by-default.sh" cli "$d")"
+if [ "$rc" -eq 0 ] && [ "$(awk '/^features: /{ on = 1; next } on && /^  why: /{ exit } on' <<<"$full" | sed 's/^  //')" = "$want" ] &&
+   grep -q '^  why: ' <<<"$full" && ! grep -q '^where: ' <<<"$full"
+then ok "features: every item, from files only (gh not logged in), and the rule"
+else bad "features (exit $rc):"; sed 's/^/        /' <<<"$full" | head -12; fi
+out="$(MOCK_DIR="$work/gitlab" "$script" "$work/gitlab" features 2>&1)"
+grep -q '^features: ' <<<"$out" && grep -qE '^  (off|started off)' <<<"$out" && ok "features on a GitLab project: listed" || bad "features on GitLab: $(head -3 <<<"$out")"
+out="$("$script" features "$work/plain" 2>&1)"
+grep -q '^features: ' <<<"$out" && grep -qE '^  off: ' <<<"$out" && ok "features with no repository: the items for every archetype" || bad "features, no repository: $(head -3 <<<"$out")"
+
+# The skill: the three forms, answered from the printed lines.
+for w in '`/plinth:guide map <step>`' '`/plinth:guide features`' 'from the printed `map:` lines' 'no drawn cycle'; do
+  grep -qF -- "$w" "$guide_md" && ok "the skill says: $w" || bad "the skill does not say: $w"
+done
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"
