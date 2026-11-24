@@ -111,16 +111,23 @@ type an answer instead):
    cannot keep the ruleset: the generator reads your plan at this answer and
    offers public instead, upgrading and starting again, or stopping. On
    GitLab.com private is the default.
-6. **Use the recommended defaults?** MIT licence (Proprietary for a private
-   project), in `~/my-app`, no third-party reviewer, no code of conduct, no
-   description. Yes asks nothing more. Customize asks the licence; then, on
-   GitHub, whether a code reviewer such as Codex's is already connected to
-   your account, a code of conduct (with a contact; not asked when your
-   account's own applies) and a one-line description; then the folder, with
-   `~/my-app` offered and any other path typed into Other.
+6. **Every answer in one table.** The repository and its host, the kind,
+   who may see it, the licence (MIT for a public project, Proprietary for a
+   private one), on GitHub the third-party reviewer (none), the code of
+   conduct (none, or your account's own when it publishes one) and the
+   description (your sentence from step 2, cut to one line of 350
+   characters), and the folder (`~/my-app`). The first button names what it
+   does, for example "Create public repository you/my-app". **Change some**
+   picks rows to change: the name and folder, the description, the licence,
+   or the reviewer and code of conduct (a code of conduct asks where reports
+   go); only those are asked, then the table comes back with the changed
+   rows marked. To change who may see it, the kind or the host, type it into
+   Other ("make it private"): that question comes back, and after the
+   visibility the licence too.
 
 Where the picker cannot be shown (`claude -p`), the same questions come as
-text, numbered.
+text, numbered; at the table, you type the numbers to change, comma-separated,
+or 0 to keep.
 
 A reviewer you say is connected gets the check `third-party / review` on
 every pull request. It reports and is not required: a pull request still

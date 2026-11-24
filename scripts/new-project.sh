@@ -167,8 +167,12 @@ case "$desc_said" in *+*-*|*-*+*) echo "--description and --no-description: choo
 # characters, so neither is refused or cut after the repository exists.
 if [ "$coc" = 1 ] && { [ -z "${coc_contact//[[:space:]]/}" ] || [[ "$coc_contact" == *$'\n'* ]]; }; then
   echo "--code-of-conduct= needs one line: the email address or web page reports go to"$'\n'"$usage" >&2; exit 2; fi
-if [[ "$desc" == *$'\n'* ]] || [ "${#desc}" -gt 350 ]; then
-  echo "--description is one line of at most 350 characters (got ${#desc})"$'\n'"$usage" >&2; exit 2; fi
+# Characters, not bytes, whatever the locale: under LC_ALL=C ${#desc} counts a
+# Hangul syllable as three, and a 350-character Korean line was refused (#1068).
+# A UTF-8 character is every byte that is not a continuation byte (0x80-0xBF).
+desc_len="$(printf '%s' "$desc" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')"
+if [[ "$desc" == *$'\n'* ]] || [ "$desc_len" -gt 350 ]; then
+  echo "--description is one line of at most 350 characters (got $desc_len)"$'\n'"$usage" >&2; exit 2; fi
 # stop, warn, below, choices_of, read_into and unread_why, shared with the GitLab door.
 # shellcheck source=scripts/lib/door.sh
 . "$here/lib/door.sh"

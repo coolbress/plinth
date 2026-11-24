@@ -133,8 +133,8 @@ is typed into the chat, and none of the questions below needs one.
 2. **What to make**, when there is no `--archetype=`, in text (it has no
    choices): "What do you want to make? A sentence or two in your own words
    is enough; \"I don't know\" is an answer too." Keep the answer: the
-   archetype's reason quotes it, the names translate it, and the visibility
-   reads it. With `--archetype=` given, steps 2, 3 and 4 are not asked.
+   archetype's reason quotes it, the names translate it, the visibility
+   reads it, and the table of step 8 shortens it into the description. With `--archetype=` given, steps 2, 3 and 4 are not asked.
 3. **Follow-ups**, only when the answer to step 2 leaves the archetype open
    (it fits two kinds, says too little, or is "I don't know"); one that names
    what is made asks none. Ask only what decides between the kinds still open:
@@ -233,7 +233,7 @@ is typed into the chat, and none of the questions below needs one.
    more names until it passes. A typed name that stops is shown and
    explained the same way, and the name is asked again.
 7. **Who may see the project**, when neither `--public` nor `--private` is
-   given: ask it alone, before the defaults, since it decides the license
+   given: ask it alone, before the table, since it decides the license
    recommended, what the wall can hold on the account's plan and who can read
    the code. Header `Visibility`: "Who may see this project's code?" On
    GitHub, list **Anyone on the internet (public) (Recommended)** first: GitHub
@@ -265,48 +265,128 @@ is typed into the chat, and none of the questions below needs one.
    at the ruleset: show the line, say that if GitHub refuses the ruleset the
    repository is deleted again, and ask the same `Plan` question with
    **Private anyway** in place of the upgrade.
-8. **The recommended defaults.** Of the third-party reviewer
-   (`--third-party-review`/`--no-third-party-review`), the code of conduct
-   (`--code-of-conduct=`/`--no-code-of-conduct`), the description
-   (`--description=`/`--no-description`), license (`--license=`) and
-   directory (`--dir=`), take the ones the arguments do not give. The host
-   and the visibility are known by now. First, when the code of conduct is
-   among them and the host is GitHub, read whether the owner already
-   publishes one:
+8. **Every answer in one table, before anything is created.** In a chat
+   there is no Back button: the table is the way back, so it holds every
+   answer, the two that cannot be taken back (the name and the visibility)
+   among them. The answers the questions above left open take their
+   defaults. On GitHub, when neither `--code-of-conduct=` nor
+   `--no-code-of-conduct` is given, read first whether the owner already
+   publishes a code of conduct:
 
    ```bash
    ${CLAUDE_PLUGIN_ROOT}/scripts/owner-files.sh [<owner>]
    ```
 
    with the owner from the name, or nothing for a bare name. A
-   `code_of_conduct: yes` line means the owner's applies: leave the code of
-   conduct out of every question below and add no flag for it. Any other
-   line (`no`, or `unknown: …`) leaves it to ask; the script stops on its
-   own if the lookup fails again. If nothing is left, ask nothing. Otherwise
-   ask one question, header `Defaults`, naming only those left with their
-   defaults: "Use the recommended defaults? MIT license, in `~/<name>`, no
-   third-party reviewer, no code of conduct, no description." It never names
-   the host or the visibility. On GitLab.com, leave out the reviewer, the
-   code of conduct and the description, which are GitHub only. The license
-   follows the visibility: for a private project, say "Proprietary license"
-   in place of "MIT license".
+   `code_of_conduct: yes` line means the owner's applies: row 6 says so, it
+   adds no flag, and **Reviewer and code of conduct** asks the reviewer only,
+   since the script ignores `--code-of-conduct` then. Any other line (`no`,
+   or `unknown: …`) leaves row 6 to its default; the script stops on its own
+   if the lookup fails again.
+
+   Before showing the table, check it once with every flag it holds, as
+   step 6 checked the name:
+
+   ```bash
+   ${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh <name> --check <flags of the table>
+   ```
+
+   with the name once and the table's flags only: each row is a flag, those
+   the arguments gave included, and a name in `$ARGUMENTS` given again stops
+   the check (`one name only`).
+
+   A stop about the description means the line is still too long: shorten
+   it and check again. Any other stop is shown and explained as
+   [What the script printed](#what-the-script-printed) says.
+
+   Then show the table, its labels in the person's language and each flag
+   as written:
+
+   | # | Row | Default when not asked | Flag |
+   | --- | --- | --- | --- |
+   | 1 | Repository and host | `owner/name` on GitHub, or on GitLab.com; a bare name is shown under the login | `--host=github` or `--host=gitlab`, and the name |
+   | 2 | Kind | The archetype of step 4, and for `web` where it runs | `--archetype=`, and `--hosting=` for `web` |
+   | 3 | Visibility | The answer of step 7 | `--public` or `--private` |
+   | 4 | License | MIT for a public project, Proprietary for a private one | `--license=mit`, `--license=apache-2.0` or `--license=proprietary` |
+   | 5 | Third-party reviewer | None | `--no-third-party-review` or `--third-party-review` |
+   | 6 | Code of conduct | None; "the owner's applies (`<owner>/.github`)" when `owner-files.sh` says yes | `--no-code-of-conduct` or `--code-of-conduct=<contact>`; none when the owner's applies |
+   | 7 | Description | The sentence of step 2, shortened to one line of at most 350 characters in its own language; none when step 2 was not asked or its answer was "I don't know" | `--description=<line>` or `--no-description` |
+   | 8 | Local folder | `~/<name>`, written out as an absolute path | `--dir=<path>` |
+
+   On GitLab.com leave out rows 5, 6 and 7, and keep the other rows'
+   numbers: the reviewer and the code of conduct are GitHub only, and the
+   GitLab door sets no description yet.
+
+   Ask, header `Create`: "Create it with these answers?"
 
    | Label | Description |
    | --- | --- |
-   | Yes (Recommended) | Create it with these. |
-   | Customize | Choose each one. |
+   | Create `VISIBILITY` repository `owner/name` (Recommended) | Creates it with every row above. |
+   | Change some | Pick the rows to change; the table comes back after. |
 
-   Every answer becomes a flag, a default included, so that the command
-   said before the run (below) asks nothing when typed again. **Yes** adds
-   the flag for each default still open: `--no-third-party-review`,
-   `--no-code-of-conduct`, `--no-description`, `--license=mit` and
-   `--dir=<home>/<name>`, with the home directory written out as an absolute
-   path; on GitLab.com, none of the three GitHub-only flags; for a private
-   project, `--license=proprietary` in place of `--license=mit`. The host of
-   step 1 is a flag too: `--host=github` or `--host=gitlab`.
-   **Customize** asks each choice still open in one call, leaving out what
-   the arguments give and what does not apply: the license and, on GitHub,
-   the reviewer, the code of conduct and the description.
+   `VISIBILITY` is `public` or `private`, and on GitLab.com the label reads
+   "Create `VISIBILITY` project `owner/name` on GitLab.com". No second "are
+   you sure": the label says what happens, and choosing it runs the script.
+
+   **Change some** asks one question, header `Change`, a multi-select:
+   "Which do you want to change? To change the visibility, the kind or the
+   host, type it into Other." Its choices are groups of rows:
+
+   | Label | Rows |
+   | --- | --- |
+   | Name and folder | rows 1 and 8 |
+   | Description | row 7 |
+   | License | row 4 |
+   | Reviewer and code of conduct | rows 5 and 6 |
+
+   On GitLab.com leave out **Description** and **Reviewer and code of
+   conduct**, as their rows are. Only the groups picked are asked, in one
+   call:
+
+   - **Name and folder**: the name of step 6, then the folder (below). A
+     new name is checked with the table's check above, the new name in place
+     of the old: step 6's command would pass the old one again in
+     `$ARGUMENTS` and stop (`one name only`).
+   - **Description**: header `Description`: "A one-line description for the
+     repository's page?" **Keep it**: the row's line. **None**:
+     `--no-description`; it can be added later on the repository's page. A
+     line typed into Other replaces it, shortened the same way.
+   - **License**: header `License` (below).
+   - **Reviewer and code of conduct**: headers `Reviewer` and `Conduct`
+     (below), `Conduct` left out when the owner's applies.
+
+   A code of conduct turned on asks its report contact before the table
+   returns, in text, since it has no choices: "Where should reports under
+   the code of conduct go? An email address or a web page; anyone who can
+   read the repository can read it." The answer becomes
+   `--code-of-conduct=<answer>`. An empty answer is asked again.
+
+   The visibility, the kind and the host are changed by what is typed into
+   Other ("make it private"), which goes back to that question: step 7, step
+   4 (and step 5 for `web`), or step 1 with its preflight and the name's
+   check again. A visibility changed this way asks the license again, with
+   the new recommendation first. A host changed this way drops or adds the
+   rows only GitHub carries. "Stop" ends it, with nothing created. A typed
+   answer that is none of these is asked again.
+
+   Then show the table again, each changed row marked "(changed)" after its
+   value, and ask header `Create` again.
+
+   A row changed at the table replaces its flag among the arguments: the
+   check, the run and the command said before it carry the new flag only,
+   never both (`--public` and `--private` together stop the script). The
+   name is replaced the same way: one name, the new one.
+
+   When the arguments give every row, show the table and ask nothing: the
+   command said before an earlier run asks no question when typed again.
+
+   In text (a `claude -p` run, or a call with no answer), show the same
+   numbered table, then: "Create `VISIBILITY` repository `owner/name`? Type
+   the numbers to change, comma-separated; 0 to keep." Each number asks its
+   row's question in text, rows 1 to 3 going back to their question as
+   above; then the table again, the changed rows marked.
+
+   The questions the groups ask:
 
    - Header `License`: "Which license?" Three choices, each saying what
      it grants; for a private repository list **Proprietary
@@ -331,27 +411,21 @@ is typed into the chat, and none of the questions below needs one.
      `/plinth:floor-check` does not ask for it. **Yes, the Contributor
      Covenant**: the most used one, version 3.0, written as
      `CODE_OF_CONDUCT.md`; it names where reports of bad behaviour go, so
-     the next question asks that.
-   - Header `Description`: "A one-line description for the repository's
-     page? Type it into Other." **Skip for now**: `--no-description`; it can
-     be added later on the repository's page. A line typed into Other
-     becomes `--description=<that line>`, at most 350 characters.
+     its contact is asked next.
+   - Header `Folder`: "Where should the local copy go?" with one choice,
+     **`~/<name>` (Recommended)**, a new folder in your home directory
+     (`--dir=<home>/<name>`, written out); another path is typed into Other
+     and becomes `--dir=<path>`. It must not exist yet, or be empty.
 
-   With **Yes** to the code of conduct, ask in text, since it has no
-   choices: "Where should reports under the code of conduct go? An email
-   address or a web page; anyone who can read the repository can read it."
-   The answer becomes `--code-of-conduct=<answer>`. An empty answer is
-   asked again.
+   A typed answer to `License`, `Reviewer` or `Conduct` that is none of its
+   choices is asked again.
 
-   Then, when no `--dir=` was given, ask the directory on its own, header
-   `Folder`: "Where should the local copy go?" with one choice,
-   **`~/<name>` (Recommended)**, a new folder in your home directory
-   (`--dir=<home>/<name>`, written out); another path is typed into Other
-   and becomes `--dir=<path>`. It must not
-   exist yet, or be empty.
-
-   A typed answer that is none of the choices (other than the folder and
-   the description) is asked again.
+   Every row becomes a flag, a default included, so that the command said
+   before the run (below) asks nothing when typed again: the host
+   (`--host=github` or `--host=gitlab`), `--archetype=`, `--public` or
+   `--private`, `--license=`, `--dir=` with the home directory written out
+   as an absolute path, and on GitHub the reviewer's, the code of conduct's
+   (none when the owner's applies) and the description's.
 
 Then run, with the arguments as typed and the flags the answers added:
 
