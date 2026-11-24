@@ -1286,7 +1286,7 @@ ${repush:+$repush
 }${baseline_line:+  first commit on main: $baseline_line
 }  $day_names and what to do with Dependabot's pull requests are in the pull request's body and in README.md under "First day"
 $admin_line
-  next: cd $dir && claude, then type /plinth:guide for the command after this merge, and /plinth:guide map for the whole way
+  next: cd $dir && claude, then type /plinth:guide for the command after this merge, and /plinth:guide map for the whole way on one screen
 EOF
 [ "${PLINTH_TOKEN_SOURCE:-}" != prompt ] || \
   echo "  if your everyday gh token is fine-grained with selected repositories, add $name to it: https://github.com/settings/personal-access-tokens"

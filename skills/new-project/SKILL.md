@@ -604,6 +604,7 @@ What to do with the output:
   `/plinth:guide` in the new repository's folder; it names the command to
   type next and, until the first merge, explains this step and the next in
   plain words, and
-  `/plinth:guide map` shows the whole way.
+  `/plinth:guide map` shows the whole way on one screen, and
+  `/plinth:guide map <step>` one step in depth.
 
 Do not edit the generated repository in this session.

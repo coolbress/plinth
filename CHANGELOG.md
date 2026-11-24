@@ -37,6 +37,21 @@ pull requests and have no tag.
   The step depth now shows only before the first merge or on `map`, which
   partly reverses #908. No progress bar and no step fraction (#1076).
 
+- `/plinth:guide map` is a one-screen map of the whole way, about 30 lines,
+  in place of every row of the arsenal's table: a title (the project, the
+  step it is at, the changes merged), a legend, the setup steps once, steps
+  2 to 6 with one written return line, the steps for when they are needed,
+  the next command, and two footer lines. Marks come only from reads: `▶`
+  the step the project is at, `✓` and `✗` where a read shows done or needing
+  attention (creation, the first merge, the token step's Administration
+  reach, step 9's template, pin and Dependabot pull requests), `·` for not
+  yet. `/plinth:guide map <step>` (1 to 9, or a name such as `merge` or
+  `release`) prints that step in depth, and `/plinth:guide features` lists
+  every item that started off from files alone, so it also answers offline
+  and on GitLab; the off-by-default count line points there. Before, `map 4`
+  read `4` as the folder. This reverses #908's "every step in depth" for
+  `map`; the depth moves to `map <step>` (#1087).
+
 - `ci / deps` on a private GitHub repository without GitHub Code Security,
   where GitHub refuses dependency review, now checks the dependency versions
   a pull request adds instead of reporting "not yet confirmed": osv-scanner

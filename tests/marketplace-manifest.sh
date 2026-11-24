@@ -47,8 +47,9 @@ plinth_says = entries["plinth"]["description"]
 check("No hooks in the default set." in plinth_says and "hook" not in plinth_says.replace("No hooks in the default set.", "").lower(),
       "plinth entry: the description says the default set has no hooks, and names none")
 # One tool per slot: frontend-design and taste-skill are never both on (#68, from #149).
-# Impeccable is listed in the arsenal with its own installer and is not a marketplace entry.
-for n in ("frontend-design", "impeccable", "i-have-adhd", "playbook", "review"):
+# Impeccable is listed in the arsenal with its own installer and is not a marketplace entry;
+# claude-security and sentry are listed with the official marketplace's install line (#1080).
+for n in ("frontend-design", "impeccable", "claude-security", "sentry", "i-have-adhd", "playbook", "review"):
     check(n not in entries, f"no marketplace entry named {n}")
 
 pinned = {n: p["source"].get("sha") for n, p in entries.items() if isinstance(p["source"], dict)}
@@ -154,8 +155,11 @@ installed, _, not_installed = body.partition("## Listed, not installed")
 def rows(text):
     return re.findall(r"^\| `([^`]+)` \|", text, re.M)
 check(rows(installed) == names, f"arsenal: 'Installed by default' lists exactly the dependencies: {rows(installed)}")
-check(rows(not_installed) == listed + ["impeccable"],
-      f"arsenal: 'Listed, not installed' lists the catalog entries and impeccable: {rows(not_installed)}")
+official = ["claude-security", "sentry"]
+check(rows(not_installed) == listed + ["impeccable"] + official,
+      f"arsenal: 'Listed, not installed' lists the catalog entries, impeccable, claude-security and sentry: {rows(not_installed)}")
+check(all(f"claude plugin install {n}@claude-plugins-official" in " ".join(not_installed.split()) for n in official),
+      "arsenal gives the official marketplace's install line of claude-security and sentry")
 check(all(f"claude plugin install {n}@plinth" in " ".join(not_installed.split()) for n in listed),
       "arsenal gives the install line of each catalog entry")
 readme = (root / "README.md").read_text()

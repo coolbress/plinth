@@ -572,5 +572,5 @@ End the report with one line in the person's language: try typing
 `/plinth:guide`; it names in plain words the one command to type next, then
 what is open and what happened so far, and, before the first merge, how to
 use the tools of that step and the next; `/plinth:guide map` shows the whole
-way. On a repository plinth did not make,
+way on one screen, and `/plinth:guide map <step>` one step in depth. On a repository plinth did not make,
 it points back here.

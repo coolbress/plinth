@@ -225,7 +225,7 @@ change the repository's rules, and so whether an agent using it could; and
 the `next:` line:
 
 ```text
-  next: cd /home/you/my-app && claude, then type /plinth:guide for the command after this merge, and /plinth:guide map for the whole way
+  next: cd /home/you/my-app && claude, then type /plinth:guide for the command after this merge, and /plinth:guide map for the whole way on one screen
 ```
 
 A `to do now` block follows when you said a code reviewer is connected, then
@@ -276,9 +276,9 @@ pull request's branch, and the next session starts from `main`). Then
 until this first pull request is merged, explains in plain words the step you
 are at and the next one, each with its tool and how to use it. After the
 first merge it says the command, what is open and what happened so far,
-without that depth. `/plinth:guide map` shows the whole way, every step
-with its tool and how to use it; it is worth reading once before this first
-merge.
+without that depth. `/plinth:guide map` shows the whole way on one screen,
+each step with its command, and `/plinth:guide map <step>` one step in depth;
+the map is worth reading once before this first merge.
 
 If the `administration:` line said the login has it, do its link next, before
 the agent works on its own: about five minutes for a token without that
