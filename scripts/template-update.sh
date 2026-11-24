@@ -68,8 +68,11 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 checker="$here/floor-check.py"
 state_name="plinth-template-update"
 
-# A path as a shell word, for a line the user or the skill runs as printed.
-q() { printf '%q' "$1"; }
+# A path as a shell word, for a line the user or the skill runs as printed:
+# sq, the doors' own quoting, which shows Hangul as typed (#1065).
+# shellcheck source=scripts/lib/shell-word.sh
+. "$here/lib/shell-word.sh" || { printf 'template-update: no %s\n' "$here/lib/shell-word.sh" >&2; exit 1; }
+q() { sq "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
 usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested | --archetype <a> [--keep <path> | --drop <path>]...] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 

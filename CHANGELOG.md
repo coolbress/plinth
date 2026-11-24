@@ -54,6 +54,17 @@ pull requests and have no tag.
   are unchanged. That read takes the newest 100 `ready-for-agent` issues, and
   the line says so when it comes back full.
 
+- A command printed to be pasted shows Hangul as typed (#1065). On macOS's
+  bash 3.2, `printf %q` printed part of a Hangul argument as escaped bytes,
+  so the line could not be read off the screen. `/plinth:new-project`'s
+  "public instead" command at the private-plan stops, the GitLab door's
+  `cd <directory>` lines, the commands `scripts/template-update.sh` prints
+  and the retry line of `scripts/merge-when-green.sh` now quote with the
+  admin-token command's single quotes, from one function in
+  `scripts/lib/shell-word.sh`. A value with a space or a quote is printed
+  inside single quotes where it had backslashes (`'My Project'`, not
+  `My\ Project`); pasted, it is the same argument.
+
 ## [2.43.0] - 2026-11-24
 
 An archetype move between one that publishes to PyPI (`cli`, `library`) and one that publishes an image (`backend`, `data-ml`) reaches the default branch without a hand edit. `ci / diff-size` leaves the rewritten `release.yml` out of the count in a pull request that changes `archetype:`, so `/plinth:template-update --finish` splits the move by file. A project gets this by raising both `coolbress/plinth` `uses:` lines to this release; the plan says so when the called plinth lacks it. `/plinth:new-project` refuses a repository name longer than 46 characters before it creates anything, because a longer one makes the new project's lint check fail. The first login asks only for `repo` and `workflow`, and `delete_repo` is a separate opt-in. In full mode, `/plinth:guide` says how many features are off by default and points at `map` instead of listing each. New projects render plinth-template v1.50.3 and call plinth v2.42.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise unless it wants the archetype-move rule.

@@ -813,8 +813,8 @@ if [ "$rc" = 3 ] && grep -q "CONTRIBUTING.md.rej" <<<"$out" && ! grep -q "pr cre
 then ok "a .rej staged with git add -A is still a conflict: nothing committed, nothing opened"
 else bad "staged .rej (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
-# ── the printed --finish line survives a path with spaces ───────────────
-spaced="$work/My Projects"; mkdir -p "$spaced"
+# ── the printed --finish line survives a path with spaces and Hangul ────
+spaced="$work/내 Projects"; mkdir -p "$spaced"
 repo="$spaced/sp"; BARE="$spaced/sp.git"
 git init -q -b main "$repo"; mkdir -p "$repo/.github/workflows"
 cp "$work/conflict/.copier-answers.yml" "$work/conflict/CONTRIBUTING.md" "$work/conflict/AGENTS.md" "$repo/" 2>/dev/null
@@ -830,7 +830,11 @@ wt="$spaced/sp-template-$target_ref"
 printf '# Contributing\nresolved\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add -A
 reset_logs
 out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" bash -c "$line" 2>&1)"; rc=$?
-if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log"; then ok "the printed --finish line runs as printed under a directory with a space"
+# Copied off a screen: the path is printed as typed, inside single quotes,
+# not as the escaped bytes of bash 3.2's printf %q (#1065).
+if grep -qF -- "--finish '$wt'" <<<"$line"; then ok "the printed --finish line shows a path with Hangul as typed"
+else bad "the printed --finish line does not show the path as typed: '$line'"; fi
+if [ "$rc" = 0 ] && grep -q "pr create" "$work/gh.log"; then ok "the printed --finish line runs as printed under a directory with a space and Hangul"
 else bad "spaced path (rc=$rc): '$line'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # Finished as printed, with no --resolved: the description claims no side
 # and no one's word for it (Codex review on #558).
