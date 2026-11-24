@@ -1468,6 +1468,19 @@ state "a failing check: the counts line, no event" "$d" \
   "problems: a check fails on pull request #9" "!  2026-10-22 #2" "!the newest"
 printf '[]' > "$d/open.json"
 
+# Review on #1090. Two people's pull requests merged the same day: the first
+# merge is the earlier timestamp, not the one created first.
+d2="$(repo so-far-same-day)"
+printf '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":2},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[{"number":1,"title":"docs: opened first, merged at six","mergedAt":"2026-10-22T18:00:00Z","author":{"__typename":"User","login":"someone"}},{"number":2,"title":"docs: opened second, merged at nine","mergedAt":"2026-10-22T09:00:00Z","author":{"__typename":"User","login":"someone"}}]}}}}' > "$d2/history.json"
+state "so far: the first merge the same day is the earlier timestamp" "$d2" \
+  "  2026-10-22 #2 first merge by a person: docs: opened second, merged at nine" "!#1 first merge by a person"
+# Before the first merge, a failing check on the first pull request is a
+# problem: the history is the counts line.
+d3="$(repo so-far-first-fails)"
+put "$d3/open.json" "$(pr 1 'docs: first pull request through the wall' false FAILURE)"
+state "before the first merge: a failing first pull request is a problem" "$d3" \
+  "problems: a check fails on pull request #1" "so far: counts only while a problem is open"
+
 # The latest completed run of ci.yml on main: pass, fail (a problem), none,
 # not read; each leaves the route as it was.
 base="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"

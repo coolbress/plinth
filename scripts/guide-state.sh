@@ -274,7 +274,7 @@ if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
-      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"')] | @tsv' 2>&1)"; then
+      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"'), .mergedAt] | @tsv' 2>&1)"; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
 elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body --jq "$issue_rows" 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
@@ -857,6 +857,12 @@ fi
 # Its own read: failing, it leaves every other line as it is.
 problems=""
 [ -z "$broken" ] || problems="a check fails on pull request #$(field 1 <<<"$broken")"
+# Before the first merge `broken` is empty by design (the first pull request
+# has its own route), but its failing check still blocks (#1090 review).
+if [ -z "$broken" ] && [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
+  first_fail="$(awk -F '\t' '$4 == "fail"' <<<"$people_prs" | head -1)"
+  [ -z "$first_fail" ] || problems="a check fails on pull request #$(field 1 <<<"$first_fail")"
+fi
 [ -z "${token_open:-}" ] || problems="${problems:+$problems; }the token step is not done"
 if run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
       --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)"; then
@@ -913,7 +919,7 @@ history_jq='def clean: gsub("[\t\n\r]"; " ");
      ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
        | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", $at[0:10], .name, "tag", ""]),
      ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
-       | ["first", .mergedAt[0:10], "#\(.number)", (.title | clean)]))
+       | ["first", .mergedAt, "#\(.number)", (.title | clean)]))
   | @tsv'
 if history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f query="$history_q" \
       --jq "\"$repo\" as \$repo | $history_jq" 2>&1)"; then
@@ -924,13 +930,14 @@ if history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo
     # The first merge by a person: the earliest of the GraphQL read's, and of
     # the merged ones read above unless that read was cut.
     events="$( { awk -F '\t' '$1 == "event" || $1 == "first"' <<<"$history"
-        [ -n "$past_first" ] || awk -F '\t' '$2 == "person" { print "first\t" $3 "\t#" $1 "\t" $4 }' <<<"$merged"
+        [ -n "$past_first" ] || awk -F '\t' '$2 == "person" { print "first\t" ($5 != "" ? $5 : $3) "\t#" $1 "\t" $4 }' <<<"$merged"
         awk -F '\t' '$2 == "person" && $4 ~ /^feat(\([^)]*\))?!?:/ { print "event\t" $3 "\t#" $1 "\tmerged\t" $4 }' <<<"$merged"; } |
       awk -F '\t' '
         $1 == "first" { if (fd == "" || $2 < fd) { fd = $2; fr = $3; ft = $4 }; next }
         $2 != "" { n++; d[n] = $2; r[n] = $3; k[n] = $4; t[n] = $5 }
         END {
-          if (fd != "") { n++; d[n] = fd; r[n] = fr; k[n] = "first merge by a person"; t[n] = ft; first = fr }
+          # Compared on the whole timestamp, printed as the day (#1090 review).
+          if (fd != "") { n++; d[n] = substr(fd, 1, 10); r[n] = fr; k[n] = "first merge by a person"; t[n] = ft; first = fr }
           for (i = 1; i <= n; i++) {
             # One line per pull request: its first merge, not also its feat: merge.
             if (k[i] == "merged" && r[i] == first) continue
