@@ -117,8 +117,8 @@ case "$step" in
   choices)       case "${MOCK_CHOICES:-ok}" in
                    garbage)   printf '!!! not base64 !!!' ;;
                    nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
-                   hosting) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nhosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' | base64 ;;
-                   *) printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}" | base64 ;;
+                   hosting) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'hosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' ; } | base64 ;;
+                   *) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'plinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}"; } | base64 ;;
                  esac ;;
   # The owner's shared community-health files: present, absent (404) or
   # unreadable (any other failure). `gh` prints "Not Found" on a 404.
@@ -347,6 +347,8 @@ export REAL_GIT="$real_git"
 TEMPLATE_REF="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 TEMPLATE_SHA="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$root/scripts/new-project.sh")"
 export TEMPLATE_REF TEMPLATE_SHA
+# The template's name validators, as its copier.yml carries them (#1067).
+export MOCK_VALIDATORS="$root/tests/fixtures/copier-name-validators.yml"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 export CLAUDE_CONFIG_DIR="$work/claude"
@@ -422,6 +424,54 @@ then ok pre-scope "the fix asks for repo,workflow; delete_repo is named apart, w
 else bad pre-scope "the scope or fine-grained stop asks for delete_repo with the needed scopes, or names no opt-in"; cat "$work/home-pre-scope/out" "$work/home-pre-fine/out" | sed 's/^/        /'; fi
 # The install needs git 2.37 (tests/install-smoke.sh); the door asks the same.
 E="MOCK_GIT_VERSION=2.36.1" run git-236 err no no "git 2.36.1 is too old (2.37 or newer" -- --preflight
+
+echo "--preflight: every miss at once, git's identity among them (#1067)"
+# Before #1067 the first miss stopped the run, so a token without workflow on
+# a machine where git cannot name the author showed only the scope. git is
+# told to use its configuration only, with none there: it cannot guess.
+noident="-u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true"
+E="$noident MOCK_SCOPES=repo" run pre-two-misses err no no "2 things to fix; nothing was created:" -- --preflight
+for phrase in "lacks the scope(s) workflow" "fix: gh auth refresh -h github.com -s repo,workflow" \
+              "git cannot tell who makes the first commit" 'fix: git config --global user.name "Your Name"' \
+              'fix: git config --global user.email "you@example.com"'; do
+  grep -qF -- "$phrase" "$work/home-pre-two-misses/out" && ok pre-two-misses "one run shows \"$phrase\"" \
+    || { bad pre-two-misses "the run does not show \"$phrase\""; sed 's/^/        /' "$work/home-pre-two-misses/out"; }
+done
+E="$noident" run pre-no-ident err no no "git cannot tell who makes the first commit" -- --preflight
+grep -qF "things to fix" "$work/home-pre-no-ident/out" && bad pre-no-ident "one miss is counted as several" || ok pre-no-ident "one miss is shown alone, without a count"
+# The whole run stops at it too, before the create (the GitHub door creates
+# the repository before its first commit).
+E="$noident" run no-ident err no no "git cannot tell who makes the first commit" -- probe
+# Tools missing together: no uv beside a logged-out gh, both named.
+E="MOCK_NOAUTH=1" P="$work/bin-nouv" run pre-nouv-noauth err no no "2 things to fix; nothing was created:" -- --preflight
+grep -qF "uv is not installed" "$work/home-pre-nouv-noauth/out" && grep -qF "gh is not logged in" "$work/home-pre-nouv-noauth/out" \
+  && ok pre-nouv-noauth "uv and the login both named" || { bad pre-nouv-noauth "not both named"; sed 's/^/        /' "$work/home-pre-nouv-noauth/out"; }
+
+echo "--check: the name and the visibility at the answer, nothing created (#1067)"
+# Every check the run makes before it renders: the skill runs it on each name
+# before showing it, and on private at the visibility answer.
+no_writes() { # <case>
+  if grep -E '^gh (repo|label|pr) |^gh api .*(-X|--method) |^uvx .*copier' "$work/home-$1/calls.log" | grep -q .
+  then bad "$1" "--check wrote or rendered:"; sed 's/^/        /' "$work/home-$1/calls.log"
+  else ok "$1" "--check created, wrote and rendered nothing"; fi
+}
+run check-ok ok no no "check: ok (tester/probe, public, cli, folder" -- probe --archetype=cli --check
+no_writes check-ok
+[ ! -e "$work/home-check-ok/probe" ] && ok check-ok "no folder was made" || bad check-ok "--check made the folder"
+E="MOCK_EXISTS=1" run check-taken err no no "already exists; the door creates new repositories only" -- probe --check
+mkdir -p "$work/home-check-folder/probe"; : > "$work/home-check-folder/probe/notes.txt"
+run check-folder err no no "already exists and is not an empty directory" -- probe --check
+E="MOCK_MEMBER=0" run check-member err no no "are not a member of the organization 'someorg'" -- someorg/probe --check
+run check-rules err no no "is not <name> or <owner>/<name>" -- "my app" --check
+run check-long err no no "the limit is 46" -- "$(printf 'a%.0s' $(seq 47))" --check
+run check-reserved err no no "the template refuses the name 'train' for the data-ml archetype: the data-ml archetype already ships a test named tests/test_train.py" -- train --archetype=data-ml --check
+no_writes check-reserved
+run check-reserved-cli ok no no "check: ok (tester/train, public, cli" -- train --archetype=cli --check
+run check-keyword err no no "the template refuses the name 'class' for the cli archetype" -- class --check
+E="MOCK_PLAN=free" run check-free err no no "is on GitHub Free" -- probe --private --check
+if grep -F "public instead" "$work/home-check-free/out" | grep -qF -- "--check"
+then bad check-free "the command offered for public instead carries --check"
+else ok check-free "the command offered for public instead does not carry --check"; fi
 # The separate terminal is one of two fixes, not a property of the door: a
 # browser login with the scopes the door reads runs it in the session (#228).
 if grep -qF "gh auth login -s repo,workflow" "$work/home-fine-grained/out"
@@ -863,8 +913,12 @@ else bad apache "the license did not reach copier, or its text was fetched over 
 
 # The template is the judge of a name (#964): one the door's own check lets
 # through and copier's validator refuses stops before the repository exists,
-# with copier's words, as a refusal of any other answer does.
-run name-refused   err no no "The package name 'class' derived from 'class' is a Python keyword" -- class
+# with copier's words, as a refusal of any other answer does. The door reads
+# the template's name rules first (#1067), so copier is reached here with a
+# copier.yml whose validators the door could not read.
+E="MOCK_VALIDATORS=/dev/null" run name-refused   err no no "The package name 'class' derived from 'class' is a Python keyword" -- class
+grep -qF "could not read the template's name rules" "$work/home-name-refused/out" \
+  && ok name-refused "unread name rules are a warning, and copier decides" || bad name-refused "no warning that the name rules were not read"
 grep -qF "nothing was created on GitHub" "$work/home-name-refused/out" \
   && ok name-refused "the stop says nothing was created on GitHub" || bad name-refused "the stop does not say nothing was created on GitHub"
 # A name of 47 characters or more renders a project whose own lint check is red
@@ -1486,7 +1540,7 @@ case "$all" in
                            echo "{\"access_level\": ${MOCK_GL_LEVEL:-50}}" ;;
   # Every API read names gitlab.com (`--hostname`); only the encoded path is a
   # project read. Anything else falls through and fails.
-  "api --hostname gitlab.com projects/tester%2Fprobe"|"api --hostname gitlab.com projects/someorg%2Fprobe")
+  "api --hostname gitlab.com projects/tester%2Fprobe"|"api --hostname gitlab.com projects/someorg%2Fprobe"|"api --hostname gitlab.com projects/tester%2Ftrain")
                            case "${MOCK_GL_EXISTS:-0}" in
                              1)   echo '{"id": 1, "path_with_namespace": "x/y"}' ;;
                              500) echo '{"message":"500 Internal Server Error"}'; echo "glab: 500 Internal Server Error" >&2; exit 1 ;;
@@ -1576,7 +1630,7 @@ printf 'curl %s\n' "$*" >> "$GH_LOG"
 case "$*" in *"/copier.yml"*)
   case "${MOCK_GL_CHOICES:-1}" in
     down)      echo "curl: (6) Could not resolve host: raw.githubusercontent.com" >&2; exit 6 ;;
-    1)         printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\nplinth_sha:\n' ;;
+    1)         printf 'license:\n  type: str\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'plinth_sha:\n' ;;
     nochoices) printf 'plinth_sha:\n  type: str\n' ;;
     *)         echo "curl: (22) The requested URL returned error: 404" >&2; exit 22 ;;
   esac ;;
@@ -1626,6 +1680,40 @@ then bad gl-preflight "--preflight read past the login:"; sed 's/^/        /' "$
 else ok gl-preflight "reads no namespace, group or project"; fi
 E="MOCK_GLAB_NOAUTH=1" gl_run gl-preflight-noauth err no no "glab is not logged in" -- --host gitlab --preflight
 E="MOCK_GIT_VERSION=2.36.1" gl_run gl-git-236 err no no "git 2.36.1 is too old (2.37 or newer" -- --host gitlab --preflight
+echo "--readiness: both hosts read, nothing written (#1067)"
+# Before the host question: whether gh and glab are installed and logged in,
+# and as whom. Only reads: `auth status` and a GET of the user, on each.
+only_reads() { # <case>: every call is one of the reads --readiness may make
+  if grep -vE '^gh auth status$|^gh api user --jq \.login$|^glab auth status --hostname gitlab\.com$|^glab api --hostname gitlab\.com user$' "$work/home-$1/calls.log" | grep -q .
+  then bad "$1" "--readiness made a call that is not one of its reads:"; sed 's/^/        /' "$work/home-$1/calls.log"
+  else ok "$1" "only reads: auth status and the user, on each host"; fi
+}
+P="$work/glbin:$work/bin" run ready-both ok no no "github: ok, gh logged in as tester" -- --readiness
+grep -qxF "gitlab: ok, glab logged in to gitlab.com as tester" "$work/home-ready-both/out" \
+  && ok ready-both "both hosts ready, each with its login" || { bad ready-both "gitlab is not read as ready"; sed 's/^/        /' "$work/home-ready-both/out"; }
+only_reads ready-both
+run ready-no-glab ok no no "gitlab: missing, glab (GitLab CLI) is not installed" -- --readiness
+grep -qxF "github: ok, gh logged in as tester" "$work/home-ready-no-glab/out" \
+  && ok ready-no-glab "a host missing its tool beside one that is ready" || bad ready-no-glab "github is not read as ready"
+only_reads ready-no-glab
+E="MOCK_NOAUTH=1" P="$work/glbin:$work/bin" run ready-gh-out ok no no "github: missing, gh is not logged in" -- --readiness
+grep -qF "gitlab: ok," "$work/home-ready-gh-out/out" \
+  && ok ready-gh-out "a host logged out beside one that is ready" || bad ready-gh-out "gitlab is not read as ready"
+only_reads ready-gh-out
+
+# Git's identity is checked on GitLab.com too, beside another miss (#1067).
+E="$noident MOCK_GLAB_NOAUTH=1" gl_run gl-two-misses err no no "2 things to fix; nothing was created:" -- --host gitlab --preflight
+grep -qF "git cannot tell who makes the first commit" "$work/home-gl-two-misses/out" && grep -qF "glab is not logged in" "$work/home-gl-two-misses/out" \
+  && ok gl-two-misses "the identity and the login both named" || { bad gl-two-misses "not both named"; sed 's/^/        /' "$work/home-gl-two-misses/out"; }
+E="$noident" gl_run gl-no-ident err no no "git cannot tell who makes the first commit" -- probe --host gitlab
+# --check on GitLab.com: the namespace, the path, the folder and the
+# template's refusals, then `check: ok` with nothing created.
+gl_run gl-check-ok ok no no "check: ok (gitlab.com/tester/probe, private, cli" -- probe --host gitlab --check
+if grep -qE '^glab .*-X |^uvx .*copier' "$work/home-gl-check-ok/calls.log"
+then bad gl-check-ok "--check wrote or rendered"; sed 's/^/        /' "$work/home-gl-check-ok/calls.log"
+else ok gl-check-ok "--check created, wrote and rendered nothing"; fi
+E="MOCK_GL_EXISTS=1" gl_run gl-check-taken err no no "already exists; the door creates new projects only" -- probe --host gitlab --check
+gl_run gl-check-reserved err no no "the template refuses the name 'train' for the data-ml archetype" -- train --archetype=data-ml --host gitlab --check
 E="MOCK_GLAB_NOAUTH=1" gl_run gl-logged-out err no no "glab auth login --hostname gitlab.com" -- probe --host gitlab
 E="MOCK_GL_GROUP=0" gl_run gl-group-missing err no no "group 'someorg' does not exist on GitLab.com" -- someorg/probe --host gitlab
 E="MOCK_GL_LEVEL=30" gl_run gl-group-developer err no no "needs the Maintainer role" -- someorg/probe --host gitlab
@@ -1889,8 +1977,7 @@ for pair in "(cli) |::also the choice for a tool that runs on a schedule on the 
             "(data-ml) |::Data processing, collection or a pipeline with no model trained is \`cli\`." \
             "(backend) |::A service that keeps running and answers requests, in a container." \
             "(library) |::A package other code imports." \
-            "| A service, or a model you train |::a model trained here, with a model card. On GitHub a \`v*\` tag publishes the model, its metrics and the card as release files." \
-            "| A service, or a model you train |::Data processing, collection or a pipeline with no model trained is \`cli\`."; do
+            "(web) |::A web app with logins and a database, on GitHub only. It costs money to run: about US \$13 a month on Render."; do
   key="${pair%%::*}"; phrase="${pair#*::}"
   if row "$key" | grep -qF -- "$phrase"; then ok skill-archetype "the $key row says \"$phrase\""
   else bad skill-archetype "the skill's $key row does not say \"$phrase\""; fi
@@ -1921,18 +2008,13 @@ for pair in "| Anyone on the internet (public) |::the license recommended is MIT
   if row "$key" | grep -qF -- "$phrase"; then ok skill-visibility "the $key row says \"$phrase\""
   else bad skill-visibility "the skill's $key row does not say \"$phrase\""; fi
 done
-# GitLab.com picked under Customize keeps the visibility step 4 stated and says
-# only what changes there (#1061); #1033's review had asked it again. The one
-# answer GitLab cannot take, a project more visible than its group, is the
-# run's stop before anything is created, not a second question.
-keep="$(sed -n '/visibility answered in step 4 stands/,/^$/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
-if printf '%s\n' "$keep" | grep -qF 'host chosen here is GitLab.com: do not ask it again'
-then ok skill-visibility "GitLab.com chosen under Customize keeps the visibility already answered"
-else bad skill-visibility "the skill does not keep the visibility when GitLab.com is chosen after step 4"; fi
-for phrase in 'say in one line what changes on GitLab' 'The license follows the same answer, so it is not asked again' \
-              'no more visible than its group' 'stops before creating anything'; do
-  if printf '%s\n' "$keep" | grep -qF -- "$phrase"; then ok skill-visibility "the kept visibility says \"$phrase\""
-  else bad skill-visibility "the kept visibility does not say \"$phrase\""; fi
+# The host is the first question now (#1067), so the sentences that kept the
+# visibility when GitLab.com was picked later under Customize are gone, and
+# Customize no longer asks the host.
+for old in 'visibility answered in step 4 stands' 'host chosen here is GitLab.com: do not ask it again' \
+           'first the host and the license'; do
+  if grep -qF -- "$old" "$skill"; then bad skill-order "the skill still says \"$old\""
+  else ok skill-order "the skill no longer says \"$old\""; fi
 done
 flat="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
 for old in 'ask step 4 again' 'ask the license again'; do
@@ -1941,7 +2023,7 @@ for old in 'ask step 4 again' 'ask the license again'; do
 done
 # Where the host is chosen, GitLab.com says the next-step guide and template
 # updates are partly manual there: the guide reads GitHub only (#1061, #1012).
-host_q="$(sed -n '/Header `Host`: "Where should the repository live?"/,/Header `License`/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+host_q="$(sed -n '/Header `Host`: "Where should the/,/^2\. \*\*What to make/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
 if printf '%s\n' "$host_q" | grep -qF 'the next-step guide and template updates are partly manual'
 then ok skill-host "the Host question's GitLab.com choice says guide and update are partly manual there"
 else bad skill-host "the Host question does not say the guide and template updates are partly manual on GitLab.com"; fi
@@ -1950,18 +2032,72 @@ then ok skill-visibility "the visibility answer becomes a flag, so the command s
 else bad skill-visibility "the skill does not turn the visibility answer into --public or --private"; fi
 # The Defaults step, from its heading to the Host question, names no
 # visibility and adds no visibility flag; its license follows the answer.
-defaults_step="$(sed -n '/^5\. \*\*The recommended defaults\.\*\*/,/Header `Host`/p' "$skill")"
+defaults_step="$(sed -n '/^8\. \*\*The recommended defaults\.\*\*/,/Header `License`/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
 if printf '%s\n' "$defaults_step" | grep -qF 'header `Defaults`'
-then ok skill-visibility "the Defaults step is read as step 5, up to the Host question"
-else bad skill-visibility "the Defaults step is not step 5 as this test reads it, so the checks below read nothing"; defaults_step=""; fi
+then ok skill-visibility "the Defaults step is read as step 8, up to the License question"
+else bad skill-visibility "the Defaults step is not step 8 as this test reads it, so the checks below read nothing"; defaults_step=""; fi
 for old in 'public on GitHub' 'private on GitLab.com' '`--public`' '`--private`'; do
   if printf '%s\n' "$defaults_step" | grep -qF -- "$old"; then bad skill-visibility "the Defaults step still says \"$old\""
   else ok skill-visibility "the Defaults step no longer says \"$old\""; fi
 done
-for phrase in 'It never names the visibility.' 'for a private project, say "Proprietary license" in place of "MIT' \
+for phrase in 'It never names the host or the visibility.' 'for a private project, say "Proprietary license" in place of "MIT' \
               'for a private project, `--license=proprietary`'; do
   if printf '%s\n' "$defaults_step" | grep -qF -- "$phrase"; then ok skill-visibility "the Defaults step says \"$phrase\""
   else bad skill-visibility "the Defaults step does not say \"$phrase\""; fi
+done
+
+# The order of the questions (#1067): the host first, then what to make, the
+# archetype, where a web app runs, the name, the visibility; the defaults last.
+prev=0
+for step in '1\. \*\*The host\*\*' '2\. \*\*What to make\*\*' '3\. \*\*Follow-ups\*\*' \
+            '4\. \*\*The archetype recommendation\*\*' '5\. \*\*Where a web app runs\*\*' \
+            '6\. \*\*The name\*\*' '7\. \*\*Who may see the project\*\*' '8\. \*\*The recommended defaults\.\*\*'; do
+  at="$(grep -nE "^$step" "$skill" | head -n 1 | cut -d: -f1)"
+  if [ -n "$at" ] && [ "$at" -gt "$prev" ]; then ok skill-order "\"$step\" comes next, at line $at"; prev="$at"
+  else bad skill-order "\"$step\" is missing or out of order (line ${at:-none}, after $prev)"; fi
+done
+# The readiness read comes before the host question, and the preflight for the
+# chosen host before what to make; the free text before any archetype choice.
+ready_at="$(grep -nF 'new-project.sh --readiness' "$skill" | head -n 1 | cut -d: -f1)"
+host_at="$(grep -nF 'Header `Host`: "Where should the' "$skill" | head -n 1 | cut -d: -f1)"
+make_at="$(grep -nF 'What do you want to make?' "$skill" | head -n 1 | cut -d: -f1)"
+kind_at="$(grep -niF 'header `Kind`' "$skill" | head -n 1 | cut -d: -f1)"
+use_at="$(grep -nF 'Header `Use`' "$skill" | head -n 1 | cut -d: -f1)"
+if [ -n "$ready_at" ] && [ -n "$host_at" ] && [ -n "$make_at" ] && [ -n "$use_at" ] && [ -n "$kind_at" ] \
+   && [ "$ready_at" -lt "$host_at" ] && [ "$host_at" -lt "$make_at" ] && [ "$make_at" -lt "$use_at" ] && [ "$use_at" -lt "$kind_at" ]
+then ok skill-order "readiness, then the host, then the free text, then the follow-ups, then the archetype choice"
+else bad skill-order "readiness ${ready_at:-none}, host ${host_at:-none}, free text ${make_at:-none}, follow-ups ${use_at:-none}, kind ${kind_at:-none} are not in that order"; fi
+flat="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
+for phrase in 'With `--host` in the arguments the host is not asked' \
+              'With `--archetype=` given, steps 2, 3 and 4 are not asked.' \
+              'only when the answer to step 2 leaves the archetype open' \
+              'When the `Use` follow-up was asked, it is not asked again' \
+              'the kinds below other than the one recommended' \
+              'quoting the person'"'"'s words from step 2' \
+              'Never choose for them in silence: the person always picks.' \
+              '| Not sure | Start with the narrowest, a terminal command (`--archetype=cli`)' \
+              'Right after the archetype is set, say its prerequisites' \
+              'a Render account and about US $13 a month' \
+              'Never ask for a secret' \
+              'it names every item missing at once, each with its fix' \
+              'When the person says it is done, run the preflight again' \
+              'a translation, not a romanization' \
+              'check a typed name as soon as it is given' \
+              'new-project.sh <name> --check --host=<host> --archetype=<archetype>' \
+              'Show only suggestions that passed' \
+              '`owner/name` puts it under an organization' \
+              'Anyone on the internet can read and copy the code' \
+              'list **Only people you add (private) (Recommended)** first instead and say why' \
+              'read the plan now, not at the end' \
+              '**Public instead** (`--public`' '**Upgrade the plan and start again**' '**Stop**: nothing is created' \
+              'in the same order, with their choices numbered, one question at a time'; do
+  if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-order "the skill says \"$phrase\""
+  else bad skill-order "the skill does not say \"$phrase\""; fi
+done
+# The archetype step's makes / does-not-make table names every kind.
+for k in cli library backend data-ml web; do
+  if grep -qE "^   \| $k \| .+ \| .+ \|$" "$skill"; then ok skill-order "the makes table has a row for $k"
+  else bad skill-order "the makes table has no row for $k"; fi
 done
 
 echo "-- $pass passed, $fail failed"

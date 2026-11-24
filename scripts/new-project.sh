@@ -8,6 +8,8 @@
 #                  [--force-defaults] [--host=github|gitlab]
 #                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web only)
 #   new-project.sh --preflight [<the same arguments>]
+#   new-project.sh [<owner>/]<name> --check [<the same arguments>]
+#   new-project.sh --readiness
 #
 # --preflight runs steps 1 and 2 below (the tools, gh's login and its token)
 # and ends with `preflight: ok`, reading nothing about an owner, a repository
@@ -27,10 +29,11 @@
 #
 # --host gitlab hands the run to scripts/new-project-gitlab.sh (#353).
 #
-# Preflight, in order; the first miss stops with the one line that fixes it,
-# before anything exists:
-#   1 tools       claude >= 2.1.274, git >= 2.37, uv, gh logged in (warnings: token
-#                 in the environment, native Windows)
+# Preflight, in order, before anything exists; step 1 names every miss at
+# once, each with its fix (#1067), and from step 2 the first miss stops:
+#   1 tools       claude >= 2.1.274, git >= 2.37 and an identity for the first
+#                 commit, uv, gh logged in (warnings: token in the environment,
+#                 native Windows)
 #   2 token       classic: scopes repo and workflow; delete_repo is an opt-in the
 #                 fixes name apart (#1034), and without it rollback is off. Fine-grained: the admin path, because
 #                 its reach over a repository that does not exist yet cannot be read.
@@ -90,15 +93,41 @@ tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-s
 # Taken out before the rest is parsed, so a GitHub run without it reads its
 # arguments exactly as before. The GitLab door gets the pins above from here,
 # so the template tag and copier's version have one source.
-host=github; rest=(); host_next=0
+#
+# --readiness reads, before the host is asked, whether each host's CLI is
+# installed and logged in, and as whom: one line per host, `ok` or `missing`,
+# and exit 0. It writes nothing: `gh auth status`, `glab auth status` and a GET
+# of each one's user (#1067). The chosen host's whole check is --preflight.
+#
+# --check runs every check a run makes before it renders (the tools, the
+# token, the owner, the name taken or not, the folder, the plan for --private,
+# the template's own refusals of the name for the archetype), then prints
+# `check: ok` and creates nothing. /plinth:new-project runs it on each name
+# it suggests, and on a typed one, before showing it, and on the visibility
+# when private is chosen (#1067). Taken out here with --host, so a command
+# printed from the arguments never carries it.
+host=github; rest=(); host_next=0; check=0; readiness=0
 for a in "$@"; do
   if [ "$host_next" = 1 ]; then host="$a"; host_next=0; continue; fi
-  case "$a" in --host) host_next=1 ;; --host=*) host="${a#*=}" ;; *) rest+=("$a") ;; esac
+  case "$a" in --host) host_next=1 ;; --host=*) host="${a#*=}" ;; --check) check=1 ;; --readiness) readiness=1 ;; *) rest+=("$a") ;; esac
 done
+if [ "$readiness" = 1 ]; then
+  if ! command -v gh >/dev/null; then echo "github: missing, gh (GitHub CLI) is not installed"
+  elif ! gh auth status >/dev/null 2>&1; then echo "github: missing, gh is not logged in"
+  else echo "github: ok, gh logged in as $(gh api user --jq .login 2>/dev/null || echo '(login not readable)')"; fi
+  if ! command -v glab >/dev/null; then echo "gitlab: missing, glab (GitLab CLI) is not installed"
+  elif ! glab auth status --hostname gitlab.com >/dev/null 2>&1; then echo "gitlab: missing, glab is not logged in to gitlab.com"
+  else
+    gl_login="$(glab api --hostname gitlab.com user 2>/dev/null | sed -n 's/.*"username": *"\([^"]*\)".*/\1/p')" || gl_login=""
+    echo "gitlab: ok, glab logged in to gitlab.com as ${gl_login:-(login not readable)}"
+  fi
+  exit 0
+fi
 [ "$host_next" = 0 ] || { echo "--host needs a value: github or gitlab" >&2; exit 2; }
 case "$host" in
   github) set -- ${rest[@]+"${rest[@]}"} ;;
-  gitlab) PLINTH_DOOR_TEMPLATE_REPO="$template_repo" PLINTH_DOOR_TEMPLATE_REF="$template_ref" \
+  gitlab) [ "$check" = 0 ] || rest+=(--check)
+          PLINTH_DOOR_TEMPLATE_REPO="$template_repo" PLINTH_DOOR_TEMPLATE_REF="$template_ref" \
             PLINTH_DOOR_TEMPLATE_SHA="$template_sha" \
             PLINTH_DOOR_COPIER_VERSION="$copier_version" PLINTH_DOOR_COPIER_NEWER="$copier_newer" \
             PLINTH_DOOR_CLAUDE_FLOOR="$claude_floor" PLINTH_DOOR_GIT_FLOOR="$git_floor" \
@@ -106,7 +135,7 @@ case "$host" in
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight]"
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight] [--check] [--readiness]"
 preflight=0; target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
 coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""
 for a in "$@"; do case "$a" in
@@ -151,17 +180,29 @@ for a in "$@"; do [ "$a" = --private ] || public_cmd="$public_cmd $(printf '%q' 
 [ -z "$target" ] || name_fits "${target#*/}"
 
 # ── 1 tools ──────────────────────────────────────────────────────────────
-command -v git >/dev/null || stop "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
-git_v="$(git --version | awk '{print $3}')"
-below "$git_floor" "$git_v" && stop "git $git_v is too old ($git_floor or newer: installing the plugin needs it)" "  fix: upgrade git (macOS: brew install git)"
-command -v uv  >/dev/null || stop "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh" \
+# Each miss is kept, not a stop, so one run names every item missing (#1067);
+# the login is read only where gh is installed, and step 2 only where it is
+# logged in.
+command -v git >/dev/null || miss "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
+if command -v git >/dev/null; then
+  git_v="$(git --version | awk '{print $3}')"
+  below "$git_floor" "$git_v" && miss "git $git_v is too old ($git_floor or newer: installing the plugin needs it)" "  fix: upgrade git (macOS: brew install git)"
+  git_identity
+fi
+command -v uv  >/dev/null || miss "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh" \
   "  in Claude Code, type it after ! (! curl ...), then restart Claude Code (or open a new shell) so it finds uv"
-command -v gh  >/dev/null || stop "gh (GitHub CLI) is not installed" "  fix: https://cli.github.com, then gh auth login"
-command -v python3 >/dev/null || stop "python3 is not installed (it shapes the ruleset for the archetype)" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install python3"
-command -v claude >/dev/null || stop "claude (Claude Code) is not installed" "  fix: curl -fsSL https://claude.ai/install.sh | bash"
-claude_v="$(claude --version 2>/dev/null | awk '{print $1}')" || claude_v=""
-below "$claude_floor" "${claude_v:-0}" && stop "claude ${claude_v:-?} is below the supported floor $claude_floor" "  fix: claude update"
-gh auth status >/dev/null 2>&1 || stop "gh is not logged in" "  fix: gh auth login   (browser login; the token stays in the keychain)"
+command -v gh  >/dev/null || miss "gh (GitHub CLI) is not installed" "  fix: https://cli.github.com, then gh auth login"
+command -v python3 >/dev/null || miss "python3 is not installed (it shapes the ruleset for the archetype)" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install python3"
+command -v claude >/dev/null || miss "claude (Claude Code) is not installed" "  fix: curl -fsSL https://claude.ai/install.sh | bash"
+if command -v claude >/dev/null; then
+  claude_v="$(claude --version 2>/dev/null | awk '{print $1}')" || claude_v=""
+  below "$claude_floor" "${claude_v:-0}" && miss "claude ${claude_v:-?} is below the supported floor $claude_floor" "  fix: claude update"
+fi
+if command -v gh >/dev/null; then
+  gh auth status >/dev/null 2>&1 || { miss "gh is not logged in" "  fix: gh auth login   (browser login; the token stays in the keychain)"; misses_stop; }
+else
+  misses_stop
+fi
 # How long each wait below may take: GitHub detecting the languages, CodeQL
 # default setup's first analysis of main, and the first pull request being
 # picked up by CI and CodeQL (three waits, so three times this at worst). 300 s
@@ -284,6 +325,7 @@ else
     "     or classic: scopes repo and workflow, and delete_repo if a failed run should delete what it created (https://github.com/settings/tokens)"
 fi
 
+misses_stop
 if [ "$preflight" = 1 ]; then
   echo "preflight: ok (tools; gh logged in as $login, scopes: ${scopes:-none}; rollback: ${rollback%% (*})"
   exit 0
@@ -393,6 +435,21 @@ if [ -n "$arch_choices" ] && [ -n "$lic_choices" ]; then
 else
   warn "could not read the template's archetype and license lists; copier decides (a refusal creates nothing)"
   printf '  %s\n' "$(unread_why)" >&2
+fi
+# The template's own refusals of the name for this archetype, read from the
+# same copier.yml (#1067): copier would refuse them at the render, after every
+# question; here they stop a --check, so a refused name is never suggested.
+if [ -n "$copier_yml" ]; then
+  if ! refused="$(python3 "$here/template-names.py" "$name" "$arch" <<<"$copier_yml")"; then
+    case "$refused" in
+      "copier.yml's validators"*) warn "could not read the template's name rules: $refused; copier decides (a refusal creates nothing)" ;;
+      *) stop "the template refuses the name '$name' for the $arch archetype: $refused; nothing was created" "  fix: choose another name" ;;
+    esac
+  fi
+fi
+if [ "$check" = 1 ]; then
+  echo "check: ok ($repo, $visibility, $arch, folder $dir; nothing was created)"
+  exit 0
 fi
 # Where a web app runs (#677): `render`, or a place plinth lists and does not
 # deploy to or check, passed as copier's `hosting` and `hosting_elsewhere`.

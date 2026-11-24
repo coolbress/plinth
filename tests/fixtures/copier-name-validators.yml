@@ -1,0 +1,51 @@
+# The name validators of plinth-template's copier.yml at the pinned commit
+# (scripts/new-project.sh template_sha), copied for the offline door tests
+# (#1067): the archetype's validator, then the project_name question.
+  validator: >-
+    {%- set pkg = project_name | regex_replace('[-. ]', '_') | lower -%}
+    {%- set shipped = {
+      'cli': ['built_wheel', 'entry_point', 'tree_hygiene'],
+      'library': ['built_wheel', 'tree_hygiene'],
+      'backend': ['entry_point', 'tree_hygiene'],
+      'data-ml': ['entry_point', 'train', 'tree_hygiene'],
+      'web': ['access', 'pages', 'passwords', 'tree_hygiene'],
+    } -%}
+    {%- if pkg in shipped.get(archetype, []) -%}
+    The package name '{{ pkg }}' derived from '{{ project_name }}' would name the
+    project's test tests/test_{{ pkg }}.py, and the {{ archetype }} archetype already
+    ships a test by that name. Choose another repository name, for example
+    '{{ project_name }}-app'.
+    {%- endif -%}
+project_name:
+  type: str
+  help: Repository name (GitHub rules). Example my-app
+  # A repository name and a Python package name follow different rules: GitHub
+  # allows `.` and a leading digit, Python does not. The package name is
+  # derived from the repository name below; when that derivation cannot be a
+  # Python identifier, stop here, before writing a single file.
+  #
+  # The package name is also `pyproject.toml`'s distribution name, which
+  # starts and ends with a letter or digit: `_demo` is an identifier, rendered,
+  # and uv refused to read the project (coolbress/plinth-template#256).
+  # A name whose test a shipped test takes is refused at `archetype`, below.
+  validator: >-
+    {%- set pkg = project_name | regex_replace('[-. ]', '_') | lower -%}
+    {%- if not project_name -%}
+    The name is empty.
+    {%- elif not (pkg | regex_search('^[a-z_][a-z0-9_]*$')) -%}
+    No Python package name can be made from '{{ project_name }}': '{{ pkg }}'
+    {% if pkg | regex_search('^[0-9]') %}starts with a digit{% else %}contains a character an identifier cannot{% endif %}.
+    Choose another repository name.
+    {%- elif pkg in [
+      'and','as','assert','async','await','break','class','continue','def','del','elif','else',
+      'except','finally','for','from','global','if','import','in','is','lambda','nonlocal','not',
+      'or','pass','raise','return','try','while','with','yield'
+    ] -%}
+    The package name '{{ pkg }}' derived from '{{ project_name }}' is a Python keyword;
+    it cannot be imported. Choose another repository name.
+    {%- elif pkg[:1] == '_' or pkg[-1:] == '_' -%}
+    The package name '{{ pkg }}' derived from '{{ project_name }}' is also the
+    distribution name in pyproject.toml, which must start and end with a letter or digit.
+    Choose a repository name without a leading or trailing '-', '_' or '.'.
+    {%- endif -%}
+

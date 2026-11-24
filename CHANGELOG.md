@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project` asks the host first, beside each host's readiness
+  read without changing anything (`new-project.sh --readiness`), then what
+  you want to make in your own words, recommends an archetype quoting them,
+  and only then asks the name and the visibility. The preflight names every
+  missing item at once, git's identity for the first commit among them,
+  instead of stopping at the first. Each suggested or typed name, and private
+  at its answer, is checked before it is shown or taken
+  (`new-project.sh <name> --check`): taken, a folder in the way, not a
+  member, the plan, and the names the archetype's template refuses, read
+  from its `copier.yml` (#1067).
+
 ## [2.44.0] - 2026-11-24
 
 `/plinth:guide` finds a `ready-for-agent` ticket older than the newest 100 open issues instead of saying `/grilling` while one is ready, and says when that read failed or came back full. Without `map`, it prints only the arsenal rows of the step the project is at and the next one, so its answers are shorter (19–20 lines for a ready ticket, against 28–30) with the command where it was. `/plinth:new-project` keeps a visibility already answered when GitLab.com is chosen under Customize, and says on the Host question that the guide and template updates are partly manual on GitLab.com. New projects render plinth-template v1.50.4: a GitLab project's `AGENTS.md` names its issues and merge requests instead of `/plinth:guide`, a `web` project's note example refuses a blank note and says why, and new projects call plinth v2.43.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise.

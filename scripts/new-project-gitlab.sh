@@ -5,7 +5,9 @@
 #   new-project.sh --host gitlab --preflight [<the same arguments>]
 #
 # --preflight runs steps 1 and 2 (the tools, glab's login and its token) and
-# ends with `preflight: ok`; the name is optional (#771).
+# ends with `preflight: ok`; the name is optional (#771). Step 1 names every
+# item missing in one stop (#1067). --check runs every check up to the render
+# and ends with `check: ok`, creating nothing (#1067).
 #
 # It checks, renders and prints the plan (#531), creates the project and
 # pushes main (#532), raises the wall (#533), then opens the first merge
@@ -18,9 +20,11 @@
 # Every API read names gitlab.com (`glab api --hostname`): without it glab may
 # answer for the GitLab host of the repository it is run from.
 #
-# Preflight, in order; the first miss stops with the one line that fixes it:
-#   1 tools       claude, git >= the GitHub door's floor, uv, python3, curl, glab >= the tested
-#                 version, logged in to gitlab.com
+# Preflight, in order; step 1 names every miss at once, each with its fix,
+# and from step 2 the first miss stops:
+#   1 tools       claude, git >= the GitHub door's floor and an identity for the
+#                 first commit, uv, python3, curl, glab >= the tested version,
+#                 logged in to gitlab.com
 #   2 login       the username glab is logged in as
 #   3 namespace   a bare name goes under that username; <group>/<name> needs
 #                 the Maintainer role or above in the group. Rollback needs
@@ -51,10 +55,11 @@ git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitla
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--no-description] [--preflight]"
-preflight=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--no-description] [--preflight] [--check]"
+preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""
 for a in "$@"; do case "$a" in
   --preflight)   preflight=1 ;;
+  --check)       check=1 ;;
   --private)     visibility=private; vis_said="$vis_said-" ;;
   --public)      visibility=public; vis_said="$vis_said+" ;;
   --license=*)   lic="${a#*=}" ;;
@@ -102,24 +107,39 @@ assisted_by="${PLINTH_ASSISTED_BY:-}"
   || stop "PLINTH_ASSISTED_BY must be <agent>:<model>, e.g. Claude:claude-opus-5-5 (got: $assisted_by)" "  fix: unset it, or set it in that form"
 
 # ── 1 tools ──────────────────────────────────────────────────────────────
-command -v git >/dev/null || stop "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
-git_v="$(git --version | awk '{print $3}')"
-below "$git_floor" "$git_v" && stop "git $git_v is too old ($git_floor or newer: installing the plugin needs it)" "  fix: upgrade git (macOS: brew install git)"
-command -v uv >/dev/null || stop "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh" \
+# Each miss is kept, not a stop, so one run names every item missing (#1067);
+# the login is read only where glab is installed and recent enough.
+command -v git >/dev/null || miss "git is not installed" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install git"
+if command -v git >/dev/null; then
+  git_v="$(git --version | awk '{print $3}')"
+  below "$git_floor" "$git_v" && miss "git $git_v is too old ($git_floor or newer: installing the plugin needs it)" "  fix: upgrade git (macOS: brew install git)"
+  git_identity
+fi
+command -v uv >/dev/null || miss "uv is not installed (it renders the template)" "  fix: curl -LsSf https://astral.sh/uv/install.sh | sh" \
   "  in Claude Code, type it after ! (! curl ...), then restart Claude Code (or open a new shell) so it finds uv"
-command -v python3 >/dev/null || stop "python3 is not installed (it reads GitLab's answers)" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install python3"
-command -v curl >/dev/null || stop "curl is not installed (it reads the template's choices)" "  fix: install curl"
-command -v claude >/dev/null || stop "claude (Claude Code) is not installed" "  fix: curl -fsSL https://claude.ai/install.sh | bash"
-claude_v="$(claude --version 2>/dev/null | awk '{print $1}')" || claude_v=""
-below "$claude_floor" "${claude_v:-0}" && stop "claude ${claude_v:-?} is below the supported floor $claude_floor" "  fix: claude update"
-command -v glab >/dev/null || stop "glab (GitLab CLI) is not installed" "  fix: https://gitlab.com/gitlab-org/cli (macOS: brew install glab), then glab auth login --hostname $gitlab"
-# The first field that reads as a version: `glab 1.122.0 (…)` now, `glab
-# version 1.36.0 (…)` in older releases. None is a stop, never a pass.
-glab_v="$(glab --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)" || glab_v=""
-[ -n "$glab_v" ] || stop "could not read glab's version from \`glab --version\`" "  fix: brew upgrade glab (or your package manager's update), to $glab_floor or newer"
-below "$glab_floor" "$glab_v" && stop "glab ${glab_v:-?} is below $glab_floor, the version this door was run with" "  fix: brew upgrade glab (or your package manager's update)"
-glab auth status --hostname "$gitlab" >/dev/null 2>&1 \
-  || stop "glab is not logged in to $gitlab" "  fix: glab auth login --hostname $gitlab --web --git-protocol https   (browser login; the token stays in the keyring)"
+command -v python3 >/dev/null || miss "python3 is not installed (it reads GitLab's answers)" "  fix: macOS: xcode-select --install; Debian/Ubuntu: sudo apt install python3"
+command -v curl >/dev/null || miss "curl is not installed (it reads the template's choices)" "  fix: install curl"
+command -v claude >/dev/null || miss "claude (Claude Code) is not installed" "  fix: curl -fsSL https://claude.ai/install.sh | bash"
+if command -v claude >/dev/null; then
+  claude_v="$(claude --version 2>/dev/null | awk '{print $1}')" || claude_v=""
+  below "$claude_floor" "${claude_v:-0}" && miss "claude ${claude_v:-?} is below the supported floor $claude_floor" "  fix: claude update"
+fi
+glab_ok=0
+if ! command -v glab >/dev/null; then
+  miss "glab (GitLab CLI) is not installed" "  fix: https://gitlab.com/gitlab-org/cli (macOS: brew install glab), then glab auth login --hostname $gitlab"
+else
+  # The first field that reads as a version: `glab 1.122.0 (…)` now, `glab
+  # version 1.36.0 (…)` in older releases. None is a miss, never a pass.
+  glab_v="$(glab --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)" || glab_v=""
+  if [ -z "$glab_v" ]; then miss "could not read glab's version from \`glab --version\`" "  fix: brew upgrade glab (or your package manager's update), to $glab_floor or newer"
+  elif below "$glab_floor" "$glab_v"; then miss "glab ${glab_v:-?} is below $glab_floor, the version this door was run with" "  fix: brew upgrade glab (or your package manager's update)"
+  elif ! glab auth status --hostname "$gitlab" >/dev/null 2>&1; then
+    miss "glab is not logged in to $gitlab" "  fix: glab auth login --hostname $gitlab --web --git-protocol https   (browser login; the token stays in the keyring)"
+  else glab_ok=1; fi
+fi
+# Step 2 reads the login with glab and python3: without either, stop here
+# with what step 1 found, not with a login it could not read.
+{ [ "$glab_ok" = 1 ] && command -v python3 >/dev/null; } || misses_stop
 
 # ── 2 login ──────────────────────────────────────────────────────────────
 user_json="$(glab api --hostname "$gitlab" user 2>/dev/null)" || stop "cannot read $gitlab/api/v4/user with glab's login" "  fix: glab auth status --hostname $gitlab"
@@ -153,6 +173,7 @@ else
   esac
 fi
 
+misses_stop
 if [ "$preflight" = 1 ]; then
   echo "preflight: ok (tools; glab logged in to $gitlab as $login${token_note:+; $token_note})"
   exit 0
@@ -282,6 +303,18 @@ fi
 grep -qxF "$arch" <<<"$arch_choices" || stop "unknown archetype: $arch" "  the template accepts: $(tr '\n' ' ' <<<"$arch_choices")"
 spdx="$(grep -ixF "$lic" <<<"$lic_choices" | head -1)" || spdx=""
 [ -n "$spdx" ] || stop "the template does not carry the license $lic" "  it accepts: $(tr '\n' ' ' <<<"$lic_choices")"
+# The template's own refusals of the name for this archetype, as on GitHub
+# (#1067); then --check ends here, before the render, having created nothing.
+if ! refused="$(python3 "$here/template-names.py" "$name" "$arch" <<<"$copier_yml")"; then
+  case "$refused" in
+    "copier.yml's validators"*) warn "could not read the template's name rules: $refused; copier decides (a refusal creates nothing)" ;;
+    *) stop "the template refuses the name '$name' for the $arch archetype: $refused; nothing was created" "  fix: choose another project name" ;;
+  esac
+fi
+if [ "$check" = 1 ]; then
+  echo "check: ok ($gitlab/$project, $visibility, $arch, folder $dir; nothing was created)"
+  exit 0
+fi
 
 # Render, as the GitHub door does: copier at its pinned version and date,
 # into a plain directory whose .git is removed, then initialised (#118).
