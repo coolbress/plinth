@@ -50,7 +50,15 @@ if [ -n "$owner_at" ] && [ -n "$table_at" ] && [ "$owner_at" -lt "$table_at" ]
 then ok "the owner's files are read before the table is shown"
 else bad "owner-files.sh (at ${owner_at:-none}) is not read before the table (at ${table_at:-none})"; fi
 says "the step" "$step" 'A `code_of_conduct: yes` line means the owner'"'"'s applies' 'the script ignores `--code-of-conduct` then' \
-  '<name> --check --host=<host>' 'shorten it and check again'
+  '<name> --check <flags of the table>' 'shorten it and check again'
+# The table check names the name once: $ARGUMENTS may hold it too, and a name
+# given twice stops the check (one name only).
+check_line="$(printf '%s\n' "$step" | grep -oE 'new-project\.sh <name> --check[^`]*' | head -n 1)"
+case "$check_line" in
+  *'$ARGUMENTS'*) bad "the table check passes \$ARGUMENTS beside <name>: $check_line" ;;
+  '') bad "the table check line is missing" ;;
+  *) ok "the table check gives the name once" ;;
+esac
 
 echo "-- the primary choice names the action, the visibility and owner/name"
 says "the step" "$step" 'header `Create`' \

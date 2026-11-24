@@ -288,8 +288,12 @@ is typed into the chat, and none of the questions below needs one.
    step 6 checked the name:
 
    ```bash
-   ${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh <name> --check --host=<host> $ARGUMENTS <flags of the table>
+   ${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh <name> --check <flags of the table>
    ```
+
+   with the name once and the table's flags only: each row is a flag, those
+   the arguments gave included, and a name in `$ARGUMENTS` given again stops
+   the check (`one name only`).
 
    A stop about the description means the line is still too long: shorten
    it and check again. Any other stop is shown and explained as
