@@ -49,6 +49,20 @@ pull requests and have no tag.
   review is served, runs `dependency-review-action` as before. The check
   name and every input stay (#1073).
 
+- `/plinth:new-project` ends its questions with one numbered table of every
+  answer, the repository and its host, the kind, the visibility, the
+  licence, the reviewer, the code of conduct, the description and the
+  folder, in place of the "Use the recommended defaults?" question, which
+  named neither the name nor the visibility. The first button names what it
+  does ("Create public repository owner/name"); **Change some** is one
+  multi-select of four groups of rows, and only the groups picked are asked
+  before the table comes back with the changed rows marked. The visibility,
+  the kind and the host are changed by typing into Other, and a changed
+  visibility asks the licence again. In text mode the table takes "numbers
+  to change, comma-separated; 0 to keep". On GitHub the description now
+  defaults to your sentence about what you are making, cut to one line of
+  350 characters, where it was none (#1068).
+
 ### Fixed
 
 - A command printed to be pasted shows Hangul as typed (#1065). On macOS's
@@ -61,6 +75,10 @@ pull requests and have no tag.
   `scripts/lib/shell-word.sh`. A value with a space or a quote is printed
   inside single quotes where it had backslashes (`'My Project'`, not
   `My\ Project`); pasted, it is the same argument.
+
+- `new-project.sh --description=` counts characters, not bytes, whatever the
+  locale: under `LC_ALL=C` a 350-character Korean line was refused as 1050
+  (#1068).
 
 ## [2.44.0] - 2026-11-24
 
