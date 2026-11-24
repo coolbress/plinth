@@ -11,6 +11,19 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `/plinth:new-project`, when GitLab.com is chosen under Customize after the
+  visibility was answered, keeps that answer and says in one line what
+  changes on GitLab; it no longer asks the visibility, then the license,
+  again (#1061). A project more visible than its group is still the run's
+  stop before anything is created. The Host question's GitLab.com choice
+  says the next-step guide and template updates are partly manual there:
+  `/plinth:guide` reads GitHub only (#1012 is the full answer).
+  plinth-template's companion change makes a GitLab project's `AGENTS.md`
+  say where the next work is instead of sending the agent to the guide; it
+  reaches new projects when plinth's template pin is raised.
+
 ## [2.43.0] - 2026-11-24
 
 An archetype move between one that publishes to PyPI (`cli`, `library`) and one that publishes an image (`backend`, `data-ml`) reaches the default branch without a hand edit. `ci / diff-size` leaves the rewritten `release.yml` out of the count in a pull request that changes `archetype:`, so `/plinth:template-update --finish` splits the move by file. A project gets this by raising both `coolbress/plinth` `uses:` lines to this release; the plan says so when the called plinth lacks it. `/plinth:new-project` refuses a repository name longer than 46 characters before it creates anything, because a longer one makes the new project's lint check fail. The first login asks only for `repo` and `workflow`, and `delete_repo` is a separate opt-in. In full mode, `/plinth:guide` says how many features are off by default and points at `map` instead of listing each. New projects render plinth-template v1.50.3 and call plinth v2.42.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise unless it wants the archetype-move rule.
