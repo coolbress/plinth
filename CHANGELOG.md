@@ -18,8 +18,9 @@ pull requests and have no tag.
   read came back full with no ticket to take, `scripts/guide-state.sh` reads
   the `ready-for-agent` issues on their own and applies the same `Blocked by`,
   native-dependency and open-pull-request skips to them. A blocker of theirs
-  missing from both reads is read by number, so a closed one no longer
-  blocks. When the `ready-for-agent` read fails, the guide says the next
+  missing from both reads is read by number: only one read closed or
+  merged no longer blocks, and one not read still blocks whatever its
+  number. When the `ready-for-agent` read fails, the guide says the next
   ticket was not read in place of `/grilling`; the routes before `/grilling`
   are unchanged. That read takes the newest 100 `ready-for-agent` issues, and
   the line says so when it comes back full.

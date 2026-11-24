@@ -902,6 +902,19 @@ grep -qxF 'ready-for-agent issues past the newest 100 open, read on their own: #
   grep -qxF 'ticket to take: none; every ready-for-agent ticket waits: #5 on #3 (not in the open issues read)' <<<"$out" &&
   ok "that blocker's state not read: still blocks, and said so" ||
   { bad "older blocker not read"; grep -E 'ready-for|ticket|command' <<<"$out" | sed 's/^/        /'; }
+# A blocker newer than the lowest number of the first read, missing from it
+# (an open pull request can hold the number): still blocks when not read,
+# whatever its number; only a read CLOSED or MERGED frees the ticket.
+jq -n '[{number: 5, title: "Old ticket", labels: [{name: "ready-for-agent"}], body: "Blocked by: #105"}]
+  + [range(10; 111) | select(. != 105) | {number: ., title: "r\(.)", labels: [{name: "wayfinder:research"}], body: ""}]' > "$d/issues.json"
+out="$(MOCK_LOOKUP_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF 'ticket to take: none; every ready-for-agent ticket waits: #5 on #105 (not in the open issues read)' <<<"$out" &&
+  grep -qxF 'command: /grilling' <<<"$out" &&
+  ok "that older ticket's blocker newer than the first read's lowest, not read: still blocks" ||
+  { bad "newer unread blocker of an older ticket"; grep -E 'ready-for|ticket|command' <<<"$out" | sed 's/^/        /'; }
+printf '{"105":"MERGED"}' > "$d/lookup.json"
+state "that blocker read merged: not blocking" "$d" \
+  "command: /implement #5" "ticket to take: #5, not blocked (#105 is closed); the only ready-for-agent ticket left"
 rm "$d/lookup.json"
 # The failed read takes /grilling's place only: an issue to triage still routes.
 older

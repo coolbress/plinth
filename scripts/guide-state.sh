@@ -405,7 +405,9 @@ read_order() {
 # the first read saw: a blocker older than that, missing from it, is still
 # not known to be closed, unless read by number: the older tickets' blockers
 # missing from both reads are, in one GraphQL call, and one read CLOSED or
-# MERGED no longer blocks; one that read does not answer still blocks. A
+# MERGED no longer blocks; one that read does not answer still blocks,
+# whatever its number: newer than that lowest, it can be a missing number
+# the first read skipped, an open pull request's (#1062). A
 # failed read of the ready-for-agent issues leaves the next ticket not read,
 # said in place of /grilling.
 full="$([ "$(grep -c . <<<"$issues" || true)" -ge 100 ] && echo 1)"
@@ -442,7 +444,7 @@ choice="$(awk -F '\t' -v full="$full" '
       for (i = 1; i <= k; i++) {
         if (a[i] ~ /#/) ob = ob " " a[i]
         else if ((a[i] in open) || (a[i] in nopen)) ob = ob " #" a[i]
-        else if (full && a[i] + 0 < min + 0 && !(a[i] in shut)) ob = ob " #" a[i] "~"
+        else if (!(a[i] in shut) && ((x in past) || (full && a[i] + 0 < min + 0))) ob = ob " #" a[i] "~"
         else closed = closed " #" a[i]
       }
       if (ob != "") { why = said(substr(ob, 2)); gsub(/~/, " (not in the open issues read)", why) }
