@@ -21,6 +21,31 @@ pull requests and have no tag.
   `/plinth:guide map`, also before the first merge; `map` still prints and
   explains every row (#1060).
 
+- `/plinth:new-project`, when GitLab.com is chosen under Customize after the
+  visibility was answered, keeps that answer and says in one line what
+  changes on GitLab; it no longer asks the visibility, then the license,
+  again (#1061). A project more visible than its group is still the run's
+  stop before anything is created. The Host question's GitLab.com choice
+  says the next-step guide and template updates are partly manual there:
+  `/plinth:guide` reads GitHub only (#1012 is the full answer).
+  plinth-template's companion change makes a GitLab project's `AGENTS.md`
+  say where the next work is instead of sending the agent to the guide; it
+  reaches new projects when plinth's template pin is raised.
+
+### Fixed
+
+- `/plinth:guide` no longer misses a `ready-for-agent` ticket older than the
+  newest 100 open issues and says `/grilling` instead (#1059). When that
+  read came back full with no ticket to take, `scripts/guide-state.sh` reads
+  the `ready-for-agent` issues on their own and applies the same `Blocked by`,
+  native-dependency and open-pull-request skips to them. A blocker of theirs
+  missing from both reads is read by number: only one read closed or
+  merged no longer blocks, and one not read still blocks whatever its
+  number. When the `ready-for-agent` read fails, the guide says the next
+  ticket was not read in place of `/grilling`; the routes before `/grilling`
+  are unchanged. That read takes the newest 100 `ready-for-agent` issues, and
+  the line says so when it comes back full.
+
 ## [2.43.0] - 2026-11-24
 
 An archetype move between one that publishes to PyPI (`cli`, `library`) and one that publishes an image (`backend`, `data-ml`) reaches the default branch without a hand edit. `ci / diff-size` leaves the rewritten `release.yml` out of the count in a pull request that changes `archetype:`, so `/plinth:template-update --finish` splits the move by file. A project gets this by raising both `coolbress/plinth` `uses:` lines to this release; the plan says so when the called plinth lacks it. `/plinth:new-project` refuses a repository name longer than 46 characters before it creates anything, because a longer one makes the new project's lint check fail. The first login asks only for `repo` and `workflow`, and `delete_repo` is a separate opt-in. In full mode, `/plinth:guide` says how many features are off by default and points at `map` instead of listing each. New projects render plinth-template v1.50.3 and call plinth v2.42.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise unless it wants the archetype-move rule.
