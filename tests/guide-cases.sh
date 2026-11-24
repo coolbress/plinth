@@ -24,8 +24,14 @@ cat > "$work/bin/gh" <<'MOCK'
 # fail as an unauthenticated gh does. A list is cut at --limit.
 set -u
 [ -n "${MOCK_GH_FAIL:-}" ] && { echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 4; }
-jqf="."; limit=30; fields=""; prev=""
-for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; [ "$prev" = --limit ] && limit="$a"; [ "$prev" = --json ] && fields="$a"; prev="$a"; done
+jqf="."; limit=30; fields=""; label=""; prev=""
+for a in "$@"; do [ "$prev" = --jq ] && jqf="$a"; [ "$prev" = --limit ] && limit="$a"; [ "$prev" = --json ] && fields="$a"; [ "$prev" = --label ] && label="$a"; prev="$a"; done
+# The read of the ready-for-agent issues on their own (#1059): MOCK_LABEL_FAIL
+# fails it; MOCK_LABEL_LOG counts the calls.
+if [ "$1 $2" = "issue list" ] && [ "$label" = ready-for-agent ]; then
+  [ -z "${MOCK_LABEL_LOG:-}" ] || echo label >> "$MOCK_LABEL_LOG"
+  [ -n "${MOCK_LABEL_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+fi
 [ -n "${MOCK_FAIL_ON:-}" ] && [ "$1 $2 ${4:-}" = "$MOCK_FAIL_ON" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
 # GET repos/<o>/<r>/commits/<sha>: the commit by that oid in open.json's
 # pull requests, in the REST shape. MOCK_API_FAIL fails it.
@@ -134,11 +140,13 @@ case "$1 $2 ${4:-}" in
   "api repos/o/r/issues/"*"/comments "*) f=comments.json ;;
   *) echo "mock gh: unexpected $*" >&2; exit 1 ;;
 esac
-# As gh does: the --limit highest numbers (30 unless said), then the filter.
-# They stay in the fixture's order, so the script's own sorting is what sorts.
+# As gh does: those with --label's label when one is given, then the --limit
+# highest numbers (30 unless said), then the filter. They stay in the
+# fixture's order, so the script's own sorting is what sorts.
 set -o pipefail
 # Only the --json fields asked for, as gh gives.
-jq --argjson n "$limit" --arg f "$fields" '(map(.number) | sort | reverse | .[:$n]) as $keep | map(select(.number as $x | $keep | index($x)))
+jq --argjson n "$limit" --arg f "$fields" --arg l "$label" 'map(select($l == "" or ([.labels[]?.name] | index($l))))
+  | (map(.number) | sort | reverse | .[:$n]) as $keep | map(select(.number as $x | $keep | index($x)))
   | if $f == "" then . else map(with_entries(select(.key as $k | $f | split(",") | index($k)))) end' "$MOCK_DIR/$f" | jq -r "$jqf"
 MOCK
 chmod +x "$work/bin/gh"
@@ -856,6 +864,38 @@ state "a full read, a blocker older than all of it: not known closed, still bloc
 jq 'map(select(.number != 200))' "$d/issues.json" > "$d/x.json" && mv "$d/x.json" "$d/issues.json"
 state "99 open, the blocker not among them: closed" "$d" \
   "command: /implement #101" "ticket to take: #101, not blocked (#5 is closed); the lowest number of the 2 left"
+# A ready-for-agent ticket older than the newest 100 open issues (#1059): read
+# on its own, with the same skips, only when the 100 held none to take.
+d="$(repo ready-older)"
+put "$d/merged.json" "$(pr 1 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
+older() { # [<body of #1>]: #1 ready-for-agent, #2..#101 research records
+  jq -n --arg b "${1:-}" '[{number: 1, title: "Old ticket", labels: [{name: "ready-for-agent"}], body: $b}]
+    + [range(2; 102) | {number: ., title: "r\(.)", labels: [{name: "wayfinder:research"}], body: ""}]' > "$d/issues.json"
+}
+older
+state "a ready ticket older than the newest 100 open: read on its own, /implement it" "$d" \
+  "command: /implement #1" "ticket to take: #1, not blocked; the only ready-for-agent ticket left" \
+  "ready-for-agent issues past the newest 100 open, read on their own: #1"
+older 'Blocked by: #50'
+state "that older ticket blocked by an open issue: skipped as one in the 100 is" "$d" \
+  "command: /grilling" "ticket to take: none; every ready-for-agent ticket waits: #1 on #50" \
+  "skipped: 1 of 1 ready-for-agent; blocked by an open issue: #1 on #50"
+older
+out="$(MOCK_LABEL_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF 'ticket to take: not read: none of the newest 100 open issues can be taken, and the ready-for-agent issues past them were not read (HTTP 502: Bad Gateway)' <<<"$out" &&
+  grep -q '^command: none: ' <<<"$out" && ! grep -qxF 'command: /grilling' <<<"$out" &&
+  ok "the ready-for-agent read failing: the next ticket said not read, not /grilling" ||
+  { bad "the ready-for-agent read failing"; grep -E 'ticket|where|command|note' <<<"$out" | sed 's/^/        /'; }
+awk '/^where: /{ w = substr($0, 8) } /^command: /{ print w "\t" substr($0, 10) }' <<<"$out" >> "$printed"
+log="$work/label.log"
+: > "$log"; MOCK_LABEL_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+[ "$(grep -c . "$log")" = 1 ] && ok "nothing to take in a full read: the ready-for-agent issues read once" || bad "nothing to take in a full read: label read $(grep -c . "$log") times"
+jq 'map(if .number == 101 then .labels = [{name: "ready-for-agent"}] else . end)' "$d/issues.json" > "$d/x.json" && mv "$d/x.json" "$d/issues.json"
+: > "$log"; MOCK_LABEL_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+[ ! -s "$log" ] && ok "a ticket to take in the newest 100: no second read" || bad "a ticket to take in the 100: label read anyway"
+jq 'map(select(.number != 1 and .number != 101))' "$d/issues.json" > "$d/x.json" && mv "$d/x.json" "$d/issues.json"
+: > "$log"; MOCK_LABEL_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+[ ! -s "$log" ] && ok "fewer than 100 open, none to take: every open issue was read, no second read" || bad "under 100 open: label read anyway"
 
 d="$(repo bots-only)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: x' false SUCCESS)"
