@@ -13,6 +13,14 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.50.4 instead of v1.50.3:
+  a `web` project's note example refuses a blank note and says why, and a
+  GitLab project's `AGENTS.md` names its issues and merge requests instead
+  of `/plinth:guide` (the plinth-template half of #1061). New projects call
+  plinth v2.43.0 (`plinth_sha`'s default moved from d374071 to 8452dd9).
+  `AGENTS.md` changed in its GitLab branch only; the GitHub render, which
+  the eval suite renders, and `.claude/` are unchanged.
+
 - `/plinth:guide` without `map` reads only the two rows of the arsenal's
   table it explains, the step the project is at and the one after it, in
   both modes, and a `release:` line with what goes out on a version tag:
