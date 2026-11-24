@@ -37,6 +37,9 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # stop, warn, below, choices_of, read_into and unread_why, shared with the GitHub door.
 # shellcheck source=scripts/lib/door.sh
 . "$here/lib/door.sh"
+# sq: a value as one shell word, for every command printed to be pasted.
+# shellcheck source=scripts/lib/shell-word.sh
+. "$here/lib/shell-word.sh"
 
 # The pins come from new-project.sh, their one source: run through it.
 template_repo="${PLINTH_DOOR_TEMPLATE_REPO:?run it as new-project.sh <name> --host gitlab}"
@@ -465,7 +468,7 @@ Assisted-by: $assisted_by}"
 # Kept untracked in .git, so the command that finishes a failed open sends the
 # same description: --fill would rebuild it from a commit that has only a subject.
 printf '%s\n' "$mr_body" > "$dir/.git/plinth-first-mr.md"
-dir_q="$(printf %q "$dir")"   # every printed cd runs when pasted, spaces and all
+dir_q="$(sq "$dir")"   # every printed cd runs when pasted, spaces and all, and shows Hangul as typed (#1065)
 mr_create="glab mr create --source-branch $branch --target-branch main --title '$mr_title' --description-file .git/plinth-first-mr.md --remove-source-branch --yes"
 if ! push_err="$(git -C "$dir" push -u origin "$branch" 2>&1 >/dev/null)"; then
   mr_line="not opened (the push of $branch failed: $(tail -1 <<<"$push_err")); push and open it: cd $dir_q && git push -u origin $branch && $mr_create"
