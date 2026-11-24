@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.43.0] - 2026-11-24
+
+An archetype move between one that publishes to PyPI (`cli`, `library`) and one that publishes an image (`backend`, `data-ml`) reaches the default branch without a hand edit. `ci / diff-size` leaves the rewritten `release.yml` out of the count in a pull request that changes `archetype:`, so `/plinth:template-update --finish` splits the move by file. A project gets this by raising both `coolbress/plinth` `uses:` lines to this release; the plan says so when the called plinth lacks it. `/plinth:new-project` refuses a repository name longer than 46 characters before it creates anything, because a longer one makes the new project's lint check fail. The first login asks only for `repo` and `workflow`, and `delete_repo` is a separate opt-in. In full mode, `/plinth:guide` says how many features are off by default and points at `map` instead of listing each. New projects render plinth-template v1.50.3 and call plinth v2.42.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise unless it wants the archetype-move rule.
+
+tested with plinth-template v1.50.3
+eval suite not run: plinth-template v1.50.2 to v1.50.3 changes no `AGENTS.md` or `.claude/` file, only `plinth_sha`'s default; the guide change was measured with the guide tasks on <https://github.com/coolbress/plinth/issues/647#issuecomment-7118069671>
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.50.3 instead of v1.50.2:
@@ -5939,7 +5946,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.42.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.43.0...HEAD
+[2.43.0]: https://github.com/coolbress/plinth/releases/tag/v2.43.0
 [2.42.0]: https://github.com/coolbress/plinth/releases/tag/v2.42.0
 [2.41.0]: https://github.com/coolbress/plinth/releases/tag/v2.41.0
 [2.40.1]: https://github.com/coolbress/plinth/releases/tag/v2.40.1
