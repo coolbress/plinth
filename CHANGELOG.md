@@ -11,6 +11,20 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+### Changed
+
+- `ci / deps` on a private GitHub repository without GitHub Code Security,
+  where GitHub refuses dependency review, now checks the dependency versions
+  a pull request adds instead of reporting "not yet confirmed": osv-scanner
+  2.6.0 (downloaded and checked against its SHA-256, the same as the GitLab
+  `deps` job's) compares `uv.lock` at the head with `uv.lock` at the merge
+  base against one offline copy of the OSV database, and the job fails on an
+  added version with an advisory at `deps-fail-on-severity` or above, or
+  when the scan cannot run. Such a repository's pull requests can now go red
+  where the check was green. A public repository, or a private one where the
+  review is served, runs `dependency-review-action` as before. The check
+  name and every input stay (#1073).
+
 ## [2.44.0] - 2026-11-24
 
 `/plinth:guide` finds a `ready-for-agent` ticket older than the newest 100 open issues instead of saying `/grilling` while one is ready, and says when that read failed or came back full. Without `map`, it prints only the arsenal rows of the step the project is at and the next one, so its answers are shorter (19–20 lines for a ready ticket, against 28–30) with the command where it was. `/plinth:new-project` keeps a visibility already answered when GitLab.com is chosen under Customize, and says on the Host question that the guide and template updates are partly manual on GitLab.com. New projects render plinth-template v1.50.4: a GitLab project's `AGENTS.md` names its issues and merge requests instead of `/plinth:guide`, a `web` project's note example refuses a blank note and says why, and new projects call plinth v2.43.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise.

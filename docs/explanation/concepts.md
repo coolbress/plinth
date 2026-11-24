@@ -413,9 +413,11 @@ request head that Dependabot pushed, and the code scanning rule passes it;
 the dependency and test checks still run there, and `main` is analysed after
 the merge (measured on five such heads in three repositories; heads other
 bots push were not measured). On a private repository without GitHub Code
-Security, GitHub refuses dependency review, and `ci / deps` passes saying
-nothing was checked where the dependency graph still answers; where the
-graph is off, the review fails instead (#395). The third kind is a setting
+Security, GitHub refuses dependency review (#395); where the dependency
+graph still answers, `ci / deps` compares the pull request's `uv.lock` with
+its merge base's using osv-scanner and the OSV database instead, as on
+GitLab, and fails on an added advisory (#1073); where the graph is off, the
+review fails. The third kind is a setting
 the Actions token cannot read: push protection, private vulnerability
 reporting, the Actions allowlist, the ruleset's bypass actors, the CodeQL
 default setup languages, the squash commit settings.
@@ -437,8 +439,7 @@ branch up to date, so a check that ran on an older commit does not count.
 the pull request's current commit, and without one in two cases its policy
 names: a pull request whose recorded pushes are all Dependabot's, and a
 release pull request whose diff is a release's, where the repository has
-turned that on; its log says which. `ci / deps` says nothing was checked
-where that is so. No job in plinth's workflows is skipped with `if:`: a
+turned that on; its log says which. No job in plinth's workflows is skipped with `if:`: a
 check that does not apply, such as `ci / deps` outside a pull request,
 reports a pass that says so. A release is tagged only on a commit the e2e
 runner's green run covers (the door's whole journey on real GitHub, through
@@ -534,7 +535,7 @@ three of its parts are paid GitHub products, and `/plinth:new-project
 | GitHub Free, a personal account or an organization | GitHub does not enforce a ruleset on its private repositories. Where the token reads the plan, the door stops before creating anything. Where it cannot (a fine-grained token), the ruleset call decides: the repository is created, the refused ruleset ends the run, and it is deleted again, or named for you to delete when the token cannot |
 | GitHub Pro, Team or Enterprise | A ruleset with the same required checks as a public repository; its `code_scanning` rule depends on GitHub Code Security, below |
 | With GitHub Code Security | CodeQL default setup and the `code_scanning` rule; `ci / deps` reviews each pull request's dependencies |
-| Without it | No CodeQL and no `code_scanning` rule (in its place, `ci / lint`'s security rules); GitHub refuses dependency review, so `ci / deps` passes saying nothing was checked (in its place, Dependabot alerts after the merge) |
+| Without it | No CodeQL and no `code_scanning` rule (in its place, `ci / lint`'s security rules); GitHub refuses dependency review, so `ci / deps` compares the added dependency versions in `uv.lock` with osv-scanner and the OSV database instead (#1073) |
 | With GitHub Secret Protection | Push protection on |
 | Without it | No push protection (in its place, `ci / secrets`, which finds a secret after the push) |
 

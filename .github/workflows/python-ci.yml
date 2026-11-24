@@ -1096,8 +1096,8 @@ jobs:
   # A wall, not a net. Dependabot reports what already got in; this job
   # blocks what a PR is bringing in. The dependency graph must be enabled
   # (it is by default on public repositories). On a private repository
-  # without GitHub Code Security GitHub refuses the review, and the job says
-  # it checked nothing (#395).
+  # without GitHub Code Security GitHub refuses the review (#395), and
+  # osv-scanner compares the added dependencies instead, as on GitLab (#1073).
   deps:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1119,8 +1119,9 @@ jobs:
       # with an `sbom_url` on the same repository; the synchronous export
       # closes on 2026-11-13). A fork's comparison is answered 403 as well
       # (GitHub's REST docs), so a fork is never refused. Both answers, on a
-      # private repository that is not a fork, are reported as not checked; any other answer, an error or a public repository runs the
-      # review as before, so it still fails.
+      # private repository that is not a fork, hand the comparison to
+      # osv-scanner (#1073); any other answer, an error or a public repository
+      # runs the review as before, so it still fails.
       - name: Is dependency review served on this repository?
         id: served
         if: github.event_name == 'pull_request'
@@ -1159,6 +1160,134 @@ jobs:
             echo "dependency review: GitHub answered HTTP $code; running it."
           fi
 
+      # Refused (#1073): the comparison plinth's GitLab `deps` job runs (#516),
+      # since GitHub serves no review here. osv-scanner, downloaded by version
+      # and checked against its SHA-256 (no action, so no Actions allowlist
+      # changes; tests/deps-served-cases.sh fails when these two differ from
+      # the GitLab job's), reads uv.lock at the merge base of base and head and
+      # at the head, as `dependency-graph/compare` would, both read through the
+      # API (the checkout is the merge commit at depth 1). The OSV database is
+      # downloaded once and both are scanned offline against that one copy, so
+      # a finding counts as added only when the head has it and the base does
+      # not. The severity is the advisory's highest CVSS score: critical 9.0
+      # and up, high 7.0, moderate 4.0, low above 0; one with no score counts
+      # as at or above. `scan` and the comparison are the GitLab job's lines,
+      # character for character (the same test reads both). A scan that cannot
+      # run (the download, the checksum, a lockfile unread) fails the step: it
+      # never passes unchecked.
+      - name: Where GitHub refuses it, compare the added dependencies with osv-scanner
+        id: osv
+        if: github.event_name == 'pull_request' && steps.served.outputs.review == 'refused'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          API: ${{ github.api_url }}
+          WORKDIR: ${{ inputs.working-directory }}
+          PLINTH_DEPS_FAIL_ON_SEVERITY: ${{ inputs.deps-fail-on-severity }}
+          OSV_SCANNER_VERSION: "2.6.0"
+          OSV_SCANNER_SHA256: "ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108"
+        run: |
+          set -uo pipefail
+          PLINTH_TMP="$RUNNER_TEMP/plinth-deps"; mkdir -p "$PLINTH_TMP"
+          plinth_osv() {
+            local d="$PLINTH_TMP/osv" f=osv-scanner_linux_amd64
+            mkdir -p "$d" &&
+              curl -fsSL --retry 3 -o "$d/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/$f" &&
+              echo "${OSV_SCANNER_SHA256}  $d/osv-scanner" | sha256sum -c - &&
+              chmod +x "$d/osv-scanner" &&
+              export PATH="$d:$PATH"
+          }
+          # get <url> <out> [accept]: prints the HTTP code, 000 with no answer.
+          get() {
+            local code
+            code="$(curl -sS -o "$2" -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: ${3:-application/vnd.github+json}" "$1" 2>/dev/null)" || code=000
+            printf '%s' "$code"
+          }
+          lock="${WORKDIR%/}/uv.lock"; lock="${lock#./}"
+          # osv-scanner applies an osv-scanner.toml beside the lockfile, where a
+          # pull request could ignore the advisory it adds: both scans use this
+          # empty one instead.
+          : > "$PLINTH_TMP/osv-scanner.toml"
+          # scan <lockfile> <out.json> [flags]: 0 when osv-scanner read the file.
+          # It exits 1 on findings, 128 when it found no package: that is a pass
+          # only for a lockfile with no registry package in it.
+          scan() {
+            local rc=0
+            osv-scanner scan source --offline-vulnerabilities --config="$PLINTH_TMP/osv-scanner.toml" "${@:3}" --format json -L "$1" > "$2" || rc=$?
+            case "$rc" in
+              0|1) return 0 ;;
+              128) if grep -q 'source = { registry' "$1"; then echo "osv-scanner found no package in $1, which names registry packages"; return 1; fi
+                   echo '{"results": []}' > "$2"; return 0 ;;
+              *) echo "osv-scanner exited $rc on $1: an error, not a finding"; return 1 ;;
+            esac
+          }
+          review() {
+            local h="$PLINTH_TMP/head" b="$PLINTH_TMP/base" code base
+            mkdir -p "$h" "$b"
+            code="$(get "$API/repos/$REPO/compare/$BASE...$HEAD?per_page=1" "$PLINTH_TMP/compare.json")"
+            base="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["merge_base_commit"]["sha"])' "$PLINTH_TMP/compare.json" 2>/dev/null)" || base=""
+            if [ "$code" != 200 ] || [ -z "$base" ]; then echo "the merge base of $BASE and $HEAD could not be read (HTTP $code)"; return 1; fi
+            code="$(get "$API/repos/$REPO/contents/$lock?ref=$HEAD" "$h/uv.lock" application/vnd.github.raw+json)"
+            case "$code" in
+              200) ;;
+              404) echo "no $lock at the head"; return 1 ;;
+              *) echo "$lock at the head could not be read (HTTP $code)"; return 1 ;;
+            esac
+            code="$(get "$API/repos/$REPO/contents/$lock?ref=$base" "$b/uv.lock" application/vnd.github.raw+json)"
+            case "$code" in
+              200) ;;
+              404) echo "no $lock at the merge base: every locked version counts as added"
+                   echo "version = 1" > "$b/uv.lock" ;;
+              *) echo "$lock at the merge base could not be read (HTTP $code)"; return 1 ;;
+            esac
+            plinth_osv || return 1
+            export OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY="$PLINTH_TMP/osv-db"
+            scan "$h/uv.lock" "$PLINTH_TMP/head.json" --download-offline-databases || return 1
+            scan "$b/uv.lock" "$PLINTH_TMP/base.json" || return 1
+            python3 - "$PLINTH_TMP/head.json" "$PLINTH_TMP/base.json" "$PLINTH_DEPS_FAIL_ON_SEVERITY" "$PLINTH_TMP/deps.verdict" <<'PY'
+          import json, sys
+          head, base, threshold, out = sys.argv[1:5]
+          FLOOR = {"critical": 9.0, "high": 7.0, "moderate": 4.0, "low": 0.0}[threshold]
+          def findings(path):
+              with open(path, encoding="utf-8") as f:
+                  data = json.load(f)
+              found = {}
+              for r in data["results"]:
+                  for p in r["packages"]:
+                      pkg = p["package"]
+                      for g in p.get("groups") or []:
+                          key = (pkg["name"], pkg["version"], tuple(sorted(g["ids"])))
+                          found[key] = g.get("max_severity") or ""
+              return found
+          try:
+              new, old = findings(head), findings(base)
+          except (OSError, ValueError, KeyError, TypeError) as e:
+              print(f"osv-scanner's output is not the JSON report expected: {e!r}")
+              sys.exit(2)
+          def blocks(score):
+              try:
+                  return float(score) > FLOOR if FLOOR == 0.0 else float(score) >= FLOOR
+              except ValueError:
+                  return True   # no score: counted as at or above
+          added = sorted((k, s) for k, s in new.items() if k not in old)
+          for (name, version, ids), s in added:
+              print(f"added: {name} {version} {', '.join(ids)} (CVSS {s or 'none'})")
+          hits = [f"{name} {version} ({ids[0]}, CVSS {s or 'none'})" for (name, version, ids), s in added if blocks(s)]
+          with open(out, "w", encoding="utf-8") as f:
+              if hits:
+                  shown = ", ".join(hits[:9]) + (f", and {len(hits) - 9} more in the log" if len(hits) > 9 else "")
+                  f.write(f"fail: dependency review, {len(hits)} advisories at {threshold} or above on added dependency versions: {shown}\n")
+              else:
+                  f.write(f"pass: dependency review, no added dependency version with an advisory at {threshold} or above (osv-scanner, the OSV database)\n")
+          sys.exit(1 if hits else 0)
+          PY
+          }
+          rc=0; review || rc=$?
+          exit "$rc"
+
       - name: Dependency review, blocks vulnerable versions a PR introduces
         id: review
         if: github.event_name == 'pull_request' && steps.served.outputs.review != 'refused'
@@ -1171,15 +1300,17 @@ jobs:
           # own call if it needs one.
 
       # Not a PR: report a pass instead of skipping the job (see pr-title).
-      # Refused (#395): not yet confirmed. A head Dependabot pushed is not
-      # analysed by CodeQL, whose code_scanning rule then passes (#179): said
-      # here, read from who started the run, since CodeQL's own check cannot.
+      # Refused (#395): osv-scanner's line (#1073), a fail when it wrote none.
+      # A head Dependabot pushed is not analysed by CodeQL, whose code_scanning
+      # rule then passes (#179): said here, read from who started the run,
+      # since CodeQL's own check cannot.
       - name: Verdict
         if: ${{ !cancelled() }}
         env:
           EVENT: ${{ github.event_name }}
           SERVED: ${{ steps.served.outputs.review }}
           REVIEW: ${{ steps.review.outcome }}
+          OSV: ${{ steps.osv.outcome }}
           SEVERITY: ${{ inputs.deps-fail-on-severity }}
           ACTOR: ${{ github.actor }}
         run: |
@@ -1189,8 +1320,12 @@ jobs:
             say "pass: dependency review, does not apply (a review started this run: the pull_request run of this head compares its dependencies, and that run's result stands)"
           elif [ "$EVENT" != pull_request ]; then
             say "pass: dependency review, does not apply (not a pull request: no base to compare dependencies against)"
+          elif [ "$SERVED" = refused ] && [ "$OSV" != success ] && [ "$OSV" != failure ]; then
+            say "not yet confirmed: dependency review, osv-scanner did not run because an earlier step failed; a run that gets past that step confirms it"
+          elif [ "$SERVED" = refused ] && [ -s "$RUNNER_TEMP/plinth-deps/deps.verdict" ]; then
+            say "$(head -n 1 "$RUNNER_TEMP/plinth-deps/deps.verdict")"
           elif [ "$SERVED" = refused ]; then
-            say "not yet confirmed: dependency review, GitHub refuses it on this private repository without GitHub Code Security (HTTP 403), so no dependency this pull request adds was compared with the advisory database; Dependabot alerts report one after the merge"
+            say "fail: dependency review, the scan could not run (its error is in the osv-scanner step's log); a run where osv-scanner reads both lockfiles confirms it"
           elif [ "$REVIEW" = success ]; then
             say "pass: dependency review, no added dependency version with an advisory at $SEVERITY or above"
           elif [ "$REVIEW" = failure ]; then
