@@ -1,6 +1,6 @@
 ---
 name: guide
-description: Reads the repository and says, in plain words and the person's own language, the one command to type next, then what is open and what happened so far, copied from the record; before the first merge, how to use the tools of the step it is at and the next one; the whole way with `map`. User-invoked only; changes nothing. The whole catalog of tools and what each costs is /plinth:arsenal.
+description: Reads the repository and says, in plain words and the person's own language, the one command to type next, then what is open and what happened so far, copied from the record; before the first merge, how to use the tools of the step it is at and the next one; a one-screen map of the whole way with `map`, one step in depth with `map <step>`, and what started off with `features`. User-invoked only; changes nothing. The whole catalog of tools and what each costs is /plinth:arsenal.
 disable-model-invocation: true
 disallowed-tools: Edit, Write, NotebookEdit
 ---
@@ -22,16 +22,26 @@ From the repository's folder (the current directory):
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/guide-state.sh" .
 ```
 
-When the person asks for the whole way (`/plinth:guide map`, or in their own
-words), add `map` after the `.`.
+Three other forms, each typed after the `.`:
+
+- `map`, when the person asks for the whole way (`/plinth:guide map`, or in
+  their own words): the one-screen map of the whole way.
+- `map <step>`, when they ask about one step (`/plinth:guide map <step>`,
+  with a number 1 to 9 or a name such as `merge` or `release`): that step in
+  depth. An unknown step is exit 2: show its message, which lists the names,
+  and stop.
+- `features`, when they ask what the project started with off
+  (`/plinth:guide features`): every item, read from files only, so it
+  answers offline and on GitLab too; nothing else is read.
 
 It prints the state, then `where:`, `next:` and `tool:` from the one row that
 state points to, the `command:` to type (with `before:` and `note:` when there
 are), `then:`, the row of the step after it, then `mode:`, the `why:` lines,
-and last the table. Without `map` the table holds only its header and the
-rows of the two steps `where:` and `then:` name (`table: this step and the
-next only`), and none when there is no step, then a `release:` line, the
-release row's Next action; on `map`, every row (`table: every row`). Before
+and last the table. The table holds only its header and the rows of the two
+steps `where:` and `then:` name (`table: this step and the next only`), and
+none when there is no step, then a `release:` line, the release row's Next
+action. On `map`, a `map:` block takes the table's place; on `map <step>`,
+one `step:` block for each of that step's rows. Before
 `mode:` come `main ci:` (the latest completed run of `ci.yml` on `main`:
 pass, fail, none or not read), `problems:` (what blocks, or `none`), and the
 history: `started:` (the start and the last activity, each a date with days
@@ -90,6 +100,8 @@ The first time you use a command, from the Next action cell of its row:
 keep the command's English name and follow it with a plain gloss in the
 person's language, taken from that cell, never written in your own words.
 
+This is the default answer; `map`, `map <step>` and `features` are answered
+as "The map, one step, and what started off" below says.
 Seven parts, in this order, in both modes: the one command comes before any
 history, so a person reading from the top learns what to do now first. The
 status of anything is one of four words, each beside its fixed-width symbol:
@@ -129,50 +141,37 @@ again, not a line to the end.
    first: say from `note:` that the failing pull request's checks are run
    again after it.
 4. **Then.** One or two sentences from `then:`: the step after this one. The
-   depth rule: this step and the next in depth only with `mode: full` or
-   `map`. With
+   depth rule: this step and the next in depth only with `mode: full` or,
+   for one step, on `map <step>` (below). With
    `mode: full`, the step `where:` names and the one `then:` names follow
    here, each in the depth above, from their two rows in the table. With
-   `mode: focused`, no step is explained in depth. On `map`, where
-   `mode: full` says the person asked for the whole way, start the depth
-   with a heading, in the person's language, that says what follows is the
-   whole way, from here to the project's end; part 7 is under it too.
+   `mode: focused`, no step is explained in depth.
 5. **Open now.** One line each, a status word beside its symbol: the open
    pull requests (`✓ done` checks pass, `… in progress` checks running,
    `‖ waiting` a draft or blocked, `✗ failed` a check fails), the
    `merge next:` line, the `ticket to take:` line, and the open issues that
    are not tickets, each said as what its line says it is. Then what started
    off, in one line, in both modes: how many items the `off by default:`
-   lines hold, and where each is named: at the end of this answer when
-   `mode:` says the person asked for the whole way (`map`), otherwise
-   `/plinth:guide map`. A `none left off` or `not read` there is said as it
-   is. Under that line, only the items whose line starts `to do, if not done
-   yet`, each with its steps; name no other here. The script prints every
-   item only on `map`: even then the others are not a paragraph each in this
-   part, and they are said at all only at the end of part 7.
+   lines hold, and that `/plinth:guide features` names each. A `none left
+   off` or `not read` there is said as it is. Under that line, only the items
+   whose line starts `to do, if not done yet`, each with its steps; name no
+   other here: the others are not a paragraph each, and they are the
+   `features` answer's.
 6. **So far.** The events only from the `so far:` lines, titles as printed:
    each line's date, reference, kind and title, copied, at most the five the
    script prints, never a summary of your own and never an event it did not
    print. Then the `totals:` line in words. With `so far: counts only while
    a problem is open`, only the totals; with `not read`, say the history was
    not read, and why.
-7. **The rest of the way.** Without `map`, the table holds no other row, so
-   this part is plain text, no code block. First one line from `release:`:
-   what goes out on a version tag, in its words (with no `release:` line,
-   that row is one of the two the depth gives). Then a `step 9:` line, as it
-   says, when there is one. Last, one line saying that `/plinth:guide map`
-   shows the whole way in depth and every item that started off; with
+7. **The rest of the way.** The table holds no other row, so this part is
+   plain text, no code block. First one line from `release:`: what goes out
+   on a version tag, in its words (with no `release:` line, that row is one
+   of the two the depth gives). Then a `step 9:` line, as it says, when there
+   is one. Last, one line saying that `/plinth:guide map` shows the whole way
+   on one screen and `/plinth:guide map <step>` one step in depth; with
    `mode: full`, it adds that this is worth reading now, for the reason
    `mode:` gives. Name and describe no other step here: its row was not
-   printed. On `map` (the person asked for the whole way): the other steps
-   of the nine, then the four moments (release and deploy, operate,
-   retrospective, ending), in the table's order, with the step the project
-   is at marked, each in the depth above. The release and deploy line keeps
-   what its row says goes out on a version tag, and the retrospective line
-   names `/retro`. A `step 9:` line goes on step 9's line; the step the
-   project is at stays the one `where:` names. End it with every `off by
-   default:` item: the feature, when it is worth turning on, where the steps
-   are, and what the line says about whether it is on.
+   printed.
 
 What to keep to:
 
@@ -230,3 +229,33 @@ What to keep to:
   project is at, and mark none in the rest of the way.
 - Exit 1 is the table missing a row or the words the guide looks for: show the
   message as it is and stop.
+
+## The map, one step, and what started off
+
+On `map`, the answer is the map, from the printed `map:` lines, in their
+order, and none of the seven parts: the title, the legend, the three groups,
+the `↻` return line, the next command, and the two footer lines. Keep each
+line's mark, number and command exactly as printed; say each name, the
+`why now:` line and the footer in the person's language. The marks are the
+legend's four: `▶ you are here`, `✓ done`, `✗ needs attention`, `· not yet`.
+A line printed with no mark has none because no read covers it: add none,
+and never mark a step done that the map does not. The lines under
+`next command:` go in the one code block, `/clear` first where it is
+printed, with part 3's line on what `/clear` does; a `next command:` that
+says `none:` or `not read` is said in words. There is no drawn cycle, no
+progress bar and no box-drawing characters: the `↻` line is the return, in
+words. A
+`✗` on the token line or on step 9 says what needs attention: under the map,
+one line each from the `token step:` or `step 9:` line, the `template:` and
+`plinth pin:` lines, or the open Dependabot pull requests. The looking-back
+line names `/retro`, the retrospective's tool, as printed.
+
+On `map <step>`, each `step:` block in depth, in the person's language:
+what it is for (`purpose:`), how to use it and what to type (`how:`), the
+tool (`tool:`), what it leaves (`it leaves:`), and what usually comes next
+(`then:`). The block marked `(you are here)` has a `next command:` line: it
+goes in the one code block. Nothing else of the seven parts.
+
+With `features`, every line under `features:`: the feature, when it is worth
+turning on, where its steps are, and what the line says about whether it is
+on. The `why:` line under it is the sorting rule, given only when asked why.

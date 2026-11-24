@@ -16,8 +16,10 @@ If you remember one command, make it `/plinth:guide`, typed: it reads the
 repository and says, in your language and in plain words, where the project
 is now and the one command to type next, then what is open and what happened
 so far; before your first pull request is merged, also how to use the tools
-of this step and the next. `/plinth:guide map` shows the whole way, every step in
-depth, worth reading once before your first pull request is merged.
+of this step and the next. `/plinth:guide map` shows the whole way on one
+screen, marking where you are and what is done, worth reading once before your
+first pull request is merged; `/plinth:guide map <step>` explains one step in
+depth, and `/plinth:guide features` lists what started off.
 `/plinth:arsenal` is the catalog behind it, answered from a task without
 reading the project: every tool, what it costs and how to install it.
 
