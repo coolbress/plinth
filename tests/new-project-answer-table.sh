@@ -77,7 +77,9 @@ echo "-- text mode"
 says "the step" "$step" 'numbers to change, comma-separated; 0 to keep'
 
 echo "-- every answer stays a flag, so the command said before the run asks nothing"
-says "the step" "$step" 'Every row becomes a flag, a default included'
+says "the step" "$step" 'Every row becomes a flag, a default included' \
+  'When the arguments give every row, show the table and ask nothing' \
+  'A row changed at the table replaces its flag among the arguments' 'never both'
 # The bundled question is gone, read as one line so a phrase across lines counts.
 flat="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
 for old in 'header `Defaults`' 'Use the recommended defaults?' '| Customize |' 'It never names the host or the visibility.'; do

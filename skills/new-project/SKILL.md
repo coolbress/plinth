@@ -366,6 +366,13 @@ is typed into the chat, and none of the questions below needs one.
    Then show the table again, each changed row marked "(changed)" after its
    value, and ask header `Create` again.
 
+   A row changed at the table replaces its flag among the arguments: the
+   check, the run and the command said before it carry the new flag only,
+   never both (`--public` and `--private` together stop the script).
+
+   When the arguments give every row, show the table and ask nothing: the
+   command said before an earlier run asks no question when typed again.
+
    In text (a `claude -p` run, or a call with no answer), show the same
    numbered table, then: "Create `VISIBILITY` repository `owner/name`? Type
    the numbers to change, comma-separated; 0 to keep." Each number asks its
