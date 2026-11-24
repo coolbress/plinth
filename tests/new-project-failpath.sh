@@ -895,6 +895,16 @@ if grep -qxF 'gh repo create tester/probe --public' "$work/home-desc-none/calls.
 then ok desc-none "--no-description sets none"; else bad desc-none "a description was set"; fi
 run desc-both err no no "--description and --no-description: choose one" -- probe --description=x --no-description
 run desc-long err no no "--description is one line of at most 350 characters (got 351)" -- probe "--description=$(printf 'x%.0s' $(seq 351))"
+# The skill shortens a longer sentence to 350 characters in its own language
+# (#1068); the door counts characters, not bytes, whatever the locale: under
+# LC_ALL=C bash's ${#var} counts a Hangul syllable as three.
+ko400="$(printf '가%.0s' $(seq 400))"; ko350="$(printf '가%.0s' $(seq 350))"
+[ "$(printf '%s' "$ko350" | LC_ALL=C wc -c | tr -d ' ')" = 1050 ] || bad desc-ko "the 350-syllable fixture is not 1050 bytes; the cases below test nothing"
+E="LC_ALL=C" run desc-ko ok yes no "" -- probe "--description=$ko350"
+if grep -qxF "gh repo create tester/probe --public --description $ko350" "$work/home-desc-ko/calls.log"
+then ok desc-ko "a 350-character Korean line, shortened from 400, is set at creation under LC_ALL=C"
+else bad desc-ko "the 350-character Korean line was not set as given"; fi
+E="LC_ALL=C" run desc-ko-long err no no "--description is one line of at most 350 characters (got 400)" -- probe "--description=$ko400"
 
 echo "where a web app runs (#677)"
 # A template without the questions (v1.26.0) renders for Render whatever it
@@ -2008,17 +2018,19 @@ for old in 'Data processing, or a model you train' 'data processing and model tr
   else ok skill-archetype "the skill no longer says \"$old\""; fi
 done
 
-# Visibility is asked alone, before the bundled defaults (#1033): "the
-# recommended defaults" read as "leave the technical choices to plinth", and a
-# team-internal tool started public under MIT. The defaults then name no
-# visibility, Yes adds no visibility flag, and Customize does not ask it again.
+# Visibility is asked alone, before the table of every answer (#1033, #1068):
+# "the recommended defaults" read as "leave the technical choices to plinth",
+# and a team-internal tool started public under MIT. The table shows it again
+# as a row; it is changed by typing into Other, which goes back to this one
+# question, so the question is written once. The table's own wording is
+# pinned in tests/new-project-answer-table.sh.
 vis_q="$(grep -nF 'Header `Visibility`: "Who may see this project'"'"'s code?"' "$skill" | head -n 1 | cut -d: -f1)"
-def_q="$(grep -nF 'header `Defaults`' "$skill" | head -n 1 | cut -d: -f1)"
+def_q="$(grep -nF 'header `Create`' "$skill" | head -n 1 | cut -d: -f1)"
 if [ -n "$vis_q" ] && [ -n "$def_q" ] && [ "$vis_q" -lt "$def_q" ]
-then ok skill-visibility "the visibility question, worded as who may see the code, comes before the Defaults question"
-else bad skill-visibility "the visibility question (line ${vis_q:-none}) is not before the Defaults question (line ${def_q:-none})"; fi
+then ok skill-visibility "the visibility question, worded as who may see the code, comes before the table's Create question"
+else bad skill-visibility "the visibility question (line ${vis_q:-none}) is not before the Create question (line ${def_q:-none})"; fi
 if grep -c 'Header `Visibility`' "$skill" | grep -qx 1
-then ok skill-visibility "visibility is asked in one place only, not again under Customize"
+then ok skill-visibility "visibility is asked in one place only, not again under Change some"
 else bad skill-visibility "the skill asks visibility in more than one place"; fi
 for pair in "| Anyone on the internet (public) |::the license recommended is MIT" \
             "| Anyone on the internet (public) |::On GitHub the whole wall stands on every plan" \
@@ -2051,28 +2063,25 @@ else bad skill-host "the Host question does not say the guide and template updat
 if grep -qF 'The answer becomes `--public` or `--private`, on either host.' "$skill"
 then ok skill-visibility "the visibility answer becomes a flag, so the command said before the run asks it no more"
 else bad skill-visibility "the skill does not turn the visibility answer into --public or --private"; fi
-# The Defaults step, from its heading to the Host question, names no
-# visibility and adds no visibility flag; its license follows the answer.
-defaults_step="$(sed -n '/^8\. \*\*The recommended defaults\.\*\*/,/Header `License`/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
-if printf '%s\n' "$defaults_step" | grep -qF 'header `Defaults`'
-then ok skill-visibility "the Defaults step is read as step 8, up to the License question"
-else bad skill-visibility "the Defaults step is not step 8 as this test reads it, so the checks below read nothing"; defaults_step=""; fi
-for old in 'public on GitHub' 'private on GitLab.com' '`--public`' '`--private`'; do
-  if printf '%s\n' "$defaults_step" | grep -qF -- "$old"; then bad skill-visibility "the Defaults step still says \"$old\""
-  else ok skill-visibility "the Defaults step no longer says \"$old\""; fi
-done
-for phrase in 'It never names the host or the visibility.' 'for a private project, say "Proprietary license" in place of "MIT' \
-              'for a private project, `--license=proprietary`'; do
-  if printf '%s\n' "$defaults_step" | grep -qF -- "$phrase"; then ok skill-visibility "the Defaults step says \"$phrase\""
-  else bad skill-visibility "the Defaults step does not say \"$phrase\""; fi
+# The table step names the visibility in its Create label and as a row, and
+# its license follows the visibility, a change through Other included.
+defaults_step="$(sed -n '/^8\. \*\*Every answer in one table/,/^Then run, with the arguments/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+if printf '%s\n' "$defaults_step" | grep -qF 'header `Create`'
+then ok skill-visibility "the table step is read as step 8, up to the run"
+else bad skill-visibility "the table step is not step 8 as this test reads it, so the checks below read nothing"; defaults_step=""; fi
+for phrase in '| 3 | Visibility |' 'Create `VISIBILITY` repository `owner/name`' 'MIT for a public project, Proprietary for a private one' \
+              'A visibility changed this way asks the license again, with the new recommendation first' \
+              'for a private repository list **Proprietary (Recommended)** first'; do
+  if printf '%s\n' "$defaults_step" | grep -qF -- "$phrase"; then ok skill-visibility "the table step says \"$phrase\""
+  else bad skill-visibility "the table step does not say \"$phrase\""; fi
 done
 
 # The order of the questions (#1067): the host first, then what to make, the
-# archetype, where a web app runs, the name, the visibility; the defaults last.
+# archetype, where a web app runs, the name, the visibility; the table last.
 prev=0
 for step in '1\. \*\*The host\*\*' '2\. \*\*What to make\*\*' '3\. \*\*Follow-ups\*\*' \
             '4\. \*\*The archetype recommendation\*\*' '5\. \*\*Where a web app runs\*\*' \
-            '6\. \*\*The name\*\*' '7\. \*\*Who may see the project\*\*' '8\. \*\*The recommended defaults\.\*\*'; do
+            '6\. \*\*The name\*\*' '7\. \*\*Who may see the project\*\*' '8\. \*\*Every answer in one table'; do
   at="$(grep -nE "^$step" "$skill" | head -n 1 | cut -d: -f1)"
   if [ -n "$at" ] && [ "$at" -gt "$prev" ]; then ok skill-order "\"$step\" comes next, at line $at"; prev="$at"
   else bad skill-order "\"$step\" is missing or out of order (line ${at:-none}, after $prev)"; fi

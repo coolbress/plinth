@@ -33,11 +33,11 @@ claude plugin install plinth@plinth
 <!-- install-block:end -->
 
 Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it asks
-what kind of project it is, who may see it, and whether to use the
-recommended defaults (or customize the host, third-party reviewer, licence,
-code of conduct, description and directory),
-then creates a repository with the checks already required, or says why it
-could not. Each answer is also a flag, and a flag given is not asked
+where it lives, what kind of project it is, its name and who may see it,
+shows every answer (licence, third-party reviewer, code of conduct,
+description and directory included) in one table where you change only the
+rows you pick, then creates a repository with the checks already required,
+or says why it could not. Each answer is also a flag, and a flag given is not asked
 ([the tutorial](docs/tutorials/getting-started.md#create-the-repository)). From there,
 [run a project](docs/how-to/run-a-project.md) is the loop, stage by stage.
 
