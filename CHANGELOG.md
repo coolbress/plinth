@@ -11,6 +11,13 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.44.0] - 2026-11-24
+
+`/plinth:guide` finds a `ready-for-agent` ticket older than the newest 100 open issues instead of saying `/grilling` while one is ready, and says when that read failed or came back full. Without `map`, it prints only the arsenal rows of the step the project is at and the next one, so its answers are shorter (19–20 lines for a ready ticket, against 28–30) with the command where it was. `/plinth:new-project` keeps a visibility already answered when GitLab.com is chosen under Customize, and says on the Host question that the guide and template updates are partly manual on GitLab.com. New projects render plinth-template v1.50.4: a GitLab project's `AGENTS.md` names its issues and merge requests instead of `/plinth:guide`, a `web` project's note example refuses a blank note and says why, and new projects call plinth v2.43.0. No input, job or check name a project calls changed, so its `uses:` pins need no raise.
+
+tested with plinth-template v1.50.4
+eval suite not run: plinth-template v1.50.3 to v1.50.4 changes `AGENTS.md` in its GitLab branch only and no `.claude/` file, and the eval suite renders with the defaults (GitHub); the guide change was measured with the guide tasks on <https://github.com/coolbress/plinth/issues/647#issuecomment-7126400970>
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.50.4 instead of v1.50.3:
@@ -6000,7 +6007,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.43.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.44.0...HEAD
+[2.44.0]: https://github.com/coolbress/plinth/releases/tag/v2.44.0
 [2.43.0]: https://github.com/coolbress/plinth/releases/tag/v2.43.0
 [2.42.0]: https://github.com/coolbress/plinth/releases/tag/v2.42.0
 [2.41.0]: https://github.com/coolbress/plinth/releases/tag/v2.41.0
