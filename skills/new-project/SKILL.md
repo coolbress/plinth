@@ -343,8 +343,10 @@ is typed into the chat, and none of the questions below needs one.
    conduct**, as their rows are. Only the groups picked are asked, in one
    call:
 
-   - **Name and folder**: the name of step 6, checked as there, then the
-     folder (below).
+   - **Name and folder**: the name of step 6, then the folder (below). A
+     new name is checked with the table's check above, the new name in place
+     of the old: step 6's command would pass the old one again in
+     `$ARGUMENTS` and stop (`one name only`).
    - **Description**: header `Description`: "A one-line description for the
      repository's page?" **Keep it**: the row's line. **None**:
      `--no-description`; it can be added later on the repository's page. A
@@ -372,7 +374,8 @@ is typed into the chat, and none of the questions below needs one.
 
    A row changed at the table replaces its flag among the arguments: the
    check, the run and the command said before it carry the new flag only,
-   never both (`--public` and `--private` together stop the script).
+   never both (`--public` and `--private` together stop the script). The
+   name is replaced the same way: one name, the new one.
 
    When the arguments give every row, show the table and ask nothing: the
    command said before an earlier run asks no question when typed again.

@@ -59,6 +59,7 @@ case "$check_line" in
   '') bad "the table check line is missing" ;;
   *) ok "the table check gives the name once" ;;
 esac
+says "the step" "$step" 'the new name in place of the old' 'The name is replaced the same way: one name, the new one.'
 
 echo "-- the primary choice names the action, the visibility and owner/name"
 says "the step" "$step" 'header `Create`' \
