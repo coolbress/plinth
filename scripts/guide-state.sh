@@ -22,8 +22,8 @@
 #                                           # map <step>: that step in depth (1 to 9, or a name)
 #   guide-state.sh [<dir>] features         # every item that started off; reads files only
 #
-# A word after `map` is the step when it is 1 to 9 or names no folder here;
-# otherwise it is the folder. A step the script does not know is exit 2.
+# With `map`, a word that names a step is the step, before or after the
+# folder; one that names no step and no folder is exit 2.
 #
 # The rows are copied from skills/arsenal/SKILL.md as they stand, never from
 # a list of its own, so the guide cannot name a step or tool the table does
@@ -34,14 +34,19 @@ plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/admin-reach.sh
 . "$plugin/scripts/lib/admin-reach.sh" 2>/dev/null || { echo "guide-state: no $plugin/scripts/lib/admin-reach.sh" >&2; exit 1; }
 arsenal="$plugin/skills/arsenal/SKILL.md"
-dir="."; map=""; step=""; features=""; prev=""
+dir="."; map=""; step=""; features=""
+# With `map` anywhere, a word that names a step (1 to 9, or a name below) is
+# the step, before or after the folder, even where a folder has that name;
+# any other word is the folder, or, when it names no folder, a step that
+# does not exist (exit 2 below).
+step_word() { case "$1" in [1-9]|create|setup|token|account|idea|spec|plan|ticket|implement|checks|review|merge|broke|fix|back|stop|update|maintain|release|deploy|operate|retro|retrospective|end|handover) return 0 ;; esac; return 1; }
+for a in "$@"; do [ "$a" = map ] && map=yes; done
 for a in "$@"; do
   case "$a" in
-    map) map=yes ;;
+    map) ;;
     features) features=yes ;;
-    *) if [ "$prev" = map ] && [ -z "$step" ] && { [[ "$a" =~ ^[1-9]$ ]] || [ ! -d "$a" ]; }; then step="$a"; else dir="$a"; fi ;;
+    *) if [ -n "$map" ] && [ -z "$step" ] && { step_word "$a" || [ ! -d "$a" ]; }; then step="$a"; else dir="$a"; fi ;;
   esac
-  prev="$a"
 done
 
 # features (#1087): every item the project started with off, with when it
@@ -161,7 +166,7 @@ set_mode "$mode" "$mode_why"
 # What the map's marks read (#1087), each set where its line is printed:
 # made (made by plinth: yes|no), first_merged (yes|no), token_mark,
 # repo_name, merged_total and releases_total (the totals: line), archetype.
-folder_name="no repository yet"; made=""; first_merged=""; token_mark=""; repo_name=""; merged_total=""; releases_total=""; archetype=""
+folder_name="no repository yet"; hosting=""; prs_read=""; made=""; first_merged=""; token_mark=""; repo_name=""; merged_total=""; releases_total=""; archetype=""
 behind_lines=""; bot_prs=""; choice=""
 
 # cmds_of <How to use it cell>: what a map line says to type: each command in
@@ -181,7 +186,12 @@ name_of() { sed -E 's/ \([^()]*\)$//' <<<"$1"; }
 release_said() {
   local next lead items mine
   next="$(row "A merged change to put out" | sed -n 2p)"
-  if [ "$archetype" = web ]; then printf '%s\n' "${next%%; *}"; return; fi
+  if [ "$archetype" = web ]; then
+    # Render unless the answers name another place; then the Tool cell's words.
+    if [ -z "${hosting:-}" ] || [ "$hosting" = render ]; then printf '%s\n' "${next%%; *}"
+    else row "A merged change to put out" | sed -n 3p | grep -oE 'plinth does not deploy a `web` app that runs anywhere else' || printf '%s\n' "$next"; fi
+    return
+  fi
   items="${next#*; }"; lead="${items%%, \`*}"
   mine="$(awk -v a="\`$archetype\`" '{ n = split($0, p, /, `/); for (i = 2; i <= n; i++) if (index("`" p[i], a)) { print "`" p[i]; exit } }' <<<"$items")"
   if [ -n "$archetype" ] && [ -n "$mine" ]; then printf '%s, %s\n' "$lead" "$mine"; else printf '%s\n' "$next"; fi
@@ -255,10 +265,11 @@ print_map() {
   echo "  When needed"
   for i in 7 8; do r="$(step_row "$i")"; [ -n "$r" ] || exit 1; map_row "" "" "$r"; done
   # Step 9 (#1087): ✗ when the template or the plinth pin is behind or a
-  # dependency pull request is open, ✓ when both read current; else no mark.
+  # dependency pull request is open, ✓ when both read current and the open
+  # pull requests were read with none of Dependabot's; else no mark.
   n9=""
   if grep -qE '^(template: [^,]+, behind |plinth pin: [^,]+, behind )' <<<"$behind_lines" || [ -n "$bot_prs" ]; then n9="✗"
-  elif grep -qE '^template: [^,]+, the tag this plinth targets$' <<<"$behind_lines" &&
+  elif [ -n "${prs_read:-}" ] && grep -qE '^template: [^,]+, the tag this plinth targets$' <<<"$behind_lines" &&
        grep -qE '^plinth pin: [^,]+, at v[0-9.]+, the latest plinth release$' <<<"$behind_lines"; then n9="✓"; fi
   map_row "$n9" 9 "$(step_row 9)"
   cells="$(row "A merged change to put out")" || exit 1
@@ -303,7 +314,7 @@ finish() {
     print_map
   else
     # The header and its rule, then the rows said above; none when no step was.
-    echo "table: this step and the next only; /plinth:guide map prints every row"
+    echo "table: this step and the next only; /plinth:guide map shows the whole way"
     head -2 <<<"$table"
     printf '%s' "$shown" | awk 'NF && !seen[$0]++'
     # What goes out on a version tag stays said in every answer (#908), from
@@ -463,6 +474,7 @@ for_issues='def for_issues: [(.body // "") | scan("(?i)(?:^|[^a-z0-9_])(?:close[
 read=100
 prs=""; merged=""; issues=""; failed=""
 issue_rows="$kind$refs$blockers"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind, blockers] | @tsv'
+prs_read=""
 if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt,mergeStateStatus \
       --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv' 2>&1)"; then
@@ -473,6 +485,7 @@ elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json n
 elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body --jq "$issue_rows" 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
 fi
+[ -n "$failed" ] || prs_read=yes
 if [ -n "$failed" ]; then
   echo "issues and pull requests: not read ($failed)"
   set_mode full "the state was not read"; say_off

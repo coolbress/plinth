@@ -1181,13 +1181,13 @@ for d in "$work/idle" "$work/created" "$work/plain" "$work/other"; do
   out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
   rows="$(table_of "$out" | sed -n '3,$p' | grep -c .)"
   if why="$(two_rows "$out")" && [ "$rows" -ge 1 ] && [ "$(table_of "$out" | sed -n 1p)" = "$(sed -n 1p <<<"$whole")" ] &&
-     grep -qx 'table: this step and the next only; /plinth:guide map prints every row' <<<"$out" &&
+     grep -qx 'table: this step and the next only; /plinth:guide map shows the whole way' <<<"$out" &&
      grep -qxF "release: $(sed -n 1p <<<"$rel"): $(sed -n 2p <<<"$rel")" <<<"$out"; then
     ok "no map ($(basename "$d"), $(grep '^mode: ' <<<"$out" | cut -c7-11)): the header, this step's row and the next one's ($rows)"
   else bad "no map ($(basename "$d")): ${why:-$rows rows}"; table_of "$out" | cut -c1-60 | sed 's/^/        /'; fi
 done
 out="$(MOCK_DIR="$work/idle" MOCK_GH_FAIL=1 "$script" "$work/idle" 2>&1)"
-if grep -qx 'table: this step and the next only; /plinth:guide map prints every row' <<<"$out" &&
+if grep -qx 'table: this step and the next only; /plinth:guide map shows the whole way' <<<"$out" &&
    [ -z "$(table_of "$out" | sed -n '3,$p')" ] && grep -qx 'where: not read' <<<"$out" && ! grep -q '^release: ' <<<"$out"; then
   ok "where: not read, no map: no row of the table"
 else bad "where: not read printed rows: $(table_of "$out" | sed -n '3,$p' | cut -c1-60)"; fi
@@ -1615,6 +1615,19 @@ mkdir -p "$d/.github/workflows"
 printf 'name: CI\non: pull_request\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s # v2.31.0\n' "$pin_at" > "$d/.github/workflows/ci.yml"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
 has "map: step 9 done when the template and the pin are current and no dependency pull request is open" "$out" "  ✓ 9 Between pieces of work: "
+put "$d/open.json" "$(pr 10 'chore(deps): bump y' true SUCCESS)"
+out="$(MOCK_FAIL_ON="pr list open" MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map: step 9 not done when the open pull requests were not read" "$out" "    9 Between pieces of work: "
+printf '[]' > "$d/open.json"
+d5="$(repo map-web "archetype: web
+hosting: elsewhere
+hosting_elsewhere: Fly.io")"
+out="$(MOCK_DIR="$d5" "$script" "$d5" map 2>&1)"
+has "map: a web app hosted elsewhere: the table's words that plinth does not deploy it" "$out" \
+  "      A merged change to put out: plinth does not deploy a \`web\` app that runs anywhere else"
+printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: web\nhosting: render\n' > "$d5/.copier-answers.yml"
+out="$(MOCK_DIR="$d5" "$script" "$d5" map 2>&1)"
+has "map: a web app on Render: it goes out by itself" "$out" "      A merged change to put out: A \`web\` app on Render goes out by itself"
 printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' > "$d/.copier-answers.yml"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
 has "map: step 9 needs attention when the template is behind" "$out" "  ✗ 9 Between pieces of work: "
@@ -1623,10 +1636,14 @@ has "map: step 9 needs attention when the template is behind" "$out" "  ✗ 9 Be
 depth() { awk '/^step: /{ on = 1 } on' <<<"$1"; }
 want4="step: A ticket ready (step 4) (you are here)
   purpose: $(awk -F ' \\| ' 'index($0, "| A ticket ready") == 1 { print $2 }' "$arsenal")"
-for form in "map 4" "map ticket" "DIR map 4" "map 4 DIR"; do
-  args="${form//DIR/$d}"
+# Run from the fixture for the forms with no folder, from elsewhere for the
+# others, so that a folder argument is what is read.
+mkdir -p "$d/spec"
+for form in "map 4" "map ticket" "DIR map 4" "map 4 DIR" "map DIR 4" ". map spec"; do
+  args="${form//DIR/$d}"; from="$d"; case "$form" in *DIR*) from="$work" ;; esac
   # shellcheck disable=SC2086
-  out="$(cd "$d" && MOCK_DIR="$d" "$script" $args 2>&1)"; rc=$?
+  out="$(cd "$from" && MOCK_DIR="$d" "$script" $args 2>&1)"; rc=$?
+  [ "$form" != ". map spec" ] || { grep -qx 'step: A job bigger than one session (step 3)' <<<"$out" && ok "map spec, with a spec/ folder here: step 3, not the folder" || bad "map spec with a spec/ folder: $(grep -E '^(step|map:)' <<<"$out" | head -2)"; continue; }
   if [ "$rc" -eq 0 ] && [ "$(depth "$out" | head -2)" = "$want4" ] && grep -qxF '  next command: /clear, then /implement #5' <<<"$out" &&
      grep -q '^repository: o/r' <<<"$out" && ! grep -qx 'map:' <<<"$out" && [ -z "$(table_of "$out")" ]
   then ok "$form: step 4 in depth, with the command, in the folder read"
