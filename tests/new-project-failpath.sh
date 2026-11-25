@@ -2054,6 +2054,10 @@ else bad gl-render-env "a token variable reached copier"; grep -E 'TOKEN' "$work
 # "moved to the background" as a failure would run the door a second time on
 # the same repository.
 skill="$root/skills/new-project/SKILL.md"
+# The questions are written out one level down, in questions.md; both() reads
+# the skill and then them, in the order an agent reads them.
+questions="$root/skills/new-project/questions.md"
+both() { cat "$skill" "$questions"; }
 for phrase in 'several minutes, and up to about 26' 'at most about 16 minutes in' \
               'longest timeout the Bash tool allows' 'run it in the background' \
               'wait for that same run to end' 'run the script again while it is running' \
@@ -2075,7 +2079,7 @@ fi
 # words (coolbress/plinth-template#300): a project that only collected data on
 # a schedule was made as data-ml when the answer read "Data processing, or a
 # model you train" (#1003). Each phrase is read in its own answer's row.
-row() { grep -F "$1" "$skill" | head -n 1; }
+row() { both | grep -F "$1" | head -n 1; }
 for pair in "(cli) |::also the choice for a tool that runs on a schedule on the owner's machine (a data collector, a pipeline)" \
             "(cli) |::On GitHub its release workflow runs only when a tag is pushed" \
             "(data-ml) |::A model trained here, with a model card. On GitHub a \`v*\` tag publishes the model, its metrics and the card as release files." \
@@ -2088,7 +2092,7 @@ for pair in "(cli) |::also the choice for a tool that runs on a schedule on the 
   else bad skill-archetype "the skill's $key row does not say \"$phrase\""; fi
 done
 for old in 'Data processing, or a model you train' 'data processing and model training' 'Always-on server or data job'; do
-  if grep -qF -- "$old" "$skill"; then bad skill-archetype "the skill still says \"$old\""
+  if both | grep -qF -- "$old"; then bad skill-archetype "the skill still says \"$old\""
   else ok skill-archetype "the skill no longer says \"$old\""; fi
 done
 
@@ -2098,12 +2102,12 @@ done
 # as a row; it is changed by typing into Other, which goes back to this one
 # question, so the question is written once. The table's own wording is
 # pinned in tests/new-project-answer-table.sh.
-vis_q="$(grep -nF 'Header `Visibility`: "Who may see this project'"'"'s code?"' "$skill" | head -n 1 | cut -d: -f1)"
-def_q="$(grep -nF 'header `Create`' "$skill" | head -n 1 | cut -d: -f1)"
+vis_q="$(both | grep -nF 'Header `Visibility`: "Who may see this project'"'"'s code?"' | head -n 1 | cut -d: -f1)"
+def_q="$(both | grep -nF 'header `Create`' | head -n 1 | cut -d: -f1)"
 if [ -n "$vis_q" ] && [ -n "$def_q" ] && [ "$vis_q" -lt "$def_q" ]
 then ok skill-visibility "the visibility question, worded as who may see the code, comes before the table's Create question"
 else bad skill-visibility "the visibility question (line ${vis_q:-none}) is not before the Create question (line ${def_q:-none})"; fi
-if grep -c 'Header `Visibility`' "$skill" | grep -qx 1
+if both | grep -c 'Header `Visibility`' | grep -qx 1
 then ok skill-visibility "visibility is asked in one place only, not again under Change some"
 else bad skill-visibility "the skill asks visibility in more than one place"; fi
 for pair in "| Anyone on the internet (public) |::the license recommended is MIT" \
@@ -2120,10 +2124,10 @@ done
 # Customize no longer asks the host.
 for old in 'visibility answered in step 4 stands' 'host chosen here is GitLab.com: do not ask it again' \
            'first the host and the license'; do
-  if grep -qF -- "$old" "$skill"; then bad skill-order "the skill still says \"$old\""
+  if both | grep -qF -- "$old"; then bad skill-order "the skill still says \"$old\""
   else ok skill-order "the skill no longer says \"$old\""; fi
 done
-flat="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
+flat="$(both | tr '\n' ' ' | tr -s ' ')"
 for old in 'ask step 4 again' 'ask the license again'; do
   if printf '%s\n' "$flat" | grep -qF -- "$old"; then bad skill-visibility "the skill still says \"$old\""
   else ok skill-visibility "the skill no longer says \"$old\""; fi
@@ -2131,19 +2135,19 @@ done
 # Where the host is chosen, GitLab.com says the next-step guide is partly
 # manual there (the guide reads GitHub only, #1061) and that template
 # updates are served, as a draft merge request (#1012).
-host_q="$(sed -n '/Header `Host`: "Where should the/,/^2\. \*\*What to make/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+host_q="$(sed -n '/Header `Host`: "Where should the/,/^## 2\. What to make/p' "$questions" | tr '\n' ' ' | tr -s ' ')"
 if printf '%s\n' "$host_q" | grep -qF 'the next-step guide is partly manual' && printf '%s\n' "$host_q" | grep -qF '`/plinth:template-update` serves it, ending in a draft merge request' \
    && ! printf '%s\n' "$host_q" | grep -qF 'template updates are partly manual'
 then ok skill-host "the Host question's GitLab.com choice says the guide is partly manual and template updates are served"
 else bad skill-host "the Host question's GitLab.com choice on the guide and template updates"; fi
-if grep -qF 'The answer becomes `--public` or `--private`, on either host.' "$skill"
+if both | grep -qF 'The answer becomes `--public` or `--private`, on either host.'
 then ok skill-visibility "the visibility answer becomes a flag, so the command said before the run asks it no more"
 else bad skill-visibility "the skill does not turn the visibility answer into --public or --private"; fi
 # The table step names the visibility in its Create label and as a row, and
 # its license follows the visibility, a change through Other included.
-defaults_step="$(sed -n '/^8\. \*\*Every answer in one table/,/^Then run, with the arguments/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+defaults_step="$(awk '/^## 8\. Every answer in one table/ {on=1; print; next} on && /^## / {exit} on' "$questions" | tr '\n' ' ' | tr -s ' ')"
 if printf '%s\n' "$defaults_step" | grep -qF 'header `Create`'
-then ok skill-visibility "the table step is read as step 8, up to the run"
+then ok skill-visibility "the table step is read as step 8, up to the next heading"
 else bad skill-visibility "the table step is not step 8 as this test reads it, so the checks below read nothing"; defaults_step=""; fi
 for phrase in '| 3 | Visibility |' 'Create `VISIBILITY` repository `owner/name`' 'MIT for a public project, Proprietary for a private one' \
               'A visibility changed this way asks the license again, with the new recommendation first' \
@@ -2164,16 +2168,16 @@ for step in '1\. \*\*The host\*\*' '2\. \*\*What to make\*\*' '3\. \*\*Follow-up
 done
 # The readiness read comes before the host question, and the preflight for the
 # chosen host before what to make; the free text before any archetype choice.
-ready_at="$(grep -nF 'new-project.sh --readiness' "$skill" | head -n 1 | cut -d: -f1)"
-host_at="$(grep -nF 'Header `Host`: "Where should the' "$skill" | head -n 1 | cut -d: -f1)"
-make_at="$(grep -nF 'What do you want to make?' "$skill" | head -n 1 | cut -d: -f1)"
-kind_at="$(grep -niF 'header `Kind`' "$skill" | head -n 1 | cut -d: -f1)"
-use_at="$(grep -nF 'Header `Use`' "$skill" | head -n 1 | cut -d: -f1)"
+ready_at="$(both | grep -nF 'new-project.sh --readiness' | head -n 1 | cut -d: -f1)"
+host_at="$(both | grep -nF 'Header `Host`: "Where should the' | head -n 1 | cut -d: -f1)"
+make_at="$(both | grep -nF 'What do you want to make?' | head -n 1 | cut -d: -f1)"
+kind_at="$(both | grep -niF 'header `Kind`' | head -n 1 | cut -d: -f1)"
+use_at="$(both | grep -nF 'Header `Use`' | head -n 1 | cut -d: -f1)"
 if [ -n "$ready_at" ] && [ -n "$host_at" ] && [ -n "$make_at" ] && [ -n "$use_at" ] && [ -n "$kind_at" ] \
    && [ "$ready_at" -lt "$host_at" ] && [ "$host_at" -lt "$make_at" ] && [ "$make_at" -lt "$use_at" ] && [ "$use_at" -lt "$kind_at" ]
 then ok skill-order "readiness, then the host, then the free text, then the follow-ups, then the archetype choice"
 else bad skill-order "readiness ${ready_at:-none}, host ${host_at:-none}, free text ${make_at:-none}, follow-ups ${use_at:-none}, kind ${kind_at:-none} are not in that order"; fi
-flat="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
+flat="$(both | tr '\n' ' ' | tr -s ' ')"
 for phrase in 'With `--host` in the arguments the host is not asked' \
               'With `--archetype=` given, steps 2, 3 and 4 are not asked.' \
               'only when the answer to step 2 leaves the archetype open' \
@@ -2202,7 +2206,7 @@ for phrase in 'With `--host` in the arguments the host is not asked' \
 done
 # The archetype step's makes / does-not-make table names every kind.
 for k in cli library backend data-ml web; do
-  if grep -qE "^   \| $k \| .+ \| .+ \|$" "$skill"; then ok skill-order "the makes table has a row for $k"
+  if grep -qE "^\| $k \| .+ \| .+ \|$" "$questions"; then ok skill-order "the makes table has a row for $k"
   else bad skill-order "the makes table has no row for $k"; fi
 done
 

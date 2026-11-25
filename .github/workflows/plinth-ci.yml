@@ -74,6 +74,9 @@ jobs:
       - name: Every test file is wired
         run: ./tests/all-tests-are-wired.sh
 
+      - name: Shipped skills within size, with no issue numbers
+        run: ./tests/skill-size.sh
+
       - name: The wall the door applies is a wall
         run: ./scripts/check-ruleset.sh
 
