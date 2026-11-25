@@ -43835,9 +43835,9 @@ floor check: root=$WORK/pkg project=. host=gitlab
   PASS  uv.lock committed
   INFO  archetype library: no container image, .env.example or JSON logs required
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  FAIL  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError)
   SKIP  no --repo: wall not checked
--- 6 failed, 2 not verified
+-- 7 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: no issue template under .gitlab/issue_templates/: every issue arrives in whatever shape its writer chose; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: no merge request template under .gitlab/merge_request_templates/: the squash commit is made from whatever description the merge request has; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -43845,7 +43845,7 @@ fail: .claude/settings.json does not deny glab auth status --show-token; run /pl
 fail: .claude/settings.json does not deny glab auth status -t; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .claude/settings.json does not deny glab config get token; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .claude/settings.json does not deny glab config reads; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/pkg --no-network
 --- exit 1
@@ -43888,9 +43888,9 @@ floor check: root=$WORK/pkg project=. host=gitlab
   PASS  uv.lock committed
   INFO  archetype library: no container image, .env.example or JSON logs required
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  FAIL  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError)
   SKIP  no --repo: wall not checked
--- 6 failed, 2 not verified
+-- 7 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: no issue template under .gitlab/issue_templates/: every issue arrives in whatever shape its writer chose; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: no merge request template under .gitlab/merge_request_templates/: the squash commit is made from whatever description the merge request has; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -43898,7 +43898,7 @@ fail: .claude/settings.json does not deny glab auth status --show-token; run /pl
 fail: .claude/settings.json does not deny glab auth status -t; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .claude/settings.json does not deny glab config get token; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .claude/settings.json does not deny glab config reads; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/pkg --no-network --host github
 --- exit 0
@@ -44300,9 +44300,9 @@ floor check: root=$WORK/img project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   FAIL  .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  FAIL  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError)
   SKIP  no --repo: wall not checked
--- 7 failed, 2 not verified
+-- 8 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: no issue template under .gitlab/issue_templates/: every issue arrives in whatever shape its writer chose; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: no merge request template under .gitlab/merge_request_templates/: the squash commit is made from whatever description the merge request has; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -44311,7 +44311,7 @@ fail: .claude/settings.json does not deny glab auth status -t; run /plinth:floor
 fail: .claude/settings.json does not deny glab config get token; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .claude/settings.json does not deny glab config reads; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/ml --no-network
 --- exit 0
@@ -45036,9 +45036,9 @@ floor check: root=$WORK/ml project=. host=gitlab
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  MODEL_CARD.md present
   FAIL  .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  FAIL  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError)
   SKIP  no --repo: wall not checked
--- 7 failed, 2 not verified
+-- 8 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: no issue template under .gitlab/issue_templates/: every issue arrives in whatever shape its writer chose; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: no merge request template under .gitlab/merge_request_templates/: the squash commit is made from whatever description the merge request has; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -45047,7 +45047,7 @@ fail: .claude/settings.json does not deny glab auth status -t; run /plinth:floor
 fail: .claude/settings.json does not deny glab config get token; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .claude/settings.json does not deny glab config reads; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/other-web --no-network
 --- exit 1
@@ -58396,12 +58396,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 0
@@ -58457,12 +58457,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 0
@@ -58518,12 +58518,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 0
@@ -58579,12 +58579,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network --host gitlab
 --- exit 0
@@ -58640,12 +58640,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network --host github
 --- exit 1
@@ -58825,12 +58825,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 1 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: .claude/settings.json does not deny glab auth status --show-token; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 1
@@ -58886,12 +58886,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 1 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: .claude/settings.json does not deny glab auth status -t; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 1
@@ -58947,12 +58947,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 1 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: .claude/settings.json does not deny glab config get token; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 1
@@ -59008,12 +59008,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 1 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: .claude/settings.json does not deny glab config reads; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 1
@@ -59069,12 +59069,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 1 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: SECURITY.md missing: on GitLab nothing is inherited from an owner's .github repository; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 1
@@ -59127,12 +59127,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 1 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: no issue template under .gitlab/issue_templates/: every issue arrives in whatever shape its writer chose; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 1
@@ -59188,12 +59188,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 1 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: no merge request template under .gitlab/merge_request_templates/: the squash commit is made from whatever description the merge request has; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 0
@@ -59249,12 +59249,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase --no-network
 --- exit 1
@@ -59310,12 +59310,12 @@ floor check: root=$WORK/glcase project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   FAIL  .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  FAIL  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, no include of https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml was found in its top-level include
   SKIP  no --repo: wall not checked
--- 1 failed, 2 not verified
+-- 2 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, no include of https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml was found in its top-level include; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glcase
 --- exit 0
@@ -59736,7 +59736,8 @@ floor check: root=$WORK/glgood project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
   SKIP  GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it
   SKIP  the login glab stores for gitlab.com not verified: glab's configuration is not read here; `glab auth status --hostname gitlab.com` shows it
@@ -59746,10 +59747,9 @@ floor check: root=$WORK/glgood project=. host=gitlab
   SKIP  SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, say which keys push [cannot be read here]
   INFO    not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file
   INFO  no production database URL found in this environment, the repository's .env* files or the env of .claude/settings*.json (the repository's and the user's); best effort: shell profile files, other files and schemes other than postgres:// and postgresql:// are not read
--- 0 failed, 6 not verified (1 cannot be read here)
+-- 0 failed, 5 not verified (1 cannot be read here)
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the login glab stores for gitlab.com not verified: glab's configuration is not read here; `glab auth status --hostname gitlab.com` shows it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -59810,7 +59810,8 @@ floor check: root=$WORK/glgood project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
   WARN  GITLAB_TOKEN is set in this environment: glab, and the git push it serves, use it before any stored login
   INFO    remove GITLAB_TOKEN where it is set (a shell startup file), then restart Claude Code
@@ -59822,10 +59823,9 @@ floor check: root=$WORK/glgood project=. host=gitlab
   SKIP  SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, say which keys push [cannot be read here]
   INFO    not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file
   INFO  no production database URL found in this environment, the repository's .env* files or the env of .claude/settings*.json (the repository's and the user's); best effort: shell profile files, other files and schemes other than postgres:// and postgresql:// are not read
--- 0 failed, 6 not verified (1 cannot be read here)
+-- 0 failed, 5 not verified (1 cannot be read here)
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the login glab stores for gitlab.com not verified: glab's configuration is not read here; `glab auth status --hostname gitlab.com` shows it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -59886,7 +59886,8 @@ floor check: root=$WORK/glgood project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
   SKIP  GLAB_CONFIG_DIR is set: the gh or git configuration read without it was not read, and the agent can unset it
   SKIP  GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it
@@ -59897,10 +59898,9 @@ floor check: root=$WORK/glgood project=. host=gitlab
   SKIP  SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, say which keys push [cannot be read here]
   INFO    not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file
   INFO  no production database URL found in this environment, the repository's .env* files or the env of .claude/settings*.json (the repository's and the user's); best effort: shell profile files, other files and schemes other than postgres:// and postgresql:// are not read
--- 0 failed, 7 not verified (1 cannot be read here)
+-- 0 failed, 6 not verified (1 cannot be read here)
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: GLAB_CONFIG_DIR is set: the gh or git configuration read without it was not read, and the agent can unset it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -59962,7 +59962,8 @@ floor check: root=$WORK/glgood project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
   SKIP  GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it
   SKIP  the login glab stores for gitlab.com not verified: glab's configuration is not read here; `glab auth status --hostname gitlab.com` shows it
@@ -59973,10 +59974,9 @@ floor check: root=$WORK/glgood project=. host=gitlab
   SKIP  SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, say which keys push [cannot be read here]
   INFO    not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file
   INFO  no production database URL found in this environment, the repository's .env* files or the env of .claude/settings*.json (the repository's and the user's); best effort: shell profile files, other files and schemes other than postgres:// and postgresql:// are not read
--- 0 failed, 6 not verified (1 cannot be read here)
+-- 0 failed, 5 not verified (1 cannot be read here)
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the login glab stores for gitlab.com not verified: glab's configuration is not read here; `glab auth status --hostname gitlab.com` shows it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -60037,7 +60037,8 @@ floor check: root=$WORK/glgood project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
   SKIP  GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it
   SKIP  the login glab stores for gitlab.com not verified: glab's configuration is not read here; `glab auth status --hostname gitlab.com` shows it
@@ -60048,10 +60049,9 @@ floor check: root=$WORK/glgood project=. host=gitlab
   SKIP  SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, say which keys push [cannot be read here]
   INFO    not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file
   INFO  no production database URL found in this environment, the repository's .env* files or the env of .claude/settings*.json (the repository's and the user's); best effort: shell profile files, other files and schemes other than postgres:// and postgresql:// are not read
--- 0 failed, 6 not verified (1 cannot be read here)
+-- 0 failed, 5 not verified (1 cannot be read here)
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: GIT_CONFIG_NOSYSTEM is set: the gh or git configuration read without it was not read, and the agent can unset it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the login glab stores for gitlab.com not verified: glab's configuration is not read here; `glab auth status --hostname gitlab.com` shows it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -60127,12 +60127,12 @@ floor check: root=$WORK/glold project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  no --repo: wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/glold --print-update-command --plinth-pin tested
 --- exit 0
@@ -61746,12 +61746,12 @@ floor check: root=$WORK/glgood project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   PASS  .gitlab-ci.yml carries the docker-image job (docker build, docker run)
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  PASS  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA (0123456789abcdef0123456789abcdef01234567)
+  PASS  the include names a checksum (include:integrity), which GitLab checks before the pipeline starts
   SKIP  --no-network: the GitLab wall not checked
--- 0 failed, 2 not verified
+-- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: --no-network: the GitLab wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/js-py --no-network
 --- exit 0
@@ -62094,9 +62094,9 @@ floor check: root=$WORK/js-gitlab project=. host=gitlab
   PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
   INFO  .github/workflows/release.yml not required: on GitLab the template renders no release workflow
   FAIL  .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one
-  SKIP  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and --no-network leaves it uninstalled
+  FAIL  .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError)
   SKIP  no --repo: wall not checked
--- 10 failed, 2 not verified
+-- 11 failed, 1 not verified
 --- again with --verdicts: exit 1
 fail: no issue template under .gitlab/issue_templates/: every issue arrives in whatever shape its writer chose; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: no merge request template under .gitlab/merge_request_templates/: the squash commit is made from whatever description the merge request has; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
@@ -62108,7 +62108,7 @@ fail: pyproject.toml missing; run /plinth:floor-check, which writes the fix for 
 fail: uv.lock missing: CI runs `uv sync --locked`; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: CMD ['python', '-m', 'app'] does not run an existing module python -m None; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 fail: .gitlab-ci.yml has no `docker-image` job that builds and runs the container; this archetype's floor has one; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA not verified: /opt/homebrew/opt/python@3.13/bin/python3.13 has no PyYAML and -...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: .gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it could not be read (FileNotFoundError); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/js-py --no-network --repo o/r --ruleset $ROOT/ruleset.json
 --- exit 1

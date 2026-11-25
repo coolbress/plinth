@@ -36,6 +36,29 @@ pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/        /'; return 0; }
 
+# Offline, the checker reads a GitLab include only with a PyYAML in its own
+# python3, and without one prints a SKIP naming that interpreter's path: the
+# output would depend on the machine (the runner's python3 has PyYAML, a
+# Homebrew one has none). So it is always recorded with PyYAML: when this
+# python3 has none, the GitLab floor-check job's own PyYAML, pinned by hash,
+# binary wheels only, goes into a venv under $work, as the checker installs
+# it with the network, and that venv's python is the one used. The output
+# without PyYAML is tests/floor-check-cases.sh's to judge, on a machine that
+# has none.
+if ! "$py" -c 'import yaml' 2>/dev/null; then
+  "$py" - "$checker" > "$work/req.txt" <<'PY' || { echo "  FAIL  the GitLab job's pinned PyYAML could not be read"; exit 1; }
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("floor_check", sys.argv[1])
+fc = importlib.util.module_from_spec(spec); spec.loader.exec_module(fc)
+req = fc.gitlab_job_block("REQ")
+sys.exit(req is None or sys.stdout.write(req) < 0)
+PY
+  "$py" -m venv "$work/yaml" && "$work/yaml/bin/python" -m pip install --quiet --disable-pip-version-check \
+      --require-hashes --only-binary :all: --no-deps -r "$work/req.txt" \
+    || { echo "  FAIL  $py has no PyYAML and the GitLab job's pinned PyYAML did not install (it needs the network)"; exit 1; }
+  py="$work/yaml/bin/python"
+fi
+
 # The python3 the cases test finds first: `python3 <checker> ...` goes to the
 # recorder, everything else to the real interpreter. The paths are written
 # in, so a case run under `env -i` is recorded too.
