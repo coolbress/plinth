@@ -94,13 +94,14 @@ The tests that compare plinth with the template (`template-rules-drift`,
 `release-allowlist`, `arsenal-freshness`, `template-update-cases`,
 `template-render` and `install-smoke`) read the checkout `PLINTH_TEMPLATE_DIR`
 names, which must be at the pinned commit with nothing changed; without it,
-each fetches its own. `ci / install` makes the checkout once, in a step of
-its own, so a network error there is the fetch failing, not a test.
+each fetches its own. Each `ci / install-<n>` job makes the checkout once, in a
+step of its own, so a network error there is the fetch failing, not a test.
 `tests/template-update-cases.sh` takes minutes rather than seconds.
 Everything else runs offline in seconds.
 
-The whole set, with the commands above it, is every step of `ci / install`, `ci / docs` and `ci / tools` but
-one, the link check. CodeQL and the `canary`, `canary-web` and
+The whole set, with the commands above it, is every step of `ci / install-1` to `ci / install-5`, `ci / docs`
+and `ci / tools` but one, the link check. Those five jobs run at once on separate runners, and `ci / install`, the
+required check, passes only when all five did and names a failed one's step and test (#1135). CodeQL and the `canary`, `canary-web` and
 `canary-template` jobs run only on GitHub.
 
 The lint files are what `ci / tools` calls, with the same flags, but a
