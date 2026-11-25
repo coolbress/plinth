@@ -205,19 +205,7 @@ SKIP_DIRS = {".git", ".venv", "node_modules", ".plinth-ci", ".smoke", ".scratch"
 FORM_SUFFIXES = {".yml", ".yaml", ".md"}
 CONFIG_NAMES = {"config.yml", "config.yaml"}
 
-fails = 0
-skips = 0
-left = 0
-# SKIPs no change to this machine or repository clears (#1002): SSH keys, the
-# sandbox's state while Claude Code does not record it, a GitHub status the
-# repository's plan does not expose. Inside `skips`, counted apart.
-unreadable = 0
 UNREADABLE = "[cannot be read here]"
-# Items that depend on Python, on a JavaScript or TypeScript repository (#681).
-na = 0
-# One line per FAIL, SKIP and deferred INFO, in the three forms of
-# docs/reference/required-checks.md, for --verdicts (#437).
-verdicts: list[str] = []
 LEFT_TO_SKILL = "; left to /plinth:floor-check"
 # The one next action a FAIL or WARN carries where CI shows it (#837); python-ci.yml's
 # floor-check step has the same words. Empty for a person's run, which is the skill.
@@ -227,44 +215,286 @@ next_action = ""
 # (the report beside it has the whole text).
 SKIP_NEXT = "; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
 
+# --- Checks, ids and states (#1103) -----------------------------------------
+# Every check has an entry in REGISTRY: an opaque id (`FC-<area><nn>`, never
+# reused; a retired id stays as an alias of the one that replaced it), what it
+# needs to run, who acts on what it finds, and the states it can return. A
+# check reports through emit(id, state, msg_key, values); the text and
+# verdicts renderers turn the results into the lines this file printed before
+# ids existed, byte for byte (tests/floor-check-golden.sh holds them).
+# `FC-UNASSIGNED` is where a call not yet given its id reports; each area's
+# pull request moves its calls out of it.
+#
+# The states, one to one with the verdicts printed:
+#   pass PASS, fail FAIL, warn WARN, unknown SKIP (with a reason),
+#   review INFO left to someone who can read it (with who), not_applicable N/A,
+#   info INFO.
+# Areas, as the checks fall in the run:
+#   A  the documents and issue templates      E  the ci job and its pins
+#   B  repository files and agent settings    F  the wall and the repository's settings
+#   C  template drift, the plugin, answers    G  this machine (--sandbox, --plugins, --credentials)
+#   D  the project: its archetype's files
+AREAS = {"A": "documents and issue templates", "B": "repository files and agent settings",
+         "C": "template drift, the plugin and the recorded answers", "D": "the project and its archetype's files",
+         "E": "the ci job and its pins", "F": "the wall and the repository's settings", "G": "this machine"}
+STATES = ("pass", "fail", "warn", "unknown", "review", "not_applicable", "info")
+SHOWN = {"pass": "PASS", "fail": "FAIL", "warn": "WARN", "unknown": "SKIP", "review": "INFO",
+         "not_applicable": "N/A", "info": "INFO"}
+HOSTS = ("github", "gitlab")
+NEEDS = ("files", "git", "network", "gh", "admin", "machine")
+HANDOFFS = ("agent", "person", "admin", "ci")
+LIFECYCLES = ("experimental", "stable")
+UNASSIGNED = "FC-UNASSIGNED"
+DOCS = "skills/floor-check/SKILL.md"
+
+
+def check(cid: str, name: str, *, states: tuple[str, ...], handoff: str, fix: str, docs: str,
+          messages: dict[str, str], hosts: tuple[str, ...] = HOSTS, archetypes: tuple[str, ...] | None = None,
+          needs: tuple[str, ...] = ("files",), lifecycle: str = "stable", aliases: tuple[str, ...] = (),
+          unreached: dict[str, str] | None = None) -> dict:
+    """One REGISTRY entry. `archetypes` None is every archetype; `unreached`
+    names, for a declared state no fixture of tests/floor-check-cases.sh
+    reaches, why not."""
+    area = cid[3]
+    assert re.fullmatch(r"FC-[A-G]\d\d", cid) and area in AREAS, cid
+    assert states and set(states) <= set(STATES), (cid, states)
+    assert handoff in HANDOFFS and lifecycle in LIFECYCLES and set(hosts) <= set(HOSTS) and set(needs) <= set(NEEDS), cid
+    # An experimental check has not earned a FAIL: it may only warn.
+    assert lifecycle == "stable" or "fail" not in states, cid
+    assert set(unreached or {}) <= set(states), cid
+    return {"id": cid, "name": name, "area": area, "hosts": hosts, "archetypes": archetypes, "needs": needs,
+            "lifecycle": lifecycle, "states": states, "handoff": handoff, "fix": fix, "docs": docs,
+            "messages": messages, "aliases": aliases, "unreached": unreached or {}}
+
+
+def _registry(*entries: dict) -> dict[str, dict]:
+    reg: dict[str, dict] = {}
+    for e in entries:
+        assert e["id"] not in reg, e["id"]
+        reg[e["id"]] = e
+    aliases = [a for e in entries for a in e["aliases"]]
+    assert len(aliases) == len(set(aliases)) and not set(aliases) & set(reg), "an alias names one retired id"
+    return reg
+
+
+STATIC = f"{DOCS}#what-the-static-checks-read-and-what-they-do-not"
+GITLAB_DOCS = f"{DOCS}#a-gitlab-checkout"
+TWO_WAY = ("pass", "fail")
+
+
+def _documents() -> tuple[dict, ...]:
+    """Area A: the documents and issue templates a repository carries."""
+    top = tuple(check(cid, f"{doc} present", states=TWO_WAY, handoff="agent", docs=STATIC,
+                      fix=f"add a {doc} that says what it is for; /plinth:new-project renders one",
+                      messages={"good": f"{doc} present", "bad": f"{doc} missing or empty"})
+                for cid, doc in (("FC-A01", "LICENSE"), ("FC-A02", "README.md"), ("FC-A03", "CHANGELOG.md"),
+                                 ("FC-A04", "AGENTS.md")))
+    return top + (
+        check("FC-A05", "CONTRIBUTING.md present", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="add a CONTRIBUTING.md with the build and test commands and how a change lands",
+              messages={"good": "CONTRIBUTING.md present", "bad": "CONTRIBUTING.md missing"}),
+        check("FC-A06", "CONTRIBUTING.md says how to build and test", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="write the commands that build and test the project in CONTRIBUTING.md",
+              messages={"good": "CONTRIBUTING.md says how to build and test",
+                        "bad": "CONTRIBUTING.md has no build or test command"}),
+        check("FC-A07", "CONTRIBUTING.md says how to land a change", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="say in CONTRIBUTING.md how a change lands: a pull request, its review and its merge",
+              messages={"good": "CONTRIBUTING.md says how to land a change",
+                        "bad": "CONTRIBUTING.md has no pull request flow"}),
+        check("FC-A08", "CONTRIBUTING.md is not a stub", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="write CONTRIBUTING.md out: at least ten lines a contributor can follow",
+              messages={"good": "CONTRIBUTING.md is not a stub ({lines} lines)",
+                        "bad": "CONTRIBUTING.md looks like a stub ({lines} lines)"}),
+        check("FC-A09", "SECURITY.md present or inherited", states=("pass", "fail", "unknown"), handoff="agent",
+              docs=STATIC, needs=("files", "network"),
+              fix="add a SECURITY.md that says how to report a vulnerability, or one in the owner's .github repository",
+              messages={"local": "SECURITY.md present",
+                        "inherited": "SECURITY.md inherited from the owner's .github repository",
+                        "gitlab": "SECURITY.md missing: on GitLab nothing is inherited from an owner's .github repository",
+                        "absent": "SECURITY.md neither local nor in the owner's .github repository",
+                        "unread": "SECURITY.md not local; inheritance not verified (offline or API error)"}),
+        check("FC-A10", "issue templates present or inherited", states=("pass", "fail", "unknown"), handoff="agent",
+              docs=STATIC, hosts=("github",), needs=("files", "network"),
+              fix="add issue forms under .github/ISSUE_TEMPLATE/ (bug, feature, task), or in the owner's .github repository",
+              messages={"good": "issue templates found ({where}): {names}",
+                        "bad": "no issue template ({where}): every issue arrives in whatever shape its writer chose",
+                        "absent": "issue forms neither local nor in the owner's .github repository",
+                        "unread": "issue forms not local; inheritance not verified (offline or API error)",
+                        "content": "inherited forms not verified (content unreadable): {names}"}),
+        check("FC-A11", "a local ISSUE_TEMPLATE replaces the owner's set", states=("info",), handoff="person",
+              docs=STATIC, hosts=("github",), fix="",
+              messages={"info": "a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them"}),
+        check("FC-A12", "a Markdown issue template has a name", states=("pass", "warn"), handoff="agent",
+              docs=STATIC, hosts=("github",), needs=("files", "network"),
+              fix="give the template front matter with a `name:` value",
+              messages={"good": "{name} has Markdown front matter with a name",
+                        "bad": "{name} has no front matter `name:` with a value: GitHub does not offer it as a template"}),
+        check("FC-A13", "an issue form has name, description and body", states=("pass", "fail", "warn"),
+              handoff="agent", docs=STATIC, hosts=("github",), needs=("files", "network"),
+              fix="add the missing top-level keys to the form",
+              messages={"good": "{name} has name, description, body", "bad": "{name} lacks {keys}"}),
+        check("FC-A14", "an issue form has no unquoted YAML alias", states=("pass", "fail", "warn"), handoff="agent",
+              docs=STATIC, hosts=("github",), needs=("files", "network"),
+              fix="quote the value that starts with * or &",
+              messages={"good": "{name} has no unquoted YAML alias",
+                        "bad": "{name} line {lines}: value starts with * or &"}),
+        check("FC-A15", "an issue form labels its issues", states=("pass", "fail", "warn"), handoff="agent",
+              docs=STATIC, hosts=("github",), needs=("files", "network"),
+              fix="add `labels:` with the label the issue sorts under",
+              messages={"good": "{name} labels its issues",
+                        "bad": "{name} has no labels: those issues never sort in a list"}),
+        check("FC-A16", "an issue form's body is a list", states=("pass", "warn"), handoff="agent", docs=STATIC,
+              hosts=("github",), needs=("files", "network"),
+              fix="make `body:` a list of form elements",
+              messages={"good": "{name} body is a list",
+                        "bad": "{name} body is not a list: GitHub rejects a form whose body is not a sequence"}),
+        check("FC-A17", "at least one issue template GitHub can offer", states=TWO_WAY, handoff="agent", docs=STATIC,
+              hosts=("github",), needs=("files", "network"),
+              fix="fix one template so GitHub offers it: the per-file lines above say what each lacks",
+              messages={"good": "at least one template GitHub can offer ({where})",
+                        "bad": "no usable issue template ({where}): every file found is missing what GitHub needs to offer it"}),
+        check("FC-A18", "Dependabot configured", states=TWO_WAY, handoff="agent", docs=STATIC, hosts=("github",),
+              fix="add .github/dependabot.yml for the project's ecosystems and its GitHub Actions",
+              messages={"good": ".github/dependabot.yml present", "bad": ".github/dependabot.yml missing: pins age silently"}),
+        check("FC-A19", "Dependabot does not run on GitLab", states=("info",), handoff="person", docs=GITLAB_DOCS,
+              hosts=("gitlab",), fix="",
+              messages={"info": "Dependabot does not run on GitLab: nothing raises the plinth include or uv.lock's "
+                                "pins for you; `deps` scans uv.lock on each merge request"}),
+        check("FC-A20", "GitLab issue templates present", states=TWO_WAY, handoff="agent", docs=GITLAB_DOCS,
+              hosts=("gitlab",), fix="add issue templates under .gitlab/issue_templates/",
+              messages={"good": "issue templates found (.gitlab/issue_templates): {names}",
+                        "bad": "no issue template under .gitlab/issue_templates/: every issue arrives in whatever "
+                               "shape its writer chose"}),
+        check("FC-A21", "GitLab merge request templates present", states=TWO_WAY, handoff="agent", docs=GITLAB_DOCS,
+              hosts=("gitlab",), fix="add a merge request template under .gitlab/merge_request_templates/",
+              messages={"good": "merge request templates found (.gitlab/merge_request_templates): {names}",
+                        "bad": "no merge request template under .gitlab/merge_request_templates/: the squash commit "
+                               "is made from whatever description the merge request has"}),
+        check("FC-A22", "a GitLab issue template labels its issues", states=("pass", "warn"), handoff="agent",
+              docs=GITLAB_DOCS, hosts=("gitlab",), fix="add a `/label ~name` line to the template",
+              messages={"good": "{name} labels its issues",
+                        "bad": "{name} has no `/label ~name` line: those issues never sort in a list"}),
+    )
+
+
+REGISTRY = _registry(
+    # Where a result() call not yet given its id reports: any state, the
+    # message its text. Not a check; the golden test counts what is left in it.
+    {"id": UNASSIGNED, "name": "not yet given an id", "area": None, "hosts": HOSTS, "archetypes": None,
+     "needs": NEEDS, "lifecycle": "stable", "states": STATES, "handoff": "agent", "fix": "", "docs": DOCS,
+     "messages": {}, "aliases": (), "unreached": {}},
+    *_documents(),
+)
+
+# The run, as emit() records it: one result per line printed, in order, and
+# the --verdicts lines they make (tests/check-messages.sh reads the last one).
+results: list[dict] = []
+verdicts: list[str] = []
+TRACE = os.environ.get("FLOOR_CHECK_TRACE")   # tests/floor-check-golden.sh: one `<id> <state>` line per result
+HERE = "cannot be read here"                   # an unknown no change to this machine or repository clears (#1002)
+
+
+def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
+         reason: str | None = None, reader: str | None = None) -> None:
+    """Report one result of check `cid`: `state` one it declares, the message
+    its entry's `msg_key` with `values` filled in (for FC-UNASSIGNED,
+    `msg_key` is the message). An unknown says why (`reason`; HERE marks one
+    no change clears), a review who reads it (`reader`)."""
+    e = REGISTRY[cid]
+    assert state in e["states"], (cid, state)
+    assert (state == "unknown") == (reason is not None), (cid, state, reason)
+    assert (state == "review") == (reader is not None), (cid, state, reader)
+    msg = msg_key if cid == UNASSIGNED else e["messages"][msg_key].format(**(values or {}))
+    r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader}
+    results.append(r)
+    verdicts.extend(verdict_lines(r))
+    print(render_text(r))
+    if TRACE:
+        with open(TRACE, "a", encoding="utf-8") as t:
+            t.write(f"{cid} {state}\n")
+
+
+def verdict(cid: str, cond: bool, values: dict | None = None, bad: str = "fail") -> bool:
+    """A two-way check: `good` when cond holds, else `bad` (fail, or warn)."""
+    emit(cid, "pass" if cond else bad, "good" if cond else "bad", values)
+    return cond
+
 
 def result(kind: str, msg: str, *, deferred: bool = False, here: bool = False) -> None:
-    """`deferred` marks an INFO for a read this run cannot make and a run with
-    a login that administers the repository does (#436): outside the
-    not-verified count (#303), counted on the summary line on its own.
-    `here` marks a SKIP that cannot be read from this machine or repository
-    whatever the person changes there (#1002): still a SKIP in the count,
-    marked on its line and counted apart on the summary line. The verdicts
-    file keeps the line as it was, so `ci / floor-check` reads the same."""
-    global fails, skips, left, na, unreadable
+    """A call not yet given its id (#1103): `kind` the verdict printed.
+    `deferred` marks an INFO for a read this run cannot make and a run with
+    a login that administers the repository does (#436), `here` a SKIP that
+    cannot be read from this machine or repository whatever the person
+    changes there (#1002)."""
     assert not here or kind == "SKIP", "only a SKIP is marked as not readable here"
-    shown = f"{msg}; {next_action}" if next_action and kind in ("FAIL", "WARN") else msg
-    if here:
-        unreadable += 1
-        shown = f"{msg} {UNREADABLE}"
-    print(f"  {kind:5} {shown}")
-    if kind == "N/A":
-        na += 1
-    elif kind == "FAIL":
-        fails += 1
-        verdicts.append(f"fail: {shown}")
-    elif kind == "SKIP":
-        skips += 1
-        # The SKIP's own text says why; what reads it differs per item (an
-        # admin login, the network, a file the door writes), so the line says
-        # only what is true of all of them.
-        room = 300 - len("not yet confirmed: ") - len(SKIP_NEXT)
-        verdicts.append(f"not yet confirmed: {msg if len(msg) <= room else msg[:room - 3] + '...'}{SKIP_NEXT}")
-    if deferred:
-        left += 1
-        # The fixed ending is how `ci / floor-check` tells these from the
-        # per-commit lines it annotates (#441).
-        verdicts.append(f"not yet confirmed: {msg}{LEFT_TO_SKILL}")
+    assert not deferred or kind == "INFO", "only an INFO is left to the skill"
+    state = "review" if deferred else {v: k for k, v in SHOWN.items() if k != "review"}[kind]
+    emit(UNASSIGNED, state, msg, reason=(HERE if here else "unstated") if kind == "SKIP" else None,
+         reader="/plinth:floor-check with a login that administers the repository" if deferred else None)
 
 
 def ok(cond: bool, good: str, bad: str) -> bool:
     result("PASS" if cond else "FAIL", good if cond else bad)
     return cond
+
+
+# --- Renderers: what the results print as -----------------------------------
+def render_text(r: dict) -> str:
+    """The report's line. A FAIL or WARN carries the next action where CI
+    shows it; an unknown no change clears is marked as such."""
+    kind = SHOWN[r["state"]]
+    shown = f"{r['msg']}; {next_action}" if next_action and kind in ("FAIL", "WARN") else r["msg"]
+    if r["reason"] == HERE:
+        shown = f"{r['msg']} {UNREADABLE}"
+    return f"  {kind:5} {shown}"
+
+
+def render_summary(rs: list[dict]) -> str:
+    """The last line: unknowns no change clears counted apart inside the not
+    verified (#1002), reviews outside it (#303, #436), and what does not
+    apply (#681)."""
+    n = {s: sum(r["state"] == s for r in rs) for s in STATES}
+    here = sum(r["reason"] == HERE for r in rs)
+    return (f"-- {n['fail']} failed, {n['unknown']} not verified" + (f" ({here} cannot be read here)" if here else "")
+            + (f", {n['review']} left to /plinth:floor-check" if n["review"] else "")
+            + (f", {n['not_applicable']} do not apply" if n["not_applicable"] else ""))
+
+
+def verdict_lines(r: dict) -> list[str]:
+    """The --verdicts lines one result makes (#437), in the three forms of
+    docs/reference/required-checks.md: a fail, an unknown, a review. They
+    keep the message without the unreadable-here mark, so `ci / floor-check`
+    reads the same."""
+    if r["state"] == "fail":
+        return [f"fail: {r['msg']}; {next_action}" if next_action else f"fail: {r['msg']}"]
+    if r["state"] == "unknown":
+        # The SKIP's own text says why; what reads it differs per item (an
+        # admin login, the network, a file the door writes), so the line says
+        # only what is true of all of them.
+        msg, room = r["msg"], 300 - len("not yet confirmed: ") - len(SKIP_NEXT)
+        return [f"not yet confirmed: {msg if len(msg) <= room else msg[:room - 3] + '...'}{SKIP_NEXT}"]
+    if r["state"] == "review":
+        # The fixed ending is how `ci / floor-check` tells these from the
+        # per-commit lines it annotates (#441).
+        return [f"not yet confirmed: {r['msg']}{LEFT_TO_SKILL}"]
+    return []
+
+
+def render_verdicts(rs: list[dict]) -> str:
+    """The --verdicts file: each result's lines, after a pass line when
+    nothing failed."""
+    lines = [line for r in rs for line in verdict_lines(r)]
+    if not any(r["state"] == "fail" for r in rs):
+        lines.insert(0, "pass: the floor, no FAIL in what this run read")
+    return "".join(f"{line}\n" for line in lines)
+
+
+def run_record(rs: list[dict]) -> dict:
+    """The run beyond its lines: the registered checks that reported nothing
+    (not evaluated: another host, archetype or flag), for #1105's report."""
+    seen = {r["id"] for r in rs}
+    return {"results": rs, "not_evaluated": [i for i in REGISTRY if i != UNASSIGNED and i not in seen],
+            "crashed": None}
 
 
 def read(path: Path) -> str:
@@ -345,42 +575,36 @@ def inherited_file(owner: str | None, path: str, network: bool):
 
 
 def check_files(root: Path, owner: str | None, network: bool, host: str = "github") -> None:
-    for name in ("LICENSE", "README.md", "CHANGELOG.md", "AGENTS.md"):
+    for cid, name in (("FC-A01", "LICENSE"), ("FC-A02", "README.md"), ("FC-A03", "CHANGELOG.md"), ("FC-A04", "AGENTS.md")):
         p = root / name
-        ok(p.is_file() and p.stat().st_size > 0, f"{name} present", f"{name} missing or empty")
+        verdict(cid, p.is_file() and p.stat().st_size > 0)
 
     # CONTRIBUTING: present is not adequate. A third of the ones in the wild
     # are stubs with no build/test command and no way to land a change.
     c = root / "CONTRIBUTING.md"
-    if ok(c.is_file(), "CONTRIBUTING.md present", "CONTRIBUTING.md missing"):
+    if verdict("FC-A05", c.is_file()):
         text = read(c)
-        ok(re.search(r"uv run pytest|uv sync|pytest|npm test|make test|tests?/\S+\.(sh|py)", text, re.IGNORECASE) is not None,
-           "CONTRIBUTING.md says how to build and test",
-           "CONTRIBUTING.md has no build or test command")
-        ok(re.search(r"pull request|\bPR\b|fork|merge", text, re.IGNORECASE) is not None,
-           "CONTRIBUTING.md says how to land a change",
-           "CONTRIBUTING.md has no pull request flow")
+        verdict("FC-A06", re.search(r"uv run pytest|uv sync|pytest|npm test|make test|tests?/\S+\.(sh|py)", text,
+                                    re.IGNORECASE) is not None)
+        verdict("FC-A07", re.search(r"pull request|\bPR\b|fork|merge", text, re.IGNORECASE) is not None)
         body = [ln for ln in text.splitlines() if ln.strip()]
-        ok(len(body) >= 10, f"CONTRIBUTING.md is not a stub ({len(body)} lines)",
-           f"CONTRIBUTING.md looks like a stub ({len(body)} lines)")
+        verdict("FC-A08", len(body) >= 10, {"lines": len(body)})
 
     if (root / "SECURITY.md").is_file():
-        result("PASS", "SECURITY.md present")
+        emit("FC-A09", "pass", "local")
     elif host == "gitlab":
         # GitLab has no owner-level `.github` repository to inherit from (#547 review, round 3).
-        result("FAIL", "SECURITY.md missing: on GitLab nothing is inherited from an owner's .github repository")
+        emit("FC-A09", "fail", "gitlab")
     else:
         got = inherited_file(owner, "SECURITY.md", network)
         if got is ERROR:
-            result("SKIP", "SECURITY.md not local; inheritance not verified (offline or API error)")
+            emit("FC-A09", "unknown", "unread", reason="offline or API error")
         else:
-            ok(got is not ABSENT, "SECURITY.md inherited from the owner's .github repository",
-               "SECURITY.md neither local nor in the owner's .github repository")
+            emit("FC-A09", *(("pass", "inherited") if got is not ABSENT else ("fail", "absent")))
 
     if host == "gitlab":
         check_gitlab_templates(root)
-        result("INFO", "Dependabot does not run on GitLab: nothing raises the plinth include or uv.lock's pins "
-                       "for you; `deps` scans uv.lock on each merge request")
+        emit("FC-A19", "info", "info")
         check_gitattributes(root)
         check_agent_settings(root, host)
         check_doc_links(root)
@@ -398,13 +622,13 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
         check_issue_forms(local, "local")
         # GitHub does not merge the two sets: any local template or config
         # replaces the owner's shared set entirely, per folder, not per file.
-        result("INFO", "a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them")
+        emit("FC-A11", "info", "info")
     else:
         listing = api(f"repos/{owner}/.github/contents/.github/ISSUE_TEMPLATE", network) if owner else ERROR
         if listing is ERROR or (listing is not ABSENT and not isinstance(listing, list)):
-            result("SKIP", "issue forms not local; inheritance not verified (offline or API error)")
+            emit("FC-A10", "unknown", "unread", reason="offline or API error")
         elif listing is ABSENT:
-            result("FAIL", "issue forms neither local nor in the owner's .github repository")
+            emit("FC-A10", "fail", "absent")
         else:
             files, unread = {}, []
             for entry in cast("list[dict]", listing):  # a list: the two branches above took every other value
@@ -423,13 +647,12 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
                     else:
                         unread.append(name)
             if unread:
-                result("SKIP", f"inherited forms not verified (content unreadable): {', '.join(sorted(unread))}")
+                emit("FC-A10", "unknown", "content", {"names": ", ".join(sorted(unread))}, reason="content unreadable")
             # Absence is concluded only when every candidate was actually read.
             if files or not unread:
                 check_issue_forms(files, "inherited")
 
-    ok((root / ".github" / "dependabot.yml").is_file(), ".github/dependabot.yml present",
-       ".github/dependabot.yml missing: pins age silently")
+    verdict("FC-A18", (root / ".github" / "dependabot.yml").is_file())
 
     check_gitattributes(root)
     check_agent_settings(root)
@@ -472,8 +695,7 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
     forms = {n: t for n, t in files.items() if n not in CONFIG_NAMES}
     # Found, not valid: this line says which files are there. Whether each is a
     # template GitHub will actually offer is the per-file verdict below.
-    ok(bool(forms), f"issue templates found ({where}): {', '.join(sorted(forms))}",
-       f"no issue template ({where}): every issue arrives in whatever shape its writer chose")
+    verdict("FC-A10", bool(forms), {"where": where, "names": ", ".join(sorted(forms))})
     alias_trap = re.compile(r"^\s*[\w-]+:\s+[*&]")
     usable = 0
     for name, text in sorted(forms.items()):
@@ -483,44 +705,38 @@ def check_issue_forms(files: dict[str, str], where: str) -> None:
         # yesterday. Promoting one is a later decision, taken once consumers
         # have had a release to see it.
         known = name.endswith(".yml")
-        say = (lambda cond, good, bad: ok(cond, good, bad)) if known else \
-              (lambda cond, good, bad: result("PASS" if cond else "WARN", good if cond else bad))
+        bad = "fail" if known else "warn"
         if name.endswith(".md"):
             # A legacy Markdown template is front matter and prose. GitHub reads
             # its `name:` from that front matter; the key alone is not a name,
             # and without a value there is no title to list the template under.
             good = bool(md_front_matter_name(text))
-            say(good, f"{name} has Markdown front matter with a name",
-                f"{name} has no front matter `name:` with a value: GitHub does not offer it as a template")
+            verdict("FC-A12", good, {"name": name}, "warn")   # a `.md` is new ground: never a FAIL
             usable += good
             continue
         keys = [k for k in ("name:", "description:", "body:") if not re.search(rf"^{k}", text, re.MULTILINE)]
-        say(not keys, f"{name} has name, description, body", f"{name} lacks {keys}")
+        verdict("FC-A13", not keys, {"name": name, "keys": keys}, bad)
         # A value starting with `*` or `&` is read as a YAML alias and breaks the whole form.
         trap = [n for n, ln in enumerate(text.splitlines(), 1) if alias_trap.match(ln)]
-        say(not trap, f"{name} has no unquoted YAML alias", f"{name} line {trap}: value starts with * or &")
+        verdict("FC-A14", not trap, {"name": name, "lines": trap}, bad)
         # `labels:` is plinth's policy, not GitHub's syntax: forms are valid
         # without it, so it does not decide whether GitHub can offer the file.
         labelled = re.search(r"^labels:\s*\[.+\]", text, re.MULTILINE) or re.search(r"^labels:\s*\n\s+- ", text, re.MULTILINE)
-        say(labelled is not None, f"{name} labels its issues",
-            f"{name} has no labels: those issues never sort in a list")
+        verdict("FC-A15", labelled is not None, {"name": name}, bad)
         # `body:` holding a scalar is a form GitHub rejects. This check is new
         # ground for every extension, so it never fails on its own; it decides
         # `usable` only for the extensions this file did not read before, where
         # no repository can have been passing on the strength of it.
         listed = yaml_body_is_list(text)
         if not keys:
-            result("PASS" if listed else "WARN",
-                   f"{name} body is a list" if listed else
-                   f"{name} body is not a list: GitHub rejects a form whose body is not a sequence")
+            verdict("FC-A16", listed, {"name": name}, "warn")
         usable += not keys and not trap and (listed or known)
     # An invalid extra is a WARN because the repository passed without it being
     # read. A repository whose every template is invalid never passed: it failed
     # the old filename check too, so leaving it green would be a loosening, not
     # compatibility.
     if forms:
-        ok(usable > 0, f"at least one template GitHub can offer ({where})",
-           f"no usable issue template ({where}): every file found is missing what GitHub needs to offer it")
+        verdict("FC-A17", usable > 0, {"where": where})
 
 
 def check_gitlab_templates(root: Path) -> None:
@@ -528,19 +744,15 @@ def check_gitlab_templates(root: Path) -> None:
     .gitlab/merge_request_templates/ by file name; no front matter. An issue
     template labels its issues with a `/label ~name` quick action, as
     plinth-template renders them; one without it is a WARN, as on GitHub."""
-    for where, what, bad in ((".gitlab/issue_templates", "issue templates",
-                              "every issue arrives in whatever shape its writer chose"),
-                             (".gitlab/merge_request_templates", "merge request templates",
-                              "the squash commit is made from whatever description the merge request has")):
+    for cid, where in (("FC-A20", ".gitlab/issue_templates"), ("FC-A21", ".gitlab/merge_request_templates")):
         d = root / where
         found = sorted(p.name for p in d.iterdir() if p.is_file() and p.suffix == ".md" and p.stat().st_size > 0) \
             if d.is_dir() else []
-        ok(bool(found), f"{what} found ({where}): {', '.join(found)}", f"no {what[:-1]} under {where}/: {bad}")
-        if where.endswith("issue_templates"):
+        verdict(cid, bool(found), {"names": ", ".join(found)})
+        if cid == "FC-A20":
             for name in found:
-                labelled = re.search(r"^/label\s+~\S", read(d / name), re.MULTILINE)
-                result("PASS" if labelled else "WARN", f"{name} labels its issues" if labelled else
-                       f"{name} has no `/label ~name` line: those issues never sort in a list")
+                verdict("FC-A22", re.search(r"^/label\s+~\S", read(d / name), re.MULTILINE) is not None,
+                        {"name": name}, "warn")
 
 
 def check_gitattributes(root: Path) -> None:
@@ -5132,14 +5344,17 @@ def main() -> int:
         check_credentials(root, host)
         check_database_urls(root)
 
-    print(f"-- {fails} failed, {skips} not verified" + (f" ({unreadable} cannot be read here)" if unreadable else "")
-          + (f", {left} left to /plinth:floor-check" if left else "")
-          + (f", {na} do not apply" if na else ""))
+    print(render_summary(results))
     if a.verdicts:
-        lines = verdicts if fails else ["pass: the floor, no FAIL in what this run read", *verdicts]
-        Path(a.verdicts).write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
-    return 1 if fails else 0
+        Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
+    return 1 if any(r["state"] == "fail" for r in results) else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception:
+        if TRACE:
+            with open(TRACE, "a", encoding="utf-8") as t:
+                t.write(f"crashed {results[-1]['id'] if results else '-'}\n")
+        raise
