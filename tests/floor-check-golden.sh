@@ -3,7 +3,8 @@
 # to ids and states (#1103). Every `python3 "$checker" ...` that
 # tests/floor-check-cases.sh makes is recorded: its arguments, exit code,
 # stdout and --verdicts file, the CI form (--actions-token --verdicts) among
-# them; the records, with the fixtures' temporary paths written as $WORK and
+# them, and each run that asked for no --verdicts file again with one; the
+# records, with the fixtures' temporary paths written as $WORK and
 # this checkout as $ROOT, are compared with
 # tests/fixtures/floor-check-golden/cases.txt. A run the cases test makes
 # another way (a copy of the checker, another interpreter) is not recorded.
@@ -58,7 +59,13 @@ records, root, home = sys.argv[1:]
 # /var/folders/.../T, which it uses whatever $TMPDIR says), with every
 # directory above it, written as it was passed or as resolved.
 work = re.compile(r"(?:/[^/\s'\"=:]+)*/tmp\.[A-Za-z0-9]{6,}")
+# A not yet confirmed line cut at 300 characters inside a temporary path is cut
+# at another place on another machine, whose path is longer or shorter: from
+# that path on, the cut is written as one placeholder.
+cut = re.compile(r"^(not yet confirmed: .*?)/\S*tmp\..*?\.\.\.(; run /plinth:floor-check where it can read this: \S+)$",
+                 re.MULTILINE)
 def norm(s: str) -> str:
+    s = cut.sub(r"\1<a temporary path, then cut>\2", s)
     s = work.sub("$WORK", s)
     return s.replace(root, "$ROOT").replace(home, "$HOME")
 out = []
@@ -67,12 +74,15 @@ for f in sorted(Path(records).glob("*.json")):
     out.append(f"=== {norm(' '.join(r['args']))}\n--- exit {r['exit']}\n--- stdout\n{norm(r['stdout'])}")
     if r["verdicts"] is not None:
         out.append(f"--- verdicts\n{norm(r['verdicts'])}")
+    if r.get("second"):
+        out.append(f"--- again with --verdicts: exit {r['second']['exit']}\n{norm(r['second']['verdicts'])}")
 sys.stdout.write("".join(s if s.endswith("\n") else s + "\n" for s in out))
 PY
 n="$(grep -c '^=== ' "$work/cases.txt")"
 ci_form="$(grep -E '^=== ' "$work/cases.txt" | grep -c -- '--actions-token.*--verdicts\|--verdicts.*--actions-token')"
-if [ "$n" -gt 100 ] && [ "$ci_form" -gt 0 ]; then ok "$n checker runs recorded, $ci_form of them in the CI form (--actions-token --verdicts)"
-else bad "only $n checker runs recorded ($ci_form in the CI form): the cases test did not run as it should" "$(tail -20 "$work/cases.log")"; fi
+want="$(grep -c '^=== ' "$golden" 2>/dev/null || echo 0)"
+if [ "$n" -gt 100 ] && [ "$n" -ge "$want" ] && [ "$ci_form" -gt 0 ]; then ok "$n checker runs recorded, $ci_form of them in the CI form (--actions-token --verdicts)"
+else bad "$n checker runs recorded, $want in the golden file ($ci_form in the CI form): the cases test did not run as it should" "$(tail -20 "$work/cases.log")"; fi
 
 if [ "$write" = 1 ]; then
   mkdir -p "$(dirname "$golden")"; cp "$work/cases.txt" "$golden"; echo "  wrote $golden"
