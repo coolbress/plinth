@@ -73,7 +73,7 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.50.4 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.51.0 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
 ```
 
 Before any question, the generator reads whether `gh` and `glab` are
@@ -170,7 +170,14 @@ you can type instead:
   `.github` repository already publishes one, which then applies.
   `--no-code-of-conduct` says no without being asked.
 - `--description=<one line>`: the line under the repository's name on
-  GitHub; `--no-description` leaves it empty.
+  GitHub or GitLab.com, and under the title in `README.md`;
+  `--no-description` leaves it empty.
+- `--records-language=<language>`: the language the project's issues, pull
+  requests and documents are written in, named in English (`Korean`);
+  English when not given.
+- `--no-custom-user-model`, for `web` only: start with Django's `auth.User`
+  instead of the project's own `accounts.User`, which a new `web` project
+  gets without being asked.
 - `--public`, `--dir=<path>`, `--host=github`: the defaults, said out loud,
   so that nothing is asked.
 

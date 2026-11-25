@@ -2219,9 +2219,12 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
         return no(f"{new!r} is not an archetype's name (lower-case letters, digits and hyphens)")
     # `web` is left out both ways: a move to or from it also changes the
     # hosting answers, its two checks and the tag ruleset, none of it measured.
+    # A move into `web` will also need --data custom_user_model=true, as
+    # /plinth:new-project passes for a new web project (#1092): lifting this
+    # refusal without it would start the moved project on Django's auth.User.
     if "web" in (old, new):
         return no("web is not moved to or from here: its hosting answers, its two checks and its tag ruleset "
-                  "change with it, and that move was not measured")
+                  "change with it, and that move was not measured; a move into web will also need custom_user_model=true (#1092)")
     if old == new:
         return no(f"the recorded archetype is already {new}")
     d = template_drift(root, host, network, move=True)

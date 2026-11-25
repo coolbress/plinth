@@ -86,7 +86,7 @@ jobs:
   # line. Its check names are `canary-template (…) / …`, required by no
   # ruleset; the name moves with the pin.
   canary-template:
-    name: canary-template (plinth-template v1.50.4 at 36bc40b)
+    name: canary-template (plinth-template v1.51.0 at f0ed80e)
     uses: ./.github/workflows/python-ci.yml
     permissions:
       contents: read
@@ -95,6 +95,6 @@ jobs:
       actions: write
     with:
       working-directory: canary-template
-      extra-python-versions: "3.13"
+      extra-python-versions: "3.14"
       max-diff-lines: 0
       floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"

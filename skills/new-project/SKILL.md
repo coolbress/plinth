@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -134,7 +134,8 @@ is typed into the chat, and none of the questions below needs one.
    choices): "What do you want to make? A sentence or two in your own words
    is enough; \"I don't know\" is an answer too." Keep the answer: the
    archetype's reason quotes it, the names translate it, the visibility
-   reads it, and the table of step 8 shortens it into the description. With `--archetype=` given, steps 2, 3 and 4 are not asked.
+   reads it, and the table of step 8 shortens it into the description and
+   names its language as the records language. With `--archetype=` given, steps 2, 3 and 4 are not asked.
 3. **Follow-ups**, only when the answer to step 2 leaves the archetype open
    (it fits two kinds, says too little, or is "I don't know"); one that names
    what is made asks none. Ask only what decides between the kinds still open:
@@ -296,7 +297,9 @@ is typed into the chat, and none of the questions below needs one.
    the check (`one name only`).
 
    A stop about the description means the line is still too long: shorten
-   it and check again. Any other stop is shown and explained as
+   it and check again. A stop about the records language means it was not
+   named in English: write it as `Korean`, not `ko` or `한국어`, and check
+   again. Any other stop is shown and explained as
    [What the script printed](#what-the-script-printed) says.
 
    Then show the table, its labels in the person's language and each flag
@@ -311,11 +314,21 @@ is typed into the chat, and none of the questions below needs one.
    | 5 | Third-party reviewer | None | `--no-third-party-review` or `--third-party-review` |
    | 6 | Code of conduct | None; "the owner's applies (`<owner>/.github`)" when `owner-files.sh` says yes | `--no-code-of-conduct` or `--code-of-conduct=<contact>`; none when the owner's applies |
    | 7 | Description | The sentence of step 2, shortened to one line of at most 350 characters in its own language; none when step 2 was not asked or its answer was "I don't know" | `--description=<line>` or `--no-description` |
-   | 8 | Local folder | `~/<name>`, written out as an absolute path | `--dir=<path>` |
+   | 8 | Records language | The language the sentence of step 2 is written in, or the one the person writes in when there is none, named in English (`Korean`, not `ko`) | `--records-language=<language>` |
+   | 9 | Local folder | `~/<name>`, written out as an absolute path | `--dir=<path>` |
 
-   On GitLab.com leave out rows 5, 6 and 7, and keep the other rows'
-   numbers: the reviewer and the code of conduct are GitHub only, and the
-   GitLab door sets no description yet.
+   The description is the repository's one line on its page and under the
+   title in `README.md`. The records language is the language the new
+   project's `AGENTS.md` asks its issues, pull requests, commit messages and
+   documents to be written in; headings tools read, commit types and code
+   stay in English.
+
+   On GitLab.com leave out rows 5 and 6, and keep the other rows' numbers:
+   the reviewer and the code of conduct are GitHub only.
+
+   When the visibility is public and the records language is not English,
+   one line under the table says so: "The issues and pull requests will be
+   in `LANGUAGE`, on a public page." Say nothing of it otherwise.
 
    Ask, header `Create`: "Create it with these answers?"
 
@@ -334,23 +347,28 @@ is typed into the chat, and none of the questions below needs one.
 
    | Label | Rows |
    | --- | --- |
-   | Name and folder | rows 1 and 8 |
-   | Description | row 7 |
+   | Name and folder | rows 1 and 9 |
+   | Records language and description | rows 7 and 8 |
    | License | row 4 |
    | Reviewer and code of conduct | rows 5 and 6 |
 
-   On GitLab.com leave out **Description** and **Reviewer and code of
-   conduct**, as their rows are. Only the groups picked are asked, in one
+   On GitLab.com leave out **Reviewer and code of conduct**, as its rows
+   are. Only the groups picked are asked, in one
    call:
 
    - **Name and folder**: the name of step 6, then the folder (below). A
      new name is checked with the table's check above, the new name in place
      of the old: step 6's command would pass the old one again in
      `$ARGUMENTS` and stop (`one name only`).
-   - **Description**: header `Description`: "A one-line description for the
-     repository's page?" **Keep it**: the row's line. **None**:
-     `--no-description`; it can be added later on the repository's page. A
-     line typed into Other replaces it, shortened the same way.
+   - **Records language and description**: header `Description`: "A
+     one-line description for the repository's page and its README?" **Keep
+     it**: the row's line. **None**: `--no-description`; it can be added
+     later on the repository's page. A line typed into Other replaces it,
+     shortened the same way. Then header `Records`: "Which language should
+     the project's issues, pull requests and documents be written in?"
+     **Keep `LANGUAGE`**: the row's. **English**:
+     `--records-language=English`. Another language typed into Other is
+     named in English and becomes `--records-language=<language>`.
    - **License**: header `License` (below).
    - **Reviewer and code of conduct**: headers `Reviewer` and `Conduct`
      (below), `Conduct` left out when the owner's applies.
@@ -424,8 +442,14 @@ is typed into the chat, and none of the questions below needs one.
    before the run (below) asks nothing when typed again: the host
    (`--host=github` or `--host=gitlab`), `--archetype=`, `--public` or
    `--private`, `--license=`, `--dir=` with the home directory written out
-   as an absolute path, and on GitHub the reviewer's, the code of conduct's
-   (none when the owner's applies) and the description's.
+   as an absolute path, the description's, `--records-language=`, and on
+   GitHub the reviewer's and the code of conduct's (none when the owner's
+   applies). For `web`, add `--custom-user-model` without asking, unless
+   the arguments give `--no-custom-user-model`: the new
+   project starts with its own user model (`accounts.User`), which Django
+   sets before the first `migrate` and which is changed later only by hand;
+   the table shows no row for it, and a person who wants Django's
+   `auth.User` types `--no-custom-user-model` as an argument.
 
 Then run, with the arguments as typed and the flags the answers added:
 

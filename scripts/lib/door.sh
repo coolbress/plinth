@@ -49,6 +49,26 @@ name_fits() {
   [ "${#1}" -le "$name_limit" ] || stop "the name is ${#1} characters; the limit is $name_limit: a longer name makes the new project's own lint check fail, because its Python package takes the same name and lines of the rendered code then pass the 100 characters the check allows; nothing was read or created" \
     "  fix: choose a name of $name_limit characters or fewer"
 }
+# answers_fit <usage> <description> <records language>: exits 2 when the
+# description is not one line of at most 350 characters, or the records
+# language is not a language named in English, before any tool or login is
+# read. The description goes onto the repository's page (GitHub's limit is
+# 350) and into README.md; the language into AGENTS.md
+# (coolbress/plinth-template#331). Characters, not bytes, whatever the
+# locale: under LC_ALL=C ${#desc} counts a Hangul syllable as three, and a
+# 350-character Korean line was refused (#1068). A UTF-8 character is every
+# byte that is not a continuation byte (0x80-0xBF).
+answers_fit() {
+  local usage="$1" desc="$2" lang="$3" n
+  n="$(printf '%s' "$desc" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')"
+  if [[ "$desc" == *$'\n'* ]] || [ "$n" -gt 350 ]; then
+    printf '%s\n' "--description is one line of at most 350 characters (got $n)" "$usage" >&2; exit 2; fi
+  # The template writes the value into a sentence ("written in Korean"), so a
+  # code (ko) or a name in its own script (한국어) would read wrong there.
+  if [ -n "$lang" ] && ! [[ "$lang" =~ ^[A-Z][A-Za-z]*([ -][A-Za-z]+)*$ && ${#lang} -le 40 ]]; then
+    printf '%s\n' "--records-language= takes a language named in English, such as Korean or Brazilian Portuguese, not a code or a name in its own script (got: $lang)" "$usage" >&2; exit 2; fi
+  return 0
+}
 warn() { printf 'warning: %s\n' "$1" >&2; }
 # below <floor> <version>: true when version sorts before floor.
 below() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" != "$1" ]; }

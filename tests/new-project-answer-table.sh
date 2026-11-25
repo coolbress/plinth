@@ -28,7 +28,8 @@ echo "-- the table holds every answer, the name and the visibility among them"
 # One row each, in a table whose first cell is the row's number.
 row() { printf '%s\n' "$step" | grep -oE "\| $1 \| $2 \|[^|]*\|[^|]*\|" | head -n 1; }
 for pair in "1::Repository and host" "2::Kind" "3::Visibility" "4::License" \
-            "5::Third-party reviewer" "6::Code of conduct" "7::Description" "8::Local folder"; do
+            "5::Third-party reviewer" "6::Code of conduct" "7::Description" "8::Records language" \
+            "9::Local folder"; do
   n="${pair%%::*}"; name="${pair#*::}"
   if [ -n "$(row "$n" "$name")" ]; then ok "row $n is \"$name\""
   else bad "the table has no row $n \"$name\""; fi
@@ -40,7 +41,8 @@ says "the license row" "$(row 4 License)" 'MIT for a public project, Proprietary
 says "the reviewer row" "$(row 5 'Third-party reviewer')" '`--no-third-party-review`'
 says "the code-of-conduct row" "$(row 6 'Code of conduct')" "the owner's applies" '`--no-code-of-conduct`'
 says "the description row" "$(row 7 Description)" 'sentence of step 2' 'one line of at most 350 characters' '`--no-description`'
-says "the folder row" "$(row 8 'Local folder')" '`--dir=' 'absolute path'
+says "the records-language row" "$(row 8 'Records language')" 'language the sentence of step 2 is written in' 'named in English' '`--records-language=<language>`'
+says "the folder row" "$(row 9 'Local folder')" '`--dir=' 'absolute path'
 # The code-of-conduct row is filled after the owner's files are read, and the
 # table is checked with --check before it is shown, so a description still too
 # long is shortened again.
@@ -68,12 +70,23 @@ says "the step" "$step" 'header `Create`' \
 
 echo "-- change some: one multi-select of at most four groups matching the rows"
 says "the step" "$step" '| Change some |' 'header `Change`' 'multi-select'
-groups="$(printf '%s\n' "$step" | grep -oE '\| (Name and folder|Description|License|Reviewer and code of conduct) \| rows? [0-9, and]+ \|' | sort -u)"
+groups="$(printf '%s\n' "$step" | grep -oE '\| (Name and folder|Records language and description|License|Reviewer and code of conduct) \| rows? [0-9, and]+ \|' | sort -u)"
 if [ "$(printf '%s\n' "$groups" | grep -c .)" = 4 ]; then ok "four groups, each naming its rows"
 else bad "the groups are not the four with their rows:"; printf '%s\n' "$groups" | sed 's/^/        /'; fi
-says "the groups" "$groups" '| Name and folder | rows 1 and 8 |' '| Description | row 7 |' \
+says "the groups" "$groups" '| Name and folder | rows 1 and 9 |' '| Records language and description | rows 7 and 8 |' \
   '| License | row 4 |' '| Reviewer and code of conduct | rows 5 and 6 |'
-says "the step" "$step" 'On GitLab.com leave out rows 5, 6 and 7' 'On GitLab.com leave out **Description** and **Reviewer and code of conduct**'
+says "the step" "$step" 'On GitLab.com leave out rows 5 and 6' 'On GitLab.com leave out **Reviewer and code of conduct**'
+# The description and the records language are door flags on both hosts now
+# (#1068, coolbress/plinth-template#331): GitLab keeps their rows and group.
+for old in 'the GitLab door sets no description yet' 'leave out **Description**'; do
+  if printf '%s\n' "$step" | grep -qF -- "$old"; then bad "the step still says \"$old\""
+  else ok "the step no longer says \"$old\""; fi
+done
+
+echo "-- the records language: asked in its group, hinted when public and not English"
+says "the step" "$step" 'header `Records`' '`--records-language=English`' \
+  'When the visibility is public and the records language is not English' 'on a public page' 'Say nothing of it otherwise' \
+  'named in English: write it as `Korean`, not `ko`'
 
 echo "-- only the picked groups are asked; what a change moves is asked too"
 says "the step" "$step" 'Only the groups picked are asked' \
@@ -87,6 +100,8 @@ says "the step" "$step" 'numbers to change, comma-separated; 0 to keep'
 
 echo "-- every answer stays a flag, so the command said before the run asks nothing"
 says "the step" "$step" 'Every row becomes a flag, a default included' \
+  'the description'"'"'s, `--records-language=`, and on GitHub the reviewer'"'"'s' \
+  'For `web`, add `--custom-user-model` without asking' '`--no-custom-user-model`' \
   'When the arguments give every row, show the table and ask nothing' \
   'A row changed at the table replaces its flag among the arguments' 'never both'
 # The bundled question is gone, read as one line so a phrase across lines counts.

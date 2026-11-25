@@ -58,8 +58,8 @@ git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitla
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--no-description] [--preflight] [--check]"
-preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--preflight] [--check]"
+preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""; desc=""; desc_said=""; lang=""
 for a in "$@"; do case "$a" in
   --preflight)   preflight=1 ;;
   --check)       check=1 ;;
@@ -72,10 +72,17 @@ for a in "$@"; do case "$a" in
   # stops before anything is read; saying no to it is what GitLab has anyway.
   --no-third-party-review) ;;
   --third-party-review) echo "--third-party-review is for GitHub only: the check is a GitHub workflow, and a GitLab project has no caller for it; nothing was read or created"$'\n'"  fix: drop --third-party-review" >&2; exit 2 ;;
-  # The code of conduct and the description are asked and set on GitHub
-  # only for now (#772); saying no to them is what GitLab gets.
-  --no-code-of-conduct|--no-description) ;;
-  --code-of-conduct*|--description=*) echo "${a%%=*} is for GitHub only for now: the GitLab door does not render a code of conduct or set a description; nothing was read or created"$'\n'"  fix: drop ${a%%=*}" >&2; exit 2 ;;
+  # The description goes onto the project's page and into README.md, and the
+  # records language into AGENTS.md, as on GitHub (#1068).
+  --description=*)      desc="${a#*=}"; desc_said="$desc_said+" ;;
+  --no-description)     desc=""; desc_said="$desc_said-" ;;
+  --records-language=*) lang="${a#*=}" ;;
+  # The code of conduct is asked and rendered on GitHub only for now (#772);
+  # saying no to it is what GitLab gets.
+  --no-code-of-conduct) ;;
+  --code-of-conduct*) echo "--code-of-conduct is for GitHub only for now: the GitLab door does not render a code of conduct; nothing was read or created"$'\n'"  fix: drop --code-of-conduct" >&2; exit 2 ;;
+  # A web project's user model (#1092): web is made on GitHub only.
+  --custom-user-model|--no-custom-user-model) echo "$a is for --archetype=web, which is made on GitHub only; nothing was read or created"$'\n'"  fix: drop $a, or drop --host gitlab" >&2; exit 2 ;;
   -*)            echo "unknown option for --host gitlab: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
 esac; done
@@ -83,6 +90,8 @@ esac; done
 # Both, in either order, stop as on GitHub: the last one winning made an
 # added --public turn a private request public (#960).
 case "$vis_said" in *+*-*|*-*+*) echo "--private and --public: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
+case "$desc_said" in *+*-*|*-*+*) echo "--description and --no-description: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
+answers_fit "$usage" "$desc" "$lang"
 # Before any tool or login is read, so nothing on GitLab is touched; the
 # template's own validator says the same, later (#615).
 [ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
@@ -326,7 +335,7 @@ fi
 env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$ns" --data "license=$spdx" --data "archetype=$arch" \
-  --data "host=gitlab" \
+  --data "host=gitlab" ${desc:+--data "description=$desc"} ${lang:+--data "records_language=$lang"} \
   --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null
 rm -rf "$dir/.git"
 git init -q -b main "$dir"
@@ -334,7 +343,8 @@ git -C "$dir" remote add origin "$url.git"
 git -C "$dir" add -A
 git -C "$dir" commit -q -m "chore: render $template_repo@$template_ref ($arch, $spdx, host gitlab)"
 
-echo "create $gitlab/$project ($visibility, $spdx, $arch, as $role) from $template_repo@$template_ref in $dir; wall: protected main (no push, Maintainers merge, no force push), Pipelines must succeed, squash, fast-forward; then the first merge request. rollback: $rollback"
+lang_words=""; [ -z "$lang" ] || [ "$lang" = English ] || lang_words=", records in $lang"
+echo "create $gitlab/$project ($visibility, $spdx, $arch$lang_words, as $role) from $template_repo@$template_ref in $dir; wall: protected main (no push, Maintainers merge, no force push), Pipelines must succeed, squash, fast-forward; then the first merge request. rollback: $rollback"
 [ -z "$token_note" ] || echo "$token_note"
 
 # ── create ───────────────────────────────────────────────────────────────
@@ -345,7 +355,7 @@ echo "create $gitlab/$project ($visibility, $spdx, $arch, as $role) from $templa
 # available) to stderr even when the call succeeds.
 create_err="$(mktemp)"
 if ! create_out="$(glab api --hostname "$gitlab" -X POST projects -f "name=$name" -f "path=$name" \
-      -F "namespace_id=$ns_id" -f "visibility=$visibility" -f default_branch=main 2>"$create_err")"; then
+      -F "namespace_id=$ns_id" -f "visibility=$visibility" -f default_branch=main ${desc:+-f "description=$desc"} 2>"$create_err")"; then
   printf '%s\n' "the create call failed, so there is nothing to roll back: $(head -c 300 <<<"$create_out $(cat "$create_err")" | tr '\n' ' ')" \
     "  if GitLab created it anyway, it is at $url" >&2
   rm -f "$create_err"; exit 1
