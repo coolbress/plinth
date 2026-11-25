@@ -209,11 +209,13 @@ UNREADABLE = "[cannot be read here]"
 LEFT_TO_SKILL = "; left to /plinth:floor-check"
 # The one next action a FAIL or WARN carries where CI shows it (#837); python-ci.yml's
 # floor-check step has the same words. Empty for a person's run, which is the skill.
-NEXT_ACTION = "run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+# At the plinth commit ci / floor-check fetched this from (job.workflow_sha); main run by hand.
+REPORT = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/skills/floor-check/SKILL.md#report"
+NEXT_ACTION = f"run /plinth:floor-check, which writes the fix for each item: {REPORT}"
 next_action = ""
 # The SKIP's next action; a line the job annotates stays within 300 characters
 # (the report beside it has the whole text).
-SKIP_NEXT = "; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+SKIP_NEXT = f"; run /plinth:floor-check where it can read this: {REPORT}"
 
 # --- Checks, ids and states (#1103) -----------------------------------------
 # Every check has an entry in REGISTRY: an opaque id (`FC-<area><nn>`, never
@@ -2117,7 +2119,7 @@ def plugin_skew(root: Path, network: bool, host: str | None = None) -> dict:
     if d["state"] == "skip":
         return {"state": "skip"}
     gitlab = (host or (copier_answers(root) or {}).get("host")) == "gitlab"
-    out: dict = {"target": d["target"], "gitlab": gitlab}
+    out: dict = {"target": d["target"]}
 
     def key(tag: str) -> tuple[int, ...]:
         return tuple(int(x) for x in tag[1:].split("."))
@@ -2179,8 +2181,8 @@ def check_plugin_skew(root: Path, network: bool, host: str | None = None) -> Non
     s = plugin_skew(root, network, host)
     if s["state"] == "older":
         result("WARN", f"template: {plugin_skew_head(s)}")
-        # template-update.sh has no GitLab path; this check prints the update line there.
-        for step in PLUGIN_UPDATE_STEPS[:-1] + (("/plinth:floor-check",) if s["gitlab"] else PLUGIN_UPDATE_STEPS[-1:]):
+        # template-update.sh serves GitLab too (#1012), so the last step is the same on both hosts.
+        for step in PLUGIN_UPDATE_STEPS:
             result("INFO", f"  {step}")
         if s.get("unreleased"):
             result("INFO", f"  {s['unreleased']}")

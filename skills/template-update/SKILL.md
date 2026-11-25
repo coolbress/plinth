@@ -13,8 +13,13 @@ skill runs it and relays what it says, then runs the project's review on the
 pull request it opened. The command is the checker's own line,
 read from it, never written out here or by you.
 
-GitLab is not served yet: on a GitLab checkout the script stops before any
-work and names the project's own update steps; relay that and stop.
+On GitLab it runs the same steps through `glab`: copier runs the same way,
+and what reads and writes the host is `glab api`, asked of the host and
+project origin's URL names, which ends in a draft merge request (a `Draft:`
+title) where GitHub's ends in a draft pull request, with its pipeline in
+place of the checks. Read "pull request" below as the merge request there.
+The script stops before any work on a GitLab checkout whose origin URL names
+no project; relay that and stop.
 
 ## 1. The plan
 
@@ -123,7 +128,8 @@ the plan; then show the plan again and ask again.
   `Review: fresh-context`, with what it reported on the lines under it. If
   none could run, the line stays `none`, with the reason why. That is the one
   edit this skill makes to the description (`gh pr edit --body-file`, on the
-  body as `gh pr view` reads it). Show the user the findings, and change
+  body as `gh pr view` reads it; on GitLab `glab mr update <iid> --description`,
+  on the body as `glab mr view <iid> -F json` reads it). Show the user the findings, and change
   nothing in the update for them without the user's word.
   An update often changes the agent's own rules (`AGENTS.md`, `CLAUDE.md`,
   `.claude/settings.json`, a file under `.claude/skills/` or
@@ -223,8 +229,8 @@ archetype it does not fit: a `data-ml` project that trains nothing, for
 example, which would otherwise delete the model example by hand and still get
 it offered again by every update. Moving is the person's call: never propose
 it as the fix for a warning, and run each step only on their word. It moves
-between any two archetypes but `web`, which it does not move to or from, and
-not on GitLab, which this script does not serve. Which names are archetypes
+between any two archetypes but `web`, which it does not move to or from, on
+GitHub and on GitLab. Which names are archetypes
 is the template's to say: copier refuses one it does not offer, and the plan
 stops on that before anything is written. The project must already be
 at the template tag this plinth targets: when it is behind, the plan stops
@@ -233,6 +239,17 @@ and says to update first.
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --archetype <a>
 ```
+
+On GitLab no check is required by name, so the required-check and Actions
+allowlist steps below are GitHub's alone. There the plan names the jobs of
+`.gitlab-ci.yml` that stop and start (`docker-image`, which `backend` and
+`data-ml` carry), whether "Pipelines must succeed" is on with
+skipped pipelines not counted, and whether the default branch is protected,
+as `/plinth:floor-check` reads them on GitLab. When both hold, there is nothing
+to change in the project's settings. When either does not, or was not read,
+it names the `glab api` command a Maintainer runs with their own login, or
+says to run `/plinth:floor-check`. Give the person that line; never run it
+yourself.
 
 The plan runs the move on a copy of the default branch outside the
 repository and prints what it deletes, adds and changes, any conflicts, and
