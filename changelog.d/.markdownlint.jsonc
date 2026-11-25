@@ -1,0 +1,2 @@
+// A fragment starts at its "### <Section>" heading: the version heading above it is written at release (scripts/make-release.sh).
+{ "MD041": false }

@@ -10,8 +10,9 @@
 # the commit: scripts/new-project.sh's template_ref and template_sha, the
 # README's status line, the tutorial's example line, the summary check in
 # tests/new-project-failpath.sh, the canary-template job's name in
-# .github/workflows/ci.yml, and one `Changed` line under [Unreleased] in
-# CHANGELOG.md, moved when an earlier raise since the release wrote one.
+# .github/workflows/ci.yml, and one `Changed` line in the changelog fragment
+# changelog.d/template-pin.md (#1136), moved when an earlier raise since the
+# release wrote one.
 # Every edit is made in memory first: a place that is not found as expected
 # changes no file.
 #
@@ -111,42 +112,30 @@ for path, before, after in edits:
         continue
     texts[path] = text.replace(before, after)
 
-# CHANGELOG.md: the [Unreleased] line an earlier raise wrote moves to the new
-# tag; without one, a Changed line is added.
-path = "CHANGELOG.md"
-text = (root / path).read_text(encoding="utf-8")
-m = re.search(r"^## \[Unreleased\]\n(.*?)(?=^## \[)", text, re.M | re.S)
-if not m:
-    problems.append(f"{path}: no '## [Unreleased]' section followed by a released one")
-else:
-    body = m[1]
-    line = re.compile(r"^(- `/plinth:new-project` renders " + re.escape(name) + r" )v\d+\.\d+\.\d+", re.M)
+# The changelog line, in its own fragment (#1136): the line an earlier raise
+# since the release wrote moves to the new tag; without the file, it is written.
+path = "changelog.d/template-pin.md"
+line = re.compile(r"^(- `/plinth:new-project` renders " + re.escape(name) + r" )v\d+\.\d+\.\d+", re.M)
+if (root / path).exists():
+    body = (root / path).read_text(encoding="utf-8")
     found = line.findall(body)
-    if len(found) > 1:
-        problems.append(f"{path}: [Unreleased] has {len(found)} lines saying what /plinth:new-project renders, not one")
-    elif found:
-        body = line.sub(lambda x: x[1] + new, body, count=1)
+    if len(found) != 1:
+        problems.append(f"{path}: {len(found)} lines saying what /plinth:new-project renders, not one")
     else:
-        entry = f"- `/plinth:new-project` renders {name} {new} instead of {old}.\n"
-        changed = re.search(r"^### Changed\n\n", body, re.M)
-        if changed:
-            body = body[:changed.end()] + entry + body[changed.end():]
-        else:
-            nxt = re.search(r"^### (?!Added\n)", body, re.M)
-            at = nxt.start() if nxt else len(body.rstrip("\n")) + 1
-            head = body[:at].rstrip("\n")
-            body = (head + "\n\n" if head.strip() else "\n") + "### Changed\n\n" + entry + "\n" + body[at:].lstrip("\n")
-    texts[path] = text[:m.start(1)] + body + text[m.end(1):]
+        texts[path] = line.sub(lambda x: x[1] + new, body, count=1)
+else:
+    texts[path] = f"### Changed\n\n- `/plinth:new-project` renders {name} {new} instead of {old}.\n"
 
 if problems:
     print("no file changed; these places are not as a pin raise expects:", *problems, sep="\n  ", file=sys.stderr)
     sys.exit(1)
 for path, text in texts.items():
+    (root / path).parent.mkdir(exist_ok=True)
     (root / path).write_text(text, encoding="utf-8")
 PY
 
 echo "raised the template pin: $name $old_ref (${old_sha:0:7}) -> $tag (${sha:0:7})"
-echo "edited: scripts/new-project.sh, README.md, docs/tutorials/getting-started.md, tests/new-project-failpath.sh, .github/workflows/ci.yml, CHANGELOG.md"
+echo "edited: scripts/new-project.sh, README.md, docs/tutorials/getting-started.md, tests/new-project-failpath.sh, .github/workflows/ci.yml, changelog.d/template-pin.md"
 from="the tag plinth $version was tested with"
 if [ -n "$template_reads" ]; then
   echo "eval suite: owed at the next release: $name's diff from $tested ($from) to $tag changes what a new project's agent reads:"
@@ -160,9 +149,9 @@ echo "  1. tests/template-render.sh --write, to re-render canary-template/ at $t
 echo "     and copy template/Dockerfile.jinja's FROM lines at $tag into canary-web/Dockerfile, which tests/template-render.sh holds to them (#975)"
 plinth_sha_note=""
 grep -qx 'copier.yml' <<<"$template_changed" && plinth_sha_note=", and whether plinth_sha's default moved (copier.yml changed)"
-echo "  2. CHANGELOG.md [Unreleased]: say what a project rendered at $tag receives (gh release view $tag --repo $repo)$plinth_sha_note"
+echo "  2. changelog.d/template-pin.md: say what a project rendered at $tag receives (gh release view $tag --repo $repo)$plinth_sha_note"
 if [ -d "$root/.git" ] || [ -f "$root/.git" ]; then
-  left="$(git -C "$root" grep -n -F -e "$old_ref" -e "${old_sha:0:7}" -- ':!CHANGELOG.md' ':!canary-template' || true)"
+  left="$(git -C "$root" grep -n -F -e "$old_ref" -e "${old_sha:0:7}" -- ':!CHANGELOG.md' ':!changelog.d' ':!canary-template' || true)"
   if [ -n "$left" ]; then
     echo "  3. these lines still name $old_ref or ${old_sha:0:7}; change each, or keep it when it names the release a thing arrived in:"
     sed 's/^/     /' <<<"$left"
