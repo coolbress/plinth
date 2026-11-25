@@ -121,6 +121,16 @@ mutate "$tmp/f-same.json"    'for f in files[:2]: f["patch"] = "@@ -2,3 +2,3 @@\
 mutate "$tmp/f-cldel.json"   'c = files[2]; c["patch"] += "\n-## [0.1.0] - 2026-09-01"'
 mutate "$tmp/f-nopatch.json" 'files[2].pop("patch")'
 mutate "$tmp/f-renamed.json" 'files[1]["status"] = "renamed"'
+# Run 1 deletes the changelog fragments it writes out (#1136).
+fr='def fr(name, status="removed"): return {"filename": name, "status": status, "patch": "@@ -1,3 +0,0 @@\n-### Fixed\n-\n-- x"}
+'
+mutate "$tmp/f-frags.json"    "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/two.md")]'
+mutate "$tmp/f-fragedit.json" "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/two.md", "modified")]'
+mutate "$tmp/f-fragadd.json"  "$fr"'files += [fr("changelog.d/one.md", "added")]'
+mutate "$tmp/f-otherdel.json" "$fr"'files += [fr("changelog.d/one.md"), fr("README.md")]'
+mutate "$tmp/f-fragdir.json"  "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/.markdownlint.jsonc")]'
+mutate "$tmp/f-fragdot.json"  "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/.hidden.md")]'
+mutate "$tmp/f-fragsub.json"  "$fr"'files += [fr("changelog.d/sub/x.md")]'
 python3 -c 'import json,sys; json.dump([{"filename": "x%d" % i, "status": "added", "patch": "+x"} for i in range(100)], open(sys.argv[1], "w"))' "$tmp/f-fullpage.json"
 R='TITLE=chore(release): v1.7.0'
 gate ''     'a release title with a file beyond the three is summoned'         PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-extra.json"
@@ -137,7 +147,14 @@ gate ''     'a release title with a full page of files is summoned'            P
 gate ''     'a release title with an unreadable files list is summoned'        PASS_RELEASE=true "$R" FILES_JSON="$tmp/broken.json"
 gate ''     'a release title with no files list is summoned'                   PASS_RELEASE=true "$R" FILES_JSON=
 gate ''     'a release title with the list of another version is summoned'     PASS_RELEASE=true 'TITLE=chore(release): v1.6.1' FILES_JSON="$real"
+gate ''     'a release title that edits a changelog fragment instead of removing it is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragedit.json"
+gate ''     'a release title that adds a changelog fragment is summoned'     PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragadd.json"
+gate ''     'a release title that removes another file beside the fragments is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-otherdel.json"
+gate ''     "a release title that removes changelog.d's lint config is summoned" PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragdir.json"
+gate ''     'a release title that removes a dot file run 1 never deletes is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragdot.json"
+gate ''     'a release title that removes a file below changelog.d/ is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragsub.json"
 gate "$REL" 'the real v1.7.0 release diff passes under its title'              PASS_RELEASE=true "$R" FILES_JSON="$real"
+gate "$REL" 'the release diff with its changelog fragments removed passes'      PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-frags.json"
 if out="$(env -i PATH="$PATH" DRAFT=false MERGED=false PR_STATE=open PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-extra.json" \
             ACTIVITY_JSON="$tmp/dependabot.json" HEAD_SHA="$HEAD" AUTHOR_LOGIN=coolbress bash "$gate_sh" 2>&1 >/dev/null)" \
    && printf '%s' "$out" | grep -q 'scripts/new-project.sh'; then

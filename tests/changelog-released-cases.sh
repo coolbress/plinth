@@ -85,7 +85,7 @@ if ! sed -n '/^## \[1.1.0\]/,/^## \[1.0.0\]/p' "$repo/CHANGELOG.md" | grep -q 't
   bad "#877 fixture: the merged line did not land inside [1.1.0]" "$(cat "$repo/CHANGELOG.md")"
 fi
 run "#877's shape: a line merged into the tagged [1.1.0] fails, naming the section" 1 '::error::CHANGELOG.md [1.1.0]'
-run "#877's shape: the failure says to move the line under [Unreleased]" 1 'under [Unreleased]'
+run "#877's shape: the failure says to move the line into a fragment (#1136)" 1 'into a fragment, changelog.d/<branch-slug>.md'
 
 # 2. The same line under [Unreleased], on a branch from the released main.
 fresh
