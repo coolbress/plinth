@@ -203,6 +203,16 @@ plant "an unlabelled .yaml next to good forms warns, it does not fail" \
   "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "__none__" || true
 plant "an unlabelled .yml still fails" \
   "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "no labels"
+# The two other per-form checks, each in both severities (#1103: every state
+# a check declares is reached by a fixture).
+plant "a .yml without description fails" \
+  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "extra.yml lacks \['description:'\]"
+warns "a .yaml without description warns" \
+  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "extra.yaml lacks \['description:'\]"
+plant "a .yml value that starts with * fails" \
+  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "extra.yml line \[2\]: value starts with"
+warns "a .yaml value that starts with * warns" \
+  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "extra.yaml line \[2\]: value starts with"
 # An invalid extra warns, because the repository passed without that file being
 # read. A repository whose *every* template is invalid never passed the old
 # filename check either, so it fails: leaving it green would be a loosening.

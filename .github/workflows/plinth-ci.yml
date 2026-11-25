@@ -99,6 +99,11 @@ jobs:
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
 
+      # The same fixtures again, each checker run recorded and compared with
+      # its golden output byte for byte, and its ids read against the registry (#1103).
+      - name: Floor checker output unchanged, its ids registered
+        run: ./tests/floor-check-golden.sh
+
       - name: Records checker verdicts on fixtures, offline
         run: ./tests/records-check-cases.sh
 

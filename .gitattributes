@@ -6,3 +6,7 @@
 # in diffs so review reads the changed line in pyproject.toml, not hundreds of
 # lockfile lines. They still count in `ci / diff-size`; that is a separate meter.
 uv.lock linguist-generated
+
+# The floor checker's recorded output (#1103): written by
+# `tests/floor-check-golden.sh --write`, read in review as a diff of what changed.
+tests/fixtures/floor-check-golden/cases.txt linguist-generated
