@@ -70,6 +70,9 @@ jobs:
       - name: A red or warning check's annotations say what failed, one next action and a link that exists
         run: ./tests/check-messages.sh
 
+      - name: A failing check ends its log with what failed, the next step and a link (the case matrix)
+        run: ./tests/check-failure-shape.sh
+
       - name: ci / diff-size names changes to the checks the description does not
         run: ./tests/weakened-checks-cases.sh
 

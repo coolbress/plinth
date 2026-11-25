@@ -221,11 +221,13 @@ verdicts: list[str] = []
 LEFT_TO_SKILL = "; left to /plinth:floor-check"
 # The one next action a FAIL or WARN carries where CI shows it (#837); python-ci.yml's
 # floor-check step has the same words. Empty for a person's run, which is the skill.
-NEXT_ACTION = "run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+# At the plinth commit ci / floor-check fetched this from (job.workflow_sha); main run by hand.
+REPORT = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/skills/floor-check/SKILL.md#report"
+NEXT_ACTION = f"run /plinth:floor-check, which writes the fix for each item: {REPORT}"
 next_action = ""
 # The SKIP's next action; a line the job annotates stays within 300 characters
 # (the report beside it has the whole text).
-SKIP_NEXT = "; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+SKIP_NEXT = f"; run /plinth:floor-check where it can read this: {REPORT}"
 
 
 def result(kind: str, msg: str, *, deferred: bool = False, here: bool = False) -> None:

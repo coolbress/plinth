@@ -56,7 +56,7 @@ print("\n".join(lines[j:end]))
 PY
 }
 for s in limit pytest extra Verdict; do
-  name="$s"; [ "$s" = limit ] && name="Time limit"; [ "$s" = extra ] && name="Also on the extra Python versions"
+  name="$s"; [ "$s" = limit ] && name="Time limit"; [ "$s" = pytest ] && name="pytest on .python-version"; [ "$s" = extra ] && name="Also on the extra Python versions"
   job_step test "$name" > "$tmp/$s.sh" || { echo "  FAIL  test / $name: step not found in python-ci.yml"; exit 1; }
 done
 job_step test "Changed lines under the tests" > "$tmp/changed.sh" || { echo "  FAIL  the changed-lines step was not found"; exit 1; }
