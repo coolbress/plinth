@@ -442,7 +442,7 @@ named() {
     [ "$end" = yes ] || echo "  no ## Outcome (or ## Decision for a record) in the body"
     said=1
   done < <(printf '%s\n%s\n' "$refs" "$parts" | awk -F'\t' 'NF == 3 && !seen[tolower($2) "#" $3]++')
-  [ "$said" = 0 ] || echo "Whoever merged ticks the criteria this change met and writes the ending of an issue it closed (AGENTS.md)."
+  [ "$said" = 0 ] || echo "Whoever merged ticks the criteria this change met and writes the ending of an issue it closed (docs/agents/issue-tracker.md)."
 }
 # A merge queue takes the pull request without merging it yet: the issues are
 # read only once it reads as merged.

@@ -21,6 +21,16 @@ pull requests and have no tag.
 
 ### Changed
 
+- plinth's own `AGENTS.md` (`CLAUDE.md`) keeps the rules an agent needs before
+  acting, in 97 lines rather than 159, and links each procedure to its one
+  home: the review rounds to the reviewer how-to, closing an issue to
+  [the issue tracker page](docs/agents/issue-tracker.md#closing-an-issue), the
+  release pull request to the release how-to, and the dependency-entry
+  exceptions to a new page, [dependency entries](docs/reference/dependency-entries.md).
+  The incidents that justified its rules are lines in the decisions page.
+  The only rule that changed is its own size: at most 110 lines and 7,500
+  bytes, which reverses the 60-line cap #25 set for it.
+
 - `/plinth:template-update` serves GitLab, where it used to stop and point at
   the manual steps (#924). The plan, `--apply` and `--finish` run copier as on
   GitHub; what differs is what reads and writes the host: `glab api`, asked

@@ -88,7 +88,7 @@ the move changes what a new project's agent reads, and then asks for
    `release pull request: not summoned`
    ([what it passes without summoning](configure-the-third-party-reviewer.md#pull-requests-it-passes-without-summoning)).
    Do not wait for a review that was not
-   asked for. To have the release note read, a person posts the summons on
+   asked for, and do not toggle draft to start one. To have the release note read, a person posts the summons on
    the pull request; an agent does not write it (`AGENTS.md`).
 5. Start the `e2e` workflow on the release branch, and wait for it to pass.
    The merge is what reaches an installation with auto-update on: the version
