@@ -91,7 +91,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - zizmor runs with a token and blocks at medium and above, except known-vulnerable-actions, which reports. 2026-10-09, #442
 - A closing keyword outside the closing line fails `ci / docs`; the closing line is read by its position at the end. 2026-10-01, #293
 - On a private GitHub repository without Code Security, `ci / deps` compares with osv-scanner, under the same check name. 2026-11-24, #1073
-- Everything kept off stays off and every strict default stays on, until its reopen condition; the one exception is the Hypothesis rule, which became scoped guidance on 2026-11-25 (#1144). 2026-11-24, #1074
+- Everything kept off stays off and every strict default stays on, until its reopen condition; #1144 re-read these defaults on 2026-11-25 and kept every one (its Hypothesis change is to a rule this list never held). 2026-11-24, #1074
 - `ci / diff-size` keeps its 400-line cap. Its basis is small, revertable changes whose description says one thing, not a defect-detection limit; to get under it, split the change rather than shorten docs, docstrings or tests. 2026-11-25, #1144
 - `mypy --strict` stays on for tests, until a type error in a test stops the #163 tester or `type: ignore` lines pile up in tests. 2026-11-25, #1144
 - Zero required approvals stays, until a separate agent account is the default (#605) or a second person joins (#1150). 2026-11-25, #1144
