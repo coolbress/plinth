@@ -67,15 +67,20 @@ repo="$work/repo"; origin="$work/origin.git"
 mkdir -p "$repo/.claude-plugin" "$repo/scripts/lib"
 cp "$root"/.claude-plugin/plugin.json "$root"/.claude-plugin/marketplace.json "$repo/.claude-plugin/"
 cp "$root"/CHANGELOG.md "$repo/"
-cp "$root"/scripts/make-release.sh "$root"/scripts/new-project.sh "$repo/scripts/"
+cp "$root"/scripts/make-release.sh "$root"/scripts/new-project.sh "$root"/scripts/changelog-fragments.py "$repo/scripts/"
 cp "$root"/scripts/lib/template-reads.sh "$repo/scripts/lib/"
-# One known entry under Unreleased, whatever the real file has there today.
+# Nothing under Unreleased and two known fragments, whatever the real files
+# hold today (#1136): one lists Fixed before Added, and a name later in the
+# order holds the other Fixed entry, so the section's order is the script's.
 python3 - "$repo/CHANGELOG.md" <<'PY'
 import pathlib, re, sys
 p = pathlib.Path(sys.argv[1])
-p.write_text(re.sub(r"(?ms)^## \[Unreleased\]\n.*?^(?=## \[)",
-                    "## [Unreleased]\n\n### Fixed\n\n- An entry waiting for the release.\n\n", p.read_text(), count=1))
+p.write_text(re.sub(r"(?ms)^## \[Unreleased\]\n.*?^(?=## \[)", "## [Unreleased]\n\n", p.read_text(), count=1))
 PY
+mkdir -p "$repo/changelog.d"
+cp "$root"/changelog.d/.markdownlint.jsonc "$repo/changelog.d/"
+printf '### Fixed\n\n- A second fix.\n\n### Added\n\n- A new thing.\n' > "$repo/changelog.d/aa-other.md"
+printf '### Fixed\n\n- An entry waiting for the release.\n' > "$repo/changelog.d/zz-fixed.md"
 # The pin the release before was tested with, whatever the real pin is today:
 # a pull request that raises the pin would otherwise read as a moved pin here.
 tested_ref="$(sed -nE 's/^tested with plinth-template (v[^ ]+)$/\1/p' "$repo/CHANGELOG.md" | head -1)"
@@ -130,8 +135,8 @@ printf 'A reason.\n\n## More\n\ntested with %s\n' "$template" > "$work/h2.md"
 printf 'A reason.\n\n### Fixed\n\ntested with %s\n' "$template" > "$work/h3.md"
 printf 'A reason.\n\n   ## More\n\ntested with %s\n' "$template" > "$work/h2-indented.md"
 : > "$work/empty.md"
-# What run 1 makes of why.md and the fixture's Unreleased entry, and what run 2 publishes.
-expected="$(printf 'A reason a person wrote.\n\ntested with %s\n\n### Fixed\n\n- An entry waiting for the release.' "$template")"
+# What run 1 makes of why.md and the fixture's fragments, and what run 2 publishes.
+expected="$(printf 'A reason a person wrote.\n\ntested with %s\n\n### Added\n\n- A new thing.\n\n### Fixed\n\n- A second fix.\n\n- An entry waiting for the release.' "$template")"
 
 echo "-- tag format"
 run "$next" "$work/why.md";        check "a tag without the v prefix is refused"       no $?
@@ -248,6 +253,37 @@ is "  and the refusal names that section" says "[$current] section"
 g reset -q --hard "$before_move"; g push -q -f origin main
 is "the pin is back where the release before tested it" grep -qxF "template_ref=\"$prev_ref\"" "$repo/scripts/new-project.sh"
 
+echo "-- the fragments (#1136): each one reads, and nothing is under [Unreleased]"
+before_frag="$(g rev-parse HEAD)"
+frag_case() { # <name> <file> <content>: commit it, run 1 must refuse and change nothing
+  printf '%b' "$3" > "$repo/$2"; g add -A; g commit -q -m "fixture: $1"; g push -q origin main
+  run "v$next" "$work/why.md";     check "$1 is refused" no $?
+  is "  and nothing changed" untouched
+  is "  and the refusal names it" says "${4:-$2}"
+  g reset -q --hard "$before_frag"; g push -q -f origin main
+}
+frag_case "a fragment naming no known section" changelog.d/notes.md '### Notes\n\n- Something.\n'
+frag_case "an empty fragment" changelog.d/empty.md '\n'
+frag_case "a fragment with text before its first heading" changelog.d/loose.md '- Loose.\n\n### Fixed\n\n- Fine.\n'
+frag_case "a fragment whose section has nothing under it" changelog.d/bare.md '### Fixed\n\n'
+frag_case "a fragment with a ## heading" changelog.d/h2.md '### Fixed\n\n- One.\n\n## [9.9.9]\n'
+frag_case "a file in changelog.d that is not a fragment" changelog.d/notes.txt 'x\n'
+python3 - "$repo/CHANGELOG.md" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+p.write_text(p.read_text().replace("## [Unreleased]\n\n", "## [Unreleased]\n\n### Fixed\n\n- Written the old way.\n\n", 1))
+PY
+g commit -q -am "fixture: a line under Unreleased"; g push -q origin main
+run "v$next" "$work/why.md";       check "a line under [Unreleased] is refused" no $?
+is "  and nothing changed" untouched
+is "  and the refusal says where the line goes" says "changelog.d/<branch-slug>.md"
+g reset -q --hard "$before_frag"; g push -q -f origin main
+printf '### Fixed\n\n- Not committed.\n' > "$repo/changelog.d/untracked.md"
+run "v$next" "$work/why.md";       check "an untracked fragment is refused" no $?
+is "  and nothing changed" untouched
+is "  and the refusal names it" says "changelog.d/untracked.md"
+rm "$repo/changelog.d/untracked.md"
+
 echo "-- bump"
 run "v${current%%.*}.0.0" "$work/why.md"; check "a version not above the current one is refused" no $?
 is "nothing changed" untouched
@@ -272,6 +308,9 @@ is "no release yet"                not grep -q "release create" "$GH_LOG"
 is "the pin did not move, so the template's diff was not asked" not grep -q "compare/" "$GH_LOG"
 is "the section is the why, then what was under Unreleased" [ "$(section_of "$next")" = "$expected" ]
 is "Unreleased is empty"           [ -z "$(section_of Unreleased)" ]
+is "the fragments are deleted in the release commit" \
+  [ "$(g show --name-status --format= HEAD -- changelog.d | sort)" = "$(printf 'D\tchangelog.d/aa-other.md\nD\tchangelog.d/zz-fixed.md')" ]
+is "  and changelog.d's dot file stays" [ -f "$repo/changelog.d/.markdownlint.jsonc" ]
 is "[Unreleased] compares from the new tag" grep -qxF "[Unreleased]: $base/compare/v$next...HEAD" "$repo/CHANGELOG.md"
 is "  and is the only [Unreleased] link" [ "$(grep -c '^\[Unreleased\]: ' "$repo/CHANGELOG.md")" = 1 ]
 is "the new version links its Release" grep -qxF "[$next]: $base/releases/tag/v$next" "$repo/CHANGELOG.md"

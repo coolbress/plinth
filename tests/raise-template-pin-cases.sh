@@ -65,15 +65,11 @@ fresh() { # a new copy of the files, committed, so `git diff` is the raise
   done
   cp "$root/scripts/raise-template-pin.sh" "$work/repo/scripts/" 2>/dev/null
   cp "$root/scripts/lib/template-reads.sh" "$work/repo/scripts/lib/"
-  # A known [Unreleased], whatever the real file has there today: on a branch
-  # carrying a raise it holds a line the script would move, not add.
-  python3 - "$work/repo/CHANGELOG.md" <<'PY'
-import pathlib, re, sys
-p = pathlib.Path(sys.argv[1])
-p.write_text(re.sub(r"(?ms)^## \[Unreleased\]\n.*?^(?=## \[)",
-                    "## [Unreleased]\n\n### Added\n\n- An entry.\n\n### Changed\n\n- Another entry.\n\n",
-                    p.read_text(), count=1))
-PY
+  # No changelog fragment of a raise, whatever the real checkout has today: on
+  # a branch carrying a raise it holds a line the script would move, not add.
+  # Another fragment beside it is left alone (#1136).
+  mkdir -p "$work/repo/changelog.d"
+  printf '### Added\n\n- An entry.\n' >"$work/repo/changelog.d/other.md"
   git -C "$work/repo" init -q && git -C "$work/repo" add -A &&
     git -C "$work/repo" -c user.name=t -c user.email=t@example.com commit -qm base
   : >"$work/gh.log"
@@ -82,7 +78,7 @@ PY
   printf 'v9.9.9\nv9.9.8\n' >"$work/releases"   # v9.9.7: a tag with no release
 }
 raise() { (cd "$work/repo" && scripts/raise-template-pin.sh "$@") >"$work/out" 2>&1; }
-unchanged() { git -C "$work/repo" diff --quiet; }
+unchanged() { git -C "$work/repo" diff --quiet && [ -z "$(git -C "$work/repo" status --porcelain)" ]; }
 
 [ -n "$old_ref" ] && [ -n "$old_sha" ] && [ -n "$tested" ] ||
   { echo "  FAIL  cannot read the pin, the version or its tested line"; exit 1; }
@@ -107,29 +103,30 @@ check "GitHub not answering is not read as a missing tag" '! grep -q "^raised" "
 # ---- The raise: the same edits as #947's and #952's.
 fresh; COMPARE_OUT=$'1\nREADME.md' raise v9.9.9 "${new_sha:0:7}"; rc=$?
 check "a published tag naming the given commit is raised" '[ "$rc" = 0 ] && grep -q "^raised the template pin: plinth-template $old_ref (${old_sha:0:7}) -> v9.9.9 (${new_sha:0:7})" "$work/out"'
+git -C "$work/repo" add -N changelog.d/template-pin.md   # new: counted in the diff
 diffs="$(git -C "$work/repo" diff --numstat | awk '{print $3, $1, $2}' | sort)"
-want="$(printf '%s\n' ".github/workflows/ci.yml 1 1" "CHANGELOG.md 1 0" "README.md 1 1" \
+want="$(printf '%s\n' ".github/workflows/ci.yml 1 1" "changelog.d/template-pin.md 3 0" "README.md 1 1" \
           "docs/tutorials/getting-started.md 1 1" "scripts/new-project.sh 2 2" "tests/new-project-failpath.sh 1 1" | sort)"
 check "it changes the five files #947 and #952 changed by hand, and canary-template's name (#958)" '[ "$diffs" = "$want" ] || { echo "$diffs" >&2; false; }'
 # Each removed line, with the tag and the commit moved, is the added line.
-moved="$(git -C "$work/repo" diff -U0 -- . ':!CHANGELOG.md' | grep '^-[^-]' | cut -c2- |
+moved="$(git -C "$work/repo" diff -U0 -- . ':!CHANGELOG.md' ':!changelog.d' | grep '^-[^-]' | cut -c2- |
          sed -e "s/$old_ref/v9.9.9/g" -e "s/$old_sha/$new_sha/g" -e "s/${old_sha:0:7}/${new_sha:0:7}/g")"
-added="$(git -C "$work/repo" diff -U0 -- . ':!CHANGELOG.md' | grep '^+[^+]' | cut -c2-)"
+added="$(git -C "$work/repo" diff -U0 -- . ':!CHANGELOG.md' ':!changelog.d' | grep '^+[^+]' | cut -c2-)"
 check "every edited line differs only in the tag and the commit" '[ -n "$moved" ] && [ "$moved" = "$added" ]'
 check "new-project.sh pins the tag's full commit" 'grep -qx "template_sha=\"$new_sha\"" "$work/repo/scripts/new-project.sh" && grep -qx "template_ref=\"v9.9.9\"" "$work/repo/scripts/new-project.sh"'
 check "canary-template's name says the new tag and commit" 'grep -qF "name: canary-template (plinth-template v9.9.9 at ${new_sha:0:7})" "$work/repo/.github/workflows/ci.yml"'
-unrel="$(awk '/^## \[Unreleased\]/ {on=1; next} /^## \[/ {on=0} on' "$work/repo/CHANGELOG.md")"
-check "[Unreleased] gains one Changed line naming the new tag" 'grep -c "renders plinth-template v9.9.9" <<<"$unrel" | grep -qx 1 && awk "/^### Changed/ {c=1} /renders plinth-template v9.9.9/ {print c+0; exit}" <<<"$unrel" | grep -qx 1'
+check "a changelog fragment says it, one Changed line naming the new tag, and reads as a fragment (#1136)" '[ "$(cat "$work/repo/changelog.d/template-pin.md")" = "$(printf "### Changed\n\n- \`/plinth:new-project\` renders plinth-template v9.9.9 instead of %s." "$old_ref")" ] && "$root/scripts/changelog-fragments.py" check "$work/repo" >/dev/null'
+check "CHANGELOG.md and the other fragment are untouched" 'git -C "$work/repo" diff --quiet -- CHANGELOG.md changelog.d/other.md'
 check "it prints that no eval suite is owed for a diff that misses what the agent reads" 'grep -q "^eval suite: not owed" "$work/out" && grep -q "from $tested" "$work/out"'
 check "it prints what is left: the re-render, canary-web's FROM lines, the CHANGELOG text, the pull request" 'grep -q "tests/template-render.sh --write" "$work/out" && grep -q "FROM lines at v9.9.9 into canary-web/Dockerfile" "$work/out" && grep -q "gh release view v9.9.9" "$work/out" && grep -q "chore(new-project): render plinth-template v9.9.9" "$work/out"'
 check "it reads the compare from the tag the last release was tested with" 'grep -q "compare/$tested\.\.\.v9\.9\.9" "$work/gh.log"'
 
 # A second raise before the release moves the same line, not a new one.
-git -C "$work/repo" -c user.name=t -c user.email=t@example.com commit -qam first
+git -C "$work/repo" add -A && git -C "$work/repo" -c user.name=t -c user.email=t@example.com commit -qm first
 printf 'v9.9.10 commit %s\n' "abcdefabcdefabcdefabcdefabcdefabcdefabcd" >>"$work/tags"; echo v9.9.10 >>"$work/releases"
 COMPARE_OUT=$'1\ntemplate/AGENTS.md.jinja' raise v9.9.10
-unrel="$(awk '/^## \[Unreleased\]/ {on=1; next} /^## \[/ {on=0} on' "$work/repo/CHANGELOG.md")"
-check "a second raise moves the [Unreleased] line it finds instead of adding one" '! grep -q "v9.9.9" <<<"$unrel" && grep -c "renders plinth-template v9.9.10" <<<"$unrel" | grep -qx 1'
+frag="$(cat "$work/repo/changelog.d/template-pin.md")"
+check "a second raise moves the fragment's line instead of adding one" '! grep -q "v9.9.9" <<<"$frag" && grep -c "renders plinth-template v9.9.10" <<<"$frag" | grep -qx 1'
 check "it prints that the eval suite is owed and which file says so" 'grep -q "^eval suite: owed" "$work/out" && grep -q "^  template/AGENTS.md.jinja$" "$work/out"'
 
 # An annotated tag names a tag object; the commit is behind it.
