@@ -22,7 +22,9 @@ jobs:
   # still run in order, and a step that needs one before it (uv, zsh, the
   # template checkout, the floor install last) stays in the same job.
   #
-  # The groups are balanced on step times, about four minutes of tests each:
+  # The groups are balanced on step times. Over 7 green runs after #1135 a
+  # group took 3.7 to 6.7 minutes, setup included, and `ci / install` ended
+  # 5.1 to 6.8 minutes (median 6.2) after the first group started:
   #   install-1  the plugin's contracts and the eval suite
   #   install-2  the checks' cases, the floor checker's golden output, the pins
   #   install-3  the floor checker's verdicts and the door
@@ -31,10 +33,10 @@ jobs:
   # A test moves between groups freely; a new group is added to the install
   # job's `needs` too, or the verdict fails (tests/install-verdict-cases.sh).
   #
-  # Each group's limit leaves a third of itself after its slowest green run,
-  # so a slow runner does not cancel a green job, and stays far under the old
-  # 35, so a step that hangs is still cancelled. Measure again before moving
-  # it either way.
+  # Each group's limit of 12 leaves a third of itself after its slowest green
+  # run (6.7 minutes, so up to 8 would still do), so a slow runner does not
+  # cancel a green job, and stays far under the old 35, so a step that hangs
+  # is still cancelled. Measure again before moving it either way.
   install-1:
     runs-on: ubuntu-latest
     timeout-minutes: 12
