@@ -1,0 +1,221 @@
+# .github/workflows/python-ci.yml
+  floor-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # Labels belong to issues: without this the label check reads an API
+      # error and reports "not verified" in every consumer's CI, so the one
+      # place it matters most is the one place it would never run (#84).
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+
+      # `job.workflow_sha` is documented (contexts reference, job context) but
+      # actionlint's schema does not know it yet; lint with
+      # -ignore 'property "workflow_sha" is not defined'.
+      - name: Fetch the checker from the same plinth commit as this workflow
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth"; mkdir -p "$d/lib"
+          for f in scripts/floor-check.py ruleset.json ruleset-merge.json labels.txt scripts/new-project.sh; do
+            curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
+              "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
+          done
+          # The owner's shared-template decisions the update line needs (#726),
+          # beside the checker as in the plugin: scripts/lib/.
+          curl -fsSL --retry 3 -o "$d/lib/shared-github.sh" \
+            "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/scripts/lib/shared-github.sh"
+          echo "plinth ${PLINTH_SHA}"
+
+      - name: Floor check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKDIR: ${{ inputs.working-directory }}
+          EXPECT: ${{ inputs.floor-check-required-checks }}
+        # The verdict lines first, then the report; the exit code is the
+        # checker's. A checker that wrote no verdict file (a crash) is a fail.
+        run: |
+          set -euo pipefail
+          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
+          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          t="$RUNNER_TEMP/floor"; rc=0
+          python3 "$RUNNER_TEMP/plinth/floor-check.py" \
+            --root . --project "$WORKDIR" --repo "$GITHUB_REPOSITORY" \
+            --ruleset "$RUNNER_TEMP/plinth/ruleset.json" --merge-ruleset "$RUNNER_TEMP/plinth/ruleset-merge.json" \
+            --caller-from-checkout --actions-token \
+            ${EXPECT:+--expect-checks "$EXPECT"} --verdicts "$t.verdicts" > "$t.txt" || rc=$?
+          cat "$t.txt"
+          if [ ! -f "$t.verdicts" ]; then
+            echo "fail: the floor, the checker wrote no verdicts (exit $rc); its report is below" > "$t.verdicts"
+            [ "$rc" != 0 ] || rc=1
+          fi
+          # One ::error::, however many FAILs (#837): the first and the count, with
+          # the one next action, so a red's first annotation is not GitHub's exit
+          # code. Words only: the exit below is the checker's either way.
+          n=0; first=""
+          while IFS= read -r l || [ -n "$l" ]; do
+            case "$l" in "fail: "*) n=$((n + 1)); [ -n "$first" ] || first="${l#fail: }" ;; esac
+          done < "$t.verdicts"
+          if [ "$n" -gt 0 ]; then
+            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+            first="${first%"; $next"}"; lead="floor-check: $n FAIL, first: "
+            room=$((300 - ${#lead} - ${#next} - 2))
+            [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
+            e="$lead$first; $next"; e="${e//'%'/%25}"; echo "::error::$e"
+          fi
+          while IFS= read -r l || [ -n "$l" ]; do say "$l"; done < "$t.verdicts"
+          { echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+  # How large the code has grown (#705): functions above a complexity or a
+  # statement count and Python files above a line count, measured with the
+  # project's own locked ruff (C901, PLR0915) and a count of git's files under
+  # `src/`, or the whole project without one. Reported, never failing (#702's
+  # Decisions, 2026-10-28): every step that measures continues on error, and
+  # whether the job ever turns red is decided after projects have shown its
+  # warnings. Not a required check. The limits are conventions, each the
+  # default of the tool it comes from, not numbers shown to predict anything;
+  # the project's own ruff settings for them are overridden so every project
+  # is measured the same way, and so are its suppressions: ruff runs with
+  # `--isolated --ignore-noqa`, so a `# noqa`, a per-file ignore or an exclude
+  # in the project's configuration hides nothing. Both measures read one list,
+  # git's tracked `.py` files (#723): ruff gets it as explicit paths, in
+  # batches, never a directory to walk, so `.gitignore` drops nothing; a listed
+  # file ruff skipped, could not read or could not parse is named as not
+  # measured, never passed. The summary opens with one
+  # verdict line; when something is above a limit, that line is not annotated
+  # and up to three warnings name the largest instead, each with the next step.
+# gitlab/python-ci.yml
+floor-check:
+  extends: .plinth
+  timeout: 5m
+  script:
+    - |
+      cfg="${CI_CONFIG_PATH:-.gitlab-ci.yml}"
+      # The definition is read with a YAML parser, not a scanner (#528): a
+      # duplicate key takes its last value and quoting follows YAML, as
+      # GitLab reads it. PyYAML 6.0.3 from PyPI, every wheel pinned by its
+      # hash (CPython 3.11 to 3.14 on Linux and macOS, x86_64 and arm64), no
+      # source build. A Python outside that range finds no wheel and fails. A failed install fails the job; it never passes it.
+      plinth_pyyaml() {
+        local d="$PLINTH_TMP/yaml" r="$PLINTH_TMP/pyyaml-requirements.txt"
+        cat > "$r" <<'REQ'
+      pyyaml==6.0.3 \
+          --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc \
+          --hash=sha256:0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6 \
+          --hash=sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28 \
+          --hash=sha256:ee2922902c45ae8ccada2c5b501ab86c36525b883eff4255313a253a3160861c \
+          --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0 \
+          --hash=sha256:2283a07e2c21a2aa78d9c4442724ec1eb15f5e42a723b99cb3d822d48f5f7ad1 \
+          --hash=sha256:7f047e29dcae44602496db43be01ad42fc6f1cc0d8cd6c83d342306c32270196 \
+          --hash=sha256:8da9669d359f02c0b91ccc01cac4a67f16afec0dac22c2ad09f46bee0697eba8 \
+          --hash=sha256:b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d \
+          --hash=sha256:10892704fc220243f5305762e276552a0395f7beb4dbf9b14ec8fd43b57f126c \
+          --hash=sha256:652cb6edd41e718550aad172851962662ff2681490a8a711af6a4d288dd96824 \
+          --hash=sha256:44edc647873928551a01e7a563d7452ccdebee747728c1080d881d68af7b997e \
+          --hash=sha256:c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5 \
+          --hash=sha256:501a031947e3a9025ed4405a168e6ef5ae3126c59f90ce0cd6f2bfc477be31b7 \
+          --hash=sha256:34d5fcd24b8445fadc33f9cf348c1047101756fd760b4dacb5c3e99755703310 \
+          --hash=sha256:8d1fab6bb153a416f9aeb4b8763bc0f22a5586065f86f7664fc23339fc1c1fac
+      REQ
+        python3 -m venv "$d" &&
+          "$d/bin/pip" install --quiet --disable-pip-version-check --require-hashes \
+            --only-binary :all: --no-deps -r "$r" &&
+          PLINTH_PY="$d/bin/python"
+      }
+      if ! plinth_pyyaml; then
+        say "fail: $cfg includes plinth's GitLab pipeline at a full commit SHA, PyYAML did not install (its error is above), so nothing read the definition"
+        plinth_failed=1
+        verdict
+      fi
+      CONFIG="$cfg" "$PLINTH_PY" - <<'PY' > "$PLINTH_TMP/floor.verdicts" || plinth_failed=1
+      import os, re, sys
+      import yaml
+      path = os.environ["CONFIG"]
+      URL = re.compile(r"https://raw\.githubusercontent\.com/coolbress/plinth/([^/\s'\"]+)/gitlab/python-ci\.yml")
+      STD = f"{path} includes plinth's GitLab pipeline at a full commit SHA"
+      try:
+          with open(path, encoding="utf-8") as f:
+              text = f.read()
+      except (OSError, UnicodeDecodeError) as e:
+          print(f"fail: {STD}, it could not be read ({e.__class__.__name__})")
+          sys.exit(1)
+      class Loader(yaml.SafeLoader):
+          """SafeLoader that accepts GitLab's tags (`!reference` and the
+          like) as data instead of refusing the file."""
+      Loader.add_multi_constructor("!", lambda loader, suffix, node: None)
+      try:
+          docs = list(yaml.load_all(text, Loader=Loader))
+      except yaml.YAMLError as e:
+          why = " ".join(str(e).split())[:200]
+          print(f"fail: {STD}, it is not YAML that can be read ({why})")
+          sys.exit(1)
+      # One document, or GitLab's inputs layout: a `spec:` header, `---`, then
+      # the configuration.
+      if len(docs) == 2 and isinstance(docs[0], dict) and set(docs[0]) == {"spec"}:
+          doc = docs[1]
+      elif len(docs) <= 1:
+          doc = docs[0] if docs else None
+      else:
+          print(f"fail: {STD}, its {len(docs)} YAML documents are not the layout GitLab reads "
+                "(one document, or a spec: header, ---, and the configuration)")
+          sys.exit(1)
+      # Only the top-level `include:` gives a URL its meaning, as a string or
+      # a mapping's `remote:`; an include of plinth from a nested local file
+      # is not read here. The URL is the whole value, not found inside one.
+      include = doc.get("include") if isinstance(doc, dict) else None
+      entries = include if isinstance(include, list) else ([] if include is None else [include])
+      found, near = [], []
+      for e in entries:
+          url, integrity = (e, None) if isinstance(e, str) else \
+              (e.get("remote"), e.get("integrity")) if isinstance(e, dict) else (None, None)
+          m = URL.fullmatch(url.strip()) if isinstance(url, str) else None
+          # A URL naming plinth in any other form (a query, a fragment,
+          # another host) would be left out of the judgement while GitLab
+          # still fetches it: it fails instead.
+          if not m and isinstance(url, str) and "coolbress/plinth" in url.lower():
+              near.append(url.strip())
+          if m:
+              checked = isinstance(integrity, str) and re.fullmatch(r"sha256-[A-Za-z0-9+/]{43}=", integrity.strip())
+              found.append((m, bool(checked)))
+      if near:
+          shown = ", ".join(" ".join(u.split())[:200] for u in near)
+          print(f"fail: {STD}, it includes plinth by a URL that is not "
+                f"https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml: {shown}")
+          sys.exit(1)
+      loose = sorted({m.group(1) for m, _ in found if not re.fullmatch(r"[0-9a-fA-F]{40}", m.group(1))})
+      if not found or loose:
+          why = (f"it includes it at {', '.join(loose)}, not a full commit SHA" if loose
+                 else "no include of https://raw.githubusercontent.com/coolbress/plinth/<commit-sha>/gitlab/python-ci.yml was found in its top-level include")
+          print(f"fail: {STD}, {why}")
+          sys.exit(1)
+      print(f"pass: {STD} ({', '.join(sorted({m.group(1) for m, _ in found}))})")
+      # GitLab checks a checksum per include, and a later include can replace
+      # an earlier one's jobs: every include needs its own.
+      bare = sum(1 for _, checked in found if not checked)
+      if not bare:
+          print("pass: the include names a checksum (include:integrity), which GitLab checks before the pipeline starts")
+      else:
+          which = "the include names" if len(found) == 1 else f"{bare} of {len(found)} includes names"
+          print(f"not yet confirmed: the bytes GitLab fetched are plinth's file, {which} no checksum "
+                "(include:integrity), which GitLab.com Free checks; a checksum on each include confirms it")
+      PY
+      while IFS= read -r l || [ -n "$l" ]; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/floor.verdicts"
+      [ -s "$PLINTH_TMP/floor.verdicts" ] || { say "fail: the floor, the check wrote no verdicts"; plinth_failed=1; }
+      # The block above is the include rule alone: /plinth:floor-check runs
+      # it from this file on a checkout (#543), so these lines stay outside it.
+      # A job token reads none of these; /plinth:floor-check, run with a
+      # Maintainer's glab login, reads them from GitLab (#544).
+      for what in \
+        "the protected default branch (no force push, merge requests only, Maintainers merge)" \
+        "the merge check \"Pipelines must succeed\", with \"Skipped pipelines are considered successful\" off" \
+        "this include on the default branch, after the merge (GitLab Free has no required checks by name, so a merge request that drops it or a job still merges)" \
+        "the rest of the floor (the document set, agent settings, the project files)"; do
+        say "not yet confirmed: $what; left to /plinth:floor-check"
+      done
+      verdict
