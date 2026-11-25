@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-echo "  FAIL  planted failure for #1135, reverted in the next commit"; exit 1
 # Manifest invariants that `claude plugin validate` does not check: the pins,
 # the dependency set, the catalog, and the skill frontmatter that makes
 # "user only" and "read only" real instead of prose.

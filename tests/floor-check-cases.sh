@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-echo "  FAIL  planted failure for #1135, reverted in the next commit"; exit 1
 # The floor checker's verdicts on fixtures, offline: a complete backend
 # instance passes, and each planted defect is named. A checker that cannot
 # fail is not a check.

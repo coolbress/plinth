@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-echo "  FAIL  planted failure for #1135, reverted in the next commit"; exit 1
 # gitlab/python-ci.yml, plinth's pipeline for GitLab.com (#353). Its job
 # names and inputs are python-ci.yml's; its pinned tools, the commit types,
 # the coverage requirements, the question to coverage about its source (#761),
