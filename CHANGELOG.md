@@ -19,7 +19,8 @@ pull requests and have no tag.
   release trains, changelog fragments, GitLab's support line, the defaults
   #1144 kept, the template's `AGENTS.md` rules). The seven pairs of records
   that disagreed when it was collected now carry reversal lines, and the page
-  lists none open. The issue body stays canonical; the page says how to add a
+  lists none open. A decision whose building issue is still open ends in
+  `(decided; not built yet: #N)`. The issue body stays canonical; the page says how to add a
   line and how a reversal is recorded.
 
 ### Changed
