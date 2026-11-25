@@ -53,7 +53,7 @@
 
 | Where | What a failing check in this shape says there |
 | --- | --- |
-| The last lines of the job's log (`gh run view --log-failed`) | `failed: <what failed>`, `next: <one action>`, `more: <a link to its section below>`, the last thing plinth prints in the job. Above them the Verdict step prints its summary lines |
+| The last lines of the job's log (`gh run view --job <id> --log`; `--log-failed` shows only the step that failed, not the Verdict that prints these lines) | `failed: <what failed>`, `next: <one action>`, `more: <a link to its section below>`, the last thing plinth prints in the job. Above them the Verdict step prints its summary lines |
 | An annotation on the pull request | One, titled with the check's name, `ci / <job>`: what failed and the next step, in at most 300 characters |
 | The job's summary | It opens with the `fail:` line, as in [What a job's summary says](#what-a-jobs-summary-says) |
 | The job's conclusion | Unchanged: the Verdict step exits 0, so the red and GitHub's own "Process completed with exit code 1" come from the step that failed |
