@@ -91,10 +91,15 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - zizmor runs with a token and blocks at medium and above, except known-vulnerable-actions, which reports. 2026-10-09, #442
 - A closing keyword outside the closing line fails `ci / docs`; the closing line is read by its position at the end. 2026-10-01, #293
 - On a private GitHub repository without Code Security, `ci / deps` compares with osv-scanner, under the same check name. 2026-11-24, #1073
-- Everything kept off stays off and every strict default stays on, until its reopen condition. 2026-11-24, #1074
+- Everything kept off stays off and every strict default stays on, until its reopen condition; the one exception is the Hypothesis rule, which became scoped guidance on 2026-11-25 (#1144). 2026-11-24, #1074
+- `ci / diff-size` keeps its 400-line cap. Its basis is small, revertable changes whose description says one thing, not a defect-detection limit; to get under it, split the change rather than shorten docs, docstrings or tests. 2026-11-25, #1144
+- `mypy --strict` stays on for tests, until a type error in a test stops the #163 tester or `type: ignore` lines pile up in tests. 2026-11-25, #1144
+- Zero required approvals stays, until a separate agent account is the default (#605) or a second person joins (#1150). 2026-11-25, #1144
+- The self-reported fresh-context review is a convention, not a control: nothing checks that it ran, and the description's `Review:` line is what the person reads. 2026-11-25, #1144
 - Shared inline Python moves into scripts without splitting the workflow into several callers. 2026-11-25, #1127
 - The code-growth sensor is report-only. 2026-10-28, #705
 - GitLab keeps the same nine job names as GitHub. 2026-10-13, #353
+- The GitLab pipeline is supported and skills are GitHub-first: what exists for GitLab keeps working, and a new feature reaches GitLab when a GitLab user is recorded. 2026-11-25, #1137
 
 ## Releases and pins
 
@@ -102,6 +107,9 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Tags are plain `vX.Y.Z`. 2026-09-03, #15
 - The version's CHANGELOG section is the release note, and it names the template tag the release was tested with. 2026-09-19, #209
 - Run 2 tags only a commit whose own e2e run succeeded. 2026-09-07, #62
+- plinth releases at most once a week, and merges stay small and frequent; a named hotfix path releases a security or breakage fix outside the train. 2026-11-25, #1132
+- plinth-template releases at most twice a week, with the same hotfix path. 2026-11-25, coolbress/plinth-template#351
+- Each pull request writes its changelog line as a fragment, and `make-release.sh` assembles the fragments into the version's section at release; the release pull request's pass rule changes with it. 2026-11-25, #1136
 - Released CHANGELOG sections stay as published; corrections go in the next section. 2026-10-13, #511
 - A dependency entry narrows its skills inside the entry and is never renamed or moved. 2026-10-10, #407
 - The default set leans to "listed, not installed"; a tool earns a default place by serving a loop step, on four criteria. 2026-10-19, #520
@@ -121,12 +129,14 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - plinth and plinth-template stay separate repositories. 2026-11-18, #953
 - Web is Django on its LTS, and Render is the one hosting path built (about $13 a month, no free Postgres, no spending cap promised). 2026-10-20, #604
 - Other hosts are listed with the date they were read; no second host is built until a stated condition is met. 2026-10-27, #639
-- Archetypes are added one at a time: dashboard, job, chatbot, bot. 2026-11-24, #1069
+- One new archetype, dashboard (#1069), and three options on existing archetypes, in this order: a scheduled run on `cli` (#1070), calling Claude on `cli`, `dashboard` and `backend` (#1071), and a Render background worker on `backend` for bots (#1072). 2026-11-25, #1069
 - Web adds only two check names, `ci / migrations` and `ci / deploy-check`. 2026-10-20, #606
 - New web projects start with their own user model. 2026-11-24, coolbress/plinth-template#332
 - The records' language is a copier answer; headings that tools parse, commit types and code stay English. 2026-11-24, coolbress/plinth-template#331
 - The extra Python version CI runs is 3.14. 2026-11-24, coolbress/plinth-template#333
 - The rendered `AGENTS.md` stays within 60 lines for every archetype. 2026-10-28, coolbress/plinth-template#134
+- The rendered `AGENTS.md` keeps under `## Always` only what a required check, the ruleset or a deny rule holds; a rule no machine holds whose break cannot be undone goes under `## Ask first`, the rest moves to the page that owns it, and the file stays within 8,192 bytes. 2026-11-25, coolbress/plinth-template#352
+- Hypothesis is guidance in the testing section, scoped to parsers, serializers and round-trip code, not an `Always` rule for every pure function. 2026-11-25, #1144
 - The template ships one `verify` skill, with the clean-up step folded in, and no hook. 2026-10-12, #496
 - The beginner output style is on by default; a person can turn it off. 2026-10-15, #515
 - The agent gives one recommended option before any choice, and a decision report at a merge. 2026-10-15, #515
@@ -172,14 +182,13 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 ## Unresolved: two records disagree
 
-Each pair below has no reversal line linking it. The later record is the one
-the code follows today, but the earlier record still reads as in force until
-a person decides and the record says so.
+None open. The seven pairs listed here when the page was made each carry a
+reversal line on the earlier record since 2026-11-25:
 
-- **Private repositories.** #19 (2026-09-08) and #40 (2026-09-04): private repositories stop before creation, whatever the plan. #320 (2026-09-30): private repositories are supported on GitHub Pro, Team and Enterprise. Neither names the other.
-- **GitLab.** #19 (2026-09-02): GitLab support is out of scope. #321 (2026-09-30) and #353: GitLab.com Free is a supported host with a stated lower wall. Neither names the other.
-- **"What next" as a skill.** #68 (2026-09-03, 2026-09-07): no "what next" skill and no new router skill; `/ask-matt` is the routing source. #710 (2026-10-28) and #1086 (2026-11-24): `/plinth:guide` is that skill, and `/ask-matt` is dropped from "which tool now". #68 is not named.
-- **A page of terms.** #515 (2026-10-15): no glossary page until #163 shows which terms stall a reader. #809 (completed 2026-11-04): one fixed term table, `docs/reference/terms.md`. #515 is not named.
-- **The second language.** #31 (2026-09-03): v1.1's first language is TypeScript. #611 (2026-10-27): no TypeScript archetype now. #31 is not named.
-- **A second third-party reviewer.** #711 (2026-10-28): Copilot is the first reviewer to probe, CodeRabbit the second. #387 (2026-11-10): Codex stays the only supported reviewer, with no probe now. #711 has no line saying so.
-- **plinth's own `AGENTS.md` length.** #25 (2026-09-03): `AGENTS.md` at most 60 lines. plinth's own is 159 lines today; #1125 is slimming `CLAUDE.md` to at most 110 lines and 7,500 bytes, and does not name #25's 60.
+- Private repositories: #19 and #40 name #320.
+- GitLab: #19 names #321 and #353.
+- "What next" as a skill: #68 names #710 and #1086.
+- A page of terms: #515 names #809.
+- The second language: #31 names #611.
+- A second third-party reviewer: #711 names #387.
+- plinth's own `AGENTS.md` length: #25 names #1125.
