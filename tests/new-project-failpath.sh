@@ -26,6 +26,7 @@ cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -u
 printf 'gh %s\n' "$*" >> "$GH_LOG"
+answer_qs() { [ "${MOCK_NO_ANSWER_Q:-0}" = 1 ] || printf 'description:\n  type: str\nrecords_language:\n  type: str\n  default: English\ncustom_user_model:\n  type: bool\n  default: false\n'; }
 all="$*"; step=other
 case "$all" in
   "auth status"*)                                step=auth ;;
@@ -114,11 +115,14 @@ case "$step" in
   # default has no hosting questions, as v1.26.0; hosting adds them in the
   # shape coolbress/plinth-template#128 gave them (#677). The default lists
   # Proprietary, as v1.48.0 does (coolbress/plinth-template#289); hosting does not.
+  # Both ask description, records_language and custom_user_model, as v1.51.0
+  # does (coolbress/plinth-template#331, #332); MOCK_NO_ANSWER_Q=1 is a
+  # template before them.
   choices)       case "${MOCK_CHOICES:-ok}" in
                    garbage)   printf '!!! not base64 !!!' ;;
                    nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
-                   hosting) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'hosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' ; } | base64 ;;
-                   *) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'plinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}"; } | base64 ;;
+                   hosting) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'hosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' ; answer_qs; } | base64 ;;
+                   *) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'plinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}"; answer_qs; } | base64 ;;
                  esac ;;
   # The owner's shared community-health files: present, absent (404) or
   # unreadable (any other failure). `gh` prints "Not Found" on a 404.
@@ -295,6 +299,13 @@ case " $* " in *" third_party_review=true "*)
 esac
 # The code of conduct (#772): rendered with its contact unless the owner has
 # one; MOCK_COC_NORENDER=1 plays a template that took the answer and dropped it.
+# The answers of coolbress/plinth-template#331 and #332, recorded as copier
+# records them; MOCK_CUM_NORECORD=1 plays a template that took
+# custom_user_model=true and dropped it.
+for a in "$@"; do case "$a" in
+  description=*|records_language=*) printf '%s: %s\n' "${a%%=*}" "${a#*=}" >> "$dst/.copier-answers.yml" ;;
+  custom_user_model=true) [ "${MOCK_CUM_NORECORD:-0}" = 1 ] || printf 'custom_user_model: true\n' >> "$dst/.copier-answers.yml" ;;
+esac; done
 case " $* " in *" code_of_conduct=true "*)
   if [ "${MOCK_COC_NORENDER:-0}" != 1 ] && [[ " $* " != *" owner_has_code_of_conduct=true "* ]]; then
     for a in "$@"; do case "$a" in code_of_conduct_contact=*) printf 'reports: %s\n' "${a#*=}" > "$dst/CODE_OF_CONDUCT.md" ;; esac; done
@@ -808,7 +819,7 @@ E="MOCK_SHARED_PR=error MOCK_SHARED_FORMS=error" run forced-defaults ok yes no "
 run org-member     ok yes no "as member"                                                    -- someorg/probe
 run apache         ok yes no "(public, Apache-2.0, cli, as owner)"                           -- probe --license=apache-2.0
 run backend        ok yes no "(public, MIT, backend, as owner)"                                -- probe --archetype=backend
-run web            ok yes no "(public, MIT, web on Render, as owner)"                          -- probe --archetype=web
+run web            ok yes no "(public, MIT, web on Render, its own user model (accounts.User), as owner)"                          -- probe --archetype=web
 pr_body web > "$work/first-pr-web.md"
 holds_form "the first pull request of an archetype with no tag ruleset" "$work/first-pr-web.md" web
 if grep -q "tag ruleset" "$work/first-pr-web.md"; then bad web "the description claims a tag ruleset the archetype does not have"
@@ -906,17 +917,64 @@ then ok desc-ko "a 350-character Korean line, shortened from 400, is set at crea
 else bad desc-ko "the 350-character Korean line was not set as given"; fi
 E="LC_ALL=C" run desc-ko-long err no no "--description is one line of at most 350 characters (got 400)" -- probe "--description=$ko400"
 
+echo "the description and the records language reach copier (#1068, coolbress/plinth-template#331)"
+run answers ok yes no "(public, MIT, cli, records in Korean, as owner)" -- probe "--description=매일 아침 날씨를 모으는 도구" --records-language=Korean
+if grep -qF -- '--data description=매일 아침 날씨를 모으는 도구 --data records_language=Korean --vcs-ref' "$work/home-answers/calls.log"
+then ok answers "the description and the records language are passed to copier as given"
+else bad answers "copier did not get them as given"; grep '^uvx' "$work/home-answers/calls.log" | cut -c1-400 | sed 's/^/        /'; fi
+if ! grep -qE -- '--data (description|records_language|custom_user_model)=' "$work/home-none/calls.log"
+then ok answers-none "a run that gives neither passes no description, records language or user model"
+else bad answers-none "an answer was passed that was not given"; fi
+run lang-english ok yes no "(public, MIT, cli, as owner)" -- probe --records-language=English
+grep -qF -- '--data records_language=English' "$work/home-lang-english/calls.log" \
+  && ok lang-english "English said out loud is passed, and the summary says nothing more" || bad lang-english "--records-language=English did not reach copier"
+run lang-code err no no "--records-language= takes a language named in English, such as Korean" -- probe --records-language=ko
+run lang-own-script err no no "not a code or a name in its own script (got: 한국어)" -- probe --records-language=한국어
+run lang-two-words ok yes no "records in Brazilian Portuguese" -- probe "--records-language=Brazilian Portuguese"
+E="MOCK_NO_ANSWER_Q=1" run lang-old-template err no no "does not ask records_language, so --records-language would be dropped" -- probe --records-language=Korean
+E="MOCK_NO_ANSWER_Q=1" run desc-old-template ok yes no "" -- probe --description=x
+if grep -qxF 'gh repo create tester/probe --public --description x' "$work/home-desc-old-template/calls.log" && ! grep -qF -- '--data description=' "$work/home-desc-old-template/calls.log"
+then ok desc-old-template "a template that does not ask the description still gets it on the repository's page only, as before"
+else bad desc-old-template "the description was dropped or passed to a template that does not ask it"; fi
+E="MOCK_FINE=1" run lang-rerun err no no "with-admin-token.sh" -- probe --records-language=Korean "--description=날씨 도구"
+if grep -qF -- "probe --records-language=Korean '--description=날씨 도구'" "$work/home-lang-rerun/out"
+then ok lang-rerun "the printed command carries the records language and the description, so typed again it asks nothing"
+else bad lang-rerun "the printed command lost an answer"; grep -F 'new-project.sh' "$work/home-lang-rerun/out" -A1 | sed 's/^/        /'; fi
+
+echo "a web project starts with its own user model (#1092, coolbress/plinth-template#332)"
+run cum-web ok yes no "(public, MIT, web on Render, its own user model (accounts.User), as owner)" -- probe --archetype=web
+if grep -qF -- '--data custom_user_model=true --vcs-ref' "$work/home-cum-web/calls.log"
+then ok cum-web "a web run passes custom_user_model=true without being asked"; else bad cum-web "custom_user_model=true did not reach copier"; fi
+run cum-said ok yes no "its own user model" -- probe --archetype=web --custom-user-model
+run cum-no ok yes no "(public, MIT, web on Render, as owner)" -- probe --archetype=web --no-custom-user-model
+if ! grep -qF -- 'custom_user_model' "$work/home-cum-no/calls.log"
+then ok cum-no "--no-custom-user-model passes no answer: Django's auth.User, as before"; else bad cum-no "an answer was passed"; fi
+for c in none answers; do
+  if ! grep -qF -- 'custom_user_model' "$work/home-$c/calls.log"; then ok "cum-not-web-$c" "a cli run passes no custom_user_model answer"
+  else bad "cum-not-web-$c" "a cli run passed custom_user_model"; fi
+done
+run cum-cli err no no "--custom-user-model and --no-custom-user-model are for --archetype=web only" -- probe --custom-user-model
+run cum-both err no no "--custom-user-model and --no-custom-user-model: choose one" -- probe --archetype=web --custom-user-model --no-custom-user-model
+E="MOCK_CUM_NORECORD=1" run cum-dropped err no no "did not record custom_user_model: true" -- probe --archetype=web
+E="MOCK_NO_ANSWER_Q=1" run cum-old-template err no no "does not ask custom_user_model, so --custom-user-model would be dropped" -- probe --archetype=web
+# copier.yml unread: the default answer goes anyway, and the render's answers
+# file decides, before the repository exists.
+E="MOCK_CHOICES=garbage" run cum-unread ok yes no "its own user model" -- probe --archetype=web
+grep -qF -- '--data custom_user_model=true' "$work/home-cum-unread/calls.log" \
+  && ok cum-unread "an unread copier.yml still passes the user model" || bad cum-unread "no custom_user_model answer with copier.yml unread"
+E="MOCK_CHOICES=garbage MOCK_CUM_NORECORD=1" run cum-unread-dropped err no no "did not record custom_user_model: true" -- probe --archetype=web
+
 echo "where a web app runs (#677)"
 # A template without the questions (v1.26.0) renders for Render whatever it
 # is given, so Render passes nothing to it and another place stops first.
 if ! grep -q '^uvx .*--data hosting' "$work/home-web/calls.log"; then ok web "a template without the hosting questions is passed no hosting answer"
 else bad web "a hosting answer reached a template that does not ask it"; grep hosting "$work/home-web/calls.log" | sed 's/^/        /'; fi
-E="MOCK_CHOICES=hosting" run web-render ok yes no "(public, MIT, web on Render, as owner)" -- probe --archetype=web
+E="MOCK_CHOICES=hosting" run web-render ok yes no "(public, MIT, web on Render, its own user model (accounts.User), as owner)" -- probe --archetype=web
 if grep -q '^uvx .* --data hosting=render --vcs-ref' "$work/home-web-render/calls.log" && ! grep -q -- '--data hosting_elsewhere' "$work/home-web-render/calls.log" \
    && ! grep -q 'where it runs:' "$work/home-web-render/out"
 then ok web-render "no answer is Render: copier gets hosting=render and nothing else, and no closing line for it"
 else bad web-render "an unanswered web run did not pass hosting=render alone"; grep hosting "$work/home-web-render/calls.log" | sed 's/^/        /'; fi
-E="MOCK_CHOICES=hosting" run web-home ok yes no "(public, MIT, web on A computer at home, which plinth does not deploy to or check, as owner)" -- probe --archetype=web --hosting=home
+E="MOCK_CHOICES=hosting" run web-home ok yes no "(public, MIT, web on A computer at home, which plinth does not deploy to or check, its own user model (accounts.User), as owner)" -- probe --archetype=web --hosting=home
 if grep -q '^uvx .* --data hosting=elsewhere --data hosting_elsewhere=home --vcs-ref' "$work/home-web-home/calls.log" \
    && grep -qF 'where it runs: A computer at home. plinth did not deploy the app there and has not checked that place; the steps, and what they leave to you, are in README.md under "Where it runs"' "$work/home-web-home/out"
 then ok web-home "copier gets hosting=elsewhere and hosting_elsewhere=home, and the closing lines name the place, that plinth did not deploy or check it, and the README"
@@ -1792,24 +1850,37 @@ gl_run gl-review err no no "--third-party-review is for GitHub only" -- probe --
 if ! grep -q '^glab ' "$work/home-gl-review/calls.log"; then ok gl-review "nothing reached GitLab before the refusal"
 else bad gl-review "a glab call ran before the refusal"; fi
 gl_run gl-no-review ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- probe --host gitlab --no-third-party-review
-# The code of conduct and the description are GitHub only for now (#772).
+# The code of conduct is GitHub only for now (#772); the description and the
+# records language go to copier on GitLab too, and the description onto the
+# project's page (#1068).
 gl_run gl-no-coc ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- probe --host gitlab --no-code-of-conduct --no-description
+if ! grep -qE -- '--data (description|records_language)=|default_branch=main -f description=' "$work/home-gl-no-coc/calls.log"
+then ok gl-no-coc "--no-description and no --records-language pass neither"; else bad gl-no-coc "an answer was passed that was not given"; fi
 gl_run gl-coc err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --code-of-conduct=a@b.c
-gl_run gl-desc err no no "--description is for GitHub only for now" -- probe --host gitlab "--description=x"
-if ! grep -q '^glab ' "$work/home-gl-coc/calls.log" "$work/home-gl-desc/calls.log"
-then ok gl-coc "the GitLab door refuses both before any glab call"; else bad gl-coc "glab was called before the refusal"; fi
+if ! grep -q '^glab ' "$work/home-gl-coc/calls.log"
+then ok gl-coc "the GitLab door refuses it before any glab call"; else bad gl-coc "glab was called before the refusal"; fi
+gl_run gl-desc ok yes no "create gitlab.com/tester/probe (private, MIT, cli, records in Korean, as owner)" -- probe --host gitlab "--description=매일 아침 날씨를 모으는 도구" --records-language=Korean
+if grep -qF -- '--data host=gitlab --data description=매일 아침 날씨를 모으는 도구 --data records_language=Korean --vcs-ref' "$work/home-gl-desc/calls.log" \
+   && grep -qF -- '-f default_branch=main -f description=매일 아침 날씨를 모으는 도구' "$work/home-gl-desc/calls.log"
+then ok gl-desc "the GitLab door passes the description and the records language to copier, and the description to the project"
+else bad gl-desc "the GitLab door did not pass them as given"; grep -E '^uvx|POST projects ' "$work/home-gl-desc/calls.log" | cut -c1-400 | sed 's/^/        /'; fi
+E="LC_ALL=C" gl_run gl-desc-long err no no "--description is one line of at most 350 characters (got 400)" -- probe --host gitlab "--description=$ko400"
+gl_run gl-lang-code err no no "--records-language= takes a language named in English" -- probe --host gitlab --records-language=ko
+gl_run gl-cum err no no "--custom-user-model is for --archetype=web, which is made on GitHub only" -- probe --host gitlab --custom-user-model
+if ! grep -q '^glab ' "$work/home-gl-desc-long/calls.log" "$work/home-gl-lang-code/calls.log" "$work/home-gl-cum/calls.log"
+then ok gl-answers-refused "a refused answer stops before any glab call"; else bad gl-answers-refused "glab was called before the refusal"; fi
 # The pairs the GitHub door refuses, on GitLab (#960). --private with --public
 # is refused there too, in either order: the last one used to win, and an
 # added --public made a private request public. The other pairs stop because
-# one side of each is GitHub only.
+# one side of each is GitHub only, or the two say opposite things.
 gl_run gl-private-public err no no "--private and --public: choose one" -- probe --host gitlab --private --public
 gl_run gl-public-private err no no "--private and --public: choose one" -- probe --host gitlab --public --private
 gl_run gl-review-both err no no "--third-party-review is for GitHub only" -- probe --host gitlab --no-third-party-review --third-party-review
 gl_run gl-review-both-rev err no no "--third-party-review is for GitHub only" -- probe --host gitlab --third-party-review --no-third-party-review
 gl_run gl-coc-both err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --no-code-of-conduct --code-of-conduct=a@b.c
-gl_run gl-desc-both err no no "--description is for GitHub only for now" -- probe --host gitlab --no-description --description=x
+gl_run gl-desc-both err no no "--description and --no-description: choose one" -- probe --host gitlab --no-description --description=x
 gl_run gl-coc-both-rev err no no "--code-of-conduct is for GitHub only for now" -- probe --host gitlab --code-of-conduct=a@b.c --no-code-of-conduct
-gl_run gl-desc-both-rev err no no "--description is for GitHub only for now" -- probe --host gitlab --description=x --no-description
+gl_run gl-desc-both-rev err no no "--description and --no-description: choose one" -- probe --host gitlab --description=x --no-description
 pair_homes=""; for c in gl-private-public gl-public-private gl-review-both gl-review-both-rev gl-coc-both gl-coc-both-rev gl-desc-both gl-desc-both-rev; do pair_homes="$pair_homes $work/home-$c/calls.log"; done
 # shellcheck disable=SC2086
 pair_rc=0; grep -q '^glab ' $pair_homes || pair_rc=$?

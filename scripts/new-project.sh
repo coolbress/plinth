@@ -5,6 +5,8 @@
 #                  [--private|--public] [--third-party-review|--no-third-party-review]
 #                  [--code-of-conduct=<contact>|--no-code-of-conduct]
 #                  [--description=<one line>|--no-description]
+#                  [--records-language=<language in English>]
+#                  [--custom-user-model|--no-custom-user-model]   (web only)
 #                  [--force-defaults] [--host=github|gitlab]
 #                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web only)
 #   new-project.sh --preflight [<the same arguments>]
@@ -22,7 +24,13 @@
 # description. /plinth:new-project asks for the ones not given (#765, #772);
 # this script asks nothing. --public, --no-third-party-review,
 # --no-code-of-conduct and --no-description say the default out loud, so a
-# run can give every choice. --code-of-conduct renders the Contributor
+# run can give every choice. --description is also README.md's first line, and
+# --records-language (default English, a language named in English such as
+# Korean) the language AGENTS.md says the project's records are written in
+# (coolbress/plinth-template#331). A web project starts with its own user
+# model, accounts.User (coolbress/plinth-template#332), unless
+# --no-custom-user-model says otherwise (#1092): Django sets it before the
+# first migrate, and changing it later is done by hand. --code-of-conduct renders the Contributor
 # Covenant 3.0 naming <contact> for reports, unless the owner's `.github`
 # publishes a code of conduct, which then applies instead (#772). --third-party-review renders the caller of the `third-party /
 # review` check; the ruleset does not require it (#765).
@@ -135,15 +143,18 @@ case "$host" in
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight] [--check] [--readiness]"
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--custom-user-model|--no-custom-user-model] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight] [--check] [--readiness]"
 preflight=0; target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
-coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""
+coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""; lang=""; cum=""; cum_said=""
 for a in "$@"; do case "$a" in
   --code-of-conduct=*)  coc=1; coc_contact="${a#*=}"; coc_said="$coc_said+" ;;
   --code-of-conduct)    echo "--code-of-conduct needs the address reports go to: --code-of-conduct=<email or web page>"$'\n'"$usage" >&2; exit 2 ;;
   --no-code-of-conduct) coc=0; coc_said="$coc_said-" ;;
   --description=*)      desc="${a#*=}"; desc_said="$desc_said+" ;;
   --no-description)     desc=""; desc_said="$desc_said-" ;;
+  --records-language=*) lang="${a#*=}" ;;
+  --custom-user-model)    cum=1; cum_said="$cum_said+" ;;
+  --no-custom-user-model) cum=0; cum_said="$cum_said-" ;;
   --private)     private=1 ;;
   --public)      said_public=1 ;;
   --third-party-review)    review=1; review_said="$review_said+" ;;
@@ -162,20 +173,19 @@ esac; done
 case "$review_said" in *+*-*|*-*+*) echo "--third-party-review and --no-third-party-review: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 case "$coc_said" in *+*-*|*-*+*) echo "--code-of-conduct and --no-code-of-conduct: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 case "$desc_said" in *+*-*|*-*+*) echo "--description and --no-description: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
-# The contact is written into CODE_OF_CONDUCT.md, the description onto the
-# repository page: one line each, and the description within GitHub's 350
-# characters, so neither is refused or cut after the repository exists.
+case "$cum_said" in *+*-*|*-*+*) echo "--custom-user-model and --no-custom-user-model: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
+[ -z "$cum" ] || [ "$arch" = web ] || { echo "--custom-user-model and --no-custom-user-model are for --archetype=web only"$'\n'"$usage" >&2; exit 2; }
+# Not given, a web project gets its own user model (#1092).
+[ -n "$cum" ] || { [ "$arch" != web ] || cum=1; }
+# The contact is written into CODE_OF_CONDUCT.md: one line, so it is not
+# refused after the repository exists. The description and the records
+# language are checked by answers_fit, below.
 if [ "$coc" = 1 ] && { [ -z "${coc_contact//[[:space:]]/}" ] || [[ "$coc_contact" == *$'\n'* ]]; }; then
   echo "--code-of-conduct= needs one line: the email address or web page reports go to"$'\n'"$usage" >&2; exit 2; fi
-# Characters, not bytes, whatever the locale: under LC_ALL=C ${#desc} counts a
-# Hangul syllable as three, and a 350-character Korean line was refused (#1068).
-# A UTF-8 character is every byte that is not a continuation byte (0x80-0xBF).
-desc_len="$(printf '%s' "$desc" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')"
-if [[ "$desc" == *$'\n'* ]] || [ "$desc_len" -gt 350 ]; then
-  echo "--description is one line of at most 350 characters (got $desc_len)"$'\n'"$usage" >&2; exit 2; fi
-# stop, warn, below, choices_of, read_into and unread_why, shared with the GitLab door.
+# stop, warn, below, choices_of, read_into, unread_why and answers_fit, shared with the GitLab door.
 # shellcheck source=scripts/lib/door.sh
 . "$here/lib/door.sh"
+answers_fit "$usage" "$desc" "$lang"
 # sq: an argument as one shell word, for every command printed to be pasted.
 # shellcheck source=scripts/lib/shell-word.sh
 . "$here/lib/shell-word.sh"
@@ -507,6 +517,31 @@ if [ "$review" = 1 ]; then
   fi
   review_data=(--data third_party_review=true)
 fi
+# The description, the records language (coolbress/plinth-template#331) and a
+# web project's own user model (coolbress/plinth-template#332, #1092), each to
+# a template that asks it, as the reviewer above. A template that does not ask
+# would render without the answer, so one given stops here instead; an answer
+# that is the default (none, English, no) changes nothing and goes nowhere.
+answer_data=()
+for q in description records_language custom_user_model; do
+  case "$q" in
+    description)       v="$desc"; flag="--description"; [ -n "$v" ] || continue ;;
+    records_language)  v="$lang"; flag="--records-language"; [ -n "$v" ] || continue ;;
+    custom_user_model) [ "$cum" = 1 ] || continue; v=true; flag="--custom-user-model" ;;
+  esac
+  if ! grep -q "^$q:" <<<"$copier_yml"; then
+    [ "$q" != records_language ] || [ "$v" != English ] || continue
+    [ "$q" != description ] || continue  # without the question it still goes onto the repository's page, as before
+    # Unread, the default user model is passed anyway: the render's answers
+    # file is read for it below, before the repository exists.
+    [ -n "$arch_choices" ] || [ "$q" != custom_user_model ] || { answer_data+=(--data "$q=$v"); continue; }
+    [ -n "$arch_choices" ] || stop "could not read whether the template asks $q, so $flag cannot be passed safely; nothing was created" \
+      "  $(unread_why)" "  fix: run it again"
+    stop "the template this plinth renders ($template_repo@$template_ref) does not ask $q, so $flag would be dropped; nothing was created" \
+      "  fix: drop $flag, or wait for a plinth release whose template asks it"
+  fi
+  answer_data+=(--data "$q=$v")
+done
 # A --check stops here: every validation before the ruleset has run (the
 # name, the archetype and license, where a web app runs, the reviewer), and
 # nothing below has been created yet.
@@ -647,6 +682,8 @@ arch_words="$arch"
 [ "${place:-render}" = render ] || arch_words="$arch_words, which plinth does not deploy to or check"
 [ "$review" = 0 ] || arch_words="$arch_words, third-party review reporting and not required"
 [ "$coc" = 0 ] || arch_words="$arch_words, a code of conduct with reports to $coc_contact"
+[ "$cum" != 1 ] || arch_words="$arch_words, its own user model (accounts.User)"
+[ -z "$lang" ] || [ "$lang" = English ] || arch_words="$arch_words, records in $lang"
 echo "create $repo ($visibility, $spdx, $arch_words, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
 
 # ── create ───────────────────────────────────────────────────────────────
@@ -691,7 +728,7 @@ if ! env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \
   --data "owner_has_issue_forms=$([ "$has_forms" = yes ] && echo true || echo false)" \
   --data "visibility=$([ "$private" = 1 ] && echo private || echo public)" \
-  ${hosting_data[@]+"${hosting_data[@]}"} ${review_data[@]+"${review_data[@]}"} \
+  ${answer_data[@]+"${answer_data[@]}"} ${hosting_data[@]+"${hosting_data[@]}"} ${review_data[@]+"${review_data[@]}"} \
   ${owner_files_data[@]+"${owner_files_data[@]}"} \
   --vcs-ref "$template_sha" "gh:$template_repo" "$dir" < /dev/null; then
   echo "copier stopped (its words above: a refused answer, or a fetch that failed); nothing was created on GitHub" >&2
@@ -702,6 +739,12 @@ rm -rf "$dir/.git"
 # repository would go up without the check the person chose.
 if [ "$review" = 1 ] && ! grep -qx 'third_party_review: true' "$dir/.copier-answers.yml" 2>/dev/null; then
   echo "the template did not record third_party_review: true in $dir/.copier-answers.yml, so the third-party reviewer was not rendered" >&2
+  exit 1
+fi
+# A web project's user model is set before the first migrate or by hand, so
+# one asked for must be in the render before the repository exists.
+if [ "$cum" = 1 ] && ! grep -qx 'custom_user_model: true' "$dir/.copier-answers.yml" 2>/dev/null; then
+  echo "the template did not record custom_user_model: true in $dir/.copier-answers.yml, so the project would start with Django's auth.User" >&2
   exit 1
 fi
 if [ "$coc" = 1 ] && ! [ -s "$dir/CODE_OF_CONDUCT.md" ]; then

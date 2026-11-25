@@ -42,13 +42,14 @@ bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 # render <template checkout> <dest>: the door's copier call for a public `cli`
 # project of an owner with no shared .github, then what the door does after:
 # no .git. `_src_path` is set to the door's own form, gh:<repo>: rendered from
-# a checkout it would name the checkout's path.
+# a checkout it would name the checkout's path. Arguments after the two are
+# more of the door's answers, for the web render below.
 render() {
   env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
     copier copy --defaults --quiet \
     --data project_name=probe --data owner=coolbress --data license=MIT --data archetype=cli \
     --data owner_has_pr_template=false --data owner_has_issue_forms=false --data visibility=public \
-    --vcs-ref HEAD "$1" "$2" </dev/null >/dev/null 2>"$work/copier.err" || { cat "$work/copier.err" >&2; return 1; }
+    "${@:3}" --vcs-ref HEAD "$1" "$2" </dev/null >/dev/null 2>"$work/copier.err" || { cat "$work/copier.err" >&2; return 1; }
   rm -rf "$2/.git"
   sed -i.bak "s|^_src_path: .*|_src_path: gh:$template_repo|" "$2/.copier-answers.yml" && rm -f "$2/.copier-answers.yml.bak"
 }
@@ -274,6 +275,31 @@ else bad "ci.yml's canary-template job is not the rendered caller:"; sed 's/^/  
 if out="$(same_froms "$template_dir/template/Dockerfile.jinja" "$root/canary-web/Dockerfile")"
 then ok "canary-web/Dockerfile's FROM lines are template/Dockerfile.jinja's at $template_ref"
 else bad "canary-web/Dockerfile's FROM lines are not template/Dockerfile.jinja's at $template_at; copy the template's:"; echo "$out"; fi
+
+# The answers the door adds at this pin (#1068, #1092): a web project with its
+# own user model, a description and a records language, rendered as the door
+# passes them (copier takes the last --data archetype=), and read back where
+# the template puts each.
+web="$work/web"
+if ! render "$template_dir" "$web" --data archetype=web --data custom_user_model=true \
+     --data "description=매일 아침 날씨를 모으는 도구" --data records_language=Korean; then
+  bad "could not render $template_at as the door's web project with its answers"
+else
+  answers="$web/.copier-answers.yml"
+  for line in 'archetype: web' 'custom_user_model: true' 'records_language: Korean' 'description: 매일 아침 날씨를 모으는 도구'; do
+    if grep -qxF "$line" "$answers"; then ok "the web render records $line"
+    else bad "the web render's .copier-answers.yml has no line $line"; fi
+  done
+  models="$(find "$web" -path '*/accounts/models.py' | head -n 1)"
+  if [ -n "$models" ] && grep -q '^class User(AbstractUser)' "$models"
+  then ok "accounts/models.py holds User(AbstractUser)"; else bad "no accounts/models.py with User(AbstractUser) (found: ${models:-none})"; fi
+  if grep -rqF 'AUTH_USER_MODEL = "accounts.User"' "$web" --include='*.py'
+  then ok "the settings set AUTH_USER_MODEL = \"accounts.User\""; else bad "no settings file sets AUTH_USER_MODEL = \"accounts.User\""; fi
+  if grep -qxF '> 매일 아침 날씨를 모으는 도구' "$web/README.md"
+  then ok "README.md's line under the title is the description"; else bad "README.md does not carry the description"; fi
+  if grep -qF 'Korean' "$web/AGENTS.md"
+  then ok "AGENTS.md names the records language"; else bad "AGENTS.md does not name Korean"; fi
+fi
 
 # Until the pin carries it, the commit plinth copied it from (plinth-template#287).
 heavy_from="c19a631782a808c3451cf3b0fd396ab9110f1f71"

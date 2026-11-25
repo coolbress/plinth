@@ -13,7 +13,35 @@ pull requests and have no tag.
 
 ### Changed
 
-- `/plinth:new-project` renders plinth-template v1.51.0 instead of v1.50.4.
+- `/plinth:new-project` renders plinth-template v1.51.0 instead of v1.50.4,
+  and passes it three new answers. A project made from this release has its
+  description as `README.md`'s line under the title, besides the
+  repository's page, and its `AGENTS.md` names the language its records are
+  written in: `--records-language=<language>` (default English, a language
+  named in English such as `Korean`; a code such as `ko` is refused), a row of
+  the answer table defaulting to the language of what you said you want to
+  make, with one line under the table when a public project's records will
+  not be in English. Both doors take `--description=` and
+  `--records-language=`; on GitLab.com the description is also set on the
+  project's page, where before `--description=` was refused (#1068). A new
+  `web` project starts with its own user model, `accounts.User`
+  (`--custom-user-model`, not asked; `--no-custom-user-model` keeps Django's
+  `auth.User`), since Django sets it before the first `migrate` (#1092).
+  Existing projects are unchanged: the template's new questions default to
+  what v1.50.4 rendered, and `/plinth:template-update` records them as
+  English, no description and no custom user model. The release also
+  brings, to new projects and through `/plinth:template-update`: `AGENTS.md`'s
+  two lines on how tests are written (Hypothesis for pure functions, parsers
+  and serializers; no paid outside service in tests) and a `uv add` row in
+  `.claude/permissions.md`; Python 3.14 in place of 3.13 as the extra version
+  `ci / test` runs, a project using something 3.14 removed then failing
+  `ci / test` on that update's pull request; for `data-ml`, the SHA-256 of
+  the training data in `metrics.json` and the model card, which gains
+  "Intended use", "Bias" and Hugging Face-style front matter; and
+  `plinth_sha`'s default moved to v2.44.0 (coolbress/plinth-template v1.51.0's
+  release note). `copier update` needs no hands unless a project edited the
+  lines these touch. No job, check or action changes. `canary-template` runs
+  `extra-python-versions: "3.14"`, as the rendered caller does.
 - `/plinth:new-project` asks the host first, beside each host's readiness
   read without changing anything (`new-project.sh --readiness`), then what
   you want to make in your own words, recommends an archetype quoting them,
