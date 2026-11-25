@@ -33,7 +33,8 @@
 # Exit 0 means the whole path happened, deletion included. A failure after
 # the create deletes the repository; one that could not be deleted is named
 # on stderr and in the job summary, and the exit is 1 either way. GitHub
-# only: template-update.sh has no GitLab path.
+# only: the job's token is GitHub's. template-update.sh's GitLab path (#1012)
+# runs only in tests/template-update-cases.sh, with glab mocked.
 #
 # The token is the e2e job's (Administration, Contents, Pull requests:
 # write), typed through with-admin-token.sh, as e2e.sh's is.

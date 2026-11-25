@@ -17,6 +17,8 @@ command -v jq >/dev/null || { echo "  FAIL  jq is needed to build the fixtures";
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
   || { echo "  FAIL  needs python3 3.11 or later, as the runner has; got $(python3 --version 2>&1)"; exit 1; }
 
+# The plinth commit a link names: the steps read it as job.workflow_sha.
+PLINTH_SHA=0123456789abcdef0123456789abcdef01234567; export PLINTH_SHA
 work="$(mktemp -d "${TMPDIR:-/tmp}/check-messages.XXXXXX")"; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 pass=0; fail=0
@@ -222,7 +224,7 @@ floor() { # <label> <want exit>
 floor "an empty repository: many FAILs" 1
 report="$(grep -E '^  (FAIL|WARN) ' "$work/out")"
 nfail="$(grep -c '^  FAIL ' <<<"$report")"
-tail='run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report'
+tail="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/${PLINTH_SHA:0:12}/skills/floor-check/SKILL.md#report"
 if [ "$nfail" -gt 1 ] && grep -q '^  WARN ' <<<"$report" && ! grep -vF -- "; $tail" <<<"$report" | grep -q .; then ok "every FAIL and WARN line of the report ($(wc -l <<<"$report" | tr -d ' ')) ends in the one next action and link"
 else bad "a FAIL or WARN line lacks the next action and link, or the fixture has no WARN" "$(grep -vF -- "; $tail" <<<"$report")"; fi
 nerr="$(grep -c '^::error::' "$work/out")"
@@ -262,11 +264,11 @@ printf '%s\t::warning::%s\n' "a 900-character SKIP" "$long_skip" >> "$annotation
 
 echo "-- every annotation read: what failed, one next action, a link that exists, at most 300 characters"
 python3 - "$root" "$annotations" <<'PY'
-import re, sys
+import os, re, sys
 root, path = sys.argv[1:3]
 sys.path.insert(0, root)
 ACTION = re.compile(r"[.;:,]\s+(?:remove|rewrite|reword|split|re-run|run|name|edit|write|ask|update|read)\b", re.IGNORECASE)
-LINK = re.compile(r"https://github\.com/coolbress/plinth/blob/main/([^\s#]+)#([\w-]+)")
+LINK = re.compile(r"https://github\.com/coolbress/plinth/blob/" + re.escape(os.environ["PLINTH_SHA"][:12]) + r"/([^\s#]+)#([\w-]+)")
 def anchors(file):
     out = set()
     for line in open(f"{root}/{file}", encoding="utf-8"):
@@ -317,10 +319,10 @@ bad = n = 0
 for where, l in got:
     if l.lstrip().startswith("#") or not re.search(r"::(error|warning)::", l):
         continue
-    if "more not yet confirmed lines" in l or "say()" in l or '"::error::$e"' in l or '"::error::$lead$first$tail"' in l:  # built above: the fixtures read them
+    if "more not yet confirmed lines" in l or "say()" in l or "ends()" in l or '"::error::$e"' in l or '"::error::$lead$first$tail"' in l:  # built above: the fixtures read them
         continue
     n += 1
-    if "https://github.com/coolbress/plinth/blob/main/" not in l and "{HOW}" not in l and "$HOW" not in l:
+    if "https://github.com/coolbress/plinth/blob/$at/" not in l and "{HOW}" not in l and "$HOW" not in l:
         bad += 1
         print(f"  FAIL  {where}: no link\n        | {l.strip()[:200]}")
 print(f"  {'PASS' if not bad else 'FAIL'}  {n - bad} of {n} literal annotations carry a link")

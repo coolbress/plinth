@@ -70,6 +70,9 @@ jobs:
       - name: A red or warning check's annotations say what failed, one next action and a link that exists
         run: ./tests/check-messages.sh
 
+      - name: A failing check ends its log with what failed, the next step and a link (the case matrix)
+        run: ./tests/check-failure-shape.sh
+
       - name: ci / diff-size names changes to the checks the description does not
         run: ./tests/weakened-checks-cases.sh
 
@@ -95,6 +98,11 @@ jobs:
 
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
+
+      # The same fixtures again, each checker run recorded and compared with
+      # its golden output byte for byte, and its ids read against the registry (#1103).
+      - name: Floor checker output unchanged, its ids registered
+        run: ./tests/floor-check-golden.sh
 
       - name: Records checker verdicts on fixtures, offline
         run: ./tests/records-check-cases.sh

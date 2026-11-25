@@ -203,6 +203,16 @@ plant "an unlabelled .yaml next to good forms warns, it does not fail" \
   "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "__none__" || true
 plant "an unlabelled .yml still fails" \
   "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "no labels"
+# The two other per-form checks, each in both severities (#1103: every state
+# a check declares is reached by a fixture).
+plant "a .yml without description fails" \
+  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "extra.yml lacks \['description:'\]"
+warns "a .yaml without description warns" \
+  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "extra.yaml lacks \['description:'\]"
+plant "a .yml value that starts with * fails" \
+  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "extra.yml line \[2\]: value starts with"
+warns "a .yaml value that starts with * warns" \
+  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "extra.yaml line \[2\]: value starts with"
 # An invalid extra warns, because the repository passed without that file being
 # read. A repository whose *every* template is invalid never passed the old
 # filename check either, so it fails: leaving it green would be a loosening.
@@ -3918,11 +3928,11 @@ nocopy="$work/skew-foreign"; rm -rf "$nocopy"; cp -R "$good" "$nocopy"; rm "$noc
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$nocopy" 2>&1)"
 if ! grep -q "claude plugin" <<<"$out"; then ok "a repository the door did not make: no skew line, the drift item's SKIP stands"
 else bad "skew, not door-made"; fi
-# GitLab: template-update.sh has no GitLab path, so the last step is this check,
-# which prints the update line; the pin read is the include's.
+# GitLab: template-update.sh serves it (#1012), so the last step is the skill,
+# as on GitHub; the pin read is the include's.
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
-if grep -qF "$skew_head" <<<"$out" && grep -qF "  INFO    /plinth:floor-check" <<<"$out" && ! grep -qF "  INFO    /plinth:template-update" <<<"$out"
-then ok "GitLab: the skew's last step is /plinth:floor-check, not the skill with no GitLab path"
+if grep -qF "$skew_head" <<<"$out" && grep -qF "  INFO    /plinth:template-update" <<<"$out" && ! grep -qF "  INFO    /plinth:floor-check" <<<"$out"
+then ok "GitLab: the skew's last step is /plinth:template-update, as on GitHub"
 else bad "skew, GitLab steps"; printf '%s\n' "$out" | grep -E 'plugin|/plinth:' | sed 's/^/        /'; fi
 gl_pin="$(sed -nE 's|.*coolbress/plinth/([0-9a-f]{40})/gitlab/python-ci\.yml.*|\1|p' "$glgood/.gitlab-ci.yml")"
 printf '{"content":"%s"}\n' "$(printf 'template_ref="v99.0.0"\n' | base64 | tr -d '\n')" \
