@@ -11,6 +11,12 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.45.0] - 2026-11-25
+
+New projects start the way a person thinks about them: the host first, then what they want to make, a recommended archetype with its reason, the name, and one table of every answer before anything is created, with only the rows they pick asked again. They render plinth-template v1.51.0, which records the language of the project's records and a one-line description, gives a `web` project its own user model from the start, tests Python 3.14 in place of 3.13, and records a `data-ml` project's training-data hash. `/plinth:guide` says the next step first and keeps a one-screen map of the whole way, with one step in depth on request. A private repository without GitHub Code Security now compares its added dependencies with osv-scanner instead of reporting "not yet confirmed". Printed commands keep Hangul as typed.
+tested with plinth-template v1.51.0
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-7155016545>
+
 ### Changed
 
 - `/plinth:new-project` renders plinth-template v1.51.0 instead of v1.50.4,
@@ -6128,7 +6134,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.44.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.45.0...HEAD
+[2.45.0]: https://github.com/coolbress/plinth/releases/tag/v2.45.0
 [2.44.0]: https://github.com/coolbress/plinth/releases/tag/v2.44.0
 [2.43.0]: https://github.com/coolbress/plinth/releases/tag/v2.43.0
 [2.42.0]: https://github.com/coolbress/plinth/releases/tag/v2.42.0
