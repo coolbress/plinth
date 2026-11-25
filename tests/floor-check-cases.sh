@@ -445,6 +445,30 @@ wall "invisible bypass actors are SKIP, not a pass" "bypass actors not visible" 
 wall "an intact wall against the fixture counts only the label read as not verified" "-- 0 failed, 1 not verified"
 wall "invisible bypass actors are counted as not verified" "-- 0 failed, 2 not verified" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
 wall "an unreadable repository is counted, not passed" "-- 0 failed, 2 not verified" "printf '[]' > \"$api/repos/o/r.json\""
+# Old-style branch protection and no ruleset, as measured on a test repository
+# for #1104 (2026-11-25): with either token rules/branches/main and rulesets are
+# [], branches/main says protected: true, and branches/main/protection is the
+# rule set to an admin token and a 403 to the Actions token (contents: read),
+# served here as unparseable, which is how a fixture says the API failed. The
+# checker reads neither branches path today and calls that wall down; the state
+# the adopter path gives it is `review` (#1103's model, a person reads the old
+# protection; #1107). This pins today's verdict so that change is made on purpose.
+oapi="$work/api-oldstyle"; rm -rf "$oapi"; cp -R "$api" "$oapi"
+mkdir -p "$oapi/repos/o/r/branches/main"
+printf '[]' > "$oapi/repos/o/r/rules/branches/main.json"; printf '[]' > "$oapi/repos/o/r/rulesets?per_page=100.json"
+printf '%s' '{"name":"main","protected":true,"protection":{"enabled":true,"required_status_checks":{"enforcement_level":"non_admins","contexts":["test"],"checks":[{"context":"test","app_id":15368}]}}}' \
+  > "$oapi/repos/o/r/branches/main.json"
+old_protection='{"required_status_checks":{"strict":true,"contexts":["test"],"checks":[{"context":"test","app_id":15368}]},"required_pull_request_reviews":{"dismiss_stale_reviews":false,"require_code_owner_reviews":false,"require_last_push_approval":false,"required_approving_review_count":0},"required_signatures":{"enabled":false},"enforce_admins":{"enabled":false},"required_linear_history":{"enabled":false},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},"block_creations":{"enabled":false},"required_conversation_resolution":{"enabled":false},"lock_branch":{"enabled":false},"allow_fork_syncing":{"enabled":false}}'
+oldstyle() { # <description> <protection body> [checker args...]
+  local desc="$1" out rc; printf '%s' "$2" > "$oapi/repos/o/r/branches/main/protection.json"; shift 2
+  out="$(FLOOR_CHECK_API_DIR="$oapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" \
+         --expect-checks "ci / a, ci / b" "$@" 2>&1)"; rc=$?
+  if [ "$rc" = 1 ] && grep -qx '  FAIL  no rules govern main: the wall is down' <<<"$out" \
+     && ! grep -qiE 'protected|branch protection' <<<"$out"; then ok "$desc"
+  else bad "$desc (rc=$rc)"; grep -E 'FAIL|wall|protect' <<<"$out" | sed 's/^/        /'; fi
+}
+oldstyle "old-style protection, admin token: today the wall is down, the protection unread" "$old_protection"
+oldstyle "old-style protection, Actions token (403): today the wall is down, the protection unread" "HTTP 403 Resource not accessible by integration" --actions-token
 # The merge ruleset (ruleset-merge.json, #568): the one ruleset allowed a
 # bypass actor, and only in its exact shape. Its own copy of the fixture API.
 mapi="$work/api-merge"; rm -rf "$mapi"; cp -R "$api" "$mapi"
