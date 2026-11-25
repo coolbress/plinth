@@ -3894,11 +3894,11 @@ nocopy="$work/skew-foreign"; rm -rf "$nocopy"; cp -R "$good" "$nocopy"; rm "$noc
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$nocopy" 2>&1)"
 if ! grep -q "claude plugin" <<<"$out"; then ok "a repository the door did not make: no skew line, the drift item's SKIP stands"
 else bad "skew, not door-made"; fi
-# GitLab: template-update.sh has no GitLab path, so the last step is this check,
-# which prints the update line; the pin read is the include's.
+# GitLab: template-update.sh serves it (#1012), so the last step is the skill,
+# as on GitHub; the pin read is the include's.
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
-if grep -qF "$skew_head" <<<"$out" && grep -qF "  INFO    /plinth:floor-check" <<<"$out" && ! grep -qF "  INFO    /plinth:template-update" <<<"$out"
-then ok "GitLab: the skew's last step is /plinth:floor-check, not the skill with no GitLab path"
+if grep -qF "$skew_head" <<<"$out" && grep -qF "  INFO    /plinth:template-update" <<<"$out" && ! grep -qF "  INFO    /plinth:floor-check" <<<"$out"
+then ok "GitLab: the skew's last step is /plinth:template-update, as on GitHub"
 else bad "skew, GitLab steps"; printf '%s\n' "$out" | grep -E 'plugin|/plinth:' | sed 's/^/        /'; fi
 gl_pin="$(sed -nE 's|.*coolbress/plinth/([0-9a-f]{40})/gitlab/python-ci\.yml.*|\1|p' "$glgood/.gitlab-ci.yml")"
 printf '{"content":"%s"}\n' "$(printf 'template_ref="v99.0.0"\n' | base64 | tr -d '\n')" \
