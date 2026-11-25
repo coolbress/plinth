@@ -2037,7 +2037,8 @@ else bad "the skill's order"; fi
 
 # The skill names the four fields and the one edit it allows (#856).
 skill="$root/skills/template-update/SKILL.md"
-skill_text="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
+# The archetype move's steps sit one level down, in reference.md.
+skill_text="$(cat "$skill" "$root/skills/template-update/reference.md" | tr '\n' ' ' | tr -s ' ')"
 if grep -qF '`## What and why`, `## What I checked myself`, `## How it was verified` and a `Review:` line' <<<"$skill_text" \
    && ! grep -qF 'two headings' <<<"$skill_text"
 then ok "the skill names the form's four fields, not two headings"

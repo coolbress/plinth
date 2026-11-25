@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # /plinth:new-project shows every answer in one table before it creates
 # anything, and asks again only the rows the person picks (#1068). The skill is
-# text an agent follows, so this test reads skills/new-project/SKILL.md: each
+# text an agent follows, so this test reads skills/new-project/questions.md,
+# where the skill's questions are written out (and the skill itself for what it no longer says): each
 # row, the primary choice's form, the "change some" groups, what a change asks
 # next, and the text-mode line. The door's own half (a description shortened to
 # 350 characters is accepted) is a case in tests/new-project-failpath.sh.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 skill="${1:-$root/skills/new-project/SKILL.md}"
+questions="$(dirname "$skill")/questions.md"
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
@@ -19,10 +21,10 @@ says() { # says <what> <text> <phrase>...
   done
 }
 
-# The step, from its heading to the run that follows it, as one line.
-step="$(sed -n '/^8\. \*\*Every answer in one table/,/^Then run, with the arguments/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
+# The step, from its heading to the next heading or the end, as one line.
+step="$(awk '/^## 8\. Every answer in one table/ {on=1; print; next} on && /^## / {exit} on' "$questions" | tr '\n' ' ' | tr -s ' ')"
 if [ -n "$step" ]; then ok "step 8 is the table, read up to the run"
-else bad "step 8 \"Every answer in one table\" is missing, so the checks below read nothing"; fi
+else bad "step 8 \"Every answer in one table\" is missing from $questions, so the checks below read nothing"; fi
 
 echo "-- the table holds every answer, the name and the visibility among them"
 # One row each, in a table whose first cell is the row's number.
@@ -105,7 +107,7 @@ says "the step" "$step" 'Every row becomes a flag, a default included' \
   'When the arguments give every row, show the table and ask nothing' \
   'A row changed at the table replaces its flag among the arguments' 'never both'
 # The bundled question is gone, read as one line so a phrase across lines counts.
-flat="$(tr '\n' ' ' < "$skill" | tr -s ' ')"
+flat="$(cat "$skill" "$questions" | tr '\n' ' ' | tr -s ' ')"
 for old in 'header `Defaults`' 'Use the recommended defaults?' '| Customize |' 'It never names the host or the visibility.'; do
   if printf '%s\n' "$flat" | grep -qF -- "$old"; then bad "the skill still says \"$old\""
   else ok "the skill no longer says \"$old\""; fi
