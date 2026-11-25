@@ -2,14 +2,14 @@
 
 plinth is a Claude Code plugin plus its marketplace. Installers add the
 marketplace and install `plinth@plinth`; that must keep working on a clean
-machine. `CLAUDE.md` is a symlink to this file.
+machine. `CLAUDE.md` is a symlink to this file. Why each rule holds:
+[decisions in force](docs/reference/decisions-in-force.md).
 
 ## Checks
 
 The commands are in [CONTRIBUTING.md](CONTRIBUTING.md#run-the-checks): three `claude plugin validate --strict`
 calls, `scripts/check-ruleset.sh`, and the tests. Before a pull request, the local run is the tests the change
-touched and those it reaches (that page says how to find them); CI runs every `tests/*.sh`. The full set
-locally is optional, and its block queues each test in `scripts/heavy.sh` on its own.
+touched and those it reaches (that page says how to find them); CI runs every `tests/*.sh`.
 
 ## Always
 
@@ -24,87 +24,39 @@ locally is optional, and its block queues each test in `scripts/heavy.sh` on its
   `git worktree add --no-track -b <type>/<slug> .claude/worktrees/<slug> origin/main`
   (that path is ignored; one outside the repository works too). Never switch,
   reset, rebase or stash another task's checkout.
-- `version` moves only in a release: `scripts/make-release.sh vX.Y.Z <why-file>` bumps both manifests,
-  then tags from the merged `main`; never bump it elsewhere. `tests/make-release-guards.sh` checks it.
+- `version` moves only in a release ([cut a release](docs/how-to/cut-a-release.md)); `tests/make-release-guards.sh` checks it.
 - Pin every third-party marketplace entry to a full commit SHA. Raising a pin is a pull request, and its
-  release note names `claude plugin update <name>@plinth`: `update plinth` does not fetch a raised pin (#714).
+  release note names `claude plugin update <name>@plinth`: `update plinth` does not fetch a raised pin.
 - Keep the caller job named `ci` in `.github/workflows/ci.yml`. Check names are
   `ci / <job>` and rulesets require them by name
   ([the list](docs/reference/required-checks.md)). Renaming a `python-ci.yml`
   job is a MAJOR change: every consumer ruleset requires the old name forever.
 - Never skip a job with `if:`. Report a pass instead; a skipped job has no check name.
-- Product text is English. `.ko.md` translations are optional and never canonical.
-  Answer the person in the language they write in. The first time you use one
-  of the everyday terms in [the term table](docs/reference/terms.md) with the
-  person, add its plain explanation once, in their language, and keep the
-  English term in brackets after the translation, the same word every time,
-  so it matches the host's screen.
+- Product text is English; `.ko.md` translations are optional and never canonical.
+  Answer the person in the language they write in. The first time you use a term
+  from [the term table](docs/reference/terms.md) with the person,
+  add its plain explanation once, in their language, and keep the English term in brackets
+  after the translation, the same word every time, so it matches the host's screen.
 - A commit made with AI carries `Assisted-by: <agent>:<model>` (the Linux kernel's
   form, e.g. `Assisted-by: Claude:claude-fable-5-1`), one line for each model the
-  work used, and so do the last lines of the pull request description, which becomes the squash commit when merged as
-  [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change) step 5 says. AI is never a
-  `Co-Authored-By` and adds no session trailer or link; the person who merges answers.
+  work used, and so do the last lines of the pull request description, which
+  becomes the squash commit. AI is never a `Co-Authored-By` and adds no session
+  trailer or link; the person who merges answers.
 - The default review is a fresh-context review, before the description is written: a new subagent (not a fork of this session) or a new session, given only the diff (`git diff origin/main...HEAD`), the issue's acceptance criteria and this file's Code Review Rules, never this conversation; its findings go in the description as it reported them. A same-session `/code-review` helps but is not independent; say which review ran. `third-party / review` only records an accepted reviewer's signal on the commit.
-  A release pull request (`chore(release): vX.Y.Z` whose diff has run 1's shape: the two manifests' `"version"` lines raised and `CHANGELOG.md` only adding lines, the replaced `[Unreleased]` link aside) is passed by that check without a summons or a review, by design
-  ([cut a release](docs/how-to/cut-a-release.md), step 4): merge it with `scripts/merge-when-green.sh` on green checks and a green `e2e` on its branch (steps 5 and 6), which the script holds; do not wait for the reviewer, toggle draft, or post the summons for it.
-  When several pull requests are open, only the session the person names (or the person) merges, one at a
-  time, with `scripts/merge-when-green.sh`, and does not edit a description while it waits; one left behind
-  `main` goes up to date with `--update`, which stops rather than update twice. Other sessions do not bring
-  their own pull request up to date (coolbress/plinth-template#293 has why).
-  Whoever opens or merges a pull request reads the reviewer's inline comments
-  (`gh api repos/<owner>/<repo>/pulls/<n>/comments`; the check's log lists their
-  URLs), not only its summary, and the description says what was done with
-  each: fixed, answered with the reason, or moved to an issue. How many rounds
-  ([When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop)):
-  after the first review, two rounds of fixes; from the third, fix only what
-  the change itself makes irreversible or lets reach other people, which is
-  fixed whatever the round, answer the rest or move it to an issue, and
-  merge; a risk that cannot be classified yet stays open until another look
-  classifies it. Judge the row by what the diff does, not by the reviewer's
-  P1: a how-to line that could say more exposes nothing, so it is never that
-  row (#420 ran six rounds on one). When a finding repeats the last one's
-  kind, rewrite once for the whole kind; later findings of that kind are
-  answered, unless they are in the fix-whatever-the-round row.
-  Before pushing a fix for a review finding, run
-  `scripts/merge-when-green.sh <n> --round`: it only reads, and prints the
-  same round line as the check's log, which a green check leaves unread.
-  From round 3 it exits 1 until `--row <irreversible|issue|answer|unclassified>
-  "<why>"` states the finding's row and reason; put the line it prints in the
-  description's review section.
-  Never write the reviewer's summons text (its `@` mention) in a pull request
-  description or comment: the reviewer reads it as a task and answers with
-  noise (#184, #189). Describe it instead.
+- Review findings: read the reviewer's inline comments and say in the description what was done with each; before pushing a fix, run `scripts/merge-when-green.sh <n> --round` ([When to stop](docs/how-to/configure-the-third-party-reviewer.md#when-to-stop)).
+- Never write the reviewer's summons text (its `@` mention) in a pull request
+  description or comment; describe it instead.
+- A release pull request (`chore(release): vX.Y.Z`, with run 1's diff) needs no review or summons: merge it as [cut a release](docs/how-to/cut-a-release.md) steps 4 to 6 say.
+- When several pull requests are open, only the session the person names (or the person) merges, one at a time ([CONTRIBUTING.md](CONTRIBUTING.md#land-a-change) step 5).
 - Issues and pull requests follow [CONTRIBUTING.md](CONTRIBUTING.md#land-a-change)
   (the pull-request shape) and [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)
-  (what a record has to carry). Write them as public: no home path, account or
-  folder name from the owner's computer; the issue tracker page says what goes
-  in instead. Read the templates that actually apply first,
-  the owner's `.github` defaults included; `gh --body` bypasses them. In a
-  consumer repository their conventions win, and plinth's are the default only
-  where they have none. Closing an issue writes its ending into the body:
-  `## Outcome`, saying which of completed, cancelled, superseded or moved to a
-  follow-up it is, and what was verified (a record ends in `## Decision`
-  instead: a `wayfinder:research`, `:prototype` or `:grilling` child).
-  Tick each acceptance criterion that was met; one left unticked is named in
-  the Outcome with why (#294 closed with all five met and none ticked).
-  Ticking happens at the merge, closed or not: whoever merges a pull request
-  that names an issue (`Closes`, `Part of`) ticks the criteria it met
-  (#489 met three of #485's and left them unticked); `merge-when-green.sh`
-  prints what is left (#490).
-  `Closes #N` closes it through GitHub without asking anyone, so whoever
-  merges writes the ending; measured 2026-09-23, 23 of 86 closed issues had no
-  ending. A closing keyword before `#N` anywhere in the description closes
-  that issue too: "the two fixes #65 decided" closed #65 on merge (#284).
-  Word the prose another way; `ci / docs` fails a description that would (#293).
-  A reference to another repository's issue or pull request is `owner/repo#N`;
-  a bare `#N`, or `plinth #N`, links to this repository's own `#N`.
+  (what a record has to carry, and which templates to read first). Write them as
+  public: no home path, account or folder name from the owner's computer.
+- Closing an issue writes its ending, and whoever merges ticks the criteria the change met: [closing an issue](docs/agents/issue-tracker.md#closing-an-issue).
+- A closing keyword before `#N` anywhere in a description closes that issue: word the prose another way; `ci / docs` fails it.
 - Changing behaviour: verify the boundaries and partial failures of the inputs
   and states it touches, record which paths you exercised and which you did
   not, and do not widen a few cases into a guarantee about all of them.
-- Closing an issue that carried a confidence-bearing judgement (a `/code-review`
-  CONFIRMED/PLAUSIBLE finding, a `ready-for-agent` call judged on what triage
-  knew): say in `## Outcome`, or `## Decision` for a record, whether later
-  evidence supports it, contradicts it, or leaves it unresolved.
 
 ## Ask first
 
@@ -112,19 +64,7 @@ locally is optional, and its block queues each test in `scripts/heavy.sh` on its
 - Adding a hook anywhere in the default plugin, or adding a dependency or raising
   its pin when that version ships one. Hooks live in the opt-in profile; a
   dependency's hook is still a hook in every user's session.
-- Changing what a dependency carries: narrow or widen its entry's `skills`
-  under the name it has; never rename or move the entry. `claude plugin update`
-  does not install a dependency under a new name, and the old one stays
-  installed and failing, or, with a `renames` map, is dropped without an
-  error (measured for #468). One exception, measured for #469: an entry whose
-  upstream root carries a `plugin.json` cannot narrow its `skills` with a
-  `url` source (`strict: false` then fails as conflicting manifests), so its
-  source moves to `git-subdir` under the same name, and installed copies need
-  `claude plugin update <name>@plinth` once besides the update of plinth. A
-  second exception, measured for #477: a move from another marketplace into
-  plinth's under the same name survives only with two commands,
-  `claude plugin install plinth@plinth` then `claude plugin prune`, which the
-  release note names.
+- Changing what a dependency carries: narrow or widen its entry's `skills` under the name it has; never rename or move the entry, except as [dependency entries](docs/reference/dependency-entries.md) says.
 
 ## Never
 
@@ -136,11 +76,9 @@ locally is optional, and its block queues each test in `scripts/heavy.sh` on its
 - New repository: `/plinth:new-project <owner>/<name>`. Existing one:
   `/plinth:floor-check`. Choosing a tool, planning to review included: `/plinth:arsenal`.
 - Next ticket: `gh issue list --label ready-for-agent`, then `/implement #N`.
-  `/implement` ends at a commit on the current branch: the pull-request rules
-  above are not applied by it, and a skill carrying its own example format does
-  not override this repository's. Whoever opens the pull request applies them.
-- Issue tracker, triage labels, domain docs: [docs/agents/](docs/agents/issue-tracker.md)
-  (`issue-tracker.md`, `triage-labels.md`, `domain.md`); glossary in `GLOSSARY.md`.
+  `/implement` ends at a commit on the current branch: whoever opens the pull request applies the rules
+  above, and a skill's own example format does not override them.
+- Issue tracker, triage labels, domain docs: [docs/agents/](docs/agents/issue-tracker.md); glossary in `GLOSSARY.md`.
 
 ## Code Review Rules
 

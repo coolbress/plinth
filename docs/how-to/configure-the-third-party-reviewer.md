@@ -127,7 +127,8 @@ other.
   `CHANGELOG.md`; each manifest replaces its one `"version"` line with the
   title's version, higher than the old one, so no second version line is added
   beside it and the version does not go back; `CHANGELOG.md` only adds lines, the `[Unreleased]` link
-  aside. A pull request under that title that also touches a script, moves a
+  aside. Besides those, the changelog fragments `changelog.d/<name>.md` run 1
+  writes out may be removed, and only removed. A pull request under that title that also touches a script, moves a
   marketplace entry's pin or removes a changelog line is summoned, and the log
   says why; so is one whose file list cannot be read. What it does not cover
   is the release note's own text. It is off by default, and fits only a
@@ -289,6 +290,11 @@ asking for an environment. And skipping the summons skips nothing the toggle
 does not already give: on the first Dependabot pull request here (#178) the
 reviewer had nothing to say about the bump and one correct comment about this
 repository's text next to it.
+
+An agent never writes the summons text (the reviewer's `@` mention) in a pull
+request description or comment: the reviewer reads it
+as a task and answers with noise (#184, #189). Describe it instead, as "the
+summons" or "a review request".
 
 ### When the verdict lands after the check gave up
 
@@ -453,7 +459,12 @@ what is left, not by the reviewer's severity label:
 The first row wins whenever it applies: who can trigger a defect is independent
 of how far its consequence reaches. An important risk that cannot be judged
 yet is in no row: it stays open until another look classifies it, as the table
-above says, and the budget below does not merge past it.
+above says, and the budget below does not merge past it. Judge the row by
+what the diff does, not by the reviewer's P1: a how-to line that could say
+more exposes nothing, so it is never the first row (#420 ran six rounds on
+one). When a finding repeats the last one's kind, rewrite once for the whole
+kind; later findings of that kind are answered, unless they are in the first
+row.
 
 Budget: after the first review, two rounds of fixes. From the third round on,
 fix only the first row; the second row becomes an issue, answered on the

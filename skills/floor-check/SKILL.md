@@ -8,9 +8,8 @@ disallowed-tools: Edit, Write, NotebookEdit
 # Floor check
 
 Runs the same checker that `ci / floor-check` runs in CI, from the same file.
-Token, network and inputs can still make the two results differ: an item the
-run could not read is a SKIP line, never a PASS. Read-only: it changes no
-file and no setting.
+Token, network and inputs can still make the two results differ. Read-only:
+it changes no file and no setting. Do not fix anything in this session, and do not run anything that writes.
 
 ## Run
 
@@ -71,7 +70,7 @@ It also reads the scopes `gh auth status` lists for the active github.com
 account: `workflow` among them is a WARN naming the login, since it lets the
 agent push a change to `.github/workflows/`, the checks included; scopes
 without it are an INFO; none listed (a fine-grained token lists none) or an
-answer not read is a SKIP, never a PASS. With `GH_TOKEN` or `GITHUB_TOKEN`
+answer not read is a SKIP. With `GH_TOKEN` or `GITHUB_TOKEN`
 set, the line says the stored login's scopes may not be the ones in use. On
 GitLab glab's token scopes are a SKIP. The `workflow` WARN is expected
 before the first pull request is merged; its fix is a token without
@@ -105,7 +104,7 @@ PASS in that shape, a FAIL in any other, a WARN when no ruleset carries
 `update` (every repository made before it; the WARN names
 `scripts/create-merge-ruleset.sh`, which needs repository administration, so
 give it to the user to run), and a SKIP when its bypass actors cannot be
-read: never a PASS then.
+read.
 
 With `--merge-ruleset` one more line follows, starting `the merge:`. It
 says whether "merge on your word" is guidance or a boundary for the login
@@ -226,6 +225,8 @@ read as before. `ci / floor-check` is not involved: it runs only from
 
 ## Report
 
+An item the run could not read is a SKIP line, never a PASS.
+
 Lead with a summary in plain words, for a person who may not know the
 checker's terms yet. It comes before the checker's output and replaces none
 of it:
@@ -321,7 +322,7 @@ covers only what is listed here.
 | Plinth pins agree | The same `uses:` lines as Action pins, those of `coolbress/plinth/...` at a full commit SHA: two or more SHAs across the files (`ci.yml` and `label.yml` are rendered at one commit; a hand edit moves one) are a WARN naming each file with its SHA, and the INFO under it is the `sed` line that moves each lagging file's plinth references, and nothing else in it, to the SHA the `ci` job calls. The owner, repository and SHA compare in any letter case, as GitHub reads them. One SHA, or none outside the `ci` job, prints nothing, whatever the template state | A plinth `uses:` on a tag or branch (the Action pins WARN, not repeated). A `uses` it cannot read is a SKIP naming the file and line, unless the readable ones already disagree. Not a FAIL: `label / label` is not a required check |
 | Release workflow | For a `cli`, `library`, `backend` or `data-ml` on GitHub, `.github/workflows/release.yml` at the repository root (also with `--project`) as text, comments dropped: present (plinth-template 1.29.0 renders it for `cli` and `library`, 1.30.0 for `backend`, 1.31.0 for `data-ml`); every line of its `on:` block is `push:`, `tags:` or a tag pattern under it, so another event, another filter or a key it cannot read (a quoted one) is a WARN naming that line; no `secrets.<name>` other than `GITHUB_TOKEN`, and no `password:`. For `data-ml`, the files its `ASSETS:` line names: one ending in `.pkl`, `.pickle`, `.joblib` or `.pt`, in any letter case, is a WARN; no such line, or a value that is not one line of plain file names (a folded or literal block such as `>-`, a value continued on a deeper-indented line, a second `ASSETS:` line, an expression, a comment), is a SKIP | Whether PyPI has a publisher registered, whether the `pypi` environment exists or what protects it, whether the image was pushed or who can fetch it, whether the release exists or its files match their `SHA256SUMS`, which files a `data-ml` step uploads other than through `ASSETS`, whether the tag-against-version step is still there, what the jobs do. Missing on an instance rendered before the template release that adds it is a WARN whose INFO names the update. On GitLab, an INFO: the template renders no release workflow there. `web` is not asked |
 | Model card | For a `data-ml`, on either host, `MODEL_CARD.md` in the project directory: present (plinth-template 1.31.0 renders it). Missing is a WARN whose INFO names the update | What the card says, whether its personal-data answer is true or filled in, whether the training run fills its results. Other archetypes are not asked |
-| Render Blueprint | `render.yaml` in the project directory, whenever it is there (#811): for a `web` instance hosted on Render, whether it is there at all is the separate `render.yaml present` item; for any other repository, a JavaScript or TypeScript one included, it is read when present and nothing is said when it is not. Read as block YAML with the standard library: each `type: web` service has a `healthCheckPath` and `autoDeployTrigger: checksPass`, each database names a `plan` other than `free` (Render deletes a free Postgres after 30 days, with no backups), and no `envVars` entry, under a service or an `envVarGroups` group, whose key names a secret (`SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`, `PRIVATE_KEY`, `CREDENTIAL`, `DATABASE_URL`, `..._DSN`) carries a literal `value:`. Each gap is a WARN with one fix line, one per service or database that has it, and never a FAIL. The name match errs toward a WARN: `TOKEN_TTL_SECONDS` with a literal value is one. A file with no web service or no `envVars` says so as an INFO, not a PASS | Dashboard-only settings: Blueprint Auto Sync, health alerts, spend limits. Whether the plan named exists, whether the path answers, a secret under a name the pattern does not match. A file in a form the reader does not read (a flow collection other than `[]` or `{}`, a block scalar, an anchor or alias, a merge key, a nested list, a plain value holding a colon and a space, a backslash escape in double quotes, in a key or a value, a tab in the indentation, resources under `projects` or `ungrouped`) is one SKIP for the whole file, never a PASS. The SKIP names the line number and the form, never what the line holds: `ci / floor-check` publishes it as an annotation, and the line may hold a secret. Railway and Fly files are not read |
+| Render Blueprint | `render.yaml` in the project directory, whenever it is there (#811): for a `web` instance hosted on Render, whether it is there at all is the separate `render.yaml present` item; for any other repository, a JavaScript or TypeScript one included, it is read when present and nothing is said when it is not. Read as block YAML with the standard library: each `type: web` service has a `healthCheckPath` and `autoDeployTrigger: checksPass`, each database names a `plan` other than `free` (Render deletes a free Postgres after 30 days, with no backups), and no `envVars` entry, under a service or an `envVarGroups` group, whose key names a secret (`SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`, `PRIVATE_KEY`, `CREDENTIAL`, `DATABASE_URL`, `..._DSN`) carries a literal `value:`. Each gap is a WARN with one fix line, one per service or database that has it, and never a FAIL. The name match errs toward a WARN: `TOKEN_TTL_SECONDS` with a literal value is one. A file with no web service or no `envVars` says so as an INFO, not a PASS | Dashboard-only settings: Blueprint Auto Sync, health alerts, spend limits. Whether the plan named exists, whether the path answers, a secret under a name the pattern does not match. A file in a form the reader does not read (a flow collection other than `[]` or `{}`, a block scalar, an anchor or alias, a merge key, a nested list, a plain value holding a colon and a space, a backslash escape in double quotes, in a key or a value, a tab in the indentation, resources under `projects` or `ungrouped`) is one SKIP for the whole file. The SKIP names the line number and the form, never what the line holds: `ci / floor-check` publishes it as an annotation, and the line may hold a secret. Railway and Fly files are not read |
 | JSON logs | For a service archetype (`backend`, `data-ml`, `web`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
 
 ## The ci job

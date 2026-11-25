@@ -256,6 +256,8 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 - [Decisions in force](docs/reference/decisions-in-force.md): the decisions
   that hold today, each with the record that holds it, and the pairs of
   records that still disagree.
+- [Where shipped skills' rules came from](docs/reference/skill-sources.md):
+  the record behind each rule a skill states without its issue number.
 - [GLOSSARY.md](GLOSSARY.md): the vocabulary (wall, door, box, floor, arsenal, profile).
 - [Terms a first project meets](docs/reference/terms.md): repository, pull
   request, check, merge and the rest, each in one plain line, and the rule that

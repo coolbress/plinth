@@ -68,7 +68,9 @@ esac
 # the title, so the title alone passed any pull request that took it;
 # the diff is checked too: exactly the two manifests and CHANGELOG.md,
 # modified; in each manifest its one `"version"` line replaced by the
-# title's version, a higher one; in CHANGELOG.md lines added, the `[Unreleased]` link aside.
+# title's version, a higher one; in CHANGELOG.md lines added, the `[Unreleased]` link aside;
+# besides those, only changelog fragments (`changelog.d/<name>.md`) removed,
+# which run 1 writes into CHANGELOG.md and deletes (#1136).
 # FILES_JSON is `pulls/:n/files`; one that is missing, unreadable, a full
 # page or lacks a patch counts as "not a release's diff". What this does
 # not cover: the release note's own text.
@@ -88,6 +90,12 @@ def why():
         return "the changed files could not be read"
     if len(files) >= 100:
         return "the changed files fill a page; more may follow"
+    fragment = re.compile(r"^changelog\.d/[^/.][^/]*\.md$")   # run 1 deletes no dot file
+    frags = [f for f in files if isinstance(f, dict) and fragment.match(str(f.get("filename")))]
+    for f in frags:
+        if f.get("status") != "removed":
+            return f"{f['filename']} is {f.get('status')}, not removed; a release only deletes the fragments it writes out"
+    files = [f for f in files if f not in frags]
     names = {f.get("filename") for f in files if isinstance(f, dict)}
     if names != want or len(files) != len(want):
         extra, missing = sorted(map(str, names - want)), sorted(want - names)

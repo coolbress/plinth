@@ -11,57 +11,6 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
-### Added
-
-- [Decisions in force](docs/reference/decisions-in-force.md): one page of
-  the decisions that hold today in plinth and plinth-template, one line each
-  with its date and the record that holds it, brought up to 2026-11-25 (the
-  release trains, changelog fragments, GitLab's support line, the defaults
-  #1144 kept, the template's `AGENTS.md` rules). The seven pairs of records
-  that disagreed when it was collected now carry reversal lines, and the page
-  lists none open. A decision whose building issue is still open ends in
-  `(decided; not built yet: #N)`. The issue body stays canonical; the page says how to add a
-  line and how a reversal is recorded.
-
-### Changed
-
-- `/plinth:template-update` serves GitLab, where it used to stop and point at
-  the manual steps (#924). The plan, `--apply` and `--finish` run copier as on
-  GitHub; what differs is what reads and writes the host: `glab api`, asked
-  of the host and project origin's URL names, verifies the base, and the
-  update ends in a draft merge request (a `Draft:` title), not a draft pull
-  request. An archetype move (`--archetype <a>`) works there too: in place of
-  required checks, its plan names the jobs of `.gitlab-ci.yml` that start
-  and stop, whether "Pipelines must succeed" is on (skipped pipelines not
-  counted) and whether the default branch is protected, as
-  `/plinth:floor-check` reads them, and for one that is not, the `glab api`
-  command a Maintainer runs. Nothing changes the project's settings. On
-  GitLab the size of the update is not counted before it is pushed, so no
-  split is proposed; the pipeline's `diff-size` job counts it. The script
-  still stops on a GitLab checkout whose origin URL names no project, and a
-  move to or from `web` is still refused on both hosts. `/plinth:floor-check`'s
-  plugin-update steps on GitLab now end at `/plinth:template-update`, as on
-  GitHub (#1012).
-
-- A failing `ci / test` now says what failed, the next step and a link, in
-  the three places a person and their agent look (#1098). Its log ends with
-  `failed:`, `next:` and `more:` lines, the last thing plinth prints in the
-  job, and one annotation titled `ci / test` says the same in at most 300
-  characters: on a failing test it names the first one and the command that
-  runs it (`uv run pytest <test>`), and each failed test is an annotation at
-  its file and line, nine at most, then a line saying how many there are.
-  Fewer warnings: a step that did not run because an earlier step failed is
-  no longer a warning once the job has a `fail:` line (it repeated the
-  failure and read like the cause), and every job's Verdict prints its
-  summary lines into the log too. The links `python-ci.yml`,
-  `pr-review.yml` and the scripts they fetch print now name the plinth
-  commit the project's `ci.yml` calls (`job.workflow_sha`, its first 12
-  characters), not `main`; `more:` opens the check's section of the new
-  "When a check fails" part of `docs/reference/required-checks.md`. The
-  pytest step is named `pytest on .python-version` (it showed as
-  "Run limited() {"); no job, step id, check name, input or secret is
-  renamed. The other required checks get the same shape in #1099 and #1100.
-
 ## [2.45.0] - 2026-11-25
 
 New projects start the way a person thinks about them: the host first, then what they want to make, a recommended archetype with its reason, the name, and one table of every answer before anything is created, with only the rows they pick asked again. They render plinth-template v1.51.0, which records the language of the project's records and a one-line description, gives a `web` project its own user model from the start, tests Python 3.14 in place of 3.13, and records a `data-ml` project's training-data hash. `/plinth:guide` says the next step first and keeps a one-screen map of the whole way, with one step in depth on request. A private repository without GitHub Code Security now compares its added dependencies with osv-scanner instead of reporting "not yet confirmed". Printed commands keep Hangul as typed.
