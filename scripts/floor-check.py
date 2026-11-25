@@ -2224,7 +2224,7 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     # refusal without it would start the moved project on Django's auth.User.
     if "web" in (old, new):
         return no("web is not moved to or from here: its hosting answers, its two checks and its tag ruleset "
-                  "change with it, and that move was not measured")
+                  "change with it, and that move was not measured; a move into web will also need custom_user_model=true (#1092)")
     if old == new:
         return no(f"the recorded archetype is already {new}")
     d = template_drift(root, host, network, move=True)

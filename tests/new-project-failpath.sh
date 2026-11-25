@@ -933,12 +933,15 @@ run lang-own-script err no no "not a code or a name in its own script (got: 한�
 run lang-two-words ok yes no "records in Brazilian Portuguese" -- probe "--records-language=Brazilian Portuguese"
 E="MOCK_NO_ANSWER_Q=1" run lang-old-template err no no "does not ask records_language, so --records-language would be dropped" -- probe --records-language=Korean
 E="MOCK_NO_ANSWER_Q=1" run desc-old-template ok yes no "" -- probe --description=x
+E="MOCK_CHOICES=garbage" run desc-unread ok yes no "" -- probe --description=x
+grep -qF -- '--data description=x' "$work/home-desc-unread/calls.log" \
+  && ok desc-unread "with copier.yml unread, the description is still passed to copier" || bad desc-unread "the description was dropped with copier.yml unread"
 if grep -qxF 'gh repo create tester/probe --public --description x' "$work/home-desc-old-template/calls.log" && ! grep -qF -- '--data description=' "$work/home-desc-old-template/calls.log"
 then ok desc-old-template "a template that does not ask the description still gets it on the repository's page only, as before"
 else bad desc-old-template "the description was dropped or passed to a template that does not ask it"; fi
 E="MOCK_FINE=1" run lang-rerun err no no "with-admin-token.sh" -- probe --records-language=Korean "--description=날씨 도구"
 if grep -qF -- "probe --records-language=Korean '--description=날씨 도구'" "$work/home-lang-rerun/out"
-then ok lang-rerun "the printed command carries the records language and the description, so typed again it asks nothing"
+then ok lang-rerun "the admin-token command the door prints carries the records language and the description"
 else bad lang-rerun "the printed command lost an answer"; grep -F 'new-project.sh' "$work/home-lang-rerun/out" -A1 | sed 's/^/        /'; fi
 
 echo "a web project starts with its own user model (#1092, coolbress/plinth-template#332)"

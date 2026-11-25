@@ -531,10 +531,11 @@ for q in description records_language custom_user_model; do
   esac
   if ! grep -q "^$q:" <<<"$copier_yml"; then
     [ "$q" != records_language ] || [ "$v" != English ] || continue
-    [ "$q" != description ] || continue  # without the question it still goes onto the repository's page, as before
-    # Unread, the default user model is passed anyway: the render's answers
-    # file is read for it below, before the repository exists.
-    [ -n "$arch_choices" ] || [ "$q" != custom_user_model ] || { answer_data+=(--data "$q=$v"); continue; }
+    # Unread, the description and the default user model are passed anyway:
+    # copier ignores an answer it does not ask, and the render's answers file
+    # is read for the user model below, before the repository exists.
+    [ -n "$arch_choices" ] || [ "$q" = records_language ] || { answer_data+=(--data "$q=$v"); continue; }
+    [ "$q" != description ] || continue  # not asked, it still goes onto the repository's page, as before
     [ -n "$arch_choices" ] || stop "could not read whether the template asks $q, so $flag cannot be passed safely; nothing was created" \
       "  $(unread_why)" "  fix: run it again"
     stop "the template this plinth renders ($template_repo@$template_ref) does not ask $q, so $flag would be dropped; nothing was created" \

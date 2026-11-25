@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -444,7 +444,8 @@ is typed into the chat, and none of the questions below needs one.
    `--private`, `--license=`, `--dir=` with the home directory written out
    as an absolute path, the description's, `--records-language=`, and on
    GitHub the reviewer's and the code of conduct's (none when the owner's
-   applies). For `web`, add `--custom-user-model` without asking: the new
+   applies). For `web`, add `--custom-user-model` without asking, unless
+   the arguments give `--no-custom-user-model`: the new
    project starts with its own user model (`accounts.User`), which Django
    sets before the first `migrate` and which is changed later only by hand;
    the table shows no row for it, and a person who wants Django's
