@@ -74,13 +74,15 @@ the move changes what a new project's agent reads, and then asks for
    scripts/make-release.sh vX.Y.Z "${TMPDIR:-/tmp}/why.md"
    ```
 
-   It bumps `version` in both manifests, moves the `Unreleased` entries under
-   the new version's heading with your why above them, and commits on
+   It bumps `version` in both manifests, writes the changelog fragments in
+   `changelog.d/` under the new version's heading with your why above them,
+   grouped by section, deletes the fragments, and commits on
    `release/vX.Y.Z`.
 4. Push that branch and open a pull request titled `chore(release): vX.Y.Z`.
    It needs no third-party review: with `pass-release-pull-requests` on,
    `third-party / review` passes a pull request with exactly that title and
-   a diff of run 1's shape (only the two manifests and `CHANGELOG.md`; each
+   a diff of run 1's shape (only the two manifests and `CHANGELOG.md`, and
+   the `changelog.d/` fragments removed; each
    manifest's `"version"` line replaced by the title's, higher than before;
    `CHANGELOG.md` only adding lines, the replaced `[Unreleased]` link aside,
    so an edited note still passes) without
@@ -142,8 +144,8 @@ the move changes what a new project's agent reads, and then asks for
    a fix, or when `main` moves before the merge, close the pull request, delete
    `release/vX.Y.Z` on origin and locally, land the fix if there is one, and
    start again from step 3 with the same number: nothing has used it yet, and
-   run 1 moves any new `Unreleased` entries. Updating the branch instead would
-   change its files, leave those entries under `Unreleased` and ask for another
+   run 1 writes any new fragments. Updating the branch instead would
+   change its files, leave those fragments in `changelog.d/` and ask for another
    run anyway.
 6. Merge the pull request with `scripts/merge-when-green.sh <n>` once that run
    and the checks are green. The script stops, and prints the command from
@@ -189,6 +191,8 @@ the move changes what a new project's agent reads, and then asks for
 | The `eval suite:` line must be the link to the comment | Give the comment's link alone, in angle brackets |
 | More than one `eval suite` line | Keep one |
 | Cannot read what the template changed | Check that `gh` is logged in and can reach GitHub, then run step 3 again |
+| A changelog fragment does not read, or a line is under `[Unreleased]` | Fix the fragment it names, or move the line into a fragment (CONTRIBUTING.md, Land a change), in a pull request; then run step 3 again |
+| `changelog.d/` has untracked files | Commit them through a pull request, or remove them |
 | The previous section has no `tested with` line | Restore that line in the previous version's section of `CHANGELOG.md` in a pull request |
 | The version is not above the current one | Pick the next version |
 | The tag or the release already exists | Pick the next version |

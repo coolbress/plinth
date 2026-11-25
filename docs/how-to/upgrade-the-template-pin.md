@@ -46,8 +46,9 @@ its own checks must have passed on the commit it tags.
      `docs/tutorials/getting-started.md` and the summary check in
      `tests/new-project-failpath.sh`;
    - the `canary-template` job's `name:` in `.github/workflows/ci.yml`;
-   - one `Changed` line under `## [Unreleased]` in `CHANGELOG.md`, or, when
-     an earlier raise since the release wrote one, that line's tag.
+   - one `Changed` line in the changelog fragment
+     `changelog.d/template-pin.md`, or, when an earlier raise since the
+     release wrote one, that line's tag.
 
    It prints whether the next release owes [the eval suite](run-the-eval-suite.md):
    owed when the template's diff from the tag the last release was tested
@@ -75,7 +76,7 @@ its own checks must have passed on the commit it tags.
 4. The script lists every other line still naming the old tag or its commit.
    Change each, or keep one that names the release a thing arrived in, such
    as "from plinth-template v1.45.0".
-5. Finish the `CHANGELOG.md` line: what an instance rendered at the new tag
+5. Finish the line in `changelog.d/template-pin.md`: what an instance rendered at the new tag
    receives (`gh release view vA.B.C --repo coolbress/plinth-template`), and
    that `/plinth:floor-check` now reports a repository on the old tag as
    behind. If the new tag's `plinth_sha` default moved (the script says so

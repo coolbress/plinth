@@ -127,7 +127,8 @@ other.
   `CHANGELOG.md`; each manifest replaces its one `"version"` line with the
   title's version, higher than the old one, so no second version line is added
   beside it and the version does not go back; `CHANGELOG.md` only adds lines, the `[Unreleased]` link
-  aside. A pull request under that title that also touches a script, moves a
+  aside. Besides those, the changelog fragments `changelog.d/<name>.md` run 1
+  writes out may be removed, and only removed. A pull request under that title that also touches a script, moves a
   marketplace entry's pin or removes a changelog line is summoned, and the log
   says why; so is one whose file list cannot be read. What it does not cover
   is the release note's own text. It is off by default, and fits only a

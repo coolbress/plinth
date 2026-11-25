@@ -267,12 +267,35 @@ release needs a green run on the commit it tags, or on a commit with its tree
    `CHANGELOG.md`, or the page under `docs/` that covers it. Not every change
    needs a README edit.
 
-   A `CHANGELOG.md` line goes under `## [Unreleased]`. A section whose
+   A change's changelog line goes in its own file, a fragment:
+   `changelog.d/<branch-slug>.md`, starting with the Keep a Changelog section
+   it belongs to, then the line:
+
+   ```markdown
+   ### Fixed
+
+   - What changed for the person, and the issue (#N).
+   ```
+
+   A fragment can hold several sections (Added, Changed, Deprecated, Removed,
+   Fixed, Security), each a `###` heading with its lines under it, and
+   nothing else. A link in it is absolute
+   (`https://github.com/coolbress/plinth/blob/main/<path>`): the line moves
+   from `changelog.d/` to the root at release, and a relative one breaks in
+   one place or the other. Two pull requests open from the same `main` each add their
+   own file, so neither conflicts with the other in `CHANGELOG.md` (#1136).
+   `scripts/make-release.sh` writes the fragments into the new version's
+   section and deletes them; `## [Unreleased]` in `CHANGELOG.md` stays empty,
+   and `ci / docs` fails a pull request that writes a line there or adds a
+   fragment the release would refuse
+   (`scripts/changelog-fragments.py check` says why).
+
+   A section whose
    version has a `vX.Y.Z` tag is released: its text is that version's
    Release. A pull request open across a release can merge `main` in and
    keep its line where it sat, now inside the section the release just
    tagged (#877). `ci / docs` fails when a pull request changes a released
-   section, naming it; move the line under `[Unreleased]`. A change that puts
+   section, naming it; move the line into a fragment. A change that puts
    a section back as its tag has it passes. To correct a released section on
    purpose (a typo, a wrong link), add one line to the description naming
    each version it corrects, and only those pass. The line counts as plain
