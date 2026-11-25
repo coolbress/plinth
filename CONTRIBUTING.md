@@ -170,10 +170,8 @@ release needs a green run on the commit it tags, or on a commit with its tree
 ## Land a change
 
 1. Branch from `origin/main`, always naming the base. Unless the checkout is
-   yours alone — no command tells you whether another session is in it — make
-   the branch in its own worktree: `git fetch origin`, then
-   `git worktree add --no-track -b <type>/<slug> .claude/worktrees/<slug> origin/main`.
-   In a checkout that is yours alone, `git switch -c <type>/<slug> --no-track
+   yours alone, make the branch in its own worktree, with the command in
+   `AGENTS.md`. In a checkout that is yours alone, `git switch -c <type>/<slug> --no-track
    origin/main` does the same in place. Without the base either command starts
    the branch at whatever `HEAD` is, which carries another task's commits into
    yours. `--no-track` leaves the branch with no upstream: tracking
@@ -263,10 +261,8 @@ release needs a green run on the commit it tags, or on a commit with its tree
 
    Say what was actually run, and name what was not. A review you ran in the
    same session that wrote the change is not an independent review, and must
-   not be described as one. When you change behaviour, verify the boundaries
-   and partial failures of the inputs and states it touches; record which paths
-   you exercised and which you did not, and do not widen the result of a few
-   cases into a guarantee about all of them.
+   not be described as one. A change to behaviour is verified as `AGENTS.md`
+   says.
 
    Put user-facing explanation and history where it belongs — `README.md`,
    `CHANGELOG.md`, or the page under `docs/` that covers it. Not every change
@@ -355,11 +351,18 @@ release needs a green run on the commit it tags, or on a commit with its tree
    code scanning could not tell which alerts the change adds, often because no
    analysis ran for that head.
 
+   When several pull requests are open, only the session the person names (or
+   the person) merges, one at a time, with `scripts/merge-when-green.sh`, and
+   does not edit a description while it waits. One left behind `main` goes up
+   to date with `--update`, which stops rather than update twice. Other
+   sessions do not bring their own pull request up to date
+   (coolbress/plinth-template#293 has why).
+
    After the merge it prints, for each issue the pull request closes or names
    on a `Part of #N` line, the acceptance criteria still unticked and, for an issue
    it closed, a body with no `## Outcome` (`## Decision` for a record). Tick
    the criteria the change met and write the ending, whether or not the issue
-   closed (`AGENTS.md`). It only reads; an issue it cannot read is printed as
+   closed ([closing an issue](docs/agents/issue-tracker.md#closing-an-issue)). It only reads; an issue it cannot read is printed as
    "not read", and the exit status does not change.
 
 ## Cut a release
@@ -375,7 +378,7 @@ the template tag starts with
   `tests/python-ci-contract.sh` holds the snapshot, and
   `tests/required-checks-doc.sh` holds
   [docs/reference/required-checks.md](docs/reference/required-checks.md) to the same list.
-- Every third-party marketplace entry is pinned to a full commit SHA.
+- Every third-party marketplace entry stays pinned as `AGENTS.md` says.
 - Every `tests/*.sh` is a `run:` step in a workflow; `tests/all-tests-are-wired.sh`
   fails otherwise.
 - `.github/workflows/e2e.yml` keeps its file name: `scripts/make-release.sh`
