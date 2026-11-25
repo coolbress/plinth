@@ -20,7 +20,7 @@ wf="$root/.github/workflows/python-ci.yml"
 gl="$root/gitlab/python-ci.yml"
 
 real_uv="$(command -v uv)" || { echo "  FAIL  uv is not installed"; exit 1; }
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/build-cases.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/build-cases.XXXXXX")" || { echo "build-cases: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 pass=0; fail=0

@@ -113,7 +113,7 @@ else
 fi
 
 # ── the door ─────────────────────────────────────────────────────────────
-work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-e2e.XXXXXX")"; dir="$work/$name"
+work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-e2e.XXXXXX")" || { echo "e2e: could not make a temp folder" >&2; exit 1; }; dir="$work/$name"
 # A runner has no git identity, and the door commits. Read from a directory
 # that is not a repository, which is what the door's fresh clone inherits: a
 # user.email set only in this checkout's own config would pass here and be

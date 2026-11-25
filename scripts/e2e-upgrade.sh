@@ -100,7 +100,7 @@ name="plinth-e2e-upgrade-${GITHUB_RUN_ID:-$(date -u +%Y%m%d%H%M%S)}"
 repo="$owner/$name"; url="https://github.com/$repo"
 
 # ── 1 render, as the start's door did ────────────────────────────────────
-work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-e2e-upgrade.XXXXXX")"; dir="$work/$name"
+work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-e2e-upgrade.XXXXXX")" || { echo "e2e-upgrade: could not make a temp folder" >&2; exit 1; }; dir="$work/$name"
 git -C "$work" config user.email >/dev/null 2>&1 || {
   export GIT_AUTHOR_NAME="$login" GIT_AUTHOR_EMAIL="$id+$login@users.noreply.github.com"
   export GIT_COMMITTER_NAME="$login" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"

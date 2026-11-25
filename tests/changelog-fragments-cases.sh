@@ -5,7 +5,7 @@
 # case is a throwaway directory; the last one is this checkout.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "changelog-fragments-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 fails=0
 n=0
 case_() { # <expected ok|no> <name> <CHANGELOG [Unreleased] body> [<fragment file> <content>]...

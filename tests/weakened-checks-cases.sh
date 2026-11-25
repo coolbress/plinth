@@ -9,7 +9,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
 step="Name changes to the checks the description does not"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/weakened.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/weakened.XXXXXX")" || { echo "weakened-checks-cases: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 # The step's `run: |` block, dedented. A missing step is a FAIL, not a pass.

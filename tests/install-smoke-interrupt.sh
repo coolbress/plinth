@@ -7,7 +7,7 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 floor="$(sed -nE 's/^claude_floor="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
-work="$(mktemp -d)"
+work="$(mktemp -d)" || { echo "install-smoke-interrupt: could not make a temp folder" >&2; exit 1; }
 # A failing run leaves its clone behind: stop it, whatever dir it names.
 cleanup() {
   local d
