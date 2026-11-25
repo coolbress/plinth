@@ -1,0 +1,67 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/runner/work/app/app
+collected 6 items
+
+tests/test_a.py .FFFFE                                                   [100%]
+
+==================================== ERRORS ====================================
+__________________________ ERROR at setup of test_err __________________________
+
+    @pytest.fixture
+    def boom():
+>       raise RuntimeError("fixture broke")
+E       RuntimeError: fixture broke
+
+tests/test_a.py:22: RuntimeError
+=================================== FAILURES ===================================
+___________________________________ test_one ___________________________________
+
+    def test_one():
+>       assert 1 == 2
+E       assert 1 == 2
+
+tests/test_a.py:10: AssertionError
+_________________________________ test_helper __________________________________
+
+    def test_helper():
+>       helper(1)
+
+tests/test_a.py:13: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+x = 1
+
+    def helper(x):
+>       assert x == 2, "x is not two"
+E       AssertionError: x is not two
+E       assert 1 == 2
+
+tests/test_a.py:4: AssertionError
+_______________________________ TestK.test_p[1] ________________________________
+
+self = <test_a.TestK object at 0x7f0000000000>, v = 1
+
+    @pytest.mark.parametrize("v", [1, "a b"])
+    def test_p(self, v):
+>       assert v == 0
+E       assert 1 == 0
+
+tests/test_a.py:18: AssertionError
+______________________________ TestK.test_p[a b] _______________________________
+
+self = <test_a.TestK object at 0x7f0000000000>, v = 'a b'
+
+    @pytest.mark.parametrize("v", [1, "a b"])
+    def test_p(self, v):
+>       assert v == 0
+E       AssertionError: assert 'a b' == 0
+
+tests/test_a.py:18: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_a.py::test_one - assert 1 == 2
+FAILED tests/test_a.py::test_helper - AssertionError: x is not two
+FAILED tests/test_a.py::TestK::test_p[1] - assert 1 == 0
+FAILED tests/test_a.py::TestK::test_p[a b] - AssertionError: assert 'a b' == 0
+ERROR tests/test_a.py::test_err - RuntimeError: fixture broke
+===================== 4 failed, 1 passed, 1 error in 0.05s =====================

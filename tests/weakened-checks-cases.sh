@@ -684,7 +684,13 @@ first "lint opens with uv sync" '^- pass: uv sync --locked$'
 warned "zizmor left no advisory list: its known-vulnerable-actions line is not yet confirmed" 1
 verdict lint Verdict SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=skipped
 first "a failed sync: fail" '^- fail: uv sync --locked$'
-warned "a failed sync: each step it stopped is not yet confirmed, known-vulnerable-actions too" 4
+# Once a fail line is said, a step it stopped is in the summary only: the
+# warning repeated the failure and read like the cause (#1098).
+if [ "$(grep -c '^- not yet confirmed: .*, it did not run because an earlier step failed;' <<<"$sum")" = 3 ] \
+  && ! grep -q '^::warning::.*earlier step failed' <<<"$out" \
+  && [ "$(grep -c '^::warning::not yet confirmed: ' <<<"$out")" = 1 ] && grep -q '^::warning::not yet confirmed: no published advisory' <<<"$out"; then
+  ok "a failed sync: the three steps it stopped are in the summary only; known-vulnerable-actions, not stopped by it, still warns"
+else bad "a failed sync: want three stopped steps in the summary, unannotated, and one warning" "$out"$'\n'"$sum"; fi
 if grep -q "online audits" <<<"$sum"; then bad "the standing online-audits line is still written" "$sum"; else ok "no standing online-audits line"; fi
 
 # The zizmor step, run against a fake uvx that prints a fixture JSON and exits
@@ -762,7 +768,7 @@ echo "-- verdict lines: ci / test"
 job_step test Verdict | grep '^say()' > "$tmp/say.sh"
 printf '%s\n' '. "$1"' 'say "not yet confirmed: x%"$'"'"'\n'"'"'"::error::y"$'"'"'\r'"'"'' > "$tmp/say-call.sh"
 out="$(GITHUB_STEP_SUMMARY=/dev/null bash -e "$tmp/say-call.sh" "$tmp/say.sh")"
-if [ "$out" = '::warning::not yet confirmed: x%25%0A::error::y%0D' ]; then ok "a not yet confirmed line escapes %, a newline and a carriage return"
+if [ "$(grep '^::' <<<"$out")" = '::warning::not yet confirmed: x%25%0A::error::y%0D' ]; then ok "a not yet confirmed line escapes %, a newline and a carriage return"
 else bad "say does not escape its text" "$out"; fi
 echo "pass: changed lines ran under the tests, does not apply (not a pull request)" > "$tmp/rt/changed.verdict"
 verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
@@ -939,7 +945,7 @@ else bad "a locked coverage was installed over (exit $crc)" "$(cat "$tmp/args")"
 # The pytest step: under coverage when it installed, `--source=src` with a
 # src/ directory and `.` without; plain `uv run pytest` otherwise. A source
 # coverage's own configuration names wins: no --source then (#761).
-job_step test pytest > "$tmp/p.sh" || bad "test / pytest: step not found"
+job_step test "pytest on .python-version" > "$tmp/p.sh" || bad "test / pytest on .python-version: step not found"
 # The job started just now, with ten minutes to run (#941; tests/test-job-cases.sh).
 mkdir -p "$tmp/prt"
 pyrun() { rm -f "$tmp/args"*; date +%s > "$tmp/prt/test.started"; (cd "$1" && env PATH="$tmp/cbin:$PATH" FAKE_ARGS="$tmp/args" RUNNER_TEMP="$tmp/prt" LIMIT=10 TEST_MARGIN_SECONDS=120 COV="$2" ${3:+FAKE_SRC_RC="$3"} bash -e "$tmp/p.sh" >"$tmp/plog" 2>&1); prc=$?; }
@@ -1021,9 +1027,9 @@ else bad "twelve not yet confirmed: the summary does not carry all twelve" "$sum
 # Every job's helper is the same text, so the cap and the marker hold in each:
 # one per job, the two web-only jobs (#614), code-growth (#705), web-audit
 # (#709), pr-title's description step (#781) and diff-size's conflict-marker
-# step (#936) included.
-helpers="$(grep -E '^ +(nw=0;|say\(\) )' "$wf" | sed 's/^ *//' | sort | uniq -c)"
-if [ "$(wc -l <<<"$helpers" | tr -d ' ')" = 2 ] && [ "$(awk '{print $1}' <<<"$helpers" | sort -u | wc -l | tr -d ' ')" = 1 ] \
+# step (#936) included; and the block a failing job ends with (#1098).
+helpers="$(grep -E '^ +(nw=0;|ends\(\) |say\(\) )' "$wf" | sed 's/^ *//' | sort | uniq -c)"
+if [ "$(wc -l <<<"$helpers" | tr -d ' ')" = 3 ] && [ "$(awk '{print $1}' <<<"$helpers" | sort -u | wc -l | tr -d ' ')" = 1 ] \
   && [ "$(awk 'NR==1{print $1}' <<<"$helpers")" = 15 ]; then
   ok "every step that writes verdicts defines the same capped say helper ($(awk 'NR==1{print $1}' <<<"$helpers") steps)"
 else bad "the say helpers differ between steps, or a step lacks the cap" "$helpers"; fi

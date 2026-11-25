@@ -153,7 +153,8 @@ for path in (reviews_p, rcomments_p, icomments_p):
     for it in load(path):
         seen.add((it.get("user") or {}).get("login") or "")
 
-WHEN_TO_STOP = ("https://github.com/coolbress/plinth/blob/main/docs/how-to/"
+# At the plinth commit the workflow fetched this from (job.workflow_sha); main run by hand.
+WHEN_TO_STOP = (f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/how-to/"
                 "configure-the-third-party-reviewer.md#when-to-stop")
 HEX = re.compile(r"^[0-9a-f]{7,40}$")
 

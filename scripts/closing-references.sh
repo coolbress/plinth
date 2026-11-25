@@ -18,7 +18,9 @@
 # afterwards starts no new run, and the title is not read.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOW="https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
+# At the plinth commit the workflow fetched this from (job.workflow_sha); main run by hand.
+at="${PLINTH_SHA:-main}"
+HOW="https://github.com/coolbress/plinth/blob/${at:0:12}/CONTRIBUTING.md#land-a-change"
 
 if [ "${EVENT:-}" != pull_request ]; then
   echo "not a pull request (${EVENT:-no event}): no description to read."

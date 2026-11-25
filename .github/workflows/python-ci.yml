@@ -57,8 +57,14 @@ name: python-ci
 # conclusion does not carry it: the ruleset accepts neutral and skipped as it
 # accepts success. Where the lines depend on earlier steps, a Verdict step
 # runs `if: ${{ !cancelled() }}`, so it reports after a failed step too; a
-# step that did not run is not yet confirmed. pr-title, diff-size and
-# floor-check write theirs in the step that checks.
+# step that did not run is not yet confirmed, and once the step has a
+# `fail:` line it is not annotated: it repeats the failure (#1098).
+# pr-title, diff-size and floor-check write theirs in the step that checks.
+# `say` prints each line into the log too. A Verdict that sets fail_check,
+# fail_next and fail_more (`ci / test` so far, #1098) ends, on a failure,
+# with one `::error` titled with the check's name and the block
+# `failed:` / `next:` / `more:`, the last lines plinth prints in the job;
+# the link names the plinth commit this workflow runs (`job.workflow_sha`).
 #
 # Check names are `{caller job} / {job here}`. The caller job is named `ci`,
 # so rulesets require `ci / lint` and so on. Renaming a job here is a MAJOR
@@ -238,8 +244,10 @@ jobs:
           FORMAT: ${{ steps.format.outcome }}
           ZIZMOR: ${{ steps.zizmor.outcome }}
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$CHECK" "ruff check"
@@ -284,8 +292,10 @@ jobs:
           SYNC: ${{ steps.sync.outcome }}
           MYPY: ${{ steps.mypy.outcome }}
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$MYPY" "mypy"
@@ -411,11 +421,17 @@ jobs:
       # The question's exit code: 0 a source is named, 10 none, else unreadable.
       # Under `timeout` (#941): exit 124, or 137 at the deadline when pytest
       # ignored the TERM, is the limit, and pytest.time-limit tells Verdict.
-      - id: pytest
+      # pytest's output also goes to pytest.log, where Verdict reads its
+      # FAILED and ERROR lines (#1098); `logged` returns pytest's own code,
+      # 124 and 137 included, not tee's.
+      - name: pytest on .python-version
+        id: pytest
         env:
           COV: ${{ steps.cov.outcome }}
           LIMIT: ${{ inputs.test-timeout-minutes }}
         run: |
+          log="$RUNNER_TEMP/pytest.log"; : > "$log"
+          logged() { limited "$@" 2>&1 | tee -a "$log"; return "${PIPESTATUS[0]}"; }
           limited() {
             local rc=0 now left margin
             now="$(date +%s)"; margin=$((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS))
@@ -427,7 +443,7 @@ jobs:
             fi
             return "$rc"
           }
-          if [ "$COV" != success ]; then limited uv run pytest; exit; fi
+          if [ "$COV" != success ]; then logged uv run pytest; exit; fi
           src=.; [ -d src ] && src=src
           rc=0; uv run --no-sync python - <<'PY' || rc=$?
           import sys
@@ -438,11 +454,11 @@ jobs:
           PY
           if [ "$rc" = 0 ]; then
             echo "coverage's configuration names its source: measured as configured"
-            limited uv run --no-sync coverage run --branch -m pytest; exit
+            logged uv run --no-sync coverage run --branch -m pytest; exit
           fi
           if [ "$rc" = 10 ]; then echo "coverage's configuration names no source: --source=$src"
           else echo "could not read coverage's configuration (exit $rc): --source=$src"; fi
-          limited uv run --no-sync coverage run --branch --source="$src" -m pytest
+          logged uv run --no-sync coverage run --branch --source="$src" -m pytest
 
       # Which of the lines a pull request changes ran under the tests (#503).
       # Reported, never failing (#503's Decisions, 2026-10-12): the verdict
@@ -593,9 +609,10 @@ jobs:
             fi
             return "$rc"
           }
+          log="$RUNNER_TEMP/extra.log"; : > "$log"
           for v in $VERSIONS; do
-            echo "── python $v"
-            limited uv run --isolated --python "$v" --with pytest pytest -q
+            echo "── python $v" | tee -a "$log"
+            limited uv run --isolated --python "$v" --with pytest pytest -q 2>&1 | tee -a "$log"
           done
 
       - name: Verdict
@@ -609,18 +626,103 @@ jobs:
           PG: ${{ steps.pg.outcome }}
           LIMIT: ${{ inputs.test-timeout-minutes }}
           LIMIT_OUTCOME: ${{ steps.limit.outcome }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           # The time limit stopped it (#941): the step left a file saying so.
           limit() { [ -s "$RUNNER_TEMP/$1" ] && say "fail: $2, stopped at the time limit: the job's $LIMIT-minute limit (test-timeout-minutes) less $((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS)) s kept for the steps after it ended it, not a failing test; measure first: uv run pytest --durations=20 lists the slowest tests, and when a few take most of the time, make them faster; raise test-timeout-minutes under ci.yml's with: only when none stands out and the time moves between runs of the same commit"; }
-          if [ "$LIMIT_OUTCOME" = failure ]; then say "fail: test-timeout-minutes, '$LIMIT' is not whole minutes from 1 to 360"; fi
+          # The block the job's log ends with on a failure (#1098): the first
+          # fail line's next step, and what failed, naming the first failed
+          # test when pytest's log has one.
+          fail_check="ci / test"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--test"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
+          slow="run uv run pytest --durations=20 here and make the slowest tests faster; raise test-timeout-minutes only when none stands out"
+          # pytest's FAILED and ERROR lines in <log>: at most nine annotations
+          # at file and line across both logs, then one line saying how many.
+          tests() {
+            local n=0 id="" q="" ver=""
+            python3 - "$RUNNER_TEMP/$1" "$RUNNER_TEMP/failed.first" "$RUNNER_TEMP/failed.shown" "$2" <<'PY' || true
+          import os, re, shlex, sys
+          log, first, shownf, where = sys.argv[1:5]
+          ANSI = re.compile(r"\x1b\[[0-9;]*m")
+          try:
+              lines = [ANSI.sub("", l.rstrip("\r\n")) for l in open(log, encoding="utf-8", errors="replace")]
+          except OSError:
+              lines = []
+          # FAILED and ERROR are read only under pytest's summary header: a
+          # test's captured output above it can print the same words.
+          root, ver, cur, sections, failed, summary = os.getcwd(), "", None, {}, [], False
+          def node(rest):   # the id ends at the first " - " outside its [parameters]
+              for m in re.finditer(r" - ", rest):
+                  if rest[:m.start()].count("[") == rest[:m.start()].count("]"):
+                      return rest[:m.start()], rest[m.end():]
+              return rest, ""
+          for l in lines:
+              if l.startswith("── python "):
+                  ver, cur, summary = l[len("── python "):].strip(), None, False
+              elif m := re.match(r"^rootdir: (.+?)(?:, |$)", l):
+                  root = m.group(1) if os.path.isdir(m.group(1)) else root
+              elif (m := re.match(r"^_+ (.+?) _+$", l)) and not re.fullmatch(r"[_ ]+", l):
+                  key = re.sub(r"^ERROR (?:at (?:setup|teardown) of|collecting) ", "", m.group(1))
+                  cur = []; sections.setdefault((ver, key), []).append(cur)
+              elif re.match(r"^={3,} ", l):
+                  cur, summary = None, "short test summary info" in l
+              elif summary and (m := re.match(r"^(FAILED|ERROR) (\S.*)$", l)):
+                  failed.append((m.group(1), *node(m.group(2)), ver))
+              elif cur is not None and (m := re.match(r"^(\S.*?\.py):(\d+): ", l + " ")):
+                  cur.append((m.group(1), int(m.group(2))))
+          def esc(s, prop=False):
+              s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              return s.replace(":", "%3A").replace(",", "%2C") if prop else s
+          root = os.path.realpath(root); base = os.path.realpath(os.environ.get("GITHUB_WORKSPACE") or root)
+          rows, seen = [], set()
+          for kind, nid, why, v in failed:
+              if nid in seen:
+                  continue
+              seen.add(nid)
+              path, _, rest = nid.partition("::")
+              secs = sections.get((v, rest.replace("::", ".") if rest else path)) or [[]]
+              at = next((n for p, n in reversed(secs.pop(0)) if p == path), None)
+              rel = os.path.relpath(os.path.join(root, path), base)
+              rows.append((rel if not rel.startswith("..") else path, at, kind, nid, why, v))
+          try:
+              shown = int(open(shownf).read())
+          except (OSError, ValueError):
+              shown = 0
+          room = max(0, 9 - shown)
+          for rel, at, kind, nid, why, v in rows[:room]:
+              msg = f"{kind} {nid}" + (f" - {why}" if why else "") + (f" (python {v})" if v else "")
+              print(f"::error file={esc(rel, True)}" + (f",line={at}" if at else "") + f"::{esc(msg[:300])}")
+          if len(rows) > room > 0:
+              print(f"::notice::showing {room} of {len(rows)} failed tests; every one is in {where}")
+          elif len(rows) > room:
+              print(f"::notice::{len(rows)} more failed tests are not annotated; every one is in {where}")
+          open(shownf, "w").write(str(shown + min(room, len(rows))))
+          with open(first, "w", encoding="utf-8") as f:
+              if rows:
+                  f.write(f"{len(rows)}\t{rows[0][3]}\t{shlex.quote(rows[0][3])}\t{rows[0][5]}\n")
+          PY
+            [ ! -s "$RUNNER_TEMP/failed.first" ] || IFS=$'\t' read -r n id q ver < "$RUNNER_TEMP/failed.first"
+            if [ "${n:-0}" -gt 0 ] 2>/dev/null; then
+              local rest=""; [ "$n" = 1 ] || rest=", and $((n - 1)) more"
+              if [ -z "$ver" ]; then nx "run uv run pytest $q here, fix what it shows, and push" "pytest on .python-version: $id failed$rest"
+              else nx "run uv run --isolated --python $ver --with pytest pytest $q here, fix what it shows, and push" "pytest on python $ver: $id failed$rest"; fi
+            else nx "read the pytest step's log above its last line, fix what it names, and push"; fi
+          }
+          if [ "$LIMIT_OUTCOME" = failure ]; then say "fail: test-timeout-minutes, '$LIMIT' is not whole minutes from 1 to 360"; nx "set test-timeout-minutes under ci.yml's with: to whole minutes from 1 to 360"; fi
           v "$SYNC" "uv sync --locked"
-          if [ "$WEB" = true ]; then v "$PG" "a disposable Postgres for the tests"; fi
-          limit pytest.time-limit "pytest on .python-version" || v "$PYTEST" "pytest on .python-version"
-          if [ -n "$VERSIONS" ]; then limit extra.time-limit "pytest on $VERSIONS" || v "$EXTRA" "pytest on $VERSIONS"
-          else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
+          [ "$SYNC" != failure ] || nx "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
+          if [ "$WEB" = true ]; then v "$PG" "a disposable Postgres for the tests"; [ "$PG" != failure ] || nx "re-run this job: Postgres did not start, and the Start Postgres step's log says why"; fi
+          if limit pytest.time-limit "pytest on .python-version"; then nx "$slow" "pytest on .python-version, stopped at the time limit ($LIMIT minutes, test-timeout-minutes)"
+          else v "$PYTEST" "pytest on .python-version"; [ "$PYTEST" != failure ] || tests pytest.log "the pytest step's log"; fi
+          if [ -z "$VERSIONS" ]; then say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"
+          elif limit extra.time-limit "pytest on $VERSIONS"; then nx "$slow" "pytest on $VERSIONS, stopped at the time limit ($LIMIT minutes, test-timeout-minutes)"
+          else v "$EXTRA" "pytest on $VERSIONS"; [ "$EXTRA" != failure ] || tests extra.log "the extra versions step's log"; fi
           if [ -s "$RUNNER_TEMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$RUNNER_TEMP/changed.verdict"
           else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
 
@@ -786,8 +888,10 @@ jobs:
           ROWS: ${{ steps.rows.outcome }}
         working-directory: .
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           if [ "$WEB" != true ]; then
             say "pass: migrations, does not apply (the web input is false: not a web project)"
@@ -851,8 +955,10 @@ jobs:
           DEPLOY: ${{ steps.deploy.outcome }}
         working-directory: .
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           if [ "$WEB" != true ]; then
             say "pass: deploy-check, does not apply (the web input is false: not a web project)"
@@ -903,8 +1009,10 @@ jobs:
         env:
           GITLEAKS: ${{ steps.gitleaks.outcome }}
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$GITLEAKS" "gitleaks, the history included"
 
@@ -932,11 +1040,15 @@ jobs:
     steps:
       - name: Check the title
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           TITLE: ${{ github.event.pull_request.title }}
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -euo pipefail
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. A job skipped
           # with `if:` has no check name, and the day a ruleset requires that
@@ -961,7 +1073,7 @@ jobs:
             if printf '%s' "$subject" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
               how='Remove the trailing (#N)'
               [ "$subject" = "$TITLE" ] || how='Write it as Revert "type(scope): summary"'
-              echo "::error::PR title ends in a number: ${TITLE:0:100}. $how and name the issue on the description's closing line: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
+              echo "::error::PR title ends in a number: ${TITLE:0:92}. $how and name the issue on the description's closing line: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
               say "fail: PR title, it ends in a number"
               {
                 echo "### PR title ends in a number"
@@ -983,8 +1095,8 @@ jobs:
           fi
 
           case "$TITLE" in
-            'Revert "'*) echo "::error::PR title reverts a title that is not Conventional Commits: ${TITLE:0:60}. Rewrite it as Revert \"type(scope): summary\", with one of the eleven types: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change" ;;
-            *) echo "::error::PR title is not Conventional Commits: ${TITLE:0:60}. Rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change" ;;
+            'Revert "'*) echo "::error::PR title reverts a title that is not Conventional Commits: ${TITLE:0:60}. Rewrite it as Revert \"type(scope): summary\", with one of the eleven types: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change" ;;
+            *) echo "::error::PR title is not Conventional Commits: ${TITLE:0:60}. Rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change" ;;
           esac
           say "fail: PR title, it is not Conventional Commits"
           {
@@ -1036,22 +1148,26 @@ jobs:
       - name: The description closes no issue outside its closing line
         if: ${{ !cancelled() }}
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           FETCH: ${{ steps.fetch-closing.outcome }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -uo pipefail
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           if [ -z "${PR:-}" ]; then
             echo "Not a pull request ($EVENT_NAME): no description to read."
             say "pass: PR description, does not apply (not a pull request: no description to read)"
             exit 0
           fi
           if [ "${FETCH:-}" != success ]; then
-            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read; re-run this job: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
+            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read; re-run this job: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
             exit 1
           fi
           # The verdict lines first, then the script's report.
@@ -1088,7 +1204,7 @@ jobs:
           elif python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer" "$@" > "$fields"; then
             while IFS= read -r line; do [ -z "$line" ] || say "$line"; done < "$fields"
           else
-            say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); re-run this job: https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
+            say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); re-run this job: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
           fi
           { echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
@@ -1317,8 +1433,10 @@ jobs:
           SEVERITY: ${{ inputs.deps-fail-on-severity }}
           ACTOR: ${{ github.actor }}
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           if [ "$EVENT" = pull_request_review ]; then
             say "pass: dependency review, does not apply (a review started this run: the pull_request run of this head compares its dependencies, and that run's result stands)"
           elif [ "$EVENT" != pull_request ]; then
@@ -1371,15 +1489,19 @@ jobs:
 
       - name: Measure the reviewable diff
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           MAX_LINES: ${{ inputs.max-diff-lines }}
           EXCLUDE: ${{ inputs.diff-size-exclude }}
           WORKDIR: ${{ inputs.working-directory }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -euo pipefail
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
 
           # Not a PR: report a pass instead of skipping the job. The condition
           # lives inside the step, not on the job, so the check name always
@@ -1444,7 +1566,7 @@ jobs:
           # Three dots (base...head): changes since the merge base, which is
           # what GitHub shows on the PR.
           if ! numstat="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "${spec[@]}")"; then
-            echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA}). Update the branch from its base and push again: https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+            echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA}). Update the branch from its base and push again: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
             say "fail: diff size, the diff could not be computed"
             exit 1
           fi
@@ -1487,7 +1609,7 @@ jobs:
           fi
 
           if [ "$total" -gt "$MAX_LINES" ]; then
-            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it into pull requests that land one after another, each branched from main after the one before it merged: https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it into pull requests that land one after another, each branched from main after the one before it merged: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
             {
               echo
               echo "**Over the limit.** Docs and lockfiles are already excluded from this number."
@@ -1524,20 +1646,24 @@ jobs:
       - name: No line the pull request adds is a merge conflict marker
         if: ${{ !cancelled() }}
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           FETCH: ${{ steps.fetch-markers.outcome }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -uo pipefail
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
             echo "Not a pull request: no diff to read."
             say "pass: conflict markers, does not apply (not a pull request: no diff to read)"
             exit 0
           fi
           if [ "$FETCH" != success ]; then
-            echo "::error::plinth's conflict-marker check could not be fetched (the fetch step: ${FETCH:-did not run}). Re-run this job: https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+            echo "::error::plinth's conflict-marker check could not be fetched (the fetch step: ${FETCH:-did not run}). Re-run this job: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
             say "fail: conflict markers, plinth's check could not be fetched, so the diff was not read; re-run this job"
             exit 1
           fi
@@ -1569,6 +1695,7 @@ jobs:
         if: ${{ !cancelled() }}
         shell: python
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BODY: ${{ github.event.pull_request.body }}
@@ -1577,7 +1704,7 @@ jobs:
         run: |
           import json, os, re, subprocess, sys
 
-          HOW = "https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+          HOW = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#required-by-rulesetjson"
 
           def fit(head, tail):   # at most 300 characters; what is cut is the head, never the action and link
               room = 300 - len(tail)
@@ -1910,6 +2037,7 @@ jobs:
         if: ${{ !cancelled() }}
         shell: python
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
           REPO: ${{ github.repository }}
@@ -1927,7 +2055,7 @@ jobs:
           repo, number, head, event = E("REPO", ""), E("NUMBER", ""), E("HEAD_SHA", ""), E("EVENT", "")
           summary = E("GITHUB_STEP_SUMMARY") or os.devnull
           DEPENDABOT = 49699333   # dependabot[bot]'s account id; a login can be spelled alike
-          HOW = "https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+          HOW = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#required-by-rulesetjson"
 
           def fit(head, tail):   # at most 300 characters; what is cut is the head, never the action and link
               room = 300 - len(tail)
@@ -2178,8 +2306,10 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$BUILD" "uv build"
@@ -2232,15 +2362,19 @@ jobs:
 
       - name: Floor check
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           GH_TOKEN: ${{ github.token }}
           WORKDIR: ${{ inputs.working-directory }}
           EXPECT: ${{ inputs.floor-check-required-checks }}
         # The verdict lines first, then the report; the exit code is the
         # checker's. A checker that wrote no verdict file (a crash) is a fail.
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -euo pipefail
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           t="$RUNNER_TEMP/floor"; rc=0
           python3 "$RUNNER_TEMP/plinth/floor-check.py" \
             --root . --project "$WORKDIR" --repo "$GITHUB_REPOSITORY" \
@@ -2260,7 +2394,7 @@ jobs:
             case "$l" in "fail: "*) n=$((n + 1)); [ -n "$first" ] || first="${l#fail: }" ;; esac
           done < "$t.verdicts"
           if [ "$n" -gt 0 ]; then
-            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/$at/skills/floor-check/SKILL.md#report"
             first="${first%"; $next"}"; lead="floor-check: $n FAIL, first: "
             room=$((300 - ${#lead} - ${#next} - 2))
             [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
@@ -2494,8 +2628,10 @@ jobs:
       - name: Verdict
         if: ${{ !cancelled() }}
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           t="$RUNNER_TEMP/growth"
           if [ ! -s "$t.verdict" ]; then
             say "not yet confirmed: code size within the conventions, the measuring step did not finish (its error is in its log); a run where it does confirms it"
@@ -2743,8 +2879,10 @@ jobs:
           TOOLS: ${{ steps.tools.outcome }}
           AUDIT: ${{ steps.audit.outcome }}
         run: |
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           if [ "$WEB" != true ]; then
             say "pass: web-audit, does not apply (the web input is false: not a web project)"
             exit 0

@@ -1,0 +1,106 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/runner/work/app/app
+collected 12 items
+
+tests/test_many.py FFFFFFFFFFFF                                          [100%]
+
+=================================== FAILURES ===================================
+___________________________________ test_n00 ___________________________________
+
+    def test_n00():
+>       assert 0 == -1
+E       assert 0 == -1
+
+tests/test_many.py:2: AssertionError
+___________________________________ test_n01 ___________________________________
+
+    def test_n01():
+>       assert 1 == -1
+E       assert 1 == -1
+
+tests/test_many.py:6: AssertionError
+___________________________________ test_n02 ___________________________________
+
+    def test_n02():
+>       assert 2 == -1
+E       assert 2 == -1
+
+tests/test_many.py:10: AssertionError
+___________________________________ test_n03 ___________________________________
+
+    def test_n03():
+>       assert 3 == -1
+E       assert 3 == -1
+
+tests/test_many.py:14: AssertionError
+___________________________________ test_n04 ___________________________________
+
+    def test_n04():
+>       assert 4 == -1
+E       assert 4 == -1
+
+tests/test_many.py:18: AssertionError
+___________________________________ test_n05 ___________________________________
+
+    def test_n05():
+>       assert 5 == -1
+E       assert 5 == -1
+
+tests/test_many.py:22: AssertionError
+___________________________________ test_n06 ___________________________________
+
+    def test_n06():
+>       assert 6 == -1
+E       assert 6 == -1
+
+tests/test_many.py:26: AssertionError
+___________________________________ test_n07 ___________________________________
+
+    def test_n07():
+>       assert 7 == -1
+E       assert 7 == -1
+
+tests/test_many.py:30: AssertionError
+___________________________________ test_n08 ___________________________________
+
+    def test_n08():
+>       assert 8 == -1
+E       assert 8 == -1
+
+tests/test_many.py:34: AssertionError
+___________________________________ test_n09 ___________________________________
+
+    def test_n09():
+>       assert 9 == -1
+E       assert 9 == -1
+
+tests/test_many.py:38: AssertionError
+___________________________________ test_n10 ___________________________________
+
+    def test_n10():
+>       assert 10 == -1
+E       assert 10 == -1
+
+tests/test_many.py:42: AssertionError
+___________________________________ test_n11 ___________________________________
+
+    def test_n11():
+>       assert 11 == -1
+E       assert 11 == -1
+
+tests/test_many.py:46: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_many.py::test_n00 - assert 0 == -1
+FAILED tests/test_many.py::test_n01 - assert 1 == -1
+FAILED tests/test_many.py::test_n02 - assert 2 == -1
+FAILED tests/test_many.py::test_n03 - assert 3 == -1
+FAILED tests/test_many.py::test_n04 - assert 4 == -1
+FAILED tests/test_many.py::test_n05 - assert 5 == -1
+FAILED tests/test_many.py::test_n06 - assert 6 == -1
+FAILED tests/test_many.py::test_n07 - assert 7 == -1
+FAILED tests/test_many.py::test_n08 - assert 8 == -1
+FAILED tests/test_many.py::test_n09 - assert 9 == -1
+FAILED tests/test_many.py::test_n10 - assert 10 == -1
+FAILED tests/test_many.py::test_n11 - assert 11 == -1
+============================== 12 failed in 0.05s ==============================
