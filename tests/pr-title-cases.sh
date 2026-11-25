@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+echo "  FAIL  planted failure for #1135, reverted in the next commit"; exit 1
 # Verdicts of `ci / pr-title`. The rule is not copied here; it is extracted from
 # the workflow. Two copies of a rule drift, and that drift is what let invented
 # commit types through once.

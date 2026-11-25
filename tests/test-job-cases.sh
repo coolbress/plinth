@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+echo "  FAIL  planted failure for #1135, reverted in the next commit"; exit 1
 # `ci / test`'s time limit and where it runs coverage (#941). The steps are
 # extracted from python-ci.yml and run as the runner runs them, with `uv`
 # stubbed: the stub logs its arguments, and a pytest it runs sleeps
