@@ -13,6 +13,7 @@ pull requests and have no tag.
 
 ### Changed
 
+- `/plinth:new-project` renders plinth-template v1.51.0 instead of v1.50.4.
 - `/plinth:new-project` asks the host first, beside each host's readiness
   read without changing anything (`new-project.sh --readiness`), then what
   you want to make in your own words, recommends an archetype quoting them,
