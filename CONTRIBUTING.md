@@ -267,6 +267,13 @@ release needs a green run on the commit it tags, or on a commit with its tree
    `CHANGELOG.md`, or the page under `docs/` that covers it. Not every change
    needs a README edit.
 
+   A pull request that implements or changes a decision in force updates its
+   line on [decisions in force](docs/reference/decisions-in-force.md) in the
+   same pull request, adding one when the decision is one later work has to
+   follow and the page has none. A decision recorded only in an issue gets its
+   line when the issue's Decision is written, in a small pull request of its
+   own. That page says how a line and a reversal are written.
+
    A change's changelog line goes in its own file, a fragment:
    `changelog.d/<branch-slug>.md`, starting with the Keep a Changelog section
    it belongs to, then the line:
