@@ -5,8 +5,9 @@
 #
 # Run 1, from an up-to-date `main`: bumps `version` in plugin.json and
 # marketplace.json together, opens the `## [X.Y.Z]` section in CHANGELOG.md
-# with the why-file's text above the entries that were under Unreleased, moves
-# the link references at the end of the file, and commits on `release/vX.Y.Z`.
+# with the why-file's text above the entries of the fragments in changelog.d/
+# (scripts/changelog-fragments.py; #1136), deletes the fragments, moves the
+# link references at the end of the file, and commits on `release/vX.Y.Z`.
 # Push it, open the pull request, run `e2e` on the branch, then merge it: `main`
 # takes no direct push, and a squash merge changes the commit, so the tag cannot
 # be made before that. The merge is what reaches an installation with
@@ -218,6 +219,14 @@ fi
 grep -q '^## \[Unreleased\]$' "$changelog" || stop "CHANGELOG.md has no '## [Unreleased]' section to release from"
 grep -qE '^\[Unreleased\]: [^[:space:]]+/compare/[^[:space:]]+\.\.\.HEAD$' "$changelog" \
   || stop "CHANGELOG.md has no '[Unreleased]: <repository>/compare/<tag>...HEAD' link reference to move"
+# The entries come from the fragments, one file per pull request (#1136). A
+# fragment that does not read, or a line left under [Unreleased], stops here,
+# before any file changes; an untracked one would be written and not deleted.
+[ -z "$(git ls-files --others --exclude-standard -- changelog.d)" ] \
+  || stop "changelog.d/ has untracked files; commit them through a pull request or remove them:" \
+          "$(git ls-files --others --exclude-standard -- changelog.d)"
+entries="$(python3 "$root/scripts/changelog-fragments.py" assemble "$root")" \
+  || stop "no file changed: the fragments in changelog.d/ do not make a release section (above)"
 # The eval suite (#647, #700): when the pinned template moved since the release
 # before and the move changes a file a new project's agent reads, the why must
 # carry the suite's posted table or the reason it was not run. Asked from the
@@ -262,9 +271,9 @@ if branch_on_origin; then
 fi
 git switch -q -c "release/$tag"
 
-python3 - "$plugin" "$market" "$changelog" "$ver" "$(date +%Y-%m-%d)" "$why_file" <<'PY'
+python3 - "$plugin" "$market" "$changelog" "$ver" "$(date +%Y-%m-%d)" "$why_file" "$entries" <<'PY'
 import json, pathlib, re, sys
-plugin, market, changelog, ver, today, why_file = sys.argv[1:]
+plugin, market, changelog, ver, today, why_file, entries = sys.argv[1:]
 for f in (plugin, market):
     p = pathlib.Path(f); d = json.loads(p.read_text()); d["version"] = ver
     p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
@@ -276,16 +285,21 @@ p = pathlib.Path(changelog); text = p.read_text()
 text = re.sub(r"^\[Unreleased\]: (\S+)/compare/\S+\.\.\.HEAD$",
               lambda m: f"[Unreleased]: {m[1]}/compare/v{ver}...HEAD\n[{ver}]: {m[1]}/releases/tag/v{ver}",
               text, count=1, flags=re.M)
-# The why under the new heading, then everything that was under Unreleased.
+# The why under the new heading, then the fragments' sections; [Unreleased]
+# stays, empty, above it.
 head, sep, rest = text.partition("## [Unreleased]\n")
 why = pathlib.Path(why_file).read_text().strip()
-p.write_text(f"{head}{sep}\n## [{ver}] - {today}\n\n{why}\n\n{rest.lstrip()}")
+body = f"{why}\n\n{entries.strip()}" if entries.strip() else why
+p.write_text(f"{head}{sep}\n## [{ver}] - {today}\n\n{body}\n\n{rest.lstrip()}")
 PY
 
 git add "$plugin" "$market" "$changelog"
+# The fragments go in the same commit that writes them out (#1136); dot files
+# such as changelog.d/.markdownlint.jsonc stay, as the assembler skips them.
+for f in "$root"/changelog.d/*.md; do if [ -e "$f" ]; then git rm -q -- "$f"; fi; done
 git commit -q -m "chore(release): $tag"
 cat <<MSG
-bumped $current -> $ver in plugin.json, marketplace.json and CHANGELOG.md, committed on release/$tag;
+bumped $current -> $ver in plugin.json, marketplace.json and CHANGELOG.md, deleted the fragments in changelog.d/, committed on release/$tag;
 the why is in the [$ver] section now, and nothing reads $why_file again.
 next: push the branch, open the pull request, and run e2e on the branch:
   gh workflow run e2e.yml --ref release/$tag

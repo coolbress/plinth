@@ -10,6 +10,7 @@ disable-model-invocation: true
 Creates `[<owner>/]<name>` on GitHub with the wall already up. When a step it
 cannot go on without fails, it deletes the repository if its token can, and
 names it otherwise. The owner is optional: a bare name goes under the user's login. One script does all of it; this skill runs it and relays what it says.
+Do not edit the generated repository in this session.
 
 ## Check first, before any question
 

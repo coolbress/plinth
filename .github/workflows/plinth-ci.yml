@@ -305,6 +305,9 @@ jobs:
       - name: A pull request that changes a released CHANGELOG.md section fails, unless it names it or puts it back
         run: ./tests/changelog-released-cases.sh
 
+      - name: A changelog line under [Unreleased], or a fragment a release would refuse, fails
+        run: ./tests/changelog-fragments-cases.sh
+
       - name: A conflict marker a diff adds fails with its file and line; one the base already has passes
         run: ./tests/conflict-markers-cases.sh
 
@@ -435,6 +438,12 @@ jobs:
             git fetch --no-tags origin '+refs/tags/v*:refs/tags/v*'
           fi
           ./scripts/changelog-released.py
+
+      # A change's changelog line is its own file in changelog.d/ (#1136):
+      # lines under [Unreleased] conflicted between every pull request open
+      # from the same main. Runs on push too, where main must hold none.
+      - name: The changelog line is a fragment, and every fragment reads
+        run: ./scripts/changelog-fragments.py check
 
       # The version is pinned in the test, so a local run lints with what runs here.
       - name: markdownlint

@@ -128,7 +128,7 @@ def main():
         first = failed[0]
         error(
             f"{FILE} [{first}] changed, and v{first} is released{' (and ' + str(len(failed) - 1) + ' more)' if len(failed) > 1 else ''}. "
-            f"Move the new line under [Unreleased]; to correct the released text, add 'Corrects released section: {first}' to the description: {HOW}"
+            f"Move the new line into a fragment, changelog.d/<branch-slug>.md; to correct the released text, add 'Corrects released section: {first}' to the description: {HOW}"
         )
     print(f"  PASS  every released section of {FILE} is unchanged, back as its tag has it, or named ({len(tags)} tags read)")
     return 0
