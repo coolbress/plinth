@@ -22,13 +22,13 @@ contradict an earlier decision; open the record before relying on a line.
   under [Unresolved](#unresolved-two-records-disagree) until a person decides
   which holds and the earlier record says so.
 
-Collected on 2026-11-25 from every issue body in both repositories.
+Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and the lines saying "Decided", "reversed" or "superseded", of every issue in both repositories; the lines were then chosen and summarised by hand, so check the record before relying on one.
 
 ## new-project
 
 - The wall is fail-closed: anything that cannot be raised stops before anything is created, and says why. 2026-09-02, #19
-- `/plinth:new-project` and `/plinth:template-update` keep `disable-model-invocation: true`, with no router skill; the agent names the command for the person to type. 2026-10-15, #515
-- new-project never writes in or creates a repository from the current folder; publishing existing code is offered as printed commands. 2026-11-25, #1121
+- `/plinth:new-project` and `/plinth:template-update` keep `disable-model-invocation: true`, with no router skill that runs them on an ordinary request; the agent names the command for the person to type. 2026-10-15, #515
+- When the current folder already holds something, new-project's recommended option writes nothing there and creates no repository from it; publishing existing code is offered as printed commands. 2026-11-25, #1121
 - The door never overwrites an owner's shared issue or pull-request templates; changing them happens only on a maintainer's word, as a draft pull request. 2026-09-19, #88
 - Questions come host first (each host's readiness shown), then what the project is, then name and visibility; every answer stays a flag. 2026-11-24, #1067
 - Every answer is shown in one table before anything is created; only the rows picked are asked again. 2026-11-24, #1068
@@ -41,13 +41,14 @@ Collected on 2026-11-25 from every issue body in both repositories.
 ## guide
 
 - `/plinth:guide` is a user-only skill that names the next command; `/plinth:arsenal` stays the model-invocable catalog, and the guide reads the arsenal's table instead of keeping its own. 2026-10-28, #710
-- The plain "what next" question goes to `/plinth:guide`, and "which tool now" points to it alone. 2026-11-24, #1086
+- The plain "what next" question goes to `/plinth:guide`. 2026-11-14, #920
+- The arsenal's "which tool now" row points to `/plinth:guide` alone. 2026-11-24, #1086
 - The answer opens with the next step, then open items and what is done so far (at most five record titles, verbatim); fixed status words, no progress bar. 2026-11-24, #1076
 - A step's tools are shown in depth only before the first merge (`mode: full`); this partly reverses #908. 2026-11-24, #1076
 - `guide map` is one screen with one step in depth through `map <step>`, and off-by-default features have their own `features` view; this reverses #908 for `map`. 2026-11-24, #1087
 - After the first merge only the token step blocks; the uptime monitor and error tracker move after the first deploy. 2026-11-24, #1078
 - A release is the next step only when nothing else is open and a `feat:` has merged since the last tag; not for web. 2026-11-24, #1077
-- The guide names floor-check at four moments in its next steps; no hook runs floor-check at session start. 2026-11-25, #1113
+- The guide names floor-check at three moments (after the adopt pull request merges, after a plinth update, before a release); a red `ci / floor-check` is left to CI's own message, and no hook runs floor-check at session start. 2026-11-25, #1113
 - A term from the fixed term table is explained once, at first use in a session, with the English term kept in brackets. 2026-11-04, #809
 - The start-of-project lines on the agent's reach are guidance, not gates. 2026-10-06, #412
 - Paid services are never in the default set; error tracking, uptime and previews are listed with their free tiers. 2026-10-28, #702
@@ -65,10 +66,11 @@ Collected on 2026-11-25 from every issue body in both repositories.
 - A production database URL within the agent's reach is a WARN. 2026-10-24, #648
 - Every check has a stable id and result state, with CI's output unchanged. 2026-11-25, #1103
 - The records check is absorbed into floor-check, and `/plinth:records-check` is removed in the merging release with no pointer skill. 2026-11-25, #1108
-- Records checks that need judgement (a reversal, a parent to close, no tags) are questions for the person, never failures; nothing is written before the person approves the plan. 2026-11-25, #1109
+- Records checks that need judgement (a reversal, a parent to close, no tags) are questions for the person, never failures; nothing is written before the person approves that record's drafted line, one record at a time. 2026-11-25, #1109
 - The adopt pull request adds new files only; an existing file the template also renders is left untouched and listed as kept in `.plinth-adoption.yml`. 2026-11-25, #1106
 - Choices about a repository live in the repository; the machine cache keeps only the last run and accepted machine warnings. 2026-11-25, #1112
-- Scorecard is not run inside plinth, and there is no score or badge by default. 2026-11-25, #1114
+- Scorecard is not run inside plinth. 2026-11-25, #1114
+- There is no score, badge or `security-insights.yml` by default. 2026-11-25, #1116
 - Usefulness is measured by action: effective false alarms stay under 10%. 2026-11-25, #1117
 
 ## CI and checks
@@ -79,7 +81,8 @@ Collected on 2026-11-25 from every issue body in both repositories.
 - "Not yet confirmed" never turns a check red or neutral; each standard reports pass, fail or not yet confirmed. 2026-10-08, #405
 - The third-party reviewer is opt-in and the default review is fresh-context; no CI review runs on a subscription token, and none is ever a required check. 2026-11-04, #812
 - `third-party / review` counts review rounds but never stops summoning or passes an unreviewed head; there is no budget input. 2026-10-09, #423
-- The bot rule is a list of one, Dependabot, recognised by who pushed (activity log, account id), never by a commit's author. 2026-10-18, #518
+- `third-party / review` passes a Dependabot pull request unsummoned only when the activity log shows every push was Dependabot's; a commit's author never decides it. 2026-09-18, #167
+- `ci / diff-size` recognises Dependabot by account id, not login. 2026-10-18, #518
 - A release pull request passes unsummoned only behind `pass-release-pull-requests`, default false. 2026-09-18, #167
 - `ci / diff-size` lists changes to checks, tests and the agent's own rules, and fails a row only when the pusher is not an admin and no admin approved; the workflow kind stays a WARN. 2026-10-18, #518
 - Changed-line coverage is report-only and never fails `ci / test`. 2026-10-12, #503
@@ -106,10 +109,10 @@ Collected on 2026-11-25 from every issue body in both repositories.
 - ponytail-skills is not a dependency; its entry stays listed. 2026-10-19, #598
 - mattpocock-skills installs a narrowed set; the listed skills install as `mattpocock-skills-extra@plinth`. 2026-10-19, #593
 - The design default is the pinned taste-skill (`design-taste-frontend`); a raise is measured first, is its own pull request, and its note names `claude plugin update taste-skill@plinth`. 2026-11-24, #1082
-- The eval suite runs before a release that changes what the agent reads, and is cancelled if unused at the next such release. 2026-10-28, #700
+- `make-release.sh` run 1 stops when the pinned template's `AGENTS.md`, `CLAUDE.md` or `.claude/` changed, unless the why-file records an eval-suite run; plinth's own skills are outside this guard. 2026-10-28, #700
 - The eval suite is a script around `claude -p`, not `claude plugin eval`. 2026-10-25, #647
 - `template-update` never moves the plinth pin by itself; a person chooses. 2026-10-13, #511
-- Dependabot moves both plinth pins together, after GitHub's default cooldown. 2026-10-09, #447
+- floor-check WARNs, never FAILs, when the plinth pins in `ci.yml` and `label.yml` disagree; nothing requires them to move together. 2026-10-09, #447
 - The minimum Claude Code version is 2.1.274, from one source. 2026-09-26, #65
 - The git floor for installing plinth is 2.37.0. 2026-09-17, #171
 
@@ -145,7 +148,7 @@ Collected on 2026-11-25 from every issue body in both repositories.
 - From review round 3, `merge-when-green.sh --round` exits 1 until a row and reason are given. 2026-10-11, #485
 - An issue title is one sentence; a template-only ticket is filed in plinth-template. 2026-10-31, #746
 - A defect is a bug whoever finds it. 2026-11-18, #957
-- Re-grades go into the one living scorecard, #643. 2026-10-28, #701
+- Re-grades go into the one living scorecard, not new issues. 2026-10-28, #643
 - #799 records what a real project ran into; a change it needs gets its own issue. 2026-11-18, #799
 - A shipped SKILL.md stays within 500 lines and 20,000 bytes. 2026-11-25, #1126
 - `CLAUDE.md` keeps the Code Review Rules and the worktree rules byte for byte; procedures live in `docs/`. 2026-11-25, #1125
@@ -164,7 +167,7 @@ Collected on 2026-11-25 from every issue body in both repositories.
 - A Render API key is never in the agent's session; deploys go only through Render's GitHub integration after the required checks. 2026-10-20, #604
 - The agent's identity line shows only when the account is an admin, the read failed, or before a merge decision. 2026-11-24, coolbress/plinth-template#337
 - At most two parallel workers plus the coordinator on an 8 GB machine; a worker stops at the pull request. 2026-11-22, #1030
-- Each skill states its read-only or no-edit rule once, within its first 40 lines. 2026-11-25, #1124
+- Each skill states its read-only or no-edit rule within its first 40 lines, and may repeat it at the end; no other copies in the body. 2026-11-25, #1124
 
 ## Unresolved: two records disagree
 
@@ -178,4 +181,4 @@ a person decides and the record says so.
 - **A page of terms.** #515 (2026-10-15): no glossary page until #163 shows which terms stall a reader. #809 (completed 2026-11-04): one fixed term table, `docs/reference/terms.md`. #515 is not named.
 - **The second language.** #31 (2026-09-03): v1.1's first language is TypeScript. #611 (2026-10-27): no TypeScript archetype now. #31 is not named.
 - **A second third-party reviewer.** #711 (2026-10-28): Copilot is the first reviewer to probe, CodeRabbit the second. #387 (2026-11-10): Codex stays the only supported reviewer, with no probe now. #711 has no line saying so.
-- **plinth's own `AGENTS.md` length.** #25 (2026-09-03): `AGENTS.md` at most 60 lines. plinth's own is 159 lines today, and no record raises the limit; #1125 is slimming it.
+- **plinth's own `AGENTS.md` length.** #25 (2026-09-03): `AGENTS.md` at most 60 lines. plinth's own is 159 lines today; #1125 is slimming `CLAUDE.md` to at most 110 lines and 7,500 bytes, and does not name #25's 60.
