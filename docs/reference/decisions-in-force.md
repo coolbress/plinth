@@ -152,6 +152,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - #799 records what a real project ran into; a change it needs gets its own issue. 2026-11-18, #799
 - A shipped SKILL.md stays within 500 lines and 20,000 bytes. 2026-11-25, #1126
 - `CLAUDE.md` keeps the Code Review Rules and the worktree rules byte for byte; procedures live in `docs/`. 2026-11-25, #1125
+- No documentation site; `docs/` in the repository is enough until a reader asks for one. 2026-11-25, #1140
 
 ## Agents and safety
 
