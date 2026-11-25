@@ -90,7 +90,7 @@ def why():
         return "the changed files could not be read"
     if len(files) >= 100:
         return "the changed files fill a page; more may follow"
-    fragment = re.compile(r"^changelog\.d/[^/]+\.md$")
+    fragment = re.compile(r"^changelog\.d/[^/.][^/]*\.md$")   # run 1 deletes no dot file
     frags = [f for f in files if isinstance(f, dict) and fragment.match(str(f.get("filename")))]
     for f in frags:
         if f.get("status") != "removed":

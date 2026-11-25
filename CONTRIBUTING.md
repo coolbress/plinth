@@ -283,7 +283,10 @@ release needs a green run on the commit it tags, or on a commit with its tree
 
    A fragment can hold several sections (Added, Changed, Deprecated, Removed,
    Fixed, Security), each a `###` heading with its lines under it, and
-   nothing else. Two pull requests open from the same `main` each add their
+   nothing else. A link in it is absolute
+   (`https://github.com/coolbress/plinth/blob/main/<path>`): the line moves
+   from `changelog.d/` to the root at release, and a relative one breaks in
+   one place or the other. Two pull requests open from the same `main` each add their
    own file, so neither conflicts with the other in `CHANGELOG.md` (#1136).
    `scripts/make-release.sh` writes the fragments into the new version's
    section and deletes them; `## [Unreleased]` in `CHANGELOG.md` stays empty,

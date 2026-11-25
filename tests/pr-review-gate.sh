@@ -129,6 +129,7 @@ mutate "$tmp/f-fragedit.json" "$fr"'files += [fr("changelog.d/one.md"), fr("chan
 mutate "$tmp/f-fragadd.json"  "$fr"'files += [fr("changelog.d/one.md", "added")]'
 mutate "$tmp/f-otherdel.json" "$fr"'files += [fr("changelog.d/one.md"), fr("README.md")]'
 mutate "$tmp/f-fragdir.json"  "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/.markdownlint.jsonc")]'
+mutate "$tmp/f-fragdot.json"  "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/.hidden.md")]'
 mutate "$tmp/f-fragsub.json"  "$fr"'files += [fr("changelog.d/sub/x.md")]'
 python3 -c 'import json,sys; json.dump([{"filename": "x%d" % i, "status": "added", "patch": "+x"} for i in range(100)], open(sys.argv[1], "w"))' "$tmp/f-fullpage.json"
 R='TITLE=chore(release): v1.7.0'
@@ -150,6 +151,7 @@ gate ''     'a release title that edits a changelog fragment instead of removing
 gate ''     'a release title that adds a changelog fragment is summoned'     PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragadd.json"
 gate ''     'a release title that removes another file beside the fragments is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-otherdel.json"
 gate ''     "a release title that removes changelog.d's lint config is summoned" PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragdir.json"
+gate ''     'a release title that removes a dot file run 1 never deletes is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragdot.json"
 gate ''     'a release title that removes a file below changelog.d/ is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragsub.json"
 gate "$REL" 'the real v1.7.0 release diff passes under its title'              PASS_RELEASE=true "$R" FILES_JSON="$real"
 gate "$REL" 'the release diff with its changelog fragments removed passes'      PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-frags.json"

@@ -19,7 +19,7 @@ in CHANGELOG.md, which every change used to edit under `## [Unreleased]`.
 
 Either stops (exit 1, the reason on stderr) on a fragment that is empty,
 names no known section, has text before its first `###` heading, a section
-with nothing under it, or a heading of another level; on a file in
+with nothing under it, a heading of another level, or a relative link; on a file in
 changelog.d/ that is not a fragment (dot files aside); and on a line under
 `## [Unreleased]`. tests/changelog-fragments-cases.sh runs it.
 """
@@ -30,6 +30,11 @@ import sys
 SECTIONS = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
 DIR = "changelog.d"
 HEADING = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*#*[ \t]*$")
+# A link relative to changelog.d/ breaks once run 1 moves the line to the
+# root's CHANGELOG.md, and one relative to the root fails the link check here;
+# only an absolute one reads the same in both places (`ci / docs` remaps
+# github.com/coolbress/plinth/blob/main/ links to the checkout).
+RELATIVE_LINK = re.compile(r"\]\((?!https?://|mailto:|#)[^)\s]+\)|^ {0,3}\[[^\]]+\]:[ \t]+(?!https?://|mailto:|#)\S+", re.MULTILINE)
 
 
 def read(path, rel):
@@ -66,6 +71,9 @@ def read(path, rel):
             if line.strip():
                 problems.append(f"{rel}:{n}: text before the first '### <Section>' heading")
             continue
+        if RELATIVE_LINK.search(line):
+            problems.append(f"{rel}:{n}: a relative link; write it absolute, "
+                            "https://github.com/coolbress/plinth/blob/main/<path>, so it reads the same in CHANGELOG.md")
         body.append(line)
     close()
     if not out and not problems:
@@ -91,7 +99,7 @@ def fragments(root):
             else:
                 problems.extend([got] if isinstance(got, str) else got)
     unreleased = re.search(r"^## \[Unreleased\][^\n]*\n(.*?)(?=^## \[|^\[Unreleased\]: |\Z)",
-                           (root / "CHANGELOG.md").read_text(encoding="utf-8"), re.M | re.S)
+                           (root / "CHANGELOG.md").read_text(encoding="utf-8"), re.MULTILINE | re.DOTALL)
     if unreleased is None:
         problems.append("CHANGELOG.md has no '## [Unreleased]' heading")
     elif unreleased[1].strip():

@@ -1,2 +1,3 @@
 // A fragment starts at its "### <Section>" heading: the version heading above it is written at release (scripts/make-release.sh).
-{ "MD041": false }
+// This file replaces the root config for changelog.d/, so it repeats the root's two rules.
+{ "MD013": false, "MD024": { "siblings_only": true }, "MD041": false }

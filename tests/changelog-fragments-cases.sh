@@ -34,6 +34,10 @@ case_ no "text before the first heading" '\n' a.md '- One.\n\n### Added\n\n- Two
 case_ no "a section with nothing under it" '\n' a.md '### Added\n\n### Fixed\n\n- Two.\n'
 case_ no "a version heading in a fragment" '\n' a.md '### Added\n\n- One.\n\n## [2.0.0]\n'
 case_ no "a #### heading in a fragment" '\n' a.md '### Added\n\n#### More\n\n- One.\n'
+case_ ok "an absolute link and an anchor" '\n' a.md '### Added\n\n- [A page](https://github.com/coolbress/plinth/blob/main/README.md) and [a heading](#plinth).\n'
+case_ no "a relative link" '\n' a.md '### Added\n\n- [A page](docs/reference/x.md).\n'
+case_ no "a relative link one level up" '\n' a.md '### Added\n\n- [A page](../docs/reference/x.md).\n'
+case_ no "a relative link reference" '\n' a.md '### Added\n\n- [A page][x].\n\n[x]: docs/x.md\n'
 case_ no "a file that is not .md" '\n' a.txt '### Added\n\n- One.\n'
 # This checkout: what `ci / docs` runs on main and on every pull request.
 if "$root/scripts/changelog-fragments.py" check "$root" >"$work/out" 2>&1; then
