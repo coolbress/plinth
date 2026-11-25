@@ -34,15 +34,19 @@
 
       - name: Floor check
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           GH_TOKEN: ${{ github.token }}
           WORKDIR: ${{ inputs.working-directory }}
           EXPECT: ${{ inputs.floor-check-required-checks }}
         # The verdict lines first, then the report; the exit code is the
         # checker's. A checker that wrote no verdict file (a crash) is a fail.
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -euo pipefail
-          nw=0; trap '[ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"' EXIT
-          say() { echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           t="$RUNNER_TEMP/floor"; rc=0
           python3 "$RUNNER_TEMP/plinth/floor-check.py" \
             --root . --project "$WORKDIR" --repo "$GITHUB_REPOSITORY" \
@@ -62,7 +66,7 @@
             case "$l" in "fail: "*) n=$((n + 1)); [ -n "$first" ] || first="${l#fail: }" ;; esac
           done < "$t.verdicts"
           if [ "$n" -gt 0 ]; then
-            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report"
+            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/$at/skills/floor-check/SKILL.md#report"
             first="${first%"; $next"}"; lead="floor-check: $n FAIL, first: "
             room=$((300 - ${#lead} - ${#next} - 2))
             [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."

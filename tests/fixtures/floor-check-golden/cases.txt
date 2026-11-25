@@ -69646,7 +69646,7 @@ floor check: root=$WORK/glgood project=. host=gitlab
   INFO    claude plugin marketplace update plinth
   INFO    claude plugin update plinth@plinth
   INFO    /reload-plugins (or start a new session)
-  INFO    /plinth:floor-check
+  INFO    /plinth:template-update
   INFO  template: the tag the plinth pin 0123456789abcdef0123456789abcdef01234567 was tested with was not read (scripts/new-project.sh at 0123456789abcdef0123456789abcdef01234567: not found); compared with the latest release alone
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -69712,7 +69712,7 @@ floor check: root=$WORK/glgood project=. host=gitlab
   INFO    claude plugin marketplace update plinth
   INFO    claude plugin update plinth@plinth
   INFO    /reload-plugins (or start a new session)
-  INFO    /plinth:floor-check
+  INFO    /plinth:template-update
   INFO    v99.0.0 is in no release yet (the latest, v98.0.0, targets v1.51.0): if these find no new version, run /plinth:template-update again after the next release
   PASS  pyproject.toml present
   PASS  uv.lock committed
