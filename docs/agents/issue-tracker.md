@@ -106,6 +106,25 @@ Fields, labels and syntax that automation depends on are followed exactly:
 `Closes` auto-closes, a label drives triage queries, and a form's field id is
 read by tooling. Precision there is not style.
 
+## Closing an issue
+
+- **The ending goes in the body.** Closing an issue writes `## Outcome`,
+  saying which of completed, cancelled, superseded or moved to a follow-up it
+  is, and what was verified; a record ends in `## Decision` instead (a
+  `wayfinder:research`, `:prototype` or `:grilling` child).
+- **Tick each acceptance criterion that was met.** One left unticked is named
+  in the Outcome with why.
+- **Ticking happens at the merge, closed or not.** Whoever merges a pull
+  request that names an issue (`Closes`, `Part of`) ticks the criteria it met;
+  `scripts/merge-when-green.sh` prints what is left after the merge.
+- **`Closes #N` closes the issue without asking anyone**, so whoever merges
+  writes the ending.
+- **A confidence-bearing judgement gets a verdict.** Closing an issue that
+  carried one (a `/code-review` CONFIRMED or PLAUSIBLE finding, a
+  `ready-for-agent` call judged on what triage knew) says in `## Outcome`, or
+  `## Decision` for a record, whether later evidence supports it, contradicts
+  it, or leaves it unresolved.
+
 ## Conventions
 
 - **Which repository**: a change only to plinth-template is filed there, even though plinth raises its pin afterwards; the pin pull request closes it by hand. A change that also touches plinth (the door, `/plinth:floor-check`, plinth's docs) is filed here, and its template pull request ends `Part of coolbress/plinth#N`.

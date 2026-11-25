@@ -104,6 +104,10 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Run 2 tags only a commit whose own e2e run succeeded. 2026-09-07, #62
 - Released CHANGELOG sections stay as published; corrections go in the next section. 2026-10-13, #511
 - A dependency entry narrows its skills inside the entry and is never renamed or moved. 2026-10-10, #407
+- An update does not install a dependency under a new name, and a `renames` map drops the old one silently; so an entry keeps its name. 2026-10-10, #468
+- An entry whose upstream root carries a `plugin.json` narrows its skills through a `git-subdir` source under the same name; installed copies need `claude plugin update <name>@plinth` once. 2026-10-10, #469
+- A move from another marketplace into plinth's under the same name needs `claude plugin install plinth@plinth` then `claude plugin prune`, named in the release note. 2026-10-10, #477
+- A raised marketplace pin is a pull request whose release note names `claude plugin update <name>@plinth`: `update plinth` does not fetch it. 2026-10-30, #714
 - The default set leans to "listed, not installed"; a tool earns a default place by serving a loop step, on four criteria. 2026-10-19, #520
 - Dependencies that run a hook stay out of the default set (last30days moved to the catalog). 2026-09-30, #354
 - ponytail-skills is not a dependency; its entry stays listed. 2026-10-19, #598
@@ -142,16 +146,23 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Each guidance item says its kind; a failure is met first with a simpler default, then a boundary, and guidance only where neither fits. 2026-10-15, #515
 - A reversal is written on the earlier record as a dated "reversed by" line. 2026-11-25, #1109
 - Where each kind of record goes lives in `docs/agents/issue-tracker.md` alone, and a decision made in a comment also goes into the body. 2026-11-19, coolbress/plinth-template#269
-- A closing keyword before `#N` anywhere in a description closes that issue; word the prose another way. 2026-09-26, #65
+- A closing keyword before `#N` anywhere in a description closes that issue; word the prose another way. 2026-09-26, #65, measured on #284
 - A squash merge passes the description with `--body-file`. 2026-09-24, #250
 - An Outcome says whether later evidence supports a confidence-bearing judgement. 2026-09-26, #294
 - From review round 3, `merge-when-green.sh --round` exits 1 until a row and reason are given. 2026-10-11, #485
+- A review finding's row is judged by what the diff does, not by the reviewer's P1; a how-to line that could say more is never the first row. 2026-10-07, #420
+- An agent never writes the reviewer's summons text in a pull request description or comment; the reviewer answers it with noise. 2026-09-18, #184, #189
+- When several pull requests are open, only the session the person names merges, one at a time; other sessions do not bring their own up to date. 2026-11-21, coolbress/plinth-template#293
+- Each acceptance criterion met is ticked; one left unticked is named in the Outcome. 2026-10-03, #294
+- Whoever merges a pull request that names an issue ticks the criteria it met, closed or not. 2026-10-11, #489
+- After a merge, `merge-when-green.sh` prints the named issues' unticked criteria and a missing ending. 2026-10-11, #490
 - An issue title is one sentence; a template-only ticket is filed in plinth-template. 2026-10-31, #746
 - A defect is a bug whoever finds it. 2026-11-18, #957
 - Re-grades go into the one living scorecard, not new issues. 2026-10-28, #643
 - #799 records what a real project ran into; a change it needs gets its own issue. 2026-11-18, #799
 - A shipped SKILL.md stays within 500 lines and 20,000 bytes. 2026-11-25, #1126
 - `CLAUDE.md` keeps the Code Review Rules and the worktree rules byte for byte; procedures live in `docs/`. 2026-11-25, #1125
+- plinth's own `AGENTS.md` (`CLAUDE.md`) stays within 110 lines and 7,500 bytes; this reverses #25's 60-line cap for plinth's own file. 2026-11-25, #1125
 - No documentation site; `docs/` in the repository is enough until a reader asks for one. 2026-11-25, #1140
 
 ## Agents and safety
@@ -182,4 +193,3 @@ a person decides and the record says so.
 - **A page of terms.** #515 (2026-10-15): no glossary page until #163 shows which terms stall a reader. #809 (completed 2026-11-04): one fixed term table, `docs/reference/terms.md`. #515 is not named.
 - **The second language.** #31 (2026-09-03): v1.1's first language is TypeScript. #611 (2026-10-27): no TypeScript archetype now. #31 is not named.
 - **A second third-party reviewer.** #711 (2026-10-28): Copilot is the first reviewer to probe, CodeRabbit the second. #387 (2026-11-10): Codex stays the only supported reviewer, with no probe now. #711 has no line saying so.
-- **plinth's own `AGENTS.md` length.** #25 (2026-09-03): `AGENTS.md` at most 60 lines. plinth's own is 159 lines today; #1125 is slimming `CLAUDE.md` to at most 110 lines and 7,500 bytes, and does not name #25's 60.
