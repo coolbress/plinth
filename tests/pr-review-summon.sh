@@ -379,7 +379,7 @@ if grep -q 'pull-requests: write' "$wf"; then
 else
   echo "  PASS  pr-review.yml asks for pull-requests: read"
 fi
-url='https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer'
+url='https://github.com/coolbress/plinth/blob/$at/docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer'
 if grep -qF "$url" "$wf" && grep -qx '### Summoning the reviewer' "$root/docs/how-to/configure-the-third-party-reviewer.md"; then
   echo "  PASS  the red log names the how-to's summons section, and the section is there"
 else

@@ -33,11 +33,13 @@ as a marker.
     tests/conflict-markers-cases.sh runs it on throwaway repositories.
 """
 import codecs
+import os
 import re
 import subprocess
 import sys
 
-HOW = "https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#required-by-rulesetjson"
+# At the plinth commit ci / diff-size fetched this from (job.workflow_sha); main run by hand.
+HOW = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#required-by-rulesetjson"
 EDGE = re.compile(r"^(<{7}|\|{7}|>{7})(?: .*)?$")
 MIDDLE = re.compile(r"^={7}$")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")

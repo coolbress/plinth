@@ -32,7 +32,7 @@
 | `pass: <standard>` | It applies here, ran, and held |
 | `pass: <standard>, does not apply (<why>)` | It does not apply to this run |
 | `fail: <standard>` | It applies here, ran, and did not hold |
-| `not yet confirmed: <standard>, <why>; <what confirms it and when>` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. Evidence about this commit that is missing: the same text is also a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box or Files changed. A step annotates at most nine lines, then one more saying how many are in the job summary: GitHub drops a step's annotations past ten with no notice. A line ending `; left to /plinth:floor-check` is a repository setting the Actions token never reads, the same in every run: it is in the summary and counted on the checker's summary line, not annotated |
+| `not yet confirmed: <standard>, <why>; <what confirms it and when>` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. Evidence about this commit that is missing: the same text is also a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box. A step that did not run because an earlier step failed is in the summary only once the job has a `fail:` line: the failure already says it, and a warning beside it would read like the cause or Files changed. A step annotates at most nine lines, then one more saying how many are in the job summary: GitHub drops a step's annotations past ten with no notice. A line ending `; left to /plinth:floor-check` is a repository setting the Actions token never reads, the same in every run: it is in the summary and counted on the checker's summary line, not annotated |
 | No line | The job was cancelled or timed out, or stopped before its checking step (checkout, a tool install, `ci / floor-check`'s fetch of the checker): the red or cancelled conclusion is the verdict |
 
 | Check | Opens its summary with | Not yet confirmed on a run that otherwise passes | Passes with `does not apply` |
@@ -48,6 +48,88 @@
 | `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report; each FAIL and WARN there ends in one next action and a link. Any FAIL also gives one `::error::`, however many there are: the first, the count, that action and link, within 300 characters | Each SKIP line, annotated. Each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does, ending `; left to /plinth:floor-check` and not annotated: push protection, private vulnerability reporting, the Actions allowlist, the Actions token settings, the bypass actors of both rulesets, the CodeQL default setup languages, the squash commit settings, and a private repository's missing CodeQL rule | Never |
 | `ci / code-growth` (not required) | One line, code size within the conventions, then a table of what is above them | Something above a convention: the line is in the summary and not annotated, and up to three warnings name the largest functions and files, each with the next step; reported and never failing the job. `uv sync --locked`, ruff or git's list of files did not finish: one annotated line. A Python file on git's list that ruff did not measure (it skipped it, could not read it or could not parse it): an annotated line naming it and why, the first of the three warnings. A clean-up that brings them under confirms it | No Python file under `src/`, or the project without one |
 | `ci / web-audit` (not required) | One line per page and tool: Lighthouse's four scores for `/` (logged in) and the log-in page (not logged in), and whether axe-core's automated rules found a violation there; then a table of the scores, a table per page of what axe-core found, and the sentence that automated checks catch only part of accessibility | A violation axe-core found: one annotated line per page naming each rule, its impact and how many elements; reported and never failing the job. The app image did not build or start, the migrations did not apply, Node, Chrome for Testing or the tools did not install, or the audit did not finish: one annotated line with the reason. A page Lighthouse could not load, an error status, a person the audit could not log in, or a session that sent `/` back to the log-in page: an annotated line saying so. Fixing the page, or a run that gets past the step, confirms it | The `web` input `false` |
+
+## When a check fails
+
+| Where | What a failing check in this shape says there |
+| --- | --- |
+| The last lines of the job's log (`gh run view --job <id> --log`; `--log-failed` shows only the step that failed, not the Verdict that prints these lines) | `failed: <what failed>`, `next: <one action>`, `more: <a link to its section below>`, the last thing plinth prints in the job. Above them the Verdict step prints its summary lines |
+| An annotation on the pull request | One, titled with the check's name, `ci / <job>`: what failed and the next step, in at most 300 characters |
+| The job's summary | It opens with the `fail:` line, as in [What a job's summary says](#what-a-jobs-summary-says) |
+| The job's conclusion | Unchanged: the Verdict step exits 0, so the red and GitHub's own "Process completed with exit code 1" come from the step that failed |
+| The link | At the plinth commit the project's `ci.yml` calls (`job.workflow_sha`), so the page it opens is the one that commit shipped. The headings below are the check names, which change only in a MAJOR release |
+
+### ci / pr-title
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | Its annotations: the title is not Conventional Commits or ends in a number, or the description closes an issue outside its closing line | Rewrite the title or the description as the annotation says |
+
+### ci / lint
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1099 | The log names the tool: `uv sync --locked`, `ruff check`, `ruff format --check` or zizmor | Run the same command here, fix what it names, and push |
+
+### ci / typecheck
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1099 | mypy's lines name the file and line | Run `uv run mypy .` here and fix the type there |
+
+### ci / test
+
+| What failed | The next step |
+| --- | --- |
+| `pytest on .python-version: <test> failed` | Run `uv run pytest <test>` here, fix what it shows, and push. Each failed test is also an annotation at its file and line, nine at most, then a line saying how many there are; pytest's whole output is in the pytest step's log |
+| `pytest on python <version>: <test> failed` | The same test on one of the `extra-python-versions`: run `uv run --isolated --python <version> --with pytest pytest <test>` here |
+| `pytest on .python-version` alone | pytest failed and its log has no `FAILED` or `ERROR` line, for example a crash before any test ran: read the pytest step's log above its last line, fix what it names, and push |
+| `stopped at the time limit` | The job's limit stopped pytest, not a failing test: run `uv run pytest --durations=20` here and make the slowest tests faster; raise `test-timeout-minutes` only when none stands out |
+| `uv sync --locked` | Run `uv sync --locked` here; when it says `uv.lock` needs updating, run `uv lock`, commit `uv.lock` and push |
+| `a disposable Postgres for the tests` | With the `web` input `true`, the Postgres container did not start: re-run the job; the Start Postgres step's log says why |
+| `test-timeout-minutes` | The input is not whole minutes from 1 to 360: set it under `ci.yml`'s `with:` |
+
+### ci / build
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | The log names the step: `uv build`, or the install smoke with the package that did not import | Run `uv build` here and fix what it names |
+
+### ci / secrets
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | gitleaks names the commit and the file | Revoke the secret where it was issued, then remove it from the branch's history |
+
+### ci / deps
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | The dependency review, or osv-scanner where GitHub refuses it, names the package, its version and the advisory | Raise the dependency past the advisory's fixed version |
+
+### ci / diff-size
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | Its annotations: a pull request over `max-diff-lines`, or a change to the checks the description does not name or no admin approved | Split the pull request, name the change in the description, or ask an admin to approve it |
+
+### ci / floor-check
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | Its annotation names the first FAIL and how many there are | Run `/plinth:floor-check`, which writes the fix for each item |
+
+### ci / migrations
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | The log names the step: a model change without its migration, a migration that does not apply to an empty database, or a base row the migrations do not carry | Fix what the step names |
+
+### ci / deploy-check
+
+| Not in this shape yet | What names the failure | The next step |
+| --- | --- | --- |
+| #1100 | The deploy step's log names each deployment warning | Fix the setting it names |
 
 ## Required on plinth's own repository
 

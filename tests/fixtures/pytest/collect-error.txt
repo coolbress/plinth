@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.11, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/runner/work/app/app
+collected 6 items / 1 error
+
+==================================== ERRORS ====================================
+_______________________ ERROR collecting tests/test_b.py _______________________
+ImportError while importing test module '/home/runner/work/app/app/tests/test_b.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/home/runner/.local/share/uv/python/cpython-3.12.11-linux-x86_64-gnu/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_b.py:1: in <module>
+    import nosuchmodule
+E   ModuleNotFoundError: No module named 'nosuchmodule'
+=========================== short test summary info ============================
+ERROR tests/test_b.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.05s ===============================

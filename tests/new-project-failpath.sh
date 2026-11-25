@@ -2128,12 +2128,14 @@ for old in 'ask step 4 again' 'ask the license again'; do
   if printf '%s\n' "$flat" | grep -qF -- "$old"; then bad skill-visibility "the skill still says \"$old\""
   else ok skill-visibility "the skill no longer says \"$old\""; fi
 done
-# Where the host is chosen, GitLab.com says the next-step guide and template
-# updates are partly manual there: the guide reads GitHub only (#1061, #1012).
+# Where the host is chosen, GitLab.com says the next-step guide is partly
+# manual there (the guide reads GitHub only, #1061) and that template
+# updates are served, as a draft merge request (#1012).
 host_q="$(sed -n '/Header `Host`: "Where should the/,/^2\. \*\*What to make/p' "$skill" | tr '\n' ' ' | tr -s ' ')"
-if printf '%s\n' "$host_q" | grep -qF 'the next-step guide and template updates are partly manual'
-then ok skill-host "the Host question's GitLab.com choice says guide and update are partly manual there"
-else bad skill-host "the Host question does not say the guide and template updates are partly manual on GitLab.com"; fi
+if printf '%s\n' "$host_q" | grep -qF 'the next-step guide is partly manual' && printf '%s\n' "$host_q" | grep -qF '`/plinth:template-update` serves it, ending in a draft merge request' \
+   && ! printf '%s\n' "$host_q" | grep -qF 'template updates are partly manual'
+then ok skill-host "the Host question's GitLab.com choice says the guide is partly manual and template updates are served"
+else bad skill-host "the Host question's GitLab.com choice on the guide and template updates"; fi
 if grep -qF 'The answer becomes `--public` or `--private`, on either host.' "$skill"
 then ok skill-visibility "the visibility answer becomes a flag, so the command said before the run asks it no more"
 else bad skill-visibility "the skill does not turn the visibility answer into --public or --private"; fi

@@ -19,7 +19,12 @@ checker="$root/scripts/floor-check.py"
 target_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 export TARGET_REF="$target_ref" TARGET_SHA="$target_sha"
-work="$(cd "$(mktemp -d)" && pwd -P)"; trap 'rm -rf "$work"' EXIT
+# A mktemp that fails must stop here: `cd ""` stays in the current folder,
+# and the trap below would then delete it (seen in a sandbox that refused
+# the temp folder, #1012).
+work="$(mktemp -d)" && work="$(cd "$work" && pwd -P)" && [ -n "$work" ] \
+  || { echo "template-update-cases: could not make a temp folder" >&2; exit 1; }
+trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
@@ -109,6 +114,16 @@ new=""; for a in "$@"; do case "$a" in archetype=*) new="${a#archetype=}" ;; esa
 if [ -n "$new" ]; then
   [ "${MOCK_MOVE_FAIL:-}" = 1 ] && { echo "ValueError: Validation error for question 'archetype': The package name would collide" >&2; exit 1; }
   sed -i.bak "s/^archetype: .*/archetype: $new/" .copier-answers.yml && rm .copier-answers.yml.bak
+  # On GitLab (#1012) the template renders .gitlab-ci.yml, whose
+  # docker-image job and Dockerfile come with backend and go with cli.
+  if [ -f .gitlab-ci.yml ]; then
+    if [ "$new" = backend ]; then
+      printf '\ndocker-image:\n  stage: test\n  script:\n    - docker build .\n' >> .gitlab-ci.yml; printf 'FROM x\n' > Dockerfile
+    else
+      awk '/^docker-image:/ { s = 1; next } /^[^ ]/ { s = 0 } !s' .gitlab-ci.yml > .gl && mv .gl .gitlab-ci.yml; rm -f Dockerfile
+    fi
+    exit 0
+  fi
   # A move to backend (#1017): the image job and its Dockerfile come, nothing goes.
   if [ "$new" = backend ]; then
     printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  image:\n    runs-on: ubuntu-latest\n' "$(printf '%040d' 7)" > .github/workflows/ci.yml
@@ -268,10 +283,11 @@ fixture() { # <name> → sets $repo and $BARE, cleans up what an earlier case le
   export BARE
 }
 run() { # <args...>: the script from inside $repo; sets $out and $rc
-  out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" "$@" 2>&1)"; rc=$?
+  out="$(cd "$repo" && PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" "$@" 2>&1)"; rc=$?
 }
-reset_logs() { : > "$work/gh.log"; rm -f "$work/uvx.log" "$work/gh.log.body"; }
+reset_logs() { : > "$work/gh.log"; : > "$work/glab.log"; rm -f "$work/uvx.log" "$work/gh.log.body" "$work/glab.log.body"; }
 wt_of() { printf '%s\n' "$work/$1-template-$target_ref"; }
+awt_of() { printf '%s\n' "$work/$1-archetype-$2"; }
 
 # ── plan: read-only ─────────────────────────────────────────────────────
 fixture plan; reset_logs
@@ -296,34 +312,194 @@ if [ "$rc" != 0 ] && grep -q "not verified" <<<"$out" && [ ! -e "$work/uvx.log" 
 then ok "origin/main that differs from GitHub's own main is not a verified base: stops"
 else bad "unverified base (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
-# ── GitLab is not served yet (#924) ──────────────────────────────────────
-# Told by origin's URL, or by `host: gitlab` in the answers file (a GitLab
-# under another name). Either stops before gh or copier runs and before any
-# worktree, naming GitLab and the template's own update steps.
-gitlab_stops() { # <what> <args...>
-  local what="$1"; shift; reset_logs; run "$@"
-  if [ "$rc" = 1 ] && grep -q "GitLab" <<<"$out" && grep -qF "docs/how-to/keep-this-project-current.md" <<<"$out" \
-     && [ ! -s "$work/gh.log" ] && [ ! -e "$work/uvx.log" ] && [ ! -e "$(wt_of gitlab)" ] \
-     && ! git -C "$repo" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
-  then ok "$what: stops before gh, copier or a worktree, naming GitLab and the update steps"
-  else bad "$what (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# ── GitLab (#1012, was not served before: #924) ─────────────────────────
+# Told by origin's URL, or by `host: gitlab` in the answers file. The plan,
+# --apply and --finish run copier as on GitHub; only what reads and writes
+# the host changes: glab api for the project, its branch, its settings and a
+# draft merge request. The mock answers for the project o/r on MOCK_GL_HOST
+# (gitlab.com unless a case says otherwise) and logs every call.
+cat > "$work/bin/glab" <<'MOCK'
+#!/usr/bin/env bash
+set -u
+printf 'glab %s\n' "$*" >> "$GLAB_LOG"
+[ "${1:-}" = api ] || { echo "mock glab: unexpected: $*" >&2; exit 1; }
+shift; method=GET; input=""; host=""; path=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X | --method) method="$2"; shift 2 ;;
+    --hostname)    host="$2"; shift 2 ;;
+    --input)       input="$2"; shift 2 ;;
+    -H | --header) shift 2 ;;
+    --paginate)    shift ;;
+    *)             path="$1"; shift ;;
+  esac
+done
+[ "$host" = "${MOCK_GL_HOST:-gitlab.com}" ] || { echo "mock glab: no project on host '$host'" >&2; exit 1; }
+case "$method $path" in
+  "GET projects/o%2Fr")
+    case "${MOCK_GL_PIPELINE:-on}" in
+      on)     gate=',"only_allow_merge_if_pipeline_succeeds":true,"allow_merge_on_skipped_pipeline":false' ;;
+      off)    gate=',"only_allow_merge_if_pipeline_succeeds":false,"allow_merge_on_skipped_pipeline":false' ;;
+      absent) gate='' ;;
+    esac
+    printf '{"id":42,"path_with_namespace":"o/r","default_branch":"main"%s}\n' "$gate" ;;
+  "GET projects/o%2Fr/repository/branches/main")
+    printf '{"name":"main","commit":{"id":"%s"}}\n' "${MOCK_REMOTE_SHA:-$(git -C "$BARE" rev-parse main)}" ;;
+  "GET projects/o%2Fr/protected_branches"*)
+    [ "${MOCK_GL_PROTECTED:-main}" = unreadable ] && { echo '{"message":"403 Forbidden"}'; exit 1; }
+    if [ "${MOCK_GL_PROTECTED:-main}" = none ]; then echo '[]'; else printf '[{"name":"%s"}]\n' "${MOCK_GL_PROTECTED:-main}"; fi ;;
+  "GET projects/o%2Fr/merge_requests"*) cat "${MOCK_MR_EXISTING:-/dev/null}" 2>/dev/null || echo '[]' ;;
+  "POST projects/o%2Fr/merge_requests")
+    [ -e "${MOCK_MR_FAIL:-/nonexistent}" ] && { rm "$MOCK_MR_FAIL"; echo '{"message":"500 Internal Server Error"}'; exit 1; }
+    cp "$input" "$GLAB_LOG.body"
+    echo '{"iid":9,"web_url":"https://gitlab.com/o/r/-/merge_requests/9"}' ;;
+  *) echo '{"message":"404 Not found"}'; exit 1 ;;
+esac
+MOCK
+chmod +x "$work/bin/glab"
+# A GitLab project at an old tag (or the target tag, for a move): the
+# include of plinth's GitLab pipeline with its checksum, as the template
+# renders it, and origin named by its GitLab URL, which git rewrites to the
+# bare repository on disk.
+gl_include="https://raw.githubusercontent.com/coolbress/plinth/$sha40/gitlab/python-ci.yml"
+gl_int="sha256-L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
+gl_fixture() { # <name> [<tag> <archetype>]
+  fixture "$1"
+  git -C "$repo" rm -q -r .github
+  printf '_commit: %s\n_src_path: gh:coolbress/plinth-template\narchetype: %s\nhost: gitlab\n' "${2:-v1.0.0}" "${3:-cli}" > "$repo/.copier-answers.yml"
+  printf 'include:\n  - remote: %s\n    integrity: %s\n' "$gl_include" "$gl_int" > "$repo/.gitlab-ci.yml"
+  mkdir -p "$repo/.gitlab/merge_request_templates"; printf '## What and why\n' > "$repo/.gitlab/merge_request_templates/Default.md"
+  git -C "$repo" add -A && git -C "$repo" commit -q -m "on GitLab" && git -C "$repo" push -q origin main
+  git -C "$repo" remote set-url origin "https://${MOCK_GL_HOST:-gitlab.com}/o/r.git"
+  git -C "$repo" config url."$BARE".insteadOf "https://${MOCK_GL_HOST:-gitlab.com}/o/r.git"
 }
-fixture gitlab
-git -C "$repo" remote set-url origin git@gitlab.com:o/r.git
-gitlab_stops "the plan on an origin at gitlab.com (ssh)"
-gitlab_stops "--apply on an origin at gitlab.com (ssh)" --apply "$(git -C "$BARE" rev-parse main)"
-git -C "$repo" remote set-url origin https://gitlab.example.com/group/sub/r.git
-gitlab_stops "the plan on an origin at a self-hosted gitlab.* host (https)"
-git -C "$repo" remote set-url origin "$BARE"
+no_post() { ! grep -qE -- '-X (POST|PUT)' "$work/glab.log"; }
+
+gl_fixture gl-plan; reset_logs
+want="$(python3 "$checker" --root "$repo" --repo o/r --host gitlab --print-update-command 2>/dev/null)"
+base="$(git -C "$BARE" rev-parse main)"
+run
+if [ "$rc" = 0 ] && [ -n "$want" ] && grep -qF "Command:    $want" <<<"$out" && grep -qF "verified against GitLab" <<<"$out" \
+   && grep -qF -- "--apply $base" <<<"$out"
+then ok "GitLab: the plan prints the checker's own GitLab line (the include's pin and checksum) and the apply line"
+else bad "GitLab plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if [ ! -s "$work/gh.log" ] && grep -qF "api --hostname gitlab.com projects/o%2Fr/repository/branches/main" "$work/glab.log" && no_post \
+   && [ ! -e "$work/uvx.log" ] && [ ! -e "$(wt_of gl-plan)" ]
+then ok "GitLab: the plan reads the project through glab alone, never gh, and writes nothing"
+else bad "GitLab plan's reads"; sed 's/^/        /' "$work/glab.log" "$work/gh.log"; fi
+reset_logs
+out="$(cd "$repo" && MOCK_REMOTE_SHA="$(printf '%040d' 2)" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -q "not verified" <<<"$out" && grep -qF "GitLab's o/r main" <<<"$out" && [ ! -e "$work/uvx.log" ]
+then ok "GitLab: origin/main that differs from GitLab's own main is not a verified base: stops"
+else bad "GitLab unverified base (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# Self-hosted: the host glab is asked is origin's own.
+export MOCK_GL_HOST=gitlab.example.com
+gl_fixture gl-self; reset_logs; run
+if [ "$rc" = 0 ] && grep -qF "api --hostname gitlab.example.com projects/o%2Fr" "$work/glab.log"
+then ok "GitLab: on a self-hosted gitlab.* origin, glab is asked that host"
+else bad "GitLab self-hosted (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+unset MOCK_GL_HOST
+
+# The stop that is left: a checkout whose answers say GitLab, with an origin
+# whose URL names no GitLab project.
+fixture gl-noname; reset_logs
 printf 'host: gitlab\n' >> "$repo/.copier-answers.yml"
-gitlab_stops "the plan on a checkout whose answers say host: gitlab"
-# A GitHub repository whose path only contains the word is still served.
+run
+if [ "$rc" = 1 ] && grep -qF "origin's URL names no GitLab project" <<<"$out" && [ ! -s "$work/gh.log" ] && [ ! -s "$work/glab.log" ] \
+   && [ ! -e "$work/uvx.log" ] && [ ! -e "$(wt_of gl-noname)" ]
+then ok "GitLab: an origin that names no project stops before glab, copier or a worktree"
+else bad "GitLab, no project in origin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# A GitHub repository whose path only contains the word is still GitHub's.
 fixture gitlab-word; reset_logs
 git -C "$repo" remote set-url origin https://github.com/o/gitlab-mirror.git
 git -C "$repo" config url."$BARE".insteadOf https://github.com/o/gitlab-mirror.git
 run
-if [ "$rc" = 0 ] && ! grep -q "GitLab" <<<"$out"; then ok "a GitHub repository named gitlab-mirror is not taken for GitLab"
+if [ "$rc" = 0 ] && ! grep -q "GitLab" <<<"$out" && [ ! -s "$work/glab.log" ]; then ok "a GitHub repository named gitlab-mirror is not taken for GitLab"
 else bad "gitlab in a GitHub path (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# --apply: a clean update opens a draft merge request with copier's changes.
+gl_fixture gl-clean; reset_logs
+want="$(python3 "$checker" --root "$repo" --repo o/r --host gitlab --print-update-command 2>/dev/null)"
+base="$(git -C "$BARE" rev-parse main)"
+run --apply "$base" --assisted-by "Claude:claude-test-1"
+wt="$(wt_of gl-clean)"; mr_body="$work/glab.log.body"
+if [ "$rc" = 0 ] && [ "$(cat "$work/uvx.log" 2>/dev/null)" = "${want#uvx }" ] && grep -qF "Draft merge request: https://gitlab.com/o/r/-/merge_requests/9" <<<"$out"
+then ok "GitLab --apply: copier runs the checker's words, then a draft merge request is opened"
+else bad "GitLab clean apply (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if [ -f "$mr_body" ] && [ "$(jq -r .title "$mr_body")" = "Draft: chore(template): update plinth-template v1.0.0 to $target_ref" ] \
+   && [ "$(jq -r .source_branch "$mr_body")" = "chore/template-$target_ref" ] && [ "$(jq -r .target_branch "$mr_body")" = main ] \
+   && jq -r .description "$mr_body" | grep -qF "Assisted-by: Claude:claude-test-1" \
+   && jq -r .description "$mr_body" | grep -qF "when this merge request opened" \
+   && ! jq -r .description "$mr_body" | grep -qiF "pull request"
+then ok "GitLab: the merge request is a draft from the update branch into main, its description in merge-request words"
+else bad "GitLab merge request body"; cat "$mr_body" 2>/dev/null | sed 's/^/        /'; fi
+if [ "$(git -C "$BARE" rev-parse "refs/heads/chore/template-$target_ref" 2>/dev/null)" = "$(git -C "$wt" rev-parse HEAD 2>/dev/null)" ] \
+   && [ "$(git -C "$BARE" rev-parse main)" = "$base" ] && [ ! -s "$work/gh.log" ] \
+   && grep -qxF "pr=https://gitlab.com/o/r/-/merge_requests/9" "$(git -C "$wt" rev-parse --absolute-git-dir)/plinth-template-update"
+then ok "GitLab: the update branch is pushed, main is not, gh never runs, and the record keeps the merge request"
+else bad "GitLab push/record"; fi
+if jq -r .description "$mr_body" | grep -qF "\`diff-size\` was not counted here before pushing: on GitLab"
+then ok "GitLab: the description says the size was not counted here, and that the pipeline's diff-size job counts it"
+else bad "GitLab size line"; jq -r .description "$mr_body" | grep -i size | sed 's/^/        /'; fi
+
+# A conflict stops before any merge request; --finish opens it once resolved.
+# The first try at the merge request fails; the second finds the one GitLab
+# made from this project at the pushed commit and opens no other.
+gl_fixture gl-conflict; reset_logs; base="$(git -C "$BARE" rev-parse main)"
+out="$(cd "$repo" && MOCK_COPIER=conflict PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" 2>&1)"; rc=$?
+wt="$(wt_of gl-conflict)"
+if [ "$rc" = 3 ] && grep -qF CONTRIBUTING.md <<<"$out" && no_post && ! git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
+then ok "GitLab: a conflict stops at exit 3, nothing pushed and no merge request opened"
+else bad "GitLab conflict (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+printf 'resolved\n' > "$wt/CONTRIBUTING.md"; git -C "$wt" add CONTRIBUTING.md
+: > "$work/mr-fail"
+out="$(cd "$repo" && MOCK_MR_FAIL="$work/mr-fail" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" --resolved CONTRIBUTING.md "took the template's side, on the user's word" 2>&1)"; rc=$?
+if [ "$rc" = 1 ] && grep -qF "opening the merge request failed" <<<"$out" && git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
+then ok "GitLab --finish: a merge request that fails to open leaves the branch pushed and says to run again"
+else bad "GitLab finish, merge request failing (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+pushed="$(git -C "$wt" rev-parse HEAD)"
+printf '[{"web_url":"https://gitlab.com/o/r/-/merge_requests/3","sha":"%s","source_project_id":7},{"web_url":"https://gitlab.com/o/r/-/merge_requests/8","sha":"%s","source_project_id":42}]\n' "$pushed" "$pushed" > "$work/mr-existing.json"
+: > "$work/glab.log"
+out="$(cd "$repo" && MOCK_MR_EXISTING="$work/mr-existing.json" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" --finish "$wt" 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "Draft merge request: https://gitlab.com/o/r/-/merge_requests/8" <<<"$out" && no_post
+then ok "GitLab --finish again: adopts the merge request from this project at the pushed commit (not a fork's), opens no second"
+else bad "GitLab finish adoption (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; sed 's/^/        /' "$work/glab.log"; fi
+
+# An archetype move on GitLab: copier as on GitHub; in place of the required
+# checks, the plan names "Pipelines must succeed" and the protected branch,
+# as /plinth:floor-check reads them, and the command a Maintainer runs.
+gl_fixture gl-move "$target_ref" cli; reset_logs; base="$(git -C "$BARE" rev-parse main)"
+run --archetype backend
+if [ "$rc" = 0 ] && grep -qF "Archetype:  cli -> backend" <<<"$out" && grep -qF ".gitlab-ci.yml: docker-image" <<<"$out" \
+   && grep -qF '"Pipelines must succeed" on, skipped pipelines not counted' <<<"$out" && grep -qF "nothing to change in the project's settings" <<<"$out" \
+   && grep -qF "main is protected on o/r" <<<"$out" && grep -qF "protected_branches?per_page=100 --paginate" "$work/glab.log" && grep -qF -- "--apply $base --archetype backend" <<<"$out" \
+   && no_post && [ ! -s "$work/gh.log" ] && [ ! -e "$(awt_of gl-move backend)" ]
+then ok "GitLab move plan: the job it starts, the merge gate in place of required checks, nothing to change, nothing written"
+else bad "GitLab move plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs
+out="$(cd "$repo" && MOCK_GL_PIPELINE=off MOCK_GL_PROTECTED=none PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF "only_allow_merge_if_pipeline_succeeds=false" <<<"$out" \
+   && grep -qF "glab api --hostname gitlab.com -X PUT projects/o%2Fr -F only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false" <<<"$out" \
+   && grep -qF "glab api --hostname gitlab.com -X POST projects/o%2Fr/protected_branches -f name=main -F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false" <<<"$out" \
+   && grep -qF "a Maintainer runs, with their own login (never the agent's)" <<<"$out" && no_post
+then ok "GitLab move plan: a merge gate that is off and an unprotected main each name the command a Maintainer runs; none is run"
+else bad "GitLab move plan, gate off (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs
+out="$(cd "$repo" && MOCK_GL_PIPELINE=absent MOCK_GL_PROTECTED=unreadable PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && grep -qF 'whether "Pipelines must succeed" is on was not read' <<<"$out" && grep -qF "whether main is protected was not read" <<<"$out" \
+   && ! grep -qF "nothing to change in the project's settings" <<<"$out"
+then ok "GitLab move plan: settings not read are said as not read, never as nothing to change"
+else bad "GitLab move plan, unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+reset_logs
+run --apply "$base" --archetype backend
+mr_body="$work/glab.log.body"
+if [ "$rc" = 0 ] && [ "$(jq -r .title "$mr_body" 2>/dev/null)" = "Draft: chore(template): move from the cli archetype to backend" ] \
+   && jq -r .description "$mr_body" | grep -qF "docker-image" \
+   && jq -r .description "$mr_body" | grep -qF '"Pipelines must succeed" on, skipped pipelines not counted' \
+   && ! jq -r .description "$mr_body" | grep -qE "require-check|with-admin-token|Actions allowlist" && [ ! -s "$work/gh.log" ]
+then ok "GitLab move --apply: a draft merge request whose by-hand section names GitLab's merge gate, not GitHub's checks"
+else bad "GitLab move apply (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; jq -r .description "$mr_body" 2>/dev/null | sed 's/^/        /'; fi
 
 # ── clean update ────────────────────────────────────────────────────────
 fixture clean; reset_logs
@@ -1443,7 +1619,6 @@ move_fixture() { # <name>
   printf 'tests/ export-ignore\n' > "$repo/.gitattributes"
   git -C "$repo" add -A && git -C "$repo" commit -q -m "data-ml at the target tag" && git -C "$repo" push -q origin main
 }
-awt_of() { printf '%s\n' "$work/$1-archetype-$2"; }
 
 # The plan writes each admin command to a file and prints `bash <file>`
 # (#1045): what the plan says, then each file it names, as a person reads it.
@@ -1874,8 +2049,9 @@ if ! grep -qF 'Nothing else changes outside the files' <<<"$skill_text" \
    && grep -qF 'Outside the files, only the required checks and the Actions allowlist change with the archetype' <<<"$skill_text"
 then ok "the skill says the Actions allowlist changes with the archetype too (#1018)"
 else bad "the skill's outside-the-files sentence"; fi
-if grep -qF 'GitLab is not served yet' <<<"$skill_text"
-then ok "the skill says GitLab is not served yet (#924)"
+if ! grep -qF 'GitLab is not served yet' <<<"$skill_text" && grep -qF 'On GitLab it runs the same steps through `glab`' <<<"$skill_text" \
+   && grep -qF 'a draft merge request' <<<"$skill_text"
+then ok "the skill says GitLab is served through glab, with a draft merge request (#1012)"
 else bad "the skill's GitLab line"; fi
 if grep -qF 'prints a `Pin conflict:` line' <<<"$skill_text" && grep -qF 'Tell the user this before asking for the yes' <<<"$skill_text" \
    && grep -qF "A plinth \`uses:\` line the plan's \`Pin conflict:\` line named is that conflict" <<<"$skill_text"
