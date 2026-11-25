@@ -17,7 +17,9 @@ wf="${1:?usage: install-verdict.sh <plinth-ci.yml>}"
 fail=0
 err() { fail=1; printf '::error title=ci / install::%s\n' "$1"; }
 
-declared="$(sed -nE 's/^  (install-[0-9]+):[[:space:]]*$/\1/p' "$wf" | sort)"
+# Every job whose id starts with install- is a group, whatever follows the
+# dash and whatever comment follows the colon.
+declared="$(sed -nE 's/^  (install-[A-Za-z0-9_-]+):.*$/\1/p' "$wf" | sort)"
 results="$(jq -r 'to_entries[] | "\(.key) \(.value.result)"' <<<"${NEEDS:-}" 2>/dev/null)" \
   || { err "NEEDS is not the needs context as JSON; nothing was verified"; exit 1; }
 [ -n "$declared" ] || { err "no install-<n> job in $wf; nothing was verified"; exit 1; }
@@ -36,13 +38,16 @@ for j in $(awk '{ print $1 }' <<<"$results"); do
 done
 [ "$fail" = 0 ] && { echo "  PASS  every install-<n> job succeeded"; exit 0; }
 
-# test_of <step name>: the ./tests/<file> the step with that name runs.
+# test_of <job> <step name>: the ./tests/<file> the step with that name runs
+# in that job (steps of the same name in other jobs are not read).
 test_of() {
-  awk -v n="$1" '
+  awk -v j="$1" -v n="$2" '
+    /^  [A-Za-z]/ { injob = ($0 ~ "^  " j ":") ; next }
+    !injob { next }
     { line = $0; sub(/^[[:space:]]*-?[[:space:]]*/, "", line) }
     line == "name: " n { hit = 1; next }
     hit && line ~ /^- name: |^name: / { exit }
-    hit && match(line, /\.\/tests\/[A-Za-z0-9._-]+/) { print substr(line, RSTART, RLENGTH); exit }
+    hit && match(line, /\.\/tests\/[A-Za-z0-9._\/-]+/) { print substr(line, RSTART, RLENGTH); exit }
   ' "$wf"
 }
 if [ -n "$failed" ]; then
@@ -56,7 +61,7 @@ if [ -n "$failed" ]; then
         continue
       fi
       while IFS=$'\t' read -r name url; do
-        t="$(test_of "$name")"
+        t="$(test_of "$j" "$name")"
         echo "  FAIL  ci / $j, step \"$name\"${t:+ ($t)}: $url"
       done <<<"$steps"
     done

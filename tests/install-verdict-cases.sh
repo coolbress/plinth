@@ -22,8 +22,19 @@ jobs:
     steps:
       - name: Manifests, pins, skill frontmatter
         run: ./tests/marketplace-manifest.sh
+
+      - name: Same name in two jobs
+        run: ./tests/not-this-one.sh
   install-2:
     steps:
+      - name: Check out plinth-template at the commit the door pins
+        run: |
+          d="$RUNNER_TEMP/plinth-template"
+          ./tests/lib/template-checkout.sh "$d"
+
+      - name: Same name in two jobs
+        run: ./tests/this-one.sh
+
       - name: Floor checker verdicts on fixtures
         run: ./tests/floor-check-cases.sh
 
@@ -31,8 +42,17 @@ jobs:
         env:
           X: "1"
         run: ./tests/eval-suite-cases.sh
+  install-3:
+    steps:
+      - name: Check out plinth-template at the commit the door pins
+        run: |
+          d="$RUNNER_TEMP/plinth-template"
+          ./tests/lib/template-checkout.sh "$d"
+
+      - name: Same name in two jobs
+        run: ./tests/this-one.sh
   install:
-    needs: [install-1, install-2]
+    needs: [install-1, install-2, install-3]
   tools:
     steps: []
 YML
@@ -49,7 +69,10 @@ cat >"$work/jobs.json" <<'JSON'
  {"name": "ci / install-1", "conclusion": "success", "html_url": "https://x/1", "steps": [{"name": "Manifests, pins, skill frontmatter", "conclusion": "success"}]},
  {"name": "ci / install-2", "conclusion": "failure", "html_url": "https://x/2", "steps": [
    {"name": "Floor checker verdicts on fixtures", "conclusion": "success"},
-   {"name": "The eval suite stops at its ceiling", "conclusion": "failure"}]}
+   {"name": "The eval suite stops at its ceiling", "conclusion": "failure"}]},
+ {"name": "ci / install-3", "conclusion": "failure", "html_url": "https://x/3", "steps": [
+   {"name": "Check out plinth-template at the commit the door pins", "conclusion": "failure"},
+   {"name": "Same name in two jobs", "conclusion": "failure"}]}
 ]}
 JSON
 
@@ -63,11 +86,11 @@ run() {
 s='{"result":"success","outputs":{}}'; f='{"result":"failure","outputs":{}}'
 : >"$work/gh.log"
 
-run "{\"install-1\":$s,\"install-2\":$s}"
+run "{\"install-1\":$s,\"install-2\":$s,\"install-3\":$s}"
 [ "$code" = 0 ] && grep -qF "PASS  every install-<n> job succeeded" <<<"$out" && [ ! -s "$work/gh.log" ] \
   && ok "every group green passes, and reads no API" || bad "all green did not pass (exit $code)" "$out"
 
-run "{\"install-1\":$s,\"install-2\":$f}"
+run "{\"install-1\":$s,\"install-2\":$f,\"install-3\":$s}"
 [ "$code" = 1 ] && grep -qF '::error title=ci / install::ci / install-2: failure' <<<"$out" \
   && grep -qF 'FAIL  ci / install-2, step "The eval suite stops at its ceiling" (./tests/eval-suite-cases.sh): https://x/2' <<<"$out" \
   && ! grep -qF 'Floor checker' <<<"$out" \
@@ -75,18 +98,28 @@ run "{\"install-1\":$s,\"install-2\":$f}"
   && ok "a failed group fails, naming its failed step and the test it runs" || bad "a failed group was not named (exit $code)" "$out"
 
 for r in cancelled skipped; do
-  run "{\"install-1\":{\"result\":\"$r\"},\"install-2\":$s}"
+  run "{\"install-1\":{\"result\":\"$r\"},\"install-2\":$s,\"install-3\":$s}"
   [ "$code" = 1 ] && grep -qF "ci / install-1: $r" <<<"$out" \
     && ok "a $r group fails" || bad "a $r group did not fail (exit $code)" "$out"
 done
 
-run "{\"install-1\":$s}"
+run "{\"install-1\":$s,\"install-3\":$s}"
 [ "$code" = 1 ] && grep -qF "ci / install-2 is not in the install job's needs" <<<"$out" \
   && ok "a declared group missing from needs fails" || bad "a group outside needs passed (exit $code)" "$out"
 
-run "{\"install-1\":$s,\"install-2\":$s,\"install-9\":$s}"
+run "{\"install-1\":$s,\"install-2\":$s,\"install-3\":$s,\"install-9\":$s}"
 [ "$code" = 1 ] && grep -qF "needs lists install-9" <<<"$out" \
   && ok "a needs entry the workflow does not declare fails" || bad "an undeclared needs entry passed (exit $code)" "$out"
+
+run "{\"install-1\":$s,\"install-2\":$s,\"install-3\":$f}"
+[ "$code" = 1 ] && grep -qF 'step "Check out plinth-template at the commit the door pins" (./tests/lib/template-checkout.sh)' <<<"$out" \
+  && grep -qF 'step "Same name in two jobs" (./tests/this-one.sh)' <<<"$out" && ! grep -qF 'not-this-one' <<<"$out" \
+  && ok "a failed step names its file under tests/lib/, read from its own job only" || bad "a failed step was named from the wrong place (exit $code)" "$out"
+
+cp "$work/wf.yml" "$work/extra.yml"; printf '  install-web:  # not in needs\n    steps: []\n' >>"$work/extra.yml"
+WF="$work/extra.yml" run "{\"install-1\":$s,\"install-2\":$s,\"install-3\":$s}"
+[ "$code" = 1 ] && grep -qF "ci / install-web is not in the install job's needs" <<<"$out" \
+  && ok "a group named install-<anything>, a comment after its colon, is a group too" || bad "a group outside the digits pattern passed (exit $code)" "$out"
 
 for needs in '' 'not json' '{}'; do
   run "$needs"
@@ -99,14 +132,14 @@ WF="$work/none.yml" run "{}"
 [ "$code" = 1 ] && grep -qF "no install-<n> job" <<<"$out" \
   && ok "a workflow with no install-<n> job fails" || bad "no groups passed (exit $code)" "$out"
 
-run "{\"install-1\":$s,\"install-2\":$f}" GH_FAIL=1
+run "{\"install-1\":$s,\"install-2\":$f,\"install-3\":$s}" GH_FAIL=1
 [ "$code" = 1 ] && grep -qF "could not read which step failed (HTTP 403" <<<"$out" && grep -qF "open the failed job's log: install-2" <<<"$out" \
   && ok "an unreadable API still fails, and says which job to open" || bad "an unreadable API did not fail as it should (exit $code)" "$out"
 
 # The shipped workflow: every install-<n> job is in install's needs, install
 # is never skipped, and its verdict step reads the whole needs context.
 job="$(awk '/^  install:$/ { f = 1; next } f && /^  [a-z]/ { exit } f' "$shipped")"
-declared="$(sed -nE 's/^  (install-[0-9]+):[[:space:]]*$/\1/p' "$shipped" | sort)"
+declared="$(sed -nE 's/^  (install-[A-Za-z0-9_-]+):.*$/\1/p' "$shipped" | sort)"
 needs="$(sed -nE 's/^    needs: \[(.*)\]$/\1/p' <<<"$job" | tr -d ' ' | tr ',' '\n' | sort)"
 [ "$(wc -l <<<"$declared")" -ge 2 ] && [ -n "$needs" ] && [ "$declared" = "$needs" ] \
   && ok "plinth-ci.yml's install needs exactly its $(wc -l <<<"$declared" | tr -d ' ') install-<n> jobs" \
