@@ -278,6 +278,7 @@ jobs:
 
       - name: A third-party review is attached to this commit
         env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number }}
@@ -299,6 +300,7 @@ jobs:
           WAIT: ${{ inputs.wait-seconds }}
           POLL: ${{ inputs.poll-seconds }}
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -euo pipefail
           PR_REVIEW="$RUNNER_TEMP/plinth/scripts/pr-review"   # the fetch step above
           # Each look makes about four API calls. Below 10 s a 1200 s wait spends
@@ -511,7 +513,7 @@ jobs:
           fi
           echo "  - comment '$ASK' on the pull request yourself and re-run this job: a person's comment"
           echo "    starts the review, this job's does not unless the caller gives summons-token."
-          echo "    What summons-token does and what it costs: https://github.com/coolbress/plinth/blob/main/docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer"
+          echo "    What summons-token does and what it costs: https://github.com/coolbress/plinth/blob/$at/docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer"
           echo "  - if an author listed above is the reviewer under another name,"
           echo "    set reviewer-logins in the caller to that name."
           exit 1
