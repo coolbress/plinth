@@ -125,7 +125,7 @@ is typed into the chat, and none of the questions below needs one.
    | Label | Description |
    | --- | --- |
    | GitHub (Recommended) | ✓ or ✗ and its readiness. A GitHub repository with the wall; every kind of project, the web app included (`--host=github`). |
-   | GitLab.com | ✓ or ✗ and its readiness. A GitLab.com project with its wall; needs `glab` installed and logged in. The web app is made on GitHub only. On GitLab.com the next-step guide and template updates are partly manual: `/plinth:guide` reads GitHub only, and the project's `AGENTS.md` names where the next work is instead (`--host=gitlab`). |
+   | GitLab.com | ✓ or ✗ and its readiness. A GitLab.com project with its wall; needs `glab` installed and logged in. The web app is made on GitHub only. On GitLab.com the next-step guide is partly manual: `/plinth:guide` reads GitHub only, and the project's `AGENTS.md` names where the next work is instead (`--host=gitlab`); `/plinth:template-update` serves it, ending in a draft merge request. |
 
    Then run the preflight for that host, as
    [Check first](#check-first-before-any-question) says, before the next

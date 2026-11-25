@@ -1907,7 +1907,7 @@ def plugin_skew(root: Path, network: bool, host: str | None = None) -> dict:
     if d["state"] == "skip":
         return {"state": "skip"}
     gitlab = (host or (copier_answers(root) or {}).get("host")) == "gitlab"
-    out: dict = {"target": d["target"], "gitlab": gitlab}
+    out: dict = {"target": d["target"]}
 
     def key(tag: str) -> tuple[int, ...]:
         return tuple(int(x) for x in tag[1:].split("."))
@@ -1969,8 +1969,8 @@ def check_plugin_skew(root: Path, network: bool, host: str | None = None) -> Non
     s = plugin_skew(root, network, host)
     if s["state"] == "older":
         result("WARN", f"template: {plugin_skew_head(s)}")
-        # template-update.sh has no GitLab path; this check prints the update line there.
-        for step in PLUGIN_UPDATE_STEPS[:-1] + (("/plinth:floor-check",) if s["gitlab"] else PLUGIN_UPDATE_STEPS[-1:]):
+        # template-update.sh serves GitLab too (#1012), so the last step is the same on both hosts.
+        for step in PLUGIN_UPDATE_STEPS:
             result("INFO", f"  {step}")
         if s.get("unreleased"):
             result("INFO", f"  {s['unreleased']}")

@@ -108,31 +108,66 @@ done
 [ ${#chosen_files[@]} = 0 ] || { [ "$mode" = apply ] && [ -n "$move" ]; } || usage
 pin="${pin:-live}"
 
-# GitLab is not served yet (#924): everything below reads the repository
-# with gh. Told by origin's URL as configured (gitlab.com, *.gitlab.com, or a
-# gitlab.* host) or by `host: gitlab` in the answers file, for a GitLab under
-# another name. Stops before gh is needed at all, and before any worktree.
-on_gitlab() {
-  local top url host
-  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-  sed -nE "s/^host: *['\"]?([^'\" ]*).*/\1/p" "$top/.copier-answers.yml" 2>/dev/null | grep -qx gitlab && return 0
-  url="$(git -C "$top" config --get remote.origin.url 2>/dev/null)" || return 1
+# GitHub or GitLab (#1012; #924 stopped on GitLab). Told by origin's URL as
+# configured (gitlab.com, *.gitlab.com, or a gitlab.* host) or by `host:
+# gitlab` in the answers file, for a GitLab under another name. copier runs
+# the same way on both; only what reads and writes the host differs: gh and
+# a pull request on GitHub, `glab api` and a merge request on GitLab, asked
+# of the host and project origin's URL names. --finish reads the host from
+# the record --apply wrote.
+origin_parts() { # <top>: "<host> <path>" from origin's URL as configured, or exit 1
+  local url h p
+  url="$(git -C "$1" config --get remote.origin.url 2>/dev/null)" || return 1
   case "$url" in
-    *://*) host="${url#*://}"; host="${host%%/*}"; host="${host##*@}"; host="${host%%:*}" ;;
-    [!/]*:*) host="${url%%:*}"; case "$host" in */*) return 1 ;; esac; host="${host##*@}" ;;
+    *://*) h="${url#*://}"; p="${h#*/}"; h="${h%%/*}"; h="${h##*@}"; h="${h%%:*}"
+           [ "$p" != "${url#*://}" ] || p="" ;;
+    [!/]*:*) h="${url%%:*}"; case "$h" in */*) return 1 ;; esac; h="${h##*@}"; p="${url#*:}" ;;
     *) return 1 ;;
   esac
-  host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
-  case "$host" in gitlab.com | *.gitlab.com | gitlab.*) return 0 ;; esac
+  p="${p%/}"; p="${p%.git}"; p="${p#/}"
+  printf '%s %s\n' "$(printf '%s' "$h" | tr '[:upper:]' '[:lower:]')" "$p"
+}
+on_gitlab() {
+  local top h _
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  sed -nE "s/^host: *['\"]?([^'\" ]*).*/\1/p" "$top/.copier-answers.yml" 2>/dev/null | grep -qx gitlab && return 0
+  read -r h _ < <(origin_parts "$top") || return 1
+  case "$h" in gitlab.com | *.gitlab.com | gitlab.*) return 0 ;; esac
   return 1
 }
-on_gitlab && die "this repository is on GitLab, which /plinth:template-update does not serve yet: nothing was changed.
-  Follow step 2, \"Update the template\", of docs/how-to/keep-this-project-current.md: /plinth:floor-check
-  prints the copier update line to run on a new branch, then open a merge request."
+host=github; gl_host=""; gl_path=""
+if [ "$mode" = finish ]; then
+  rec="$(git -C "$wt_arg" rev-parse --absolute-git-dir 2>/dev/null)/$state_name"
+  [ "$(sed -n 's/^host=//p' "$rec" 2>/dev/null | head -n 1)" = gitlab ] && host=gitlab
+elif on_gitlab; then
+  host=gitlab
+  read -r gl_host gl_path < <(origin_parts "$(git rev-parse --show-toplevel)") || gl_path=""
+  case "$gl_path" in
+    */*) ;;
+    *) die "this repository is on GitLab, but origin's URL names no GitLab project (<host>/<group>/<name>), which glab is asked about: nothing was changed. Set origin to the project's GitLab URL, then run this again." ;;
+  esac
+fi
+# The words for what is opened, by host.
+if [ "$host" = gitlab ]; then noun="merge request"; hostname=GitLab; cli=glab
+else noun="pull request"; hostname=GitHub; cli=gh; fi
 
-for tool in git gh python3 uvx; do
+for tool in git "$cli" python3 uvx; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"
 done
+# A path segment for GitLab's API: the project's path or a branch, encoded whole.
+enc() { python3 -I -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+# GET (or another method) on GitLab's API through glab, as the person's own login.
+gl_api() { glab api --hostname "$gl_host" "$@"; }
+# A field of a JSON object on stdin, by a path of keys (a.b); nothing when absent.
+json_get() { python3 -I -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    for k in sys.argv[1].split("."):
+        d = d[k]
+except (ValueError, KeyError, TypeError):
+    sys.exit(1)
+print(str(d).lower() if isinstance(d, bool) else d)' "$1"; }
 
 # What copier left that a person has to resolve: unmerged paths, `.rej`
 # files (untracked, or staged by a `git add -A`), and conflict markers (a marked file `git add`ed is no longer
@@ -328,6 +363,84 @@ move_steps() { # <state file> <prefix> [<dir>: write each admin command there, a
     echo "Whether the Actions allowlist lets every action the workflows use after the move start was not read ($(state_get "$sf" actions_unread)). One it refuses ends its run in startup_failure, with no job; \`/plinth:floor-check\`, run with a login that administers the repository, names each and the command that allows it."
   fi
 }
+# ── on GitLab (#1012) ───────────────────────────────────────────────────
+# GitLab requires no check by name. What holds a merge request back is the
+# project's "Pipelines must succeed" with skipped pipelines not counted, and
+# the protected default branch, as /plinth:floor-check reads them on GitLab:
+# a job the move stops leaves the pipeline, and one it starts is held to it
+# from the move's own merge request. The record's lines for them, read from
+# the project ($project_json) and its protected branches; nothing is changed.
+gl_settings() {
+  local gate rules
+  gate="$(python3 -I -c '
+import json, sys
+try:
+    p = json.loads(sys.argv[1])
+except ValueError:
+    print("unread the project could not be read"); sys.exit()
+want = {"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False}
+absent = [k for k in want if k not in p]
+off = [f"{k}={str(p[k]).lower()}" for k in want if k in p and p[k] != want[k]]
+if off:
+    print("off " + ", ".join(off))
+elif absent:
+    print("unread GitLab did not return " + ", ".join(absent) + " to this login (a project member reads them)")
+else:
+    print("on")' "${project_json:-}")"
+  printf 'gl_gate=%s\n' "$gate"
+  if rules="$(gl_api "projects/$gl_enc/protected_branches?per_page=100" --paginate 2>/dev/null)"; then
+    # Every rule whose name or wildcard pattern matches the branch applies, as
+    # floor-check.py matches them; how strong each is, it judges.
+    python3 -I -c '
+import json, re, sys
+try:
+    rules = json.loads(sys.argv[1])
+except ValueError:
+    print("gl_protect=unread an unexpected response"); sys.exit()
+if not isinstance(rules, list):
+    print("gl_protect=unread an unexpected response"); sys.exit()
+names = [r["name"] for r in rules if isinstance(r, dict) and isinstance(r.get("name"), str)
+         and re.fullmatch(".*".join(map(re.escape, r["name"].split("*"))), sys.argv[2])]
+print("gl_protect=" + ("yes " + ", ".join(names) if names else "no"))' "$rules" "$default"
+  else
+    echo "gl_protect=unread protected branches are not readable with this login (it needs the Maintainer role), or an API error"
+  fi
+}
+# What a person does on the project's settings for the move, from a record.
+gl_move_steps() { # <state file>
+  local sf="$1" repo default gh_ gate prot cmd
+  repo="$(state_get "$sf" repo)"; default="$(state_get "$sf" default)"; gh_="$(state_get "$sf" gl_host)"
+  local e; e="$(state_get "$sf" gl_enc)"
+  gate="$(state_get "$sf" gl_gate)"; prot="$(state_get "$sf" gl_protect)"
+  local jobs=""
+  while IFS= read -r c; do [ -n "$c" ] && jobs="$jobs${jobs:+, }$c stops"; done < <(sed -n 's/^job_drop=//p' "$sf")
+  while IFS= read -r c; do [ -n "$c" ] && jobs="$jobs${jobs:+, }$c starts"; done < <(sed -n 's/^job_add=//p' "$sf")
+  jobs="${jobs:-no job starts or stops}"
+  case "$gate" in
+    on) echo "GitLab requires no check by name: $repo merges a merge request only on a green pipeline (\"Pipelines must succeed\" on, skipped pipelines not counted), and the move's jobs ($jobs) go with that pipeline: nothing to change in the project's settings for them." ;;
+    off*) cmd="glab api --hostname $gh_ -X PUT projects/$e -F only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false"
+          echo "GitLab requires no check by name: what holds a merge request back is \"Pipelines must succeed\", and on $repo it is not set as the door sets it (${gate#off }), so no job, the move's ($jobs) or any other, holds a merge back. Before the move's merge request merges, a Maintainer runs, with their own login (never the agent's): $cmd" ;;
+    *) echo "GitLab requires no check by name; whether \"Pipelines must succeed\" is on was not read (${gate#unread }), and it is what holds the move's jobs ($jobs) to the pipeline. \`/plinth:floor-check\`, run with a login that reads the project's settings, names it and the command a Maintainer runs." ;;
+  esac
+  case "$prot" in
+    yes*) echo "$default is protected on $repo (rules that apply: ${prot#yes }); the move changes no rule. \`/plinth:floor-check\` judges how strong they are." ;;
+    no) echo "$default is not a protected branch on $repo: anyone with Developer can push to it. A Maintainer runs, with their own login (never the agent's): glab api --hostname $gh_ -X POST projects/$e/protected_branches -f name=$default -F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false" ;;
+    *) echo "whether $default is protected was not read (${prot#unread }); \`/plinth:floor-check\` reads it with a Maintainer's login." ;;
+  esac
+}
+# The record's job_drop=/job_add= lines: the jobs of .gitlab-ci.yml at
+# HEAD that <dir> no longer has, and the ones it gained.
+gl_job_lines() { # <dir>
+  local was now
+  was="$(git -C "$1" show HEAD:.gitlab-ci.yml 2>/dev/null | gl_jobs_of | sort -u)"
+  now="$( { [ -f "$1/.gitlab-ci.yml" ] && gl_jobs_of < "$1/.gitlab-ci.yml"; } | sort -u)"
+  comm -23 <(printf '%s\n' "$was" | sed '/^$/d') <(printf '%s\n' "$now" | sed '/^$/d') | sed 's/^/job_drop=/'
+  comm -13 <(printf '%s\n' "$was" | sed '/^$/d') <(printf '%s\n' "$now" | sed '/^$/d') | sed 's/^/job_add=/'
+}
+# The jobs of a .gitlab-ci.yml: its top-level keys, but GitLab's own
+# keywords and hidden (`.`) jobs, one per line.
+gl_jobs_of() { awk '/^[A-Za-z0-9_][A-Za-z0-9_ -]*:/ { k = $0; sub(/:.*/, "", k)
+  if (k !~ /^(default|include|stages|variables|workflow|image|services|cache|before_script|after_script|spec)$/) print k }'; }
 # The record's lines for the Actions allowlist against the workflows in <dir>
 # (the rehearsal of the move): what floor-check.py --print-refused-actions
 # says, or that it was not read.
@@ -410,9 +523,10 @@ finish() { # <worktree>
   repo="$(state_get "$sf" repo)"; default="$(state_get "$sf" default)"; base="$(state_get "$sf" base)"
   from="$(state_get "$sf" from)"; to="$(state_get "$sf" to)"; cmd="$(state_get "$sf" command)"
   pr="$(state_get "$sf" pr)"
+  gl_host="$(state_get "$sf" gl_host)"; local gl_enc gl_id; gl_enc="$(state_get "$sf" gl_enc)"; gl_id="$(state_get "$sf" gl_id)"
   local chosen pin_note; chosen="$(state_get "$sf" pin)"; pin_note="$(state_get "$sf" pin_note)"
   if [ -n "$pr" ]; then
-    echo "The draft pull request is already open: $pr"
+    echo "The draft $noun is already open: $pr"
     echo "Nothing pushed and nothing changed; further commits there are a person's."
     exit 0
   fi
@@ -456,7 +570,7 @@ finish() { # <worktree>
   local committed=no
   [ "$(git -C "$wt" rev-parse HEAD)" != "$base" ] && committed=yes
   if git -C "$wt" diff --cached --quiet; then
-    [ "$committed" = yes ] || die "nothing changed in $wt; no commit, no pull request"
+    [ "$committed" = yes ] || die "nothing changed in $wt; no commit, no $noun"
   elif [ "$committed" = yes ]; then
     die "$wt has a commit and further changes; commit or discard them by hand, then run --finish again"
   fi
@@ -469,7 +583,11 @@ finish() { # <worktree>
   local mb size_line="" cfg max exclude droot split=no
   mb="$(git -C "$wt" merge-base HEAD "refs/remotes/origin/$default" 2>/dev/null)" || mb="$base"
   local tree=(--cached "$mb"); [ "$committed" = yes ] && tree=("$mb" HEAD)
-  if cfg="$(python3 "$checker" --root "$wt" --print-diff-size 2>&1)"; then
+  if [ "$host" = gitlab ]; then
+    # The GitLab pipeline's diff-size job takes its inputs from the include's
+    # `inputs:` in .gitlab-ci.yml, which the checker does not read (#1012).
+    size_line="\`diff-size\` was not counted here before pushing: on GitLab the include's inputs are not read here, so no split is proposed; the pipeline's own diff-size job counts it."
+  elif cfg="$(python3 "$checker" --root "$wt" --print-diff-size 2>&1)"; then
     max="$(sed -n 's/^max=//p' <<<"$cfg")"; exclude="$(sed -n 's/^exclude=//p' <<<"$cfg")"; droot="$(sed -n 's/^root=//p' <<<"$cfg")"
     local prefix="" spec=(".") pats=() p
     droot="${droot%/}"
@@ -602,9 +720,15 @@ finish() { # <worktree>
       echo
       list "$(awk -F '\t' '$1 == "A" { print $2 }' <<<"$names")"
       echo
-      echo "By hand, by a person (each command is run from plinth's folder):"
-      echo
-      move_steps "$sf" "scripts/" | sed 's/^/- /'
+      if [ "$host" = gitlab ]; then
+        echo "By hand, by a person, on the project's settings (GitLab requires no check by name):"
+        echo
+        gl_move_steps "$sf" | sed 's/^/- /'
+      else
+        echo "By hand, by a person (each command is run from plinth's folder):"
+        echo
+        move_steps "$sf" "scripts/" | sed 's/^/- /'
+      fi
       echo "- Nothing else: no label changes with the archetype, and \`/plinth:floor-check\` reads the new archetype from \`.copier-answers.yml\`."
     fi
     if grep -q '^moves=' "$sf"; then
@@ -647,7 +771,7 @@ finish() { # <worktree>
     echo "## What I checked myself"
     echo
     echo "Not a person's check: this is only what \`/plinth:template-update\`'s script"
-    echo "checked as it opened the pull request."
+    echo "checked as it opened the $noun."
     echo
     echo "- Opened as a draft once no conflict was left: no unmerged path, and no \`.rej\` file or conflict marker in a file the update changed (files unchanged since $(printf '%.12s' "$base") were not read)."
     echo "- $size_line"
@@ -665,9 +789,9 @@ finish() { # <worktree>
     # The template's own line, in the words its CONTRIBUTING.md step 5 gives
     # (#1020): what was not checked is said once, here.
     echo
-    echo "Not verified: that this repository still works after the update, which is what its own checks are for; they had not run when this pull request opened, and the script waits for none of them."
+    echo "Not verified: that this repository still works after the update, which is what its own checks are for; they had not run when this $noun opened, and the script waits for none of them."
     echo
-    echo "Review: none (no review had run when this pull request opened)"
+    echo "Review: none (no review had run when this $noun opened)"
     if [ -n "$assisted" ]; then echo; echo "Assisted-by: $assisted"; fi
   } > "$body"
   { echo "$title"; echo; cat "$body"; } > "$msg"
@@ -721,17 +845,45 @@ finish() { # <worktree>
         exit 5
       fi
       rm -f "$push_err"
-      die "pushing $branch failed; the commit is in $wt, no pull request opened. Run again: $again"
+      die "pushing $branch failed; the commit is in $wt, no $noun opened. Run again: $again"
     fi
     rm -f "$push_err"
   fi
+  local pushed; pushed="$(git -C "$wt" rev-parse HEAD)"
+  if [ "$host" = gitlab ]; then
+    # GitLab (#1012): the same adoption, by the API's own fields: an open
+    # merge request from this branch into the default one, from this project
+    # (source_project_id, not a fork's) at the commit just pushed. A draft is
+    # a title that starts with "Draft:".
+    pr="$(gl_api "projects/$gl_enc/merge_requests?state=opened&source_branch=$(enc "$branch")&target_branch=$(enc "$default")" 2>/dev/null \
+      | python3 -I -c '
+import json, sys
+try:
+    rows = json.load(sys.stdin)
+except ValueError:
+    sys.exit()
+for m in rows if isinstance(rows, list) else []:
+    if isinstance(m, dict) and str(m.get("source_project_id")) == sys.argv[1] and m.get("sha") == sys.argv[2] and m.get("web_url"):
+        print(m["web_url"]); break' "$gl_id" "$pushed")" || pr=""
+    if [ -z "$pr" ]; then
+      local input; input="$(mktemp)"
+      python3 -I -c '
+import json, sys
+src, dst, title, body = sys.argv[1:5]
+json.dump({"source_branch": src, "target_branch": dst, "title": "Draft: " + title,
+           "description": open(body, encoding="utf-8").read()}, sys.stdout)' "$branch" "$default" "$title" "$body" > "$input"
+      pr="$(gl_api -X POST "projects/$gl_enc/merge_requests" -H "Content-Type: application/json" --input "$input" 2>/dev/null | json_get web_url)" || pr=""
+      rm -f "$input"
+      [ -n "$pr" ] || { rm -f "$body"; die "$branch is pushed, but opening the merge request failed (glab api projects/$gl_enc/merge_requests). Run again: $again"; }
+    fi
+  else
   # A pull request GitHub created although gh reported a failure (the reply
   # lost on the way back) is this one: adopt it rather than fail on the
   # duplicate every time (Codex review on #273). `--head` matches the branch
   # name only, so a fork's pull request from a branch of the same name
   # answers too: adopt only one whose head is this repository at the commit
   # just pushed (#274).
-  local pushed own; pushed="$(git -C "$wt" rev-parse HEAD)"
+  local own
   own="$(printf '%s' "$repo" | tr '[:upper:]' '[:lower:]')"
   pr="$(gh pr list --repo "$repo" --head "$branch" --base "$default" --state open \
     --json url,headRepositoryOwner,headRepository,headRefOid \
@@ -739,10 +891,16 @@ finish() { # <worktree>
     2>/dev/null)" || pr=""
   [ -n "$pr" ] || pr="$(gh pr create --repo "$repo" --draft --base "$default" --head "$branch" --title "$title" --body-file "$body")" \
     || { rm -f "$body"; die "$branch is pushed, but opening the pull request failed (above). Run again: $again"; }
+  fi
   rm -f "$body"
   printf 'pr=%s\n' "$pr" >> "$sf"
-  echo "Draft pull request: $pr"
-  echo "Its checks start now; nothing here waited for them. The worktree stays at $wt."
+  if [ "$host" = gitlab ]; then
+    echo "Draft merge request: $pr"
+    echo "Its pipeline starts now; nothing here waited for it. The worktree stays at $wt."
+  else
+    echo "Draft pull request: $pr"
+    echo "Its checks start now; nothing here waited for them. The worktree stays at $wt."
+  fi
   exit 0
 }
 
@@ -750,15 +908,34 @@ finish() { # <worktree>
 
 # ── plan and apply: a verified base ─────────────────────────────────────
 top="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository"
-read -r repo default < <(gh repo view --json nameWithOwner,defaultBranchRef \
-  --jq '.nameWithOwner + " " + .defaultBranchRef.name' 2>/dev/null) || true
-[ -n "${repo:-}" ] && [ -n "${default:-}" ] || die "gh cannot name this repository or its default branch (gh repo view)"
+if [ "$host" = gitlab ]; then
+  # The project as GitLab names it, with its id: a merge request adopted on
+  # a rerun is one from this project, not a fork's.
+  gl_enc="$(enc "$gl_path")"
+  project_json="$(gl_api "projects/$gl_enc" 2>/dev/null)" || project_json=""
+  repo="$(json_get path_with_namespace <<<"$project_json")" || repo=""
+  default="$(json_get default_branch <<<"$project_json")" || default=""
+  gl_id="$(json_get id <<<"$project_json")" || gl_id=""
+  [ -n "$repo" ] && [ -n "$default" ] && [ -n "$gl_id" ] \
+    || die "glab cannot name the GitLab project $gl_host/$gl_path or its default branch (glab api projects/$gl_enc; glab auth login --hostname $gl_host)"
+else
+  read -r repo default < <(gh repo view --json nameWithOwner,defaultBranchRef \
+    --jq '.nameWithOwner + " " + .defaultBranchRef.name' 2>/dev/null) || true
+  [ -n "${repo:-}" ] && [ -n "${default:-}" ] || die "gh cannot name this repository or its default branch (gh repo view)"
+fi
 git -C "$top" fetch -q origin "+refs/heads/$default:refs/remotes/origin/$default" \
   || die "git fetch origin $default failed"
 base="$(git -C "$top" rev-parse -q --verify "refs/remotes/origin/$default^{commit}")" || die "no origin/$default after fetch"
-remote="$(gh api "repos/$repo/branches/$default" --jq .commit.sha 2>/dev/null)" || remote=""
+if [ "$host" = gitlab ]; then
+  remote="$(gl_api "projects/$gl_enc/repository/branches/$(enc "$default")" 2>/dev/null | json_get commit.id)" || remote=""
+else
+  remote="$(gh api "repos/$repo/branches/$default" --jq .commit.sha 2>/dev/null)" || remote=""
+fi
 [ "$base" = "$remote" ] \
-  || die "origin/$default is not verified: it is ${base:0:12}, GitHub's $repo $default is ${remote:-unreadable}"
+  || die "origin/$default is not verified: it is ${base:0:12}, $hostname's $repo $default is ${remote:-unreadable}"
+# The checker reads the host from the answers file; said here as well, for
+# a GitLab told by origin's URL alone.
+host_arg=(); [ "$host" = gitlab ] && host_arg=(--host gitlab)
 
 # The tags, for the names: the one recorded at the base, and the one the
 # checker updates to (its own source, the pin beside this script). The
@@ -781,15 +958,16 @@ if [ -n "$move" ]; then wt="$(dirname "$top")/$(basename "$top")-archetype-$move
 # whose `.github` the checker reads for the two answers the update carries,
 # as the door's render did; a read that fails gives no line (#726).
 cmd_at() { # <dir> [live|tested]
-  python3 "$checker" --root "$1" --repo "$repo" --print-update-command --plinth-pin "${2:-live}"
+  python3 "$checker" --root "$1" --repo "$repo" ${host_arg+"${host_arg[@]}"} --print-update-command --plinth-pin "${2:-live}"
 }
 move_at() { # <dir>: the move's line; check-drop:/check-add:/moves: on stderr
-  python3 "$checker" --root "$1" --repo "$repo" --print-update-command --move-archetype "$move"
+  python3 "$checker" --root "$1" --repo "$repo" ${host_arg+"${host_arg[@]}"} --print-update-command --move-archetype "$move"
 }
 at_base() { # sets $tmp: the files the checker reads, as they are at the base
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
   paths=()
-  for p in .copier-answers.yml .github/workflows .github/ISSUE_TEMPLATE \
+  # .gitlab-ci.yml: on GitLab the pin and its checksum are its include's (#1012).
+  for p in .copier-answers.yml .github/workflows .github/ISSUE_TEMPLATE .gitlab-ci.yml \
            PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md; do
     git -C "$top" cat-file -e "$base:$p" 2>/dev/null && paths+=("$p")
   done
@@ -801,7 +979,7 @@ at_base() { # sets $tmp: the files the checker reads, as they are at the base
 # that could not be made is said, and the update goes on with this target.
 plugin_gate() {
   local says rc=0
-  says="$(python3 "$checker" --root "$tmp" --print-plugin-skew)" || rc=$?
+  says="$(python3 "$checker" --root "$tmp" ${host_arg+"${host_arg[@]}"} --print-plugin-skew)" || rc=$?
   case "$rc" in
     0) ;;
     3) printf '%s\n' "$says"
@@ -873,7 +1051,7 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
     while IFS= read -r j; do [ -n "$j" ] && stops="$stops$f: $j"$'\n'; done <<<"$gone"
   done < <(git -C "$r" -c core.quotePath=false ls-tree -r --name-only HEAD -- .github/workflows)
   listed() { if [ -n "$1" ]; then printf '%s\n' "$1" | sed '/^$/d' | indent; else echo "  none"; fi; }
-  echo "Repository: $repo, base origin/$default at $base (verified against GitHub)"
+  echo "Repository: $repo, base origin/$default at $base (verified against $hostname)"
   echo "Archetype:  $old_arch -> $move, at $to (the tag it records)"
   echo "Worktree:   $wt (branch $branch)"
   echo "Command:    $cmd"
@@ -893,6 +1071,22 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
     listed "$conflicts"
   else
     echo "Conflicts:  none"
+  fi
+  if [ "$host" = gitlab ]; then
+    # GitLab's pipeline is .gitlab-ci.yml, its jobs the top-level keys (#1012).
+    { printf 'repo=%s\ndefault=%s\ngl_host=%s\ngl_enc=%s\n' "$repo" "$default" "$gl_host" "$gl_enc"
+      gl_job_lines "$r"; gl_settings; } > "$tmp/checks"
+    echo "CI jobs that stop:"; listed "$(sed -n 's/^job_drop=/.gitlab-ci.yml: /p' "$tmp/checks")"
+    echo "CI jobs that start:"; listed "$(sed -n 's/^job_add=/.gitlab-ci.yml: /p' "$tmp/checks")"
+    gl_move_steps "$tmp/checks" | sed 's/`//g'
+    echo
+    echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
+    echo "  $(q "$0") --apply $base --archetype $move"
+    if [ -n "$owned" ]; then
+      echo "  with each changed file above named once, as the person chooses: --keep <path> restores it after"
+      echo "  copier, as this repository's own file; --drop <path> lets the move delete it. Without, --apply stops."
+    fi
+    exit 0
   fi
   echo "CI jobs that stop:"; listed "$stops"
   # The checks, as move_steps words them for the record --apply writes.
@@ -942,7 +1136,7 @@ if [ "$mode" = plan ]; then
   grep -v '^moves: ' "$tmp/live-note" >&2
   tested_cmd="$(cmd_at "$tmp" tested 2>"$tmp/pin-note")" || tested_cmd=""
   [ "$tested_cmd" != "$cmd" ] || tested_cmd=""
-  echo "Repository: $repo, base origin/$default at $base (verified against GitHub)"
+  echo "Repository: $repo, base origin/$default at $base (verified against $hostname)"
   if [ "$from" = "$to" ]; then echo "Template:   $to, re-rendered for the owner answers named above"
   else echo "Template:   $from -> $to"; fi
   echo "Worktree:   $wt (branch $branch)"
@@ -1064,8 +1258,13 @@ if [ -n "$move" ]; then
   if [ -n "$over" ] && grep -q '^diff-size-move: fails ' "$tmp/move-check"; then
     die "$rel_wf changes ${over% *} lines, over ci / diff-size's limit of ${over#* } by itself, and the plinth the workflows call ($(sed -n 's/^diff-size-move: fails //p' "$tmp/move-check" | cut -c 1-12)) counts it in the move's pull request; raise the plinth pin to v$(plinth_version) or later first, then plan the move again. Nothing was created"
   fi
-  # The allowlist against the moved workflows, for the description (#1018).
-  actions_rec="$(actions_of "$r")"
+  # The allowlist against the moved workflows, for the description (#1018);
+  # on GitLab, the jobs the move starts and stops and the merge gate (#1012).
+  if [ "$host" = gitlab ]; then
+    actions_rec="$(gl_job_lines "$r"; gl_settings)"
+  else
+    actions_rec="$(actions_of "$r")"
+  fi
   keeps=""; drops=""; unnamed=""; refused=""
   for c in ${chosen_files+"${chosen_files[@]}"}; do
     f="${c#*$'\t'}"
@@ -1112,7 +1311,7 @@ if [ -n "$move" ]; then
   grep -vE '^(moves|check-drop|check-add|check-add-floor|diff-size-move): ' "$move_note" >&2
   moves="$(sed -n 's/^moves: //p' "$move_note")"
   checks="$(sed -n 's/^check-drop: /check_drop=/p; s/^check-add: /check_add=/p; s/^check-add-floor: /add_floor=/p; s/^diff-size-move: /size_move=/p' "$move_note")"; rm -f "$move_note"
-  if req="$(required_on "$repo" "$default")"; then
+  if [ "$host" = github ] && req="$(required_on "$repo" "$default")"; then
     checks="$checks"$'\n'"required_read=yes"
     while IFS= read -r c; do [ -n "$c" ] && checks="$checks"$'\n'"required=$c"; done <<<"$req"
   fi
@@ -1222,8 +1421,9 @@ fi
 
 sf="$(state_file "$wt")"
 {
-  printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin=%s\npin_note=%s\n' \
-    "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin" "$pin_note"
+  printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin=%s\npin_note=%s\nhost=%s\n' \
+    "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin" "$pin_note" "$host"
+  [ "$host" = github ] || printf 'gl_host=%s\ngl_enc=%s\ngl_id=%s\n' "$gl_host" "$gl_enc" "$gl_id"
   if [ -n "$move" ]; then
     printf 'archetype=%s\nold_archetype=%s\ncompared=yes\n' "$move" "$old_arch"
     while IFS= read -r p; do [ -n "$p" ] && printf 'keep=%s\n' "$p"; done <<<"$keeps"
