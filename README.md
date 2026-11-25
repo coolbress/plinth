@@ -253,6 +253,9 @@ The [CHANGELOG](CHANGELOG.md) lists what each version adds.
 - How-to, for maintainers: [cut a release](docs/how-to/cut-a-release.md),
   [upgrade the template pin](docs/how-to/upgrade-the-template-pin.md),
   [run the eval suite](docs/how-to/run-the-eval-suite.md).
+- [Decisions in force](docs/reference/decisions-in-force.md): the decisions
+  that hold today, each with the record that holds it, and the pairs of
+  records that still disagree.
 - [GLOSSARY.md](GLOSSARY.md): the vocabulary (wall, door, box, floor, arsenal, profile).
 - [Terms a first project meets](docs/reference/terms.md): repository, pull
   request, check, merge and the rest, each in one plain line, and the rule that
