@@ -41,7 +41,7 @@ records not verified.
   or UTF-8 bytes). Each `ref` `WARN` or `SKIP` line names the records the
   reference was read in. What `ref` cannot see: a bare `#N` meant for another
   repository whose number also exists here resolves, so it passes. A table
-  of another repository's numbers written as bare `#N`, or a `#236` that
+  of another repository's numbers written as bare `#N`, or a number that
   links to the wrong issue here, looks like a right link from this
   repository's records alone. The `ref` `PASS` line means every reference
   read resolves or is a `SKIP` above, not that each points where it was
