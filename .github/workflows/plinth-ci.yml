@@ -12,14 +12,248 @@ permissions:
   contents: read
 
 jobs:
-  # Tier 1, the installer's journey: what the README says, typed on a clean runner.
-  # The limit leaves a third of itself after the slowest green run, so a slow
-  # runner does not cancel a green job (#1041: 25 green runs of 30 took 14.1
-  # to 19.9 minutes under a limit of 20), and stays under 40, so a step that
-  # hangs is still cancelled. Measure again before moving it either way.
-  install:
+  # Tier 1, the installer's journey: what the README says, typed on a clean
+  # runner, and the tests of the door and the checker. The tests run in the
+  # install-<n> jobs below, at once on separate runners, and `ci / install`
+  # (the `install` job at the end) is their verdict (#1135). Run one after
+  # another in one job they took 19.4 to 27.1 minutes (10 green runs before
+  # #1135, median 22.6); each runner is a fresh machine, so no test sees
+  # another group's /tmp, HOME, uv cache or Docker. Inside a job the steps
+  # still run in order, and a step that needs one before it (uv, zsh, the
+  # template checkout, the floor install last) stays in the same job.
+  #
+  # The groups are balanced on step times, about four minutes of tests each:
+  #   install-1  the plugin's contracts and the eval suite
+  #   install-2  the checks' cases, the floor checker's golden output, the pins
+  #   install-3  the floor checker's verdicts and the door
+  #   install-4  the guide and the template update
+  #   install-5  python-ci on fixtures, the template render and the README install
+  # A test moves between groups freely; a new group is added to the install
+  # job's `needs` too, or the verdict fails (tests/install-verdict-cases.sh).
+  #
+  # Each group's limit leaves a third of itself after its slowest green run,
+  # so a slow runner does not cancel a green job, and stays far under the old
+  # 35, so a step that hangs is still cancelled. Measure again before moving
+  # it either way.
+  install-1:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One checkout of plinth-template at the commit scripts/new-project.sh
+      # pins, read by every step below that compares plinth with the template
+      # (#953). A network error fails here, named as the fetch, not as a test;
+      # the tests read files and render from it, and fail on a checkout that
+      # is not at the pin.
+      - name: Check out plinth-template at the commit the door pins
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-template"
+          ./tests/lib/template-checkout.sh "$d"
+          echo "PLINTH_TEMPLATE_DIR=$d" >> "$GITHUB_ENV"
+
+      # uv for the tests below that run it, the release python-ci.yml pins.
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+
+      - name: Every test file is wired
+        run: ./tests/all-tests-are-wired.sh
+
+      - name: The wall the door applies is a wall
+        run: ./scripts/check-ruleset.sh
+
+      - name: python-ci contract (job names, inputs, secrets, ruleset contexts)
+        run: ./tests/python-ci-contract.sh
+
+      - name: ci / pr-title verdicts
+        run: ./tests/pr-title-cases.sh
+
+      - name: ci / pr-title fails a description that would close an issue outside its closing line
+        run: ./tests/pr-title-description-cases.sh
+
+      - name: A red or warning check's annotations say what failed, one next action and a link that exists
+        run: ./tests/check-messages.sh
+
+      - name: A failing check ends its log with what failed, the next step and a link (the case matrix)
+        run: ./tests/check-failure-shape.sh
+
+      - name: Every if-gated workflow input is passed by a caller
+        run: ./tests/inputs-are-exercised.sh
+
+      - name: Archetype vocabulary has one source
+        run: ./tests/archetype-single-source.sh
+
+      - name: plinth's own rules carry each rule shared with the pinned template
+        run: ./tests/template-rules-drift.sh
+
+      - name: The label list has one source, read by the door and the checker
+        run: ./tests/labels-single-source.sh
+
+      - name: Records checker verdicts on fixtures, offline
+        run: ./tests/records-check-cases.sh
+
+      - name: The term table has every first-project term, and the guide points at it
+        run: ./tests/term-table.sh
+
+      - name: The off-by-default list has one source, read by the door and the guide
+        run: ./tests/off-by-default-cases.sh
+
+      - name: The guidance names only skills the default install carries
+        run: ./tests/guidance-skills.sh
+
+      # A stubbed `claude`: no model is called and no login is needed.
+      - name: The eval suite refuses your own config, keeps GitHub out, stops at its ceiling, and its grader fails what it must
+        run: ./tests/eval-suite-cases.sh
+
+      - name: The plugin eval probe tells held from gone from unclear, and deletes what plugin eval keeps
+        run: ./tests/eval-suite-probe-cases.sh
+
+  install-2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One checkout of plinth-template at the commit scripts/new-project.sh
+      # pins, read by every step below that compares plinth with the template
+      # (#953). A network error fails here, named as the fetch, not as a test;
+      # the tests read files and render from it, and fail on a checkout that
+      # is not at the pin.
+      - name: Check out plinth-template at the commit the door pins
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-template"
+          ./tests/lib/template-checkout.sh "$d"
+          echo "PLINTH_TEMPLATE_DIR=$d" >> "$GITHUB_ENV"
+
+      - name: ci / test's time limit, and coverage only on a pull request
+        run: ./tests/test-job-cases.sh
+
+      - name: ci / diff-size names changes to the checks the description does not
+        run: ./tests/weakened-checks-cases.sh
+
+      - name: ci / diff-size asks an admin to approve a change to the checks
+        run: ./tests/checks-approval-cases.sh
+
+      - name: The arsenal says what the pinned template and the plugin ship
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tests/arsenal-freshness.sh
+
+      # The same fixtures again, each checker run recorded and compared with
+      # its golden output byte for byte, and its ids read against the registry (#1103).
+      - name: Floor checker output unchanged, its ids registered
+        run: ./tests/floor-check-golden.sh
+
+      - name: Every uv pin is one release and its checksum, the template's too
+        run: ./tests/uv-pin.sh
+
+      - name: scripts/heavy.sh makes a second call wait for a slot, takes back a dead one's and gives up with 75
+        run: ./tests/heavy-cases.sh
+
+      # The token is the job's, so the log's `curl -v` lines show it masked.
+      - name: Every github.com release download sends the token, to github.com only
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./tests/release-download-token.sh
+
+      - name: A uv pin behind upstream opens one issue, and closes it with an ending once raised
+        run: ./tests/uv-pin-reminder-cases.sh
+
+  install-3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One checkout of plinth-template at the commit scripts/new-project.sh
+      # pins, read by every step below that compares plinth with the template
+      # (#953). A network error fails here, named as the fetch, not as a test;
+      # the tests read files and render from it, and fail on a checkout that
+      # is not at the pin.
+      - name: Check out plinth-template at the commit the door pins
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-template"
+          ./tests/lib/template-checkout.sh "$d"
+          echo "PLINTH_TEMPLATE_DIR=$d" >> "$GITHUB_ENV"
+
+      - name: Floor checker verdicts on fixtures
+        run: ./tests/floor-check-cases.sh
+
+      - name: The door creates nothing before preflight passes and deletes on any failure after
+        run: ./tests/new-project-failpath.sh
+
+      - name: The door's skill shows every answer in one table before it creates anything
+        run: ./tests/new-project-answer-table.sh
+
+      - name: The door's shared .github decisions on fixtures, without the door
+        run: ./tests/shared-github-cases.sh
+
+      - name: The admin token is read from the terminal, not from a pasted stdin
+        run: ./tests/token-prompt-not-from-stdin.sh
+
+  install-4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One checkout of plinth-template at the commit scripts/new-project.sh
+      # pins, read by every step below that compares plinth with the template
+      # (#953). A network error fails here, named as the fetch, not as a test;
+      # the tests read files and render from it, and fail on a checkout that
+      # is not at the pin.
+      - name: Check out plinth-template at the commit the door pins
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-template"
+          ./tests/lib/template-checkout.sh "$d"
+          echo "PLINTH_TEMPLATE_DIR=$d" >> "$GITHUB_ENV"
+
+      - name: Manifests, pins, skill frontmatter
+        run: ./tests/marketplace-manifest.sh
+
+      - name: plinth's reusable workflows use only actions every consumer's Actions allowlist allows
+        run: ./tests/reusable-workflow-allowlist.sh
+
+      - name: The guide's next step per state, and only the arsenal's tools
+        run: ./tests/guide-cases.sh
+
+      - name: The template update runs the checker's command in a worktree and opens nothing over a conflict
+        run: ./tests/template-update-cases.sh
+
+      # zsh is not assumed on the runner image; without it the next test fails, it does not skip.
+      - name: Install zsh
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+
+      - name: The floor-check skill's command passes the same arguments under bash and zsh
+        run: ./tests/floor-check-run-block.sh
+
+  install-5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,83 +277,7 @@ jobs:
           ./tests/lib/template-checkout.sh "$d"
           echo "PLINTH_TEMPLATE_DIR=$d" >> "$GITHUB_ENV"
 
-      - name: Manifests, pins, skill frontmatter
-        run: ./tests/marketplace-manifest.sh
-
-      - name: Every test file is wired
-        run: ./tests/all-tests-are-wired.sh
-
-      - name: The wall the door applies is a wall
-        run: ./scripts/check-ruleset.sh
-
-      - name: python-ci contract (job names, inputs, secrets, ruleset contexts)
-        run: ./tests/python-ci-contract.sh
-
-      - name: GitLab pipeline matches python-ci; four of its jobs run on fixtures
-        run: ./tests/gitlab-ci-cases.sh
-
-      - name: ci / test's time limit, and coverage only on a pull request
-        run: ./tests/test-job-cases.sh
-
-      - name: ci / pr-title verdicts
-        run: ./tests/pr-title-cases.sh
-
-      - name: ci / pr-title fails a description that would close an issue outside its closing line
-        run: ./tests/pr-title-description-cases.sh
-
-      - name: A red or warning check's annotations say what failed, one next action and a link that exists
-        run: ./tests/check-messages.sh
-
-      - name: A failing check ends its log with what failed, the next step and a link (the case matrix)
-        run: ./tests/check-failure-shape.sh
-
-      - name: ci / diff-size names changes to the checks the description does not
-        run: ./tests/weakened-checks-cases.sh
-
-      - name: ci / diff-size asks an admin to approve a change to the checks
-        run: ./tests/checks-approval-cases.sh
-
-      - name: Every if-gated workflow input is passed by a caller
-        run: ./tests/inputs-are-exercised.sh
-
-      - name: Archetype vocabulary has one source
-        run: ./tests/archetype-single-source.sh
-
-      - name: plinth's own rules carry each rule shared with the pinned template
-        run: ./tests/template-rules-drift.sh
-
-      - name: The arsenal says what the pinned template and the plugin ship
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: ./tests/arsenal-freshness.sh
-
-      - name: The label list has one source, read by the door and the checker
-        run: ./tests/labels-single-source.sh
-
-      - name: Floor checker verdicts on fixtures
-        run: ./tests/floor-check-cases.sh
-
-      # The same fixtures again, each checker run recorded and compared with
-      # its golden output byte for byte, and its ids read against the registry (#1103).
-      - name: Floor checker output unchanged, its ids registered
-        run: ./tests/floor-check-golden.sh
-
-      - name: Records checker verdicts on fixtures, offline
-        run: ./tests/records-check-cases.sh
-
-      - name: The guide's next step per state, and only the arsenal's tools
-        run: ./tests/guide-cases.sh
-
-      - name: The term table has every first-project term, and the guide points at it
-        run: ./tests/term-table.sh
-
-      - name: The off-by-default list has one source, read by the door and the guide
-        run: ./tests/off-by-default-cases.sh
-
-      - name: The guidance names only skills the default install carries
-        run: ./tests/guidance-skills.sh
-
-      # uv for the web checks' fixture projects, the release python-ci.yml pins.
+      # uv for the tests below that run it, the release python-ci.yml pins.
       - name: Install uv (official release, SHA256 verified)
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -135,6 +293,9 @@ jobs:
           tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
           echo "$d" >> "$GITHUB_PATH"
 
+      - name: GitLab pipeline matches python-ci; four of its jobs run on fixtures
+        run: ./tests/gitlab-ci-cases.sh
+
       - name: ci / migrations and ci / deploy-check fail and pass where they must, on Postgres
         run: ./tests/web-checks-cases.sh
 
@@ -147,57 +308,10 @@ jobs:
       - name: canary-template/ is the pinned template's cli render, and its caller job is the rendered caller
         run: ./tests/template-render.sh
 
-      - name: plinth's reusable workflows use only actions every consumer's Actions allowlist allows
-        run: ./tests/reusable-workflow-allowlist.sh
-
       # The workflow's own Node and Chrome steps, then a real audit of a page
       # with known violations.
       - name: ci / web-audit names a known violation, says what automated checks miss, and never fails
         run: ./tests/web-audit-cases.sh
-
-      - name: Every uv pin is one release and its checksum, the template's too
-        run: ./tests/uv-pin.sh
-
-      - name: scripts/heavy.sh makes a second call wait for a slot, takes back a dead one's and gives up with 75
-        run: ./tests/heavy-cases.sh
-
-      # The token is the job's, so the log's `curl -v` lines show it masked.
-      - name: Every github.com release download sends the token, to github.com only
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./tests/release-download-token.sh
-
-      - name: A uv pin behind upstream opens one issue, and closes it with an ending once raised
-        run: ./tests/uv-pin-reminder-cases.sh
-
-      # A stubbed `claude`: no model is called and no login is needed.
-      - name: The eval suite refuses your own config, keeps GitHub out, stops at its ceiling, and its grader fails what it must
-        run: ./tests/eval-suite-cases.sh
-
-      - name: The plugin eval probe tells held from gone from unclear, and deletes what plugin eval keeps
-        run: ./tests/eval-suite-probe-cases.sh
-
-      # zsh is not assumed on the runner image; without it the next test fails, it does not skip.
-      - name: Install zsh
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
-
-      - name: The floor-check skill's command passes the same arguments under bash and zsh
-        run: ./tests/floor-check-run-block.sh
-
-      - name: The door creates nothing before preflight passes and deletes on any failure after
-        run: ./tests/new-project-failpath.sh
-
-      - name: The door's skill shows every answer in one table before it creates anything
-        run: ./tests/new-project-answer-table.sh
-
-      - name: The door's shared .github decisions on fixtures, without the door
-        run: ./tests/shared-github-cases.sh
-
-      - name: The template update runs the checker's command in a worktree and opens nothing over a conflict
-        run: ./tests/template-update-cases.sh
-
-      - name: The admin token is read from the terminal, not from a pasted stdin
-        run: ./tests/token-prompt-not-from-stdin.sh
 
       - name: Install plinth the way the README says
         run: ./tests/install-smoke.sh
@@ -213,6 +327,30 @@ jobs:
           v="$(claude --version | awk '{print $1}')"
           [ "$v" = "$floor" ] || { echo "::error::expected claude $floor, got $v"; exit 1; }
           ./tests/install-smoke.sh
+
+  # `ci / install`, the required check: green only when every install-<n> job
+  # is. `if: always()` makes it run, and fail, when a group fails or is
+  # cancelled; without it the job would be skipped, and a skipped required
+  # check counts as passed. It never skips. The verdict names each failed
+  # group's failed step and the test it runs (tests/lib/install-verdict.sh).
+  install:
+    needs: [install-1, install-2, install-3, install-4, install-5]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Every install-<n> job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}
+        run: ./tests/lib/install-verdict.sh .github/workflows/plinth-ci.yml
 
   # Tools: everything in this repository that is not prose is executable, and
   # most of it runs in other people's repositories (the reusable workflows, the
@@ -235,6 +373,9 @@ jobs:
 
       - name: The two lint files fail on a missing tool or a version that is not the pin
         run: ./tests/lint-wrappers-cases.sh
+
+      - name: ci / install passes only when every install-<n> job did, and names a failed one's test
+        run: ./tests/install-verdict-cases.sh
 
       - name: Ruleset upgrade refuses names that never reported
         run: ./tests/upgrade-ruleset-guard.sh
