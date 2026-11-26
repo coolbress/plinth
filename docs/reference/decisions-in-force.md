@@ -158,6 +158,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 - English is canonical; `.ko.md` translations are optional, and agent-facing text is English only. 2026-09-03, #18
 - plinth is for beginner engineers and non-engineers. 2026-10-13, #514
+- plinth bets on the process: a good process can be checked where a good outcome cannot; plinth guides it, enforces only what a check can hold, and points to proven tools for each step rather than rebuilding them. 2026-11-25, #1142
 - Only Claude Code is the tested host. 2026-09-03, #15
 - Each guidance item says its kind; a failure is met first with a simpler default, then a boundary, and guidance only where neither fits. 2026-10-15, #515
 - A reversal is written on the earlier record as a dated "reversed by" line. 2026-11-25, #1109 (decided; not built yet: #1109)
