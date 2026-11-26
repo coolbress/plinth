@@ -28,7 +28,7 @@ Ask ten people whether an app is good and you get ten answers: one wanted it
 faster, one prettier, one wanted a feature nobody else asked for. Judging an
 outcome is hard even for experts, and someone holding the first thing an
 agent built has no way to judge it at all. Ask the same people whether the
-change was small enough to read, whether a test showed it works, whether the
+change was small enough to read, whether its tests passed, whether the
 checks passed before it reached `main`, whether a written reason can be found
 next month, and whether it can be undone, and they agree. Those questions
 have yes-or-no answers. A process can be checked in a way an outcome cannot.
@@ -37,9 +37,9 @@ That is the bet plinth makes: a good process makes a good outcome more
 likely. The habits come from how experienced engineers keep projects alive:
 small changes, tests on every change, a second look before merging, a record
 of why, a way back, and a pause now and then to clean up. A decade of
-research on software delivery keeps finding that habits like these go with
-teams that ship faster and break less
-([DORA](https://dora.dev/research/)). An agent writes a feature in a minute,
+research on software delivery finds that capabilities such as working in
+small batches, test automation and version control go with teams that ship
+faster and more stably ([DORA](https://dora.dev/capabilities/)). An agent writes a feature in a minute,
 but it will not insist on the habits, and its own "done" is not evidence.
 
 So plinth researches how experienced engineers run projects, from primary
@@ -60,10 +60,11 @@ ceiling.
 - **A ritual is not a process.** A check followed without understanding
   becomes a target to fit, and an agent fits targets well
   ([what green means](#about-what-green-means), part 5). Studies of AI help
-  for people learning to program point the same way: those who asked the AI
-  to explain learned more than those who handed it the work
-  ([Anthropic, 2026](https://www.anthropic.com/research/AI-assistance-coding-skills)),
-  and the tools helped novices who already worked through problems well while
+  for people learning point the same way: engineers learning a new library
+  who asked the AI to explain understood more than those who handed it the
+  work, a correlation in one small trial
+  ([Anthropic, 2026](https://www.anthropic.com/research/AI-assistance-coding-skills));
+  and the tools helped novice programmers who already worked through problems well while
   leading those who did not further off course
   ([Prather et al., 2024](https://arxiv.org/abs/2405.17739)). So plinth says
   why once, when it matters, and wants the person able to say what a step is
@@ -73,8 +74,9 @@ ceiling.
   Help that a newcomer needs gets in an expert's way
   ([Kalyuga et al., 2003](https://ro.uow.edu.au/edupapers/136)), so the
   guidance should thin out as the person learns.
-- **The bet is not yet proven for newcomers.** The practices are proven in
-  industry; that someone new can follow them through plinth is not, until
+- **The bet is not yet proven for newcomers.** The practices go with better
+  delivery in industry research; that someone new can follow them through
+  plinth is not shown, until
   people other than its author have tried
   ([#163](https://github.com/coolbress/plinth/issues/163)).
 
