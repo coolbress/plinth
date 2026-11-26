@@ -205,22 +205,41 @@ Each part promises something different:
 [Run a project](../how-to/run-a-project.md) walks the loop through these
 parts.
 
-## About the three review layers
+## About the review layers
 
-A change can be reviewed in three ways, and they fail differently.
+A change can be reviewed in three layers, and they fail differently.
 
 - **Automated checks** are deterministic and, once required by a ruleset,
   cannot be merged past. They catch only what they assert.
-- **Automated review**, such as an AI reviewer on the pull request, reads
-  the change and can notice what no check asserts. It is a filter, not a
-  gate: it misses things and sometimes invents them.
+- **A reviewer**, an AI reading the change, can notice what no check
+  asserts. It is a filter, not a gate: it misses things and sometimes
+  invents them. How far it is from the author matters: one briefed by the
+  session that wrote the change reads it with that session's view.
 - **Human review** is reading the diff. For someone who builds by
   describing what they want, it is often the weakest of the three.
 
-plinth puts most of its weight on the first layer, adds the second as an
-option (`third-party / review`), and does not claim the two replace the
-third. Giving less weight to human review is a choice made for this kind of
-user, not a claim that checks are as good as a careful reader.
+Besides reading the change yourself, four kinds of review can run on it,
+under names that look alike:
+
+| Review | Who runs it | Sees the conversation that wrote the change | The default |
+| --- | --- | --- | --- |
+| The required checks (`ci / <job>`) | CI, on every pull request | No: each runs its command | Yes: the ruleset requires them |
+| The fresh-context review | The agent, before the pull request: a new subagent (not a fork of the session) or a new session, given only the diff, the issue's acceptance criteria and the Code Review Rules | No: it is independent of the session that wrote the change | Yes, in the template's `AGENTS.md` from plinth-template v1.38.0; guidance, so the agent may skip it: ask which review ran |
+| `code-review`, the skill `/implement` calls, and `/code-review`, a Claude Code built-in that reviews the diff for bugs at a chosen effort | The session that wrote the change, which briefs the review and sums it up | Yes: same session, not independent | No |
+| `third-party / review` | A reviewer outside the session (the Codex reviewer) comments on the pull request; the CI check records its accepted signal on the head | No | No: optional, off until the reviewer is configured |
+
+When [#808](https://github.com/coolbress/plinth/issues/808) made the
+fresh-context review the default, it ran both reviews once, with one model,
+on that change's first diff, a documentation change. The same-session review
+raised 8 findings and the fresh-context review 4, two of them found by both;
+neither found anything irreversible. One trial supports no claim about which
+finds more; the default rests on what each reviewer sees.
+
+plinth puts most of its weight on the checks, makes the fresh-context review
+the default reviewer, adds `third-party / review` as an option, and does not
+claim that reviewers replace a person reading the change. Giving less weight
+to human review is a choice made for this kind of user, not a claim that
+checks are as good as a careful reader.
 
 ## About what green means
 
@@ -471,7 +490,7 @@ so that no green is read as more. `ci / diff-size` keeps a change small
 enough for a person to read where its limit is positive, docs and lockfiles
 outside the count, and `third-party / review`, once configured, adds a
 reader that is not the author: automated review, a filter and not a
-gate, as [the three review layers](#about-the-three-review-layers) say. Nothing in plinth today
+gate, as [the review layers](#about-the-review-layers) say. Nothing in plinth today
 measures whether the tests look at the right thing, or whether a passed
 check was fitted to: the candidate checks for that, mutation testing and
 coverage among them, are #406, measured before any is adopted.
