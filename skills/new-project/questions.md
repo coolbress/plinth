@@ -158,10 +158,20 @@ project's own setup) and CodeQL; say so only if asked.
 | A model you train (data-ml) | A model trained here, with a model card. On GitHub a `v*` tag publishes the model, its metrics and the card as release files. It also checks the container, and comes with a test of the training. Data processing, collection or a pipeline with no model trained is `cli`. |
 | A website people log in to (web) | A web app with logins and a database, on GitHub only. It costs money to run: about US $13 a month on Render. It also checks the container, the database changes and the production settings. |
 
-Right after the archetype is set, say its prerequisites in one line: for
-`web`, a Render account and about US $13 a month (a $7 web service and a
-$6 Postgres, the template's figures), with where it runs asked next; for
-the others, nothing beyond what the preflight checked.
+Right after the archetype is set, say its prerequisites in one line, with
+the month's total, each figure with its link and the date it was read:
+
+- Every kind: the agent's plan, Claude Pro, US$20 a month (US$17 a month
+  billed yearly; [Claude pricing](https://claude.com/pricing), read 2026-11-26).
+- `web`: also a Render account and about US $13 a month, a US$7 web service
+  and a US$6 Postgres ([Render pricing](https://render.com/pricing), read
+  2026-11-26), so about US$33 a month in all; where it runs is asked next.
+- `cli`, `library` and `data-ml`: no host cost; US$20 a month in all.
+- `backend`: no host cost until its image runs somewhere, which then costs
+  what that place charges; US$20 a month until then.
+
+Nothing else is needed beyond what the preflight checked. On a private
+GitHub repository, CI minutes can add to it (step 7).
 
 ## 5. Where a web app runs
 
@@ -274,8 +284,8 @@ GitLab.com, private is recommended.
 
 | Label | Description |
 | --- | --- |
-| Anyone on the internet (public) | Anyone on the internet can read and copy the code; the license recommended is MIT. On GitHub the whole wall stands on every plan. On GitLab.com, anyone can read it. |
-| Only people you add (private) | Only you and the people you add can read it; the license recommended is Proprietary. On GitHub Free a private repository cannot keep the ruleset, so plinth stops before creating it; on a paid plan it has no CodeQL or push protection unless the account has GitHub Code Security and Secret Protection; on a personal account, plinth reads the plan first, which needs the `read:user` permission on your GitHub login (it says the command that adds it). On GitLab.com this is plinth's default, since the free plan protects a private project's main branch. |
+| Anyone on the internet (public) | Anyone on the internet can read and copy the code; the whole history, the issues and the Actions logs are public too, and a fork made while it is public stays public if the repository is made private later ([GitHub Docs](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/setting-repository-visibility), read 2026-11-26); the license recommended is MIT. On GitHub the whole wall stands on every plan. On GitLab.com, anyone can read it. |
+| Only people you add (private) | Only you and the people you add can read it; the license recommended is Proprietary. On GitHub Free a private repository cannot keep the ruleset, so plinth stops before creating it; on a paid plan it has no CodeQL or push protection unless the account has GitHub Code Security and Secret Protection; on a personal account, plinth reads the plan first, which needs the `read:user` permission on your GitHub login (it says the command that adds it). CI then runs on the plan's Actions minutes: each run is 13 jobs (14 for `backend`, `data-ml` and `web`), each billed as at least one minute, so about 13 to 15 billed minutes for a small project, and an edited title or description runs it again; GitHub Pro includes US$18 a month, about 3,000 Linux minutes at US$0.006 ([runner pricing](https://docs.github.com/en/billing/reference/actions-runner-pricing), [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), read 2026-11-26), roughly 40 to 75 pull requests a month: an estimate, not measured on a private repository. On GitLab.com this is plinth's default, since the free plan protects a private project's main branch. |
 
 The answer becomes `--public` or `--private`, on either host. On GitLab.com,
 leave out the GitHub sentences; on GitHub, the GitLab.com ones. In text,

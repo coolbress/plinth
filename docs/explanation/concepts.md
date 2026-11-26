@@ -621,9 +621,11 @@ and the first pull request name each part left out. On a Pro account GitHub
 gives no status for either product, so the summary says "not verified" rather
 than "not raised" (recorded on #352, 2026-10-05).
 
-CI runs on the plan's Actions minutes. Measured on that run: each CI run is 9
-jobs, about 9 billed minutes with each job rounded up, and the first pull
-request took four CI runs.
+CI runs on the plan's Actions minutes. Counted from the workflows on
+2026-11-26, each CI run is 13 jobs (14 for backend, data-ml and web, which
+also build the container), about 13 to 15 billed minutes with each job
+rounded up to a whole minute. On the run measured earlier, when a run was
+fewer jobs, the first pull request took four CI runs.
 
 GitLab Free is the alternative for code that must stay private on a free
 plan ([about GitLab](#about-gitlab)).
