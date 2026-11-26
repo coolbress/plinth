@@ -1,19 +1,21 @@
 name: CI
 #
-# The caller job is named `ci` on purpose: the checks report as `ci / install`,
-# `ci / tools` and `ci / docs`, and rulesets require those names. Rename it and
-# the required checks never report again.
+# The caller job is named `ci` on purpose: the checks report as `ci / install`
+# and `ci / tools`, and rulesets require those names. Rename it and the
+# required checks never report again. ci-text.yml's `ci` job reports
+# `ci / docs` and `ci / release-gate` the same way.
 
 on:
   push:
     branches: [main]
-  # `edited` besides the default types: a retitled pull request re-runs the
-  # title check, and an edited description re-reads the diff-size warning,
-  # without a push (#322). The whole workflow re-runs; concurrency cancels the
-  # run the edit replaces.
+  # Not on `edited`: an edit to the title or the description re-runs only
+  # the checks that read them, in ci-text.yml (`ci / docs`, `ci / release-gate`
+  # and the canaries' `pr-title` and `diff-size`), and starts nothing here, so
+  # it neither re-runs `ci / install`, `ci / tools` or a canary's code jobs nor
+  # cancels this workflow's run (#1133, after #322).
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -24,15 +26,12 @@ concurrency:
 
 jobs:
   ci:
-    # A called workflow cannot widen what its caller grants. `ci / docs` reads
-    # the pull request's description and the issues its merge will close
-    # (#293); `ci / release-gate` reads the e2e runs on the head (#863);
-    # `ci / install` reads which step of its install-<n> jobs failed (#1135);
-    # plinth-ci.yml's other jobs keep `contents: read` alone.
+    # A called workflow cannot widen what its caller grants. `ci / install`
+    # reads which step of its install-<n> jobs failed (#1135); plinth-ci.yml's
+    # other jobs keep `contents: read` alone. `ci / docs` and
+    # `ci / release-gate` are in ci-text.yml (#1133).
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
       actions: read
     uses: ./.github/workflows/plinth-ci.yml
 

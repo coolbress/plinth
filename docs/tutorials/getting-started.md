@@ -126,8 +126,8 @@ type an answer instead):
    visibility the licence too.
 
 Where the picker cannot be shown (`claude -p`), the same questions come as
-text, numbered; at the table, you type the numbers to change, comma-separated,
-or 0 to keep.
+text, numbered; at the table, you type 0 to create it as shown, or the
+numbers of the rows to change, comma-separated.
 
 A reviewer you say is connected gets the check `third-party / review` on
 every pull request. It reports and is not required: a pull request still

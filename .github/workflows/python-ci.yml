@@ -192,10 +192,23 @@ jobs:
       # pyproject. A committed lockfile is a precondition, not a check.
       - id: sync
         run: uv sync --locked
-      - id: check
-        run: uv run ruff check .
-      - id: format
-        run: uv run ruff format --check .
+      # Exit 1 is findings, 2 is ruff's own error (#1099): the code goes to a
+      # file for the Verdict step. On findings a second run writes them as
+      # JSON to another file, which keeps a path whole (GitHub's format writes
+      # file= unescaped, so a comma in a file's name cut it).
+      - name: ruff check
+        id: check
+        run: |
+          rc=0; uv run ruff check . || rc=$?
+          echo "$rc" > "$RUNNER_TEMP/ruff-check.rc"
+          if [ "$rc" = 1 ]; then uv run ruff check --output-format=json --exit-zero . > "$RUNNER_TEMP/ruff-check.json" || true; fi
+          exit "$rc"
+      # Its output is kept (`tee`) for the files it names; the exit code is ruff's.
+      - name: ruff format --check
+        id: format
+        run: |
+          uv run ruff format --check . 2>&1 | tee "$RUNNER_TEMP/ruff-format.log"; rc="${PIPESTATUS[0]}"
+          echo "$rc" > "$RUNNER_TEMP/ruff-format.rc"; exit "$rc"
 
       # Workflow security static analysis. actionlint checks correctness,
       # zizmor checks security: template injection, credential leaks, cache
@@ -243,16 +256,105 @@ jobs:
           CHECK: ${{ steps.check.outcome }}
           FORMAT: ${{ steps.format.outcome }}
           ZIZMOR: ${{ steps.zizmor.outcome }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          # The block the job's log ends with on a failure (#1098, #1099).
+          fail_check="ci / lint"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--lint"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
+          # tool <outcome> <rc file> <label> <command> <next> <kind> <output> <where>:
+          # a step whose exit code is in <rc file>. Each finding in <output> is an
+          # annotation at its file and line, nine at most in the job, then one line
+          # saying how many. Exit 1 is findings; any other code with none named is
+          # the tool's own error: it could not run (mypy exits 2 on a syntax error,
+          # which names its file and line).
+          tool() {
+            local rc=""; [ ! -f "$RUNNER_TEMP/$2" ] || rc="$(cat "$RUNNER_TEMP/$2")"
+            [ "$1" = failure ] || { v "$1" "$3"; return 0; }
+            rm -f "$RUNNER_TEMP/found.what"
+            python3 - "$6" "$RUNNER_TEMP/$7" "$RUNNER_TEMP/found.what" "$RUNNER_TEMP/found.shown" "$8" <<'PY' || true
+          import json, os, re, sys
+          kind, log, whatf, shownf, where = sys.argv[1:6]
+          try:
+              lines = [l.rstrip("\r\n") for l in open(log, encoding="utf-8", errors="replace")]
+          except OSError:
+              lines = []
+          cwd = os.getcwd(); base = os.path.realpath(os.environ.get("GITHUB_WORKSPACE") or cwd)
+          def rel(p):   # from the repository's root, as an annotation wants it; ruff's JSON gives absolute paths
+              a = os.path.realpath(os.path.join(cwd, p))
+              for b in (base, os.path.realpath(cwd)):   # never an absolute path: outside the root, from here
+                  r = os.path.relpath(a, b)
+                  if not r.startswith(".."):
+                      return r
+              return p
+          def esc(s, prop=False):
+              s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              return s.replace(":", "%3A").replace(",", "%2C") if prop else s
+          rows, after = [], False   # (file, line, col, message, code)
+          if kind == "ruff":   # ruff's JSON: the path whole, a comma in it included
+              try:
+                  found = json.loads("\n".join(lines) or "[]")
+              except ValueError:
+                  found = []
+              for x in found if isinstance(found, list) else []:
+                  if not isinstance(x, dict) or not x.get("filename"):
+                      continue
+                  at, code = x.get("location") or {}, x.get("code") or "invalid-syntax"   # a syntax error has no code before ruff 0.5
+                  rows.append((rel(x["filename"]), at.get("row"), at.get("column"), f"{code} {x.get('message') or ''}".strip(), code))
+          for l in lines:
+              if kind == "format":
+                  m = (re.match(r"^Would reformat: (.+)$", l) or re.match(r"^(.+?):(\d+):\d+: unformatted: ", l)
+                       or (after and re.match(r"^\s*--> (.+?):(\d+):\d+$", l)))
+                  after = l.startswith("unformatted: ")   # ruff 0.9 on: its next line names the file
+                  if m and rel(m.group(1)) not in [r[0] for r in rows]:
+                      at = int(m.group(2)) if m.lastindex and m.lastindex > 1 else None
+                      rows.append((rel(m.group(1)), at, None, "not formatted; uv run ruff format formats it", ""))
+              elif kind == "mypy" and (m := re.match(r"^(.+?\.pyi?):(\d+)(?::(\d+))?(?::\d+:\d+)?: error: (.*)$", l)):
+                  code = re.search(r"\[([\w-]+)\]\s*$", m.group(4))
+                  rows.append((rel(m.group(1)), int(m.group(2)), m.group(3) and int(m.group(3)), m.group(4).strip(), code and code.group(1)))
+          try:
+              shown = int(open(shownf).read())
+          except (OSError, ValueError):
+              shown = 0
+          room = max(0, 9 - shown)
+          for f, n, c, msg, _ in rows[:room]:
+              print(f"::error file={esc(f, True)}" + (f",line={n}" if n else "") + (f",col={c}" if c else "") + f"::{esc(msg[:300])}")
+          noun = {"ruff": "ruff check findings", "format": "files ruff format would change", "mypy": "mypy errors"}[kind]
+          if len(rows) > room > 0:
+              print(f"::notice::showing {room} of {len(rows)} {noun}; every one is in {where}")
+          elif len(rows) > room:
+              print(f"::notice::{len(rows)} more {noun} are not annotated; every one is in {where}")
+          open(shownf, "w").write(str(shown + min(room, len(rows))))
+          if rows:
+              k, s = len(rows), "" if len(rows) == 1 else "s"
+              f, n, _, _, code = rows[0]
+              if kind == "format":
+                  names = ", ".join(r[0] for r in rows[:3]) + (f", and {k - 3} more" if k > 3 else "")
+                  what = f"ruff format --check: {k} file{s} not formatted: {names}"
+              elif kind == "ruff":
+                  what = f"ruff check: {k} finding{s}, the first {code} at {f}:{n}"
+              else:
+                  what = f"mypy: {k} error{s}, the first at {f}:{n}" + (f" [{code}]" if code else "")
+              open(whatf, "w", encoding="utf-8").write(what + "\n")
+          PY
+            local what=""; [ ! -s "$RUNNER_TEMP/found.what" ] || what="$(cat "$RUNNER_TEMP/found.what")"
+            if [ "$rc" != 1 ] && [ -z "$what" ]; then
+              say "fail: $3 could not run (exit ${rc:-unknown}): the tool's own error, not a finding"
+              nx "run $4 here and fix what stops it; its error is in $8"; return 0
+            fi
+            v "$1" "$3"; nx "$5" "$what"
+          }
           v "$SYNC" "uv sync --locked"
-          v "$CHECK" "ruff check"
-          v "$FORMAT" "ruff format --check"
+          [ "$SYNC" != failure ] || nx "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
+          tool "$CHECK" ruff-check.rc "ruff check" "uv run ruff check ." "run uv run ruff check . here, fix what it names, and push" ruff ruff-check.json "the ruff check step's log"
+          tool "$FORMAT" ruff-format.rc "ruff format --check" "uv run ruff format --check ." "run uv run ruff format here, commit what it changes, and push" format ruff-format.log "the ruff format --check step's log"
           v "$ZIZMOR" "zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
+          [ "$ZIZMOR" != failure ] || nx "run uvx zizmor@1.29.0 --min-severity medium .github/workflows/ here, fix what it names, and push"
           kva="$RUNNER_TEMP/zizmor.kva"
           if [ ! -f "$kva" ]; then say "not yet confirmed: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions), zizmor did not finish; a run where it does confirms it"
           elif [ ! -s "$kva" ]; then say "pass: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions)"
@@ -284,21 +386,114 @@ jobs:
           echo "$d" >> "$GITHUB_PATH"
       - id: sync
         run: uv sync --locked
-      - id: mypy
-        run: uv run mypy .
+      # Exit 1 is errors in the code, 2 is mypy's own error (#1099). Its
+      # output is kept (`tee`) for the Verdict step's annotations.
+      - name: mypy
+        id: mypy
+        run: |
+          uv run mypy . 2>&1 | tee "$RUNNER_TEMP/mypy.log"; rc="${PIPESTATUS[0]}"
+          echo "$rc" > "$RUNNER_TEMP/mypy.rc"; exit "$rc"
       - name: Verdict
         if: ${{ !cancelled() }}
         env:
           SYNC: ${{ steps.sync.outcome }}
           MYPY: ${{ steps.mypy.outcome }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          # The block the job's log ends with on a failure (#1098, #1099).
+          fail_check="ci / typecheck"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--typecheck"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
+          # tool <outcome> <rc file> <label> <command> <next> <kind> <output> <where>:
+          # a step whose exit code is in <rc file>. Each finding in <output> is an
+          # annotation at its file and line, nine at most in the job, then one line
+          # saying how many. Exit 1 is findings; any other code with none named is
+          # the tool's own error: it could not run (mypy exits 2 on a syntax error,
+          # which names its file and line).
+          tool() {
+            local rc=""; [ ! -f "$RUNNER_TEMP/$2" ] || rc="$(cat "$RUNNER_TEMP/$2")"
+            [ "$1" = failure ] || { v "$1" "$3"; return 0; }
+            rm -f "$RUNNER_TEMP/found.what"
+            python3 - "$6" "$RUNNER_TEMP/$7" "$RUNNER_TEMP/found.what" "$RUNNER_TEMP/found.shown" "$8" <<'PY' || true
+          import json, os, re, sys
+          kind, log, whatf, shownf, where = sys.argv[1:6]
+          try:
+              lines = [l.rstrip("\r\n") for l in open(log, encoding="utf-8", errors="replace")]
+          except OSError:
+              lines = []
+          cwd = os.getcwd(); base = os.path.realpath(os.environ.get("GITHUB_WORKSPACE") or cwd)
+          def rel(p):   # from the repository's root, as an annotation wants it; ruff's JSON gives absolute paths
+              a = os.path.realpath(os.path.join(cwd, p))
+              for b in (base, os.path.realpath(cwd)):   # never an absolute path: outside the root, from here
+                  r = os.path.relpath(a, b)
+                  if not r.startswith(".."):
+                      return r
+              return p
+          def esc(s, prop=False):
+              s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              return s.replace(":", "%3A").replace(",", "%2C") if prop else s
+          rows, after = [], False   # (file, line, col, message, code)
+          if kind == "ruff":   # ruff's JSON: the path whole, a comma in it included
+              try:
+                  found = json.loads("\n".join(lines) or "[]")
+              except ValueError:
+                  found = []
+              for x in found if isinstance(found, list) else []:
+                  if not isinstance(x, dict) or not x.get("filename"):
+                      continue
+                  at, code = x.get("location") or {}, x.get("code") or "invalid-syntax"   # a syntax error has no code before ruff 0.5
+                  rows.append((rel(x["filename"]), at.get("row"), at.get("column"), f"{code} {x.get('message') or ''}".strip(), code))
+          for l in lines:
+              if kind == "format":
+                  m = (re.match(r"^Would reformat: (.+)$", l) or re.match(r"^(.+?):(\d+):\d+: unformatted: ", l)
+                       or (after and re.match(r"^\s*--> (.+?):(\d+):\d+$", l)))
+                  after = l.startswith("unformatted: ")   # ruff 0.9 on: its next line names the file
+                  if m and rel(m.group(1)) not in [r[0] for r in rows]:
+                      at = int(m.group(2)) if m.lastindex and m.lastindex > 1 else None
+                      rows.append((rel(m.group(1)), at, None, "not formatted; uv run ruff format formats it", ""))
+              elif kind == "mypy" and (m := re.match(r"^(.+?\.pyi?):(\d+)(?::(\d+))?(?::\d+:\d+)?: error: (.*)$", l)):
+                  code = re.search(r"\[([\w-]+)\]\s*$", m.group(4))
+                  rows.append((rel(m.group(1)), int(m.group(2)), m.group(3) and int(m.group(3)), m.group(4).strip(), code and code.group(1)))
+          try:
+              shown = int(open(shownf).read())
+          except (OSError, ValueError):
+              shown = 0
+          room = max(0, 9 - shown)
+          for f, n, c, msg, _ in rows[:room]:
+              print(f"::error file={esc(f, True)}" + (f",line={n}" if n else "") + (f",col={c}" if c else "") + f"::{esc(msg[:300])}")
+          noun = {"ruff": "ruff check findings", "format": "files ruff format would change", "mypy": "mypy errors"}[kind]
+          if len(rows) > room > 0:
+              print(f"::notice::showing {room} of {len(rows)} {noun}; every one is in {where}")
+          elif len(rows) > room:
+              print(f"::notice::{len(rows)} more {noun} are not annotated; every one is in {where}")
+          open(shownf, "w").write(str(shown + min(room, len(rows))))
+          if rows:
+              k, s = len(rows), "" if len(rows) == 1 else "s"
+              f, n, _, _, code = rows[0]
+              if kind == "format":
+                  names = ", ".join(r[0] for r in rows[:3]) + (f", and {k - 3} more" if k > 3 else "")
+                  what = f"ruff format --check: {k} file{s} not formatted: {names}"
+              elif kind == "ruff":
+                  what = f"ruff check: {k} finding{s}, the first {code} at {f}:{n}"
+              else:
+                  what = f"mypy: {k} error{s}, the first at {f}:{n}" + (f" [{code}]" if code else "")
+              open(whatf, "w", encoding="utf-8").write(what + "\n")
+          PY
+            local what=""; [ ! -s "$RUNNER_TEMP/found.what" ] || what="$(cat "$RUNNER_TEMP/found.what")"
+            if [ "$rc" != 1 ] && [ -z "$what" ]; then
+              say "fail: $3 could not run (exit ${rc:-unknown}): the tool's own error, not a finding"
+              nx "run $4 here and fix what stops it; its error is in $8"; return 0
+            fi
+            v "$1" "$3"; nx "$5" "$what"
+          }
           v "$SYNC" "uv sync --locked"
-          v "$MYPY" "mypy"
+          [ "$SYNC" != failure ] || nx "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
+          tool "$MYPY" mypy.rc "mypy" "uv run mypy ." "run uv run mypy . here, fix what it names, and push" mypy mypy.log "the mypy step's log"
 
   # The input is the job's limit (#941). A job at its limit is cancelled and
   # writes no Verdict, and a step's own timeout-minutes kills the step's shell

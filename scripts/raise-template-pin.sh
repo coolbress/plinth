@@ -102,6 +102,8 @@ edits = [
     ("tests/new-project-failpath.sh", f" from {repo}@{old} in ", f" from {repo}@{new} in "),
     (".github/workflows/ci.yml", f"name: canary-template ({name} {old} at {old_sha[:7]})",
                                  f"name: canary-template ({name} {new} at {sha[:7]})"),
+    (".github/workflows/ci-text.yml", f"name: canary-template ({name} {old} at {old_sha[:7]})",
+                                      f"name: canary-template ({name} {new} at {sha[:7]})"),
 ]
 texts, problems = {}, []
 for path, before, after in edits:
@@ -135,12 +137,12 @@ for path, text in texts.items():
 PY
 
 echo "raised the template pin: $name $old_ref (${old_sha:0:7}) -> $tag (${sha:0:7})"
-echo "edited: scripts/new-project.sh, README.md, docs/tutorials/getting-started.md, tests/new-project-failpath.sh, .github/workflows/ci.yml, changelog.d/template-pin.md"
+echo "edited: scripts/new-project.sh, README.md, docs/tutorials/getting-started.md, tests/new-project-failpath.sh, .github/workflows/ci.yml, .github/workflows/ci-text.yml, changelog.d/template-pin.md"
 from="the tag plinth $version was tested with"
 if [ -n "$template_reads" ]; then
   echo "eval suite: owed at the next release: $name's diff from $tested ($from) to $tag changes what a new project's agent reads:"
   sed 's/^/  /' <<<"$template_reads"
-  echo "  scripts/make-release.sh run 1 asks the why for 'eval suite: <link>' or 'eval suite not run: <why>' (docs/how-to/run-the-eval-suite.md)"
+  echo "  scripts/make-release.sh run 1 asks the why for 'eval suite: on the release candidate' (one run on the release branch, smoke verdict included), 'eval suite: <link>' or 'eval suite not run: <why>' (docs/how-to/cut-a-release.md, step 2)"
 else
   echo "eval suite: not owed by this raise: $name's diff from $tested ($from) to $tag changes none of template/AGENTS.md.jinja, template/CLAUDE.md.jinja, template/.claude/"
 fi
