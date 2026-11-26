@@ -32,7 +32,7 @@
 | `pass: <standard>` | It applies here, ran, and held |
 | `pass: <standard>, does not apply (<why>)` | It does not apply to this run |
 | `fail: <standard>` | It applies here, ran, and did not hold |
-| `not yet confirmed: <standard>. Why: <reason>. What confirms it: <run>.` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. One fact per sentence: what is not confirmed, why, and the run that confirms it. `ci / test`, `ci / lint`, `ci / typecheck`, `ci / build`, `ci / secrets`, `ci / deps`, `ci / migrations` and `ci / deploy-check` say it in this form, and so does every job's shared line for a step stopped by an earlier one; the other checks' own lines still read `not yet confirmed: <standard>, <why>; <what confirms it>` until #1100 and #1101 change them. Evidence about this commit that is missing: the same text is also a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box. A step that did not run because an earlier step failed is in the summary only once the job has a `fail:` line: the failure already says it, and a warning beside it would read like the cause or Files changed. A step annotates at most nine lines, then one more saying how many are in the job summary: GitHub drops a step's annotations past ten with no notice. A line ending `; left to /plinth:floor-check` is a repository setting the Actions token never reads, the same in every run: it is in the summary and counted on the checker's summary line, not annotated |
+| `not yet confirmed: <standard>. Why: <reason>. What confirms it: <run>.` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. One fact per sentence: what is not confirmed, why, and the run that confirms it. `ci / test`, `ci / lint`, `ci / typecheck`, `ci / build`, `ci / secrets`, `ci / deps`, `ci / migrations`, `ci / deploy-check`, `ci / pr-title` and `ci / diff-size` say it in this form, and so does every job's shared line for a step stopped by an earlier one. Still in the older form, `not yet confirmed: <standard>, <why>; <what confirms it>`: the floor checker's own lines (`ci / floor-check`), and `ci / code-growth`'s and `ci / web-audit`'s until the last part of #1100, and GitLab's until #1101, except the `test` job's and the merge request description's, which share their code with GitHub's and follow it. Evidence about this commit that is missing: the same text is also a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box. A step that did not run because an earlier step failed is in the summary only once the job has a `fail:` line: the failure already says it, and a warning beside it would read like the cause or Files changed. A step annotates at most nine lines, then one more saying how many are in the job summary: GitHub drops a step's annotations past ten with no notice. A line ending `; left to /plinth:floor-check` is a repository setting the Actions token never reads, the same in every run: it is in the summary and counted on the checker's summary line, not annotated |
 | No line | The job was cancelled or timed out, or stopped before its checking step (checkout, a tool install, `ci / floor-check`'s fetch of the checker): the red or cancelled conclusion is the verdict |
 
 | Check | Opens its summary with | Not yet confirmed on a run that otherwise passes | Passes with `does not apply` |
@@ -45,7 +45,7 @@
 | `ci / secrets` | gitleaks | Never | Never |
 | `ci / deps` | The dependency review's line, after the review action's own summary on a pull request: a job's summary is its steps' summaries in step order; where GitHub refuses the review, osv-scanner's line (#1073) | Where GitHub refuses the review and osv-scanner did not run because an earlier step failed. A head Dependabot pushed: CodeQL does not analyse it, and `main` is analysed after the merge (#179) | Not a pull request |
 | `ci / diff-size` | The count against `max-diff-lines`, the conflict-marker line, then, when the pull request changes how strict the checks are, the approval's line | A change to the checks on a head an admin or Dependabot pushed: no approval is asked, and the line says the change is the person's decision; reading the table above it before merging confirms it | Not a pull request. `max-diff-lines: 0` passes as measured and not enforced, with the count |
-| `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report; each FAIL and WARN there ends in one next action and a link. Any FAIL also gives one `::error::`, however many there are: the first, the count, that action and link, within 300 characters | Each SKIP line, annotated. Each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does, ending `; left to /plinth:floor-check` and not annotated: push protection, private vulnerability reporting, the Actions allowlist, the Actions token settings, the bypass actors of both rulesets, the CodeQL default setup languages, the squash commit settings, and a private repository's missing CodeQL rule | Never |
+| `ci / floor-check` | A pass line, or one fail line per FAIL, then the checker's report; each FAIL and WARN there ends in one next action and a link. Any FAIL also gives one annotation, titled `ci / floor-check`, however many there are: the first and the count, and the next step, within 300 characters; the log ends with `failed:`, `next:` and `more:` | Each SKIP line, annotated. Each read the Actions token cannot make and `/plinth:floor-check` with a login that administers the repository does, ending `; left to /plinth:floor-check` and not annotated: push protection, private vulnerability reporting, the Actions allowlist, the Actions token settings, the bypass actors of both rulesets, the CodeQL default setup languages, the squash commit settings, and a private repository's missing CodeQL rule | Never |
 | `ci / code-growth` (not required) | One line, code size within the conventions, then a table of what is above them | Something above a convention: the line is in the summary and not annotated, and up to three warnings name the largest functions and files, each with the next step; reported and never failing the job. `uv sync --locked`, ruff or git's list of files did not finish: one annotated line. A Python file on git's list that ruff did not measure (it skipped it, could not read it or could not parse it): an annotated line naming it and why, the first of the three warnings. A clean-up that brings them under confirms it | No Python file under `src/`, or the project without one |
 | `ci / web-audit` (not required) | One line per page and tool: Lighthouse's four scores for `/` (logged in) and the log-in page (not logged in), and whether axe-core's automated rules found a violation there; then a table of the scores, a table per page of what axe-core found, and the sentence that automated checks catch only part of accessibility | A violation axe-core found: one annotated line per page naming each rule, its impact and how many elements; reported and never failing the job. The app image did not build or start, the migrations did not apply, Node, Chrome for Testing or the tools did not install, or the audit did not finish: one annotated line with the reason. A page Lighthouse could not load, an error status, a person the audit could not log in, or a session that sent `/` back to the log-in page: an annotated line saying so. Fixing the page, or a run that gets past the step, confirms it | The `web` input `false` |
 
@@ -61,9 +61,12 @@
 
 ### ci / pr-title
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | Its annotations: the title is not Conventional Commits or ends in a number, or the description closes an issue outside its closing line | Rewrite the title or the description as the annotation says |
+| What failed | The next step |
+| --- | --- |
+| `PR title is not Conventional Commits: <title>` | Rewrite it as `type(scope): summary`, the type one of `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`; a revert as `Revert "type(scope): summary"` |
+| `PR title ends in a number: <title>` | Remove the trailing `(#N)` and name the issue on the description's closing line ([CONTRIBUTING.md](../../CONTRIBUTING.md#land-a-change)) |
+| `#<N>'s description: <the first FAIL>` | The description would close an issue outside its closing line: reword the sentence so the keyword does not stand before the number, or put it on the closing line. The step's one annotation says it; `closing-references.sh` prints none of its own there |
+| `PR description, plinth's check could not be fetched` | Re-run the job |
 
 ### ci / lint
 
@@ -121,15 +124,19 @@
 
 ### ci / diff-size
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | Its annotations: a pull request over `max-diff-lines`, or a change to the checks the description does not name or no admin approved | Split the pull request, name the change in the description, or ask an admin to approve it |
+| What failed | The next step |
+| --- | --- |
+| `diff size, <N> lines, over the limit of <max-diff-lines>` | Split the change into pull requests that land one after another, each branched from `main` after the one before it merged. Do not shorten docs, docstrings or tests to fit |
+| `diff size, the diff of base <sha> and head <sha> could not be computed` | Update the branch from its base and push again, so both commits are fetched. The steps after it that read the same diff print no annotation of their own; their summary lines say they are not yet confirmed for that reason |
+| `conflict markers, a line the pull request adds is one` | Resolve each conflict, delete the marker lines and push; each marker is also an annotation at its file and line, nine at most |
+| `changes to the checks, <why>, so this head (<sha>) needs admin approval for <path>` | Ask an admin to approve the pull request on this head: Files changed, Review changes, Approve |
+| `changes to the checks, ... could not be read`, or the step that lists them did not finish | Re-run the job |
 
 ### ci / floor-check
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | Its annotation names the first FAIL and how many there are | Run `/plinth:floor-check`, which writes the fix for each item |
+| What failed | The next step |
+| --- | --- |
+| `floor-check: <N> FAIL, the first: <the first FAIL>` | Run `/plinth:floor-check` here, which writes the fix for each item, and push. One annotation however many FAILs; the summary has every line. The checker's own `not yet confirmed` lines, a SKIP or a setting `left to /plinth:floor-check`, keep their form |
 
 ### ci / migrations
 
