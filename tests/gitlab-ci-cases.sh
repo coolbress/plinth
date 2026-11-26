@@ -350,12 +350,12 @@ expect "Skipped: <reason> and none (<reason>): two pass lines" 0 "pass: MR descr
 refuse "... and no warning" "does not say"
 fields $'## What I checked myself\n\n<!-- What you ran, opened or read, and what you saw. -->' ''
 expect "empty: warns for both, says how to fill or skip, and the job passes" 0 \
-  "not yet confirmed: MR description, does not say what the person checked themselves" "Skipped: <reason>" \
-  "not yet confirmed: MR description, does not say which review ran" "none (<reason>)"
+  "not yet confirmed: MR description says what was checked. Why" "Skipped: <reason>" \
+  "not yet confirmed: MR description names its review. Why" "none (<reason>)"
 fields $'## What I checked myself\n\nDone.' 'Review: done'
 expect "bare \"done\" in both: warns for both, and the job passes" 0 \
-  "does not say what the person checked themselves: its \`What I checked myself\` section says only \"Done.\"" \
-  "does not say which review ran: its \`Review:\` line says \"done\""
+  "says what was checked. Why: its \`What I checked myself\` section says only \"Done.\"" \
+  "names its review. Why: its \`Review:\` line says \"done\""
 fields $'## What I checked myself\n\n- [x] done' 'Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)'
 expect "\"- [x] done\" and the form's four answers copied: warns for both, and the job passes" 0 \
   "says only \"- [x] done\"" "line says \"fresh-context | thir\""
@@ -370,13 +370,13 @@ echo "-- pr-title: a bare #N or !N above the highest number of its kind (#826): 
 numbers() { fields "$checked" 'Review: fresh-context'; desc "$what $1"$'\n\n'"$checked"$'\n\nReview: fresh-context\n\nPart of #12\n\n'"$by"; }
 numbers "It follows #457 and !300, as #457 said."
 expect "a bare #457 above issue #40 and !300 above merge request !41: the job passes, one line each" 0 \
-  "not yet confirmed: MR description, #457 is above the highest issue number here (#40)" "group/project#N" \
-  "not yet confirmed: MR description, !300 is above the highest merge request number here (!41)" "group/project!N"
-[ "$(printf '%s' "$out" | grep -c '#457 is above')" = 1 ] && ok "... #457 once, though named twice" || bad "#457 is not named once" "$out"
+  "not yet confirmed: MR description's #457 links to something. Why: it is above the highest issue number here (#40)" "group/project#N" \
+  "not yet confirmed: MR description's !300 links to something. Why: it is above the highest merge request number here (!41)" "group/project!N"
+[ "$(printf '%s' "$out" | grep -c '#457 links to something')" = 1 ] && ok "... #457 once, though named twice" || bad "#457 is not named once" "$out"
 grep -qF -- "https://gitlab.example/api/v4/projects/9/issues?" "$tmp_curl_log" && grep -qF -- "https://gitlab.example/api/v4/projects/9/merge_requests?" "$tmp_curl_log" \
   && grep -qF -- "JOB-TOKEN: jt" "$tmp_curl_log" && ok "... both read with the job token, from this project" || bad "the highest numbers were not asked as expected" "$(cat "$tmp_curl_log")"
 numbers "It follows #41 and !40: the counts are apart."
-expect "#41 above the issues but !40 under the merge requests: only #41" 0 "#41 is above the highest issue number here (#40)"
+expect "#41 above the issues but !40 under the merge requests: only #41" 0 "#41 links to something. Why: it is above the highest issue number here (#40)"
 refuse "... and nothing for !40" "!40 is above"
 STUB_MRS='[]' numbers "It follows !4, this merge request, which the newest list may not show yet."
 refuse "this merge request's own !4 is never above" "!4 is above"
@@ -390,7 +390,7 @@ numbers "It follows #40 and !41, and nothing more!"
 refuse "the highest numbers themselves: no line" "is above the highest"
 STUB_ISSUES=fail numbers "It follows #457 and !300."
 expect "the issues cannot be read: the job passes, one line says why" 0 "bare #N not checked: the highest issue number could not be read" \
-  "!300 is above the highest merge request number here (!41)"
+  "!300 links to something. Why: it is above the highest merge request number here (!41)"
 refuse "... and nothing is said about #457" "#457 is above"
 STUB_ISSUES=fail STUB_MRS='{"message": "403 Forbidden"}' numbers "It follows #457 and !300."
 expect "neither can be read: the job passes" 0 "bare #N not checked" "bare !N not checked: the highest merge request number could not be read"

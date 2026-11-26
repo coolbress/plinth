@@ -142,10 +142,10 @@ title_is "words after the closing quote fail" 1 'Revert "feat: y" and more' "$fo
 title_is "the (#N) suffix rule still holds inside the quotes" 1 'Revert "fix: x (#12)"' "$form" "fail: PR title, it ends in a number"
 title_is "... and its summary names the form that passes" 1 'Revert "fix: x (#12)"' "" "$form"
 title_is "... and after them" 1 'Revert "fix: x" (#12)' "$form"
-title_is "\"Revert\" with no quotes is still free form" 1 'Revert feat: y' "Rewrite it as type(scope): summary"
-title_is "lowercase \"revert\" with quotes is still free form" 1 'revert "feat: y"' "Rewrite it as type(scope): summary"
+title_is "\"Revert\" with no quotes is still free form" 1 'Revert feat: y' "rewrite it as type(scope): summary"
+title_is "lowercase \"revert\" with quotes is still free form" 1 'revert "feat: y"' "rewrite it as type(scope): summary"
 title_is "the conventional revert: title still passes" 0 'revert: undo the thing'
-title_is "a plain title that fails does not offer the revert form" 1 'fix stuff' "Rewrite it as type(scope): summary"
+title_is "a plain title that fails does not offer the revert form" 1 'fix stuff' "rewrite it as type(scope): summary"
 
 echo "-- the label for a revert title (#839): pr-label.yml's step, run with a fake gh"
 python3 - "$root/.github/workflows/pr-label.yml" "$work/label.sh" <<'PY2'
@@ -230,7 +230,7 @@ setup "" "" push; export PR=""
 run "a push: passes as does not apply, no call to GitHub" 0 "no description" "pass: PR description, does not apply"
 [ -s "$FX/calls" ] && no "a push called gh" "$FX/calls" || ok "a push asks GitHub nothing"
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12\n\n'"$by" "12"; echo 1 >"$FX/gh_rc"
-run "GitHub cannot be read: fails" 1 "could not read" "fail: PR description"
+run "GitHub cannot be read: fails" 1 "could not be read" "fail: PR description"
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12\n\n'"$by" "12"; export FETCH=failure
 run "a failed fetch: fails with its own line, no call to GitHub" 1 "" "fail: PR description, plinth's check could not be fetched"
 [ -s "$FX/calls" ] && no "a failed fetch still called gh" "$FX/calls" || ok "a failed fetch asks GitHub nothing"
@@ -248,8 +248,8 @@ quiet() { # no warning and both pass lines
   else no "$1: the two pass lines are missing" "$FX/summary"; fi
 }
 warns() { # <label> <field words> <what the summary also says>: a ::warning:: and a not yet confirmed line naming the field
-  if grep -qF "::warning::not yet confirmed: PR description, $2" "$FX/out" \
-    && grep -qF -- "- not yet confirmed: PR description, $2" "$FX/summary" && grep -qF -- "$3" "$FX/summary"; then ok "$1"
+  if grep -qF "::warning::not yet confirmed: PR $2" "$FX/out" \
+    && grep -qF -- "- not yet confirmed: PR $2" "$FX/summary" && grep -qF -- "$3" "$FX/summary"; then ok "$1"
   else no "$1: no warning for \"$2\" saying \"$3\"" "$FX/out" "$FX/summary"; fi
 }
 fields "filled: what was opened and what it showed, a fresh-context review" "$checked" 'Review: fresh-context'
@@ -259,31 +259,31 @@ quiet "Skipped: <reason>"
 fields "a third-party review named" "$checked" 'Review: third-party (Codex)'
 quiet "third-party (<name>)"
 fields "empty: the template's comment left alone, no Review line" $'## What I checked myself\n\n<!-- What you ran, opened or read, and what you saw. -->' ''
-warns "an empty section warns, saying how to fill it or skip it" "does not say what the person checked themselves" "Skipped: <reason>"
-warns "a missing Review line warns, naming the four answers" "does not say which review ran" "fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
+warns "an empty section warns, saying how to fill it or skip it" "description says what was checked. Why" "Skipped: <reason>"
+warns "a missing Review line warns, naming the four answers" "description names its review. Why" "fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)"
 fields "bare \"done\" in both" $'## What I checked myself\n\nDone.' 'Review: done'
-warns "\"done\" alone in the section warns" "does not say what the person checked themselves" "\"done\""
-warns "\"Review: done\" warns" "does not say which review ran" "Review:"
+warns "\"done\" alone in the section warns" "description says what was checked. Why" "\"done\""
+warns "\"Review: done\" warns" "description names its review. Why" "Review:"
 fields "\"Skipped:\" with no reason, \"none\" with no reason" $'## What I checked myself\n\nSkipped:' 'Review: none'
-warns "\"Skipped:\" alone warns" "does not say what the person checked themselves" "Skipped: <reason>"
-warns "\"Review: none\" alone warns" "does not say which review ran" "none (<reason>)"
+warns "\"Skipped:\" alone warns" "description says what was checked. Why" "Skipped: <reason>"
+warns "\"Review: none\" alone warns" "description names its review. Why" "none (<reason>)"
 fields "the form's four answers left as they are, \"third-party\" with no name" $'## What I checked myself\n\n- [x] done' 'Review: fresh-context | third-party (<name>) | same-session (not independent) | none (<reason>)'
-warns "\"- [x] done\" warns" "does not say what the person checked themselves" "says only \"- [x] done\""
-warns "the four answers copied from the form warn" "does not say which review ran" "line says \"fresh-context | thir\""
+warns "\"- [x] done\" warns" "description says what was checked. Why" "says only \"- [x] done\""
+warns "the four answers copied from the form warn" "description names its review. Why" "line says \"fresh-context | thir\""
 for r in 'third-party' 'none (<reason>)' 'none of the findings were fixed'; do
-  fields "Review: $r" "$checked" "Review: $r"; warns "\"Review: $r\" warns" "does not say which review ran" "Review:"
+  fields "Review: $r" "$checked" "Review: $r"; warns "\"Review: $r\" warns" "description names its review. Why" "Review:"
 done
 fields "a heading with a colon, a same-session review" $'## What I checked myself:\n\nRan make check: 12 passed.' 'Review: same-session (not independent)'
 quiet "\"## What I checked myself:\""
 fields "\"done\" over two lines" $'## What I checked myself\n\nDone\n.' 'Review: fresh-context'
-if [ "$(grep -c 'does not say what the person checked' "$FX/summary")" = 1 ] && ! grep -q '^- \.' "$FX/summary"; then ok "a quote over two lines stays one verdict line"
+if [ "$(grep -c 'says what was checked. Why' "$FX/summary")" = 1 ] && ! grep -q '^- \.' "$FX/summary"; then ok "a quote over two lines stays one verdict line"
 else no "a quote over two lines split the verdict line" "$FX/summary"; fi
 fields "the fields script crashes" "$checked" 'Review: fresh-context'
 echo 'raise SystemExit("boom")' >"$FX/temp/plinth-closing/description-fields.py"; run "a crashed fields script: the job still passes" 0
-warns "... and says the fields were not read" "the fields were not read" "re-run this job"
+warns "... and says the fields were not read" "description's fields. Why" "a re-run of this job"
 setup "$what"$'\n\n'"$how"$'\n\n'"$by" ""
 run "a description without either field still passes" 0 "" "pass: PR description, merging it closes"
-warns "without the section it warns" "does not say what the person checked themselves" "What I checked myself"
+warns "without the section it warns" "description says what was checked. Why" "What I checked myself"
 setup "$what It is the second of the two fixes #65 decided."$'\n\n'"$checked"$'\n\nReview: fresh-context\n\n'"$by" "65"
 run "a red closing check still writes the fields' lines" 1 "" "pass: PR description, says which review ran"
 
@@ -295,12 +295,12 @@ nowarn() { # <label>: no warning about a number, and the fields' two pass lines 
   else quiet "$1"; fi
 }
 numbers "The pin follows #457 in the template." "a bare #457 above #41: the job passes"
-if grep -qF '::warning::not yet confirmed: PR description, #457 is above the highest issue or pull request number here (#41)' "$FX/out" \
+if grep -qF '::warning::not yet confirmed: PR description'"'"'s #457 links to something. Why: it is above the highest issue or pull request number here (#41)' "$FX/out" \
   && grep -qF 'owner/repo#N' "$FX/out"; then ok "... with a warning naming #457 and the owner/repo#N form"
 else no "no warning names #457 and owner/repo#N" "$FX/out" "$FX/summary"; fi
-grep -qF -- '- not yet confirmed: PR description, #457 is above' "$FX/summary" && ok "... and its line in the summary" || no "the summary has no line for #457" "$FX/summary"
+grep -qF -- '- not yet confirmed: PR description'"'"'s #457 links to something' "$FX/summary" && ok "... and its line in the summary" || no "the summary has no line for #457" "$FX/summary"
 numbers "It follows #457, as #457 and #500 said." "two numbers above, one twice"
-[ "$(grep -c '::warning::not yet confirmed: PR description, #457 is above' "$FX/out")" = 1 ] && grep -qF '#500 is above' "$FX/out" \
+[ "$(grep -c '::warning::not yet confirmed: PR description'"'"'s #457 links' "$FX/out")" = 1 ] && grep -qF '#500 links to something' "$FX/out" \
   && ok "one warning per reference: #457 once, #500 once" || no "not one warning per reference" "$FX/out"
 numbers "It follows coolbress/plinth-template#457 and plinth-template#81." "owner/repo#N and repo#N"
 nowarn "owner/repo#N and repo#N"
