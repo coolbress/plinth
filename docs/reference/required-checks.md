@@ -32,7 +32,7 @@
 | `pass: <standard>` | It applies here, ran, and held |
 | `pass: <standard>, does not apply (<why>)` | It does not apply to this run |
 | `fail: <standard>` | It applies here, ran, and did not hold |
-| `not yet confirmed: <standard>. Why: <reason>. What confirms it: <run>.` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. One fact per sentence: what is not confirmed, why, and the run that confirms it. `ci / test`, `ci / lint` and `ci / typecheck` say it in this form, and so does every job's shared line for a step stopped by an earlier one (`ci / deps` and `ci / code-growth` write their own); the other checks' own lines still read `not yet confirmed: <standard>, <why>; <what confirms it>` until #1100 and #1101 change them. Evidence about this commit that is missing: the same text is also a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box. A step that did not run because an earlier step failed is in the summary only once the job has a `fail:` line: the failure already says it, and a warning beside it would read like the cause or Files changed. A step annotates at most nine lines, then one more saying how many are in the job summary: GitHub drops a step's annotations past ten with no notice. A line ending `; left to /plinth:floor-check` is a repository setting the Actions token never reads, the same in every run: it is in the summary and counted on the checker's summary line, not annotated |
+| `not yet confirmed: <standard>. Why: <reason>. What confirms it: <run>.` | It applies here but did not run or could not be read, including a step stopped by an earlier failed step in the job. One fact per sentence: what is not confirmed, why, and the run that confirms it. `ci / test`, `ci / lint`, `ci / typecheck`, `ci / build`, `ci / secrets`, `ci / deps`, `ci / migrations` and `ci / deploy-check` say it in this form, and so does every job's shared line for a step stopped by an earlier one; the other checks' own lines still read `not yet confirmed: <standard>, <why>; <what confirms it>` until #1100 and #1101 change them. Evidence about this commit that is missing: the same text is also a `::warning::` annotation, listed on the run's page and counted beside the workflow in the pull request's Checks tab, not shown in its merge box. A step that did not run because an earlier step failed is in the summary only once the job has a `fail:` line: the failure already says it, and a warning beside it would read like the cause or Files changed. A step annotates at most nine lines, then one more saying how many are in the job summary: GitHub drops a step's annotations past ten with no notice. A line ending `; left to /plinth:floor-check` is a repository setting the Actions token never reads, the same in every run: it is in the summary and counted on the checker's summary line, not annotated |
 | No line | The job was cancelled or timed out, or stopped before its checking step (checkout, a tool install, `ci / floor-check`'s fetch of the checker): the red or cancelled conclusion is the verdict |
 
 | Check | Opens its summary with | Not yet confirmed on a run that otherwise passes | Passes with `does not apply` |
@@ -97,21 +97,27 @@
 
 ### ci / build
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | The log names the step: `uv build`, or the install smoke with the package that did not import | Run `uv build` here and fix what it names |
+| What failed | The next step |
+| --- | --- |
+| `uv build` | Run `uv build` here, fix what it names, and push |
+| `install smoke, import <module> from <artifact> failed in a clean venv` | Run `uv build` here, then `uv run --isolated --no-project --with <artifact> python -c 'import <module>'`, and add the module or the dependency it is missing |
+| `install smoke, <artifact> did not install in a clean venv` | Run `uv build` here, then install that artifact into a new venv with `uv pip install`, fix what it names, and push |
+| `install smoke, uv build made no wheel or sdist of the root package` | A workspace whose root is not a package: add a `[build-system]` table to `pyproject.toml`, or set `tool.uv.package = true` |
+| `uv sync --locked` | Run `uv sync --locked` here; when it says `uv.lock` needs updating, run `uv lock`, commit `uv.lock` and push |
 
 ### ci / secrets
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | gitleaks names the commit and the file | Revoke the secret where it was issued, then remove it from the branch's history |
+| What failed | The next step |
+| --- | --- |
+| `gitleaks found <N> secrets in the history, the first (<rule>) in <file> at line <line> of commit <commit>` | Revoke each secret where it was issued, then remove it from the branch history (`git rebase`, or `git filter-repo` for older commits) and push. Each secret is also an annotation at its file and line, nine at most, then a line saying how many there are; the rule and the commit are named, never the secret or the line it is on |
+| `gitleaks could not run` | gitleaks stopped with its own error (exit 1), not a secret: re-run the job, and if it fails again read the error in the secret detection step's log |
 
 ### ci / deps
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | The dependency review, or osv-scanner where GitHub refuses it, names the package, its version and the advisory | Raise the dependency past the advisory's fixed version |
+| What failed | The next step |
+| --- | --- |
+| `dependency review, <N> added dependency versions with an advisory at <severity> or above: <package> <version> (<advisory>)` | Raise each named package past its advisory's fixed version (`uv lock --upgrade-package <name>`), commit `uv.lock` and push. Where GitHub refuses the review, osv-scanner's line says the same with the CVSS score |
+| `dependency review could not run` | The review, or osv-scanner where GitHub refuses it, did not compare the dependencies: re-run the job, and if it fails again read the error in that step's log |
 
 ### ci / diff-size
 
@@ -127,15 +133,20 @@
 
 ### ci / migrations
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | The log names the step: a model change without its migration, a migration that does not apply to an empty database, or a base row the migrations do not carry | Fix what the step names |
+| What failed | The next step |
+| --- | --- |
+| `no model change without its migration` | Run `uv run python manage.py makemigrations` here, commit the migration it writes, and push |
+| `the migrations apply to an empty Postgres` | Run `uv run python manage.py migrate` here against an empty Postgres, fix the migration it stops on, and push |
+| `the base commit's rows survive this head's migrations: <table> <before> -> <after>` | Give the migration that changes those tables a data step that carries their rows over, and push. When it says `tests/migration_rows.json` holds a model migrate rewrites, take that model out of the file |
+| `a disposable Postgres` | Postgres did not start: re-run the job; the Start Postgres step's log says why |
+| `uv sync --locked` | As for `ci / build` |
 
 ### ci / deploy-check
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1100 | The deploy step's log names each deployment warning | Fix the setting it names |
+| What failed | The next step |
+| --- | --- |
+| `manage.py check --deploy: <N> warnings, the first <id>` | Run `DJANGO_SECRET_KEY=x DJANGO_ALLOWED_HOSTS=example.invalid uv run python manage.py check --deploy --fail-level WARNING` here with `DJANGO_DEBUG` unset, fix each warning in the settings, and push; the deploy step's log has every warning |
+| `uv sync --locked` | As for `ci / build` |
 
 ## Required on plinth's own repository
 

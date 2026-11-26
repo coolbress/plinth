@@ -1011,7 +1011,7 @@ jobs:
           std="the base commit's rows survive this head's migrations"
           rel="$(git rev-parse --show-prefix)tests/migration_rows.json"
           if ! git cat-file -e "HEAD^1:$rel" 2>/dev/null; then
-            echo "not yet confirmed: $std, the base commit has no tests/migration_rows.json; a base that has it confirms it" > "$out"
+            echo "not yet confirmed: $std. Why: the base commit has no tests/migration_rows.json. What confirms it: a base that has it." > "$out"
             exit 0
           fi
           export ROWS="$RUNNER_TEMP/rows.json" COUNTS="$RUNNER_TEMP/counts.json"
@@ -1081,8 +1081,10 @@ jobs:
           MISSING: ${{ steps.missing.outcome }}
           EMPTY: ${{ steps.empty.outcome }}
           ROWS: ${{ steps.rows.outcome }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         working-directory: .
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
@@ -1092,12 +1094,24 @@ jobs:
             say "pass: migrations, does not apply (the web input is false: not a web project)"
             exit 0
           fi
+          # The block the job's log ends with on a failure (#1098, #1100).
+          fail_check="ci / migrations"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--migrations"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
           v "$PG" "a disposable Postgres"
+          [ "$PG" != failure ] || nx "re-run this job, since Postgres did not start and the Start Postgres step's log says why"
           v "$SYNC" "uv sync --locked"
+          [ "$SYNC" != failure ] || nx "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
           v "$MISSING" "no model change without its migration (makemigrations --check)"
+          [ "$MISSING" != failure ] || nx "run uv run python manage.py makemigrations here, commit the migration it writes, and push"
           v "$EMPTY" "the migrations apply to an empty Postgres"
+          [ "$EMPTY" != failure ] || nx "run uv run python manage.py migrate here against an empty Postgres, fix the migration it stops on, and push"
           if [ -s "$RUNNER_TEMP/rows.verdict" ]; then say "$(cat "$RUNNER_TEMP/rows.verdict")"
           else v "$ROWS" "the base commit's rows survive this head's migrations"; fi
+          if [ "$ROWS" = failure ]; then
+            if grep -q 'holds a model migrate rewrites' "$RUNNER_TEMP/rows.verdict" 2>/dev/null; then nx "take the model the rows step names out of tests/migration_rows.json, and push"
+            elif grep -q '^fail: ' "$RUNNER_TEMP/rows.verdict" 2>/dev/null; then nx "give the migration that changes those tables a data step that carries their rows over, and push"
+            else nx "read the rows step's log above its last line, fix what it names, and push"; fi
+          fi
 
   # The production settings of a `web` project (#614): Django's deployment
   # checks at the warning level, with settings shaped like production (debug
@@ -1141,15 +1155,18 @@ jobs:
         run: |
           set -euo pipefail
           unset DJANGO_DEBUG
-          DJANGO_SECRET_KEY="$(openssl rand -hex 32)" uv run python manage.py check --deploy --fail-level WARNING
+          # Its output is kept for the Verdict step, which names the first warning (#1100).
+          DJANGO_SECRET_KEY="$(openssl rand -hex 32)" uv run python manage.py check --deploy --fail-level WARNING 2>&1 | tee "$RUNNER_TEMP/deploy.log"
       - name: Verdict
         if: ${{ !cancelled() }}
         env:
           WEB: ${{ inputs.web }}
           SYNC: ${{ steps.sync.outcome }}
           DEPLOY: ${{ steps.deploy.outcome }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         working-directory: .
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
@@ -1159,8 +1176,18 @@ jobs:
             say "pass: deploy-check, does not apply (the web input is false: not a web project)"
             exit 0
           fi
+          # The block the job's log ends with on a failure (#1098, #1100).
+          fail_check="ci / deploy-check"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--deploy-check"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
           v "$SYNC" "uv sync --locked"
+          [ "$SYNC" != failure ] || nx "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
           v "$DEPLOY" "manage.py check --deploy --fail-level WARNING with production-shaped settings (the warnings are in the deploy step's log)"
+          if [ "$DEPLOY" = failure ]; then
+            ids="$(grep -oE '\((security|[a-z_]+)\.[WE][0-9]+\)' "$RUNNER_TEMP/deploy.log" 2>/dev/null | tr -d '()' | awk '!s[$0]++' || true)"
+            n="$(grep -c . <<<"$ids" || true)"
+            if [ -n "$ids" ]; then nx "run DJANGO_SECRET_KEY=x DJANGO_ALLOWED_HOSTS=example.invalid uv run python manage.py check --deploy --fail-level WARNING here with DJANGO_DEBUG unset, fix each warning in the settings, and push" "manage.py check --deploy: $n warning$([ "$n" = 1 ] || echo s), the first $(head -n 1 <<<"$ids")"
+            else nx "read the deploy step's log above its last line, fix what it names, and push"; fi
+          fi
 
   # Secret detection. Not a duplicate of push protection: push protection
   # blocks provider-format tokens only and lets private-key PEMs and generic
@@ -1195,21 +1222,71 @@ jobs:
       # `git`, not `dir`: `dir` scans the current files only. Fetching history
       # and then scanning `dir` would look at nothing that was deleted, and a
       # deleted secret is still in history.
+      # A leak exits 3 and gitleaks' own error 1 (#1100), so the Verdict step
+      # can tell them apart; the JSON report gives each finding's file, line
+      # and commit, its secret redacted.
       - name: Secret detection, history included
         id: gitleaks
         working-directory: ${{ inputs.working-directory }}
-        run: gitleaks git . --no-banner --redact
+        run: |
+          rc=0; gitleaks git . --no-banner --redact --exit-code 3 --report-format json --report-path "$RUNNER_TEMP/gitleaks.json" || rc=$?
+          echo "$rc" > "$RUNNER_TEMP/gitleaks.rc"; exit "$rc"
       - name: Verdict
         if: ${{ !cancelled() }}
         env:
           GITLEAKS: ${{ steps.gitleaks.outcome }}
+          WD: ${{ inputs.working-directory }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
-          v "$GITLEAKS" "gitleaks, the history included"
+          # The block the job's log ends with on a failure (#1098, #1100).
+          fail_check="ci / secrets"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--secrets"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
+          rc=""; [ ! -f "$RUNNER_TEMP/gitleaks.rc" ] || rc="$(cat "$RUNNER_TEMP/gitleaks.rc")"
+          if [ "$GITLEAKS" = failure ] && [ "$rc" != 3 ]; then
+            say "fail: gitleaks could not run (exit ${rc:-unknown}), its own error and not a finding"
+            nx "re-run this job, and if it fails again read the error in the secret detection step's log"
+          else
+            v "$GITLEAKS" "gitleaks, the history included"
+          fi
+          if [ "$GITLEAKS" = failure ] && [ "$rc" = 3 ]; then
+            # Each finding at its file and line, nine at most; the rule and
+            # the commit, never the secret or the line it is on.
+            what="$(python3 - "$RUNNER_TEMP/gitleaks.json" "$WD" <<'PY' || true
+          import json, os, re, sys
+          report, wd = sys.argv[1:3]
+          try:
+              found = json.load(open(report, encoding="utf-8"))
+          except (OSError, ValueError):
+              found = []
+          rows = []
+          for x in found if isinstance(found, list) else []:
+              if isinstance(x, dict) and x.get("File"):
+                  f = os.path.normpath(os.path.join(wd or ".", x["File"]))
+                  rule = re.sub(r"[^\w.-]", "?", str(x.get("RuleID") or "a rule"))
+                  rows.append((f, x.get("StartLine"), rule, re.sub(r"[^0-9a-f]", "", str(x.get("Commit") or ""))[:12]))
+          def esc(s, prop=False):
+              s = re.sub(r"[\x00-\x1f\x7f]", "?", s).replace("%", "%25")
+              return s.replace(":", "%3A").replace(",", "%2C") if prop else s
+          for f, n, rule, c in rows[:9]:
+              where = f" in commit {c}" if c else ""
+              print(f"::error file={esc(f, True)}" + (f",line={n}" if isinstance(n, int) else "")
+                    + f"::{esc(f'gitleaks rule {rule} matched a secret here{where}, so revoke it where it was issued and remove it from the branch history')}", file=sys.stderr)
+          if len(rows) > 9:
+              print(f"::notice::showing 9 of {len(rows)} secrets gitleaks found; every one is in the secret detection step's log", file=sys.stderr)
+          if rows:
+              f, n, rule, c = rows[0]
+              print(f"gitleaks found {len(rows)} secret{'s' if len(rows) > 1 else ''} in the history, the first ({rule}) in {f}"
+                    + (f" at line {n}" if isinstance(n, int) else "") + (f" of commit {c}" if c else ""))
+          PY
+          )"
+            nx "revoke each secret where it was issued, then remove it from the branch history (git rebase or git filter-repo) and push" "$what"
+          fi
 
   # PR title is Conventional Commits with the standard eleven types only.
   #
@@ -1627,30 +1704,66 @@ jobs:
           OSV: ${{ steps.osv.outcome }}
           SEVERITY: ${{ inputs.deps-fail-on-severity }}
           ACTOR: ${{ github.actor }}
+          # The review's own list of what it failed on (#1100): empty when it
+          # could not run.
+          VULNERABLE: ${{ steps.review.outputs.vulnerable-changes }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          # The block the job's log ends with on a failure (#1098, #1100): an
+          # advisory and a review that could not run are two causes, each with
+          # its own next step.
+          fail_check="ci / deps"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--deps"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
+          raise="raise each named package past its advisory's fixed version (uv lock --upgrade-package <name>), commit uv.lock and push"
+          rerun="re-run this job, and if it fails again read the error in the"
           if [ "$EVENT" = pull_request_review ]; then
             say "pass: dependency review, does not apply (a review started this run: the pull_request run of this head compares its dependencies, and that run's result stands)"
           elif [ "$EVENT" != pull_request ]; then
             say "pass: dependency review, does not apply (not a pull request: no base to compare dependencies against)"
           elif [ "$SERVED" = refused ] && [ "$OSV" != success ] && [ "$OSV" != failure ]; then
-            say "not yet confirmed: dependency review, osv-scanner did not run because an earlier step failed; a run that gets past that step confirms it"
+            say "not yet confirmed: dependency review. Why: osv-scanner did not run because an earlier step failed. What confirms it: a run that gets past that step."
           elif [ "$SERVED" = refused ] && [ -s "$RUNNER_TEMP/plinth-deps/deps.verdict" ]; then
             say "$(head -n 1 "$RUNNER_TEMP/plinth-deps/deps.verdict")"
+            nx "$raise"
           elif [ "$SERVED" = refused ]; then
-            say "fail: dependency review, the scan could not run (its error is in the osv-scanner step's log); a run where osv-scanner reads both lockfiles confirms it"
+            say "fail: dependency review could not run, osv-scanner did not compare the two lockfiles (its error is in the osv-scanner step's log)"
+            nx "$rerun osv-scanner step's log"
           elif [ "$REVIEW" = success ]; then
             say "pass: dependency review, no added dependency version with an advisory at $SEVERITY or above"
           elif [ "$REVIEW" = failure ]; then
-            say "fail: dependency review, an added dependency version has an advisory at $SEVERITY or above, or the review could not run"
+            hits="$(python3 -c '
+          import json, re, sys
+          try:
+              changes = json.loads(sys.argv[1] or "[]")
+          except ValueError:
+              changes = []
+          hits = []
+          for c in changes if isinstance(changes, list) else []:
+              if isinstance(c, dict) and c.get("change_type", "added") == "added" and c.get("vulnerabilities"):
+                  ghsa = (c["vulnerabilities"][0] or {}).get("advisory_ghsa_id") or "an advisory"
+                  hits.append(re.sub(r"[\x00-\x1f\x7f]", "?", "%s %s (%s)" % (c.get("name"), c.get("version"), ghsa)))
+          if hits:
+              many = len(hits) > 1
+              print("%d added dependency version%s with an advisory\t%s%s" % (len(hits), "s" if many else "", ", ".join(hits[:9]),
+                    ", and %d more in the review step log" % (len(hits) - 9) if len(hits) > 9 else ""))
+          ' "$VULNERABLE" 2>/dev/null || true)"
+            if [ -n "$hits" ]; then
+              say "fail: dependency review, ${hits%%$'\t'*} at $SEVERITY or above: ${hits#*$'\t'}"
+              nx "$raise"
+            else
+              say "fail: dependency review could not run (its error is in the dependency review step's log)"
+              nx "$rerun dependency review step's log"
+            fi
           else
-            say "not yet confirmed: dependency review, it did not run because an earlier step failed; a run that gets past that step confirms it"
+            say "not yet confirmed: dependency review. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step."
           fi
           if [ "$EVENT" = pull_request ] && [ "$ACTOR" = "dependabot[bot]" ]; then
-            say "not yet confirmed: CodeQL on this head, Dependabot pushed it and CodeQL does not analyse a head Dependabot pushed; \`main\` is analysed after the merge"
+            say "not yet confirmed: CodeQL on this head. Why: Dependabot pushed it, and CodeQL does not analyse a head Dependabot pushed. What confirms it: the analysis of \`main\` after the merge."
           fi
 
   # Diff size is a reviewability gate, not a correctness one: can a person
@@ -2463,19 +2576,24 @@ jobs:
             done
             # A root uv does not package is not built; its sdist never
             # installed in a workspace before either (#889).
-            [ "${#arts[@]}" -gt 0 ] || { echo "::error::no wheel or sdist of $name in dist/: uv builds a workspace's root only when it is a package, with a [build-system] or tool.uv.package = true"; exit 1; }
+            # One cause, one annotation (#1100): the Verdict step's.
+            [ "${#arts[@]}" -gt 0 ] || { echo "no wheel or sdist of $name in dist/: uv builds a workspace's root only when it is a package, with a [build-system] or tool.uv.package = true"; echo "noroot" > "$RUNNER_TEMP/smoke.at"; exit 1; }
             links=(--find-links dist --constraint "$plan.pins")
           else
             arts=(dist/*.whl dist/*.tar.gz); links=()
           fi
+          # What it is doing, for the Verdict step when a command stops it (#1100).
+          at() { printf '%s\t%s\n' "$1" "$2" > "$RUNNER_TEMP/smoke.at"; }
           for art in "${arts[@]}"; do
             rm -rf .smoke
             uv venv --quiet .smoke
+            at install "$art"
             uv pip install --quiet --python .smoke/bin/python ${links[@]+"${links[@]}"} "$art"
             .smoke/bin/python -c 'import importlib.metadata as md,sys; print(sys.argv[1], md.version(sys.argv[1]))' "$name"
             if [ -d src ]; then
               for m in src/*/; do
                 m="$(basename "$m")"
+                at "$m" "$art"
                 .smoke/bin/python -c 'import importlib,sys; importlib.import_module(sys.argv[1])' "$m"
                 echo "  import $m ok"
               done
@@ -2484,6 +2602,7 @@ jobs:
               while IFS=$'\t' read -r dist m; do
                 m="$(basename "$m")"
                 if .smoke/bin/python -c 'import importlib.metadata as md,sys; md.distribution(sys.argv[1])' "$dist" 2>/dev/null; then
+                  at "$m" "$art"
                   .smoke/bin/python -c 'import importlib,sys; importlib.import_module(sys.argv[1])' "$m"
                   echo "  import $m ok"
                 else
@@ -2500,15 +2619,31 @@ jobs:
           SYNC: ${{ steps.sync.outcome }}
           BUILD: ${{ steps.build.outcome }}
           SMOKE: ${{ steps.smoke.outcome }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
           v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
+          # The block the job's log ends with on a failure (#1098, #1100).
+          fail_check="ci / build"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--build"
+          nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
           v "$SYNC" "uv sync --locked"
+          [ "$SYNC" != failure ] || nx "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
           v "$BUILD" "uv build"
+          [ "$BUILD" != failure ] || nx "run uv build here, fix what it names, and push"
           v "$SMOKE" "install smoke, the wheel and the sdist in a clean venv"
+          if [ "$SMOKE" = failure ]; then
+            m=""; art=""; [ ! -s "$RUNNER_TEMP/smoke.at" ] || IFS=$'\t' read -r m art < "$RUNNER_TEMP/smoke.at"
+            case "$m" in
+              noroot) nx "add a [build-system] table to pyproject.toml, or set tool.uv.package = true, so uv builds the root package, and push" "install smoke, uv build made no wheel or sdist of the root package" ;;
+              install) nx "run uv build here, then uv venv /tmp/smoke and uv pip install --python /tmp/smoke/bin/python ${art:-the wheel}, fix what it names, and push" "install smoke, ${art:-an artifact} did not install in a clean venv" ;;
+              "") nx "read the install smoke step's log above its last line, fix what it names, and push" ;;
+              *) nx "run uv build here, then uv run --isolated --no-project --with ${art:-the wheel} python -c 'import $m', and add the module or dependency it is missing" "install smoke, import $m from ${art:-the package} failed in a clean venv" ;;
+            esac
+          fi
 
   # The floor: does this repository still have what /plinth:new-project gave
   # it, and does its wall still stand? The same checker the floor-check skill

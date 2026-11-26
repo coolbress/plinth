@@ -9,8 +9,9 @@
 # as the last lines the step prints, a `more:` link at the plinth commit the
 # workflow runs whose anchor is a heading in docs/reference/required-checks.md
 # at this commit, no "earlier step failed" warning, and exit 0.
-# `ci / test`, `ci / lint` and `ci / typecheck` have the shape; the other
-# rows are printed as pending with the ticket that brings them (#1100), and
+# `ci / test`, `ci / lint`, `ci / typecheck`, `ci / build`, `ci / secrets`,
+# `ci / deps`, `ci / migrations` and `ci / deploy-check` have the shape; the
+# other rows are printed as pending with the ticket that brings them (#1100), and
 # fail here once that job's Verdict prints a block, so the list is kept
 # honest.
 # `ci / test` also: pytest's FAILED and ERROR lines become at most nine
@@ -68,6 +69,9 @@ lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
 rules = json.load(open(sys.argv[2], encoding="utf-8"))["rules"]
 checks = [c["context"] for r in rules if r["type"] == "required_status_checks"
           for c in r["parameters"]["required_status_checks"]]
+# The web archetype's two (#614) are not in ruleset.json; a web project's
+# ruleset requires them, and their pages have a heading here.
+checks += ["ci / migrations", "ci / deploy-check"]
 for check in checks:
     job = check.removeprefix("ci / ")
     start = lines.index(f"  {job}:")
@@ -157,6 +161,22 @@ jpre() {
   [ -z "${3:-}" ] || sed "s#@ROOT@#$(cd "$d" && pwd -P)#g" "$3" > "$d/$4"
 }
 
+fxg="$root/tests/fixtures/gitleaks"
+for j in build secrets deps migrations deploy-check; do step "$j" Verdict "$work/$j-verdict.sh"; done
+# jv <job> [VAR=value...]: that job's Verdict with every step passed (a web
+# project for migrations and deploy-check, a pull request for deps), then the
+# given values. The run's directory is the workspace, as on the runner.
+jv() {
+  local job="$1"; shift
+  rt="$work/rt-$((++n))"; mkdir -p "$rt"; : > "$rt/summary"
+  (cd "$rt" && env RUNNER_TEMP="$rt" GITHUB_WORKSPACE="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" \
+     SYNC=success BUILD=success SMOKE=success GITLEAKS=success WD=. WEB=true PG=success MISSING=success EMPTY=success ROWS=success DEPLOY=success \
+     EVENT=pull_request SERVED=run REVIEW=success OSV=skipped SEVERITY=high ACTOR=someone VULNERABLE="" \
+     "$@" bash -e "$work/$job-verdict.sh") > "$rt/out" 2>&1
+  rc=$?
+}
+vuln_one='[{"change_type":"added","manifest":"uv.lock","ecosystem":"pip","name":"jinja2","version":"2.10","package_url":"pkg:pypi/jinja2@2.10","license":null,"source_repository_url":null,"vulnerabilities":[{"severity":"high","advisory_ghsa_id":"GHSA-462w-v97r-4m45","advisory_summary":"Jinja2 sandbox escape","advisory_url":"https://github.com/advisories/GHSA-462w-v97r-4m45"}]}]'
+
 echo "-- the matrix: every required check, every outcome its Verdict reads"
 while IFS=$'\t' read -r check var sid; do
   job="${check#ci / }"
@@ -179,6 +199,26 @@ while IFS=$'\t' read -r check var sid; do
         FORMAT) jpre ruff-format.rc 1 "$fxr/format.log" ruff-format.log; job_verdict lint FORMAT=failure ;;
         ZIZMOR) jpre; job_verdict lint ZIZMOR=failure ;;
         MYPY) jpre mypy.rc 1 "$fxm/one.log" mypy.log; job_verdict typecheck MYPY=failure ;;
+        *) bad "$check: steps.$sid.outcome ($var) has no case here: add one"; continue ;;
+      esac
+      shape "$check, steps.$sid failed" "$rt/out" "$rc" ;;
+    "ci / build" | "ci / secrets" | "ci / deps" | "ci / migrations" | "ci / deploy-check")
+      d="$work/rt-$((n + 1))"; mkdir -p "$d"
+      case "$job:$var" in
+        build:SYNC) jv build SYNC=failure BUILD=skipped SMOKE=skipped ;;
+        build:BUILD) jv build BUILD=failure SMOKE=skipped ;;
+        build:SMOKE) printf 'mypkg\tdist/mypkg-1.0-py3-none-any.whl\n' > "$d/smoke.at"; jv build SMOKE=failure ;;
+        secrets:GITLEAKS) echo 3 > "$d/gitleaks.rc"; cp "$fxg/one.json" "$d/gitleaks.json"; jv secrets GITLEAKS=failure ;;
+        deps:REVIEW) jv deps REVIEW=failure VULNERABLE="$vuln_one" ;;
+        deps:OSV) mkdir -p "$d/plinth-deps"; echo "fail: dependency review, 1 advisories at high or above on added dependency versions: jinja2 2.10 (GHSA-462w-v97r-4m45, CVSS 7.5)" > "$d/plinth-deps/deps.verdict"
+                  jv deps SERVED=refused REVIEW=skipped OSV=failure ;;
+        migrations:PG) jv migrations PG=failure SYNC=skipped MISSING=skipped EMPTY=skipped ROWS=skipped ;;
+        migrations:SYNC) jv migrations SYNC=failure MISSING=skipped EMPTY=skipped ROWS=skipped ;;
+        migrations:MISSING) jv migrations MISSING=failure EMPTY=skipped ROWS=skipped ;;
+        migrations:EMPTY) jv migrations EMPTY=failure ROWS=skipped ;;
+        migrations:ROWS) echo "fail: the base commit's rows survive this head's migrations: notes_note 3 -> 0" > "$d/rows.verdict"; jv migrations ROWS=failure ;;
+        deploy-check:SYNC) jv deploy-check SYNC=failure DEPLOY=skipped ;;
+        deploy-check:DEPLOY) printf '%s\n' "System check identified some issues:" "WARNINGS:" "?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting." > "$d/deploy.log"; jv deploy-check DEPLOY=failure ;;
         *) bad "$check: steps.$sid.outcome ($var) has no case here: add one"; continue ;;
       esac
       shape "$check, steps.$sid failed" "$rt/out" "$rc" ;;
@@ -386,6 +426,57 @@ for s in "lint check ruff-check" "lint format ruff-format" "typecheck mypy mypy"
     else bad "ci / $j, steps.$id: the tool exits $code, the step exited $got" "$(cat "$d/out")"; fi
   done
 done
+
+echo "-- ci / secrets: each secret at its file and line, its value never printed"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo 3 > "$d/gitleaks.rc"; cp "$fxg/one.json" "$d/gitleaks.json"; jv secrets GITLEAKS=failure WD=app; out="$rt/out"
+grep -qx '::error file=app/config.py,line=1::gitleaks rule aws-access-token matched a secret here in commit b7ba5b11f925, so revoke it where it was issued and remove it from the branch history' "$out" \
+  && grep -qx 'failed: gitleaks found 1 secret in the history, the first (aws-access-token) in app/config.py at line 1 of commit b7ba5b11f925' "$out" \
+  && ok "one secret: an annotation at its file and line under working-directory, and failed: names rule, file, line and commit" || bad "one secret" "$(grep -E '^(::|failed:|next:)' "$out")"
+# Twelve findings whose report carries the secret itself, as without --redact.
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo 3 > "$d/gitleaks.rc"; canary="plinth-canary-$RANDOM-not-a-secret"
+python3 -c 'import json,sys; x=json.load(open(sys.argv[1]))[0]; json.dump([dict(x, File=f"src/m{i:02}.py", StartLine=i+1, Secret=sys.argv[2], Match="key = "+sys.argv[2]) for i in range(12)], open(sys.argv[3],"w"))' "$fxg/one.json" "$canary" "$d/gitleaks.json"
+jv secrets GITLEAKS=failure; out="$rt/out"
+if [ "$(grep -c '^::error file=src/m[0-9]*.py,line=' "$out")" = 9 ] && grep -qx "::notice::showing 9 of 12 secrets gitleaks found; every one is in the secret detection step's log" "$out"; then ok "twelve secrets: nine annotations and one showing 9 of 12"
+else bad "twelve secrets" "$(grep '^::' "$out")"; fi
+! grep -qF "$canary" "$out" "$rt/summary" && ok "the secret's value is not in the log or the summary, even when the report carries it" || bad "the secret's value was printed" "$(grep -F "$canary" "$out" "$rt/summary")"
+shape "twelve secrets" "$out" "$rc"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo 1 > "$d/gitleaks.rc"; jv secrets GITLEAKS=failure; out="$rt/out"
+grep -qx 'failed: gitleaks could not run (exit 1), its own error and not a finding' "$out" && ! grep -q '^::error file=' "$out" && ok "gitleaks exits 1: could not run, not a secret" || bad "gitleaks exits 1" "$(cat "$out")"
+shape "gitleaks could not run" "$out" "$rc"
+
+echo "-- ci / deps: an advisory and a review that could not run are two causes"
+jv deps REVIEW=failure VULNERABLE="$vuln_one"; out="$rt/out"
+grep -qx 'failed: dependency review, 1 added dependency version with an advisory at high or above: jinja2 2.10 (GHSA-462w-v97r-4m45)' "$out" && grep -q "^next: raise each named package past its advisory's fixed version" "$out" \
+  && ok "the review found an advisory: failed: names the package, version and advisory; next: raises it" || bad "the review's advisory" "$(tail -3 "$out")"
+jv deps REVIEW=failure VULNERABLE=""; out="$rt/out"
+grep -qx "failed: dependency review could not run (its error is in the dependency review step's log)" "$out" && grep -q '^next: re-run this job' "$out" \
+  && ok "the review failed with no vulnerable change: could not run, re-run" || bad "the review could not run" "$(tail -3 "$out")"
+shape "the review could not run" "$out" "$rc"
+jv deps SERVED=refused REVIEW=skipped OSV=failure; out="$rt/out"
+grep -q '^failed: dependency review could not run, osv-scanner did not compare' "$out" && grep -q "^next: re-run this job, and if it fails again read the error in the osv-scanner step's log" "$out" \
+  && ok "refused and osv-scanner left no verdict: could not run" || bad "osv-scanner could not run" "$(tail -3 "$out")"
+jv deps ACTOR='dependabot[bot]'
+grep -qx -- '- not yet confirmed: CodeQL on this head. Why: Dependabot pushed it, and CodeQL does not analyse a head Dependabot pushed. What confirms it: the analysis of `main` after the merge.' "$rt/summary" \
+  && ok "a head Dependabot pushed: CodeQL's line, one fact per sentence" || bad "Dependabot's CodeQL line" "$(cat "$rt/summary")"
+
+echo "-- ci / build, ci / migrations, ci / deploy-check: the cause and its own next step"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo noroot > "$d/smoke.at"; jv build SMOKE=failure
+grep -q '^next: add a \[build-system\] table' "$rt/out" && ! grep -q '^::error::' "$rt/out" && ok "no root wheel: one cause, the Verdict's annotation, a [build-system] next step" || bad "no root wheel" "$(cat "$rt/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf 'mypkg\tdist/mypkg-1.0-py3-none-any.whl\n' > "$d/smoke.at"; jv build SMOKE=failure
+grep -qx 'failed: install smoke, import mypkg from dist/mypkg-1.0-py3-none-any.whl failed in a clean venv' "$rt/out" && grep -q "^next: run uv build here, then uv run --isolated --no-project --with dist/mypkg-1.0-py3-none-any.whl python -c 'import mypkg'" "$rt/out" \
+  && ok "an import that failed: the module and the artifact, and the command that repeats it" || bad "the smoke's import" "$(tail -3 "$rt/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo "fail: the base commit's rows survive this head's migrations, tests/migration_rows.json holds a model migrate rewrites (its name is in this step's log)" > "$d/rows.verdict"; jv migrations ROWS=failure
+grep -q '^next: take the model the rows step names out of tests/migration_rows.json' "$rt/out" && ok "rows that hold a model migrate rewrites: take it out" || bad "the rows' model" "$(tail -3 "$rt/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo "not yet confirmed: the base commit's rows survive this head's migrations. Why: the base commit has no tests/migration_rows.json. What confirms it: a base that has it." > "$d/rows.verdict"; jv migrations
+[ "$rc" = 0 ] && ! grep -qE '^(failed:|::error)' "$rt/out" && ok "a base with no rows file: not yet confirmed, no block" || bad "no rows file" "$(cat "$rt/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf '%s\n' "?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting." "?: (security.W008) Your SECURE_SSL_REDIRECT setting is not set to True." "?: (security.W004) again" > "$d/deploy.log"; jv deploy-check DEPLOY=failure
+grep -qx 'failed: manage.py check --deploy: 2 warnings, the first security.W004' "$rt/out" && ok "deploy warnings: counted once each, the first named" || bad "deploy warnings" "$(tail -3 "$rt/out")"
+for j in build secrets deps migrations deploy-check; do
+  jv "$j"
+  if [ "$rc" = 0 ] && ! grep -qE '^(::error|failed:|next:|more:)' "$rt/out"; then ok "ci / $j passing: no block, no ::error"
+  else bad "ci / $j passing printed a block or an error" "$(cat "$rt/out")"; fi
+done
+jv migrations WEB=false; grep -qx 'pass: migrations, does not apply (the web input is false: not a web project)' "$rt/out" && [ "$rc" = 0 ] && ok "not a web project: migrations passes as not applying" || bad "migrations off the web archetype" "$(cat "$rt/out")"
 
 echo "-- not yet confirmed: one fact per sentence (#1156)"
 # More of the lines: the changed-lines step itself, run with uv and git
