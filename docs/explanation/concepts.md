@@ -22,6 +22,62 @@ agent, refuses a merge; the way of working comes from skills others already
 made well, with a guide to walking them. Its author's earlier attempts to keep the rules inside the
 agent came to the same conclusion.
 
+## About the process
+
+Ask ten people whether an app is good and you get ten answers: one wanted it
+faster, one prettier, one wanted a feature nobody else asked for. Judging an
+outcome is hard even for experts, and someone holding the first thing an
+agent built has no way to judge it at all. Ask the same people whether the
+change was small enough to read, whether a test showed it works, whether the
+checks passed before it reached `main`, whether a written reason can be found
+next month, and whether it can be undone, and they agree. Those questions
+have yes-or-no answers. A process can be checked in a way an outcome cannot.
+
+That is the bet plinth makes: a good process makes a good outcome more
+likely. The habits come from how experienced engineers keep projects alive:
+small changes, tests on every change, a second look before merging, a record
+of why, a way back, and a pause now and then to clean up. A decade of
+research on software delivery keeps finding that habits like these go with
+teams that ship faster and break less
+([DORA](https://dora.dev/research/)). An agent writes a feature in a minute,
+but it will not insist on the habits, and its own "done" is not evidence.
+
+So plinth researches how experienced engineers run projects, from primary
+sources, and writes down what it finds. It distils that into a path someone
+new can walk: what to do at each step, which proven tool to use, and what to
+look at before moving on. It guides the person along that path and enforces
+only what a check can hold, on the host; the rest is a recommendation the
+person can see and turn down. The tools for each step are not rebuilt: plinth
+points to ones others have already proved, and joins them up. What is decided
+is listed in [decisions in force](../reference/decisions-in-force.md).
+
+Where the bet stops. A good process raises the floor; it does not promise the
+ceiling.
+
+- **Building it right is not building the right thing.** The process makes
+  sure what is built works, is checked and can be changed. Whether it is what
+  the person's users need stays a human judgement: plinth can ask, not answer.
+- **A ritual is not a process.** A check followed without understanding
+  becomes a target to fit, and an agent fits targets well
+  ([what green means](#about-what-green-means), part 5). Studies of AI help
+  for people learning to program point the same way: those who asked the AI
+  to explain learned more than those who handed it the work
+  ([Anthropic, 2026](https://www.anthropic.com/research/AI-assistance-coding-skills)),
+  and the tools helped novices who already worked through problems well while
+  leading those who did not further off course
+  ([Prather et al., 2024](https://arxiv.org/abs/2405.17739)). So plinth says
+  why once, when it matters, and wants the person able to say what a step is
+  for.
+- **The process fits the project.** A team's meetings would crush a
+  one-person project, so plinth keeps the practices and drops the meetings.
+  Help that a newcomer needs gets in an expert's way
+  ([Kalyuga et al., 2003](https://ro.uow.edu.au/edupapers/136)), so the
+  guidance should thin out as the person learns.
+- **The bet is not yet proven for newcomers.** The practices are proven in
+  industry; that someone new can follow them through plinth is not, until
+  people other than its author have tried
+  ([#163](https://github.com/coolbress/plinth/issues/163)).
+
 ## About what plinth is
 
 A good project stands: it does what its user needs, shows that it does and
