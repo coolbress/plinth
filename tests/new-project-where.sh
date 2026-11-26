@@ -85,6 +85,15 @@ for c in noremote:git-no-remote "gh-https:git-remote github.com octo/tool" \
   where "subfolder of $d" "$work/$d/src/deep" "${c#*:}" "$work/$d"
 done
 
+echo "-- a repository at the home folder (dotfiles) is not a project"
+repo "$work/home" git@github.com:me/dotfiles.git
+where home-is-a-repository "$work/home" home
+mkdir -p "$work/home/newproj"; where empty-under-a-home-repository "$work/home/newproj" empty
+touch "$work/home/newproj/x.txt"; where files-under-a-home-repository "$work/home/newproj" files
+out="$(cd "$work/empty" && env -u HOME PATH="$work/bin:$PATH" "$door" --where 2>&1)"
+if [ "$out" = "folder: empty" ]; then ok "no HOME: folder: empty, and nothing on stderr"
+else bad "no HOME: wanted only \"folder: empty\", got:"; sed 's/^/        /' <<<"$out"; fi
+
 echo "-- made by plinth: one test, shared with the guide"
 for f in "$root/scripts/guide-state.sh" "$door"; do
   if grep -q 'scripts/lib/copier-answers.sh' "$f" && grep -q 'made_by_plinth ' "$f"; then ok "$(basename "$f") uses made_by_plinth from scripts/lib/copier-answers.sh"

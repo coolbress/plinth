@@ -129,7 +129,8 @@ tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-s
 #   plinth-made <path> <commit>  rendered from plinth's template (the guide's
 #                              test, scripts/lib/copier-answers.sh); <path> is
 #                              `none` with no remote on either host
-# A subfolder of a repository reads as the repository, named by `toplevel:`.
+# A subfolder of a repository reads as the repository, named by `toplevel:`;
+# a repository at the home folder itself (dotfiles) is not counted.
 host=github; rest=(); host_next=0; check=0; readiness=0; where=0
 for a in "$@"; do
   if [ "$host_next" = 1 ]; then host="$a"; host_next=0; continue; fi
@@ -139,7 +140,11 @@ done
 if [ "$where" = 1 ]; then
   # shellcheck source=scripts/lib/copier-answers.sh
   . "$here/lib/copier-answers.sh"
-  if top="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ]; then
+  # A repository rooted at the home folder (dotfiles kept in git) is not a
+  # project: the folders under it read by their own contents, home as home.
+  home_p="$(cd "${HOME:-/nonexistent}" 2>/dev/null && pwd -P)" || home_p=""
+  if top="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ] \
+     && [ "$(cd "$top" && pwd -P)" != "$home_p" ]; then
     remote="$(git -C "$top" remote | grep -x origin || git -C "$top" remote | head -n 1)"
     url=""; [ -z "$remote" ] || url="$(git -C "$top" remote get-url "$remote" 2>/dev/null)" || url=""
     # https://host/path(.git), ssh://user@host[:port]/path, user@host:path
@@ -156,7 +161,7 @@ if [ "$where" = 1 ]; then
     elif [ "$rhost" = github.com ] || [ "$rhost" = gitlab.com ]; then echo "folder: git-remote $rhost $rpath"
     else echo "folder: git-remote-other ${rhost:-unknown}"; fi
     echo "toplevel: $top"
-  elif [ "$(pwd -P)" = "$(cd "$HOME" 2>/dev/null && pwd -P)" ]; then echo "folder: home"
+  elif [ -n "$home_p" ] && [ "$(pwd -P)" = "$home_p" ]; then echo "folder: home"
   else
     state=empty
     for f in * .[!.]* ..?*; do
