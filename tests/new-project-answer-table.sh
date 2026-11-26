@@ -113,15 +113,18 @@ says "the questions" "$qflat" \
   'a US$7 web service and a US$6 Postgres' 'https://render.com/pricing' 'about US$33 a month in all' \
   '`cli`, `library` and `data-ml`: no host cost' '`backend`: no host cost until its image runs somewhere' \
   'each run is 13 jobs (14 for `backend`, `data-ml` and `web`)' 'each billed as at least one minute' \
-  'about 13 to 15 billed minutes' 'an edited title or description runs it again' \
+  'about 13 to 15 billed minutes for a small `cli` or `library` project and more for the other kinds' \
+  'an edited title or description runs it again' 'at 3 to 5 runs a pull request' \
+  'On GitHub, the whole history' 'On GitHub, CI then runs on the plan'"'"'s Actions minutes' \
   'US$18 a month, about 3,000 Linux minutes at US$0.006' \
   'https://docs.github.com/en/billing/reference/actions-runner-pricing' \
   'https://docs.github.com/en/billing/concepts/product-billing/github-actions' \
   'roughly 40 to 75 pull requests a month' 'an estimate, not measured on a private repository'
 # Every price is dated where it is printed.
-n_read="$(grep -o 'read 2026-11-26' "$questions" | wc -l | tr -d ' ')"
-if [ "$n_read" -ge 3 ]; then ok "the questions date their prices ($n_read \"read 2026-11-26\")"
-else bad "the questions date $n_read prices, fewer than the 3 places that print one"; fi
+n_read="$(grep -o 'read 2026-11-26' <<<"$qflat" | wc -l | tr -d ' ')"
+# Four places print a figure: Claude, Render, the visibility page, the runner and billing pages.
+if [ "$n_read" -ge 4 ]; then ok "the questions date their figures ($n_read \"read 2026-11-26\")"
+else bad "the questions date $n_read figures, fewer than the 4 places that print one"; fi
 grep -qF '9 jobs' "$root/docs/explanation/concepts.md" && bad "concepts.md still says 9 jobs" || ok "concepts.md no longer says 9 jobs"
 says "concepts.md" "$(tr '\n' ' ' < "$root/docs/explanation/concepts.md" | tr -s ' ')" 'each CI run is 13 jobs (14 for backend, data-ml and web'
 

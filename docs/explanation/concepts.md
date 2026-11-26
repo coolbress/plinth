@@ -623,8 +623,9 @@ than "not raised" (recorded on #352, 2026-10-05).
 
 CI runs on the plan's Actions minutes. Counted from the workflows on
 2026-11-26, each CI run is 13 jobs (14 for backend, data-ml and web, which
-also build the container), about 13 to 15 billed minutes with each job
-rounded up to a whole minute. On the run measured earlier, when a run was
+also build the container), each job rounded up to a whole minute: about 13
+to 15 billed minutes for a small cli or library project, more for the others,
+whose container, database and web checks take longer. On the run measured earlier, when a run was
 fewer jobs, the first pull request took four CI runs.
 
 GitLab Free is the alternative for code that must stay private on a free
