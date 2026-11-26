@@ -49,8 +49,7 @@ else
 fi
 
 # skill<TAB>ticket that trims it and removes this line
-exceptions='arsenal	coolbress/plinth#1086
-floor-check	coolbress/plinth#1105'
+exceptions='floor-check	coolbress/plinth#1105'
 
 found=0
 for f in "$root"/skills/*/SKILL.md; do

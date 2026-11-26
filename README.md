@@ -111,7 +111,7 @@ of them; at 200k some descriptions are cut to about the skill's name, so they
 still run when called by name, but Claude is less likely to pick them on its
 own. The `skillListingBudgetFraction` setting raises the cap, and
 plinth-template sets it. What each plugin costs and how the cap was measured
-is in the arsenal's [Installed by default](skills/arsenal/SKILL.md#installed-by-default)
+is in the arsenal's [Installed by default](skills/arsenal/installed.md)
 table and the paragraph under it.
 
 Third-party marketplaces do not auto-update by default. To move to a new version, run

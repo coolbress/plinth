@@ -57,6 +57,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - The start-of-project lines on the agent's reach are guidance, not gates. 2026-10-06, #412
 - Paid services are never in the default set; error tracking, uptime and previews are listed with their free tiers. 2026-10-28, #702
 - The arsenal says not to use `/ship` in a plinth project until a trial shows it keeps the pull-request rules. 2026-11-24, #1085 (decided; not built yet: #1085)
+- The arsenal's "Not used with plinth" line lists only a tool an agent reaches without installing anything (a built-in, or a skill plinth installs) whose use breaks a plinth rule, with its class and the rule; tools that need installing are not listed. 2026-11-26, #1086 (decided; not built yet: #1086)
 
 ## floor-check and records
 
@@ -130,6 +131,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - When a release owes both the eval suite and the smoke run, one `scripts/eval-suite.sh --release` run on the release candidate serves both, its link in the release pull request's description and the GitHub Release; the full suite is still required when the template's `AGENTS.md` or `.claude/` changed, with no waiver and no check-name change. 2026-11-25, #1134 (decided; not built yet: #1134)
 - The eval suite is a script around `claude -p`, not `claude plugin eval`. 2026-10-25, #647
 - `template-update` never moves the plinth pin; when the workflows call a plinth older than the target tag was tested with, the plan stops and names the pin pull request to merge first. 2026-11-26, #511, #1183
+- `template-update`'s archetype move and GitLab path take bug fixes only until a real project uses them; new update features are built for the plain update on GitHub. 2026-11-26, #1184
 - floor-check WARNs, never FAILs, when the plinth pins in `ci.yml` and `label.yml` disagree; nothing requires them to move together. 2026-10-09, #447
 - The minimum Claude Code version is 2.1.274, from one source. 2026-09-26, #65
 - The git floor for installing plinth is 2.37.0. 2026-09-17, #171
