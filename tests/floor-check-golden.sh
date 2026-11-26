@@ -139,8 +139,6 @@ for f in Path(sys.argv[2]).glob("*.json"):
 for i in sorted(set(reached) - set(reg)):
     print(f"unregistered {i} {' '.join(sorted(reached[i]))}")
 for i, e in sorted(reg.items()):
-    if i == fc.UNASSIGNED:
-        continue
     for s in e["states"]:
         why = e.get("unreached", {}).get(s)
         if s in reached.get(i, set()):
@@ -152,8 +150,7 @@ for i, e in sorted(reg.items()):
             print(f"missing {i} {s}")
     for s in sorted(reached.get(i, set()) - set(e["states"])):
         print(f"undeclared {i} {s}")
-print(f"registered {len(reg) - 1}")
-print(f"unassigned {' '.join(sorted(reached.get(fc.UNASSIGNED, set())))}")
+print(f"registered {len(reg)}")
 PY
 if [ "$?" != 0 ] || ! grep -q '^registered ' "$work/ids.txt"; then bad "the ids were not read against REGISTRY" "$(cat "$work/ids.txt")"
 else
@@ -167,9 +164,12 @@ else bad "registered states no fixture reaches and no entry explains, states emi
 echo "  $(sed -n 's/^registered //p' "$work/ids.txt") ids registered; what no fixture reaches:"
 grep '^unreached ' "$work/ids.txt" | sed 's/^unreached /        /'
 grep -q '^unreached ' "$work/ids.txt" || echo "        (nothing listed)"
-echo "  states still emitted through FC-UNASSIGNED: $(sed -n 's/^unassigned //p' "$work/ids.txt")"
-left="$(grep -cE '(^|[^_a-zA-Z.])(result|ok)\(' "$checker")"
-echo "  $((left - 3)) call sites still report through result() or ok(), as FC-UNASSIGNED (one pull request per area until none is left)"
+# Every check has its id (#1103): no FC-UNASSIGNED is left, and no call
+# prints a verdict but emit() and verdict(). A result() or ok() that came
+# back would print a line no registry entry stands for.
+stray="$(grep -nE 'FC-UNASSIGNED|(^|[^_a-zA-Z.])(result|ok)\(' "$checker")"
+if [ -z "$stray" ]; then ok "no FC-UNASSIGNED left, and nothing prints a verdict but emit() and verdict() (grep)"
+else bad "a verdict printed without an id, or FC-UNASSIGNED, in scripts/floor-check.py" "$stray"; fi
 fi
 
 # The two pipelines that run the checker in consumers' CI do not move with
