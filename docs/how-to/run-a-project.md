@@ -361,21 +361,8 @@ at all. Type the skill.
 
 ### Skills plinth lists but does not install
 
-More of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
-`/wait-what` among them, and `/ponytail-audit` are listed, not installed;
-`/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved them on
-[#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set
-with them and one without, so whether they change a result is not known.
-`/to-spec`, `/to-tickets`, `/wayfinder`, `/improve-codebase-architecture`
-and `/handoff` are installed by default since
-[#704](https://github.com/coolbress/plinth/issues/704), and `/retro` since
-[#714](https://github.com/coolbress/plinth/issues/714). `/ask-matt` can
-suggest `/implement-spec` or `/pr`, which plinth does not install. Run either line once, then start a new session:
-
-```sh
-claude plugin install mattpocock-skills-extra@plinth
-claude plugin install ponytail-skills@plinth
-```
+What plinth lists but does not install, what each costs and the line that
+installs it: [the arsenal's list](../../skills/arsenal/listed.md).
 
 ## What the agent tells you, and when
 

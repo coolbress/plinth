@@ -77,7 +77,7 @@ check(entries["ponytail"]["source"]["sha"] == ponytail_skills["source"].get("sha
 # The description and the arsenal row name the pin they describe, so a pull
 # request that raises it without rewriting both fails here.
 held = (ponytail_skills["source"].get("sha") or "")[:7]
-arsenal_row = re.search(r"^\| `ponytail-skills` \|.*$", (root / "skills/arsenal/SKILL.md").read_text(), re.M)
+arsenal_row = re.search(r"^\| `ponytail-skills` \|.*$", (root / "skills/arsenal/listed.md").read_text(), re.M)
 for where, text in (("catalog description", ponytail_skills.get("description", "")),
                     ("arsenal row", arsenal_row.group(0) if arsenal_row else "")):
     check(len(held) == 7 and held in text and "pre-v5" in text and "over-engineering" in text,
@@ -147,11 +147,12 @@ check(line is not None and all(t in line.group(1) for t in ("Edit", "Write", "No
 check(re.search(r"^allowed-tools:", fm, re.M) is None, "records-check: allowed-tools is not mistaken for a lock (it unlocks)")
 fm = frontmatter("arsenal")
 check("disable-model-invocation" not in fm, "arsenal: the model may open the catalog on its own")
-body = (root / "skills/arsenal/SKILL.md").read_text()
 # Where each one lives is said in three places (the catalog descriptions above,
-# the arsenal's two tables, the README's default-set paragraph); they follow
-# the dependency list, so a plugin moved in one is moved in all.
-installed, _, not_installed = body.partition("## Listed, not installed")
+# the arsenal's two tables, in installed.md and listed.md beside its SKILL.md,
+# and the README's default-set paragraph); they follow the dependency list, so
+# a plugin moved in one is moved in all.
+installed = (root / "skills/arsenal/installed.md").read_text()
+not_installed = (root / "skills/arsenal/listed.md").read_text()
 def rows(text):
     return re.findall(r"^\| `([^`]+)` \|", text, re.M)
 check(rows(installed) == names, f"arsenal: 'Installed by default' lists exactly the dependencies: {rows(installed)}")

@@ -1385,7 +1385,7 @@ REGISTRY = _registry(
 # the --verdicts lines they make (tests/check-messages.sh reads the last one).
 results: list[dict] = []
 verdicts: list[str] = []
-TRACE = os.environ.get("FLOOR_CHECK_TRACE")   # tests/floor-check-golden.sh: one `<id> <state>` line per result
+TRACE = os.environ.get("FLOOR_CHECK_TRACE")   # the tests: one `<id> <state>\t<printed line>` line per result
 HERE = "cannot be read here"                   # an unknown no change to this machine or repository clears (#1002)
 ADMIN_READER = "/plinth:floor-check with a login that administers the repository"   # who reads a review
 
@@ -1403,10 +1403,11 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader}
     results.append(r)
     verdicts.extend(verdict_lines(r))
-    print(render_text(r))
+    line = render_text(r)
+    print(line)
     if TRACE:
         with open(TRACE, "a", encoding="utf-8") as t:
-            t.write(f"{cid} {state}\n")
+            t.write(f"{cid} {state}\t{line.splitlines()[0]}\n")
 
 
 def verdict(cid: str, cond: bool, values: dict | None = None, bad: str = "fail") -> bool:
@@ -2480,6 +2481,81 @@ def print_diff_size(root: Path) -> int:
     print(f"max={got['max-diff-lines']}")
     print(f"exclude={got['diff-size-exclude']}")
     print(f"root={got['working-directory']}")
+    return 0
+
+
+# The heading coolbress/plinth-template#359 gives each release section of the
+# template's CHANGELOG: the rendered files the release changes and the copier
+# questions it adds. The update plan quotes it (#1184); a section without it
+# is printed by its own heading alone.
+TEMPLATE_CHANGES_HEADING = "### Files and questions"
+
+
+def semver(tag: str) -> tuple[int, int, int] | None:
+    m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
+def print_template_changes(root: Path, network: bool) -> int:
+    """--print-template-changes (#1184): what the template changed between
+    the tag .copier-answers.yml records and the one this plinth targets, from
+    the target tag's own CHANGELOG.md (read at the commit new-project.sh
+    pins): the heading of each release section after the recorded tag, up to
+    and including the target, newest first, each followed by its
+    TEMPLATE_CHANGES_HEADING block, indented, where it has one. Exit 0.
+    Otherwise the compare link alone on stdout, why on stderr, exit 1: the
+    CHANGELOG not read, a tag that is not a version, or no section between."""
+    pin = new_project_pin()
+    recorded = (copier_answers(root) or {}).get("_commit", "")
+    if not pin or not recorded:
+        print("no template tag recorded in .copier-answers.yml, or no pin beside this script", file=sys.stderr)
+        return 1
+    template_repo, target, target_sha = pin[0], pin[1], pin[2]
+    link = f"https://github.com/{template_repo}/compare/{recorded}...{target}"
+    after, upto = semver(recorded), semver(target)
+    if not after or not upto:
+        print(link)
+        print(f"{recorded} or {target} is not a version tag", file=sys.stderr)
+        return 1
+    data = api(f"repos/{template_repo}/contents/CHANGELOG.md?ref={target_sha}", network)
+    text = None
+    if isinstance(data, dict):
+        try:
+            text = base64.b64decode(data["content"]).decode()
+        except (TypeError, KeyError, ValueError):
+            text = None
+    if text is None:
+        print(link)
+        print(f"{template_repo} CHANGELOG.md at {target}: {'not found' if data is ABSENT else 'offline or API error'}",
+              file=sys.stderr)
+        return 1
+    sections: list[tuple[str, list[str]]] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            sections.append((line.rstrip(), []))
+        elif sections:
+            sections[-1][1].append(line.rstrip())
+    out: list[str] = []
+    for heading, body in sections:
+        m = re.match(r"## \[(\d+\.\d+\.\d+)\]", heading)
+        v = semver(m.group(1)) if m else None
+        if not v or not after < v <= upto:
+            continue
+        out.append(heading)
+        if TEMPLATE_CHANGES_HEADING in body:
+            block: list[str] = []
+            for line in body[body.index(TEMPLATE_CHANGES_HEADING):]:
+                if block and line.startswith("### "):
+                    break
+                block.append(line)
+            while block and not block[-1]:
+                block.pop()
+            out += [f"  {line}" if line else "" for line in block]
+    if not out:
+        print(link)
+        print(f"{template_repo} CHANGELOG.md at {target} has no release section after {recorded}", file=sys.stderr)
+        return 1
+    print("\n".join(out))
     return 0
 
 
@@ -6038,6 +6114,10 @@ def main() -> int:
     ap.add_argument("--print-plinth-comments", action="store_true",
                     help="print each coolbress/plinth uses: of the workflow files that carries a trailing comment as "
                          "`<file> <ref>`, and exit 0 (#1045)")
+    ap.add_argument("--print-template-changes", action="store_true",
+                    help="print the template CHANGELOG's section headings from the recorded tag to the one this plinth "
+                         "targets, with each section's files-and-questions block; exit 0, or the compare link and "
+                         "exit 1 when not read (#1184)")
     ap.add_argument("--print-plugin-skew", action="store_true",
                     help="compare the template tag this plinth targets with the latest release's and the CI pin's: exit 3 "
                          "with what to type when it is older, else exit 0, a failed read said on stderr (#843)")
@@ -6084,6 +6164,8 @@ def main() -> int:
         return print_refused_actions(root, a.repo, not a.no_network)
     if a.print_diff_size:
         return print_diff_size(root)
+    if a.print_template_changes:
+        return print_template_changes(root, not a.no_network)
     if a.print_plugin_skew:
         return print_plugin_skew(root, not a.no_network, a.host)
     if a.print_behind:

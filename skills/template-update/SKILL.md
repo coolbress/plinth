@@ -104,6 +104,16 @@ as in conflict though both sides name the same pin, and either side runs
 the same plinth. Tell the user this before asking for the yes, so
 an exit 3 on those files is the conflict they were told of.
 
+On GitHub the plan then runs the command on a copy of the default branch
+outside the repository, removed when done, and prints what it does there:
+what merges cleanly, what merges into this repository's own changes (worth a
+look: copier merged into the person's lines), each file left in conflict
+with the lines this repository added to the template's render, the template
+CHANGELOG's sections between the two tags, and how to undo the update
+before and after it merges. Show those lists whole; they are what the yes is
+to. When a list says it was not compared, pass that on. copier failing on
+the copy stops the plan with its last line: show it and stop.
+
 ## 2. The user's yes
 
 Ask the user whether to apply exactly that plan. Invoking this skill is not

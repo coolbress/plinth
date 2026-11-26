@@ -2,13 +2,13 @@
 # The arsenal says what ships. A row written before a release workflow existed
 # told a real project that a release on a tag was "planned, not built yet"
 # (#833), and nothing tied the claim to the template. This reads the template
-# at the commit scripts/new-project.sh pins and the whole of skills/arsenal/SKILL.md
-# and fails when:
+# at the commit scripts/new-project.sh pins and the whole of skills/arsenal/
+# (SKILL.md and the installed.md and listed.md beside it) and fails when:
 #   - a table cell says "planned", "not built yet" or "nothing yet" about
 #     something the template renders or the plugin installs;
 #   - a cell names an issue as the plan and that issue is closed or unreadable;
-#   - a cell marks a tool "(listed", or the "Listed, not installed" table names
-#     a plugin, that the plugin installs;
+#   - a cell marks a tool "(listed", or the "Listed, not installed" table
+#     (listed.md) names a plugin, that the plugin installs;
 #   - the release row, the reminder row or run-a-project.md does not say what
 #     the template has, archetype by archetype;
 #   - plinth's own user-only skill is not on the one list of skills the person
@@ -36,8 +36,17 @@ plan_row="| A job bigger than one session"
 # flat <file>: one line, line breaks and runs of spaces as one space.
 flat() { tr '\n' ' ' <"$1" | tr -s ' '; }
 
-# Each table cell in the catalog, one per line.
-cells() { grep '^| ' "$1" | sed -e 's/^| //' -e 's/ |$//' | awk '{ gsub(/ \| /, "\n"); print }'; }
+# Each table cell in the catalog's files, one per line.
+cells() { grep -h '^| ' "$@" | sed -e 's/^| //' -e 's/ |$//' | awk '{ gsub(/ \| /, "\n"); print }'; }
+
+# arsenal_files <arsenal dir>: SKILL.md and the two files beside it that hold
+# tables; one missing is an error, not a file with no stale claim.
+arsenal_files() {
+  local f
+  for f in SKILL.md installed.md listed.md; do
+    [ -f "$1/$f" ] || { echo "no $f in $1" >&2; return 1; }
+  done
+}
 
 # real_state <owner/repo> <n>: open or closed; nothing when it cannot be read.
 real_state() { gh api "repos/$1/issues/$2" --jq .state 2>/dev/null; }
@@ -58,9 +67,10 @@ installed() {
 # release_sources <template dir>: the template's conditional release workflows.
 release_sources() { find "$1/template/.github/workflows" -type f -name '*release.yml*' 2>/dev/null; }
 
-# stale_claims <arsenal> <template dir> <plinth dir>: one line per stale claim.
+# stale_claims <arsenal dir> <template dir> <plinth dir>: one line per stale claim.
 stale_claims() {
-  local arsenal="$1" tdir="$2" pdir="$3" cell issue repo n state rc=0 name inst
+  local adir="$1" tdir="$2" pdir="$3" cell issue repo n state rc=0 name inst
+  arsenal_files "$adir" 2>&1 || return 1
   inst="$(installed "$pdir")"
   while IFS= read -r cell; do
     if grep -qiE 'planned|not built yet|nothing yet' <<<"$cell"; then
@@ -92,19 +102,19 @@ stale_claims() {
         echo "marks \`$name\` listed, and the plugin installs it: $cell"; rc=1
       fi
     done
-  done < <(cells "$arsenal")
+  done < <(cells "$adir/SKILL.md" "$adir/installed.md" "$adir/listed.md" ${evidence:+"$evidence"})
   while IFS= read -r name; do
     if grep -qxF -- "$name" <<<"$inst"; then
       echo "the \"Listed, not installed\" table names \`$name\`, and the plugin installs it"; rc=1
     fi
-  done < <(awk '/^## Listed, not installed/{on=1; next} on && /^## /{exit} on && /^\| `/' "$arsenal" | cut -d'`' -f2)
+  done < <(grep '^| `' "$adir/listed.md" | cut -d'`' -f2)
   return $rc
 }
 
-# missing_facts <arsenal> <run-a-project> <template dir>: what the template has
-# and the release row, the reminder row or step 9 does not say.
+# missing_facts <arsenal dir> <run-a-project> <template dir>: what the template
+# has and the release row, the reminder row or step 9 does not say.
 missing_facts() {
-  local arsenal="$1" howto="$2" tdir="$3" row src arch archs all_archs="" dest rc=0 step9 reminder title
+  local arsenal="$1/SKILL.md" howto="$2" tdir="$3" row src arch archs all_archs="" dest rc=0 step9 reminder title
   row="$(grep -F -- "$release_row" "$arsenal" | head -1)"
   [ -n "$row" ] || { echo "the arsenal has no row starting '$release_row'"; rc=1; }
   if [ -z "$(release_sources "$tdir")" ]; then
@@ -167,7 +177,7 @@ typed_list() {
   flat "$p/skills/guide/SKILL.md" | grep -qF "$typed_section" || { echo "skills/guide/SKILL.md does not point at the list"; rc=1; }
   grep -qF "$typed_anchor" "$p/docs/how-to/run-a-project.md" || { echo "run-a-project.md does not point at the list"; rc=1; }
   grep -qF "$typed_anchor" "$p/README.md" || { echo "README.md does not point at the list"; rc=1; }
-  grep -F -- '| `mattpocock-skills` |' "$p/skills/arsenal/SKILL.md" | grep -qF "$typed_section" || { echo "the mattpocock-skills row does not point at the list"; rc=1; }
+  grep -F -- '| `mattpocock-skills` |' "$p/skills/arsenal/installed.md" | grep -qF "$typed_section" || { echo "the mattpocock-skills row in installed.md does not point at the list"; rc=1; }
   if grep -F -- "$plan_row" "$p/skills/arsenal/SKILL.md" | grep -qi 'ask for it'; then
     echo "step 3's row says 'ask for it' for a skill the person must type"; rc=1
   fi
@@ -177,6 +187,7 @@ typed_list() {
 # ---- Must not pass: fixtures. Issue states come from a stub, not the network.
 stub_state() { case "$2" in 703|706) echo closed ;; 900) echo open ;; *) ;; esac; }
 state_of=stub_state
+evidence=""
 
 t="$work/t"; p="$work/p"
 mkdir -p "$t/template/.github/workflows" "$t/template/docs/how-to" "$p/skills/arsenal" "$p/skills/guide" "$p/.claude-plugin" "$p/docs/how-to"
@@ -202,21 +213,11 @@ good_arsenal() {
 ## Skills only the person can start
 
 - `/plinth:guide`
-
-## Installed by default
-
-| Plugin | What |
-| --- | --- |
-| `mattpocock-skills` | See "Skills only the person can start" |
-
-## Listed, not installed
-
-| Plugin | What |
-| --- | --- |
-| `extra` | More |
 ROW
 }
 good_arsenal >"$p/skills/arsenal/SKILL.md"
+printf '# Installed by default\n\n| Plugin | What |\n| --- | --- |\n| `mattpocock-skills` | See "Skills only the person can start" |\n' >"$p/skills/arsenal/installed.md"
+printf '# Listed, not installed\n\n| Plugin | What |\n| --- | --- |\n| `extra` | More |\n' >"$p/skills/arsenal/listed.md"
 printf -- '---\nname: guide\ndisable-model-invocation: true\n---\nThe arsenal, "Skills only the person can start".\n' >"$p/skills/guide/SKILL.md"
 printf '[list](x#skills-only-the-person-can-start)\n' >"$p/README.md"
 cat >"$p/docs/how-to/run-a-project.md" <<'H'
@@ -228,7 +229,7 @@ An issue "Template update available: …": type `/plinth:template-update`.
 
 ### Next
 H
-a="$p/skills/arsenal/SKILL.md"; h="$p/docs/how-to/run-a-project.md"
+a="$p/skills/arsenal"; h="$p/docs/how-to/run-a-project.md"
 
 if out="$(stale_claims "$a" "$t" "$p")"; then ok "a catalog that matches the template has no stale claim"
 else bad "a catalog that matches the template has a stale claim: $out"; fi
@@ -237,17 +238,18 @@ else bad "a catalog that matches the template misses a fact: $out"; fi
 if out="$(typed_list "$p")"; then ok "one typed list, with the pointers, passes"
 else bad "one typed list, with the pointers, fails: $out"; fi
 
-# variant <name> <sed expression>: the good catalog with one line changed.
-variant() { sed "$2" "$a" >"$work/$1.md"; printf '%s' "$work/$1.md"; }
+# variant <name> <sed expression> [<file>]: a copy of the good catalog's
+# folder with one line of SKILL.md (or of <file>) changed.
+variant() { cp -R "$a" "$work/$1"; sed -i.bak "$2" "$work/$1/${3:-SKILL.md}"; rm -f "$work/$1/"*.bak; printf '%s' "$work/$1"; }
 # The row as it stood when it told a real project a release was not built (#833).
 old_row='| A merged change to put out (release and deploy, after step 6) | A `web` app on Render goes out by itself once `main` is green; the other archetypes publish nothing yet | Render, from `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`; a release on a tag is planned for `library` and `cli` (#703) and `backend` (#706), not built yet |'
-awk -v r="$old_row" 'index($0, "| A merged change to put out") == 1 { print r; next } { print }' "$a" >"$work/old.md"
-if out="$(stale_claims "$work/old.md" "$t" "$p")"; then bad "the old release row passes"
+cp -R "$a" "$work/old"; awk -v r="$old_row" 'index($0, "| A merged change to put out") == 1 { print r; next } { print }' "$a/SKILL.md" >"$work/old/SKILL.md"
+if out="$(stale_claims "$work/old" "$t" "$p")"; then bad "the old release row passes"
 else
   ok "the old release row is a stale claim"
   grep -q 'names #703 as the plan, and it is closed' <<<"$out" && ok "the old release row names a closed issue as the plan" || bad "the old row's closed #703 went unnoticed: $out"
 fi
-if out="$(missing_facts "$work/old.md" "$h" "$t")"; then bad "the old release row says every fact"
+if out="$(missing_facts "$work/old" "$h" "$t")"; then bad "the old release row says every fact"
 else ok "the old release row misses what each archetype does"; fi
 
 not_passing() { # <what> <stale_claims or missing_facts arguments...>
@@ -261,8 +263,11 @@ not_passing "a cell naming another repository's closed issue as the plan" stale_
 not_passing "the reminder called not built yet" stale_claims "$(variant e 's/| Say |/| The reminder is not built yet |/')" "$t" "$p"
 not_passing "an installed skill called planned" stale_claims "$(variant f 's/| Say |/| `\/implement` is planned |/')" "$t" "$p"
 not_passing "an installed skill marked listed" stale_claims "$(variant g 's|`/ask-matt` (listed)|`/implement` (listed)|')" "$t" "$p"
-printf '| `dep` | More |\n' >>"$(variant h 's/^nothing$//')"
-not_passing "an installed plugin in the Listed table" stale_claims "$work/h.md" "$t" "$p"
+printf '| `dep` | More |\n' >>"$(variant h 's/^nothing$//' listed.md)/listed.md"
+not_passing "an installed plugin in the Listed table" stale_claims "$work/h" "$t" "$p"
+not_passing "an installed skill marked listed in listed.md" stale_claims "$(variant h2 's/| More |/| `\/implement` (listed) |/' listed.md)" "$t" "$p"
+rm "$(variant h3 's/^nothing$//')/listed.md"
+not_passing "a catalog folder with no listed.md" stale_claims "$work/h3" "$t" "$p"
 not_passing "a release row without one archetype" missing_facts "$(variant i 's/, `data-ml` its model as a GitHub release//')" "$h" "$t"
 not_passing "a release row with an archetype's wrong destination" missing_facts "$(variant j 's/`backend` its image to GHCR/`backend` its image to PyPI/')" "$h" "$t"
 not_passing "a reminder row without the issue's title" missing_facts "$(variant k 's/The monthly issue "Template update available: …"/The monthly issue/')" "$h" "$t"
@@ -293,6 +298,10 @@ not_passing "step 3's row saying ask for it" typed_list "$work/p4"
 
 # ---- The real files: the template at the pinned tag against plinth's own.
 state_of=real_state
+# The real run also reads the maintainers' page the evidence tables moved to,
+# which keeps the issue numbers the catalog's files no longer carry.
+evidence="$root/docs/reference/arsenal-evidence.md"
+[ -f "$evidence" ] && ok "the evidence page is read with the catalog" || bad "no $evidence: the evidence tables were not read"
 # The live lookup, run every time: no cell may need it, and it must still work.
 if [ "$(real_state coolbress/plinth 703)" = closed ]; then ok "issue state reads over the network (#703 closed)"
 else bad "could not read coolbress/plinth#703's state; a named plan cannot be verified"; fi
@@ -300,10 +309,10 @@ else bad "could not read coolbress/plinth#703's state; a named plan cannot be ve
 if ! template_checkout "$work"; then
   bad "no checkout of the template: $template_error"
 elif [ -f "$template_dir/copier.yml" ]; then
-  if out="$(stale_claims "$root/skills/arsenal/SKILL.md" "$template_dir" "$root")"
+  if out="$(stale_claims "$root/skills/arsenal" "$template_dir" "$root")"
   then ok "no arsenal cell contradicts $template_at or what the plugin installs"
   else bad "stale claims against $template_at:"; sed 's/^/        /' <<<"$out"; fi
-  if out="$(missing_facts "$root/skills/arsenal/SKILL.md" "$root/docs/how-to/run-a-project.md" "$template_dir")"
+  if out="$(missing_facts "$root/skills/arsenal" "$root/docs/how-to/run-a-project.md" "$template_dir")"
   then ok "the release and reminder facts match $template_at"
   else bad "facts missing against $template_at:"; sed 's/^/        /' <<<"$out"; fi
 else
