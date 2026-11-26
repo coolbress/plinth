@@ -754,6 +754,11 @@ if grep -qxF -- "- CONTRIBUTING.md: repository's side, applied by the agent on t
 then ok "the description says how each conflict was resolved: which side, on whose word"
 else bad "resolution not in the description"; printf '%s\n' "$body" | sed 's/^/        /'; fi
 fields_pass "the description of a conflict resolved through --finish" "$work/gh.log.body"
+# --finish runs before the plan's code in the script: the undo lines must be
+# defined by then (review on #1206).
+if grep -qxF "  gh pr close $(git -C "$wt" rev-parse --abbrev-ref HEAD)" <<<"$body" && ! grep -qF "command not found" <<<"$out"
+then ok "a conflict resolved through --finish: the description says how to undo it too"
+else bad "the undo after --finish"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
 if grep -A2 -i "edited by a person" <<<"$body" | grep -q "^- AGENTS.md"
 then ok "a cleanly merged file a person changed afterwards is named as such, not as merged cleanly"
 else bad "edited-after list"; printf '%s\n' "$body" | sed 's/^/        /'; fi

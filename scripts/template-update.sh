@@ -525,6 +525,28 @@ required_on() { # <repo> <default>
 }
 
 # ── finish: commit, push the branch, open the draft ─────────────────────
+# How to take the update back (#1184), before its pull request merges and
+# after, as commands run from the repository's folder; paths relative, as
+# they also go in the description. GitHub only: the GitLab path takes bug
+# fixes alone until a GitLab user is recorded (#1137, #1184's Decisions).
+# Defined before finish(): --finish runs before the plan's code (review on #1206).
+undo_lines() { # <worktree> <branch>
+  local n rb rn
+  n="$(basename "$1")"; rb="revert/${2#chore/}"; rn="../$n-revert"
+  echo "Before it merges: close it, and delete its branch and worktree:"
+  # Not --delete-branch: gh deletes the local branch first, which git refuses
+  # while the update's worktree has it checked out (review on #1184).
+  echo "  gh pr close $2"
+  echo "  git push origin --delete $2"
+  echo "  git worktree remove --force $(q "../$n")"
+  echo "  git branch -D $2"
+  echo "After it merges: revert its commit in a pull request of its own:"
+  echo "  git fetch origin $default"
+  echo "  git worktree add -b $rb $(q "$rn") origin/$default"
+  echo "  git -C $(q "$rn") revert --no-edit \"\$(gh pr view $2 --json mergeCommit --jq .mergeCommit.oid)\""
+  echo "  git -C $(q "$rn") push -u origin $rb"
+  echo "  (cd $(q "$rn") && gh pr create --fill)"
+}
 finish() { # <worktree>
   local wt="$1" sf repo default base from to cmd branch left pr
   sf="$(state_file "$wt" 2>/dev/null)" && [ -f "$sf" ] \
@@ -1067,27 +1089,6 @@ rehearse() { # <cmd>
     [ -n "$p" ] || continue
     as_rendered "$p" || owned="$owned$p"$'\n'
   done <<<"$deleted"
-}
-# How to take the update back (#1184), before its pull request merges and
-# after, as commands run from the repository's folder; paths relative, as
-# they also go in the description. GitHub only: the GitLab path takes bug
-# fixes alone until a GitLab user is recorded (#1137, #1184's Decisions).
-undo_lines() { # <worktree> <branch>
-  local n rb rn
-  n="$(basename "$1")"; rb="revert/${2#chore/}"; rn="../$n-revert"
-  echo "Before it merges: close it, and delete its branch and worktree:"
-  # Not --delete-branch: gh deletes the local branch first, which git refuses
-  # while the update's worktree has it checked out (review on #1184).
-  echo "  gh pr close $2"
-  echo "  git push origin --delete $2"
-  echo "  git worktree remove --force $(q "../$n")"
-  echo "  git branch -D $2"
-  echo "After it merges: revert its commit in a pull request of its own:"
-  echo "  git fetch origin $default"
-  echo "  git worktree add -b $rb $(q "$rn") origin/$default"
-  echo "  git -C $(q "$rn") revert --no-edit \"\$(gh pr view $2 --json mergeCommit --jq .mergeCommit.oid)\""
-  echo "  git -C $(q "$rn") push -u origin $rb"
-  echo "  (cd $(q "$rn") && gh pr create --fill)"
 }
 if [ "$mode" = plan ] && [ -n "$move" ]; then
   at_base
