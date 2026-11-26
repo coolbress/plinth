@@ -207,7 +207,7 @@ while IFS=$'\t' read -r check var sid; do
       case "$job:$var" in
         build:SYNC) jv build SYNC=failure BUILD=skipped SMOKE=skipped ;;
         build:BUILD) jv build BUILD=failure SMOKE=skipped ;;
-        build:SMOKE) printf 'mypkg\tdist/mypkg-1.0-py3-none-any.whl\n' > "$d/smoke.at"; jv build SMOKE=failure ;;
+        build:SMOKE) printf 'import\037mypkg\037dist/mypkg-1.0-py3-none-any.whl\n' > "$d/smoke.at"; jv build SMOKE=failure ;;
         secrets:GITLEAKS) echo 3 > "$d/gitleaks.rc"; cp "$fxg/one.json" "$d/gitleaks.json"; jv secrets GITLEAKS=failure ;;
         deps:REVIEW) jv deps REVIEW=failure VULNERABLE="$vuln_one" ;;
         deps:OSV) mkdir -p "$d/plinth-deps"; echo "fail: dependency review, 1 advisories at high or above on added dependency versions: jinja2 2.10 (GHSA-462w-v97r-4m45, CVSS 7.5)" > "$d/plinth-deps/deps.verdict"
@@ -428,10 +428,12 @@ for s in "lint check ruff-check" "lint format ruff-format" "typecheck mypy mypy"
 done
 
 echo "-- ci / secrets: each secret at its file and line, its value never printed"
-d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo 3 > "$d/gitleaks.rc"; cp "$fxg/one.json" "$d/gitleaks.json"; jv secrets GITLEAKS=failure WD=app; out="$rt/out"
+# gitleaks names a file from the repository's root (measured: run in app/,
+# it reports app/config.py), so the annotation uses it as it is.
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo 3 > "$d/gitleaks.rc"; sed 's#"File": "config.py"#"File": "app/config.py"#' "$fxg/one.json" > "$d/gitleaks.json"; jv secrets GITLEAKS=failure; out="$rt/out"
 grep -qx '::error file=app/config.py,line=1::gitleaks rule aws-access-token matched a secret here in commit b7ba5b11f925, so revoke it where it was issued and remove it from the branch history' "$out" \
   && grep -qx 'failed: gitleaks found 1 secret in the history, the first (aws-access-token) in app/config.py at line 1 of commit b7ba5b11f925' "$out" \
-  && ok "one secret: an annotation at its file and line under working-directory, and failed: names rule, file, line and commit" || bad "one secret" "$(grep -E '^(::|failed:|next:)' "$out")"
+  && ok "one secret: an annotation at its file and line from the root, and failed: names rule, file, line and commit" || bad "one secret" "$(grep -E '^(::|failed:|next:)' "$out")"
 # Twelve findings whose report carries the secret itself, as without --redact.
 d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo 3 > "$d/gitleaks.rc"; canary="plinth-canary-$RANDOM-not-a-secret"
 python3 -c 'import json,sys; x=json.load(open(sys.argv[1]))[0]; json.dump([dict(x, File=f"src/m{i:02}.py", StartLine=i+1, Secret=sys.argv[2], Match="key = "+sys.argv[2]) for i in range(12)], open(sys.argv[3],"w"))' "$fxg/one.json" "$canary" "$d/gitleaks.json"
@@ -460,17 +462,23 @@ grep -qx -- '- not yet confirmed: CodeQL on this head. Why: Dependabot pushed it
   && ok "a head Dependabot pushed: CodeQL's line, one fact per sentence" || bad "Dependabot's CodeQL line" "$(cat "$rt/summary")"
 
 echo "-- ci / build, ci / migrations, ci / deploy-check: the cause and its own next step"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf 'install\037\037dist/mypkg-1.0.tar.gz\n' > "$d/smoke.at"; jv build SMOKE=failure
+grep -qx 'failed: install smoke, dist/mypkg-1.0.tar.gz did not install in a clean venv' "$rt/out" && ok "an install that failed: the artifact, though the module field is empty" || bad "the smoke's install" "$(tail -3 "$rt/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf 'import\037install\037dist/mypkg-1.0.tar.gz\n' > "$d/smoke.at"; jv build SMOKE=failure
+grep -qx 'failed: install smoke, import install from dist/mypkg-1.0.tar.gz failed in a clean venv' "$rt/out" && ok "a module named install is an import, not the install step" || bad "a module named install" "$(tail -3 "$rt/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo "something else" > "$d/smoke.at"; jv build SMOKE=failure
+grep -q "^next: read the install smoke step's log" "$rt/out" && shape "an unknown smoke label" "$rt/out" "$rc" || bad "an unknown smoke label printed no next:" "$(cat "$rt/out")"
 d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo noroot > "$d/smoke.at"; jv build SMOKE=failure
 grep -q '^next: add a \[build-system\] table' "$rt/out" && ! grep -q '^::error::' "$rt/out" && ok "no root wheel: one cause, the Verdict's annotation, a [build-system] next step" || bad "no root wheel" "$(cat "$rt/out")"
-d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf 'mypkg\tdist/mypkg-1.0-py3-none-any.whl\n' > "$d/smoke.at"; jv build SMOKE=failure
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf 'import\037mypkg\037dist/mypkg-1.0-py3-none-any.whl\n' > "$d/smoke.at"; jv build SMOKE=failure
 grep -qx 'failed: install smoke, import mypkg from dist/mypkg-1.0-py3-none-any.whl failed in a clean venv' "$rt/out" && grep -q "^next: run uv build here, then uv run --isolated --no-project --with dist/mypkg-1.0-py3-none-any.whl python -c 'import mypkg'" "$rt/out" \
   && ok "an import that failed: the module and the artifact, and the command that repeats it" || bad "the smoke's import" "$(tail -3 "$rt/out")"
 d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo "fail: the base commit's rows survive this head's migrations, tests/migration_rows.json holds a model migrate rewrites (its name is in this step's log)" > "$d/rows.verdict"; jv migrations ROWS=failure
 grep -q '^next: take the model the rows step names out of tests/migration_rows.json' "$rt/out" && ok "rows that hold a model migrate rewrites: take it out" || bad "the rows' model" "$(tail -3 "$rt/out")"
 d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo "not yet confirmed: the base commit's rows survive this head's migrations. Why: the base commit has no tests/migration_rows.json. What confirms it: a base that has it." > "$d/rows.verdict"; jv migrations
 [ "$rc" = 0 ] && ! grep -qE '^(failed:|::error)' "$rt/out" && ok "a base with no rows file: not yet confirmed, no block" || bad "no rows file" "$(cat "$rt/out")"
-d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf '%s\n' "?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting." "?: (security.W008) Your SECURE_SSL_REDIRECT setting is not set to True." "?: (security.W004) again" > "$d/deploy.log"; jv deploy-check DEPLOY=failure
-grep -qx 'failed: manage.py check --deploy: 2 warnings, the first security.W004' "$rt/out" && ok "deploy warnings: counted once each, the first named" || bad "deploy warnings" "$(tail -3 "$rt/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf '%s\n' "?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting." "?: (security.W008) Your SECURE_SSL_REDIRECT setting is not set to True." "?: (security.W004) again" "?: (oauth2_provider.E001) a setting" > "$d/deploy.log"; jv deploy-check DEPLOY=failure
+grep -qx 'failed: manage.py check --deploy: 3 issues, the first security.W004' "$rt/out" && ok "deploy issues: counted once each, an app label with a digit included, the first named" || bad "deploy warnings" "$(tail -3 "$rt/out")"
 for j in build secrets deps migrations deploy-check; do
   jv "$j"
   if [ "$rc" = 0 ] && ! grep -qE '^(::error|failed:|next:|more:)' "$rt/out"; then ok "ci / $j passing: no block, no ::error"

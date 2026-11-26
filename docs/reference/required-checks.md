@@ -145,7 +145,7 @@
 
 | What failed | The next step |
 | --- | --- |
-| `manage.py check --deploy: <N> warnings, the first <id>` | Run `DJANGO_SECRET_KEY=x DJANGO_ALLOWED_HOSTS=example.invalid uv run python manage.py check --deploy --fail-level WARNING` here with `DJANGO_DEBUG` unset, fix each warning in the settings, and push; the deploy step's log has every warning |
+| `manage.py check --deploy: <N> issues, the first <id>` | Run `DJANGO_SECRET_KEY=x DJANGO_ALLOWED_HOSTS=example.invalid uv run python manage.py check --deploy --fail-level WARNING` here with `DJANGO_DEBUG` unset, fix each warning in the settings, and push; the deploy step's log has every warning |
 | `uv sync --locked` | As for `ci / build` |
 
 ## Required on plinth's own repository

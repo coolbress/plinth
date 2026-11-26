@@ -12,6 +12,6 @@
   review that could not run (next: re-run). `ci / build` names the module
   and artifact the install smoke stopped on, and its own "no wheel or sdist"
   annotation becomes a log line, so one cause gives one annotation.
-  `ci / deploy-check` names the first deployment warning. Their own
+  `ci / deploy-check` names the first deployment issue it reports. Their own
   `not yet confirmed:` lines say one fact per sentence. No job, step id,
   check name, input or secret is renamed.
