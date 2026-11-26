@@ -634,9 +634,16 @@ history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/
 # the next step while it fails (#1077 review). Printed after the route.
 run_ok=""; main_red=""
 run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
-      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)" && run_ok=yes
+      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10], ((.head_commit.message // "") | (split("\n")[0] // "") | gsub("\t"; " "))] | @tsv' 2>&1)" && run_ok=yes
+# A merge broke main (#1079): the failing run's head is a squash merge, its
+# title ending in (#N) as GitHub writes it; the route undoes #N first.
+main_undo=""; main_undo_title=""
 if [ -n "$run_ok" ] && [ -n "$run" ]; then
   case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
+  if [ -n "$main_red" ]; then
+    main_undo_title="$(cut -f4 <<<"$run")"
+    main_undo="$(sed -nE 's/.* \(#([0-9]+)\)$/\1/p' <<<"$main_undo_title")"
+  fi
 fi
 
 # The release signal (#1077): the last tag (the newest with a date, by its
@@ -1070,6 +1077,17 @@ if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   else
     say "Repository made, its first pull request open" "none: no pull request is open; open the repository's pull requests page"
   fi
+elif [ -n "$main_undo" ]; then
+  # A merge broke main (#1079): undo it first, through a pull request and the
+  # same checks, as the project's own page says; reproduce and fix after.
+  # Ahead of an open pull request's failing check: main stays broken while a
+  # fix is written. /rewind is the session's own undo and never touches main.
+  run_id_red="$(cut -f1 <<<"$run")"
+  note="main's latest CI run (run $run_id_red) failed on the merge of pull request #$main_undo (${main_undo_title% (#*}); undoing it opens a revert pull request that goes through the same checks; /rewind undoes the agent's edits in a session, never a merge"
+  say "Something broke" "none: undo pull request #$main_undo first, as the project's docs/how-to/undo-a-merged-change.md says"
+  if [ "$archetype" = web ]; then restore="with the README's \"Where it runs\" and the restore you tried (step 3 of $plugin/docs/how-to/set-four-things-by-hand.md)"
+  else restore="this archetype's project has no restore steps of its own"; fi
+  echo "then also: after the undo, restore any data the change lost or changed ($restore), then reproduce and fix, and leave a short blameless note in the issue's Outcome when it lost data, needed a revert or reached users"
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
   if [ -n "$broken" ] && [ -n "$plinth_failing" ] && [ -n "$pin_behind" ]; then
@@ -1210,7 +1228,7 @@ fi
 if [ -n "$run_ok" ]; then
   if [ -z "$run" ]; then echo "main ci: none (no completed run of ci.yml on main)"
   else
-    IFS=$'\t' read -r run_id run_end run_on <<<"$run"
+    IFS=$'\t' read -r run_id run_end run_on _ <<<"$run"
     case "$run_end" in
       success|neutral|skipped) echo "main ci: pass (run $run_id, $run_on)" ;;
       *) echo "main ci: fail (run $run_id, $run_on, ${run_end:-no conclusion}): gh run view $run_id --log-failed"

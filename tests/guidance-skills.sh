@@ -20,7 +20,7 @@ import json, re, sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug"}
+BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug", "rewind"}
 plugin = json.loads((root / ".claude-plugin/plugin.json").read_text())
 entries = {e["name"]: e for e in json.loads((root / ".claude-plugin/marketplace.json").read_text())["plugins"]}
 default = {"plinth:" + d.name for d in (root / "skills").iterdir() if d.is_dir()}
@@ -72,7 +72,8 @@ PLACED = (("| A pull request with checks running (step 5) |", "`/security-review
           ("| Stopping, or coming back (step 8) |", "`/resume` and `/recap` (built in, same machine only"),
           ("| Looking back on a piece of work (retrospective) |", "`/insights` (built in"),
           ("| Something broke (step 7) |", "`/doctor` (built in"),
-          ("| Something broke (step 7) |", DEBUG_CLAUSE))
+          ("| Something broke (step 7) |", DEBUG_CLAUSE),
+          ("| Something broke (step 7) |", "`/rewind` (built in) rolls back the agent's own edits in this session and never undoes a merge"))
 
 
 def built_ins(rows):
@@ -87,6 +88,13 @@ def built_ins(rows):
         # "`/debug" with no closing backtick: `/debug <args>` counts too.
         if r.count("`/debug") != r.count(DEBUG_CLAUSE):
             out.append(f"a 'Where you are' cell names `/debug` other than as {DEBUG_CLAUSE!r}: {r[:60]}")
+        # /rewind once, in the "Something broke" row only (#1079): it is the
+        # session's undo, and a second mention invites it for a merge.
+        n = r.count("`/rewind")
+        if n and not r.startswith("| Something broke (step 7) |"):
+            out.append(f"a row other than 'Something broke' names `/rewind`: {r[:60]}")
+        elif r.startswith("| Something broke (step 7) |") and n != 1:
+            out.append(f"the 'Something broke' row names `/rewind` {n} times, not once")
     return out
 
 
@@ -146,6 +154,10 @@ case("must fail: a cell offers /debug with arguments for the app",
      "names `/debug` other than")
 case("must fail: the /debug clause loses 'not the app'",
      problems(arsenal.replace(DEBUG_CLAUSE, "`/debug` (built in) debugs it"), howto, guide), "names `/debug` other than")
+case("must fail: /rewind named twice in the Something broke row",
+     problems(arsenal.replace(broke, broke + " type `/rewind` to undo the merge;", 1), howto, guide), "names `/rewind` 2 times")
+case("must fail: /rewind gone from the Something broke row",
+     problems(arsenal.replace("`/rewind` (built in) rolls back", "a rewind rolls back"), howto, guide), "`/rewind` (built in) rolls back")
 case("must fail: step 8 drops 'same machine only'",
      problems(arsenal.replace("(built in, same machine only", "(built in"), howto, guide), "/recap")
 assert step5 in arsenal and broke in arsenal, "a row #1080 placed a built-in in moved; update this test"
