@@ -119,6 +119,7 @@ for p in '`files`' '`git-no-remote`' '`git-remote <host>' '`git-remote-other <ho
          '/plinth:floor-check' '/plinth:guide' 'gh repo create' '--source=' 'glab repo create' \
          'For `empty` or `home`' 'a name argument or `--dir=`' 'no folder question' \
          'runs no preflight' 'print the command' 'never run it yourself' 'never call the Skill tool' \
+         'every hand-off is run from its top folder' 'print `cd <top folder>` first' \
          'ends as Cancel' 'naming the top folder' 'only once the folder step goes on to the host' \
          'open a new session there'; do
   if grep -qF -- "$p" <<<"$flat"; then ok "the skill says \"$p\""; else bad "the skill does not say \"$p\""; fi

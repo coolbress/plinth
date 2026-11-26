@@ -59,6 +59,13 @@ What each choice does:
   the person to type in this folder.
 - **Cancel**: nothing is made; say so in one line.
 
+Inside a repository, every hand-off is run from its top folder, the
+`toplevel:` path: `/plinth:floor-check` and `/plinth:guide` read the folder
+they are typed in as the repository's root, and from a subfolder they report
+files missing that the top folder has. When the session started below it,
+print `cd <top folder>` first, written out, and say that the command is
+typed in a session started there.
+
 Every choice but **New separate project** ends the turn with the printed
 command, and runs no preflight and asks nothing more. A hand-off is a
 command the person types: never call the Skill tool for `/plinth:floor-check`
