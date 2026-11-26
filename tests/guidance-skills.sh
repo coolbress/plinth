@@ -51,6 +51,9 @@ def looking_back(text):
 
 # Every skill the marketplace carries that the default install does not.
 listed_skills = {s.rsplit("/", 1)[1] for e in entries.values() for s in e.get("skills", [])} - default
+# What plinth installs or lists, in the arsenal's own words: a name there is
+# not "built in", whether or not the marketplace mounts it.
+catalog = (root / "skills/arsenal/installed.md").read_text() + (root / "skills/arsenal/listed.md").read_text()
 NOT_USED = re.compile(r"^- `/([a-z][a-z0-9:-]*)` \((built in|installed by plinth)\)\. Breaks: (\S.*)$")
 
 
@@ -67,11 +70,17 @@ def not_used_problems(text, rows):
         name, cls = m.group(1), m.group(2)
         if cls == "installed by plinth" and name not in default:
             out.append(f"not-used marks /{name} installed by plinth, and the default install does not carry it")
-        if cls == "built in" and (name in default or name in listed_skills):
+        if cls == "built in" and (name in default or name in listed_skills or name in entries
+                                  or f"`{name}`" in catalog or f"`/{name}`" in catalog):
             out.append(f"not-used marks /{name} built in, and it is a skill plinth installs or lists")
         for r in rows:
             if f"`/{name}`" in r or f"`/{name} " in r:
                 out.append(f"/{name} is on the not-used line and in the table: {r[:60]}")
+    # Every tool the file names is an entry: one in another shape escapes nothing.
+    named = set(re.findall(r"`/([a-z][a-z0-9:-]*)", text))
+    entered = {m.group(1) for m in map(NOT_USED.match, entries_) if m}
+    for name in sorted(named - entered):
+        out.append(f"not-used.md names /{name} outside an entry with its class and rule")
     return out
 
 
@@ -208,6 +217,10 @@ case("must fail: a not-used tool that needs installing",
      not_used_problems(not_used + "\n- `/ponytail-audit` (listed). Breaks: it is not installed.\n", rows), "without its class")
 case("must fail: a listed skill called built in",
      not_used_problems(not_used + "\n- `/ask-matt` (built in). Breaks: it routes elsewhere.\n", rows), "plinth installs or lists")
+case("must fail: a listed plugin with no marketplace skills called built in",
+     not_used_problems(not_used + "\n- `/last30days` (built in). Breaks: x.\n", rows), "plinth installs or lists")
+case("must fail: a tool named in another shape than an entry",
+     not_used_problems(not_used + "\n1. `/rename`, which renames the session.\n", rows), "outside an entry")
 case("must fail: a skill called installed by plinth that the default install does not carry",
      not_used_problems(not_used + "\n- `/ask-matt` (installed by plinth). Breaks: it routes elsewhere.\n", rows), "does not carry it")
 case("must fail: a not-used tool named in a Tool cell",

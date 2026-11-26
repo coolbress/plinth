@@ -2,7 +2,7 @@
 
 - `/plinth:arsenal` is lighter to read (#1086, first part). Its `SKILL.md`
   keeps the "Where you are" table and the list of skills only the person can
-  start: 94 lines and 15,835 bytes, from 366 lines and 41,486, with no issue
+  start: 94 lines and 15,906 bytes, from 366 lines and 41,486, with no issue
   numbers. What lies outside the table moved to files beside it, each read
   only when the question needs it: `installed.md` (the default set and its
   cost, the built-ins the table names), `listed.md` (the listed tools and

@@ -102,7 +102,7 @@ stale_claims() {
         echo "marks \`$name\` listed, and the plugin installs it: $cell"; rc=1
       fi
     done
-  done < <(cells "$adir/SKILL.md" "$adir/installed.md" "$adir/listed.md")
+  done < <(cells "$adir/SKILL.md" "$adir/installed.md" "$adir/listed.md" ${evidence:+"$evidence"})
   while IFS= read -r name; do
     if grep -qxF -- "$name" <<<"$inst"; then
       echo "the \"Listed, not installed\" table names \`$name\`, and the plugin installs it"; rc=1
@@ -187,6 +187,7 @@ typed_list() {
 # ---- Must not pass: fixtures. Issue states come from a stub, not the network.
 stub_state() { case "$2" in 703|706) echo closed ;; 900) echo open ;; *) ;; esac; }
 state_of=stub_state
+evidence=""
 
 t="$work/t"; p="$work/p"
 mkdir -p "$t/template/.github/workflows" "$t/template/docs/how-to" "$p/skills/arsenal" "$p/skills/guide" "$p/.claude-plugin" "$p/docs/how-to"
@@ -297,6 +298,10 @@ not_passing "step 3's row saying ask for it" typed_list "$work/p4"
 
 # ---- The real files: the template at the pinned tag against plinth's own.
 state_of=real_state
+# The real run also reads the maintainers' page the evidence tables moved to,
+# which keeps the issue numbers the catalog's files no longer carry.
+evidence="$root/docs/reference/arsenal-evidence.md"
+[ -f "$evidence" ] && ok "the evidence page is read with the catalog" || bad "no $evidence: the evidence tables were not read"
 # The live lookup, run every time: no cell may need it, and it must still work.
 if [ "$(real_state coolbress/plinth 703)" = closed ]; then ok "issue state reads over the network (#703 closed)"
 else bad "could not read coolbress/plinth#703's state; a named plan cannot be verified"; fi
