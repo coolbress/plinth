@@ -1,6 +1,6 @@
-# Every id scripts/floor-check.py has registered, with the name it had (#1103).
-# Lines are only added: tests/floor-check-registry.sh fails on an id that left
-# REGISTRY without staying as an alias. Add new ones with its --write.
+# Every id scripts/floor-check.py has registered (#1103), with the name it had when it was
+# added, for reading only. Lines are only added: tests/floor-check-registry.sh fails on an id
+# that left REGISTRY without staying as an alias, here or in the latest release. --write adds new ones.
 FC-A01 LICENSE present
 FC-A02 README.md present
 FC-A03 CHANGELOG.md present

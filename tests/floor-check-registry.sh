@@ -5,7 +5,8 @@
 #   - every id ever recorded in tests/fixtures/floor-check-golden/ids.txt is still
 #     registered, as an id or as an alias (an id whose letter changed is a
 #     new id: the old one stays, as an alias of it), and every registered id is
-#     recorded there (`--write` adds the new ones);
+#     recorded there (`--write` adds the new ones); the record the latest
+#     release shipped is read too (the network), as the same pull request can edit this one;
 #   - every entry that .plinth-adoption.yml may not keep is listed with why (#1112);
 #   - every `baseline` id is in the OSPS Baseline release OSPS_BASELINE names
 #     (tests/fixtures/osps-baseline/<release>.txt);
@@ -69,6 +70,40 @@ if not gone:
     ok(f"every one of {len(recorded)} recorded ids is still registered, as an id or an alias")
 else:
     bad("recorded ids no longer registered: an id that changed letter or number keeps the old one as an alias", gone)
+
+# The same pull request can edit ids.txt, so the record is also read as the
+# latest release shipped it: an id a release carried stays, here and in
+# REGISTRY. A release before the record existed has none (404); a failed
+# read is a FAIL, not a pass.
+import subprocess, urllib.error, urllib.request
+tags = subprocess.run(["git", "-C", str(root), "ls-remote", "--tags", "--refs",
+                       "https://github.com/coolbress/plinth.git", "v*"],
+                      capture_output=True, text=True, timeout=60, check=False)
+versions = sorted((tuple(map(int, m.groups())), m.group(0)) for line in tags.stdout.splitlines()
+                  if (m := re.search(r"v(\d+)\.(\d+)\.(\d+)$", line)))
+if tags.returncode != 0 or not versions:
+    bad("the release tags could not be listed, so the released id record was not read",
+        [tags.stderr.strip() or "(no v* tag)"])
+else:
+    tag = versions[-1][1]
+    url = f"https://raw.githubusercontent.com/coolbress/plinth/{tag}/tests/fixtures/floor-check-golden/ids.txt"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            shipped = [ln.split()[0] for ln in r.read().decode().splitlines() if ln.strip() and not ln.startswith("#")]
+    except urllib.error.HTTPError as e:
+        shipped = None if e.code == 404 else e
+    except OSError as e:
+        shipped = e
+    if isinstance(shipped, Exception):
+        bad(f"{tag}'s id record could not be read", [str(shipped)])
+    elif shipped is None:
+        print(f"  INFO  {tag} carries no id record yet; the next release's is held from then on")
+    else:
+        lost = [i for i in shipped if i not in recorded or (i not in reg and i not in aliases)]
+        if not lost:
+            ok(f"every one of {len(shipped)} ids {tag} shipped is still recorded and registered")
+        else:
+            bad(f"ids {tag} shipped that left ids.txt or REGISTRY (keep the old id as an alias)", lost)
 if not new:
     ok("every registered id is in the record")
 else:
