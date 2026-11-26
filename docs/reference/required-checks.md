@@ -67,15 +67,21 @@
 
 ### ci / lint
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1099 | The log names the tool: `uv sync --locked`, `ruff check`, `ruff format --check` or zizmor | Run the same command here, fix what it names, and push |
+| What failed | The next step |
+| --- | --- |
+| `ruff check: <N> findings, the first <code> at <file>:<line>` | Run `uv run ruff check .` here, fix what it names, and push. Each finding is also an annotation at its file and line, with its code, nine at most in the job, then a line saying how many there are; ruff's whole output is in the ruff check step's log |
+| `ruff format --check: <N> files not formatted: <files>` | Run `uv run ruff format` here, commit what it changes, and push. Each file is also an annotation, within the same nine |
+| `ruff check could not run` or `ruff format --check could not run` | ruff stopped with its own error and named no file and line (exit 2: a setting it cannot read, an unknown rule, ruff missing from the dev dependencies), not a finding: run the same command here and fix what stops it; its error is in that step's log |
+| `uv sync --locked` | Run `uv sync --locked` here; when it says `uv.lock` needs updating, run `uv lock`, commit `uv.lock` and push |
+| `zizmor's audits` | Run `uvx zizmor@1.29.0 --min-severity medium .github/workflows/` here, fix what it names, and push |
 
 ### ci / typecheck
 
-| Not in this shape yet | What names the failure | The next step |
-| --- | --- | --- |
-| #1099 | mypy's lines name the file and line | Run `uv run mypy .` here and fix the type there |
+| What failed | The next step |
+| --- | --- |
+| `mypy: <N> errors, the first at <file>:<line> [<code>]` | Run `uv run mypy .` here, fix what it names, and push. Each error is also an annotation at its file and line, with its code, nine at most, then a line saying how many there are; mypy's whole output is in the mypy step's log |
+| `mypy could not run` | mypy stopped with its own error and named no file and line (exit 2: a setting it cannot read, a path that does not exist, mypy missing from the dev dependencies), not an error in the code (a syntax error also exits 2; it names its file and line, so it is reported as an error there): run `uv run mypy .` here and fix what stops it; its error is in the mypy step's log |
+| `uv sync --locked` | As for `ci / lint` |
 
 ### ci / test
 
