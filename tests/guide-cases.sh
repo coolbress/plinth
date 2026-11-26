@@ -1587,6 +1587,26 @@ hist '[]' 2 > "$d/history.json"
 state "release due: no tag at all, counted since the first merge" "$d" \
   "release due: yes: no tag yet; 2 merged since the first merge, 1 of them a feat: or fix: by a person" \
   "command: $rel_cmd"
+# Review of this change: GitHub records the tagged pull request's merge a
+# second or two after its squash commit; that pull request is not "since".
+d="$(repo release-own-pr)"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)" "$(pr 5 'fix: keep cents' false SUCCESS)"
+hist '[{"name":"v0.4.0","target":{"committedDate":"2026-10-24T23:59:58Z","associatedPullRequests":{"nodes":[{"mergedAt":"2026-10-25T00:00:00Z"}]}}}]' 2 > "$d/history.json"
+state "release not due right after one: the tagged pull request is not since" "$d" \
+  "release due: no: last tag v0.4.0 (2026-10-25); 0 merged since, nothing to put out" "command: /grilling"
+# A newest tag with no date (not a commit): the newest with one is the last.
+d="$(repo release-dateless)"
+cp "$work/release-feat/merged.json" "$d/"
+hist '[{"name":"v0.4.0","target":{}},{"name":"v0.3.0","target":{"committedDate":"2026-10-23T12:00:00Z"}}]' 4 > "$d/history.json"
+state "a newest tag with no date: the newest with one is the last tag" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person"
+# main's latest CI run failing: the release waits; the route is as before.
+d="$(repo release-main-red)"
+cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
+printf '{"total_count":1,"workflow_runs":[{"id":9,"conclusion":"failure","created_at":"2026-10-28T10:00:00Z"}]}' > "$d/runs.json"
+state "release due with main's CI failing: not the next step" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person" \
+  "problems: main's latest CI run fails (run 9)" "command: /grilling" "!where: $rel_where"
 d="$(repo release-nothing-merged)"
 state "release not due: no tag and nothing merged" "$d" "release due: no: no tag yet; nothing merged yet, nothing to put out"
 d="$(repo release-web 'archetype: web')"

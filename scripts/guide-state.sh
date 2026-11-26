@@ -600,7 +600,7 @@ history_q='query($owner: String!, $name: String!) { repository(owner: $owner, na
   records: issues(states: CLOSED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title closedAt labels(first: 20) { nodes { name } } } }
   releases(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) { totalCount nodes { tagName name isDraft publishedAt createdAt } }
   tags: refs(refPrefix: "refs/tags/", first: 10, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { totalCount
-    nodes { name target { ... on Commit { committedDate } ... on Tag { tagger { date } target { ... on Commit { committedDate } } } } } }
+    nodes { name target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } ... on Tag { tagger { date } target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } } } } } }
   firstMerges: pullRequests(states: MERGED, first: 20, orderBy: {field: CREATED_AT, direction: ASC}) { nodes { number title mergedAt author { __typename login } } }
 } }'
 history_jq='def clean: gsub("[\t\n\r]"; " ");
@@ -611,8 +611,9 @@ history_jq='def clean: gsub("[\t\n\r]"; " ");
   | (["started", "started: \($r.createdAt | ago); last activity: \(($r.pushedAt // $r.createdAt) | ago)"],
      ["totals", "totals: \($r.mergedPulls.totalCount) merged, \(many($r.closedIssues.totalCount; "closed issue")), \(many($r.releases.totalCount; "release")), \(many($r.tags.totalCount; "tag"))"],
      ["event", $r.createdAt, $repo, "created", ""],
-     ($r.tags.nodes[0] // empty | (.target.committedDate // .target.target.committedDate // .target.tagger.date // "") as $at
-       | select($at != "") | ["lasttag", .name, ($at | utc)]),
+     ([$r.tags.nodes[] | (.target.committedDate // .target.target.committedDate // .target.tagger.date // "") as $at | select($at != "")
+        | [.name, ([($at | utc), (.target.associatedPullRequests.nodes[0].mergedAt // .target.target.associatedPullRequests.nodes[0].mergedAt // "")] | max)]]
+      | first // empty | ["lasttag", .[0], .[1]]),
      ($r.records.nodes[] | ([.labels.nodes[].name | select(. == "spec" or (startswith("wayfinder:") and . != "wayfinder:task"))] | first) as $l
        | select($l != null and .closedAt != null) | ["event", .closedAt, "#\(.number)", "closed \($l)", (.title | clean)]),
      ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt), .tagName, "release", ((.name // "") | clean)]),
@@ -626,9 +627,21 @@ history_jq='def clean: gsub("[\t\n\r]"; " ");
 history_ok=""
 history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f query="$history_q" \
       --jq "\"$repo\" as \$repo | $history_jq" 2>&1)" && history_ok=yes
+# The latest completed run of ci.yml on main, read here too: a release is not
+# the next step while it fails (#1077 review). Printed after the route.
+run_ok=""; main_red=""
+run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
+      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)" && run_ok=yes
+if [ -n "$run_ok" ] && [ -n "$run" ]; then
+  case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
+fi
 
-# The release signal (#1077): the last tag (the newest by its commit's date,
-# from the read above) and what merged since; due when a feat: or fix: by a
+# The release signal (#1077): the last tag (the newest with a date, by its
+# commit's date, from the read above) and what merged since: after the later
+# of its commit's date and the merge of the pull request that commit came
+# from (GitHub records the merge a second or two after the squash commit, so
+# the tagged pull request itself is not "since"); the next step only while
+# main's latest CI run does not fail; due when a feat: or fix: by a
 # person merged since, or since the first merge when there is no tag yet. A
 # web app is skipped: it goes out by itself once main is green. The count
 # since a tag is of the merged pull requests read above; when that read was
@@ -1112,7 +1125,7 @@ elif [ -n "$older_failed" ]; then
   # In place of /grilling (#1059): a ticket may be ready past the newest 100.
   note="the ready-for-agent issues past the newest 100 open were not read ($older_failed); look again, or list them with gh issue list --label ready-for-agent"
   say "A ticket ready" "none: the next ticket was not read"
-elif [ -n "$release_due" ]; then
+elif [ -n "$release_due" ] && [ -z "$main_red" ]; then
   # Nothing else open (#1077): the release row's How to use it cell, the part
   # for a project that is not a web app; what goes out for this archetype.
   how="$(row "A merged change to put out" | sed -n 4p)"
@@ -1166,8 +1179,7 @@ if [ -z "$broken" ] && [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   [ -z "$first_fail" ] || problems="a check fails on pull request #$(field 1 <<<"$first_fail")"
 fi
 [ -z "${token_open:-}" ] || problems="${problems:+$problems; }the token step is not done"
-if run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
-      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)"; then
+if [ -n "$run_ok" ]; then
   if [ -z "$run" ]; then echo "main ci: none (no completed run of ci.yml on main)"
   else
     IFS=$'\t' read -r run_id run_end run_on <<<"$run"
