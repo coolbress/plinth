@@ -28,7 +28,7 @@ Three checks are static and WARN-only (#95): tracked dotenv files (names in
 the index, not contents or history), action pins (`uses:` lines of
 .github/workflows, not composite actions), JSON logs (a known setup in a
 service archetype's src/, never what the process prints). What each reads and
-does not read is in its docstring and in skills/floor-check/SKILL.md.
+does not read is in its docstring and in skills/floor-check/reference.md.
 
 The caller is a FAIL item (#325): the `ci` job in .github/workflows/ci.yml
 calls plinth's python-ci.yml at a full commit SHA, read with --repo from the
@@ -216,6 +216,9 @@ LEFT_TO_SKILL = "; left to /plinth:floor-check"
 REPORT = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/skills/floor-check/SKILL.md#report"
 NEXT_ACTION = f"run /plinth:floor-check, which writes the fix for each item: {REPORT}"
 next_action = ""
+# "json" (--format json): the run is printed once, as one JSON document, at
+# the end; nothing else goes to stdout.
+out_format = "text"
 # The SKIP's next action; a line the job annotates stays within 300 characters
 # (the report beside it has the whole text).
 SKIP_NEXT = f"; run /plinth:floor-check where it can read this: {REPORT}"
@@ -253,7 +256,7 @@ VIEWS = ("report", "json", "opt-in:machine", "opt-in:standards", "opt-in:all")
 # The OSPS Baseline release an entry's `baseline` ids come from;
 # tests/floor-check-registry.sh holds every id to that release's list.
 OSPS_BASELINE = "v2026.08.28"
-DOCS = "skills/floor-check/SKILL.md"
+DOCS = "skills/floor-check/reference.md"
 
 
 def check(cid: str, name: str, *, states: tuple[str, ...], handoff: str, fix: str, docs: str,
@@ -732,7 +735,7 @@ def _ci() -> tuple[dict, ...]:
     )
 
 
-WALL_DOCS = f"{DOCS}#run"
+WALL_DOCS = f"{DOCS}#the-ruleset-flags"
 PUSH_DOCS = f"{DOCS}#push-protection"
 ALLOWLIST_DOCS = f"{DOCS}#the-actions-allowlist-and-private-vulnerability-reporting"
 BESIDE_DOCS = f"{DOCS}#what-the-door-sets-beside-the-wall-and-the-projects-own-answers"
@@ -1227,7 +1230,7 @@ def _plinth() -> tuple[dict, ...]:
     )
 
 
-MACHINE_DOCS = f"{DOCS}#run"
+MACHINE_DOCS = f"{DOCS}#the-machines-items-and-the-merge-line"
 # What none_found() prints: finding nothing is not a pass.
 NONE_FOUND = "{what}; no other credential found by these rules; best effort, see the guide's list"
 
@@ -1404,7 +1407,8 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     results.append(r)
     verdicts.extend(verdict_lines(r))
     line = render_text(r)
-    print(line)
+    if out_format == "text":
+        print(line)
     if TRACE:
         with open(TRACE, "a", encoding="utf-8") as t:
             t.write(f"{cid} {state}\t{line.splitlines()[0]}\n")
@@ -1467,12 +1471,37 @@ def render_verdicts(rs: list[dict]) -> str:
     return "".join(f"{line}\n" for line in lines)
 
 
-def run_record(rs: list[dict]) -> dict:
-    """The run beyond its lines: the registered checks that reported nothing
-    (not evaluated: another host, archetype or flag), for #1105's report."""
+SCHEMA = Path(__file__).resolve().parent / "floor-check.schema.json"
+SCHEMA_ID = "floor-check/1"
+
+
+def run_record(rs: list[dict], run: dict | None = None, crashed: dict | None = None) -> dict:
+    """The run as --format json prints it, in the shape of
+    scripts/floor-check.schema.json: each result with its entry's area, name,
+    hand-off and view; the registered checks that reported nothing (not
+    evaluated: another host, archetype or flag); the summary's counts; and,
+    when the run raised, after which result."""
     seen = {r["id"] for r in rs}
-    return {"results": rs, "not_evaluated": [i for i in REGISTRY if i not in seen],
-            "crashed": None}
+    n = {s: sum(r["state"] == s for r in rs) for s in STATES}
+    results = []
+    for r in rs:
+        e = REGISTRY[r["id"]]
+        results.append({"id": r["id"], "state": r["state"], "shown": SHOWN[r["state"]], "message": r["msg"],
+                        "reason": r["reason"], "cannot_be_read_here": r["reason"] == HERE, "reader": r["reader"],
+                        "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
+                        "lifecycle": e["lifecycle"], "view": e["view"], "ci_visible": e["ci_visible"]})
+    return {"schema": SCHEMA_ID, **(run or {}), "results": results,
+            "not_evaluated": [{"id": i, "name": e["name"], "area": AREAS[e["area"]]}
+                              for i, e in REGISTRY.items() if i not in seen],
+            "summary": {**n, "cannot_be_read_here": sum(r["reason"] == HERE for r in rs)},
+            "exit": 1 if n["fail"] or crashed else 0, "crashed": crashed}
+
+
+def print_json(rs: list[dict], crashed: dict | None = None) -> None:
+    print(json.dumps(run_record(rs, run_info, crashed), indent=2, ensure_ascii=False))
+
+
+run_info: dict = {}   # the run's root, project, host and repository, for --format json
 
 
 def read(path: Path) -> str:
@@ -6097,6 +6126,9 @@ def main() -> int:
     ap.add_argument("--verdicts", metavar="FILE",
                     help="also write one verdict line per FAIL, SKIP and read left to /plinth:floor-check, "
                          "or a pass line, to FILE (ci / floor-check's job summary)")
+    ap.add_argument("--format", choices=("text", "json"), default="text",
+                    help="json: print the run once, as one JSON document in the shape of "
+                         "scripts/floor-check.schema.json, instead of the report's lines")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--plugins", action="store_true",
                     help="also compare each plugin installed from the plinth marketplace with the commit its entry pins")
@@ -6138,6 +6170,12 @@ def main() -> int:
                     help="with --print-ruleset: leave the code_scanning rule out, as the door does for a private "
                          "repository without GitHub Code Security")
     a = ap.parse_args()
+    if a.format == "json" and any(v for k, v in vars(a).items() if k.startswith("print_")):
+        ap.error("--format json reports a run; a --print-* flag prints something else")
+    global out_format
+    out_format = a.format
+    # Known before anything is read, so a run that raises still says what it read.
+    run_info.update(root=str(Path(a.root).resolve()), project=a.project, host=a.host or "github", repo=a.repo)
     if a.verdicts:
         global next_action
         next_action = NEXT_ACTION
@@ -6189,8 +6227,11 @@ def main() -> int:
     if host not in ("github", "gitlab"):
         emit("FC-F07", "unknown", "other", {"host": host}, reason="an unknown host")
         host = "github"
-    print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
-          + (" host=gitlab" if host == "gitlab" else ""))
+    run_info.update(root=str(root), project=str(project.relative_to(root)) if project != root else ".",
+                    host=host, repo=a.repo)
+    if out_format == "text":
+        print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
+              + (" host=gitlab" if host == "gitlab" else ""))
     javascript = host == "github" and javascript_project(project, root)
     if javascript:
         emit("FC-C04", "info", "info")
@@ -6275,7 +6316,10 @@ def main() -> int:
         check_credentials(root, host)
         check_database_urls(root)
 
-    print(render_summary(results))
+    if out_format == "json":
+        print_json(results)
+    else:
+        print(render_summary(results))
     if a.verdicts:
         Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
     return 1 if any(r["state"] == "fail" for r in results) else 0
@@ -6284,7 +6328,10 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception:
+    except Exception as exc:
+        if out_format == "json":
+            # The skill reads a document either way: one that says where the run stopped.
+            print_json(results, {"after": results[-1]["id"] if results else None, "error": type(exc).__name__})
         if TRACE:
             with open(TRACE, "a", encoding="utf-8") as t:
                 t.write(f"crashed {results[-1]['id'] if results else '-'}\n")
