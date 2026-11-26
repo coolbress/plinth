@@ -131,7 +131,7 @@ reg = fc.REGISTRY
 reached: dict[str, set[str]] = {}
 for f in Path(sys.argv[2]).glob("*.json"):
     for line in json.loads(f.read_text(encoding="utf-8"))["emitted"]:
-        i, state = line.split(" ", 1)
+        i, state = line.split("\t", 1)[0].split(" ", 1)
         if i == "crashed":
             print(f"crashed after {state}: {f.name}")
             continue

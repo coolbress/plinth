@@ -1704,6 +1704,84 @@ state "release due with a pull request open: its route, the signal a line" "$d" 
 grep -qF 'When `where:` is the release' "$guide_md" && grep -qF 'When a `release due:` line is printed and `where:` is not the release' "$guide_md" &&
   ok "the skill says the release signal in part 3 or in part 4" || bad "the skill does not say how the release signal is said"
 
+# ── a merge broke main (#1079) ────────────────────────────────────────────
+# main's latest CI run failed, and its head is a squash merge ("… (#N)"): the
+# command undoes #N first, through the project's own page; the then-also line
+# names the restore and the incident note. A failing open pull request with
+# main green is still "diagnose this".
+redrun() { printf '{"total_count":1,"workflow_runs":[{"id":31,"conclusion":"failure","created_at":"2026-10-28T10:00:00Z","head_commit":{"message":"%s"}}]}' "$1"; }
+undo_cmd="none: undo pull request #9 first, as the project's docs/how-to/undo-a-merged-change.md says"
+d="$(repo undo-cli)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals' false SUCCESS)"
+redrun 'feat: totals (#9)\n\nbody' > "$d/runs.json"
+state "a merge broke main: undo it first" "$d" "where: Something broke (step 7)" "command: $undo_cmd" \
+  "then also: after the undo, restore any data the change lost or changed (this archetype's project has no restore steps of its own), then reproduce and fix, and leave a short blameless note in the issue's Outcome when it lost data, needed a revert or reached users" \
+  "main ci: fail (run 31, 2026-10-28, failure): gh run view 31 --log-failed"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qF "/rewind undoes the agent's edits in a session, never a merge" <<<"$out" && ok "  the note keeps /rewind apart from the undo" || bad "the undo note does not keep /rewind apart"
+d="$(repo undo-web 'archetype: web
+hosting: render')"
+cp "$work/undo-cli/merged.json" "$work/undo-cli/runs.json" "$d/"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qx "command: $undo_cmd" <<<"$out" && grep -qF "then also: after the undo, restore any data the change lost or changed (with the README's \"Where it runs\" and the restore you tried (step 3 of " <<<"$out" &&
+  ok "a web project's undo: its restore named" || { bad "a web project's undo"; grep -E '^(command|then also)' <<<"$out" | sed 's/^/        /'; }
+# A failing open pull request, main broken by a merge too: main first.
+put "$d/open.json" "$(pr 12 'feat: export' false FAILURE)"
+state "a failing pull request while a merge broke main: the undo first" "$d" "command: $undo_cmd"
+# main green: the failing pull request is diagnosed, as before.
+printf '{"total_count":1,"workflow_runs":[{"id":32,"conclusion":"success","created_at":"2026-10-28T10:00:00Z","head_commit":{"message":"feat: totals (#9)"}}]}' > "$d/runs.json"
+state "main green, a failing pull request: still diagnose this" "$d" "command: diagnose this: pull request #12 has a failing check" "!then also: after the undo"
+# A red run whose head is not a merge (a direct push): no undo route.
+redrun 'wip' > "$d/runs.json"; printf '[]' > "$d/open.json"
+state "main red on a commit that is not a merge: no undo" "$d" "!undo pull request" "problems: main's latest CI run fails (run 31)"
+# Review of this change: what is not "a merge broke main".
+d="$(repo undo-not)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals' false SUCCESS)"
+redrun 'Revert \"feat: totals (#7)\" (#9)' > "$d/runs.json"
+state "main red on a revert's merge: never undo the undo" "$d" "!undo pull request" "problems: main's latest CI run fails (run 31)"
+printf '{"total_count":1,"workflow_runs":[{"id":33,"conclusion":"cancelled","created_at":"2026-10-28T10:00:00Z","head_commit":{"message":"feat: totals (#9)"}}]}' > "$d/runs.json"
+state "a cancelled run on a merge: no undo" "$d" "!undo pull request"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: totals' false SUCCESS)" "$(pr 9 'Revert \"feat: totals (#7)\"' false SUCCESS)"
+redrun 'feat: totals (#7)' > "$d/runs.json"
+state "the failing run is an older merge's, main moved on: no undo" "$d" "!undo pull request"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals' false SUCCESS)"
+redrun 'feat: totals (#9)' > "$d/runs.json"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals (#9)\"' false run)"
+state "a revert of the breaking merge is open: its route, no second undo" "$d" "!undo pull request" "command: /run"
+# Review on #1196: GitHub's own revert title carries no (#N) inside the
+# quotes (ci / pr-title refuses one there): Revert "<#N's title>" counts too.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false run)"
+state "an open revert titled as GitHub writes it, no (#N): no second undo" "$d" "!undo pull request" "command: /run"
+# A revert of another pull request does not stand for #9's.
+put "$d/open.json" "$(pr 12 'Revert \"feat: other\"' false run)"
+state "an open revert of another pull request: still undo #9" "$d" "command: $undo_cmd"
+out="$(MOCK_DIR="$work/undo-cli" "$script" "$work/undo-cli" 2>&1)"
+grep -qF "read its log first (gh run view 31 --log-failed)" <<<"$out" && ok "  the undo note says to read the log first" || bad "the undo note does not say to read the log first"
+
+# The row and step 7 (#1079): the undo page named; the order undo, restore,
+# reproduce and fix, incident note; a secret revoked before any history
+# rewrite; the revoke list named and in its order.
+broke_row="$(grep '^| Something broke (step 7) |' "$arsenal")"
+step7="$(awk '/^### 7\. When something breaks/{on=1; print; next} /^### 8\./{on=0} on' "$root/docs/how-to/run-a-project.md" | tr '\n' ' ' | tr -s ' ')"
+in_order() { # <text> <phrase>...: each phrase found, each after the one before
+  local text="$1" at=-1 p i; shift
+  for p in "$@"; do i="$(awk -v t="$text" -v p="$p" 'BEGIN { print index(t, p) - 1 }')"
+    [ "$i" -gt "$at" ] || { echo "$p"; return 1; }; at="$i"; done
+}
+grep -qF "the project's \`docs/how-to/undo-a-merged-change.md\`" <<<"$broke_row" && ok "the Something broke row names the project's undo page" || bad "the Something broke row lost the undo page"
+miss="$(in_order "$broke_row" "undo it first" "then restore data it lost or changed" "then reproduce and fix" "then a short incident note")" &&
+  ok "the row's order: undo, restore, reproduce and fix, incident note" || bad "the row's order breaks at: $miss"
+miss="$(in_order "$step7" "Undo the merge first" "Restore data if the change lost or changed any" "Reproduce and fix" "short incident note")" &&
+  ok "step 7's order: undo, restore, reproduce and fix, incident note" || bad "step 7's order breaks at: $miss"
+grep -qF "while the other archetypes have no restore steps of their own" <<<"$broke_row" && ok "the row says where an archetype has no restore steps" || bad "the row names no gap for the archetypes without restore steps"
+miss="$(in_order "$broke_row" "a leaked secret: revoke or rotate it first" "otherwise reproduce")" &&
+miss="$(in_order "$step7" "revoke or rotate it at the service first" "Rewriting history comes after, if at all" "does not reach clones, forks or cached views" "removing-sensitive-data-from-a-repository")" &&
+  ok "a leaked secret: revoked first, history after, and that it does not reach clones" || bad "the secret's order breaks at: $miss"
+miss=""
+grep -qF "with its revoke list" <<<"$broke_row" && grep -qF "#### If something bad ran on this computer" "$root/docs/how-to/run-a-project.md" &&
+miss="$(in_order "$step7" "The \`gh\` login and every GitHub token" "Other personal access tokens" "SSH keys" "The project's service and API keys" "Cloud and npm credentials" "the account's security log" "repositories nobody here made" "self-hosted runners nobody here added" "authorised OAuth apps and GitHub Apps")" &&
+  ok "the row names the revoke list, and the list is in its order" || bad "the revoke list: ${miss:-the row or the heading lost it}"
+
 # The skill's answer (#1076): seven parts, four status words, no bar, so far
 # only as printed, the depth rule, the /clear line, the gloss rule.
 grep -qF '/9' <<<"$(awk '/^## Say it/{on=1} on' "$guide_md")" && bad "the answer's shape names an n/9 fraction" ||

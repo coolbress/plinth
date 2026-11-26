@@ -591,6 +591,55 @@ grep -q '^not yet confirmed: changed lines ran under the tests. Why: coverage re
   && grep -q '^not yet confirmed: GHSA-mrrh-fwg8-r2c3 for tj-actions/changed-files@v35 (.github/workflows/ci.yml:9). Why: ' <<<"$nyc" \
   && ok "the changed-lines step's, a stopped step's and an advisory's lines were among them" || bad "a kind of line was not read" "$nyc"
 
+echo "-- third-party / review: no bare #N in what it prints (#1100)"
+# In a project's run, #386 links to that project's issue 386, not plinth's:
+# what pr-review.yml and the scripts it fetches print names plinth by a link
+# at the commit the caller runs. Comments and docstrings are not printed.
+python3 - "${PLINTH_REVIEW_WF:-$root/.github/workflows/pr-review.yml}" "$root"/scripts/pr-review/* <<'PY' && ok "pr-review.yml and scripts/pr-review/ print no bare #N" || bad "a printed line carries a bare #N"
+import re, sys
+bad = []
+for path in sys.argv[1:]:
+    doc = False
+    for i, line in enumerate(open(path, encoding="utf-8"), 1):
+        s = line.strip()
+        if s.count('"""') == 1:
+            doc = not doc
+            continue
+        if doc or s.startswith("#") or s.startswith('"""'):
+            continue
+        if not re.search(r"\b(echo|printf|print)\b|::(error|warning|notice)", s):
+            continue
+        for q in re.findall(r'"([^"]*)"', s):
+            if re.search(r"(?<![\w/&-])#[0-9]+\b", q):
+                bad.append(f"{path.rsplit('/', 1)[-1]}:{i}: {s[:160]}")
+                break
+if bad:
+    print("\n".join(f"        | {b}" for b in bad))
+sys.exit(1 if bad else 0)
+PY
+
+# Each annotation literal there is one sentence naming the thing and the fix,
+# with no symbol carrying meaning (#1100; the #1098 block keeps its own form).
+python3 - "${PLINTH_REVIEW_WF:-$root/.github/workflows/pr-review.yml}" "$root"/scripts/pr-review/* <<'PY' && ok "pr-review's annotations are one sentence each" || bad "a pr-review annotation is not one sentence"
+import re, sys
+bad, n = [], 0
+for path in sys.argv[1:]:
+    for i, line in enumerate(open(path, encoding="utf-8"), 1):
+        if line.strip().startswith("#"):
+            continue
+        for m in re.finditer(r"::(error|warning|notice)::((?:[^\"\\]|\\.)*)\"", line):
+            text = m.group(2)
+            if not text or text.startswith("$") and len(text) < 4:
+                continue
+            n += 1
+            plain = re.sub(r"\$\{[^}]*\}|\$\([^)]*\)|\$\w+|\{[^}]*\}", "X", text)
+            if not (plain[:1].isupper() and plain.endswith(".")) or re.search(r";|\. |\(|\)|—", plain[:-1]):
+                bad.append(f"{path.rsplit('/', 1)[-1]}:{i}: {text[:140]}")
+if bad:
+    print("\n".join(f"        | {b}" for b in bad))
+sys.exit(1 if bad or not n else 0)
+PY
+
 echo "-- names, links and the page"
 python3 - "$wf" <<'PY' && ok "every step of ci / test that runs pytest has a name" || bad "a step that runs pytest has no name"
 import re, sys

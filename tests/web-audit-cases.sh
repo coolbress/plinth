@@ -151,7 +151,7 @@ else bad "clean pages" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 0.78; lhr "$d/web-audit/1.lhr.json" 1
 bad_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; verdict "$d"
-if has "$d/summary" "not yet confirmed: no accessibility violation axe-core's automated rules find on / (logged in), it found 2: image-alt on 1 element (critical: Images must have alternative text); label on 2 elements (critical: Form elements must have labels); fixing them confirms it" \
+if has "$d/summary" "not yet confirmed: no accessibility violation axe-core's automated rules find on / (logged in). Why: it found 2, image-alt on 1 element (critical: Images must have alternative text); label on 2 elements (critical: Form elements must have labels). What confirms it: fixing them." \
    && has "$d/stdout" "::warning::not yet confirmed: no accessibility violation axe-core's automated rules find on / (logged in)" \
    && has "$d/summary" "#### What axe-core found on / (logged in)" \
    && has "$d/summary" "| [label](https://dequeuniversity.com/rules/axe/4.14/label) | critical | 2 | Form elements must have labels | \`input[name=\"text\"]\` |" \
@@ -165,11 +165,11 @@ printf '{"error":"lhci collect exited 1"}' > "$d/web-audit/1.lhr.error.json"
 printf '{"status":500,"violations":[],"incomplete":[],"rules":5}' > "$d/web-audit/0.axe.json"
 printf '{"error":"TimeoutError: Navigation timeout of 60000 ms exceeded"}' > "$d/web-audit/1.axe.error.json"
 verdict "$d"
-if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in), Lighthouse was unable to reliably load the page you requested. (Status code: 500); a run where Lighthouse loads the page confirms it" \
-   && has "$d/summary" "not yet confirmed: Lighthouse's scores for /accounts/login/ (not logged in), lhci collect exited 1;" \
-   && has "$d/summary" "not yet confirmed: axe-core on / (logged in), the page answered HTTP 500, so the audit read an error page;" \
+if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in). Why: Lighthouse was unable to reliably load the page you requested. (Status code: 500). What confirms it: a run where Lighthouse loads the page." \
+   && has "$d/summary" "not yet confirmed: Lighthouse's scores for /accounts/login/ (not logged in). Why: lhci collect exited 1. What" \
+   && has "$d/summary" "not yet confirmed: axe-core on / (logged in). Why: the page answered HTTP 500, so the audit read an error page. What" \
    && ! has "$d/summary" "pass: axe-core" \
-   && has "$d/summary" "not yet confirmed: axe-core on /accounts/login/ (not logged in), TimeoutError: Navigation timeout of 60000 ms exceeded;" \
+   && has "$d/summary" "not yet confirmed: axe-core on /accounts/login/ (not logged in). Why: TimeoutError: Navigation timeout of 60000 ms exceeded. What" \
    && ! has "$d/summary" "pass: Lighthouse" && has "$d/stdout" "exit 0"; then
   ok "a page Lighthouse or axe-core could not read, or that answered an error: not yet confirmed, never a pass"
 else bad "unreadable pages" "$(cat "$d/summary" "$d/stdout")"; fi
@@ -178,8 +178,8 @@ d="$(fresh)"; pages "$d"; lhr "$d/web-audit/1.lhr.json" 1; clean_axe "$d/web-aud
 printf '{"finalDisplayedUrl":"http://localhost:8000/","categories":{"accessibility":{"score":null},"best-practices":{"score":1},"seo":{"score":1},"performance":{"score":null}}}' > "$d/web-audit/0.lhr.json"
 printf '{"status":404,"violations":[{"id":"image-alt","impact":"critical","help":"Images must have alternative text","helpUrl":"u","nodes":1,"target":["img"]}],"incomplete":[],"rules":5}' > "$d/web-audit/0.axe.json"
 verdict "$d"
-if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in), its report has no score for Accessibility, Performance;" \
-   && has "$d/summary" "not yet confirmed: axe-core on / (logged in), the page answered HTTP 404" \
+if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in). Why: its report has no score for Accessibility, Performance. What" \
+   && has "$d/summary" "not yet confirmed: axe-core on / (logged in). Why: the page answered HTTP 404" \
    && ! has "$d/summary" "pass: Lighthouse scored / (logged in)" && ! has "$d/summary" "image-alt" \
    && has "$d/summary" "| \`/\` (logged in) | ? | 100 | 100 | ? | ? |"; then
   ok "a report missing a score, or an error page with violations: not yet confirmed, no pass and no violations from the error page"
@@ -187,7 +187,7 @@ else bad "missing score or error page" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d" no-login; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 1
 clean_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; verdict "$d"
-if has "$d/summary" "not yet confirmed: / as a logged-in person, the audit could not log a person in (TypeError: create_user() missing 1 required positional argument: 'email'), so / was audited as a visitor who is not logged in;" \
+if has "$d/summary" "not yet confirmed: / as a logged-in person. Why: the audit could not log a person in (TypeError: create_user() missing 1 required positional argument: 'email'), so / was audited as a visitor who is not logged in. What" \
    && has "$d/summary" "pass: Lighthouse scored / (not logged in)"; then
   ok "no log-in possible: / is audited as a visitor, and the summary says the logged-in page was not"
 else bad "no log-in" "$(cat "$d/summary" "$d/stdout")"; fi
@@ -196,7 +196,7 @@ d="$(fresh)"; pages "$d"; lhr "$d/web-audit/1.lhr.json" 1; clean_axe "$d/web-aud
 printf '{"finalDisplayedUrl":"http://localhost:8000/accounts/login/?next=/","categories":{"accessibility":{"score":0.88},"best-practices":{"score":1},"seo":{"score":0.9},"performance":{"score":1}}}' > "$d/web-audit/0.lhr.json"
 printf '{"status":200,"url":"http://localhost:8000/accounts/login/?next=/","violations":[{"id":"html-has-lang","impact":"serious","help":"<html> element must have a lang attribute","helpUrl":"https://dequeuniversity.com/rules/axe/4.14/html-has-lang","nodes":1,"target":["html"]}],"incomplete":[],"rules":20}' > "$d/web-audit/0.axe.json"
 verdict "$d"
-if has "$d/summary" "not yet confirmed: / as a logged-in person, the audit's session did not hold and the page sent it to /accounts/login/, so the results above for / (logged in) are the log-in page's;" \
+if has "$d/summary" "not yet confirmed: / as a logged-in person. Why: the audit's session did not hold and the page sent it to /accounts/login/, so the results above for / (logged in) are the log-in page's. What" \
    && has "$d/summary" "after a redirect to http://localhost:8000/accounts/login/?next=/" \
    && has "$d/summary" "(serious: \`<html>\` element must have a lang attribute)" \
    && has "$d/summary" "| \`<html>\` element must have a lang attribute |" \
@@ -205,29 +205,29 @@ if has "$d/summary" "not yet confirmed: / as a logged-in person, the audit's ses
 else bad "session did not hold" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; echo "there is no Dockerfile in the project" > "$d/web-audit/app.why"; verdict "$d" APP=failure AUDIT=skipped
-if has "$d/summary" "not yet confirmed: the pages' audit, the app image did not start: there is no Dockerfile in the project; a run that gets past it confirms it" \
+if has "$d/summary" "not yet confirmed: the pages' audit. Why: the app image did not start: there is no Dockerfile in the project. What confirms it: a run that gets past it." \
    && has "$d/stdout" "::warning::" && ! has "$d/summary" "pass:" && ! has "$d/summary" "Automated checks" && has "$d/stdout" "exit 0"; then
   ok "the app did not start: one not-yet-confirmed line with the reason, never a pass"
 else bad "app did not start" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; verdict "$d" CHROME=failure TOOLS=failure AUDIT=skipped
-if has "$d/summary" "not yet confirmed: the pages' audit, Chrome for Testing and Lighthouse CI and axe-core did not install" && ! has "$d/summary" "pass:"; then
+if has "$d/summary" "not yet confirmed: the pages' audit. Why: Chrome for Testing and Lighthouse CI and axe-core did not install" && ! has "$d/summary" "pass:"; then
   ok "a tool that did not install: named, never a pass"
 else bad "tool install failed" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; verdict "$d" AUDIT=failure
-if has "$d/summary" "not yet confirmed: the pages' audit, the audit did not finish (its log says why)" && ! has "$d/summary" "pass:"; then
+if has "$d/summary" "not yet confirmed: the pages' audit. Why: the audit did not finish (its log says why)" && ! has "$d/summary" "pass:"; then
   ok "an audit that crashed: not yet confirmed, never a pass"
 else bad "audit crashed" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; verdict "$d"
-if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in), it wrote no report" \
-   && has "$d/summary" "not yet confirmed: axe-core on / (logged in), it wrote no report" && ! has "$d/summary" "pass:"; then
+if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in). Why: it wrote no report" \
+   && has "$d/summary" "not yet confirmed: axe-core on / (logged in). Why: it wrote no report" && ! has "$d/summary" "pass:"; then
   ok "an audit step that succeeded but wrote nothing: not yet confirmed per page, never a pass"
 else bad "audit wrote nothing" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; verdict "$d" CHECKOUT=failure APP=skipped AUDIT=skipped
-if has "$d/summary" "not yet confirmed: the pages' audit, the checkout did not finish" && has "$d/stdout" "exit 0"; then
+if has "$d/summary" "not yet confirmed: the pages' audit. Why: the checkout did not finish" && has "$d/stdout" "exit 0"; then
   ok "a failed checkout: not yet confirmed, and the job still passes"
 else bad "checkout failed" "$(cat "$d/summary" "$d/stdout")"; fi
 
@@ -307,7 +307,7 @@ PY
   audit_s=$((SECONDS - t0))
   verdict "$d"
   if [ "$rc" = 0 ] \
-     && grep -qE "^- not yet confirmed: no accessibility violation axe-core's automated rules find on /known/ \(not logged in\), it found [0-9]+: .*image-alt on 1 element" "$d/summary" \
+     && grep -qE "^- not yet confirmed: no accessibility violation axe-core's automated rules find on /known/ \(not logged in\)\. Why: it found [0-9]+, .*image-alt on 1 element" "$d/summary" \
      && grep -qE "^- not yet confirmed: no accessibility violation .* on /known/ .*label on 1 element" "$d/summary" \
      && has "$d/stdout" "::warning::not yet confirmed: no accessibility violation axe-core's automated rules find on /known/" \
      && grep -qE "^- pass: axe-core's automated rules found no accessibility violation on / \(not logged in\) \([0-9]+ rules applied\)" "$d/summary" \
@@ -321,6 +321,13 @@ PY
   sed -n 's/^- //p' "$d/summary" | sed 's/^/        > /'
   echo "  time: ${audit_s}s to audit two pages, $((SECONDS - started))s with the installs"
 fi
+
+# Every not yet confirmed line any case above wrote, in #1156's form (#1100):
+# what. Why: reason. What confirms it: run.
+nyc="$(cat "$tmp"/c*/summary 2>/dev/null | sed -n 's/^- \(not yet confirmed: .*\)$/\1/p')"
+off="$(grep -vE '^not yet confirmed: .+\. Why: .+\. What confirms it: .+\.$' <<<"$nyc" | grep -v '^$' || true)"
+if [ -n "$nyc" ] && [ -z "$off" ]; then ok "every not yet confirmed line ($(grep -c . <<<"$nyc")) says what, why and what confirms it"
+else bad "not yet confirmed lines not in the form, or none read" "$off"; fi
 
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]

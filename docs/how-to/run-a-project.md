@@ -225,15 +225,64 @@ see these: guidance only.
 ### 7. When something breaks
 
 - **Where you are:** an error or wrong behaviour.
-- **Next:** show the agent the exact error and what you did before it. It
-  makes a command that fails the same way, then, where a test can reach it, a
-  test that fails for this bug, then fixes it. Issues someone else opened:
-  `/triage` sorts them (ready for the agent, needs you, needs more
-  information, will not do); not for tickets your own plan made.
-- **Look at:** the command or test failing before the fix, passing after.
+- **Next:** first, which kind it is.
+  - **A merged change broke `main`** (the app, or `main`'s checks, broke
+    after a merge): in this order.
+    1. Undo the merge first, with the project's own
+       `docs/how-to/undo-a-merged-change.md`: a revert pull request that goes
+       through the same checks. The app stays broken while a fix is written;
+       the revert does not.
+    2. Restore data if the change lost or changed any. A `web` project: its
+       README's "Where it runs" and the restore you tried in step 3 of
+       [the four things by hand](set-four-things-by-hand.md). The other
+       archetypes have no restore steps of their own.
+    3. Reproduce and fix, as below.
+    4. Leave a short incident note in the issue's Outcome when the incident
+       lost data, needed a revert or reached users: what happened, what was
+       done, what changes so it does not happen again, with no one blamed
+       ([Google SRE book, chapter 15](https://sre.google/sre-book/postmortem-culture/)).
+  - **A secret leaked** (a key in a commit, a log or an issue): revoke or
+    rotate it at the service first; that is what stops its use. Rewriting
+    history comes after, if at all: it is your own admin action, and it does
+    not reach clones, forks or cached views
+    ([removing sensitive data](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)).
+  - **Something bad ran on this computer** (a bad package, a script): treat
+    every credential your user account can read as gone, and work through
+    [the revoke list](#if-something-bad-ran-on-this-computer) below.
+  - **Anything else** (a failing check on an open pull request, an error):
+    say `diagnose this: …` and show the agent the exact error and what you
+    did before it. It makes a
+    command that fails the same way, then, where a test can reach it, a test
+    that fails for this bug, then fixes it.
+
+  `/rewind` (built in) takes back what the agent just did in this session,
+  files and conversation; it does not undo a merge, which is already on
+  `main`. Issues someone else opened: `/triage` sorts them (ready for the
+  agent, needs you, needs more information, will not do); not for tickets
+  your own plan made.
+- **Look at:** the revert's checks when you undid a merge; the command or
+  test failing before the fix, passing after.
 - **Yours:** say no to a fix that switches off or weakens a check instead of
-  fixing the code.
+  fixing the code; the revoking and any history rewrite are yours.
 - **If you forget:** guidance only; the fix still meets step 5's checks.
+
+#### If something bad ran on this computer
+
+Revoke or rotate, in this order:
+
+1. The `gh` login and every GitHub token (`gh auth logout`, then the
+   tokens on GitHub's settings page).
+2. Other personal access tokens: other hosts, registries.
+3. SSH keys: remove them from GitHub and every server, then make new ones.
+4. The project's service and API keys: the host, the database, any paid API.
+5. Cloud and npm credentials.
+
+Then look, on GitHub: the account's security log; repositories nobody here
+made; self-hosted runners nobody here added; authorised OAuth apps and
+GitHub Apps. A 2025 attack on npm packages stole such tokens and made
+repositories in the accounts it reached
+([CISA, 2025-09-23](https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem),
+[Nx postmortem](https://nx.dev/blog/s1ngularity-postmortem)).
 
 ### 8. Stop, and come back later
 
