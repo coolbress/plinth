@@ -51680,7 +51680,6 @@ floor check: root=$WORK/print-cmd project=.
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -51800,9 +51799,6 @@ not yet confirmed: the Actions allowlist not verified (this token does not read 
 not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/print-cmd --repo o/r --print-update-command
---- exit 1
---- stdout
-=== --root $WORK/print-cmd --repo o/r --print-update-command --plinth-pin tested
 --- exit 1
 --- stdout
 === --root $WORK/good
@@ -52068,7 +52064,8 @@ floor check: root=$WORK/print-cmd project=.
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error); the template-update skill checks it before it runs this line:
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
+  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error), so whether 0000000000000000000000000000000000000000 is older was not read
+  INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -52157,9 +52154,6 @@ uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --
 === --root $WORK/good --repo o/r --print-update-command --move-archetype cli
 --- exit 1
 --- stdout
-=== --root $WORK/good --repo o/r --print-update-command --move-archetype cli --plinth-pin tested
---- exit 2
---- stdout
 === --root $WORK/good --repo o/r --print-update-command --move-archetype
 --- exit 2
 --- stdout
@@ -52225,7 +52219,6 @@ floor check: root=$WORK/two-pins project=.
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    moves: label.yml from 0000000000000000000000000000000000000001 to 0000000000000000000000000000000000000000, the commit the ci job calls (0000000000000000000000000000000000000001 is an ancestor of it)
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -52261,9 +52254,6 @@ fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix f
 not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/two-pins --repo o/r --print-update-command --plinth-pin tested
---- exit 1
---- stdout
 === --root $WORK/two-pins --repo o/r --print-update-command
 --- exit 1
 --- stdout
@@ -52737,7 +52727,8 @@ floor check: root=$WORK/tmpl-drift-404 project=.
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found); the template-update skill checks it before it runs this line:
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
+  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error), so whether 0000000000000000000000000000000000000000 is older was not read
+  INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -52816,12 +52807,11 @@ floor check: root=$WORK/pin-choice project=.
   PASS  .claude/settings.json denies gh config reads
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.51.0 was tested with 0000000000000000000000000000000000000003 (v9.0.0), 4 commit(s) newer: https://github.com/coolbress/plinth/compare/0000000000000000000000000000000000000000...0000000000000000000000000000000000000003
-  INFO    the line above keeps the live pin; this one moves it to the tested pin, if you choose it:
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000003 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    no update command until the plinth pin is raised to the one the target tag was tested with:
+  INFO    raise it first in one pull request of its own: every coolbress/plinth uses: line in .github/workflows/ci.yml, .github/workflows/label.yml to 0000000000000000000000000000000000000003 (v9.0.0), all at that one SHA; merge it, then plan the update again
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -52855,10 +52845,180 @@ fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix f
 not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/pin-choice --repo o/r --print-update-command --plinth-pin tested
---- exit 0
+=== --root $WORK/pin-choice --repo o/r --print-update-command
+--- exit 1
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000003 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+=== --root $WORK/pin-choice --repo o/r --print-update-command
+--- exit 1
+--- stdout
+=== --root $WORK/pin-choice --repo o/r --print-update-command
+--- exit 1
+--- stdout
+=== --root $WORK/pin-choice --repo o/r
+--- exit 1
+--- stdout
+floor check: root=$WORK/pin-choice project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
+  WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
+  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.51.0 was tested with 0000000000000000000000000000000000000003, 4 commit(s) newer (release tags not read): https://github.com/coolbress/plinth/compare/0000000000000000000000000000000000000000...0000000000000000000000000000000000000003
+  INFO    no update command until the plinth pin is raised to the one the target tag was tested with:
+  INFO    raise it first in one pull request of its own: every coolbress/plinth uses: line in .github/workflows/ci.yml, .github/workflows/label.yml to 0000000000000000000000000000000000000003, all at that one SHA; merge it, then plan the update again
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  SKIP  the ci job on the default branch not verified: repos/o/r could not be read
+  INFO  wall expectation: checks [], merge methods ['squash']
+  FAIL  repos/o/r not found (404)
+  SKIP  the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does)
+  SKIP  the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration does)
+  WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
+  INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
+  SKIP  labels not verified (offline, not logged in, or API error)
+-- 1 failed, 4 not verified
+--- again with --verdicts: exit 1
+not yet confirmed: the ci job on the default branch not verified: repos/o/r could not be read; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/pin-choice --repo o/r
+--- exit 1
+--- stdout
+floor check: root=$WORK/pin-choice project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
+  WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
+  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000, newer than 0000000000000000000000000000000000000003 (v9.0.0) that v1.51.0 was tested with; the update keeps it: https://github.com/coolbress/plinth/compare/0000000000000000000000000000000000000000...0000000000000000000000000000000000000003
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  SKIP  the ci job on the default branch not verified: repos/o/r could not be read
+  INFO  wall expectation: checks [], merge methods ['squash']
+  FAIL  repos/o/r not found (404)
+  SKIP  the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does)
+  SKIP  the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration does)
+  WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
+  INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
+  SKIP  labels not verified (offline, not logged in, or API error)
+-- 1 failed, 4 not verified
+--- again with --verdicts: exit 1
+not yet confirmed: the ci job on the default branch not verified: repos/o/r could not be read; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/pin-choice --repo o/r --print-update-command
 --- exit 0
 --- stdout
@@ -52908,176 +53068,7 @@ floor check: root=$WORK/pin-choice project=.
   PASS  .claude/settings.json denies gh config reads
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.51.0 was tested with 0000000000000000000000000000000000000003, 4 commit(s) newer (release tags not read): https://github.com/coolbress/plinth/compare/0000000000000000000000000000000000000000...0000000000000000000000000000000000000003
-  INFO    the line above keeps the live pin; this one moves it to the tested pin, if you choose it:
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000003 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
-  PASS  pyproject.toml present
-  PASS  uv.lock committed
-  INFO  archetype backend: container image, .env.example and JSON logs required
-  PASS  Dockerfile present
-  PASS  every base image is pinned by digest
-  PASS  the image does not run as root
-  PASS  the image installs from the lockfile (uv sync --locked)
-  PASS  CMD runs python -m app and src/app/__main__.py exists
-  PASS  .dockerignore present
-  PASS  .dockerignore keeps .git, .env, .venv out of the image
-  PASS  .env.example present
-  PASS  .env.example documents every variable the code reads
-  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
-  PASS  .github/workflows/release.yml present
-  PASS  .github/workflows/release.yml runs on a pushed tag only
-  PASS  .github/workflows/release.yml reads no stored secret
-  PASS  ci.yml carries the image job (docker build, docker run)
-  SKIP  the ci job on the default branch not verified: repos/o/r could not be read
-  INFO  wall expectation: checks [], merge methods ['squash']
-  FAIL  repos/o/r not found (404)
-  SKIP  the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does)
-  SKIP  the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration does)
-  WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
-  INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
-  SKIP  labels not verified (offline, not logged in, or API error)
--- 1 failed, 4 not verified
---- again with --verdicts: exit 1
-not yet confirmed: the ci job on the default branch not verified: repos/o/r could not be read; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/pin-choice --repo o/r
---- exit 1
---- stdout
-floor check: root=$WORK/pin-choice project=.
-  PASS  LICENSE present
-  PASS  README.md present
-  PASS  CHANGELOG.md present
-  PASS  AGENTS.md present
-  PASS  CONTRIBUTING.md present
-  PASS  CONTRIBUTING.md says how to build and test
-  PASS  CONTRIBUTING.md says how to land a change
-  PASS  CONTRIBUTING.md is not a stub (10 lines)
-  PASS  SECURITY.md present
-  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
-  PASS  bug.yml has name, description, body
-  PASS  bug.yml has no unquoted YAML alias
-  PASS  bug.yml labels its issues
-  PASS  bug.yml body is a list
-  PASS  feature.yml has name, description, body
-  PASS  feature.yml has no unquoted YAML alias
-  PASS  feature.yml labels its issues
-  PASS  feature.yml body is a list
-  PASS  task.yml has name, description, body
-  PASS  task.yml has no unquoted YAML alias
-  PASS  task.yml labels its issues
-  PASS  task.yml body is a list
-  PASS  at least one template GitHub can offer (local)
-  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
-  PASS  .github/dependabot.yml present
-  PASS  .gitattributes present
-  PASS  .gitattributes normalises line endings (* text=auto)
-  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
-  PASS  .gitattributes has no rule that needs local git config
-  PASS  .claude/settings.json present
-  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
-  PASS  .claude/settings.json denies rm -rf
-  PASS  .claude/settings.json denies gh auth token
-  PASS  .claude/settings.json denies .env reads
-  PASS  .claude/settings.json denies `. ./.env`
-  PASS  .claude/settings.json denies `source .env`
-  PASS  .claude/settings.json denies `cat .env`
-  PASS  .claude/settings.json denies `grep KEY .env`
-  PASS  .claude/settings.json denies gh config reads
-  PASS  relative links in 5 markdown files resolve
-  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000, newer than 0000000000000000000000000000000000000003 (v9.0.0) that v1.51.0 was tested with; the live pin is kept, never moved backwards: https://github.com/coolbress/plinth/compare/0000000000000000000000000000000000000000...0000000000000000000000000000000000000003
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
-  PASS  pyproject.toml present
-  PASS  uv.lock committed
-  INFO  archetype backend: container image, .env.example and JSON logs required
-  PASS  Dockerfile present
-  PASS  every base image is pinned by digest
-  PASS  the image does not run as root
-  PASS  the image installs from the lockfile (uv sync --locked)
-  PASS  CMD runs python -m app and src/app/__main__.py exists
-  PASS  .dockerignore present
-  PASS  .dockerignore keeps .git, .env, .venv out of the image
-  PASS  .env.example present
-  PASS  .env.example documents every variable the code reads
-  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
-  PASS  .github/workflows/release.yml present
-  PASS  .github/workflows/release.yml runs on a pushed tag only
-  PASS  .github/workflows/release.yml reads no stored secret
-  PASS  ci.yml carries the image job (docker build, docker run)
-  SKIP  the ci job on the default branch not verified: repos/o/r could not be read
-  INFO  wall expectation: checks [], merge methods ['squash']
-  FAIL  repos/o/r not found (404)
-  SKIP  the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does)
-  SKIP  the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration does)
-  WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
-  INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
-  SKIP  labels not verified (offline, not logged in, or API error)
--- 1 failed, 4 not verified
---- again with --verdicts: exit 1
-not yet confirmed: the ci job on the default branch not verified: repos/o/r could not be read; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/pin-choice --repo o/r --print-update-command --plinth-pin tested
---- exit 1
---- stdout
-=== --root $WORK/pin-choice --repo o/r
---- exit 1
---- stdout
-floor check: root=$WORK/pin-choice project=.
-  PASS  LICENSE present
-  PASS  README.md present
-  PASS  CHANGELOG.md present
-  PASS  AGENTS.md present
-  PASS  CONTRIBUTING.md present
-  PASS  CONTRIBUTING.md says how to build and test
-  PASS  CONTRIBUTING.md says how to land a change
-  PASS  CONTRIBUTING.md is not a stub (10 lines)
-  PASS  SECURITY.md present
-  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
-  PASS  bug.yml has name, description, body
-  PASS  bug.yml has no unquoted YAML alias
-  PASS  bug.yml labels its issues
-  PASS  bug.yml body is a list
-  PASS  feature.yml has name, description, body
-  PASS  feature.yml has no unquoted YAML alias
-  PASS  feature.yml labels its issues
-  PASS  feature.yml body is a list
-  PASS  task.yml has name, description, body
-  PASS  task.yml has no unquoted YAML alias
-  PASS  task.yml labels its issues
-  PASS  task.yml body is a list
-  PASS  at least one template GitHub can offer (local)
-  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
-  PASS  .github/dependabot.yml present
-  PASS  .gitattributes present
-  PASS  .gitattributes normalises line endings (* text=auto)
-  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
-  PASS  .gitattributes has no rule that needs local git config
-  PASS  .claude/settings.json present
-  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
-  PASS  .claude/settings.json denies rm -rf
-  PASS  .claude/settings.json denies gh auth token
-  PASS  .claude/settings.json denies .env reads
-  PASS  .claude/settings.json denies `. ./.env`
-  PASS  .claude/settings.json denies `source .env`
-  PASS  .claude/settings.json denies `cat .env`
-  PASS  .claude/settings.json denies `grep KEY .env`
-  PASS  .claude/settings.json denies gh config reads
-  PASS  relative links in 5 markdown files resolve
-  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
@@ -53158,10 +53149,11 @@ floor check: root=$WORK/pin-choice project=.
   PASS  .claude/settings.json denies gh config reads
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.51.0 was tested with 0000000000000000000000000000000000000003, but the two were not compared (offline or API error); the live pin is kept
+  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.51.0 was tested with 0000000000000000000000000000000000000003, but the two were not compared (offline or API error)
+  INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -53195,7 +53187,7 @@ fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix f
 not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/pin-choice --repo o/r --print-update-command --plinth-pin tested
+=== --root $WORK/pin-choice --repo o/r --print-update-command
 --- exit 1
 --- stdout
 === --root $WORK/pin-choice --repo o/r
@@ -53243,92 +53235,11 @@ floor check: root=$WORK/pin-choice project=.
   PASS  .claude/settings.json denies gh config reads
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.51.0 was tested with 0000000000000000000000000000000000000003, but the two were not compared (the two commits have diverged); the live pin is kept
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
-  PASS  pyproject.toml present
-  PASS  uv.lock committed
-  INFO  archetype backend: container image, .env.example and JSON logs required
-  PASS  Dockerfile present
-  PASS  every base image is pinned by digest
-  PASS  the image does not run as root
-  PASS  the image installs from the lockfile (uv sync --locked)
-  PASS  CMD runs python -m app and src/app/__main__.py exists
-  PASS  .dockerignore present
-  PASS  .dockerignore keeps .git, .env, .venv out of the image
-  PASS  .env.example present
-  PASS  .env.example documents every variable the code reads
-  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
-  PASS  .github/workflows/release.yml present
-  PASS  .github/workflows/release.yml runs on a pushed tag only
-  PASS  .github/workflows/release.yml reads no stored secret
-  PASS  ci.yml carries the image job (docker build, docker run)
-  SKIP  the ci job on the default branch not verified: repos/o/r could not be read
-  INFO  wall expectation: checks [], merge methods ['squash']
-  FAIL  repos/o/r not found (404)
-  SKIP  the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does)
-  SKIP  the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration does)
-  WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
-  INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
-  SKIP  labels not verified (offline, not logged in, or API error)
--- 1 failed, 4 not verified
---- again with --verdicts: exit 1
-not yet confirmed: the ci job on the default branch not verified: repos/o/r could not be read; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/pin-choice --repo o/r
---- exit 1
---- stdout
-floor check: root=$WORK/pin-choice project=.
-  PASS  LICENSE present
-  PASS  README.md present
-  PASS  CHANGELOG.md present
-  PASS  AGENTS.md present
-  PASS  CONTRIBUTING.md present
-  PASS  CONTRIBUTING.md says how to build and test
-  PASS  CONTRIBUTING.md says how to land a change
-  PASS  CONTRIBUTING.md is not a stub (10 lines)
-  PASS  SECURITY.md present
-  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
-  PASS  bug.yml has name, description, body
-  PASS  bug.yml has no unquoted YAML alias
-  PASS  bug.yml labels its issues
-  PASS  bug.yml body is a list
-  PASS  feature.yml has name, description, body
-  PASS  feature.yml has no unquoted YAML alias
-  PASS  feature.yml labels its issues
-  PASS  feature.yml body is a list
-  PASS  task.yml has name, description, body
-  PASS  task.yml has no unquoted YAML alias
-  PASS  task.yml labels its issues
-  PASS  task.yml body is a list
-  PASS  at least one template GitHub can offer (local)
-  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
-  PASS  .github/dependabot.yml present
-  PASS  .gitattributes present
-  PASS  .gitattributes normalises line endings (* text=auto)
-  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
-  PASS  .gitattributes has no rule that needs local git config
-  PASS  .claude/settings.json present
-  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
-  PASS  .claude/settings.json denies rm -rf
-  PASS  .claude/settings.json denies gh auth token
-  PASS  .claude/settings.json denies .env reads
-  PASS  .claude/settings.json denies `. ./.env`
-  PASS  .claude/settings.json denies `source .env`
-  PASS  .claude/settings.json denies `cat .env`
-  PASS  .claude/settings.json denies `grep KEY .env`
-  PASS  .claude/settings.json denies gh config reads
-  PASS  relative links in 5 markdown files resolve
-  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
+  INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.51.0 was tested with 0000000000000000000000000000000000000003, but the two were not compared (the two commits have diverged)
+  INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -53407,11 +53318,11 @@ floor check: root=$WORK/pin-choice project=.
   PASS  .claude/settings.json denies gh config reads
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found); the template-update skill checks it before it runs this line:
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
+  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error), so whether 0000000000000000000000000000000000000000 is older was not read
+  INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -53445,6 +53356,9 @@ fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix f
 not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/pin-choice --repo o/r --print-update-command
+--- exit 1
+--- stdout
 === --root $WORK/pin-choice --repo o/r
 --- exit 1
 --- stdout
@@ -53490,10 +53404,11 @@ floor check: root=$WORK/pin-choice project=.
   PASS  .claude/settings.json denies gh config reads
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
-  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0 has no plinth_sha default that is a full commit SHA); the live pin 0000000000000000000000000000000000000000 is kept
+  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0 has no plinth_sha default that is a full commit SHA), so whether 0000000000000000000000000000000000000000 is older was not read
+  INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -53527,14 +53442,6 @@ fail: repos/o/r not found (404); run /plinth:floor-check, which writes the fix f
 not yet confirmed: the Actions allowlist not verified (this token does not read the repository's Actions permissions; one with repository administration does); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: the Actions token's default permissions not verified (this token does not read the repository's Actions settings; one with repository administration...; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: labels not verified (offline, not logged in, or API error); run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/pin-choice --no-network --plinth-pin tested
---- exit 2
---- stdout
---- again with --verdicts: exit 2
-<no file>
-=== --root $WORK/pin-choice --repo o/r --print-update-command --plinth-pin newest
---- exit 2
---- stdout
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 0
 --- stdout
@@ -53578,7 +53485,6 @@ floor check: root=$WORK/owner-copy project=.
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -61296,7 +61202,6 @@ floor check: root=$WORK/glold project=. host=gitlab
   PASS  no dotenv file is tracked (20 tracked files read; names only, not contents or history)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0123456789abcdef0123456789abcdef01234567 --data plinth_gitlab_integrity=L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0123456789abcdef0123456789abcdef01234567 is kept
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -61320,11 +61225,10 @@ floor check: root=$WORK/glold project=. host=gitlab
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-=== --root $WORK/glold --print-update-command --plinth-pin tested
---- exit 0
+=== --root $WORK/glold --print-update-command
+--- exit 1
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000003 --data plinth_gitlab_integrity=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-=== --root $WORK/glold --print-update-command --plinth-pin tested
+=== --root $WORK/glold --print-update-command
 --- exit 1
 --- stdout
 === --root $WORK/glgood --repo o/r
@@ -70476,7 +70380,6 @@ floor check: root=$WORK/print-cmd project=.
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.51.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref f0ed80ea9e18cf833a67997514862a5fc2536290 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
-  INFO    plinth pin: the one v1.51.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.51.0: offline or API error); the live pin 0000000000000000000000000000000000000000 is kept
   WARN  template: this plinth targets template v1.51.0, but v99.0.0 is out (the latest plinth release, v98.0.0): update the plugin first. Type these yourself, in order:
   INFO    claude plugin marketplace update plinth
   INFO    claude plugin update plinth@plinth

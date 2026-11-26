@@ -220,6 +220,13 @@ What to keep to:
   things by hand, recommended, not in the way. For a `web` project it also
   names what waits for the first deploy, with the bill and when to read the
   Billing page, and the page's section to read; say each as the line does.
+- When `command:` says to undo a pull request first (`main`'s latest CI run
+  failed on its merge), say that `main` is broken by that merge and the
+  undo comes before any fix: the project's `docs/how-to/undo-a-merged-change.md`
+  opens a revert pull request through the same checks. Its `then also:`
+  line goes in part 4 as one sentence: restore lost or changed data, then
+  reproduce and fix, then the short incident note. `/rewind` undoes the
+  agent's own edits in a session; never offer it for a merge.
 - A spec's line says what was cut from it (`tickets cut from it:`). With
   `none`, `command:` is step 3's `/to-tickets #N`, which cuts it into
   tickets; `not read` there is not none: say it was not read, and guess

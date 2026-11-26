@@ -14,9 +14,18 @@ target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-proje
 # shellcheck source=tests/lib/template-checkout.sh
 . "$root/tests/lib/template-checkout.sh"
 work="$(mktemp -d)" || { echo "floor-check-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
+# Each fixture directory tag_names makes also answers that the target tag was
+# tested with the plinth the fixtures call, all zeros (#511), so the update
+# line is not held for the pin (#1183), unless a case wrote another first.
+tested_is() { # <fixture dir> <plinth_sha default>: the target tag's copier.yml
+  mkdir -p "$1/repos/coolbress/plinth-template/contents"
+  printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$2" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
+    > "$1/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
+}
 tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub (#519)
   mkdir -p "$1/repos/coolbress/plinth-template/commits"
   printf '{"sha":"%s"}\n' "$2" > "$1/repos/coolbress/plinth-template/commits/$target_ref.json"
+  [ -e "$1/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json" ] || tested_is "$1" "$(printf '%040d' 0)"
 }
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -2588,9 +2597,6 @@ else bad "moved tag, drift item"; printf '%s\n' "$out" | grep -E 'template|copie
 printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved, not $target_sha" "$work/print-err"; then ok "a moved target tag: --print-update-command prints no line, exit 1, names both commits"
 else bad "--print-update-command, moved tag (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
-printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
-if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved" "$work/print-err"; then ok "a moved target tag: --plinth-pin tested prints no line either"
-else bad "--plinth-pin tested, moved tag (rc=$rc, stdout '$printed')"; fi
 out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$good" 2>&1)"
 if grep -q "WARN  template: the recorded tag is the target tag ($target_ref), but $target_ref now names commit $moved, not $target_sha" <<<"$out" \
    && ! grep -q "PASS  template:" <<<"$out"
@@ -2683,11 +2689,8 @@ else bad "--move-archetype, no answers file (rc=$rc, stdout '$printed')"; sed 's
 move "$good" "$moved_api" --move-archetype cli
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved, not $target_sha" "$work/print-err"; then ok "--move-archetype, the target tag moved: no line (fail closed)"
 else bad "--move-archetype, moved tag (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
-for bad_args in "--move-archetype cli --plinth-pin tested" "--move-archetype"; do
-  # shellcheck disable=SC2086
-  FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$good" --repo o/r --print-update-command $bad_args >/dev/null 2>&1; rc=$?
-  [ "$rc" = 2 ] && ok "--print-update-command $bad_args: a usage error" || bad "--print-update-command $bad_args: exit $rc, expected 2"
-done
+FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$good" --repo o/r --print-update-command --move-archetype >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "--print-update-command --move-archetype: a usage error" || bad "--print-update-command --move-archetype: exit $rc, expected 2"
 python3 "$checker" --root "$good" --move-archetype cli >/dev/null 2>&1; rc=$?
 [ "$rc" = 2 ] && ok "--move-archetype without --print-update-command: a usage error" || bad "--move-archetype alone: exit $rc, expected 2"
 # ci.yml raised by hand and label.yml left where the template rendered it
@@ -2698,7 +2701,7 @@ python3 "$checker" --root "$good" --move-archetype cli >/dev/null 2>&1; rc=$?
 # says so, and the same fix line the pin-agreement item prints.
 two="$work/two-pins"; rm -rf "$two"; cp -R "$pcopy" "$two"
 printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$sha1" > "$two/.github/workflows/label.yml"
-stop() { # <api dir> [--plinth-pin tested] -- runs --print-update-command on $two; sets printed, rc, err
+stop() { # <api dir> -- runs --print-update-command on $two; sets printed, rc, err
   local api="$1"; shift
   printed="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$two" --repo o/r --print-update-command "$@" 2>"$work/print-err")"; rc=$?
   err="$(cat "$work/print-err")"
@@ -2722,9 +2725,6 @@ out="$(FLOOR_CHECK_API_DIR="$work/api-label-behind" python3 "$checker" --root "$
 if grep -qF "  INFO    $one_pin" <<<"$out" && grep -q "^  INFO    moves: label\.yml from $sha1 to $sha40" <<<"$out"
 then ok "floor-check's drift item prints the same line and the same move"
 else bad "drift item, ancestor"; printf '%s\n' "$out" | grep -E 'template|copier|moves' | sed 's/^/        /'; fi
-stop "$work/api-label-behind" --plinth-pin tested
-if grep -q "^moves:" <<<"$err"; then bad "--plinth-pin tested prints a move to the ci job's commit it does not carry"
-else ok "--plinth-pin tested names no move to the ci job's commit: its line carries another pin"; fi
 
 cmp_api "$work/api-label-ahead" ahead; stop "$work/api-label-ahead"
 if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "label.yml newer than ci.yml: the update prints no command, exit 1"
@@ -2881,9 +2881,10 @@ if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier up
 else bad "a 404 on the compare call"; printf '%s\n' "$out" | grep -E 'template|copier update' | sed 's/^/        /'; fi
 
 # The tested pin (#511): the target tag's copier.yml names the plinth commit
-# it was tested with. When that is newer than the pin the workflows call, a
-# second line carries it, for a person to choose; never one that moves the
-# pin backwards, and never past a comparison that was not read.
+# it was tested with. When that is newer than the pin the workflows call,
+# there is no update line until the pin is raised, in a pull request of its
+# own (#1183); a live pin newer is kept; a comparison not read is said, and
+# --print-update-command gives no line past it.
 tested="$(printf '%040d' 3)"
 pin_api() { # <copier.yml plinth_sha default or "-" for none> <compare status or "-" for none> → sets $pin_dir
   pin_dir="$work/api-pin"; rm -rf "$pin_dir"
@@ -2891,6 +2892,8 @@ pin_api() { # <copier.yml plinth_sha default or "-" for none> <compare status or
   if [ "$1" != - ]; then
     printf 'plinth_sha:\n  type: str\n  help: |\n    Commit of coolbress/plinth.\n  default: "%s"\n\nowner_github_defaults:\n  default: "0000000000000000000000000000000000000009"\n' "$1" \
       | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' > "$pin_dir/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
+  else
+    printf 'not json\n' > "$pin_dir/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
   fi
   [ "$2" = - ] || jq -n --arg s "$2" '{status: $s, ahead_by: 4, behind_by: 0}' > "$pin_dir/repos/coolbress/plinth/compare/$sha40...$tested.json"
   jq -n --arg t "$tested" '[{name: "v9.0.0", commit: {sha: $t}}]' > "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"
@@ -2898,38 +2901,60 @@ pin_api() { # <copier.yml plinth_sha default or "-" for none> <compare status or
 }
 pcopy2="$work/pin-choice"; rm -rf "$pcopy2"; cp -R "$good" "$pcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$pcopy2/.copier-answers.yml"
-pin_out() { out="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r 2>&1 | grep -E 'template|plinth|copier|pin')"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"; }
+printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$sha40" > "$pcopy2/.github/workflows/label.yml"
+pin_out() { out="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r 2>&1 | grep -E 'template|plinth|copier|pin|raise')"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"; }
+pin_print() { printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?; }
 live_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40"
-tested_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$tested"
 pin_api "$tested" ahead; pin_out
-if [ "$lines" = 2 ] && grep -qF "$live_line" <<<"$out" && grep -qF "$tested_line" <<<"$out"
-then ok "tested pin ahead of the live one: both update lines are printed, the live one first"
+if [ "$lines" = 0 ] && ! grep -qF "plinth_sha=$tested" <<<"$out" \
+   && grep -q "INFO    no update command until the plinth pin is raised to the one the target tag was tested with:" <<<"$out"
+then ok "tested pin ahead of the live one: floor-check prints no update line, and says to raise the pin first (#1183)"
 else bad "tested ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 has "the comparison names both SHAs, the tested pin's tag and the compare URL" \
   "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested \(v9\.0\.0\), 4 commit\(s\) newer: https://github\.com/coolbress/plinth/compare/$sha40\.\.\.$tested\$"
-has "the second line is offered, not chosen" "the line above keeps the live pin; this one moves it to the tested pin, if you choose it:"
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
-if [ "$rc" = 0 ] && [ "$printed" = "$(sed -n 's/^  INFO    \(uvx .*plinth_sha='"$tested$no_shared"'\)$/\1/p' <<<"$out")" ] && grep -q "4 commit(s) newer" "$work/print-err" \
-   && grep -q "^recommended: move the plinth pin to $tested (v9.0.0): this repository's checks then run the plinth commit $target_ref was tested with, 4 commit(s) newer than the one they run now" "$work/print-err"
-then ok "--print-update-command --plinth-pin tested prints exactly the second line, the comparison and the recommendation on stderr"
-else bad "--plinth-pin tested, ahead (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command 2>/dev/null)"
-case "$printed" in *"$live_line$no_shared") ok "--print-update-command without --plinth-pin still prints the live line" ;;
-  *) bad "--print-update-command default: '$printed'" ;; esac
+has "the raise names every workflow that calls plinth, at the one tested SHA" \
+  "INFO    raise it first in one pull request of its own: every coolbress/plinth uses: line in \.github/workflows/ci\.yml, \.github/workflows/label\.yml to $tested \(v9\.0\.0\), all at that one SHA; merge it, then plan the update again\$"
+# --print-update-command, as the skill and the monthly reminder run it: no
+# line, exit 1, the reason on stderr. The reminder reads exit 1 without its
+# own "nothing to update" as "no reminder" and leaves an open issue as it is.
+pin_print
+if [ "$rc" = 1 ] && [ -z "$printed" ] \
+   && grep -q "^no update command: the plinth pin is behind; the workflows call $sha40; $target_ref was tested with $tested (v9.0.0), 4 commit(s) newer: https://github.com/coolbress/plinth/compare/$sha40...$tested\$" "$work/print-err" \
+   && grep -q "^the open pull requests were not read (offline or API error)\$" "$work/print-err" \
+   && grep -q "^raise it first in one pull request of its own: every coolbress/plinth uses: line in .github/workflows/ci.yml, .github/workflows/label.yml to $tested" "$work/print-err" \
+   && ! grep -qx "no update command: the recorded tag is the target tag ($target_ref): nothing to update" "$work/print-err"
+then ok "--print-update-command with the pin behind: no line, exit 1, the comparison and the change on stderr, never the reminder's 'nothing to update'"
+else bad "--print-update-command, pin behind (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+# With an open pull request that raises the pin: it is named by number.
+mkdir -p "$pin_dir/repos/o/r/pulls/21" "$pin_dir/repos/o/r/pulls/22"
+printf '[{"number":22,"title":"fix: a bug"},{"number":21,"title":"chore(deps): bump coolbress/plinth"}]\n' > "$pin_dir/repos/o/r/pulls?state=open&per_page=100.json"
+printf '[{"filename":"src/app/x.py","patch":"+uses: coolbress/plinth/x@y"}]\n' > "$pin_dir/repos/o/r/pulls/22/files?per_page=100.json"
+jq -n --arg b "$tested" '[{filename: ".github/workflows/label.yml", patch: ("-    uses: coolbress/plinth/.github/workflows/pr-label.yml@old\n+    uses: \"coolbress/plinth/.github/workflows/pr-label.yml@" + $b + "\"")}]' \
+  > "$pin_dir/repos/o/r/pulls/21/files?per_page=100.json"
+pin_print
+if [ "$rc" = 1 ] && grep -q "^merge first: #21 chore(deps): bump coolbress/plinth (https://github.com/o/r/pull/21), which changes the coolbress/plinth uses: lines" "$work/print-err" \
+   && ! grep -q "#22" "$work/print-err" && grep -q "^then plan the update again\$" "$work/print-err" && ! grep -q "^raise it first" "$work/print-err"
+then ok "--print-update-command names the open pull request whose workflow patch adds a plinth uses: line, and no other"
+else bad "pin pull request named (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
+printf 'not json\n' > "$pin_dir/repos/o/r/pulls/21/files?per_page=100.json"; pin_print
+if [ "$rc" = 1 ] && grep -q "^the open pull requests were not read (the files of #21: offline or API error)" "$work/print-err" && grep -q "^raise it first" "$work/print-err"
+then ok "a pull request's files not read: the lookup is said as not read, never as none, and the change printed"
+else bad "pin pull request files unread (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
 
 rm "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"; pin_out
-if [ "$lines" = 2 ] && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 4 commit(s) newer (release tags not read): https://" <<<"$out"
+if [ "$lines" = 0 ] && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 4 commit(s) newer (release tags not read): https://" <<<"$out"
 then ok "the tag list unread: the comparison says so, rather than reading as an untagged commit"
 else bad "tags unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
 
 pin_api "$tested" behind; pin_out
 if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
-   && grep -q "INFO    plinth pin: the workflows call $sha40, newer than $tested (v9.0.0) that $target_ref was tested with; the live pin is kept, never moved backwards" <<<"$out"
+   && grep -q "INFO    plinth pin: the workflows call $sha40, newer than $tested (v9.0.0) that $target_ref was tested with; the update keeps it" <<<"$out"
 then ok "live pin ahead of the tested one: one line, kept because it is newer"
 else bad "live ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
-if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "never moved backwards" "$work/print-err" && ! grep -q "^recommended:" "$work/print-err"; then ok "--plinth-pin tested never prints a line that moves the pin backwards, nor recommends one: exit 1, says why"
-else bad "--plinth-pin tested, live ahead (rc=$rc, stdout '$printed')"; fi
+pin_print
+if [ "$rc" = 0 ] && case "$printed" in *"$live_line$no_shared") true ;; *) false ;; esac && grep -q "newer than $tested" "$work/print-err"
+then ok "--print-update-command with the live pin newer: the live line, the comparison on stderr"
+else bad "--print-update-command, live ahead (rc=$rc, stdout '$printed')"; fi
 
 pin_api "$sha40" -; pin_out
 if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" && ! grep -q "plinth pin:" <<<"$out"
@@ -2938,12 +2963,14 @@ else bad "equal ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' 
 
 pin_api "$tested" -; pin_out
 if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
-   && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, but the two were not compared (offline or API error); the live pin is kept" <<<"$out"
-then ok "the compare unreadable: one line, the comparison named as not read"
+   && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, but the two were not compared (offline or API error)\$" <<<"$out" \
+   && grep -q "INFO    the template-update skill stops before it runs this line until the two are compared" <<<"$out"
+then ok "the compare unreadable: floor-check shows the line, names the comparison as not read and says the skill stops"
 else bad "compare unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
-printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>/dev/null)"; rc=$?
-if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "--plinth-pin tested past an unread comparison prints no line, exit 1"
-else bad "--plinth-pin tested, compare unread (rc=$rc, stdout '$printed')"; fi
+pin_print
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "^no update command: whether the plinth pin is older than the one $target_ref was tested with was not read; the workflows call $sha40; $target_ref was tested with $tested, but the two were not compared (offline or API error)" "$work/print-err"
+then ok "--print-update-command past an unread comparison prints no line, exit 1, and says what was not read"
+else bad "--print-update-command, compare unread (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 
 pin_api "$tested" diverged; pin_out
 if [ "$lines" = 1 ] && grep -q "were not compared (the two commits have diverged)" <<<"$out"
@@ -2952,19 +2979,16 @@ else bad "diverged ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copie
 
 pin_api - ahead; pin_out
 if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
-   && grep -q "INFO    plinth pin: the one $target_ref was tested with was not read (coolbress/plinth-template copier.yml at $target_ref: offline or API error); the live pin $sha40 is kept" <<<"$out"
+   && grep -q "INFO    plinth pin: the one $target_ref was tested with was not read (coolbress/plinth-template copier.yml at $target_ref: offline or API error), so whether $sha40 is older was not read" <<<"$out"
 then ok "the tested pin unreadable: one line, named as not read"
 else bad "tested unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
-out="$(FLOOR_CHECK_API_DIR="$work/api-none-at-all" python3 "$checker" --root "$pcopy2" --repo o/r 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"
-if [ "$lines" = 1 ] && grep -q "plinth pin: the one $target_ref was tested with was not read" <<<"$out"; then ok "nothing read but the owner's 404: one line, the tested pin not read"
-else bad "offline ($lines lines)"; fi
+pin_print
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "^no update command: whether the plinth pin is older than the one $target_ref was tested with was not read" "$work/print-err"
+then ok "--print-update-command with the tested pin unreadable: no line, exit 1"
+else bad "--print-update-command, tested unread (rc=$rc, stdout '$printed')"; fi
 pin_api "not-a-sha" ahead; pin_out
 if [ "$lines" = 1 ] && grep -q "has no plinth_sha default that is a full commit SHA" <<<"$out"; then ok "a plinth_sha default that is not a full SHA is not read, not offered"
 else bad "malformed default ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
-python3 "$checker" --root "$pcopy2" --no-network --plinth-pin tested >/dev/null 2>&1; rc=$?
-if [ "$rc" = 2 ]; then ok "--plinth-pin without --print-update-command is a usage error"; else bad "--plinth-pin alone (rc=$rc)"; fi
-python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin newest >/dev/null 2>&1; rc=$?
-if [ "$rc" = 2 ]; then ok "an unknown --plinth-pin value is a usage error"; else bad "--plinth-pin newest (rc=$rc)"; fi
 
 # The owner's shared templates (#726). The update carries whether
 # `<owner>/.github` publishes a pull-request template and issue forms, as
@@ -3467,28 +3491,30 @@ glcred
 has "a gitlab.com login in ~/.netrc is a WARN" "WARN  .*\.netrc holds a login for gitlab\.com"
 
 echo "-- the update line on GitLab carries the include's checksum (#547 review)"
+# The include's pin is the one the target tag was tested with: no hold (#1183).
+glapi="$work/noapi-gl"; rm -rf "$glapi"; cp -R "$work/noapi" "$glapi"; tested_is "$glapi" "$glsha"
 glold="$work/glold"; rm -rf "$glold"; cp -R "$glgood" "$glold"
 sed -i.bak 's/^_commit: .*/_commit: v1.0.0/' "$glold/.copier-answers.yml"
 glint="L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8="
-printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$glapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
 case "$printed" in *"--data plinth_sha=$glsha --data plinth_gitlab_integrity=$glint") [ "$rc" = 0 ] && ok "the live pin and its checksum from .gitlab-ci.yml" || bad "update line rc=$rc" ;;
   *) bad "the GitLab update line: '$printed'" ;; esac
 glci "include:
   - remote: $glurl" > "$glold/.gitlab-ci.yml"
-printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$glapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
 [ "$rc" = 1 ] && grep -q "not one \`remote:\` line followed by its \`integrity:\` line" <<<"$printed" \
   && ok "an include without a checksum gives no update line, saying why" || bad "no checksum: rc=$rc '$printed'"
 glci "include:
   - remote: https://raw.githubusercontent.com/coolbress/plinth/v1.16.0/gitlab/python-ci.yml
     integrity: sha256-$glint" > "$glold/.gitlab-ci.yml"
-printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$glapi" python3 "$checker" --root "$glold" --print-update-command 2>&1)"; rc=$?
 [ "$rc" = 1 ] && grep -q "is at v1.16.0, not a full commit SHA" <<<"$printed" && ok "an include at a tag gives no update line" || bad "tag: rc=$rc '$printed'"
 cp "$glgood/.gitlab-ci.yml" "$glold/.gitlab-ci.yml"
 sed -i.bak '/^host:/d' "$glold/.copier-answers.yml"
-printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --host gitlab --print-update-command 2>&1)"; rc=$?
+printed="$(FLOOR_CHECK_API_DIR="$glapi" python3 "$checker" --root "$glold" --host gitlab --print-update-command 2>&1)"; rc=$?
 case "$printed" in *"--data plinth_gitlab_integrity=$glint") [ "$rc" = 0 ] && ok "--host gitlab without the answer: the update line reads the include" || bad "--host gitlab update rc=$rc" ;;
   *) bad "--host gitlab without the answer: '$printed'" ;; esac
-out="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --host gitlab --no-network 2>&1)"
+out="$(FLOOR_CHECK_API_DIR="$glapi" python3 "$checker" --root "$glold" --host gitlab --no-network 2>&1)"
 has "--host gitlab without the answer: the drift item carries the GitLab line" "INFO    uvx .*--data plinth_gitlab_integrity=$glint"
 printf 'host: gitlab\n' >> "$glold/.copier-answers.yml"
 glpin_api() { # <plinth_gitlab_integrity default or "-"> → $work/api-glpin, the tested pin ahead of the live one
@@ -3502,14 +3528,17 @@ glpin_api() { # <plinth_gitlab_integrity default or "-"> → $work/api-glpin, th
 }
 newint="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 glpin_api "$newint"
-printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command --plinth-pin tested 2>"$work/glpin-err")"; rc=$?
-case "$printed" in *"--data plinth_sha=$tested --data plinth_gitlab_integrity=$newint") [ "$rc" = 0 ] && ok "the tested pin moves with the checksum that tag was tested with" || bad "tested rc=$rc" ;;
-  *) bad "the tested GitLab line: '$printed'"; sed 's/^/        /' "$work/glpin-err" ;; esac
-grep -q "plinth pin: the include is at $glsha" "$work/glpin-err" && ok "the note says the include, not the workflows" || { bad "the GitLab note"; sed 's/^/        /' "$work/glpin-err"; }
+printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command 2>"$work/glpin-err")"; rc=$?
+[ "$rc" = 1 ] && [ -z "$printed" ] \
+  && grep -q "^raise it first in one merge request of its own: .gitlab-ci.yml's coolbress/plinth include to ref $tested and integrity $newint; merge it, then plan the update again\$" "$work/glpin-err" \
+  && ! grep -q "open pull requests" "$work/glpin-err" \
+  && ok "the include behind the tested pin: no line, and the change names the ref and the checksum that tag was tested with (#1183)" \
+  || { bad "the GitLab raise: rc=$rc '$printed'"; sed 's/^/        /' "$work/glpin-err"; }
+grep -q "the plinth pin is behind; the include is at $glsha" "$work/glpin-err" && ok "the note says the include, not the workflows" || { bad "the GitLab note"; sed 's/^/        /' "$work/glpin-err"; }
 glpin_api -
-printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command --plinth-pin tested 2>"$work/glpin-err")"; rc=$?
-[ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "its checksum was not read" "$work/glpin-err" \
-  && ok "no tested checksum: no tested line, the live pin kept" || { bad "tested without checksum: rc=$rc '$printed'"; sed 's/^/        /' "$work/glpin-err"; }
+printed="$(FLOOR_CHECK_API_DIR="$work/api-glpin" python3 "$checker" --root "$glold" --print-update-command 2>"$work/glpin-err")"; rc=$?
+[ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "its checksum was not read" "$work/glpin-err" && grep -q "integrity (the checksum the tag was tested with, not read)" "$work/glpin-err" \
+  && ok "no tested checksum: still no line, and the change says the checksum was not read" || { bad "tested without checksum: rc=$rc '$printed'"; sed 's/^/        /' "$work/glpin-err"; }
 
 echo "-- a GitLab project's wall, read through glab (#544)"
 # Fixtures laid out like gitlab.com/api/v4 paths, as the probe project
