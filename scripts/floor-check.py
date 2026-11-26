@@ -1124,6 +1124,105 @@ def _wall() -> tuple[dict, ...]:
     )
 
 
+DRIFT_DOCS = f"{DOCS}#template-drift"
+
+
+# The answers that rely on a file in the owner's .github repository, one
+# check each: (id, answer, the file GitHub inherits).
+OWNER_COPIES = (("FC-F05", "owner_has_code_of_conduct", "CODE_OF_CONDUCT.md"),
+                ("FC-F08", "owner_has_pr_template", "PULL_REQUEST_TEMPLATE.md"))
+
+
+def _plinth() -> tuple[dict, ...]:
+    """Area F: plinth, the template this repository was made from, its recorded answers and its plinth pins."""
+    gh = ("github",)
+    net = ("files", "network")
+    again = "  /plinth:template-update looks at the owner's .github again and passes what it finds"
+    return (
+        check("FC-F01", "the recorded template tag is the one plinth is tested with",
+              states=("pass", "warn", "unknown", "info"), handoff="person", docs=DRIFT_DOCS, needs=net,
+              fix="run /plinth:template-update to move the repository to the target tag",
+              messages={"unread": "template drift not verified ({reason})",
+                        "ahead": "template: the recorded tag {recorded} is ahead of {target}, the tag plinth is "
+                                 "tested with",
+                        "moved": "template: the recorded tag is the target tag ({target}), but {target} now names "
+                                 "commit {now}, not {sha}, the commit plinth was tested with",
+                        "good": "template: the recorded tag is the target tag ({target})",
+                        "tag": "  not verified that {target} still names {sha}, the commit plinth was tested with "
+                               "({why})",
+                        "behindunread": "template: {recorded} is behind {target}, the tag plinth is tested with; the "
+                                        "changed files could not be read ({why})",
+                        "behind": "template: {recorded} is behind {target}, the tag plinth is tested with; changed in "
+                                  "the template: {names}",
+                        "own": "  the template's own change between the two tags, not this repository's diff: another "
+                               "archetype, inherited forms or a hand-made edit can mean some of it was never rendered "
+                               "here",
+                        "file": "  {name}:",
+                        "patch": "    {line}",
+                        "nocmd": "  no update command: {why}",
+                        "pins": "  the \"workflow pins disagree\" WARN below names each file and the line that makes "
+                                "them one",
+                        "line": "  {line}",
+                        "movedcmd": "{line}",
+                        "cmdtag": "  not verified that {target} still names {sha}, the commit plinth was tested with "
+                                  "({why}); the template-update skill checks it before it runs this line:",
+                        "tested": "  the line above keeps the live pin; this one moves it to the tested pin, if you "
+                                  "choose it:"}),
+        check("FC-F02", "this installed plinth targets the newest template tag", states=("warn", "info"),
+              handoff="person", docs=DRIFT_DOCS, needs=net, ci_visible=False,
+              fix="update the plinth plugin, then run /plinth:template-update",
+              messages={"bad": "template: {head}",
+                        "step": "  {step}",
+                        "unreleased": "  {line}",
+                        "unread": "template: {line}",
+                        "note": "template: {note}"}),
+        check("FC-F03", "third_party_review: true has its workflow", states=("pass", "warn", "info"),
+              handoff="agent", docs=BESIDE_DOCS, hosts=gh,
+              fix="bring back .github/workflows/third-party.yml, or record third_party_review: false",
+              messages={"good": "third_party_review: true, and .github/workflows/third-party.yml is there",
+                        "bad": "third_party_review: true, and .github/workflows/third-party.yml is missing: no pull "
+                               "request gets the third-party / review check the project was made with",
+                        "hint": "  bring it back from the commit that removed it (git log --diff-filter=D -- "
+                                ".github/workflows/third-party.yml), or record third_party_review: false with "
+                                "/plinth:template-update if the reviewer is no longer wanted"}),
+        check("FC-F04", "code_of_conduct: true has its CODE_OF_CONDUCT.md", states=("pass", "warn", "info"),
+              handoff="agent", docs=BESIDE_DOCS, fix="bring back CODE_OF_CONDUCT.md, or record code_of_conduct: false",
+              messages={"good": "code_of_conduct: true, and CODE_OF_CONDUCT.md is there",
+                        "bad": "code_of_conduct: true, and CODE_OF_CONDUCT.md is missing",
+                        "hint": "  bring it back from the commit that removed it (git log --diff-filter=D -- "
+                                "CODE_OF_CONDUCT.md), or record code_of_conduct: false with /plinth:template-update"}),
+        *(check(cid, f"the owner's .github still publishes {name} (answered {key})",
+              states=("pass", "warn", "unknown", "info"), handoff="person", docs=BESIDE_DOCS, hosts=gh, needs=net,
+              fix="publish the file from a public <owner>/.github, or add the repository's own",
+              messages={"own": "{name} is the repository's own, which applies in place of the owner's",
+                        "norepo": "{key}: true; whether the owner's .github repository still publishes {name} not "
+                                  "verified (no --repo)",
+                        "visibility": "{key}: true; whether {owner}/.github is public not verified ({why}), and "
+                                      "GitHub inherits only from a public one",
+                        "private": "{key}: true, and {owner}/.github is private or gone: GitHub inherits {name} only "
+                                   "from a public .github repository, so this repository has none in effect",
+                        "again": again,
+                        "good": "{key}: true, and the owner's .github repository publishes {name}",
+                        "unread": "{key}: true; whether the owner's .github repository still publishes it not "
+                                  "verified (offline or API error)",
+                        "gone": "{key}: true, and the owner's .github repository no longer publishes {name}: this "
+                                "repository has none in effect"})
+          for cid, key, name in OWNER_COPIES),
+        check("FC-F06", "every plinth workflow pin names one commit", states=("warn", "unknown", "info"),
+              handoff="agent", docs=STATIC, hosts=gh,
+              fix="move every plinth uses: to the SHA the ci job calls, as the fix line says",
+              messages={"unread": "plinth workflow pins not compared: {where} mentions uses in a form this checker "
+                                  "does not read, and could pin coolbress/plinth at another commit",
+                        "bad": "{line}",
+                        "one": "  set every {repo} uses: to the one commit the ci job should call",
+                        "fix": "  {line}   (moves it to the SHA the ci job calls)"}),
+        check("FC-F07", "the recorded host is one this checker reads", states=("unknown",), handoff="person",
+              docs=GITLAB_DOCS, fix="pass --host github or --host gitlab",
+              messages={"other": ".copier-answers.yml says host: {host}, which this checker does not read; read as "
+                                 "github (pass --host to choose)"}),
+    )
+
+
 REGISTRY = _registry(
     # Where a result() call not yet given its id reports: any state, the
     # message its text. Not a check; the golden test counts what is left in it.
@@ -1136,6 +1235,7 @@ REGISTRY = _registry(
     *_project(),
     *_ci(),
     *_wall(),
+    *_plinth(),
 )
 
 # The run, as emit() records it: one result per line printed, in order, and
@@ -2142,16 +2242,16 @@ def check_plinth_pins_agree(root: Path) -> None:
     pins = plinth_pins(root)
     if pins["warn"] is None:
         if pins["unread"]:
-            result("SKIP", f"plinth workflow pins not compared: {', '.join(pins['unread'])} mentions uses in a form "
-                           "this checker does not read, and could pin coolbress/plinth at another commit")
+            emit("FC-F06", "unknown", "unread", {"where": ", ".join(pins["unread"])},
+                 reason="a uses: line not read")
         return
     # The ci job's file first: the fix moves the others to the SHA it calls.
-    result("WARN", pins["warn"])
+    emit("FC-F06", "warn", "bad", {"line": pins["warn"]})
     if pins["target"] is None:
-        result("INFO", f"  set every {PLINTH_REPO} uses: to the one commit the ci job should call")
+        emit("FC-F06", "info", "one", {"repo": PLINTH_REPO})
         return
     for line in pins["fix"]:
-        result("INFO", f"  {line}   (moves it to the SHA the ci job calls)")
+        emit("FC-F06", "info", "fix", {"line": line})
 
 
 def pins_disagree_stop(root: Path, network: bool) -> list[str]:
@@ -2742,27 +2842,25 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
     hand-made edit can mean a changed template file was never rendered here."""
     d = template_drift(root, host, network)
     if d["state"] == "skip":
-        result("SKIP", f"template drift not verified ({d['reason']})")
+        emit("FC-F01", "unknown", "unread", {"reason": d["reason"]}, reason="template drift not read")
         return
     template_repo, target = d["template_repo"], d["target"]
     recorded = d["recorded"]
     if d["state"] == "ahead":
-        result("INFO", f"template: the recorded tag {recorded} is ahead of {target}, the tag plinth is tested with")
+        emit("FC-F01", "info", "ahead", {"recorded": recorded, "target": target})
         return
     if d["state"] == "current":
         # A tag moved since this repository was rendered from it (#519).
         tag, now = target_tag(d, network)
         if tag == "moved":
-            result("WARN", f"template: the recorded tag is the target tag ({target}), but {target} now names "
-                           f"commit {now}, not {d['target_sha']}, the commit plinth was tested with")
+            emit("FC-F01", "warn", "moved", {"target": target, "now": now, "sha": d["target_sha"]})
             return
         # The PASS claims the tags only; whether the tag still names its
         # commit is said beside it when unread, not counted: every offline
         # run would otherwise count it as not verified.
-        result("PASS", f"template: the recorded tag is the target tag ({target})")
+        emit("FC-F01", "pass", "good", {"target": target})
         if tag == "unread":
-            result("INFO", f"  not verified that {target} still names {d['target_sha']}, the commit "
-                           f"plinth was tested with ({now})")
+            emit("FC-F01", "info", "tag", {"target": target, "sha": d["target_sha"], "why": now})
         return
 
     cmp = api(f"repos/{template_repo}/compare/{recorded}...{target}", network)
@@ -2777,14 +2875,12 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
         changed, unread_reason = None, "an unexpected compare response"
 
     if changed is None:
-        result("WARN", f"template: {recorded} is behind {target}, the tag plinth is tested with; "
-                       f"the changed files could not be read ({unread_reason})")
+        emit("FC-F01", "warn", "behindunread", {"recorded": recorded, "target": target, "why": unread_reason})
     else:
         names = sorted(f["filename"][len("template/"):] for f in changed)
-        result("WARN", f"template: {recorded} is behind {target}, the tag plinth is tested with; "
-                       f"changed in the template: {', '.join(names) if names else '(nothing under template/)'}")
-        result("INFO", "  the template's own change between the two tags, not this repository's diff: another "
-                       "archetype, inherited forms or a hand-made edit can mean some of it was never rendered here")
+        emit("FC-F01", "warn", "behind", {"recorded": recorded, "target": target,
+                                          "names": ", ".join(names) if names else "(nothing under template/)"})
+        emit("FC-F01", "info", "own")
         by_name = {f["filename"][len("template/"):]: f for f in changed}
         for name in TEMPLATE_DRIFT_DIFF_FILES:
             # Its source as named or with .jinja; a rename git did not pair
@@ -2793,35 +2889,34 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
             entry = next((e for e in found if e.get("status") != "removed"), found[0] if found else None)
             patch = entry.get("patch") if isinstance(entry, dict) else None
             if patch:
-                result("INFO", f"  {name}:")
+                emit("FC-F01", "info", "file", {"name": name})
                 for pline in patch.splitlines():
-                    result("INFO", f"    {pline}")
+                    emit("FC-F01", "info", "patch", {"line": pline})
 
     owner_shared(d, owner, network, root)
     if not d["cmd"]:
-        result("INFO", f"  no update command: {d['why_not']}")
+        emit("FC-F01", "info", "nocmd", {"why": d["why_not"]})
         if str(d["why_not"]).startswith("workflow pins disagree"):
-            result("INFO", "  the \"workflow pins disagree\" WARN below names each file and the line that makes them one")
+            emit("FC-F01", "info", "pins")
         return
     for note in d.get("owner_notes", []):
-        result("INFO", f"  {note}")
+        emit("FC-F01", "info", "line", {"line": note})
     tag, why = target_tag(d, network)
     if tag == "moved":
-        result("WARN", moved_note(d, why))
+        emit("FC-F01", "warn", "movedcmd", {"line": moved_note(d, why)})
         return
     if tag == "unread":
-        result("INFO", f"  not verified that {target} still names {d['target_sha']}, the commit plinth was tested "
-                       f"with ({why}); the template-update skill checks it before it runs this line:")
-    result("INFO", f"  {d['cmd']}")
+        emit("FC-F01", "info", "cmdtag", {"target": target, "sha": d["target_sha"], "why": why})
+    emit("FC-F01", "info", "line", {"line": d["cmd"]})
     for line in moves_lines(d):
-        result("INFO", f"  {line}")
+        emit("FC-F01", "info", "line", {"line": line})
     choice = plinth_pin_choice(d, network)
     if choice["state"] == "equal":
         return
-    result("INFO", f"  {choice['note']}")
+    emit("FC-F01", "info", "line", {"line": choice["note"]})
     if choice["state"] == "tested-ahead":
-        result("INFO", "  the line above keeps the live pin; this one moves it to the tested pin, if you choose it:")
-        result("INFO", f"  {choice['cmd']}")
+        emit("FC-F01", "info", "tested")
+        emit("FC-F01", "info", "line", {"line": choice["cmd"]})
 
 
 PLUGIN_UPDATE_STEPS = ("claude plugin marketplace update plinth", "claude plugin update plinth@plinth",
@@ -2920,16 +3015,16 @@ def check_plugin_skew(root: Path, network: bool, host: str | None = None) -> Non
     plugin anyone installed."""
     s = plugin_skew(root, network, host)
     if s["state"] == "older":
-        result("WARN", f"template: {plugin_skew_head(s)}")
+        emit("FC-F02", "warn", "bad", {"head": plugin_skew_head(s)})
         # template-update.sh serves GitLab too (#1012), so the last step is the same on both hosts.
         for step in PLUGIN_UPDATE_STEPS:
-            result("INFO", f"  {step}")
+            emit("FC-F02", "info", "step", {"step": step})
         if s.get("unreleased"):
-            result("INFO", f"  {s['unreleased']}")
+            emit("FC-F02", "info", "unreleased", {"line": s["unreleased"]})
     elif s["state"] == "unread":
-        result("INFO", f"template: {plugin_skew_unread(s)}")
+        emit("FC-F02", "info", "unread", {"line": plugin_skew_unread(s)})
     if s.get("note"):
-        result("INFO", f"template: {s['note']}")
+        emit("FC-F02", "info", "note", {"note": s["note"]})
 
 
 def print_plugin_skew(root: Path, network: bool = True, host: str | None = None) -> int:
@@ -4745,54 +4840,41 @@ def check_answers(root: Path, owner: str | None, network: bool, host: str = "git
         return
     if answered_true(answers, "third_party_review") and host == "github":
         caller = root / ".github" / "workflows" / "third-party.yml"
-        if caller.is_file():
-            result("PASS", "third_party_review: true, and .github/workflows/third-party.yml is there")
-        else:
-            result("WARN", "third_party_review: true, and .github/workflows/third-party.yml is missing: no pull "
-                           "request gets the third-party / review check the project was made with")
-            result("INFO", "  bring it back from the commit that removed it (git log --diff-filter=D -- "
-                           ".github/workflows/third-party.yml), or record third_party_review: false with "
-                           "/plinth:template-update if the reviewer is no longer wanted")
+        if not verdict("FC-F03", caller.is_file(), bad="warn"):
+            emit("FC-F03", "info", "hint")
     want_own = answered_true(answers, "code_of_conduct") and not (
         host == "github" and answered_true(answers, "owner_has_code_of_conduct"))
-    if want_own:
-        if (root / "CODE_OF_CONDUCT.md").is_file():
-            result("PASS", "code_of_conduct: true, and CODE_OF_CONDUCT.md is there")
-        else:
-            result("WARN", "code_of_conduct: true, and CODE_OF_CONDUCT.md is missing")
-            result("INFO", "  bring it back from the commit that removed it (git log --diff-filter=D -- "
-                           "CODE_OF_CONDUCT.md), or record code_of_conduct: false with /plinth:template-update")
+    if want_own and not verdict("FC-F04", (root / "CODE_OF_CONDUCT.md").is_file(), bad="warn"):
+        emit("FC-F04", "info", "hint")
     if host == "github":
         # The owner's copy, answered at creation and relied on since: still
         # published, or this repository has none in effect. Issue forms are
         # judged in the document set above, local or inherited.
-        for key, name in (("owner_has_code_of_conduct", "CODE_OF_CONDUCT.md"),
-                          ("owner_has_pr_template", "PULL_REQUEST_TEMPLATE.md")):
+        for cid, key, name in OWNER_COPIES:
             if answered_true(answers, key):
-                check_owner_copy(root, owner, network, key, name)
+                check_owner_copy(cid, root, owner, network, key, name)
 
 
-def check_owner_copy(root: Path, owner: str | None, network: bool, key: str, name: str) -> None:
+def check_owner_copy(cid: str, root: Path, owner: str | None, network: bool, key: str, name: str) -> None:
     """`<key>: true` and the owner's `.github` still publishing `name` at one
     of the three places GitHub reads it from, unless the repository has its
     own, which applies in its place."""
     places = (name, f".github/{name}", f"docs/{name}")
+    values = {"key": key, "name": name, "owner": owner}
     if any((root / p).is_file() for p in places):
-        result("PASS", f"{name} is the repository's own, which applies in place of the owner's")
+        emit(cid, "pass", "own", values)
         return
     if owner is None:
-        result("SKIP", f"{key}: true; whether the owner's .github repository still publishes {name} not verified "
-                       "(no --repo)")
+        emit(cid, "unknown", "norepo", values, reason="no --repo")
         return
     vis = owner_dotgithub_public(owner, network)
     if vis.startswith("unknown"):
-        result("SKIP", f"{key}: true; whether {owner}/.github is public not verified "
-                       f"({vis.removeprefix('unknown: ')}), and GitHub inherits only from a public one")
+        emit(cid, "unknown", "visibility", {**values, "why": vis.removeprefix("unknown: ")},
+             reason="visibility of the owner's .github not read")
         return
     if vis != "yes":
-        result("WARN", f"{key}: true, and {owner}/.github is private or gone: GitHub inherits {name} only from "
-                       "a public .github repository, so this repository has none in effect")
-        result("INFO", "  /plinth:template-update looks at the owner's .github again and passes what it finds")
+        emit(cid, "warn", "private", values)
+        emit(cid, "info", "again")
         return
     found, failed = False, False
     for path in places:
@@ -4802,14 +4884,12 @@ def check_owner_copy(root: Path, owner: str | None, network: bool, key: str, nam
             break
         failed = failed or got is ERROR
     if found:
-        result("PASS", f"{key}: true, and the owner's .github repository publishes {name}")
+        emit(cid, "pass", "good", values)
     elif failed:
-        result("SKIP", f"{key}: true; whether the owner's .github repository still "
-                       "publishes it not verified (offline or API error)")
+        emit(cid, "unknown", "unread", values, reason="offline or API error")
     else:
-        result("WARN", f"{key}: true, and the owner's .github repository no longer "
-                       f"publishes {name}: this repository has none in effect")
-        result("INFO", "  /plinth:template-update looks at the owner's .github again and passes what it finds")
+        emit(cid, "warn", "gone", values)
+        emit(cid, "info", "again")
 
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
@@ -5868,8 +5948,7 @@ def main() -> int:
 
     host = a.host or (copier_answers(root) or {}).get("host") or "github"
     if host not in ("github", "gitlab"):
-        result("SKIP", f".copier-answers.yml says host: {host}, which this checker does not read; "
-                       "read as github (pass --host to choose)")
+        emit("FC-F07", "unknown", "other", {"host": host}, reason="an unknown host")
         host = "github"
     print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
           + (" host=gitlab" if host == "gitlab" else ""))

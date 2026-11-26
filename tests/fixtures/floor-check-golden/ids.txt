@@ -110,3 +110,11 @@ FC-E27 the Actions allowlist lets every action the workflows use start
 FC-E28 the Actions token reads only and cannot approve a pull request
 FC-E29 a tag ruleset keeps released tags from being moved or deleted
 FC-E30 the repository has a description
+FC-F01 the recorded template tag is the one plinth is tested with
+FC-F02 this installed plinth targets the newest template tag
+FC-F03 third_party_review: true has its workflow
+FC-F04 code_of_conduct: true has its CODE_OF_CONDUCT.md
+FC-F05 the owner's .github still publishes CODE_OF_CONDUCT.md (answered owner_has_code_of_conduct)
+FC-F06 every plinth workflow pin names one commit
+FC-F07 the recorded host is one this checker reads
+FC-F08 the owner's .github still publishes PULL_REQUEST_TEMPLATE.md (answered owner_has_pr_template)
