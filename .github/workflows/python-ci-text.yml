@@ -134,9 +134,10 @@ jobs:
           # Not a PR: report a pass instead of skipping the job. A job skipped
           # with `if:` has no check name, and the day a ruleset requires that
           # name the repository quietly locks.
+          # The job's one line on a push (#1141): this step says it for the
+          # title and the description, and the two steps after it say nothing.
           if [ -z "${TITLE:-}" ]; then
-            echo "Not a pull request: no title to check."
-            say "pass: PR title, does not apply (not a pull request: no title to check)"
+            say "pass: PR title and description, do not apply (not a pull request: no title or description to read)"
             exit 0
           fi
 
@@ -217,8 +218,13 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PLINTH_SHA: ${{ job.workflow_sha }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          # Not a pull request: nothing reads these files, so nothing is
+          # fetched (#1141). On a push a 503 from raw.githubusercontent.com
+          # turned this job red with no pull request to check.
+          [ -n "${PR:-}" ] || exit 0
           d="$RUNNER_TEMP/plinth-closing"; mkdir -p "$d"
           for f in scripts/closing-references.sh scripts/closing-references.py scripts/description-fields.py; do
             curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
@@ -230,7 +236,8 @@ jobs:
       # description's closing line. A review's run reads the same pull request:
       # passing it as "not a pull request" would turn a red check green with
       # the description unchanged. Anything unread fails, a failed fetch too,
-      # with its own line: the title's pass must not be the job's only one.
+      # with its own line: on a pull request the title's pass must not be the
+      # job's only one. On a push it is, and this step says nothing (#1141).
       - name: The description closes no issue outside its closing line
         if: ${{ !cancelled() }}
         env:
@@ -238,8 +245,10 @@ jobs:
           FETCH: ${{ steps.fetch-closing.outcome }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
           PR: ${{ github.event.pull_request.number }}
+          # A bot writes its own description and cannot fill the person-only
+          # fields (#1141): description-fields.py says so in one pass line.
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
         run: |
           at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           set -uo pipefail
@@ -247,11 +256,8 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          if [ -z "${PR:-}" ]; then
-            echo "Not a pull request ($EVENT_NAME): no description to read."
-            say "pass: PR description, does not apply (not a pull request: no description to read)"
-            exit 0
-          fi
+          # Not a pull request: the title step said so for both (#1141).
+          [ -n "${PR:-}" ] || exit 0
           if [ "${FETCH:-}" != success ]; then
             say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read"
             fail_check="ci / pr-title"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--pr-title"; fail_next="re-run this job"

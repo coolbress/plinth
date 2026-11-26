@@ -67,7 +67,7 @@ echo "  PASS  claude $v (floor $floor)"
 # makes for a git-subdir source and leaves index.lock behind; the installer's retry dies on
 # that lock and prints only "index.lock: File exists" (#171). Measured: 2.30.1 to 2.35.3
 # crash, 2.37.0 and newer do not; 2.36 was not measured. One source, the door's
-# own check, which stops below it too (#771); tests/doc-pinned-facts.sh holds the
+# own check, which stops below it too (#771); tests/doc-consistency.sh holds the
 # README and the tutorial to it.
 git_floor="$(sed -nE 's/^git_floor="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 [ -n "$git_floor" ] || { echo "  FAIL  no git_floor in scripts/new-project.sh"; exit 1; }
@@ -268,7 +268,7 @@ done
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
 # The docs name them in this order; the other order leaves no mattpocock-skills
 # skill until `install` runs.
-# The README is their one source (#835); tests/doc-pinned-facts.sh holds the
+# The README is their one source (#835); tests/doc-consistency.sh holds the
 # pages that link to it.
 grep -qF "\`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/README.md")" \
   || { echo "  FAIL  README.md does not name \`${upgrade_cmds[0]}\` and then \`${upgrade_cmds[1]}\`"; exit 1; }

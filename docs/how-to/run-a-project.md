@@ -104,7 +104,10 @@ see these: guidance only.
   pull request; anything bigger starts here.
 - **Next:** type `/grilling` with the idea. The agent interviews you,
   looks up facts itself and brings you only decisions, then opens an issue
-  saying what "done" means (several sessions' work: step 3 first).
+  saying what "done" means (several sessions' work: step 3 first). When the
+  idea is a page people look at, such as a landing page, `/design` (built
+  in) sketches it as screen mockups on a canvas, before or beside the
+  interview; `/grilling` still writes the issue.
 - **Look at:** that you both mean the same thing. Have it put the agreed
   words into `GLOSSARY.md`, and a hard-to-reverse trade-off under `docs/adr/`
   (`domain-modeling`; `/grill-with-docs`,
@@ -257,9 +260,9 @@ see these: guidance only.
 
   `/rewind` (built in) takes back what the agent just did in this session,
   files and conversation; it does not undo a merge, which is already on
-  `main`. Issues someone else opened: `/triage` sorts them (ready for the
-  agent, needs you, needs more information, will not do); not for tickets
-  your own plan made.
+  `main`. Issues someone else opened, and what users report: write it as an
+  issue, then `/triage` sorts them (ready for the agent, needs you, needs
+  more information, will not do); not for tickets your own plan made.
 - **Look at:** the revert's checks when you undid a merge; the command or
   test failing before the fix, passing after.
 - **Yours:** say no to a fix that switches off or weakens a check instead of
@@ -358,21 +361,8 @@ at all. Type the skill.
 
 ### Skills plinth lists but does not install
 
-More of Matt Pocock's skills, `/ask-matt`, `/grill-with-docs` and
-`/wait-what` among them, and `/ponytail-audit` are listed, not installed;
-`/plinth:arsenal` lists each. [#520](https://github.com/coolbress/plinth/issues/520) moved them on
-[#475](https://github.com/coolbress/plinth/issues/475)'s four criteria and their measured cost; no run compared a set
-with them and one without, so whether they change a result is not known.
-`/to-spec`, `/to-tickets`, `/wayfinder`, `/improve-codebase-architecture`
-and `/handoff` are installed by default since
-[#704](https://github.com/coolbress/plinth/issues/704), and `/retro` since
-[#714](https://github.com/coolbress/plinth/issues/714). `/ask-matt` can
-suggest `/implement-spec` or `/pr`, which plinth does not install. Run either line once, then start a new session:
-
-```sh
-claude plugin install mattpocock-skills-extra@plinth
-claude plugin install ponytail-skills@plinth
-```
+What plinth lists but does not install, what each costs and the line that
+installs it: [the arsenal's list](../../skills/arsenal/listed.md).
 
 ## What the agent tells you, and when
 
