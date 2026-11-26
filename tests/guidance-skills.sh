@@ -12,6 +12,10 @@
 # under "Something broke"; and `/debug`, which debugs Claude Code, appears
 # in the table only as that one clause, never as a tool for the app. The template's end-or-hand-over form is read against
 # the installed skills by tests/install-smoke.sh, which has them.
+# The arsenal's not-used.md (#1086): each entry is "- `/<name>` (<class>).
+# Breaks: <rule>.", its class "built in" or "installed by plinth" (a tool that
+# needs installing is not listed), true of the name, and the tool is named in
+# no row of the "Where you are" table.
 # Must-not-pass cases run first.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,6 +47,32 @@ def looking_back(text):
     """The passages, paragraphs or list items, that speak of looking back."""
     blocks = re.split(r"\n\s*\n|\n(?=\s*- )", text)
     return [b for b in blocks if re.search(r"retrospective|looking back", b, re.I)]
+
+
+# Every skill the marketplace carries that the default install does not.
+listed_skills = {s.rsplit("/", 1)[1] for e in entries.values() for s in e.get("skills", [])} - default
+NOT_USED = re.compile(r"^- `/([a-z][a-z0-9:-]*)` \((built in|installed by plinth)\)\. Breaks: (\S.*)$")
+
+
+def not_used_problems(text, rows):
+    out = []
+    entries_ = [l for l in text.splitlines() if l.startswith("- ")]
+    if not entries_:
+        out.append("not-used.md lists no tool: the line was not read")
+    for l in entries_:
+        m = NOT_USED.match(l)
+        if not m:
+            out.append(f"a not-used entry without its class (built in, or installed by plinth) and the rule it breaks: {l[:70]}")
+            continue
+        name, cls = m.group(1), m.group(2)
+        if cls == "installed by plinth" and name not in default:
+            out.append(f"not-used marks /{name} installed by plinth, and the default install does not carry it")
+        if cls == "built in" and (name in default or name in listed_skills):
+            out.append(f"not-used marks /{name} built in, and it is a skill plinth installs or lists")
+        for r in rows:
+            if f"`/{name}`" in r or f"`/{name} " in r:
+                out.append(f"/{name} is on the not-used line and in the table: {r[:60]}")
+    return out
 
 
 def problems(arsenal, howto, guide):
@@ -99,6 +129,7 @@ def built_ins(rows):
 
 
 arsenal = (root / "skills/arsenal/SKILL.md").read_text()
+not_used = (root / "skills/arsenal/not-used.md").read_text()
 howto = (root / "docs/how-to/run-a-project.md").read_text()
 guide = (root / "skills/guide/SKILL.md").read_text()
 row = "| Looking back on a piece of work (retrospective) |"
@@ -163,6 +194,29 @@ case("must fail: step 8 drops 'same machine only'",
 assert step5 in arsenal and broke in arsenal, "a row #1080 placed a built-in in moved; update this test"
 case("the arsenal's table, the how-to and the guide name only default skills, and /retro",
      problems(arsenal, howto, guide), None)
+rows = table(arsenal)
+ship = "- `/ship` (built in). Breaks: "
+assert ship in not_used, "the /ship entry moved; update this test"
+ship_line = next(l for l in not_used.splitlines() if l.startswith(ship))
+case("must fail: a not-used entry with no class",
+     not_used_problems(not_used.replace(ship, "- `/ship`. Breaks: "), rows), "without its class")
+case("must fail: a not-used entry with no rule",
+     not_used_problems(not_used.replace(ship_line, "- `/ship` (built in)."), rows), "without its class")
+case("must fail: a not-used entry with an empty rule",
+     not_used_problems(not_used.replace(ship_line, "- `/ship` (built in). Breaks: "), rows), "without its class")
+case("must fail: a not-used tool that needs installing",
+     not_used_problems(not_used + "\n- `/ponytail-audit` (listed). Breaks: it is not installed.\n", rows), "without its class")
+case("must fail: a listed skill called built in",
+     not_used_problems(not_used + "\n- `/ask-matt` (built in). Breaks: it routes elsewhere.\n", rows), "plinth installs or lists")
+case("must fail: a skill called installed by plinth that the default install does not carry",
+     not_used_problems(not_used + "\n- `/ask-matt` (installed by plinth). Breaks: it routes elsewhere.\n", rows), "does not carry it")
+case("must fail: a not-used tool named in a Tool cell",
+     not_used_problems(not_used, [r.replace("| `/plinth:guide`, typed by the person |", "| `/ship`, typed by the person |") for r in rows]),
+     "/ship is on the not-used line and in the table")
+case("must fail: a not-used.md with no entries",
+     not_used_problems("# Not used with plinth\n\nNothing.\n", rows), "lists no tool")
+case("not-used.md: each entry has its class and its rule, and none is in the table",
+     not_used_problems(not_used, rows), None)
 print(f"-- {fails} failed")
 sys.exit(1 if fails else 0)
 PY
