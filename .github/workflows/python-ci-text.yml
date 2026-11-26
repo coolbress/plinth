@@ -236,7 +236,8 @@ jobs:
       # description's closing line. A review's run reads the same pull request:
       # passing it as "not a pull request" would turn a red check green with
       # the description unchanged. Anything unread fails, a failed fetch too,
-      # with its own line: the title's pass must not be the job's only one.
+      # with its own line: on a pull request the title's pass must not be the
+      # job's only one. On a push it is, and this step says nothing (#1141).
       - name: The description closes no issue outside its closing line
         if: ${{ !cancelled() }}
         env:

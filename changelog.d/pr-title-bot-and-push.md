@@ -1,7 +1,8 @@
 ### Changed
 
-- `ci / pr-title` on a pull request a bot wrote (GitHub's `user.type` Bot,
-  Dependabot's included) says in one `pass:` line that the person-only
+- `ci / pr-title` on a pull request a bot wrote (GitHub's `user.type` Bot:
+  Dependabot's, and any GitHub App's or Actions workflow's, an AI agent's
+  under an app account included) says in one `pass:` line that the person-only
   fields, `Review:` and `What I checked myself`, do not apply, instead of
   two `not yet confirmed` lines that showed on every such pull request and
   never cleared (#1141). The closing-keyword comparison and the bare `#N`
