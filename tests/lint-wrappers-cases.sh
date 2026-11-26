@@ -14,7 +14,7 @@ lock_pin() { sed -n "s/^$1==\([^ ;]*\).*/\1/p" "$root/tests/lint-tools.txt"; }
 zizmor_pin="$(lock_pin zizmor)"; ruff_pin="$(lock_pin ruff)"; mypy_pin="$(lock_pin mypy)"
 [ -n "$zizmor_pin" ] && [ -n "$ruff_pin" ] && [ -n "$mypy_pin" ] || { echo "  FAIL  zizmor, ruff or mypy not pinned in tests/lint-tools.txt"; exit 1; }
 
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+tmp="$(mktemp -d)" || { echo "lint-wrappers-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$tmp"' EXIT
 base="$tmp/base"; mkdir -p "$base"
 # git: python-lint.sh lists the files it checks with `git ls-files`.
 for t in bash dirname sed head git; do ln -s "$(command -v "$t")" "$base/$t"; done

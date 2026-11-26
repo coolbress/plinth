@@ -104,7 +104,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Shared inline Python moves into scripts without splitting the workflow into several callers. 2026-11-25, #1127 (decided; not built yet: #1127)
 - The code-growth sensor is report-only. 2026-10-28, #705
 - GitLab keeps the same nine job names as GitHub. 2026-10-13, #353
-- The GitLab pipeline is supported and skills are GitHub-first: what exists for GitLab keeps working, and a new feature reaches GitLab when a GitLab user is recorded. 2026-11-25, #1137 (decided; not built yet: #1137)
+- The GitLab pipeline is supported and skills are GitHub-first: what exists for GitLab keeps working, and a new feature reaches GitLab when a GitLab user is recorded. 2026-11-25, #1137
 
 ## Releases and pins
 
@@ -179,6 +179,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - A shipped SKILL.md stays within 500 lines and 20,000 bytes. 2026-11-25, #1126
 - `CLAUDE.md` keeps the Code Review Rules and the worktree rules byte for byte; procedures live in `docs/`. 2026-11-25, #1125
 - plinth's own `AGENTS.md` (`CLAUDE.md`) stays within 110 lines and 7,500 bytes; this reverses #25's 60-line cap for plinth's own file. 2026-11-25, #1125
+- An incident yields a check or nothing: rule text goes into `AGENTS.md` or a skill only when no check can hold it, and the pull request says why; a raised size cap is a change to the checks. 2026-11-25, #1138
 - No documentation site; `docs/` in the repository is enough until a reader asks for one. 2026-11-25, #1140
 
 ## Agents and safety

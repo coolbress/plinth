@@ -12,7 +12,7 @@ set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/pr-review.yml"
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d)" || { echo "pr-review-gate: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 gate_sh="$root/scripts/pr-review/gate.sh"

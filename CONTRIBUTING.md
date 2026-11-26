@@ -20,7 +20,8 @@ export PLINTH_TEMPLATE_DIR="$(mktemp -d)/plinth-template" && tests/lib/template-
 Before a pull request, the local run is the tests the change touched and the
 tests it reaches; CI runs every `tests/*.sh` on each pull request, on runners
 that share nothing with this machine. Every test is a `run:` step of
-`plinth-ci.yml`, which `ci.yml` calls on each pull request.
+`plinth-ci.yml`, which `ci.yml` calls on each pull request, or of
+`plinth-ci-text.yml`, which `ci-text.yml` calls.
 `tests/all-tests-are-wired.sh` fails when a `tests/*.sh` is a `run:` step in
 no workflow; it does not check that the workflow runs on a pull request, so a
 step moved to a workflow that does not is for the reviewer to catch.
@@ -122,7 +123,7 @@ local pass is the CI pass only where the tool is the same one:
 
 The link check is left out on purpose.
 `ci / docs` runs a checksum-pinned Linux build of lychee
-(`.github/workflows/plinth-ci.yml`); a package manager installs whatever
+(`.github/workflows/plinth-ci-text.yml`); a package manager installs whatever
 version it has, the check needs network, and the sites it asks can answer
 differently from one hour to the next, so a local pass does not promise a
 pass there. Both skip the hosts in `.lycheeignore`, each of which refuses
@@ -229,7 +230,10 @@ release needs a green run on the commit it tags, or on a commit with its tree
    squash message.
 
    CI runs `ci / install`, `ci / tools`, `ci / docs`, `ci / release-gate` and
-   `CodeQL`; the canary jobs run the reusable workflow at this commit against
+   `CodeQL`. An edit to the title or the description re-runs only
+   `ci / docs`, `ci / release-gate` and the canaries' `pr-title` and
+   `diff-size` (`ci-text.yml`, #1133), not the tests or the canaries' code
+   jobs, and never cancels a push's run; the canary jobs run the reusable workflow at this commit against
    `canary/` and `canary-web/`, and `canary-template` against
    `canary-template/`, plinth-template's `cli` render at the pinned commit,
    with the grant and inputs its rendered `ci.yml` gives the call (#953). No
@@ -372,6 +376,21 @@ release needs a green run on the commit it tags, or on a commit with its tree
    closed ([closing an issue](docs/agents/issue-tracker.md#closing-an-issue)). It only reads; an issue it cannot read is printed as
    "not read", and the exit status does not change.
 
+## After something goes wrong
+
+An incident yields a check or nothing. The fix is a check that fails on what
+went wrong (a test under `tests/`, a CI step, or a script that stops), or only
+the record of what happened, in its issue; no new sentence of rule text goes
+into `AGENTS.md` (`CLAUDE.md`) or a shipped skill unless a check cannot hold
+it. Then the pull request says why: the check it considered, and what that
+check could not see (a judgement no file or command output shows, say).
+`tests/skill-size.sh` holds the sizes, `AGENTS.md` at most 110 lines and
+7,500 bytes and each `skills/*/SKILL.md` at most 500 lines and 20,000 bytes.
+Text that needs more raises its cap in `tests/size_caps.py` in the same pull
+request; `ci / diff-size` lists that file as a change to the checks (here
+`canary / diff-size`, which runs the same step), so an admin approves the
+raise, or decides it by pushing it.
+
 ## Cut a release
 
 [How to cut a release](docs/how-to/cut-a-release.md). A release that moves
@@ -380,6 +399,10 @@ the template tag starts with
 
 ## What a change must keep true
 
+- The GitLab pipeline is supported; skills are GitHub-first. A change keeps
+  the existing GitLab jobs and the tests that run them passing
+  (`tests/gitlab-ci-cases.sh` among them); a new check or skill need not reach GitLab parity until a
+  GitLab user is recorded ([GitLab scope](docs/reference/gitlab-ci.md#scope)).
 - Check names are the contract with every consumer. `ci / <job>` in
   `python-ci.yml` and the contexts in `ruleset.json` must stay identical;
   `tests/python-ci-contract.sh` holds the snapshot, and

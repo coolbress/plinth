@@ -23,10 +23,11 @@ set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 door="$root/scripts/new-project.sh"
 floor="$root/scripts/floor-check.py"
-files=(python-ci.yml pr-label.yml pr-review.yml)
-excluded=("plinth-ci.yml|only plinth's own ci.yml calls it, under plinth's own allowlist")
+files=(python-ci.yml python-ci-text.yml pr-label.yml pr-review.yml)
+excluded=("plinth-ci.yml|only plinth's own ci.yml calls it, under plinth's own allowlist"
+          "plinth-ci-text.yml|only plinth's own ci-text.yml calls it, under plinth's own allowlist")
 rule="# Rule: a caller's Actions allowlist covers this file; a third-party action stops every consumer's checks (#867)."
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "reusable-workflow-allowlist: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }

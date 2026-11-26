@@ -15,7 +15,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d)"
+work="$(mktemp -d)" || { echo "make-release-guards: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 

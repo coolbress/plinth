@@ -13,7 +13,7 @@ target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-proje
 # The short list's template sources are read at the pin (#969).
 # shellcheck source=tests/lib/template-checkout.sh
 . "$root/tests/lib/template-checkout.sh"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "floor-check-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub (#519)
   mkdir -p "$1/repos/coolbress/plinth-template/commits"
   printf '{"sha":"%s"}\n' "$2" > "$1/repos/coolbress/plinth-template/commits/$target_ref.json"
@@ -170,6 +170,12 @@ printf '%s\n' 'Copyright (c) 2026 tester. All rights reserved.' '' \
 out="$(python3 "$checker" --root "$pr" --no-network 2>&1)"
 if grep -q '^  PASS  LICENSE present' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "a proprietary notice passes the LICENSE item"
 else bad "a proprietary notice does not pass the LICENSE item"; grep -E 'LICENSE|FAIL' <<<"$out" | sed 's/^/        /'; fi
+# Three failing states no other case reached (#1103: every state a check
+# declares is reached by a fixture).
+plant "uv.lock not folded in diffs is caught" "printf '* text=auto eol=lf\n' > .gitattributes" "uv.lock is not marked linguist-generated"
+plant "a .gitattributes driver that needs local git config is caught" \
+  "printf '* text=auto eol=lf\nuv.lock linguist-generated\n*.py diff=mine\n' > .gitattributes" "rules need local git config"
+plant ".claude/settings.json that is not JSON is caught" "printf '{' > .claude/settings.json" "settings.json is not valid JSON"
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
 plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"
 # The image check is the service archetypes' own required check (#127): the job

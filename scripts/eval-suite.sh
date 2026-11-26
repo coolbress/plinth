@@ -289,7 +289,7 @@ if [ -n "$cfg" ]; then
   refuse_own "$cfg"
   cfg="$(cd "$cfg" && pwd -P)"
 else
-  cfg="$(mktemp -d "${TMPDIR:-/tmp}/plinth-eval-config.XXXXXX")"
+  cfg="$(mktemp -d "${TMPDIR:-/tmp}/plinth-eval-config.XXXXXX")" || die "could not make a temp folder"
   cfg="$(cd "$cfg" && pwd -P)"
   made_cfg="$cfg"
   refuse_own "$cfg"
@@ -320,7 +320,7 @@ PY
 if [ -n "$out" ]; then
   mkdir -p "$out"
 else
-  out="$(mktemp -d "${TMPDIR:-/tmp}/plinth-eval.XXXXXX")"
+  out="$(mktemp -d "${TMPDIR:-/tmp}/plinth-eval.XXXXXX")" || die "could not make a temp folder"
 fi
 out="$(cd "$out" && pwd -P)"
 mkdir -p "$out/fixtures" "$out/runs" "$out/set-aside"

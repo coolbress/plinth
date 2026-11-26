@@ -20,8 +20,8 @@
 # unreadable download is a FAIL.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-files=(python-ci.yml plinth-ci.yml e2e.yml)
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+files=(python-ci.yml plinth-ci.yml plinth-ci-text.yml e2e.yml)
+work="$(mktemp -d)" || { echo "release-download-token: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }

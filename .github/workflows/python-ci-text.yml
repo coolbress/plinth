@@ -1,0 +1,1016 @@
+# Rule: a caller's Actions allowlist covers this file; a third-party action stops every consumer's checks (#867).
+name: python-ci-text
+# GENERATED from python-ci.yml by `tests/ci-text.sh --write`; do not edit.
+# python-ci.yml's `pr-title` and `diff-size` jobs and its inputs, copied, so
+# that plinth's own ci-text.yml re-runs its canaries' two checks that read the
+# pull request's title and description on an edit, without the code jobs
+# (#1133). Consumers call python-ci.yml, never this file. tests/ci-text.sh
+# fails when this copy and python-ci.yml differ.
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: |
+          Project root. Defaults to the repository root. This repository's
+          canary job passes `canary/` to call the workflow for real; a
+          workflow that parses is not the same as a workflow that runs.
+        type: string
+        default: "."
+
+      max-diff-lines:
+        description: |
+          Upper bound on the lines one pull request may change for review
+          (added + removed). `0` measures without blocking.
+        type: number
+        default: 400
+
+      deps-fail-on-severity:
+        description: |
+          Lowest vulnerability severity `ci / deps` blocks on:
+          `critical|high|moderate|low`. Not the same thing as Dependabot:
+          Dependabot alerts and opens update PRs after the fact; this check
+          stops a vulnerable dependency from entering through a PR.
+        type: string
+        default: high
+
+      diff-size-exclude:
+        description: |
+          Path patterns left out of the diff count, space separated, passed
+          as git pathspecs. Docs and lockfiles are the default because a line
+          of prose and a line that must pass `mypy --strict` are not the same
+          review burden.
+        type: string
+        default: "*.md *.lock *lock.json *lock.yaml *lock.yml LICENSE"
+
+      extra-python-versions:
+        description: |
+          Python versions to test in addition to `.python-version`, space
+          separated (for example "3.13 3.14"). A library that declares
+          `>=3.12` and tests only 3.12 claims support it never exercised.
+
+          No `strategy.matrix`: a matrix splits the check name into
+          `ci / test (3.13)` and every consumer would have to edit its
+          ruleset. Running in one job keeps the name `ci / test`.
+        required: false
+        type: string
+        default: ""
+
+      test-timeout-minutes:
+        description: |
+          `ci / test`'s time limit in whole minutes, 1 to 360 (#941). pytest
+          and each extra version stop two minutes before it (a fifth of it
+          under ten minutes), so the job still
+          says what ran and that the limit stopped it. Before raising it,
+          measure what takes the time: `uv run pytest --durations=20` lists
+          the slowest tests, and when a few take most of it, make them
+          faster. Raise it when none stands out and the time moves between runs of
+          the same commit, which comes from the runner: the same suite was
+          measured at 345 s and 589 s one commit apart (#941).
+        required: false
+        type: number
+        default: 10
+
+      floor-check-required-checks:
+        description: |
+          Check names the repository's ruleset must require, comma separated.
+          Empty means the nine names in plinth's ruleset.json, the ruleset
+          `/plinth:new-project` applies. Only a repository whose ruleset is
+          deliberately different passes its own list; plinth's canary does.
+        required: false
+        type: string
+        default: ""
+
+      web:
+        description: |
+          `true` for a project of plinth-template's `web` archetype (Django
+          and Postgres). It turns on `ci / migrations` and `ci / deploy-check`
+          and gives `ci / test` a disposable Postgres. Passed explicitly in
+          the rendered `ci.yml`, never read from which files exist: moving a
+          file must not turn a check into "does not apply" (#614). Renaming
+          it is a MAJOR change.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  # PR title is Conventional Commits with the standard eleven types only.
+  #
+  # Why the title: merges are squash-only, so the PR title is the landing
+  # commit; branch commits are flattened and carry no weight.
+  #
+  # Why only the standard vocabulary: an extended list kept in a document did
+  # not survive a day. With the list in front of it an agent still coined new
+  # types on the spot, and both were really `docs:`. A model reaches for the
+  # list it was trained on. The spec mandates only feat and fix, and scope is
+  # free-form, so local meaning goes into the scope (`docs(research):`).
+  # `Revert "<title>"`, the title GitHub gives a revert, passes when <title>
+  # does (#839): it is the one form outside the convention that passes.
+  # The title, and then the description: merging must not close an issue the
+  # description's closing line does not name (#781). A closing keyword before
+  # `#N` closes that issue in a sentence as much as on a line of its own.
+  pr-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      pull-requests: read   # the description, the issues its merge will close (#781), the newest pull request (#826)
+      issues: read          # those issues' numbers, the newest issue's
+    steps:
+      - name: Check the title
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
+          set -euo pipefail
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+
+          # Not a PR: report a pass instead of skipping the job. A job skipped
+          # with `if:` has no check name, and the day a ruleset requires that
+          # name the repository quietly locks.
+          if [ -z "${TITLE:-}" ]; then
+            echo "Not a pull request: no title to check."
+            say "pass: PR title, does not apply (not a pull request: no title to check)"
+            exit 0
+          fi
+
+          types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+          # GitHub's Revert button and `gh pr revert` title the new pull request
+          # `Revert "<title>"`, and undoing a revert nests it. Such a title
+          # passes when what it quotes does, so the rules read the quoted title.
+          subject="$TITLE"
+          while [[ "$subject" == 'Revert "'*'"' ]]; do subject="${subject#Revert \"}"; subject="${subject%\"}"; done
+          if printf '%s' "$subject" | grep -qE "^($types)(\([a-zA-Z0-9_.,/ -]+\))?!?: .+"; then
+            # A squash merge appends the pull request's own number to its
+            # title, so a title that already ends in one lands on main with
+            # two: `fix: x (#349) (#359)`. The issue belongs on the
+            # description's closing or `Part of` line instead.
+            if printf '%s' "$subject" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
+              how='Remove the trailing (#N)'
+              [ "$subject" = "$TITLE" ] || how='Write it as Revert "type(scope): summary"'
+              echo "::error::PR title ends in a number: ${TITLE:0:92}. $how and name the issue on the description's closing line: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
+              say "fail: PR title, it ends in a number"
+              {
+                echo "### PR title ends in a number"
+                echo
+                echo "\`\`\`"
+                echo "$TITLE"
+                echo "\`\`\`"
+                echo
+                echo "A squash merge appends this pull request's own number, so the commit on the"
+                echo "default branch would carry two. Drop the trailing \`(#N)\` and name the issue"
+                echo "in the description: \`Closes #N\` when this completes it, \`Part of #N\` otherwise."
+                [ "$subject" = "$TITLE" ] || { echo; echo "A revert passes as \`Revert \"type(scope): summary\"\`, with no \`(#N)\` inside the quotes."; }
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            echo "OK: $TITLE"
+            say "pass: PR title follows the convention"
+            exit 0
+          fi
+
+          case "$TITLE" in
+            'Revert "'*) echo "::error::PR title reverts a title that is not Conventional Commits: ${TITLE:0:60}. Rewrite it as Revert \"type(scope): summary\", with one of the eleven types: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change" ;;
+            *) echo "::error::PR title is not Conventional Commits: ${TITLE:0:60}. Rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change" ;;
+          esac
+          say "fail: PR title, it is not Conventional Commits"
+          {
+            echo "### PR title does not follow the convention"
+            echo
+            echo "\`\`\`"
+            echo "$TITLE"
+            echo "\`\`\`"
+            echo
+            echo "**Format**: \`type(scope): summary\`, or \`type(scope)!: summary\` for a breaking change"
+            echo
+            echo "**A revert**: \`revert: summary\`, or the title GitHub writes, \`Revert \"type(scope): summary\"\`, when what it quotes follows this format"
+            echo
+            echo "**Types are these eleven only** (\`@commitlint/config-conventional\`):"
+            echo "\`feat\` \`fix\` \`docs\` \`style\` \`refactor\` \`perf\` \`test\` \`build\` \`ci\` \`chore\` \`revert\`"
+            echo
+            echo "Local meaning goes into the scope. Do not invent a type:"
+            echo "| you wanted | write |"
+            echo "|---|---|"
+            echo "| \`research:\` \`record:\` \`anchor:\` | \`docs(research):\` \`docs:\` |"
+            echo "| \`decide:\` \`decision:\` \`audit:\` | \`docs(decision):\` \`docs(audit):\` |"
+            echo "| \`move:\` | \`refactor(layout):\` |"
+            echo "| \`deps:\` \`security:\` | \`build(deps):\` \`fix(security):\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # The decision plinth's own `ci / docs` runs (#293), fetched from the
+      # plinth commit this workflow file comes from (`job.workflow_sha`, see
+      # floor-check). It runs after a red title too, so one push shows both.
+      - name: Fetch the description check from the same plinth commit as this workflow
+        id: fetch-closing
+        if: ${{ !cancelled() }}
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-closing"; mkdir -p "$d"
+          for f in scripts/closing-references.sh scripts/closing-references.py scripts/description-fields.py; do
+            curl -fsSL --retry 3 -o "$d/$(basename "$f")" \
+              "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/$f"
+          done
+          echo "plinth ${PLINTH_SHA}"
+
+      # GitHub's own list of the issues the merge will close, compared with the
+      # description's closing line. A review's run reads the same pull request:
+      # passing it as "not a pull request" would turn a red check green with
+      # the description unchanged. Anything unread fails, a failed fetch too,
+      # with its own line: the title's pass must not be the job's only one.
+      - name: The description closes no issue outside its closing line
+        if: ${{ !cancelled() }}
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
+          FETCH: ${{ steps.fetch-closing.outcome }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
+          set -uo pipefail
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          if [ -z "${PR:-}" ]; then
+            echo "Not a pull request ($EVENT_NAME): no description to read."
+            say "pass: PR description, does not apply (not a pull request: no description to read)"
+            exit 0
+          fi
+          if [ "${FETCH:-}" != success ]; then
+            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read; re-run this job: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
+            exit 1
+          fi
+          # The verdict lines first, then the script's report.
+          report="$RUNNER_TEMP/closing-references.md"; : > "$report"; rc=0
+          answer="$RUNNER_TEMP/description.json"; rm -f "$answer"
+          EVENT=pull_request GITHUB_STEP_SUMMARY="$report" ANSWER_COPY="$answer" \
+            bash "$RUNNER_TEMP/plinth-closing/closing-references.sh" || rc=$?
+          if [ "$rc" = 0 ]; then
+            say "pass: PR description, merging it closes no issue its closing line does not name"
+          else
+            say "fail: PR description, merging it would close an issue its closing line does not name, or GitHub's list could not be read"
+          fi
+          # What the person checked themselves and which review ran (#810),
+          # from the description just read: a missing, empty or bare "done"
+          # field is a not yet confirmed line, so a warning, never a red.
+          # And a bare #N above this repository's highest number (#826), a
+          # reference to another repository's: issues and pull requests share
+          # one count, read with the job's own token. Unread, one log line says
+          # why and nothing is warned.
+          fields="$RUNNER_TEMP/description-fields.txt"
+          highest="$RUNNER_TEMP/highest.json"; set -- "$highest"
+          # shellcheck disable=SC2016  # $owner and $name are GraphQL's variables
+          if [ -s "$answer" ] && ! gh api graphql -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f query='
+              query($owner: String!, $name: String!) {
+                repository(owner: $owner, name: $name) {
+                  issues(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number } }
+                  pullRequests(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number } }
+                }
+              }' > "$highest" 2> "$highest.err"; then
+            echo "bare #N not checked: the highest issue or pull request number could not be read ($(head -n 1 "$highest.err"))"
+            set --
+          fi
+          if [ ! -s "$answer" ]; then :
+          elif python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer" "$@" > "$fields"; then
+            while IFS= read -r line; do [ -z "$line" ] || say "$line"; done < "$fields"
+          else
+            say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); re-run this job: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
+          fi
+          { echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+  # Diff size is a reviewability gate, not a correctness one: can a person
+  # read this? A rule that lives only in an issue body never fires; a 400-line
+  # limit written in prose was exceeded by 436 lines and nothing stopped it.
+  #
+  # Why now (measured 2026): AI-assisted PRs are 2.6x the size of human ones
+  # (p75 408 vs 157 lines) and agent-opened PRs wait 5.3x longer for a
+  # reviewer. What predicts review effort is diff size, not the PR text
+  # (arXiv 2601.00753: body text AUC 0.57, no signal).
+  #
+  # The meter matters as much as the rule: the same PR counted 452 lines with
+  # everything and 385 without docs and lockfiles. The rule was right; the
+  # meter was wrong. Hence the default exclusions.
+  diff-size:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The approval asked for below reads the reviews and the head's pusher
+    # and re-runs a red run. A called workflow's top-level permissions cap
+    # what its caller grants, so they are asked for here; a caller whose
+    # `ci` job does not grant them fails at startup, every job with it (#586).
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # base...head needs both histories
+          persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
+
+      - name: Measure the reviewable diff
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
+          MAX_LINES: ${{ inputs.max-diff-lines }}
+          EXCLUDE: ${{ inputs.diff-size-exclude }}
+          WORKDIR: ${{ inputs.working-directory }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
+          set -euo pipefail
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+
+          # Not a PR: report a pass instead of skipping the job. The condition
+          # lives inside the step, not on the job, so the check name always
+          # reports (see pr-title).
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "Not a pull request: no diff to measure."
+            say "pass: diff size, does not apply (not a pull request: no diff to measure)"
+            exit 0
+          fi
+
+          root="${WORKDIR%/}"
+          if [ -z "$root" ] || [ "$root" = "." ]; then
+            prefix=""
+            spec=(".")
+          else
+            prefix="$root/"
+            spec=("$root")
+          fi
+
+          patterns=()
+          if [ -n "$EXCLUDE" ]; then
+            read -r -a patterns <<< "$EXCLUDE"
+          fi
+          for p in ${patterns+"${patterns[@]}"}; do
+            spec+=(":(exclude)${prefix}${p}")
+          done
+
+          # An archetype move (#1044): .copier-answers.yml changes archetype:
+          # and keeps _commit:, the move at the recorded tag that
+          # /plinth:template-update makes. The template renders release.yml
+          # whole for each archetype, and between one that publishes to PyPI
+          # and one that publishes an image it shares 89 lines, so either
+          # half of a split inside it is 442 lines or more (measured on
+          # plinth-template v1.50.1 and v1.50.2, in the issue). It is left
+          # out of the count, named in the summary with its lines. The
+          # archetype: change is listed by the step that asks an admin to
+          # approve a change to the checks (#586), so a head an admin did
+          # not push stays red until an admin approves it. Anything that
+          # cannot be read counts the file. Counted with diff-size-exclude, so
+          # a project that already excludes it is told nothing new.
+          moved=""
+          answer() {  # <rev> <key>: a one-word value of .copier-answers.yml, or nothing
+            { git show "$1:.copier-answers.yml" 2>/dev/null || true; } \
+              | sed -nE "s/^$2:[[:space:]]*['\"]?([A-Za-z0-9._-]+)['\"]?[[:space:]]*(#.*)?$/\1/p" | head -n 1
+          }
+          # Only where the count reads the whole repository: under another
+          # working-directory, .github/ is not counted anyway.
+          if [ -z "$prefix" ] && mb="$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null)"; then
+            a_was="$(answer "$mb" archetype)"; a_now="$(answer "$HEAD_SHA" archetype)"
+            c_was="$(answer "$mb" _commit)"; c_now="$(answer "$HEAD_SHA" _commit)"
+            if [ -n "$a_was" ] && [ -n "$a_now" ] && [ "$a_was" != "$a_now" ] \
+               && [ -n "$c_was" ] && [ "$c_was" = "$c_now" ]; then
+              rel=".github/workflows/release.yml"
+              n_rel="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "$rel" "${spec[@]:1}" | awk '$1 != "-" { s += $1 + $2 } END { print s + 0 }')" || n_rel=0
+              if [ "$n_rel" -gt 0 ]; then
+                spec+=(":(exclude)$rel")
+                moved="$rel, ${n_rel} lines, not counted: an archetype move from ${a_was} to ${a_now} at ${c_now}, the tag .copier-answers.yml records, and the template renders that file whole for each archetype; the archetype: change is listed under changes to the checks"
+              fi
+            fi
+          fi
+
+          # Three dots (base...head): changes since the merge base, which is
+          # what GitHub shows on the PR.
+          if ! numstat="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "${spec[@]}")"; then
+            echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA}). Update the branch from its base and push again: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
+            say "fail: diff size, the diff could not be computed"
+            exit 1
+          fi
+
+          added=0
+          removed=0
+          while read -r a d _; do
+            if [ -z "$a" ] || [ "$a" = "-" ]; then   # blank line or binary
+              continue
+            fi
+            added=$((added + a))
+            removed=$((removed + d))
+          done <<< "$numstat"
+          total=$((added + removed))
+
+          note="${moved:+; $moved}"
+          if [ "$MAX_LINES" -le 0 ]; then
+            say "pass: diff size, measured and not enforced (max-diff-lines is 0): ${total} lines${note}"
+          elif [ "$total" -gt "$MAX_LINES" ]; then
+            say "fail: diff size, ${total} lines, over the limit of ${MAX_LINES}${note}"
+          else
+            say "pass: diff size, ${total} lines, within the limit of ${MAX_LINES}${note}"
+          fi
+          [ -z "$moved" ] || echo "Not counted: $moved"
+          {
+            echo
+            echo "### Diff size"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Reviewable change | **${total} lines** (+${added} / -${removed}) |"
+            echo "| Limit | ${MAX_LINES} lines |"
+            echo "| Excluded from the count | \`${EXCLUDE}\` |"
+            [ -z "$moved" ] || echo "| Not counted, an archetype move | ${moved} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$MAX_LINES" -le 0 ]; then
+            echo "Limit is 0: measured, not enforced: ${total} lines"
+            exit 0
+          fi
+
+          if [ "$total" -gt "$MAX_LINES" ]; then
+            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it into pull requests that land one after another, each branched from main after the one before it merged: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
+            {
+              echo
+              echo "**Over the limit.** Docs and lockfiles are already excluded from this number."
+              echo
+              echo "How to split: cut the change along its dependency chain (data, then API,"
+              echo "then wiring, then UX) into pull requests that land one after another,"
+              echo "each branched from main after the one before it merged. Each piece can have"
+              echo "a different reviewer."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "OK: ${total} lines / limit ${MAX_LINES}"
+
+      # A pull request that brought its base in and kept a conflict's markers
+      # passed every check and reached main (#936, coolbress/plinth-template#237).
+      # Here, not in a job of its own, so no ruleset has to require a new
+      # name. The script, from the same plinth commit as this workflow (see
+      # floor-check), reads the lines base...head adds in every tracked file,
+      # not only under `working-directory`; a marker the base already has
+      # passes. A failed fetch is a fail line, never a pass.
+      - name: Fetch the conflict-marker check from the same plinth commit as this workflow
+        id: fetch-markers
+        if: ${{ !cancelled() && github.event.pull_request.base.sha != '' }}
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/plinth-markers"; mkdir -p "$d"
+          curl -fsSL --retry 3 -o "$d/conflict-markers.py" \
+            "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/scripts/conflict-markers.py"
+          echo "plinth ${PLINTH_SHA}"
+
+      - name: No line the pull request adds is a merge conflict marker
+        if: ${{ !cancelled() }}
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
+          FETCH: ${{ steps.fetch-markers.outcome }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
+          set -uo pipefail
+          nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
+          # shellcheck disable=SC2329 # ends runs from the EXIT trap
+          ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
+          say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "Not a pull request: no diff to read."
+            say "pass: conflict markers, does not apply (not a pull request: no diff to read)"
+            exit 0
+          fi
+          if [ "$FETCH" != success ]; then
+            echo "::error::plinth's conflict-marker check could not be fetched (the fetch step: ${FETCH:-did not run}). Re-run this job: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
+            say "fail: conflict markers, plinth's check could not be fetched, so the diff was not read; re-run this job"
+            exit 1
+          fi
+          rc=0; python3 "$RUNNER_TEMP/plinth-markers/conflict-markers.py" "${BASE_SHA}...${HEAD_SHA}" || rc=$?
+          case "$rc" in
+            0) say "pass: conflict markers, no line the pull request adds is one" ;;
+            1) say "fail: conflict markers, a line the pull request adds is one; the log names each file and line" ;;
+            *) say "fail: conflict markers, the diff could not be read" ;;
+          esac
+          exit "$rc"
+
+      # An agent that cannot make a check pass can make it weaker: delete a
+      # test, loosen a threshold, edit the workflow, rewrite a test inside a
+      # kept file, skip a test or silence a line (#301, #434). This step
+      # names each such change the description does not, as a WARN: it never fails
+      # the check. Why not FAIL: the description is read from the event, and
+      # an edited description does not re-run CI (#322), so the only fix a
+      # FAIL could accept is a push; and "the description names the path" is
+      # a text match, which would block every consumer on a wording miss.
+      # A kept Python test file is listed when it loses a line, and a Python
+      # file when an added line carries a skip, xfail, noqa, type: ignore or
+      # pragma: no cover marker. What it cannot see: an assertion weakened
+      # with no line removed (a line only added, such as an early return), a
+      # marker spelled another way, a threshold passed as a workflow input by
+      # the caller. Nor can it say whether a listed change lowers the
+      # standard: a rewrite someone agreed to looks the same. It makes a
+      # change visible; whether the change is justified is the reviewer's call.
+      - name: Name changes to the checks the description does not
+        if: ${{ !cancelled() }}
+        shell: python
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BODY: ${{ github.event.pull_request.body }}
+          CHANGES_FILE: ${{ runner.temp }}/changes-to-the-checks.json
+          WEB: ${{ inputs.web }}
+        run: |
+          import json, os, re, subprocess, sys
+
+          HOW = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#required-by-rulesetjson"
+
+          def fit(head, tail):   # at most 300 characters; what is cut is the head, never the action and link
+              room = 300 - len(tail)
+              return (head if len(head) <= room else head[:room - 3] + "...") + tail
+
+          base, head = os.environ.get("BASE_SHA", ""), os.environ.get("HEAD_SHA", "")
+          body = os.environ.get("BODY") or ""
+          summary = os.environ.get("GITHUB_STEP_SUMMARY") or os.devnull
+
+          def emit(*lines):
+              with open(summary, "a", encoding="utf-8") as f:
+                  f.write("\n".join(lines) + "\n")
+
+          if not base or not head:
+              print("Not a pull request: no description to compare.")
+              emit("### Changes to the checks: not a pull request, nothing compared")
+              sys.exit(0)
+
+          def git(*args):
+              r = subprocess.run(["git", *args], capture_output=True)
+              if r.returncode != 0:
+                  err = r.stderr.decode("utf-8", "replace").strip().replace("\n", " ")
+                  print(err)
+                  print("::error::" + fit(f"git {args[0]} failed (base={base} head={head}): {err}", f"; re-run this job: {HOW}"))
+                  sys.exit(1)
+              return r.stdout.decode("utf-8", "surrogateescape")
+
+          TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")
+          # By the tool each name configures. pytest's are the files its
+          # locator reads (pyproject.toml is compared by its [tool.*] tables
+          # below): src/_pytest/config/findpaths.py at pytest 9.1.1,
+          # cf470ec0bf7eb89cd97dd56df4859eae5db46447.
+          CONFIG = {
+              "conftest.py", "pytest.toml", ".pytest.toml",                # pytest
+              "pytest.ini", ".pytest.ini",                                 # pytest
+              "tox.ini", "setup.cfg",                                      # pytest, others
+              "mypy.ini", ".mypy.ini",                                     # mypy
+              "ruff.toml", ".ruff.toml",                                   # ruff
+              ".coveragerc",                                               # coverage
+              ".pre-commit-config.yaml",                                   # pre-commit
+              ".gitleaks.toml", ".gitleaksignore",                         # gitleaks
+              "ruleset.json",                                              # the ruleset
+          }
+          mb = git("merge-base", base, head).strip()
+
+          # A parser, not a line scan: a multiline string can hold a line that
+          # looks like a header, and TOML spells `[tool.x]` several ways.
+          try:
+              import tomllib
+          except ImportError:   # Python < 3.11: no parser, so any edit counts
+              tomllib = None
+
+          def tool_table(rev, path):
+              """pyproject.toml's `tool` table at rev; None when the file is
+              absent; its whole text when it cannot be parsed."""
+              r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
+              if r.returncode != 0:
+                  return None
+              text = r.stdout.decode("utf-8", "replace")
+              if tomllib is None:
+                  return text
+              try:
+                  return tomllib.loads(text).get("tool")
+              except tomllib.TOMLDecodeError:
+                  return text
+
+          def archetype(rev, path):
+              """The archetype: line of .copier-answers.yml at rev; None when
+              the file is absent, "" when it has no such line."""
+              r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True)
+              if r.returncode != 0:
+                  return None
+              m = re.search(r"^archetype:(.*)$", r.stdout.decode("utf-8", "replace"), re.MULTILINE)
+              return m.group(1).strip() if m else ""
+
+          # The web archetype's own kinds (#615), as plinth-template renders
+          # it, read with the `web` input: who may reach a route, the
+          # migrations already written, and how production runs. An added
+          # migration is not listed; `ci / migrations` checks it.
+          WEB = os.environ.get("WEB") == "true"
+          ANSWERS = ".copier-answers.yml"
+          ACCESS = re.compile(r"(^|/)notes/access\.py$")
+
+          def web_what(status, old, new):
+              name = new.rsplit("/", 1)[-1]
+              # ci / floor-check reads its archetype-conditional items from this
+              # line, in the file at this path: a deletion or a move is listed
+              # whatever the content.
+              if ANSWERS in (name, old.rsplit("/", 1)[-1]) and (status in ("D", "R") or (
+                      archetype(mb, old) if old.rsplit("/", 1)[-1] == ANSWERS else None) != (
+                      archetype(head, new) if name == ANSWERS else None)):
+                  return f"the archetype: line of {ANSWERS} changed, or the file deleted or moved"
+              if not WEB:
+                  return None
+              if ACCESS.search(old) or ACCESS.search(new):
+                  return "notes/access.py changed (it defines which routes are public)"
+              if status != "A" and re.search(r"(^|/)migrations/", old):
+                  return "an existing migration changed, deleted or renamed"
+              if re.search(r"(^|/)src/[^/]+/settings\.py$", old) or re.search(r"(^|/)src/[^/]+/settings\.py$", new):
+                  return "the production settings module changed"
+              if {"render.yaml", "Dockerfile"} & {name, old.rsplit("/", 1)[-1]}:
+                  return "how production runs changed (render.yaml or the Dockerfile)"
+              if re.search(r"(^|/)tests/migration_rows\.json$", old) or re.search(r"(^|/)tests/migration_rows\.json$", new):
+                  return "the rows ci / migrations keeps changed (tests/migration_rows.json)"
+              return None
+
+          # The agent's own rules (#651): what it reads as instructions, what
+          # it may run, and the skills and output style it is given. By the
+          # path at the repository root, on either side of a move.
+          AGENT = (("AGENTS.md", "the agent's instructions (AGENTS.md)"),
+                   ("CLAUDE.md", "the agent's instructions (CLAUDE.md)"),
+                   (".claude/settings.json", "the agent's permissions and hooks (.claude/settings.json)"),
+                   (".claude/skills/", "an agent skill (.claude/skills/)"),
+                   (".claude/output-styles/", "the agent's output style (.claude/output-styles/)"))
+
+          def agent_what(old, new):
+              for p, why in AGENT:
+                  if any(x == p or (p.endswith("/") and x.startswith(p)) for x in (old, new)):
+                      return f"{why} added, changed, deleted or moved"
+              return None
+
+          def what(status, old, new):
+              """Why this path touches the checks, or None."""
+              name = new.rsplit("/", 1)[-1]
+              # Before the workflow kind, which asks nobody: a move between
+              # .github/workflows/ and the agent's rules is still put to a person.
+              agent = agent_what(old, new)
+              if agent:
+                  return agent
+              if new.startswith(".github/workflows/") or old.startswith(".github/workflows/"):
+                  return "a workflow changed"
+              web = web_what(status, old, new)
+              if web:
+                  return web
+              if name in CONFIG or old.rsplit("/", 1)[-1] in CONFIG:
+                  return "check configuration changed"
+              if status == "D" and TEST.search(old):
+                  return "a test file deleted"
+              if status == "R" and TEST.search(old) and not TEST.search(new):
+                  return "a test file moved out of the test paths"
+              was = old.rsplit("/", 1)[-1] == "pyproject.toml"
+              if (was or name == "pyproject.toml") and (
+                      (tool_table(mb, old) if was else None)
+                      != (tool_table(head, new) if name == "pyproject.toml" else None)):
+                  return "its [tool.*] tables changed (ruff, mypy, pytest configuration)"
+              return None
+
+          # A test rewritten inside a kept file, and a marker that turns a
+          # check off for one test or one line (#434).
+          MARKER = re.compile(r"\bmark\s*\.\s*(?:skipif|skip|xfail)\b|\bpytest\s*\.\s*skip\s*\("
+                              r"|#\s*noqa\b|#\s*type:\s*ignore\b|#\s*pragma:\s*no\s*cover\b",
+                              re.IGNORECASE)
+          lost, stat = set(), git("diff", "--numstat", "-M", "-z", f"{base}...{head}").split("\0")
+          i = 0
+          while i < len(stat) and stat[i]:
+              _, d, path = stat[i].split("\t", 2)
+              if path:                     # a rename's paths follow in the next two fields
+                  new, i = path, i + 1
+              else:
+                  new, i = stat[i + 2], i + 3
+              if d not in ("-", "0"):
+                  lost.add(new)
+
+          def markers(status, old, new):
+              """The markers on lines this pull request adds to a Python file."""
+              if status not in ("A", "M", "R") or not new.endswith(".py"):
+                  return []
+              out, hunk = [], False
+              for line in git("diff", "-U0", "-M", "--no-color", "--no-ext-diff", "--no-textconv",
+                              f"{base}...{head}", "--",
+                              f":(literal){old}", f":(literal){new}").split("\n"):
+                  hunk = hunk or line.startswith("@@")
+                  if hunk and line.startswith("+"):
+                      out += [m.group(0) for m in MARKER.finditer(line)]
+              return sorted(set(out))
+
+          def shape(status, old, new):
+              whys = []
+              if status in ("M", "R") and new.endswith(".py") and TEST.search(old) \
+                      and TEST.search(new) and new in lost:
+                  whys.append("a test file lost lines")
+              found = markers(status, old, new)
+              if found:
+                  whys.append("a skip or a suppression added (" + ", ".join(found) + ")")
+              return whys
+
+          # What marks a route public: notes/access.py's `public`, or Django's
+          # own login_not_required that it wraps. Any added line naming either,
+          # a comment line aside, since a decorator, a call, an alias or a
+          # lookup by string all reach it (the codex review of #624). Apart
+          # from markers and shape, which gitlab/python-ci.yml shares word for
+          # word: the web archetype is GitHub only.
+          # A name the head already binds to either is read too, so a route
+          # opened through an alias the base carries is listed (round 2 of
+          # that review): an import's `as`, an assignment, a getattr by
+          # string, followed through further assignments. A function that
+          # wraps one is not followed.
+          def public_names():
+              names = {"public", "login_not_required"}
+              r = subprocess.run(["git", "grep", "-h", "-I", "-E", r"[[:space:]]as[[:space:]]|=", head, "--", "*.py"],
+                                 capture_output=True)
+              if r.returncode not in (0, 1):   # 1 is no match; anything else is not an answer
+                  err = " ".join(r.stderr.decode("utf-8", "replace").split())
+                  print(err)
+                  print("::error::" + fit(f"git grep failed at {head}: {err}", f"; re-run this job: {HOW}").replace("%", "%25"))
+                  sys.exit(1)
+              lines = r.stdout.decode("utf-8", "replace").split("\n")
+              while True:
+                  alt = "|".join(sorted(map(re.escape, names)))
+                  found = set()
+                  for line in lines:
+                      found |= set(re.findall(rf"\b(?:{alt})\s+as\s+(\w+)", line))
+                      found |= set(re.findall(rf"^\s*(\w+)\s*(?::[^=]*)?=\s*(?:[\w.]+\.)?(?:{alt})\s*(?:#.*)?$", line))
+                      found |= set(re.findall(rf"^\s*(\w+)\s*=\s*getattr\([^)]*['\"](?:{alt})['\"]", line))
+                  if found <= names:
+                      return names
+                  names |= found
+
+          PUBLIC = re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, public_names()))) + r")\b") if WEB else None
+
+          def routes(status, old, new):
+              """A route marked public on a line this pull request adds to a
+              Python file outside the tests and notes/access.py."""
+              if not WEB or status not in ("A", "M", "R") or not new.endswith(".py") \
+                      or TEST.search(new) or ACCESS.search(new):
+                  return []
+              hunk, seen = False, set()
+              for line in git("diff", "-U0", "-M", "--no-color", "--no-ext-diff", "--no-textconv",
+                              f"{base}...{head}", "--",
+                              f":(literal){old}", f":(literal){new}").split("\n"):
+                  hunk = hunk or line.startswith("@@")
+                  if hunk and line.startswith("+") and not line[1:].lstrip().startswith("#"):
+                      seen |= {m.group(0) for m in PUBLIC.finditer(line[1:])}
+              if not seen:
+                  return []
+              return [f"a line naming {', '.join(sorted(seen))} added or changed "
+                      "(public, login_not_required or an alias of one: it can mark a route public)"]
+
+          fields = git("diff", "--name-status", "-M", "-z", f"{base}...{head}").split("\0")
+          found, i = [], 0
+          while i < len(fields) and fields[i]:
+              status = fields[i][0]
+              if status == "R":
+                  old, new, i = fields[i + 1], fields[i + 2], i + 3
+              else:
+                  old = new = fields[i + 1]
+                  i += 2
+              whys = [w for w in [what(status, old, new)] if w] + shape(status, old, new) + routes(status, old, new)
+              if whys:
+                  found.append((new if status != "D" else old, old, "; ".join(whys),
+                                [w for w in whys if w != "a workflow changed"]))
+
+          # What may stand next to a name that is not part of it: whitespace
+          # and Markdown punctuation, typographic quotes included. Any other
+          # character (`-`, `.`, `~`, `\`, a letter) makes a longer name, which
+          # names nothing.
+          EDGE = r"\s`'\"()\[\]{}<>*,;:!?\u2018\u2019\u201c\u201d"
+          # A run of `_` or `~` counts only with a run on each side of the
+          # name, as emphasis or strikethrough has: `_ci.yml_`, `~~ci.yml~~`
+          # (#334). One side alone (`ci.yml~`, `my_ci.yml`) is a longer name.
+          WRAP = "[_~]+"
+
+          def named(path, old):
+              """A path or file name standing whole in the body, with an EDGE
+              character or the start or end on each side; a full stop may end
+              it. So `python-ci.yml` does not name `ci.yml`. A `/` may also come
+              before a path (a link to the file) but not before a bare name:
+              `docs/ci.yml` does not name `.github/workflows/ci.yml`. A link
+              target's `#fragment` is dropped first: inline (`[x](ci.yml#L3)`),
+              a reference definition (`[x]: ci.yml#L3`) or an autolink, which
+              has a scheme (`<https://…/ci.yml#L3>`; `<ci.yml#2>` is not one)."""
+              text = re.sub(r"(\]\([^()\s#]*)#[^()\s]*", r"\1", body)
+              text = re.sub(r"(?m)^( {0,3}\[[^\]]+\]:[ \t]*<?[^\s<>#]*)#[^\s<>]*", r"\1", text)
+              text = re.sub(r"(<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s#]*)#[^<>\s]*(?=>)", r"\1", text)
+              def whole(p):
+                  before = "(?<![^" + EDGE + ("/" if "/" in p else "") + "])"
+                  after = r"(?=\Z|[" + EDGE + r"]|\.(?:\Z|[" + EDGE + "]))"
+                  before_run = "(?<![^" + EDGE + "])"
+                  return re.search(before + re.escape(p) + after, text) \
+                      or re.search(before_run + WRAP + re.escape(p) + WRAP + after, text)
+              return any(whole(p) for p in {path, old, path.rsplit("/", 1)[-1], old.rsplit("/", 1)[-1]})
+
+          def command_safe(s):   # a path must not end the warning and start another command
+              return s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          def cell(s):
+              return "`" + s.replace("`", "'").replace("|", "\\|").replace("\n", " ") + "`"
+
+          # The kinds besides a workflow, for the next step to ask an
+          # admin's approval of; the workflow kind stays a WARN.
+          if os.environ.get("CHANGES_FILE"):
+              with open(os.environ["CHANGES_FILE"], "w", encoding="utf-8") as f:
+                  json.dump([{"path": p, "why": "; ".join(k)} for p, _, _, k in found if k], f)
+
+          rows, unnamed = [], 0
+          for path, old, why, _ in found:
+              label = path if path == old else f"{old} -> {path}"
+              if named(path, old):
+                  print(f"named in the description: {label}: {why}")
+                  rows.append(f"| {cell(label)} | {why} | named |")
+              else:
+                  unnamed += 1
+                  print(command_safe("::warning::" + fit(f"{label}: {why}, and the description does not name it", f". Name the path in the description: {HOW}")))
+                  rows.append(f"| {cell(label)} | {why} | **not named** |")
+
+          print(f"{len(found)} change(s) to the checks, {unnamed} not named in the description.")
+          if found:
+              emit("", "### Changes to the checks", "",
+                   "| Path | Change | Description |", "|---|---|---|", *rows)
+          if unnamed:
+              emit("", "Not naming a path is a WARN, not a failure. Name each path in the description and say why;",
+                   "the description is read when the run starts, so push to re-check it.")
+
+      # The listed changes, a workflow aside, need the person's approval
+      # where the agent works under an account of its own (#518, #586). The
+      # mark is an admin's approving review on this head: Write can add a
+      # label, and a label stays across pushes. The account that pushed the
+      # head is read from the branch's activity, not the commit's author,
+      # which anyone writes. Pushed by an admin (one account for the person
+      # and the agent, who then cannot approve their own pull request): it
+      # stays green and says the change is the person's decision. Pushed by
+      # Dependabot, by its account id: the same. From a fork: no push is read
+      # (the activity is the fork's), so it needs the approval. Whatever this
+      # step cannot read fails, since it runs only where a change is listed.
+      # A run started by the approval re-runs the latest pull_request run of
+      # this head when that one failed, because the latest run of each event
+      # decides the merge (measured, not documented: #518). A fork's
+      # read-only token cannot, and the line says how a person does it.
+      - name: Ask an admin to approve a change to the checks
+        if: ${{ !cancelled() }}
+        shell: python
+        env:
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          CHANGES_FILE: ${{ runner.temp }}/changes-to-the-checks.json
+        run: |
+          import json, os, subprocess, sys
+          from urllib.parse import quote
+
+          E = os.environ.get
+          repo, number, head, event = E("REPO", ""), E("NUMBER", ""), E("HEAD_SHA", ""), E("EVENT", "")
+          summary = E("GITHUB_STEP_SUMMARY") or os.devnull
+          DEPENDABOT = 49699333   # dependabot[bot]'s account id; a login can be spelled alike
+          HOW = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#required-by-rulesetjson"
+
+          def fit(head, tail):   # at most 300 characters; what is cut is the head, never the action and link
+              room = 300 - len(tail)
+              return (head if len(head) <= room else head[:room - 3] + "...") + tail
+
+          WAY = ("If you agree with the change, approve the pull request on GitHub: Files changed, "
+                 "Review changes, Approve. The approval re-runs the latest red run; if this check "
+                 "does not turn green, use \"Re-run failed jobs\" on the latest red ci / diff-size.")
+
+          def emit(*lines):
+              with open(summary, "a", encoding="utf-8") as f:
+                  f.write("\n".join(lines) + "\n")
+
+          def say(line):
+              emit(f"- {line}")
+              kind = {"fail": "error", "not yet confirmed": "warning"}.get(line.split(":", 1)[0])
+              if kind:
+                  print(f"::{kind}::" + line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+              else:
+                  print(line)
+
+          class Unread(Exception):
+              pass
+
+          def api(path, *args):
+              r = subprocess.run(["gh", "api", *args, path], capture_output=True, text=True)
+              if r.returncode != 0:
+                  err = (r.stderr.strip().splitlines() or ["no answer"])[-1]
+                  raise Unread(f"{path.split('?', 1)[0]}: {err}")
+              return r.stdout
+
+          def permission(login):
+              try:
+                  return json.loads(api(f"repos/{repo}/collaborators/{quote(login)}/permission"))["permission"]
+              except Unread as e:
+                  if "HTTP 404" in str(e):   # an app's bot account is no collaborator
+                      return "none"
+                  raise
+
+          if not head or not number:
+              sys.exit(0)   # not a pull request: the step above said so
+          try:
+              with open(E("CHANGES_FILE", ""), encoding="utf-8") as f:
+                  listed = json.load(f)
+          except (OSError, ValueError):
+              say("fail: changes to the checks, the step that lists them did not finish, so whether "
+                  f"this pull request needs an admin's approval is unknown; re-run this job: {HOW}")
+              sys.exit(1)
+          if not listed:
+              sys.exit(0)
+
+          sha = head[:12]
+          rows = f"{listed[0]['path']}: {listed[0]['why']}" + (
+              f"; and {len(listed) - 1} more" if len(listed) > 1 else "")
+          try:
+              if E("HEAD_REPO", "") != repo:
+                  why = "it comes from a fork"
+              else:
+                  ref = quote(f"refs/heads/{E('HEAD_REF', '')}", safe="/")
+                  pushes = json.loads(api(f"repos/{repo}/activity?ref={ref}&direction=desc&per_page=100"))
+                  actor = next((p.get("actor") for p in pushes if p.get("after") == head), None)
+                  if not actor or not actor.get("login"):
+                      raise Unread("no push of this head in the branch's activity")
+                  why = f"{actor['login']} pushed it and is not an admin"
+                  if actor.get("id") == DEPENDABOT:
+                      say(fit(f"not yet confirmed: changes to the checks, Dependabot pushed this head ({sha}), so no approval is asked",
+                              f"; read the job summary's table before merging, it is your decision: {HOW}"))
+                      sys.exit(0)
+                  if permission(actor["login"]) == "admin":
+                      say(fit(f"not yet confirmed: changes to the checks, {actor['login']}, an admin, pushed this head ({sha}), so no approval is asked",
+                              f"; read the job summary's table before merging, it is your decision: {HOW}"))
+                      sys.exit(0)
+              reviews = [json.loads(l) for l in api(f"repos/{repo}/pulls/{number}/reviews",
+                                                     "--paginate", "--jq", ".[] | tojson").splitlines() if l.strip()]
+              latest = {}   # each reviewer's last decision; a comment decides nothing
+              for r in sorted(reviews, key=lambda r: r.get("id") or 0):
+                  if r.get("state") in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED") and r.get("user"):
+                      latest[r["user"]["login"]] = r
+              approver = next((login for login, r in sorted(latest.items())
+                               if r["state"] == "APPROVED" and r.get("commit_id") == head
+                               and permission(login) == "admin"), None)
+          except Unread as e:
+              say(fit(f"fail: changes to the checks, what decides whether this pull request needs an "
+                      f"admin's approval could not be read ({e})", f"; re-run this job: {HOW}"))
+              sys.exit(1)
+
+          if not approver:
+              say(fit(f"fail: changes to the checks, {why}, so this head ({sha}) needs admin approval for {rows}",
+                      f"; ask an admin to approve it: {HOW}"))
+              emit("", WAY)
+              sys.exit(1)
+          say(f"pass: changes to the checks, approved by {approver}, an admin, on this head ({sha})")
+          if event != "pull_request_review":
+              sys.exit(0)
+
+          # The approval's own run: the latest pull_request run of this head
+          # still decides, so re-run it when it failed, and nothing else.
+          def way(reason):
+              print(f"::notice::The approval could not re-run the latest red run ({reason}). "
+                    "Use \"Re-run failed jobs\" on the latest red ci / diff-size.")
+              emit("", f"The approval could not re-run the latest red run ({reason}). "
+                   "Use \"Re-run failed jobs\" on the latest red ci / diff-size.")
+          try:
+              workflow = json.loads(api(f"repos/{repo}/actions/runs/{E('RUN_ID', '')}"))["workflow_id"]
+              runs = json.loads(api(f"repos/{repo}/actions/workflows/{workflow}/runs"
+                                    f"?head_sha={head}&event=pull_request&per_page=100"))["workflow_runs"]
+          except (Unread, KeyError, TypeError) as e:
+              way(f"the runs of this head could not be read: {e}")
+              sys.exit(0)
+          last = max(runs, key=lambda r: (r.get("created_at") or "", r.get("id") or 0), default=None)
+          if last is None:
+              print("No pull_request run of this head to re-run.")
+          elif last.get("status") != "completed":
+              # Its diff-size may already be red while other jobs run, and a
+              # run is re-run only once it has finished.
+              way(f"the latest pull_request run of this head ({last.get('id')}) was still running; "
+                  "once it finishes, if its ci / diff-size is red")
+          elif last.get("conclusion") in ("failure", "cancelled", "timed_out"):
+              try:
+                  api(f"repos/{repo}/actions/runs/{last['id']}/rerun-failed-jobs", "-X", "POST")
+                  print(f"Re-ran the failed jobs of the latest pull_request run of this head ({last['id']}).")
+                  emit("", f"The approval re-ran the failed jobs of the latest red run of this head ({last['id']}).")
+              except Unread as e:
+                  way(str(e))
+          else:
+              print(f"The latest pull_request run of this head ({last.get('id')}) is {last.get('conclusion')}; nothing to re-run.")

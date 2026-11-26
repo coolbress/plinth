@@ -1,5 +1,8 @@
 name: plinth-ci
 # plinth's own checks. Called from ci.yml so the names come out as `ci / <job>`.
+# The two that read the pull request's title or description, `ci / docs` and
+# `ci / release-gate`, are in plinth-ci-text.yml, so an edit re-runs them
+# alone (#1133).
 # No job is skipped with `if:`; a skipped job has no check name.
 #
 # A release download sends the job's token, as python-ci.yml's do (#878);
@@ -76,8 +79,14 @@ jobs:
       - name: Every test file is wired
         run: ./tests/all-tests-are-wired.sh
 
+      - name: A failed mktemp stops a script and removes nothing it did not make
+        run: ./tests/mktemp-failure-cases.sh
+
       - name: Shipped skills within size, with no issue numbers
         run: ./tests/skill-size.sh
+
+      - name: The size test fails AGENTS.md over its caps, and a cap it cannot read
+        run: ./tests/skill-size-cases.sh
 
       - name: The wall the door applies is a wall
         run: ./scripts/check-ruleset.sh
@@ -166,6 +175,11 @@ jobs:
       # its golden output byte for byte, and its ids read against the registry (#1103).
       - name: Floor checker output unchanged, its ids registered
         run: ./tests/floor-check-golden.sh
+
+      # What the registry declares: one name per area letter, ids never
+      # renamed, and the keepable, baseline and view lists (#1103).
+      - name: Floor checker's registry holds its areas, ids, keepable, baseline and view
+        run: ./tests/floor-check-registry.sh
 
       - name: Every uv pin is one release and its checksum, the template's too
         run: ./tests/uv-pin.sh
@@ -382,6 +396,9 @@ jobs:
       - name: ci / install passes only when every install-<n> job did, and names a failed one's test
         run: ./tests/install-verdict-cases.sh
 
+      - name: An edit re-runs only the checks that read the title or description, each reported by one workflow
+        run: ./tests/ci-text.sh
+
       - name: Ruleset upgrade refuses names that never reported
         run: ./tests/upgrade-ruleset-guard.sh
 
@@ -488,239 +505,3 @@ jobs:
 
       - name: ci / code-growth warns above the conventions, passes below them, and never fails
         run: ./tests/code-growth-cases.sh
-
-  # A release pull request merges only after a green `e2e` on its head (#863).
-  # The ruleset requires this check, so the merge button and a bare
-  # `gh pr merge` are held too, not only scripts/merge-when-green.sh (#855).
-  # A ruleset cannot require a check of release pull requests alone, so it
-  # runs on every pull request and every push, and decides in the script:
-  # anything that is not a release passes at once. plinth's own: it is not in
-  # python-ci.yml, so no consumer sees it. merge-when-green.sh re-runs it once
-  # the e2e run is green.
-  release-gate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: read   # the e2e runs on the head
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # The merge commit and its first parent, the base: the diff that
-          # says whether a manifest's "version" line changes.
-          fetch-depth: 2
-
-      - name: A release pull request has a green e2e run on its head
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          EVENT: ${{ github.event_name }}
-          HEAD_REF: ${{ github.head_ref }}
-          TITLE: ${{ github.event.pull_request.title }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: ./scripts/release-gate.sh
-
-  # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
-  # the README install block is the one the tutorial shows, and the pull
-  # request's own description closes no issue outside its closing line.
-  docs:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: read   # the description and the issues its merge will close (#293)
-      issues: read          # those issues' numbers
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # The whole history: HEAD^1 is the base that the released-section
-          # step compares CHANGELOG.md with, and the link check looks up the
-          # commit a link to this repository's own commit page names.
-          fetch-depth: 0
-
-      # First, so a description that would close the wrong issue is red
-      # before the link check's download. A keyword in a sentence closes an
-      # issue as `Closes #N` does: "the two fixes #65 decided" closed #65 on
-      # merge (#284). Not a pull request: a pass, reported by the script.
-      - name: The description closes no issue outside its closing line
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          EVENT: ${{ github.event_name }}
-          PR: ${{ github.event.pull_request.number }}
-        run: ./scripts/closing-references.sh
-
-      # The check python-ci.yml's `ci / diff-size` runs for every project
-      # (#936), here on this repository's own pull requests: HEAD^1 is the
-      # base the merge commit sits on, so HEAD^1..HEAD is what the pull
-      # request adds. Not a pull request: a pass, nothing read.
-      - name: No line the pull request adds is a merge conflict marker
-        env:
-          EVENT: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT" != pull_request ]; then echo "Not a pull request: no diff to read."; exit 0; fi
-          ./scripts/conflict-markers.py HEAD^1 HEAD
-
-      # A pull request open across a release can merge main in and keep its
-      # new line inside the section the release just tagged (#877, #881). The
-      # tags are fetched here; reading none fails the script rather than
-      # finding every section unreleased. Not a pull request: a pass, reported
-      # by the script. No --depth: the checkout holds the whole history, and
-      # a shallow fetch would cut it at each tag, where the link check's
-      # ancestry look-up for commit links then stops (#971).
-      - name: The pull request changes no released section of CHANGELOG.md
-        env:
-          EVENT: ${{ github.event_name }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT" = pull_request ]; then
-            git fetch --no-tags origin '+refs/tags/v*:refs/tags/v*'
-          fi
-          ./scripts/changelog-released.py
-
-      # A change's changelog line is its own file in changelog.d/ (#1136):
-      # lines under [Unreleased] conflicted between every pull request open
-      # from the same main. Runs on push too, where main must hold none.
-      - name: The changelog line is a fragment, and every fragment reads
-        run: ./scripts/changelog-fragments.py check
-
-      # The version is pinned in the test, so a local run lints with what runs here.
-      - name: markdownlint
-        run: ./tests/markdownlint.sh
-
-      # Official release binary, checksum verified: no third-party action to allowlist.
-      # Bump the version and the checksum together (checksum: the release's .sha256 asset).
-      # Since 0.24 the tarball nests the binary under a directory named like the archive.
-      - name: Link check (lychee)
-        env:
-          LYCHEE_VERSION: "0.24.2"
-          LYCHEE_SHA256: "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/lychee"; mkdir -p "$d"
-          f="lychee-x86_64-unknown-linux-gnu.tar.gz"
-          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
-            "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/$f"
-          echo "${LYCHEE_SHA256}  $d/$f" | sha256sum -c -
-          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/lychee"
-          # The version plugin.json names has no Release until run 2 of
-          # scripts/make-release.sh, after its pull request merges; until then
-          # its CHANGELOG.md link and the [Unreleased] compare link from its tag
-          # answer 404. Those two are skipped, and stay skipped until the next
-          # release moves the version on; every earlier version's are checked.
-          v="$(jq -er .version .claude-plugin/plugin.json)"; v="${v//./[.]}"
-          repo='https://github[.]com/coolbress/plinth'
-          # A link to this repository's own blob page on main is checked
-          # against the checkout, which is what main holds once this merges,
-          # without a request to github.com, whose blob pages answered 503 for
-          # over an hour on 2026-10-10 while nothing the pull request changed
-          # was at fault (#486). Only main: a link at another ref names a tree
-          # the checkout is not, so it still goes to github.com. The link text
-          # stays absolute, since a CHANGELOG section becomes a Release body.
-          remap=(--remap "^$repo/blob/main/([^#]*)(#.*)?\$ file://$PWD/\$1")
-          # A host that refuses every automated request is in .lycheeignore,
-          # which lychee reads from the checkout root, with the date measured.
-          # canary-template/ is the template's render (#953): its links name
-          # a project that does not exist, and the template checks its own.
-          # A host that fails only some requests is checked twice instead
-          # (#971): lychee's --max-retries covers a timeout, a 5xx, 408 and
-          # 429, not a failed TLS handshake or a 403, and nngroup.com failed
-          # one of 88 requests from the runners with a TLS handshake and passed
-          # the next. A failed run waits and runs once more with --cache;
-          # lychee never writes a failed link to its cache, so the second run
-          # requests only the links that failed, and a 404 fails it as well.
-          check() { # check <seconds to wait before the second run> <lychee arguments>
-            local wait="$1"; shift
-            rm -f .lycheecache
-            "$d/lychee" --cache "$@" && return 0
-            echo "::warning::the link check failed; checking the failed links once more in ${wait}s (#971)"
-            sleep "$wait"
-            "$d/lychee" --cache "$@"
-          }
-          # A link to this repository's own commit page is checked against the
-          # checkout's history, not github.com, which lychee skips: two such
-          # pages answered 503 to both runs, 60 seconds apart, and to 42 and
-          # 47 of 120 requests from the runners (#971). lychee lists the links
-          # it skips (--dump), as it parsed them, so a link it skips under
-          # another spelling (GitHub.com, :443, a .. segment) is looked up as
-          # well. A path that is no hexadecimal SHA fails, and so does a SHA
-          # that is not in main's history as of the base (HEAD^1): a commit
-          # only on a branch would pass here and fail on main once squashed.
-          commit_links() { # commit_links <lychee input arguments>
-            local out bad=0 url sha
-            out="$("$d/lychee" --dump -v --no-progress --exclude "^$repo/commit/" "$@")" \
-              || { echo "::error::lychee could not list the links to check"; return 1; }
-            while IFS= read -r url; do
-              sha="$(sed -nE "s|^$repo/commit/([0-9a-f]{7,40})([?#].*)?\$|\\1|p" <<<"$url")"
-              if [ -z "$sha" ] || ! git merge-base --is-ancestor "$sha" HEAD^1 2>/dev/null; then
-                echo "::error::$url names no commit in main's history"; bad=1
-              fi
-            done < <(sed -nE "s|^($repo/commit/[^ ]*) .*\[excluded\]\$|\1|p" <<<"$out" | sort -u)
-            return "$bad"
-          }
-          commit_links --exclude-path '(^|/)canary-template/' -- './**/*.md'
-          check 60 --no-progress --github-token "$GITHUB_TOKEN" "${remap[@]}" --exclude-path '(^|/)canary-template/' \
-            --exclude "^$repo/commit/" \
-            --exclude "^$repo/releases/tag/v$v\$" --exclude "^$repo/compare/v${v}[.][.][.]HEAD\$" -- './**/*.md'
-          # The commit-link check on fixtures: a commit in main's history
-          # passes; a SHA that is no commit, a commit off main's history, a
-          # path that is no SHA and a missing SHA behind a host spelled
-          # GitHub.com each fail, so the check cannot pass a link it skipped.
-          fc="$RUNNER_TEMP/commit-links"; mkdir -p "$fc"
-          u='https://github.com/coolbress/plinth/commit'
-          off="$(GIT_AUTHOR_NAME=f GIT_AUTHOR_EMAIL=f@f GIT_COMMITTER_NAME=f GIT_COMMITTER_EMAIL=f@f \
-            git commit-tree "HEAD^1^{tree}" -p HEAD^1 -m 'fixture: a commit off main')"
-          echo "[here]($u/$(git rev-parse HEAD^1))" >"$fc/ok.md"
-          echo "[gone]($u/0000000000000000000000000000000000000000)" >"$fc/gone.md"
-          echo "[off]($u/$off)" >"$fc/off.md"
-          echo "[branch]($u/main)" >"$fc/branch.md"
-          echo "[case](https://GitHub.com/coolbress/plinth/commit/0000000000000000000000000000000000000000)" >"$fc/case.md"
-          commit_links -- "$fc/ok.md" || { echo "::error::a link to a commit in main's history failed"; exit 1; }
-          for x in gone off branch case; do
-            if commit_links -- "$fc/$x.md" >/dev/null; then
-              echo "::error::the commit-link check passed $fc/$x.md, which names no commit in main's history"; exit 1
-            fi
-          done
-          # The second run on two fixtures, offline: a link still missing fails
-          # both runs, so the check still fails; a link that appears during the
-          # wait passes the second, so a failure that does not last passes.
-          fr="$RUNNER_TEMP/lychee-retry"; mkdir -p "$fr"
-          echo "[gone](file://$fr/gone.md)" >"$fr/gone-link.md"
-          if check 0 --no-progress --offline -- "$fr/gone-link.md"; then
-            echo "::error::a link to a missing file passed the second run: it checks nothing"; exit 1
-          fi
-          echo "[late](file://$fr/late.md)" >"$fr/late-link.md"
-          (sleep 2; touch "$fr/late.md") &
-          out="$(check 6 --no-progress --offline -- "$fr/late-link.md" 2>&1)" \
-            || { echo "$out"; echo "::error::a link that came back during the wait still failed the second run"; exit 1; }
-          echo "$out"
-          grep -q 'checking the failed links once more' <<<"$out" \
-            || { echo "::error::the first run passed, so this fixture did not reach the second run"; exit 1; }
-          rm -f .lycheecache
-          # The remap on two fixtures, offline: an existing file passes with no
-          # network, and a missing one fails, so the remap cannot pass unchecked.
-          fx="$RUNNER_TEMP/lychee-remap"; mkdir -p "$fx/ok" "$fx/missing"
-          echo "[ok](https://github.com/coolbress/plinth/blob/main/README.md#plinth)" >"$fx/ok/a.md"
-          echo "[missing](https://github.com/coolbress/plinth/blob/main/no-such-file.md)" >"$fx/missing/a.md"
-          "$d/lychee" --no-progress --offline "${remap[@]}" -- "$fx/ok/a.md" \
-            || { echo "::error::a remapped link to an existing file failed"; exit 1; }
-          if "$d/lychee" --no-progress --offline "${remap[@]}" -- "$fx/missing/a.md"; then
-            echo "::error::a remapped link to a missing file passed: the remap checks nothing"; exit 1
-          fi
-
-      - name: No internal vocabulary in public text
-        run: ./tests/de-jargon.sh
-
-      - name: README install block equals the tutorial's
-        run: ./tests/readme-install-block.sh
-
-      - name: The required-checks page names exactly the checks the wall requires
-        run: ./tests/required-checks-doc.sh
-
-      - name: The docs' template tag and check counts match the source
-        run: ./tests/doc-pinned-facts.sh
