@@ -670,16 +670,16 @@ verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR=som
 first "not a pull request: pass, does not apply" '^- pass: dependency review, does not apply \(not a pull request'
 warned "not a pull request: no warning" 0
 verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped OSV=skipped SEVERITY=high ACTOR=someone
-first "refused, osv-scanner stopped by an earlier step: not yet confirmed (#1073)" '^- not yet confirmed: dependency review, osv-scanner did not run because an earlier step failed'
+first "refused, osv-scanner stopped by an earlier step: not yet confirmed (#1073)" '^- not yet confirmed: dependency review\. Why: osv-scanner did not run because an earlier step failed\.'
 warned "refused, osv-scanner stopped: one warning, the same text" 1
 verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped OSV=failure SEVERITY=high ACTOR=someone
-first "refused, osv-scanner failed with no line of its own: fail, never a pass" '^- fail: dependency review, the scan could not run'
+first "refused, osv-scanner failed with no line of its own: fail, never a pass" '^- fail: dependency review could not run, osv-scanner did not compare the two lockfiles'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=success SEVERITY=moderate ACTOR=someone
 first "reviewed: pass, at the input's severity" '^- pass: dependency review, no added dependency version with an advisory at moderate or above$'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=failure SEVERITY=high ACTOR=someone
 first "review failed: fail" '^- fail: dependency review'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=success SEVERITY=high ACTOR='dependabot[bot]'
-if grep -qE '^- not yet confirmed: CodeQL on this head, Dependabot pushed it .*`main` is analysed after the merge$' <<<"$sum"; then ok "a head Dependabot pushed: CodeQL not yet confirmed"
+if grep -qE '^- not yet confirmed: CodeQL on this head\. Why: Dependabot pushed it.*What confirms it: the analysis of `main` after the merge\.$' <<<"$sum"; then ok "a head Dependabot pushed: CodeQL not yet confirmed"
 else bad "a head Dependabot pushed: no CodeQL line" "$sum"; fi
 warned "a head Dependabot pushed: one warning" 1
 verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR='dependabot[bot]'
