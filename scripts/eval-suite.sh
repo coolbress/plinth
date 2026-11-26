@@ -63,7 +63,13 @@
 # another. The none arm is left out: nothing a plinth or template release
 # changes reaches it. Like --smoke it takes no --task, --arm, --runs, --model or
 # --config-dir, and its summary says it is a release run and names this
-# checkout's branch and commit; its exit is the default suite's.
+# checkout's branch and commit. It starts with the smoke run's rows (the
+# tasks with a `smoke` file, plinth arm, runs 1 and 2) and prints the line
+# --smoke prints from those rows alone before any other run starts, so one
+# run on the release candidate serves both gates when both are due (#1134).
+# Its exit is the smoke run's for those rows: 1 when one of them did not pass,
+# 3 when the ceiling or a run that did not really run stopped it, 0 otherwise;
+# the other rows' results are the table's, not the exit's.
 #
 # A session that did not really run (eval-suite-grade.py --not-run: the usage
 # limit, or an error on its first turn, or a cost of 0) is not graded: it gets a
@@ -541,39 +547,44 @@ set_aside() { # <run dir>
 }
 stopped=""
 total=$(( runs * cells ))
-i=0
+# The order the runs start in, one "<task> <arm> <n>" each. --release starts
+# with the rows --smoke runs (the tasks with a smoke file, plinth arm, runs 1
+# and 2), so one run on the release candidate gives the smoke verdict before
+# the rest of the suite (#1134).
+smoke_rows=()
+if [ -n "$smoke" ]; then
+  for n in 1 2; do for t in "${tasks[@]}"; do smoke_rows+=("$t plinth $n"); done; done
+elif [ -n "$release" ]; then
+  for n in 1 2; do
+    for t in "${tasks[@]}"; do
+      [ -f "$root/eval-suite/tasks/$t/smoke" ] && task_in_arm "$t" plinth && smoke_rows+=("$t plinth $n")
+    done
+  done
+  [ "${#smoke_rows[@]}" -gt 0 ] || die "--release: no task has a smoke file"
+fi
+is_smoke_row() { local r; for r in ${smoke_rows[@]+"${smoke_rows[@]}"}; do [ "$r" != "$1" ] || return 0; done; return 1; }
+order=(${smoke_rows[@]+"${smoke_rows[@]}"})
 for n in $(seq 1 "$runs"); do
   for t in "${tasks[@]}"; do
     for a in "${arms[@]}"; do
       task_in_arm "$t" "$a" || continue
-      if [ -f "$out/runs/$t-$a-$n/grade.json" ]; then i=$(( i + 1 )); continue; fi
-      s="$(spent)"
-      if over "$s" "$ceiling"; then
-        stopped="Stopped: ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n; $(not_started) not started"
-        break 3
-      fi
-      budget="$(awk -v c="$ceiling" -v s="$s" -v m="$per_run_cap" 'BEGIN { l = c - s; printf "%.4f", (l < m ? l : m) }')"
-      i=$(( i + 1 ))
-      set_aside "$out/runs/$t-$a-$n"
-      echo "== run $i of $total: $t $a $n (budget \$$budget, spent \$$s)"
-      run_one "$t" "$a" "$n" "$budget"
-      if [ -f "$out/runs/$t-$a-$n/not-run.txt" ]; then
-        stopped="$(plural "$(graded_runs)" run runs) graded; stopped at run $i ($t $a $n): $(cat "$out/runs/$t-$a-$n/not-run.txt"); $(not_started) not started"
-        break 3
-      fi
+      is_smoke_row "$t $a $n" || order+=("$t $a $n")
     done
   done
 done
 
 # Every run the smoke run asked for, passed. A run not started, not graded or
-# not counted is not a pass.
+# not counted is not a pass. Reads the smoke rows' folders only.
 smoke_verdict() {
-  python3 -I - "$out/runs" "$total" <<'PY'
+  python3 -I - "$out/runs" "${smoke_rows[@]}" <<'PY'
 import json, sys
 from pathlib import Path
-runs, want = Path(sys.argv[1]), int(sys.argv[2])
+runs, names = Path(sys.argv[1]), ["-".join(r.split()) for r in sys.argv[2:]]
+want = len(names)
 good, bad = 0, []
-for d in sorted(p for p in runs.iterdir() if p.is_dir()):
+for d in sorted(runs / n for n in names):
+    if not d.is_dir():
+        continue
     g = d / "grade.json"
     if (d / "not-run.txt").exists():
         bad.append(f"{d.name} (not run: {(d / 'not-run.txt').read_text().strip()})")
@@ -588,7 +599,7 @@ for d in sorted(p for p in runs.iterdir() if p.is_dir()):
         bad.append(f"{d.name} (did not pass)")
     else:
         good += 1
-again = sorted(p.name for p in (runs.parent / "set-aside").iterdir())
+again = sorted(p.name for p in (runs.parent / "set-aside").iterdir() if p.name.rsplit(".", 1)[0] in names)
 print(
     f"smoke: {good} of {want} runs passed"
     + (f"; not passed: {', '.join(bad)}" if bad else "")
@@ -598,8 +609,34 @@ print(
 sys.exit(0 if good == want else 1)
 PY
 }
+
+said=""
+i=0
+for row in "${order[@]}"; do
+  read -r t a n <<<"$row"
+  # The smoke rows are behind it: their verdict, once, before any other run starts.
+  if [ -n "$release" ] && [ -z "$said" ] && [ "$i" = "${#smoke_rows[@]}" ]; then
+    said=1; smoke_verdict || true
+  fi
+  if [ -f "$out/runs/$t-$a-$n/grade.json" ]; then i=$(( i + 1 )); continue; fi
+  s="$(spent)"
+  if over "$s" "$ceiling"; then
+    stopped="Stopped: ceiling reached: spent \$$s of \$$ceiling; not starting $t $a $n; $(not_started) not started"
+    break
+  fi
+  budget="$(awk -v c="$ceiling" -v s="$s" -v m="$per_run_cap" 'BEGIN { l = c - s; printf "%.4f", (l < m ? l : m) }')"
+  i=$(( i + 1 ))
+  set_aside "$out/runs/$t-$a-$n"
+  echo "== run $i of $total: $t $a $n (budget \$$budget, spent \$$s)"
+  run_one "$t" "$a" "$n" "$budget"
+  if [ -f "$out/runs/$t-$a-$n/not-run.txt" ]; then
+    stopped="$(plural "$(graded_runs)" run runs) graded; stopped at run $i ($t $a $n): $(cat "$out/runs/$t-$a-$n/not-run.txt"); $(not_started) not started"
+    break
+  fi
+done
+
 verdict="" smoke_failed=""
-[ -z "$smoke" ] || verdict="$(smoke_verdict)" || smoke_failed=1
+[ -z "$smoke$release" ] || verdict="$(smoke_verdict)" || smoke_failed=1
 # Both release runs install plinth from this checkout; their summary names which commit.
 if [ -n "$smoke$release" ]; then
   dirty=""; [ -z "$(git -C "$root" status --porcelain 2>/dev/null)" ] || dirty=", with uncommitted changes"

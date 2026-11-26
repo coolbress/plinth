@@ -1533,12 +1533,109 @@ grep -qxF "main ci: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "so
   ok "the main run read failing: main ci not read, the rest unchanged" || { bad "the main run read failing"; sed 's/^/        /' <<<"$out" | head -30; }
 # The history read failing: its lines say so; nothing else moves.
 out="$(MOCK_HISTORY_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
-others() { grep -vE '^(started|so far|totals|last activity): |^  20[0-9]{2}-[0-9]{2}-[0-9]{2} ' <<<"$1"; }
+others() { grep -vE '^(started|so far|totals|last activity|release due): |^  20[0-9]{2}-[0-9]{2}-[0-9]{2} ' <<<"$1"; }
 grep -qxF "so far: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "totals: not read (HTTP 502: Bad Gateway)" <<<"$out" &&
   grep -qxF "started: not read (HTTP 502: Bad Gateway)" <<<"$out" && [ "$(others "$out")" = "$(others "$base")" ] &&
   ok "the history read failing: started, so far and totals not read, the rest unchanged" ||
   { bad "the history read failing"; diff <(others "$base") <(others "$out") | head; grep -E '^(started|so far|totals)' <<<"$out" | sed 's/^/        /'; }
 state "GitLab: so far not read" "$work/gitlab" "so far: not read (the guide reads GitHub only)"
+grep -qxF "release due: not read (HTTP 502: Bad Gateway)" <<<"$out" && ok "the history read failing: release due not read" ||
+  bad "the history read failing: $(grep '^release due' <<<"$out")"
+
+# ── a release due (#1077) ─────────────────────────────────────────────────
+# The last tag comes from the history read; the merges since it from the
+# merged pull requests read. pr N merges on 2026-10-2(N mod 10); the tag's
+# commit is 2026-10-23 12:00, so #4 to #9 merged after it.
+hist() { # <tags nodes JSON> <merged total>
+  printf '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":%s},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":1,"nodes":%s},"firstMerges":{"nodes":[]}}}}' "$2" "$1"
+}
+tag03='[{"name":"v0.3.0","target":{"committedDate":"2026-10-23T12:00:00Z"}}]'
+rel_cmd="none: push a version tag as the project's \`docs/how-to/publish-a-release.md\` says"
+rel_where="A merged change to put out (release and deploy, after step 6)"
+d="$(repo release-feat)"
+put "$d/merged.json" "$(pr 2 'docs: before the tag' false SUCCESS)" "$(pr 5 'feat: export to csv' false SUCCESS)" \
+  "$(pr 6 'docs: after the tag' false SUCCESS)" "$(pr 7 'chore(deps): bump x' true SUCCESS)"
+hist "$tag03" 4 > "$d/history.json"
+state "release due: a tag, three merges since, one a feat:" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person"
+expect "release due, nothing else open, cli: the release is the next step" "$d" "$rel_where" "$rel_cmd" \
+  "\`cli\` and \`library\` publish to PyPI"
+d="$(repo release-data-ml 'archetype: data-ml')"
+cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
+expect "release due, nothing else open, data-ml: the release is the next step" "$d" "$rel_where" "$rel_cmd" \
+  "\`data-ml\` its model as a GitHub release"
+d="$(repo release-fix)"
+put "$d/merged.json" "$(pr 2 'feat: before the tag' false SUCCESS)" "$(pr 5 'fix(ledger): round in cents' false SUCCESS)"
+hist "$tag03" 2 > "$d/history.json"
+state "release due: a tag with only fix: merges since" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 1 merged since, 1 of them a feat: or fix: by a person" \
+  "where: $rel_where" "command: $rel_cmd"
+d="$(repo release-none-due)"
+put "$d/merged.json" "$(pr 2 'feat: before the tag' false SUCCESS)" "$(pr 5 'docs: after the tag' false SUCCESS)"
+hist "$tag03" 2 > "$d/history.json"
+state "release not due: nothing but docs: since the tag" "$d" \
+  "release due: no: last tag v0.3.0 (2026-10-23); 1 merged since, none of them a feat: or fix: by a person" \
+  "command: /grilling"
+base="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+out="$(MOCK_HISTORY_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "release due: not read (HTTP 502: Bad Gateway)" <<<"$out" && [ "$(route "$out")" = "$(route "$base")" ] &&
+  [ "$(others "$out")" = "$(others "$base")" ] && ok "the tag read failing: release due not read, the rest unchanged" ||
+  { bad "the tag read failing"; diff <(others "$base") <(others "$out") | head; }
+d="$(repo release-no-tag)"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)" "$(pr 5 'feat: export to csv' false SUCCESS)"
+hist '[]' 2 > "$d/history.json"
+state "release due: no tag at all, counted since the first merge" "$d" \
+  "release due: yes: no tag yet; 2 merged since the first merge, 1 of them a feat: or fix: by a person" \
+  "command: $rel_cmd"
+# Review of this change: GitHub records the tagged pull request's merge a
+# second or two after its squash commit; that pull request is not "since".
+d="$(repo release-own-pr)"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)" "$(pr 5 'fix: keep cents' false SUCCESS)"
+hist '[{"name":"v0.4.0","target":{"committedDate":"2026-10-24T23:59:58Z","associatedPullRequests":{"nodes":[{"mergedAt":"2026-10-25T00:00:00Z"}]}}}]' 2 > "$d/history.json"
+state "release not due right after one: the tagged pull request is not since" "$d" \
+  "release due: no: last tag v0.4.0 (2026-10-25); 0 merged since, nothing to put out" "command: /grilling"
+# A newest tag with no date (not a commit): the newest with one is the last.
+d="$(repo release-dateless)"
+cp "$work/release-feat/merged.json" "$d/"
+hist '[{"name":"v0.4.0","target":{}},{"name":"v0.3.0","target":{"committedDate":"2026-10-23T12:00:00Z"}}]' 4 > "$d/history.json"
+state "a newest tag with no date: the newest with one is the last tag" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person"
+# main's latest CI run failing: the release waits; the route is as before.
+d="$(repo release-main-red)"
+cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
+printf '{"total_count":1,"workflow_runs":[{"id":9,"conclusion":"failure","created_at":"2026-10-28T10:00:00Z"}]}' > "$d/runs.json"
+state "release due with main's CI failing: not the next step" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person" \
+  "problems: main's latest CI run fails (run 9)" "command: /grilling" "!where: $rel_where"
+d="$(repo release-nothing-merged)"
+state "release not due: no tag and nothing merged" "$d" "release due: no: no tag yet; nothing merged yet, nothing to put out"
+d="$(repo release-web 'archetype: web')"
+cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
+state "a web app: no release signal" "$d" "!release due" "command: /grilling"
+# Past the 100 merged pull requests read, with the tag older than all of them.
+d="$(repo release-cut)"
+many=(); for i in $(seq 1 100); do many+=("$(pr "$i" "feat: change $i" false SUCCESS)"); done
+put "$d/merged.json" "${many[@]}"
+hist '[{"name":"v0.1.0","target":{"tagger":{"date":"2026-10-10T09:00:00+09:00"},"target":{"committedDate":"2026-10-01T00:00:00Z"}}}]' 400 > "$d/history.json"
+state "release due: past the 100 read, the count says so" "$d" \
+  "release due: yes: last tag v0.1.0 (2026-10-01); 100 merged since, of the last 100 read, 100 of them a feat: or fix: by a person among those read"
+# Anything else open: the command is that, and the signal stays a line.
+d="$(repo release-ticket)"
+cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
+put "$d/issues.json" "$(issue 11 'Show monthly totals' ready-for-agent)"
+state "release due with a ticket ready: the ticket is the command, the signal a line" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person" \
+  "command: /implement #11" "!where: $rel_where"
+d="$(repo release-pr)"
+cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
+put "$d/open.json" "$(pr 12 'feat: totals' false run)"
+state "release due with a pull request open: its route, the signal a line" "$d" \
+  "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person" \
+  "command: /run" "!where: $rel_where"
+# The skill says how the signal is said: in part 3 when it is the step, in
+# part 4 otherwise.
+grep -qF 'When `where:` is the release' "$guide_md" && grep -qF 'When a `release due:` line is printed and `where:` is not the release' "$guide_md" &&
+  ok "the skill says the release signal in part 3 or in part 4" || bad "the skill does not say how the release signal is said"
 
 # The skill's answer (#1076): seven parts, four status words, no bar, so far
 # only as printed, the depth rule, the /clear line, the gloss rule.

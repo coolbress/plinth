@@ -7,6 +7,8 @@ you, and the checks tell you what was confirmed. The guidance is designed for
 that reader, and not yet tried by anyone but its author.
 
 Gated where a check can. Guided where it can't.
+The path comes from how experienced engineers run projects; whether the
+result is what you wanted stays yours to judge ([why](docs/explanation/concepts.md#about-the-process)).
 
 **What makes a project professional when you are new to code?**
 Not the code alone: the setup around it, the checks the code has to pass and

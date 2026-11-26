@@ -127,6 +127,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - mattpocock-skills installs a narrowed set; the listed skills install as `mattpocock-skills-extra@plinth`. 2026-10-19, #593
 - The design default is the pinned taste-skill (`design-taste-frontend`); a raise is measured first, is its own pull request, and its note names `claude plugin update taste-skill@plinth`. 2026-11-24, #1082 (decided; not built yet: #1082)
 - `make-release.sh` run 1 stops when the pinned template's `AGENTS.md`, `CLAUDE.md` or `.claude/` changed, unless the why-file records an eval-suite run; plinth's own skills are outside this guard. 2026-10-28, #700
+- When a release owes both the eval suite and the smoke run, one `scripts/eval-suite.sh --release` run on the release candidate serves both, its link in the release pull request's description and the GitHub Release; the full suite is still required when the template's `AGENTS.md` or `.claude/` changed, with no waiver and no check-name change. 2026-11-25, #1134 (decided; not built yet: #1134)
 - The eval suite is a script around `claude -p`, not `claude plugin eval`. 2026-10-25, #647
 - `template-update` never moves the plinth pin by itself; a person chooses. 2026-10-13, #511
 - floor-check WARNs, never FAILs, when the plinth pins in `ci.yml` and `label.yml` disagree; nothing requires them to move together. 2026-10-09, #447
@@ -157,6 +158,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 - English is canonical; `.ko.md` translations are optional, and agent-facing text is English only. 2026-09-03, #18
 - plinth is for beginner engineers and non-engineers. 2026-10-13, #514
+- plinth bets on the process: a good process can be checked where a good outcome cannot; plinth guides it, enforces only what a check can hold, and points to proven tools for each step rather than rebuilding them. 2026-11-25, #1142
 - Only Claude Code is the tested host. 2026-09-03, #15
 - Each guidance item says its kind; a failure is met first with a simpler default, then a boundary, and guidance only where neither fits. 2026-10-15, #515
 - A reversal is written on the earlier record as a dated "reversed by" line. 2026-11-25, #1109 (decided; not built yet: #1109)

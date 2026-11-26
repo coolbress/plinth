@@ -72,20 +72,27 @@ the move changes what a new project's agent reads, and then asks for
    script reads the template's changes between the two tags. When they touch
    `template/AGENTS.md.jinja`, `template/CLAUDE.md.jinja` or anything under
    `template/.claude/` (the settings, the output style, the default skills),
-   the why needs one more line, either of:
+   the why needs one more line, one of:
 
    ```text
+   eval suite: on the release candidate
    eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-<id>>
    eval suite not run: <the reason>
    ```
 
-   For the first, run [the release run](run-the-eval-suite.md#the-release-run),
-   `scripts/eval-suite.sh --release`, and post its table on #647; the link is
-   that comment's, in angle brackets (a bare link fails `ci / docs`). It runs
+   Use the first. The suite then runs once in step 5, on the release branch
+   run 1 makes. That run also gives the smoke verdict, so no separate smoke
+   run is needed (#1134). Its link cannot go in the commit it tests, so it
+   goes in the release pull request's description, and step 8 puts it in the
+   GitHub Release. The second line is for a run made before the candidate
+   existed, with the smoke run still due in step 5; the link is the comment's,
+   in angle brackets (a bare link fails `ci / docs`). Either way,
+   [the release run](run-the-eval-suite.md#the-release-run),
+   `scripts/eval-suite.sh --release`, runs
    the `repo-only` and `plinth` arms, three runs each, under a US$15 ceiling;
    it leaves out the `none` arm, which nothing a release changes reaches
-   (#647's Decisions, "[the suite a release runs](https://github.com/coolbress/plinth/issues/647)"). The line stays in the release's section and its
-   GitHub Release, so whoever reads the release sees the table or the reason.
+   (#647's Decisions, "[the suite a release runs](https://github.com/coolbress/plinth/issues/647)"). The line stays in the release's section, and its
+   GitHub Release shows the table's link or the reason.
    A release whose pin did not move, or whose move touches none of those
    files, needs neither.
 3. Run the script once, from the up-to-date `main`:
@@ -154,6 +161,13 @@ the move changes what a new project's agent reads, and then asks for
    scripts/eval-suite.sh --smoke
    ```
 
+   When the why says `eval suite: on the release candidate`, run
+   `scripts/eval-suite.sh --release` there instead: one run that prints the
+   smoke verdict from its first six rows, then runs the rest of the suite
+   ([the release run](run-the-eval-suite.md#the-release-run)). Its smoke
+   verdict is the gate, as the smoke run's would be. Put its link in the pull
+   request's description on one line, `eval suite: <link>`, in angle brackets.
+
    Post its table on #647. Name the `e2e` run and that comment in the pull
    request's description. If the smoke run fails, read the failed runs'
    `reader.md`. When a session timed out or crashed, run it again and say so in
@@ -209,6 +223,7 @@ the move changes what a new project's agent reads, and then asks for
 | The why has a heading line | Remove every line that starts with `#` |
 | The template pin moved and changes what a new project's agent reads | Run the eval suite and add `eval suite: <link>`, or add `eval suite not run: <the reason>` (step 2) |
 | The `eval suite:` line must be the link to the comment | Give the comment's link alone, in angle brackets |
+| The section says `eval suite: on the release candidate`, and the release pull request's description must carry the link (run 2) | Edit the merged pull request's description: add `eval suite: <link>` on one line, then run step 8 again |
 | More than one `eval suite` line | Keep one |
 | Cannot read what the template changed | Check that `gh` is logged in and can reach GitHub, then run step 3 again |
 | A changelog fragment does not read, or a line is under `[Unreleased]` | Fix the fragment it names, or move the line into a fragment (CONTRIBUTING.md, Land a change), in a pull request; then run step 3 again |
