@@ -81,8 +81,8 @@
               "nodes": []
             },
             "tags": {
-              "totalCount": 0,
-              "nodes": []
+              "totalCount": 1,
+              "nodes": [{"name": "v0.1.0", "target": {"committedDate": "2026-11-04T17:38:00Z"}}]
             },
             "firstMerges": {
               "nodes": [

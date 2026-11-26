@@ -575,6 +575,104 @@ if [ "$(grep -c . <<<"$merged" || true)" -ge "$read" ]; then
   past_first=yes; counted="$counted of the last $read read; older ones not read"
 fi
 
+# What happened so far (#1076), from one GraphQL call: when the repository
+# was made and last pushed to (a push to any branch, a bot's too), the true
+# totals, and the records below. Its own read: failing, started, so far and
+# totals say not read and every other line stays as it is. The events that
+# count, each a date, a reference, a kind and the record's title as recorded:
+#   - the repository's creation;
+#   - the first merge by a person: the earliest merged of the first 20 pull
+#     requests opened that a person (not a Bot) wrote, or of the merged ones
+#     read above when that read was not cut (nexusbt's first merge was
+#     Dependabot's);
+#   - closed records: issues labelled spec or wayfinder:* (not
+#     wayfinder:task), among the 50 closed issues updated last;
+#   - releases (not drafts) and tags with no release, the 10 newest of each;
+#   - feat: merges by people, from the merged pull requests read above.
+# Every other merge is counted only. The newest five are printed, newest
+# first; with a problem open, only the totals line. Each event keeps its whole
+# timestamp, in UTC (a tag's date may carry an offset), until the five are
+# picked: only the printed date is cut to the day.
+history_q='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+  createdAt pushedAt
+  mergedPulls: pullRequests(states: MERGED) { totalCount }
+  closedIssues: issues(states: CLOSED) { totalCount }
+  records: issues(states: CLOSED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title closedAt labels(first: 20) { nodes { name } } } }
+  releases(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) { totalCount nodes { tagName name isDraft publishedAt createdAt } }
+  tags: refs(refPrefix: "refs/tags/", first: 10, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { totalCount
+    nodes { name target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } ... on Tag { tagger { date } target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } } } } } }
+  firstMerges: pullRequests(states: MERGED, first: 20, orderBy: {field: CREATED_AT, direction: ASC}) { nodes { number title mergedAt author { __typename login } } }
+} }'
+history_jq='def clean: gsub("[\t\n\r]"; " ");
+  def ago: ((now - fromdate) / 86400 | floor | if . < 0 then 0 else . end) as $d | "\(.[0:10]) (\($d) day\(if $d == 1 then "" else "s" end) ago)";
+  def many($n; $w): "\($n) \($w)\(if $n == 1 then "" else "s" end)";
+  def utc: if test("[+-][0-9]{2}:[0-9]{2}$") then ((.[0:19] + "Z" | fromdate) - ((.[19:20] + "1" | tonumber) * ((.[20:22] | tonumber) * 3600 + (.[23:25] | tonumber) * 60)) | todate) else . end;
+  .data.repository as $r
+  | (["started", "started: \($r.createdAt | ago); last activity: \(($r.pushedAt // $r.createdAt) | ago)"],
+     ["totals", "totals: \($r.mergedPulls.totalCount) merged, \(many($r.closedIssues.totalCount; "closed issue")), \(many($r.releases.totalCount; "release")), \(many($r.tags.totalCount; "tag"))"],
+     ["event", $r.createdAt, $repo, "created", ""],
+     ([$r.tags.nodes[] | (.target.committedDate // .target.target.committedDate // .target.tagger.date // "") as $at | select($at != "")
+        | [.name, ([($at | utc), (.target.associatedPullRequests.nodes[0].mergedAt // .target.target.associatedPullRequests.nodes[0].mergedAt // "")] | max)]]
+      | first // empty | ["lasttag", .[0], .[1]]),
+     ($r.records.nodes[] | ([.labels.nodes[].name | select(. == "spec" or (startswith("wayfinder:") and . != "wayfinder:task"))] | first) as $l
+       | select($l != null and .closedAt != null) | ["event", .closedAt, "#\(.number)", "closed \($l)", (.title | clean)]),
+     ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt), .tagName, "release", ((.name // "") | clean)]),
+     ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
+       | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", ($at | utc), .name, "tag", ""]),
+     ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
+       | ["first", .mergedAt, "#\(.number)", (.title | clean)]))
+  | @tsv'
+# Read here, before the route: the release signal (#1077) takes its last
+# tag from it. Printed at the end, after main ci.
+history_ok=""
+history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f query="$history_q" \
+      --jq "\"$repo\" as \$repo | $history_jq" 2>&1)" && history_ok=yes
+# The latest completed run of ci.yml on main, read here too: a release is not
+# the next step while it fails (#1077 review). Printed after the route.
+run_ok=""; main_red=""
+run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
+      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)" && run_ok=yes
+if [ -n "$run_ok" ] && [ -n "$run" ]; then
+  case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
+fi
+
+# The release signal (#1077): the last tag (the newest with a date, by its
+# commit's date, from the read above) and what merged since: after the later
+# of its commit's date and the merge of the pull request that commit came
+# from (GitHub records the merge a second or two after the squash commit, so
+# the tagged pull request itself is not "since"); the next step only while
+# main's latest CI run does not fail; due when a feat: or fix: by a
+# person merged since, or since the first merge when there is no tag yet. A
+# web app is skipped: it goes out by itself once main is green. The count
+# since a tag is of the merged pull requests read above; when that read was
+# cut before the tag, the line says so. With no tag, the count is the true
+# total. Its own read: failing, it says not read and nothing else moves.
+release_due=""; release_line=""
+if [ "$archetype" != web ]; then
+  if [ -z "$history_ok" ]; then
+    echo "release due: not read ($(tail -1 <<<"$history" | tr '\t' ' '))"
+  else
+    tag="$(awk -F '\t' '$1 == "lasttag" { print $2; exit }' <<<"$history")"
+    tag_at="$(awk -F '\t' '$1 == "lasttag" { print $3; exit }' <<<"$history")"
+    since="$(awk -F '\t' -v at="$tag_at" 'at == "" || $5 > at' <<<"$merged")"
+    feats="$(awk -F '\t' '$2 == "person" && $4 ~ /^(feat|fix)(\([^)]*\))?!?:/' <<<"$since" | grep -c . || true)"
+    oldest="$(tail -1 <<<"$merged" | field 5)"
+    read_cut=""
+    { [ -n "$past_first" ] && { [ -z "$tag_at" ] || [[ "$oldest" > "$tag_at" ]]; }; } && read_cut=", of the last $read read"
+    if [ -n "$tag" ]; then
+      n="$(grep -c . <<<"$since" || true)"; from="last tag $tag (${tag_at:0:10}); $n merged since$read_cut"
+    else
+      n="$(sed -nE 's/^totals\ttotals: ([0-9]+) merged, .*/\1/p' <<<"$history")"
+      n="${n:-0}"; if [ "$n" = 0 ]; then from="no tag yet; nothing merged yet"; else from="no tag yet; $n merged since the first merge"; fi
+    fi
+    if [ "$n" = 0 ]; then of="nothing to put out"
+    elif [ "$feats" = 0 ]; then of="none of them a feat: or fix: by a person${read_cut:+ among those read}"
+    else of="$feats of them a feat: or fix: by a person${read_cut:+ among those read}"; release_due=yes; fi
+    release_line="release due: $([ -n "$release_due" ] && echo yes || echo no): $from, $of"
+    echo "$release_line"
+  fi
+fi
+
 # Which ticket /implement takes (#910), from what the repository records. A
 # ready-for-agent ticket is skipped while its blockers include an open issue,
 # or while an open pull request is for it (that pull request is routed first).
@@ -1027,6 +1125,12 @@ elif [ -n "$older_failed" ]; then
   # In place of /grilling (#1059): a ticket may be ready past the newest 100.
   note="the ready-for-agent issues past the newest 100 open were not read ($older_failed); look again, or list them with gh issue list --label ready-for-agent"
   say "A ticket ready" "none: the next ticket was not read"
+elif [ -n "$release_due" ] && [ -z "$main_red" ]; then
+  # Nothing else open (#1077): the release row's How to use it cell, the part
+  # for a project that is not a web app; what goes out for this archetype.
+  how="$(row "A merged change to put out" | sed -n 4p)"
+  note="$(sed -n 's/^release due: yes: //p' <<<"$release_line"); $(release_said)"
+  say "A merged change to put out" "none: ${how#*for the others, }"
 else
   say "An idea in your own words" "/grilling"
 fi
@@ -1075,8 +1179,7 @@ if [ -z "$broken" ] && [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   [ -z "$first_fail" ] || problems="a check fails on pull request #$(field 1 <<<"$first_fail")"
 fi
 [ -z "${token_open:-}" ] || problems="${problems:+$problems; }the token step is not done"
-if run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
-      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)"; then
+if [ -n "$run_ok" ]; then
   if [ -z "$run" ]; then echo "main ci: none (no completed run of ci.yml on main)"
   else
     IFS=$'\t' read -r run_id run_end run_on <<<"$run"
@@ -1091,52 +1194,7 @@ else
 fi
 echo "problems: ${problems:-none}"
 
-# What happened so far (#1076), from one GraphQL call: when the repository
-# was made and last pushed to (a push to any branch, a bot's too), the true
-# totals, and the records below. Its own read: failing, started, so far and
-# totals say not read and every other line stays as it is. The events that
-# count, each a date, a reference, a kind and the record's title as recorded:
-#   - the repository's creation;
-#   - the first merge by a person: the earliest merged of the first 20 pull
-#     requests opened that a person (not a Bot) wrote, or of the merged ones
-#     read above when that read was not cut (nexusbt's first merge was
-#     Dependabot's);
-#   - closed records: issues labelled spec or wayfinder:* (not
-#     wayfinder:task), among the 50 closed issues updated last;
-#   - releases (not drafts) and tags with no release, the 10 newest of each;
-#   - feat: merges by people, from the merged pull requests read above.
-# Every other merge is counted only. The newest five are printed, newest
-# first; with a problem open, only the totals line. Each event keeps its whole
-# timestamp, in UTC (a tag's date may carry an offset), until the five are
-# picked: only the printed date is cut to the day.
-history_q='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
-  createdAt pushedAt
-  mergedPulls: pullRequests(states: MERGED) { totalCount }
-  closedIssues: issues(states: CLOSED) { totalCount }
-  records: issues(states: CLOSED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title closedAt labels(first: 20) { nodes { name } } } }
-  releases(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) { totalCount nodes { tagName name isDraft publishedAt createdAt } }
-  tags: refs(refPrefix: "refs/tags/", first: 10, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { totalCount
-    nodes { name target { ... on Commit { committedDate } ... on Tag { tagger { date } } } } }
-  firstMerges: pullRequests(states: MERGED, first: 20, orderBy: {field: CREATED_AT, direction: ASC}) { nodes { number title mergedAt author { __typename login } } }
-} }'
-history_jq='def clean: gsub("[\t\n\r]"; " ");
-  def ago: ((now - fromdate) / 86400 | floor | if . < 0 then 0 else . end) as $d | "\(.[0:10]) (\($d) day\(if $d == 1 then "" else "s" end) ago)";
-  def many($n; $w): "\($n) \($w)\(if $n == 1 then "" else "s" end)";
-  def utc: if test("[+-][0-9]{2}:[0-9]{2}$") then ((.[0:19] + "Z" | fromdate) - ((.[19:20] + "1" | tonumber) * ((.[20:22] | tonumber) * 3600 + (.[23:25] | tonumber) * 60)) | todate) else . end;
-  .data.repository as $r
-  | (["started", "started: \($r.createdAt | ago); last activity: \(($r.pushedAt // $r.createdAt) | ago)"],
-     ["totals", "totals: \($r.mergedPulls.totalCount) merged, \(many($r.closedIssues.totalCount; "closed issue")), \(many($r.releases.totalCount; "release")), \(many($r.tags.totalCount; "tag"))"],
-     ["event", $r.createdAt, $repo, "created", ""],
-     ($r.records.nodes[] | ([.labels.nodes[].name | select(. == "spec" or (startswith("wayfinder:") and . != "wayfinder:task"))] | first) as $l
-       | select($l != null and .closedAt != null) | ["event", .closedAt, "#\(.number)", "closed \($l)", (.title | clean)]),
-     ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt), .tagName, "release", ((.name // "") | clean)]),
-     ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
-       | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", ($at | utc), .name, "tag", ""]),
-     ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
-       | ["first", .mergedAt, "#\(.number)", (.title | clean)]))
-  | @tsv'
-if history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f query="$history_q" \
-      --jq "\"$repo\" as \$repo | $history_jq" 2>&1)"; then
+if [ -n "$history_ok" ]; then
   awk -F '\t' '$1 == "started" { print $2 }' <<<"$history"
   if [ -n "$problems" ]; then
     echo "so far: counts only while a problem is open"
