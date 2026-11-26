@@ -20,7 +20,7 @@
 # unreadable download is a FAIL.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-files=(python-ci.yml plinth-ci.yml e2e.yml)
+files=(python-ci.yml plinth-ci.yml plinth-ci-text.yml e2e.yml)
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }

@@ -1,0 +1,95 @@
+name: CI text
+#
+# The checks that read the pull request's title or description, apart from
+# ci.yml so that an edit re-runs them and nothing else (#1133): `ci / docs`,
+# `ci / release-gate`, and the canaries' `pr-title` and `diff-size`. A push
+# runs them here too, beside ci.yml.
+#
+# GitHub keeps each workflow's latest run of a check name and requires every
+# one to pass (measured on a test pull request for #1133): a stale verdict
+# from another workflow would hold the merge until a push. So each required
+# name here is reported by this workflow alone, and its runs queue per pull
+# request and head rather than cancel: an edit's run starts after the push's
+# run has finished, so it speaks last, and no push's run is cancelled by an
+# edit. A new head gets a new group, and ci.yml's own concurrency still
+# cancels a superseded push's run there.
+#
+# The canaries' two text checks are the exception: ci.yml's canary calls run
+# all of python-ci.yml on a push, these two included, and a consumer's job
+# cannot be dropped without an `if:`. On a push both report them from the
+# same payload, so with the same verdict; on an edit only this copy runs, and
+# scripts/merge-when-green.sh reads the run started last. No ruleset requires
+# a canary check. tests/ci-text.sh holds all of this.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  # `ci / docs` reads the pull request's description and the issues its merge
+  # will close (#293); `ci / release-gate` reads the e2e runs on the head
+  # (#863). A called workflow cannot widen what its caller grants.
+  ci:
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    uses: ./.github/workflows/plinth-ci-text.yml
+
+  # ci.yml's three canary calls, name, grant and inputs, calling the copy of
+  # python-ci.yml's pr-title and diff-size (python-ci-text.yml). A pin raise
+  # renames canary-template in both files (scripts/raise-template-pin.sh).
+  canary:
+    uses: ./.github/workflows/python-ci-text.yml
+    # A called workflow cannot widen what its caller grants: a job there that
+    # asks for more than this grant fails the whole run at startup, no check
+    # reporting (measured for #586). python-ci-text.yml's floor-check asks for
+    # `issues: read` (labels) and diff-size for `pull-requests: read` and
+    # `actions: write` (the approval of a change to the checks). Scoped to
+    # this job, not raised for the whole file.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: write
+    with:
+      working-directory: canary
+      extra-python-versions: "3.13"
+      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"   # CodeQL is a code_scanning rule; floor-check sees it either way
+
+  canary-web:
+    uses: ./.github/workflows/python-ci-text.yml
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: write
+    with:
+      working-directory: canary-web
+      web: true
+      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"
+
+  canary-template:
+    name: canary-template (plinth-template v1.51.0 at f0ed80e)
+    uses: ./.github/workflows/python-ci-text.yml
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: write
+    with:
+      working-directory: canary-template
+      extra-python-versions: "3.14"
+      max-diff-lines: 0
+      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"
