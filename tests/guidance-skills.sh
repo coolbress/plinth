@@ -6,16 +6,20 @@
 # plinth's skills, a skill of a dependency plugin.json names (as the
 # marketplace mounts it), a Claude Code built-in the table uses, or, in the
 # table only, marked "(listed)". Each of the three also names `/retro`, the
-# retrospective's tool. The built-ins #1080 placed stay marked "(built in" in
-# their rows: `/security-review` at step 5, `/resume` and `/recap` (same
-# machine only) at step 8, `/insights` on the retrospective row, `/doctor`
-# under "Something broke"; and `/debug`, which debugs Claude Code, appears
-# in the table only as that one clause, never as a tool for the app. The template's end-or-hand-over form is read against
+# retrospective's tool. The table's columns (#1086): one tool per job in the
+# Tool cell, a class for each job in Class (installed, built in, platform,
+# listed), and at most one tool with its class and condition in Also. The
+# built-ins #1080 and #1086 placed stay "built in" in their rows with their
+# words: `/security-review` at step 5, `/resume` and `/recap` (same machine
+# only) at step 8, `/insights` on the retrospective row, `/doctor` and
+# `/rewind` under "Something broke", `/design` on the idea row, `/simplify`
+# on the build and check rows; `/debug`, which debugs Claude Code, is in no
+# row. The template's end-or-hand-over form is read against
 # the installed skills by tests/install-smoke.sh, which has them.
 # The arsenal's not-used.md (#1086): each entry is "- `/<name>` (<class>).
 # Breaks: <rule>.", its class "built in" or "installed by plinth" (a tool that
 # needs installing is not listed), true of the name, and the tool is named in
-# no row of the "Where you are" table.
+# no row of the "Where you are" table, Tool or Also.
 # Must-not-pass cases run first.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,7 +28,8 @@ import json, re, sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug", "rewind"}
+BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug", "rewind",
+            "simplify", "verify"}
 plugin = json.loads((root / ".claude-plugin/plugin.json").read_text())
 entries = {e["name"]: e for e in json.loads((root / ".claude-plugin/marketplace.json").read_text())["plugins"]}
 default = {"plinth:" + d.name for d in (root / "skills").iterdir() if d.is_dir()}
@@ -104,29 +109,90 @@ def problems(arsenal, howto, guide):
     return out
 
 
-# The one clause the table may say `/debug` in (#1080).
-DEBUG_CLAUSE = "`/debug` (built in) is for Claude Code itself, not the app"
-# The row's start, then what it must say: a built-in and its mark (#1080).
-PLACED = (("| A pull request with checks running (step 5) |", "`/security-review` (built in"),
-          ("| Stopping, or coming back (step 8) |", "`/resume` and `/recap` (built in, same machine only"),
-          ("| Looking back on a piece of work (retrospective) |", "`/insights` (built in"),
-          ("| Something broke (step 7) |", "`/doctor` (built in"),
-          ("| Something broke (step 7) |", DEBUG_CLAUSE),
-          ("| Something broke (step 7) |", "`/rewind` (built in) rolls back the agent's own edits in this session and never undoes a merge"))
+# The stage table's columns (#1086): Trigger | Tool | Class | plinth piece |
+# Also | Then. Tool holds one tool per job, jobs apart by "; ", each job's
+# tool before its ": " (a sequence "X, then Y" is one job); Class has one
+# class per job in the same order; Also is `-` or one tool, "(class)" and a
+# condition after ": ".
+CLASSES = {"installed", "built in", "platform", "listed"}
+ALSO = re.compile(r"^`[^`]+` \((installed|built in|platform|listed)\): \S")
+
+
+def cells(row):
+    return row[2:-2].split(" | ")
+
+
+def tools_in(head):
+    """The tools a job's head names: backticked spans, a sequence counting once."""
+    return [len(re.findall(r"`[^`]+`", part)) or 1 for part in head.split(", then ")]
+
+
+def columns(rows):
+    out = []
+    for r in rows[2:]:
+        c = cells(r)
+        if len(c) != 6:
+            out.append(f"a row without six cells: {r[:60]}")
+            continue
+        trig, tool, cls, _, also, _ = c
+        jobs = [] if tool == "-" else tool.split("; ")
+        classes = [] if cls == "-" else cls.split("; ")
+        for j in jobs:
+            head = j.split(": ", 1)[0]
+            if " or " in head or any(n > 1 for n in tools_in(head)):
+                out.append(f"{trig}: a Tool cell names two tools for one job: {head}")
+        if len(jobs) != len(classes):
+            out.append(f"{trig}: {len(jobs)} jobs in Tool and {len(classes)} classes in Class")
+        for k in classes:
+            for part in k.split(", then "):
+                if part not in CLASSES:
+                    out.append(f"{trig}: the class {part!r} is not one of {sorted(CLASSES)}")
+        if also != "-" and not ALSO.match(also):
+            out.append(f"{trig}: the Also cell is not one tool, its class and a condition: {also[:60]}")
+    return out
+
+
+def class_of(rows, start, name):
+    """The class the row starting with start gives the tool name, in Tool or Also."""
+    row = next((r for r in rows if r.startswith(start)), None)
+    if row is None or len(cells(row)) != 6:
+        return None
+    _, tool, cls, _, also, _ = cells(row)
+    for j, k in zip(tool.split("; "), cls.split("; ")):
+        if f"`{name}`" in j.split(": ", 1)[0] or f"`{name} " in j.split(": ", 1)[0]:
+            return k.split(", then ")[-1] if ", then " in j else k
+    m = ALSO.match(also)
+    if m and also.startswith(f"`{name}`"):
+        return m.group(1)
+    return None
+
+
+# The built-ins placed in the table (#1080, #1086): the row, the tool, and the
+# words its job or condition keeps.
+PLACED = (("| A pull request with checks running (step 5) |", "/security-review", "before the merge"),
+          ("| A pull request with checks running (step 5) |", "/simplify", "cleanup of the changed code"),
+          ("| A ticket ready (step 4) |", "/simplify", "cleanup of the changed code"),
+          ("| An idea in your own words (step 2) |", "/design", "v2.1.265 or later and an account where the Design template is available"),
+          ("| Stopping, or coming back (step 8) |", "/resume", "same machine only"),
+          ("| Stopping, or coming back (step 8) |", "/recap", "same machine only"),
+          ("| Looking back on a piece of work (retrospective) |", "/insights", "not in cloud sessions"),
+          ("| Something broke (step 7) |", "/doctor", "not the app"),
+          ("| Something broke (step 7) |", "/rewind", "never a merge"))
 
 
 def built_ins(rows):
-    out = []
-    for start, says in PLACED:
-        row = next((r for r in rows if r.startswith(start)), None)
-        if row is None:
-            out.append(f"no row starting {start!r}")
-        elif says not in row:
-            out.append(f"the row {start!r} no longer says {says!r}")
+    out = columns(rows)
+    for start, name, says in PLACED:
+        row = next((r for r in rows if r.startswith(start)), "")
+        if class_of(rows, start, name) != "built in":
+            out.append(f"the row {start!r} no longer gives `{name}` as built in")
+        elif not re.search(re.escape(f"`{name}`") + r"[^;|]*" + re.escape(says), row):
+            out.append(f"the row {start!r} no longer says {says!r} of `{name}`")
     for r in rows:
-        # "`/debug" with no closing backtick: `/debug <args>` counts too.
-        if r.count("`/debug") != r.count(DEBUG_CLAUSE):
-            out.append(f"a 'Where you are' cell names `/debug` other than as {DEBUG_CLAUSE!r}: {r[:60]}")
+        # /debug debugs Claude Code, never the app (#1080): installed.md says
+        # so, and no row offers it.
+        if "`/debug" in r:
+            out.append(f"a 'Where you are' row names `/debug`, which debugs Claude Code, not the app: {r[:60]}")
         # /rewind once, in the "Something broke" row only (#1079): it is the
         # session's undo, and a second mention invites it for a merge.
         n = r.count("`/rewind")
@@ -184,22 +250,40 @@ case("must fail: retro is not in the default install",
 step5 = "| A pull request with checks running (step 5) |"
 broke = "| Something broke (step 7) |"
 case("must fail: /security-review leaves the step 5 row",
-     problems(arsenal.replace("`/security-review` (built in", "a security pass (built in"), howto, guide),
-     "no longer says '`/security-review` (built in'")
-case("must fail: a cell offers /debug for the app",
-     problems(arsenal.replace(broke, broke + " Type `/debug` to find the app's bug;", 1), howto, guide),
-     "names `/debug` other than")
-case("must fail: a cell offers /debug with arguments for the app",
-     problems(arsenal.replace(broke, broke + " type `/debug the app's crash`;", 1), howto, guide),
-     "names `/debug` other than")
-case("must fail: the /debug clause loses 'not the app'",
-     problems(arsenal.replace(DEBUG_CLAUSE, "`/debug` (built in) debugs it"), howto, guide), "names `/debug` other than")
+     problems(arsenal.replace("`/security-review`: a security pass", "a security pass"), howto, guide),
+     "no longer gives `/security-review` as built in")
+case("must fail: /security-review marked installed",
+     problems(arsenal.replace("| platform; built in; built in |", "| platform; built in; installed |"), howto, guide),
+     "no longer gives `/security-review` as built in")
+case("must fail: a row offers /debug for the app",
+     problems(arsenal.replace("`/doctor`: Claude Code itself", "`/debug`: the app's bug; `/doctor`: Claude Code itself"), howto, guide),
+     "names `/debug`")
 case("must fail: /rewind named twice in the Something broke row",
      problems(arsenal.replace(broke, broke + " type `/rewind` to undo the merge;", 1), howto, guide), "names `/rewind` 2 times")
-case("must fail: /rewind gone from the Something broke row",
-     problems(arsenal.replace("`/rewind` (built in) rolls back", "a rewind rolls back"), howto, guide), "`/rewind` (built in) rolls back")
+case("must fail: /rewind loses 'never a merge'",
+     problems(arsenal.replace("never a merge", "any edit"), howto, guide), "'never a merge'")
 case("must fail: step 8 drops 'same machine only'",
-     problems(arsenal.replace("(built in, same machine only", "(built in"), howto, guide), "/recap")
+     problems(arsenal.replace("summary of this one, same machine only", "summary of this one"), howto, guide), "of `/recap`")
+case("must fail: /design loses its conditions",
+     problems(arsenal.replace(", with Claude Code v2.1.265 or later and an account where the Design template is available", ""), howto, guide),
+     "of `/design`")
+case("must fail: /simplify leaves the build row",
+     problems(arsenal.replace("| `/simplify` (built in): cleanup of the changed code | A pull request with checks running |", "| - | A pull request with checks running |"), howto, guide),
+     "'| A ticket ready (step 4) |' no longer gives `/simplify`")
+case("must fail: a Tool cell names two tools for one job, with 'or'",
+     problems(arsenal.replace("`/to-spec`, then `/to-tickets` |", "`/to-spec` or `/wayfinder` |"), howto, guide), "two tools for one job")
+case("must fail: a Tool cell names two tools for one job, side by side",
+     problems(arsenal.replace("`/grilling`: an interview", "`/grilling`, `/grill-with-docs` (listed): an interview"), howto, guide),
+     "two tools for one job")
+case("must fail: a job with no class",
+     problems(arsenal.replace("| platform; installed; installed; built in; built in |", "| platform; installed; installed; built in |"), howto, guide),
+     "5 jobs in Tool and 4 classes")
+case("must fail: a class outside the four",
+     problems(arsenal.replace("| `/grilling`: an interview before any code | installed |", "| `/grilling`: an interview before any code | bundled |"), howto, guide),
+     "the class 'bundled'")
+case("must fail: an Also cell with two tools",
+     problems(arsenal.replace("`/wayfinder` (installed): when the way is unclear", "`/wayfinder` (installed) or `/ask-matt`: when the way is unclear"), howto, guide),
+     "the Also cell is not one tool")
 assert step5 in arsenal and broke in arsenal, "a row #1080 placed a built-in in moved; update this test"
 case("the arsenal's table, the how-to and the guide name only default skills, and /retro",
      problems(arsenal, howto, guide), None)
@@ -224,8 +308,11 @@ case("must fail: a tool named in another shape than an entry",
 case("must fail: a skill called installed by plinth that the default install does not carry",
      not_used_problems(not_used + "\n- `/ask-matt` (installed by plinth). Breaks: it routes elsewhere.\n", rows), "does not carry it")
 case("must fail: a not-used tool named in a Tool cell",
-     not_used_problems(not_used, [r.replace("| `/plinth:guide`, typed by the person |", "| `/ship`, typed by the person |") for r in rows]),
+     not_used_problems(not_used, [r.replace("| `/plinth:guide`, typed by the person", "| `/ship`, typed by the person") for r in rows]),
      "/ship is on the not-used line and in the table")
+case("must fail: a not-used tool named in an Also cell",
+     not_used_problems(not_used, [r.replace("`/wayfinder` (installed)", "`/steward` (built in)") for r in rows]),
+     "/steward is on the not-used line and in the table")
 case("must fail: a not-used.md with no entries",
      not_used_problems("# Not used with plinth\n\nNothing.\n", rows), "lists no tool")
 case("not-used.md: each entry has its class and its rule, and none is in the table",
