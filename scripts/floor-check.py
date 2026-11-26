@@ -2616,8 +2616,12 @@ def print_update_command(root: Path, network: bool = True, host: str | None = No
             return 1
         if choice["state"] == "unread":
             print(f"no update command: whether the plinth pin is older than the one {d['target']} was tested with "
-                  f"was not read; {choice['note'][len('plinth pin: '):]}. Run it again once it can be read",
-                  file=sys.stderr)
+                  f"was not read; {choice['note'][len('plinth pin: '):]}", file=sys.stderr)
+            # A failed read may pass; a pin GitHub cannot order against the
+            # tested one (diverged, or not a plinth commit) never will.
+            to = f" to {choice['tested']} or a later plinth release" if choice.get("tested") else ""
+            print(f"run it again if a read failed; otherwise raise the plinth pin{to} in a pull request of its own, "
+                  "merge it, then plan the update again", file=sys.stderr)
             return 1
         print(choice["note"], file=sys.stderr)
         for line in moves_lines(d):

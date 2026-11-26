@@ -71,7 +71,7 @@ whether the owner's `.github` repository publishes a pull-request template
 and issue forms, so an update never writes a form that hides the owner's
 shared ones; when that cannot be read, the plan says so and stops. A
 `Plinth pin:` line compares that pin with the one the target tag was tested
-with when they differ; a newer live pin is kept.
+with; a newer live pin is kept.
 
 The pin comes first, the update second. When the workflows call a plinth
 older than the one the target tag was tested with, the plan exits 1 having
@@ -85,7 +85,9 @@ change), then runs `/plinth:template-update` again. Do not make the change
 or merge it for them in this skill. When the comparison could not be read
 (offline, or the tag's `copier.yml` unreadable), the plan stops too and
 names what it could not read: pass that on and stop; it never updates as if
-the pin were current.
+the pin were current. Rerunning helps only when a read failed; a pin GitHub
+cannot order against the tested one (on another branch, or not a plinth
+commit) is raised in its own pull request first, as above.
 
 When `.copier-answers.yml` records a `plinth_sha` other than a pin the
 workflows call (raised in the workflows only, by Dependabot or by hand), the

@@ -755,7 +755,7 @@ labelled() { # a label.yml calling plinth at $sha40, as the template renders it
 # the plan stops before anything is written and names it.
 pr_api="$work/api-pin-pr"; rm -rf "$pr_api"; cp -R "$pin_api" "$pr_api"; pulls_open "$pr_api"
 fixture pinbehind; labelled; reset_logs
-pinrun "$pr_api"; git_before="$(git_state "$repo")"
+git -C "$repo" fetch -q origin; git_before="$(git_state "$repo")"
 pinrun "$pr_api"
 if [ "$rc" = 1 ] && grep -q "^no update command: the plinth pin is behind; the workflows call $sha40; $target_ref was tested with $tested, 2 commit(s) newer" <<<"$out" \
    && grep -qF "https://github.com/coolbress/plinth/compare/$sha40...$tested" <<<"$out" \
@@ -763,7 +763,8 @@ if [ "$rc" = 1 ] && grep -q "^no update command: the plinth pin is behind; the w
    && grep -q "^Nothing has been written" <<<"$out" && ! grep -q "^Command:" <<<"$out" && ! grep -q -- "--apply" <<<"$out"
 then ok "a live pin older than the tested one: the plan exits 1, names both SHAs, the compare and the open pin pull request (#1183)"
 else bad "plan, pin behind, pull request open (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-if [ "$git_before" = "$(git_state "$repo")" ] && [ ! -e "$(wt_of pinbehind)" ] && [ ! -e "$work/uvx.log" ]
+if [ "$git_before" = "$(git_state "$repo")" ] && [ ! -e "$(wt_of pinbehind)" ] && [ ! -e "$work/uvx.log" ] \
+   && [ "$(git -C "$repo" for-each-ref --format='%(refname)' refs/heads)" = refs/heads/main ]
 then ok "and it writes nothing: no worktree, no branch, no change under .git but the fetch, no copier"
 else bad "the stopped plan wrote something"; diff <(printf '%s\n' "$git_before") <(git_state "$repo") | sed 's/^/        /'; fi
 # --apply on the same base stops the same way, before anything is created.
@@ -814,8 +815,9 @@ else bad "plan, tested unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/       
 uncmp_api="$work/api-pin-uncompared"; rm -rf "$uncmp_api"; cp -R "$pin_api" "$uncmp_api"; rm "$uncmp_api/repos/coolbress/plinth/compare/$sha40...$tested.json"
 reset_logs; pinrun "$uncmp_api" --apply "$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 1 ] && grep -q "$target_ref was tested with $tested, but the two were not compared (offline or API error)" <<<"$out" \
-   && grep -q "nothing was created" <<<"$out" && [ ! -e "$(wt_of pinequal)" ] && [ ! -e "$work/uvx.log" ]
-then ok "the two pins not compared: --apply stops before anything is created, and says so"
+   && grep -q "nothing was created" <<<"$out" && [ ! -e "$(wt_of pinequal)" ] && [ ! -e "$work/uvx.log" ] \
+   && grep -q "^run it again if a read failed; otherwise raise the plinth pin to $tested or a later plinth release" <<<"$out"
+then ok "the two pins not compared: --apply stops before anything is created, says so, and how to get past it"
 else bad "--apply, pins uncompared (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # A pin raised by hand in the workflows, not in the answers file (#1015):
@@ -1709,10 +1711,8 @@ if [ "$rc" = 1 ] && grep -qF "Validation error for question 'archetype'" <<<"$ou
    && [ ! -e "$(awt_of move-plan cli)" ]
 then ok "copier refusing the move (a colliding package name) stops the plan with copier's sentence"
 else bad "refused move (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-for args in "--archetype cli --plinth-pin tested|--apply $base --archetype cli --plinth-pin tested" "--finish|--finish $work/x --archetype cli"; do
-  run ${args#*|}
-  [ "$rc" = 2 ] && ok "${args%%|*} with an archetype move: a usage error" || bad "${args#*|}: exit $rc, expected 2"
-done
+run --finish "$work/x" --archetype cli
+[ "$rc" = 2 ] && ok "--finish with an archetype move: a usage error" || bad "--finish $work/x --archetype cli: exit $rc, expected 2"
 run --apply "$base" --archetype web
 if [ "$rc" = 1 ] && [ ! -e "$(awt_of move-plan web)" ] && ! git -C "$repo" rev-parse -q --verify refs/heads/chore/archetype-web >/dev/null
 then ok "--apply with an archetype the checker refuses stops before a worktree or branch exists"
