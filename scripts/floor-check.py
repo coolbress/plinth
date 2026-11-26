@@ -461,7 +461,10 @@ def _agent() -> tuple[dict, ...]:
 
 
 PROJECT_DOCS = f"{DOCS}#what-the-static-checks-read-and-what-they-do-not"
-SERVICES = ("backend", "data-ml", "web")   # CONDITIONAL_ARCHETYPES, which is defined above
+# The archetypes come from the constants the run reads, never a list written
+# here: the template owns the vocabulary (tests/archetype-single-source.sh).
+SERVICES = CONDITIONAL_ARCHETYPES
+RELEASING = tuple(RELEASES)
 RENDER_FIX = "the fix line under this item says what to set"
 
 
@@ -510,7 +513,7 @@ def _project() -> tuple[dict, ...]:
                         "bad": "MODEL_CARD.md missing: a release publishes the model without saying what it was trained on",
                         "update": "  plinth-template {since} adds it with the training run: copier update"}),
         check("FC-C08", "the release workflow present", states=("pass", "warn", "info"), handoff="agent",
-              docs=PROJECT_DOCS, archetypes=("cli", "library", "backend", "data-ml"),
+              docs=PROJECT_DOCS, archetypes=RELEASING,
               fix="copier update, then follow docs/how-to/publish-a-release.md",
               messages={"good": "{workflow} present",
                         "bad": "{workflow} missing: a version tag does not publish {what}",
@@ -518,13 +521,13 @@ def _project() -> tuple[dict, ...]:
                                   "copier update, then follow that page",
                         "gitlab": "{workflow} not required: on GitLab the template renders no release workflow"}),
         check("FC-C09", "the release workflow runs on a pushed tag only", states=("pass", "warn"), handoff="agent",
-              docs=PROJECT_DOCS, hosts=("github",), archetypes=("cli", "library", "backend", "data-ml"),
+              docs=PROJECT_DOCS, hosts=("github",), archetypes=RELEASING,
               fix="make `on:` a push of tags and nothing else",
               messages={"good": "{workflow} runs on a pushed tag only",
                         "bad": "{workflow} is not read as tag-only (first line not read: {seen}): "
                                "a branch push or a pull request could publish"}),
         check("FC-C10", "the release workflow reads no stored secret", states=("pass", "warn"), handoff="agent",
-              docs=PROJECT_DOCS, hosts=("github",), archetypes=("cli", "library", "backend", "data-ml"),
+              docs=PROJECT_DOCS, hosts=("github",), archetypes=RELEASING,
               fix="publish with the run's own token or Trusted Publishing, and delete the stored secret",
               messages={"good": "{workflow} reads no stored secret",
                         "bad": "{workflow} reads a stored secret ({secrets}): {instead}, and a stored token can be "
