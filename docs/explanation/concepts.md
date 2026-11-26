@@ -224,7 +224,7 @@ under names that look alike:
 | Review | Who runs it | Sees the conversation that wrote the change | The default |
 | --- | --- | --- | --- |
 | The required checks (`ci / <job>`) | CI, on every pull request | No: each runs its command | Yes: the ruleset requires them |
-| The fresh-context review | The agent, before the pull request: a new subagent (not a fork of the session) or a new session, given only the diff, the issue's acceptance criteria and the Code Review Rules | No: it is independent of the session that wrote the change | Yes, from the template's `AGENTS.md`; guidance, so the agent may skip it: ask which review ran |
+| The fresh-context review | The agent, before the pull request: a new subagent (not a fork of the session) or a new session, given only the diff, the issue's acceptance criteria and the Code Review Rules | No: it is independent of the session that wrote the change | Yes, in the template's `AGENTS.md` from plinth-template v1.38.0; guidance, so the agent may skip it: ask which review ran |
 | `code-review`, the skill `/implement` calls, and `/code-review`, a Claude Code built-in that reviews the diff for bugs at a chosen effort | The session that wrote the change, which briefs the review and sums it up | Yes: same session, not independent | No |
 | `third-party / review` | A reviewer outside the session (the Codex reviewer) comments on the pull request; the CI check records its accepted signal on the head | No | No: optional, off until the reviewer is configured |
 
