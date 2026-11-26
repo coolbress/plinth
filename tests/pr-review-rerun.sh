@@ -15,7 +15,7 @@ set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 rerun="$root/scripts/review-rerun.py"
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d)" || { echo "pr-review-rerun: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 BOT='chatgpt-codex-connector[bot]'

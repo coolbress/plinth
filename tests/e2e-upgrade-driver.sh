@@ -12,7 +12,7 @@ set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 real_git="$(command -v git)"
-work="$(cd "$(mktemp -d)" && pwd -P)"
+work="$(mktemp -d)" && work="$(cd "$work" && pwd -P)" || { echo "e2e-upgrade-driver: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/tmp"
 export TMPDIR="$work/tmp"

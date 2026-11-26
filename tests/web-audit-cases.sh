@@ -22,7 +22,7 @@ set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/web-audit.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/web-audit.XXXXXX")" || { echo "web-audit-cases: could not make a temp folder" >&2; exit 1; }
 srv=""
 trap '[ -z "$srv" ] || { kill "$srv" 2>/dev/null; wait "$srv" 2>/dev/null; }; rm -rf "$tmp"' EXIT
 
