@@ -22,10 +22,14 @@ ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 
 # A cap that cannot be read stops the test: an empty one would hold nothing.
+# So does a name set twice: a raise by an added line loses no line, and
+# ci / diff-size lists only a test file that lost lines.
 cap() {
   local v
-  v="$(sed -n "s/^$1 = \([0-9][0-9]*\)\$/\1/p" "$root/tests/size_caps.py" 2>/dev/null | head -n 1)"
+  v="$(sed -n "s/^$1 = \([0-9][0-9]*\)\$/\1/p" "$root/tests/size_caps.py" 2>/dev/null)"
   [ -n "$v" ] || { echo >&2 "  FAIL  no '$1 = <number>' line in $root/tests/size_caps.py"; exit 1; }
+  [ "$(printf '%s\n' "$v" | wc -l | tr -d ' ')" = 1 ] \
+    || { echo >&2 "  FAIL  $1 is set more than once in $root/tests/size_caps.py: change its one line"; exit 1; }
   printf '%s\n' "$v"
 }
 max_lines="$(cap SKILL_MAX_LINES)" || exit 1

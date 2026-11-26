@@ -54,6 +54,11 @@ d="$(fixture 50 2000 cap-missing)"
 grep -v '^AGENTS_MAX_BYTES' "$d/tests/size_caps.py" > "$d/caps" && mv "$d/caps" "$d/tests/size_caps.py"
 expect fail "a cap missing from tests/size_caps.py: not read as no limit" "$d" "AGENTS_MAX_BYTES"
 
+# A raise by an added line loses no line, so ci / diff-size would not list it.
+d="$(fixture 120 2000 cap-twice)"
+{ echo 'AGENTS_MAX_LINES = 140'; cat "$root/tests/size_caps.py"; } > "$d/tests/size_caps.py"
+expect fail "a cap set twice (a raise by an added line): not read" "$d" "AGENTS_MAX_LINES"
+
 d="$(fixture 50 2000 skill-over)"
 python3 -c 'import sys; open(sys.argv[1], "w").write("---\nname: one\n---\n" + "x\n" * 501)' "$d/skills/one/SKILL.md"
 expect fail "a skill over 500 lines still fails (the skill caps as they were)" "$d" "the limits are 500 lines and 20000 bytes"
