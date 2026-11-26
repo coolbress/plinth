@@ -962,8 +962,8 @@ jobs:
               emit(f"- {line}")
               if line.startswith("not yet confirmed: "):
                   print("::warning::" + line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
-              else:
-                  print(line)
+              else:   # a path with a line break must not start a command
+                  print(" ".join(line.split("\n")).replace("\r", " "))
 
           def fails(what, next_step):
               say(f"fail: {what}")

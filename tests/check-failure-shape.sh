@@ -557,6 +557,16 @@ floor "'fail: ' + 'y' * 400 + '; run /plinth:floor-check, which writes the fix\n
 grep -qE '^::error title=ci / floor-check::floor-check: 1 FAIL, the first: y+\.\.\. — run /plinth:floor-check here' "$rt/out" && shape "a 400-character FAIL" "$rt/out" "$rc" 1 \
   || bad "a long FAIL is not cut with the next step kept" "$(grep '^::' "$rt/out")"
 
+# A path with a line break, which git's -z list can carry: the approval
+# step's fail line must not start a command (the #1100 review).
+newrt; printf '[{"path": "x\\n::stop-commands::zz", "why": "a test file moved out of the test paths"}]\n' > "$rt/changes.json"
+# A fake gh: no review, so the step reaches the line that names the path.
+mkdir -p "$work/noreviews"; printf '#!/usr/bin/env bash\nexit 0\n' > "$work/noreviews/gh"; chmod +x "$work/noreviews/gh"
+(cd "$gr" && env PATH="$work/noreviews:$PATH" RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" MEASURE=success EVENT=pull_request REPO=o/r RUN_ID=1 NUMBER=7 HEAD_SHA=1111111111111111111111111111111111111111 HEAD_REF=x HEAD_REPO=a/fork CHANGES_FILE="$rt/changes.json" python3 "$work/ask.py") > "$rt/out" 2>&1; rc=$?
+if grep -q 'needs admin approval for x' "$rt/out" && ! grep -q '^::stop-commands::' "$rt/out" && [ "$(grep -c '^::error' "$rt/out")" = 1 ]; then ok "a path with a line break in the approval's fail line starts no command"
+else bad "a path with a line break started a command" "$(cat "$rt/out")"; fi
+shape "a fork's change to the checks with no approval" "$rt/out" "$rc" 1
+
 echo "-- not yet confirmed: one fact per sentence (#1156)"
 # More of the lines: the changed-lines step itself, run with uv and git
 # failing (no pull request; pytest stopped; coverage recorded nothing), and

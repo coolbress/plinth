@@ -72,7 +72,7 @@ if [ "$rc" != 0 ]; then
     *"more than 100"*) next="Reword the description so it closes fewer issues" ;;
     *) next="Re-run this job" ;;
   esac
-  if [ -n "${MESSAGE_FILE:-}" ]; then printf '%s\t%s\n' "#$PR's description: $first" "$(printf '%s' "${next:0:1}" | tr '[:upper:]' '[:lower:]')${next:1}" > "$MESSAGE_FILE"; exit 1; fi
+  if [ -n "${MESSAGE_FILE:-}" ]; then printf '%s\t%s\n' "#$PR's description: ${first//$'\t'/ }" "$(printf '%s' "${next:0:1}" | tr '[:upper:]' '[:lower:]')${next:1}" > "$MESSAGE_FILE"; exit 1; fi
   # At most 300 characters: what is cut is the first FAIL, never the action and link.
   lead="#$PR's description: "; tail=". $next: $HOW"; room=$((300 - ${#lead} - ${#tail}))
   [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."

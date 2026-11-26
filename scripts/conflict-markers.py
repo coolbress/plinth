@@ -99,7 +99,7 @@ def stopped(what, next_step):
     if path:
         print(f"{what}; {next_step}")
         with open(path, "w", encoding="utf-8") as f:
-            f.write(f"{what}\t{next_step}\n")
+            f.write(" ".join(what.split()) + "\t" + next_step + "\n")   # one line, its only tab the separator
     else:
         print(f"::error::{what}. {next_step[:1].upper()}{next_step[1:]}: {HOW}")
 

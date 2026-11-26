@@ -741,7 +741,7 @@ pr-title:
       try:
           said = field_lines(body, "MR")
       except Exception as e:  # never the closing check's verdict
-          said = [f"not yet confirmed: MR description, the fields were not read ({type(e).__name__}); run a new pipeline: {HOW}"]
+          said = [f"not yet confirmed: MR description's fields. Why: they could not be read ({type(e).__name__}). What confirms it: a new pipeline ({HOW})."]
       # A bare #N or !N above the highest of its kind (#826): never a red. This
       # merge request is a number GitLab has, if its list does not show it yet.
       highest = {}
