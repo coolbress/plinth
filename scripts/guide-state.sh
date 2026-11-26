@@ -649,7 +649,11 @@ if [ -n "$run_ok" ] && [ -n "$run" ]; then
     main_undo="$(sed -nE 's/.* \(#([0-9]+)\)$/\1/p' <<<"$main_undo_title")"
     case "$main_undo_title" in 'Revert "'*|revert:*|revert\(*) main_undo="" ;; esac
     [ -z "$main_undo" ] || [ "$(head -1 <<<"$merged" | cut -f1)" = "$main_undo" ] || main_undo=""
-    [ -z "$main_undo" ] || ! awk -F '\t' -v n="$main_undo" 'index($6, "Revert \"") == 1 && index($6, "(#" n ")")' <<<"$prs" | grep -q . || main_undo=""
+    # An open revert of #N: GitHub titles it Revert "<#N's title>", with no
+    # (#N) inside the quotes (ci / pr-title refuses one there); a title that
+    # does carry (#N) counts too (#1196 review).
+    [ -z "$main_undo" ] || ! REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
+      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { found = 1 } END { exit !found }' <<<"$prs" || main_undo=""
   fi
 fi
 

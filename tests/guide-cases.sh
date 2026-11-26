@@ -1748,6 +1748,13 @@ put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals
 redrun 'feat: totals (#9)' > "$d/runs.json"
 put "$d/open.json" "$(pr 12 'Revert \"feat: totals (#9)\"' false run)"
 state "a revert of the breaking merge is open: its route, no second undo" "$d" "!undo pull request" "command: /run"
+# Review on #1196: GitHub's own revert title carries no (#N) inside the
+# quotes (ci / pr-title refuses one there): Revert "<#N's title>" counts too.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false run)"
+state "an open revert titled as GitHub writes it, no (#N): no second undo" "$d" "!undo pull request" "command: /run"
+# A revert of another pull request does not stand for #9's.
+put "$d/open.json" "$(pr 12 'Revert \"feat: other\"' false run)"
+state "an open revert of another pull request: still undo #9" "$d" "command: $undo_cmd"
 out="$(MOCK_DIR="$work/undo-cli" "$script" "$work/undo-cli" 2>&1)"
 grep -qF "read its log first (gh run view 31 --log-failed)" <<<"$out" && ok "  the undo note says to read the log first" || bad "the undo note does not say to read the log first"
 
