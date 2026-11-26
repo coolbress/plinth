@@ -424,7 +424,7 @@ repo_was="$repo"; bare_was="$BARE"
 api_q="$work/api-q"; tag_names "$api_q" "$target_sha"
 { printf 'plinth_sha:\n  type: str\n  default: "%s"\n\n' "$sha40"
   printf 'description:\n  type: str\n  help: One line saying what this project is.\n  default: ""\n\n'
-  printf 'records_language:\n  type: str\n  help: |\n    The language records are written in,\n    named in English. Example Korean.\n  default: English\n\n'
+  printf 'records_language:\n  type: str\n  help: |\n    The language records are written in,\n    named in English. Example Korean.\n\n    A second paragraph.\n  default: English\n\n'
   printf 'hosting:\n  type: str\n  when: "{{ archetype == '"'web'"' }}"\n  help: Where will your app run?\n  default: render\n\n'
   printf 'contact:\n  type: str\n  help: Where reports go.\n'
 } | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
@@ -440,7 +440,7 @@ q_run() { # <env...> -- <args...>: the script in $repo
 fixture questions
 q_run MOCK_QUESTIONS="$work/questions.txt" --
 asked="$(awk 'index($0, "New questions") == 1 { f = 1; next } f && /^[^ ]/ { exit } f' <<<"$out")"
-want_asked="$(printf '%s\n' "  records_language, default English" "    The language records are written in," "    named in English. Example Korean." \
+want_asked="$(printf '%s\n' "  records_language, default English" "    The language records are written in," "    named in English. Example Korean." "    " "    A second paragraph." \
   "  description, default ''" "    One line saying what this project is.")"
 if [ "$rc" = 0 ] && [ "$asked" = "$want_asked" ] && grep -qF -- "with --answer <name> <value> for each new question" <<<"$out"
 then ok "the plan names each new question that applies, with its default and its help, and leaves out one whose when: is false"

@@ -2631,7 +2631,8 @@ def print_question_help(names: list[str], network: bool) -> int:
     """--print-question-help (#1185): for each named question, its name on a
     line, then its help from the copier.yml of the tag this plinth targets
     (read at the commit new-project.sh pins), each line indented by two; a
-    question with no help there is followed by `  (no help in copier.yml)`.
+    question with no help there is followed by `  (no help in copier.yml)`;
+    a blank line of help is printed as two spaces, so only a name starts a line.
     Exit 0; exit 1 with the reason on stderr when copier.yml is not read."""
     pin = new_project_pin()
     if not pin:
@@ -2651,8 +2652,9 @@ def print_question_help(names: list[str], network: bool) -> int:
         return 1
     for name in names:
         print(name)
+        # A blank line of the help stays indented: only a name starts a line.
         for line in question_help(text, name) or ["(no help in copier.yml)"]:
-            print(f"  {line}" if line else "")
+            print(f"  {line}".rstrip() or "  ")
     return 0
 
 
