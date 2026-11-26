@@ -1,9 +1,10 @@
 # How to give the agent a token that cannot change the checks
 
 Before this page: the first pull request of step 1 in
-[Run a project](run-a-project.md#1-start), merged. After it:
-[the agent's own account](give-the-agent-its-own-account.md), whose step 6
-repeats this page's step 5 for your own login, then
+[Run a project](run-a-project.md#1-start), merged. This page is the one
+step before step 2. After it, strongly recommended but not in the way of
+step 2: [the agent's own account](give-the-agent-its-own-account.md), whose
+step 6 repeats this page's step 5 for your own login, then
 [the four things by hand](set-four-things-by-hand.md).
 
 The browser login from Getting started holds `workflow`, and so does the one

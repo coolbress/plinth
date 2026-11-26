@@ -245,10 +245,11 @@ print_map() {
   case "$first_merged" in yes) m="✓" ;; no) m="·" ;; *) m="" ;; esac
   [ "$where_cell" = "$(sed -n 1p <<<"$first")" ] && m="·"
   map_line "$m" 1 "${n#*; }" "$(cmds_of "$(sed -n 4p <<<"$cells")")" "$(sed -n 1p <<<"$cells")"
-  # The three things before step 2, named by the first merge row's Next
-  # action and paged by its Tool cell, in the same order.
+  # The three things after the first merge, named by its row's Next action
+  # (the token before step 2, then the two recommended) and paged by its
+  # Tool cell, in the same order.
   cells="$(row "First pull request merged")" || exit 1
-  names="$(sed -n 2p <<<"$cells")"; names="${names#*: }"
+  names="$(sed -n 2p <<<"$cells")"; names="${names#*: }"; names="${names%%; *}, ${names#*recommended next: }"
   pages="$(sed -n 3p <<<"$cells")"; pages="$(grep -oE '`[^`]+`' <<<"${pages%%; *}" | tr -d '`')"
   [ "$(awk -F ', ' '{ print NF }' <<<"$names")" = 3 ] && [ "$(grep -c . <<<"$pages")" = 3 ] ||
     { echo "guide-state: the arsenal's row 'First pull request merged' no longer names three things and three pages" >&2; exit 1; }
@@ -257,7 +258,7 @@ print_map() {
     page="$(sed -n "${i}p" <<<"$pages")"; [ "$i" = 1 ] || page="$dir_of/$page"
     case "$i" in 1) m="$token_mark" ;; *) m="·" ;; esac
     if [ "$i" = 1 ]; then map_line "$m" 1 "$(awk -F ', ' -v i="$i" '{ print $i }' <<<"$names")" "$page" "$(sed -n 1p <<<"$cells")"
-    else map_line "$m" 1 "$(awk -F ', ' -v i="$i" '{ print $i }' <<<"$names")" "$page" "-"; fi
+    else map_line "$m" 1 "$(awk -F ', ' -v i="$i" '{ print $i }' <<<"$names") (recommended)" "$page" "-"; fi
   done
   echo "  Each ticket (repeat)"
   for i in 2 3 4 5 6; do r="$(step_row "$i")"; [ -n "$r" ] || { echo "guide-state: the arsenal's table has no row for step $i" >&2; exit 1; }; map_row "" "$i" "$r"; done
@@ -647,6 +648,19 @@ fi
 # since a tag is of the merged pull requests read above; when that read was
 # cut before the tag, the line says so. With no tag, the count is the true
 # total. Its own read: failing, it says not read and nothing else moves.
+# The token step's reach (#922), read before the route (#1078): after the
+# first merge only the token stands before step 2, so with one merge the
+# route turns on it. Past the first merge, whatever the route, the line
+# below the route says it. The reach is read as new-project.sh reads it at
+# creation, by scripts/lib/admin-reach.sh: not from the account's role
+# alone, which stays admin for the owner after the token step. admin: not
+# done; none: done; read, or a reach that could not be read: not verified,
+# with why. Before the first merge the step is still ahead: no read.
+reach=""
+if [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; then
+  in_repo_gh() { (cd "$top" && gh "$@"); }
+  reach="$(admin_reach in_repo_gh "$repo" "?" "?")"
+fi
 release_due=""; release_line=""
 if [ "$archetype" != web ]; then
   if [ -z "$history_ok" ]; then
@@ -1116,8 +1130,9 @@ elif [ -n "$fallback" ]; then
   before="/clear"; say "A ticket ready" "/implement #$fallback"
 elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [ -n "$n" ]; then
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
-elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
-  say "First pull request merged" "none: three pages to follow, in order (the tool cell)"; pages_named=yes
+elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ] && [ "$reach" != none ]; then
+  # Only the token blocks step 2 (#1078); the other two pages are recommended.
+  say "First pull request merged" "none: the token page first (the tool cell's first page); the other two pages are recommended next"; pages_named=yes
 elif [ -n "$bot_prs" ]; then
   note="then Dependabot's pull requests ($(field 1 <<<"$bot_prs" | sed 's/^/#/' | paste -sd ' ' -)), one at a time, each merged on green on the person's word"
   say "Between pieces of work" "/plinth:floor-check"
@@ -1134,30 +1149,34 @@ elif [ -n "$release_due" ] && [ -z "$main_red" ]; then
 else
   say "An idea in your own words" "/grilling"
 fi
-# The token step (#922): "First pull request merged" is the route only while
-# nothing else is open, so past the first merge, whatever the route, a line
-# of its own names its three pages while the credential gh uses in this
-# session reaches the repository's Administration: the agent can still
-# change the checks. The reach is read as new-project.sh reads it at creation,
-# by scripts/lib/admin-reach.sh: not from the account's role alone, which
-# stays admin for the owner after the token step. admin: not done; none: no
-# line; read, or a reach that could not be read: not verified, with why.
-# Before the first merge the step is still ahead, and on its own row the pages
-# are already named: no read, no line. The map's token mark (#1087) is that
-# read's: ✓ none, ✗ admin, no mark for read or unknown; · before the first
-# merge.
+# The token step (#922), from the reach read above: past the first merge, a
+# line of its own names the token page, and the other two as recommended,
+# unless the route is the first merge's own row, which already names them.
+# The map's token mark (#1087) is that read's: ✓ none, ✗ admin, no mark for
+# read or unknown; · before the first merge.
 [ "$first_merged" = yes ] || token_mark="·"
 if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ -z "${pages_named:-}" ]; then
   cells="$(row "First pull request merged")" || exit 1
   pages="$(sed -n 3p <<<"$cells")"; pages="${pages%%; *}"; step1="$(sed -n 1p <<<"$cells")"
-  in_repo_gh() { (cd "$top" && gh "$@"); }
-  reach="$(admin_reach in_repo_gh "$repo" "?" "?")"
+  token_page="${pages%%, *}"; rest_pages="${pages#*, }"; rest_pages="${rest_pages% there}, in the same folder"
   case "$reach" in
     none) token_mark="✓" ;;
-    admin) token_open=yes; token_mark="✗"; echo "token step: not done: the credential gh uses in this session reaches the Administration of $repo, so the agent can still change the checks; before going on, follow the three pages of $step1, in order: $pages" ;;
-    read) echo "token step: not verified: the credential gh uses in this session reads the Administration of $repo, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
-    *) echo "token step: not verified: ${reach#unknown: }; the agent's token should have Administration at No access, as the three pages of $step1 say, in order: $pages" ;;
+    admin) token_open=yes; token_mark="✗"; echo "token step: not done: the credential gh uses in this session reaches the Administration of $repo, so the agent can still change the checks; before going on, finish the token page of $step1, $token_page; then, recommended: $rest_pages" ;;
+    read) echo "token step: not verified: the credential gh uses in this session reads the Administration of $repo, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the token page of $step1 says, $token_page; then, recommended: $rest_pages" ;;
+    *) echo "token step: not verified: ${reach#unknown: }; the agent's token should have Administration at No access, as the token page of $step1 says, $token_page; then, recommended: $rest_pages" ;;
   esac
+fi
+# The token step done and one merge, so the route is step 2 (#1078): the
+# account and the four things are one "then also" line, not the command. A
+# web project's line also names what waits for the first deploy, with the
+# section of the four-things page that carries each, read 2026-11-26.
+if [ "$reach" = none ] && [ "$people_merged" -eq 1 ] && [ -z "$past_first" ] && [ "$said_cmd" = /grilling ]; then
+  also="then also: recommended, not in the way of step 2, from $step1: $rest_pages"
+  if [ "$archetype" = web ]; then
+    section="$(dirname "$(tr -d '`' <<<"$token_page")")/set-four-things-by-hand.md#after-the-first-deploy"
+    also="$also; after the first deploy, from $section: the host's deploy-failure notification, an uptime monitor and an error tracker; one copy of the data off the host, in a place the agent cannot reach, at least weekly (a Render export or pg_dump: Render Hobby restores only the past 3 days); a restore rehearsal that counts one table's rows before and after; and the bill to expect, about US\$13 a month on Render (a US\$7 web service, a US\$6 Postgres, 5 GB of bandwidth included, then US\$0.15 a GB), read on the Billing page after the first month, with usage credits billed at API rates once turned on, so set a monthly limit first"
+  fi
+  echo "$also"
 fi
 # The template behind (#904): step 9's line names the update; the step the
 # project is at stays the one above.

@@ -61,12 +61,19 @@ September, and the next payment dates in order."*
 - **If you forget:** a boundary once it exists: the required checks and the
   ruleset are on GitHub, beyond an agent without administration.
 
-Then, before step 2, in this order; until each is done, its protection is
+Then, before step 2, only [the agent's token](give-the-agent-a-token.md),
+ending with every other credential off the machine: until it is done, the
+agent can still change the checks. After it, strongly recommended but not in
+the way of step 2, in this order; until each is done, its protection is
 missing:
 
-1. [The agent's token](give-the-agent-a-token.md) (the default), ending with every other credential off the machine.
-2. Then [its own account](give-the-agent-its-own-account.md) (strongly recommended), whose step 6 removes your own login, the token from 1 included.
-3. [The four things by hand](set-four-things-by-hand.md).
+1. [Its own account](give-the-agent-its-own-account.md), whose step 6 removes your own login, the token included.
+2. [The four things by hand](set-four-things-by-hand.md).
+
+An uptime monitor and an error tracker wait for the first deploy: the
+four-things page's [after the first
+deploy](set-four-things-by-hand.md#after-the-first-deploy) names them, with
+the data's off-host copy and the bill to expect.
 
 A `web` project also needs a place to run:
 [choose where a web app runs](choose-where-a-web-app-runs.md). Render is the
