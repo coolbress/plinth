@@ -1,0 +1,74 @@
+# Every id scripts/floor-check.py has registered (#1103), with the name it had when it was
+# added, for reading only. Lines are only added: tests/floor-check-registry.sh fails on an id
+# that left REGISTRY without staying as an alias, here or in the latest release. --write adds new ones.
+FC-A01 LICENSE present
+FC-A02 README.md present
+FC-A03 CHANGELOG.md present
+FC-A04 AGENTS.md present
+FC-A05 CONTRIBUTING.md present
+FC-A06 CONTRIBUTING.md says how to build and test
+FC-A07 CONTRIBUTING.md says how to land a change
+FC-A08 CONTRIBUTING.md is not a stub
+FC-A09 SECURITY.md present or inherited
+FC-A10 issue templates present or inherited
+FC-A11 a local ISSUE_TEMPLATE replaces the owner's set
+FC-A12 a Markdown issue template has a name
+FC-A13 an issue form has name, description and body
+FC-A14 an issue form has no unquoted YAML alias
+FC-A15 an issue form labels its issues
+FC-A16 an issue form's body is a list
+FC-A17 at least one issue template GitHub can offer
+FC-A18 Dependabot configured
+FC-A19 Dependabot does not run on GitLab
+FC-A20 GitLab issue templates present
+FC-A21 GitLab merge request templates present
+FC-A22 a GitLab issue template labels its issues
+FC-A23 .gitattributes present
+FC-A24 .gitattributes normalises line endings
+FC-A25 .gitattributes folds uv.lock in diffs
+FC-A26 .gitattributes needs no local git config
+FC-A27 relative links in the Markdown documents resolve
+FC-A28 no dotenv file is tracked
+FC-B01 .claude/settings.json present
+FC-B02 .claude/settings.json is valid JSON
+FC-B03 .claude/settings.json denies force push
+FC-B04 .claude/settings.json denies rm -rf
+FC-B05 .claude/settings.json denies gh auth token
+FC-B06 .claude/settings.json denies .env reads
+FC-B07 .claude/settings.json denies `. ./.env`
+FC-B08 .claude/settings.json denies `source .env`
+FC-B09 .claude/settings.json denies `cat .env`
+FC-B10 .claude/settings.json denies `grep KEY .env`
+FC-B11 .claude/settings.json denies gh config reads
+FC-B12 .claude/settings.json denies glab auth status --show-token
+FC-B13 .claude/settings.json denies glab auth status -t
+FC-B14 .claude/settings.json denies glab config get token
+FC-B15 .claude/settings.json denies glab config reads
+FC-C01 pyproject.toml present
+FC-C02 uv.lock committed
+FC-C03 the archetype is known
+FC-C04 read as a JavaScript or TypeScript project
+FC-C05 the Python items do not apply to a JavaScript project
+FC-C06 a Bun lockfile is not the only lockfile
+FC-C07 MODEL_CARD.md present
+FC-C08 the release workflow present
+FC-C09 the release workflow runs on a pushed tag only
+FC-C10 the release workflow reads no stored secret
+FC-C11 the release uploads no pickle
+FC-C12 render.yaml present
+FC-C13 render.yaml is read
+FC-C14 a Render web service has a health check
+FC-C15 a Render web service deploys after the checks pass
+FC-C16 a Render database is on a paid plan
+FC-C17 no secret-named Render variable carries a literal value
+FC-C18 a web app hosted elsewhere
+FC-C19 Dockerfile present
+FC-C20 every base image is pinned by digest
+FC-C21 the image does not run as root
+FC-C22 the image installs from the lockfile
+FC-C23 the image's CMD runs the package
+FC-C24 .dockerignore present
+FC-C25 .dockerignore keeps .git, .env and .venv out
+FC-C26 the service logs JSON
+FC-C27 .env.example present
+FC-C28 .env.example documents every variable the code reads

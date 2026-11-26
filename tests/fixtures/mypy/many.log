@@ -1,0 +1,13 @@
+src/m12.py:2: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:4: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:6: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:8: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:10: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:12: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:14: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:16: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:18: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:20: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:22: error: Incompatible return value type (got "int", expected "str")  [return-value]
+src/m12.py:24: error: Incompatible return value type (got "int", expected "str")  [return-value]
+Found 12 errors in 1 file (checked 1 source file)

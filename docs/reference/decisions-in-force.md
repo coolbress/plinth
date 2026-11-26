@@ -104,7 +104,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Shared inline Python moves into scripts without splitting the workflow into several callers. 2026-11-25, #1127 (decided; not built yet: #1127)
 - The code-growth sensor is report-only. 2026-10-28, #705
 - GitLab keeps the same nine job names as GitHub. 2026-10-13, #353
-- The GitLab pipeline is supported and skills are GitHub-first: what exists for GitLab keeps working, and a new feature reaches GitLab when a GitLab user is recorded. 2026-11-25, #1137 (decided; not built yet: #1137)
+- The GitLab pipeline is supported and skills are GitHub-first: what exists for GitLab keeps working, and a new feature reaches GitLab when a GitLab user is recorded. 2026-11-25, #1137
 
 ## Releases and pins
 
@@ -127,6 +127,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - mattpocock-skills installs a narrowed set; the listed skills install as `mattpocock-skills-extra@plinth`. 2026-10-19, #593
 - The design default is the pinned taste-skill (`design-taste-frontend`); a raise is measured first, is its own pull request, and its note names `claude plugin update taste-skill@plinth`. 2026-11-24, #1082 (decided; not built yet: #1082)
 - `make-release.sh` run 1 stops when the pinned template's `AGENTS.md`, `CLAUDE.md` or `.claude/` changed, unless the why-file records an eval-suite run; plinth's own skills are outside this guard. 2026-10-28, #700
+- When a release owes both the eval suite and the smoke run, one `scripts/eval-suite.sh --release` run on the release candidate serves both, its link in the release pull request's description and the GitHub Release; the full suite is still required when the template's `AGENTS.md` or `.claude/` changed, with no waiver and no check-name change. 2026-11-25, #1134 (decided; not built yet: #1134)
 - The eval suite is a script around `claude -p`, not `claude plugin eval`. 2026-10-25, #647
 - `template-update` never moves the plinth pin by itself; a person chooses. 2026-10-13, #511
 - floor-check WARNs, never FAILs, when the plinth pins in `ci.yml` and `label.yml` disagree; nothing requires them to move together. 2026-10-09, #447

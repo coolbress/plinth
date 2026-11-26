@@ -170,6 +170,18 @@ printf '%s\n' 'Copyright (c) 2026 tester. All rights reserved.' '' \
 out="$(python3 "$checker" --root "$pr" --no-network 2>&1)"
 if grep -q '^  PASS  LICENSE present' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "a proprietary notice passes the LICENSE item"
 else bad "a proprietary notice does not pass the LICENSE item"; grep -E 'LICENSE|FAIL' <<<"$out" | sed 's/^/        /'; fi
+# Three failing states no other case reached (#1103: every state a check
+# declares is reached by a fixture).
+plant "uv.lock not folded in diffs is caught" "printf '* text=auto eol=lf\n' > .gitattributes" "uv.lock is not marked linguist-generated"
+plant "a .gitattributes driver that needs local git config is caught" \
+  "printf '* text=auto eol=lf\nuv.lock linguist-generated\n*.py diff=mine\n' > .gitattributes" "rules need local git config"
+plant ".claude/settings.json that is not JSON is caught" "printf '{' > .claude/settings.json" "settings.json is not valid JSON"
+# The service archetype's files, each failing state once (#1103).
+plant "a missing Dockerfile is caught" "rm Dockerfile" "Dockerfile missing"
+plant "an image not built from the lockfile is caught" "sed -i.bak 's/uv sync --locked/uv sync/' Dockerfile" "does not use .uv sync --locked."
+plant "a missing .dockerignore is caught" "rm .dockerignore" ".dockerignore missing"
+plant "a .dockerignore that lets .venv in is caught" "printf '.git\n.env\n' > .dockerignore" ".dockerignore lacks \\['.venv'\\]"
+plant "a missing .env.example is caught" "rm .env.example" ".env.example missing"
 plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
 plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"
 # The image check is the service archetypes' own required check (#127): the job

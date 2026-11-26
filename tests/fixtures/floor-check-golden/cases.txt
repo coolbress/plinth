@@ -1899,6 +1899,566 @@ floor check: root=$WORK/case project=.
   PASS  feature.yml body is a list
   PASS  task.yml has name, description, body
   PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  FAIL  uv.lock is not marked linguist-generated: review reads machine-written lines
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: uv.lock is not marked linguist-generated: review reads machine-written lines; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  FAIL  .gitattributes rules need local git config: ['*.py: diff=mine']
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: .gitattributes rules need local git config: ['*.py: diff=mine']; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  FAIL  .claude/settings.json is not valid JSON
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: .claude/settings.json is not valid JSON; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  FAIL  Dockerfile missing
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: Dockerfile missing; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  FAIL  the image does not use `uv sync --locked`: it can drift from the repository
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: the image does not use `uv sync --locked`: it can drift from the repository; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  FAIL  .dockerignore missing
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: .dockerignore missing; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  FAIL  .dockerignore lacks ['.venv']: they ship inside the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: .dockerignore lacks ['.venv']: they ship inside the image; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.51.0)
+  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.51.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  FAIL  .env.example missing
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: .env.example missing; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/case --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/case project=.
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
   FAIL  task.yml has no labels: those issues never sort in a list
   PASS  task.yml body is a list
   PASS  at least one template GitHub can offer (local)
