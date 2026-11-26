@@ -8,7 +8,7 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/eval-suite-probe-cases.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/eval-suite-probe-cases.XXXXXX")" || { echo "eval-suite-probe-cases: could not make a temp folder" >&2; exit 1; }
 tmp="$(cd "$tmp" && pwd -P)"
 trap '[ -n "${KEEP:-}" ] || { chmod -R u+rwx "$tmp" 2>/dev/null; rm -rf "$tmp"; }' EXIT
 
@@ -123,7 +123,7 @@ fixture="$(sed -nE 's|^cp -R "(.*)/\." \.$|\1|p' "$plugin/probe-evals/probe/scaf
 marker="$(grep '^Probe marker:' "$fixture/AGENTS.md")"
 cases=""
 for arm in with without; do
-  k="$(mktemp -d "$TMPDIR/e-XXXXXX")"
+  k="$(mktemp -d "$TMPDIR/e-XXXXXX")" || { echo "eval-suite-probe-cases: could not make a temp folder" >&2; exit 1; }
   mkdir -p "$k/out" "$k/sealed"
   p=""; [ "$arm" = with ] && [ -f "$plugin/.claude-plugin/plugin.json" ] && p=',{"name":"plinth"}'
   s=""; [ -n "$p" ] && s=',"plinth:arsenal"'

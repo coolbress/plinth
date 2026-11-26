@@ -30,7 +30,7 @@ set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 command -v uv >/dev/null || { echo "  FAIL  uv is not installed"; exit 1; }
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/eval-suite-cases.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/eval-suite-cases.XXXXXX")" || { echo "eval-suite-cases: could not make a temp folder" >&2; exit 1; }
 tmp="$(cd "$tmp" && pwd -P)"
 trap '[ -n "${KEEP:-}" ] || rm -rf "$tmp"' EXIT
 

@@ -76,8 +76,14 @@ jobs:
       - name: Every test file is wired
         run: ./tests/all-tests-are-wired.sh
 
+      - name: A failed mktemp stops a script and removes nothing it did not make
+        run: ./tests/mktemp-failure-cases.sh
+
       - name: Shipped skills within size, with no issue numbers
         run: ./tests/skill-size.sh
+
+      - name: The size test fails AGENTS.md over its caps, and a cap it cannot read
+        run: ./tests/skill-size-cases.sh
 
       - name: The wall the door applies is a wall
         run: ./scripts/check-ruleset.sh
@@ -166,6 +172,11 @@ jobs:
       # its golden output byte for byte, and its ids read against the registry (#1103).
       - name: Floor checker output unchanged, its ids registered
         run: ./tests/floor-check-golden.sh
+
+      # What the registry declares: one name per area letter, ids never
+      # renamed, and the keepable, baseline and view lists (#1103).
+      - name: Floor checker's registry holds its areas, ids, keepable, baseline and view
+        run: ./tests/floor-check-registry.sh
 
       - name: Every uv pin is one release and its checksum, the template's too
         run: ./tests/uv-pin.sh

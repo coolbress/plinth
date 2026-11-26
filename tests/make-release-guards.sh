@@ -15,7 +15,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d)"
+work="$(mktemp -d)" || { echo "make-release-guards: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 
@@ -283,6 +283,47 @@ run "v$next" "$work/why.md";       check "an untracked fragment is refused" no $
 is "  and nothing changed" untouched
 is "  and the refusal names it" says "changelog.d/untracked.md"
 rm "$repo/changelog.d/untracked.md"
+
+echo "-- the train (#1132): at most one release a week, or a hotfix with its reason"
+# The release before's tag on origin only, created N days ago: the script
+# reads origin, not a local tag, and the tag's own date, not its commit's.
+tag_aged() { # <days ago, seconds allowed>
+  local when=$(( $(date +%s) - $1 ))
+  GIT_COMMITTER_DATE="$when +0000" g tag -a -m "v$current" "v$current" HEAD
+  g push -q origin "refs/tags/v$current"; g tag -d "v$current" >/dev/null
+}
+untag() { git -C "$origin" tag -d "v$current" >/dev/null; }
+day=86400
+hotfix_reason="a published advisory reaches an action plinth pins."
+printf 'A reason.\n\nhotfix: %s\n\ntested with %s\n' "$hotfix_reason" "$template" > "$work/hotfix.md"
+printf 'A reason.\n\nhotfix:   \n\ntested with %s\n' "$template" > "$work/hotfix-empty.md"
+printf 'A reason.\n\nhotfix: one.\nhotfix: two.\n\ntested with %s\n' "$template" > "$work/hotfix-two.md"
+tag_aged $(( 6 * day ))
+run "v$next" "$work/why.md";       check "6 days after the release before, without a hotfix line, it is refused" no $?
+is "  and nothing changed"         untouched
+is "  and the refusal names the tag" says "v$current"
+is "  and its age"                 says "6 days"
+is "  and the line that releases anyway" says "hotfix: <reason>"
+run "v$next" "$work/hotfix-empty.md"; check "a hotfix line with no reason is refused" no $?
+is "  and nothing changed"         untouched
+run "v$next" "$work/hotfix-two.md"; check "two hotfix lines are refused" no $?
+is "  and nothing changed"         untouched
+run "v$next" "$work/hotfix.md";    check "6 days after, with 'hotfix: <reason>', it bumps" ok $?
+is "  and the section says hotfix: with its reason" grep -qxF "hotfix: $hotfix_reason" <(section_of "$next")
+is "  above the first ###, so run 2 publishes it as the why" \
+  grep -qxF "hotfix: $hotfix_reason" <(section_of "$next" | awk '/^### /{exit} 1')
+undo_bump
+untag; tag_aged $(( 7 * day ))
+run "v$next" "$work/why.md";       check "7 days after, without a hotfix line, it bumps" ok $?
+undo_bump
+run "v$next" "$work/hotfix-empty.md"; check "an empty hotfix reason is refused on any day" no $?
+untag
+g tag "v$current" HEAD; g push -q origin "refs/tags/v$current"; g tag -d "v$current" >/dev/null
+run "v$next" "$work/why.md";       check "a lightweight tag, with no date of its own, is refused" no $?
+is "  and nothing changed"         untouched
+is "  and the refusal says why"    says "not an annotated tag"
+untag
+is "no tag left on origin"         [ -z "$(git -C "$origin" tag -l)" ]
 
 echo "-- bump"
 run "v${current%%.*}.0.0" "$work/why.md"; check "a version not above the current one is refused" no $?
