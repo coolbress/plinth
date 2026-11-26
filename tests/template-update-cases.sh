@@ -112,6 +112,9 @@ case " $* " in *" copier recopy "*)
   printf '%s\n' "$*" > "$UVX_LOG.recopy"
   [ "${MOCK_RECOPY_FAIL:-}" = 1 ] && { echo "copier: the template could not be fetched" >&2; exit 1; }
   dst="${!#}"; [ -f "$dst/.copier-answers.yml" ] || { echo "mock recopy: no answers file in $dst" >&2; exit 1; }
+  # MOCK_OLD_RENDER: a folder holding the render a plain update's plan
+  # compares with (#1184), in place of the data-ml files.
+  [ -n "${MOCK_OLD_RENDER:-}" ] && { cp -R "$MOCK_OLD_RENDER/." "$dst/"; exit 0; }
   mkdir -p "$dst/src/demo" "$dst/tests" "$dst/data"
   printf 'model\n' > "$dst/MODEL_CARD.md"; printf 'train\n' > "$dst/src/demo/train.py"
   printf 'test\n' > "$dst/tests/test_train.py"; printf 'data\n' > "$dst/data/README.md"; printf 'FROM x\n' > "$dst/Dockerfile"
@@ -178,6 +181,8 @@ fi
 [ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
 printf 'template line\n' >> AGENTS.md
+# MOCK_TOUCH: more files the template changes, each merged cleanly (#1184).
+for f in ${MOCK_TOUCH:-}; do printf 'template line\n' >> "$f"; done
 # MOCK_BIG: an update over ci / diff-size's default limit of 400, mostly
 # issue forms (#795): 380 lines of form, 40 of source, 500 of docs (excluded).
 if [ "${MOCK_BIG:-}" = three ]; then
@@ -303,9 +308,89 @@ run
 base="$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 0 ] && grep -qF "$want" <<<"$out" && grep -qF -- "--apply $base" <<<"$out"; then ok "the plan prints the checker's own command and the apply line naming the verified base"
 else bad "plan (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-if [ ! -e "$(wt_of plan)" ] && ! git -C "$repo" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null && [ ! -e "$work/uvx.log" ]
-then ok "the plan creates no worktree, no branch, and never runs copier"
+# The plan runs copier on a copy outside the repository (#1184), never in it.
+ran_in="$(cat "$work/uvx.log.cwd."* 2>/dev/null)"; rm -f "$work/uvx.log.cwd."*
+if [ ! -e "$(wt_of plan)" ] && ! git -C "$repo" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null \
+   && [ -n "$ran_in" ] && ! grep -qF "$repo" <<<"$ran_in"
+then ok "the plan creates no worktree, no branch, and runs copier only on a copy outside the repository"
 else bad "the plan wrote something"; fi
+
+# ── plan: the rehearsal (#1184) ─────────────────────────────────────────
+# The plan runs the line on a copy of the base and says what it does: what
+# merges cleanly where the repository has the template's render, what merges
+# into the repository's own changes, what is left in conflict with the lines
+# the repository added there, what the template changed, and how to undo.
+# The old render is the mock recopy's: MOCK_OLD_RENDER's files.
+fixture rehearse
+printf '# Contributing\nOur own rule\n' > "$repo/CONTRIBUTING.md"
+git -C "$repo" commit -q -am "our rule" && git -C "$repo" push -q origin main
+mkdir -p "$work/old-render/.github/ISSUE_TEMPLATE"
+printf '# Agents\n' > "$work/old-render/AGENTS.md"; printf '# Contributing\n' > "$work/old-render/CONTRIBUTING.md"
+printf 'name: task\n' > "$work/old-render/.github/ISSUE_TEMPLATE/task.yml"
+# The target tag's CHANGELOG: two sections after v1.0.0, one with the fixed
+# heading; v1.0.0 itself and [Unreleased] are not between.
+api_cl="$work/api-cl"; tag_names "$api_cl" "$target_sha"
+printf '%s\n' "# Changelog" "" "## [Unreleased]" "" "### Added" "- later" "" \
+  "## [${target_ref#v}] - 2026-11-25" "" "**Lead.**" "" "### Files and questions" "" "- \`AGENTS.md\`" "- question \`records_language\`" "" "### Added" "" "- a question" "" \
+  "## [1.0.1] - 2026-01-02" "" "### Fixed" "" "- a fix" "" "## [1.0.0] - 2026-01-01" "" "- first" \
+  | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
+  > "$api_cl/repos/coolbress/plinth-template/contents/CHANGELOG.md?ref=$target_sha.json"
+# What the plan must leave as it was: the checkout's status (an untracked
+# file), every ref, the worktrees and the stash (one entry), and nothing of
+# its own in the temporary directory.
+printf 'mine\n' > "$repo/notes.txt"
+printf 'x\n' >> "$repo/AGENTS.md"; git -C "$repo" stash push -q -m "the person's" -- AGENTS.md
+snap() { git -C "$repo" status --porcelain; git -C "$repo" for-each-ref; git -C "$repo" worktree list --porcelain; git -C "$repo" stash list; }
+before="$(snap)"; plan_tmp="$work/plan-tmp"; mkdir -p "$plan_tmp"
+plan_run() { # <env...>: the plan with its own TMPDIR
+  reset_logs
+  out="$(cd "$repo" && env "$@" TMPDIR="$plan_tmp" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" 2>&1)"; rc=$?
+}
+plan_run FLOOR_CHECK_API_DIR="$api_cl" MOCK_COPIER=conflict MOCK_TOUCH=.github/ISSUE_TEMPLATE/task.yml MOCK_OLD_RENDER="$work/old-render"
+block() { awk -v h="$1" 'index($0, h) == 1 { f = 1; next } f && /^[^ ]/ { exit } f' <<<"$out"; }
+clean="$(block "Merges cleanly, where this repository has the template's render of v1.0.0:")"
+own="$(block "Merges cleanly into this repository's own changes")"
+left="$(block "Left in conflict")"
+if [ "$rc" = 0 ] && grep -q "^Rehearsed on a copy of origin/main outside this repository, in [0-9]* s" <<<"$out" \
+   && [ "$(sort <<<"$clean")" = "$(printf '  .copier-answers.yml\n  AGENTS.md\n' | sort)" ] && [ "$own" = "  .github/ISSUE_TEMPLATE/task.yml" ] \
+   && [ "$left" = "$(printf '  CONTRIBUTING.md\n    lines this repository added to the template'"'"'s render of v1.0.0:\n      + Our own rule')" ]
+then ok "the plan rehearses the update: what merges cleanly, what merges into this repository's own changes, and each conflict with the lines this repository added"
+else bad "plan, the three lists (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if grep -qF -- "copier recopy --defaults --overwrite --quiet --vcs-ref v1.0.0 ." "$work/uvx.log.recopy" 2>/dev/null
+then ok "the comparison is copier's own render of the recorded answers at the recorded tag"
+else bad "plan, what ran"; cat "$work/uvx.log" "$work/uvx.log.recopy" 2>/dev/null | sed 's/^/        /'; fi
+changes="$(block "What the template changed, v1.0.0 to $target_ref:")"
+want_changes="$(printf '  %s\n' "## [${target_ref#v}] - 2026-11-25" "  ### Files and questions" "" "  - \`AGENTS.md\`" "  - question \`records_language\`" "## [1.0.1] - 2026-01-02")"
+if [ "$changes" = "$want_changes" ]
+then ok "the plan prints the CHANGELOG's section headings between the two tags, quoting the files-and-questions heading where a section has it"
+else bad "plan, the template's changes"; printf '%s\n' "$changes" | sed 's/^/        /'; fi
+undo="$(block "Undo:")"
+if grep -qxF "    gh pr close chore/template-$target_ref --delete-branch" <<<"$undo" && grep -qF "revert --no-edit" <<<"$undo" \
+   && grep -qxF "    git worktree remove --force ../rehearse-template-$target_ref" <<<"$undo"
+then ok "the plan says how to undo the update before it merges and after"
+else bad "plan, undo"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if [ "$(snap)" = "$before" ] && [ -z "$(ls -A "$plan_tmp")" ] && [ ! -e "$(wt_of rehearse)" ]
+then ok "the plan leaves the checkout as it was (status, refs, worktrees, stash) and no copy in the temporary directory"
+else bad "plan, the checkout or the temporary directory changed"; diff <(printf '%s\n' "$before") <(snap) | sed 's/^/        /'; ls -A "$plan_tmp" | sed 's/^/        /'; fi
+# copier failing in the rehearsal: a stop, and still nothing left behind.
+plan_run FLOOR_CHECK_API_DIR="$api_cl" MOCK_COPIER=fail
+if [ "$rc" = 1 ] && grep -qF "copier failed in the rehearsal" <<<"$out" && grep -qF "copier: something broke" <<<"$out" \
+   && ! grep -qE -- "--apply [0-9a-f]{40}" <<<"$out" && [ "$(snap)" = "$before" ] && [ -z "$(ls -A "$plan_tmp")" ]
+then ok "copier failing in the rehearsal stops the plan with its last line, and leaves the checkout and the temporary directory as they were"
+else bad "plan, copier fails (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; ls -A "$plan_tmp" | sed 's/^/        /'; fi
+# The old render failing: the lists are given without the comparison, said.
+plan_run FLOOR_CHECK_API_DIR="$api_cl" MOCK_COPIER=conflict MOCK_RECOPY_FAIL=1
+if [ "$rc" = 0 ] && grep -qx "Merges cleanly:" <<<"$out" && grep -qF "Not compared with the template's render of v1.0.0" <<<"$out" \
+   && grep -qF "copier: the template could not be fetched" <<<"$out" && grep -qx "  CONTRIBUTING.md" <<<"$out" && ! grep -q "lines this repository added" <<<"$out" \
+   && [ -z "$(ls -A "$plan_tmp")" ]
+then ok "an old render copier could not make: the lists without the comparison, and the plan says what it could not show"
+else bad "plan, old render fails (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The CHANGELOG not read: the compare link in its place.
+plan_run FLOOR_CHECK_API_DIR="$work/api-none" MOCK_OLD_RENDER="$work/old-render"
+if [ "$rc" = 0 ] && grep -qF "its CHANGELOG was not read (coolbress/plinth-template CHANGELOG.md at $target_ref: not found); every change: https://github.com/coolbress/plinth-template/compare/v1.0.0...$target_ref" <<<"$out"
+then ok "a CHANGELOG not read: the plan prints the compare link instead"
+else bad "plan, CHANGELOG unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
 
 # ── the base must be the verified default branch ────────────────────────
 reset_logs
@@ -541,6 +626,16 @@ else bad "Assisted-by last line: '$(tail -n 1 <<<"$body")'"; fi
 if grep -q "task.yml" <<<"$body"; then bad "an untouched local issue form is listed as changed"
 else ok "a local issue form copier did not touch is not in the description"; fi
 if grep -qi "wait" "$work/gh.log"; then bad "something waited on checks"; else ok "nothing waits on the branch's checks"; fi
+# Undo (#1184): before merge and after, the plan's own lines, no home path.
+undo="$(awk '/^To undo it, from the repository/ { f = 1; next } f && /^## / { exit } f' <<<"$body")"
+n="$(basename "$wt")"
+if grep -qxF "  gh pr close chore/template-$target_ref --delete-branch" <<<"$undo" \
+   && grep -qxF "  git worktree remove --force ../$n" <<<"$undo" && grep -qxF "  git branch -D chore/template-$target_ref" <<<"$undo" \
+   && grep -qxF "  git worktree add -b revert/template-$target_ref ../$n-revert origin/main" <<<"$undo" \
+   && grep -qF "revert --no-edit \"\$(gh pr view chore/template-$target_ref --json mergeCommit --jq .mergeCommit.oid)\"" <<<"$undo" \
+   && grep -qxF "  (cd ../$n-revert && gh pr create --fill)" <<<"$undo" && ! grep -qF "$work" <<<"$body"
+then ok "the description says how to undo it before it merges (close, delete branch and worktree) and after (revert in a pull request), in relative paths"
+else bad "the description's undo"; printf '%s\n' "$undo" | sed 's/^/        /'; fi
 # ── the description follows the form at the pinned tag (#856) ───────────
 cp "$work/gh.log.body" "$work/clean.body"
 fields_pass "the description of a clean update" "$work/clean.body"
@@ -875,7 +970,7 @@ said="$(grep -A2 "^ *The update leaves" <<<"$out" | tr '\n' ' ')"
 if [ "$rc" = 0 ] && grep -q "# v2.41.0" "$repo/.github/workflows/ci.yml" \
    && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40" <<<"$out" \
    && grep -q "in conflict in ci.yml, label.yml " <<<"$said" && grep -q "both sides name $sha40: they differ only by the trailing comment" <<<"$said" \
-   && ! grep -q "no conflict on that line is expected" <<<"$out" && [ ! -e "$work/uvx.log" ]
+   && ! grep -q "no conflict on that line is expected" <<<"$out" && [ ! -e "$(wt_of pincomment)" ]
 then ok "a pin raised by hand with a version comment, the live pin carried: the plan says the line conflicts by the comment alone (#1045)"
 else bad "a commented pin, live carried (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # The plan's line only names files; nothing is written before --apply.

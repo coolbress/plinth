@@ -11,6 +11,14 @@
 #       older than the one the target tag was tested with, or one not
 #       compared with it (#1183): it names the open pull request that raises
 #       the pin, to merge first, or the change to make in one.
+#       On GitHub it then runs the command on a copy of the base outside the
+#       repository, removed when done (#1184), and prints what merges cleanly,
+#       what merges into this repository's own changes (compared with
+#       copier's render of the recorded answers at the recorded tag), what is
+#       left in conflict with the lines this repository added there, the
+#       template CHANGELOG's sections between the two tags (the compare link
+#       when it is not read), and how to undo the update before and after it
+#       merges. copier failing on the copy stops the plan.
 #   template-update.sh --apply <base-sha> [--assisted-by <agent>:<model>]
 #       Branches a worktree beside the repository from <base-sha> (it must
 #       still be origin/<default>), requires it clean, runs the command and,
@@ -760,6 +768,15 @@ finish() { # <worktree>
         echo
       fi
     fi
+    # How to take it back (#1184), the plan's own lines.
+    if [ "$host" = github ]; then
+      echo "To undo it, from the repository's folder:"
+      echo
+      echo '```text'
+      undo_lines "$wt" "$branch"
+      echo '```'
+      echo
+    fi
     # The fields of the form plinth-template renders, in its order (#856):
     # each says only what is true as this opens, and a script is not a person.
     echo "## What I checked myself"
@@ -984,20 +1001,51 @@ plugin_gate() {
     *) echo "the installed plinth was not compared with the latest release (the check exited $rc); going on with the template tag this plinth targets, $to" >&2 ;;
   esac
 }
-# The rehearsal of the move <cmd> (in $tmp, after at_base): a clone of the
-# base outside this repository, checked out as --apply's worktree is (`git
-# archive` would leave out an export-ignore path), where copier runs as
-# --apply would run it. Nothing of it is kept; the clone borrows this
-# repository's objects and writes none into it. Sets $r, $conflicts,
-# $deleted and $owned: the deleted files whose content at the base is not
-# the old archetype's render (#1016).
-rehearse() { # <cmd>
-  local words prefix ref p
+# The rehearsal (in $tmp, after at_base): a clone of the base outside this
+# repository, checked out as --apply's worktree is (`git archive` would leave
+# out an export-ignore path), where copier runs <cmd> as --apply would run it.
+# Nothing of it is kept; the clone borrows this repository's objects and
+# writes none into it, and $tmp goes on exit, a failure included. Sets $r;
+# returns copier's status, its output in $tmp/rehearsal.log.
+rehearse_run() { # <cmd>
+  local words
   read -ra words <<<"$1"
   r="$tmp/rehearsal"
   { git clone -q --shared --no-checkout "$top" "$r" && git -C "$r" checkout -q --detach "$base"; } \
     || die "could not make the rehearsal clone of origin/$default; nothing was written"
-  ( cd "$r" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) > "$tmp/rehearsal.log" 2>&1 || {
+  ( cd "$r" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) > "$tmp/rehearsal.log" 2>&1
+}
+# copier's own render of the answers recorded at the base, at <ref>, into
+# $tmp/old-render, a folder holding nothing else: exactly what the template
+# gave this repository (`recopy` renders without merging; measured, 9.18.2).
+# The same copier as <cmd>, the line. Returns non-zero when it could not be
+# made, copier's output in $tmp/old-render.log.
+render_old() { # <cmd> <ref>
+  local prefix words
+  prefix="${1%% copier update *}"
+  [ "$prefix" != "$1" ] && [ -n "$2" ] || { echo "the line is not the copier update this script reads: $1" > "$tmp/old-render.log"; return 1; }
+  read -ra words <<<"$prefix"
+  mkdir "$tmp/old-render" && git -C "$r" show HEAD:.copier-answers.yml > "$tmp/old-render/.copier-answers.yml" \
+    || { echo "could not read .copier-answers.yml at the base" > "$tmp/old-render.log"; return 1; }
+  ( cd "$tmp/old-render" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" copier recopy --defaults --overwrite --quiet \
+      --vcs-ref "$2" . < /dev/null ) > "$tmp/old-render.log" 2>&1
+}
+# Is <path> at the base exactly what the old render holds there?
+as_rendered() { # <path>
+  if [ -L "$tmp/old-render/$1" ]; then
+    [ "$(readlink "$tmp/old-render/$1")" = "$(git -C "$r" show "HEAD:$1")" ]
+  elif [ -f "$tmp/old-render/$1" ]; then
+    git -C "$r" show "HEAD:$1" | cmp -s - "$tmp/old-render/$1"
+  else
+    return 1
+  fi
+}
+# The move's rehearsal (#1004). Sets $r, $conflicts, $deleted and $owned:
+# the deleted files whose content at the base is not the old archetype's
+# render (#1016).
+rehearse() { # <cmd>
+  local ref p
+  rehearse_run "$1" || {
     tail -n 1 "$tmp/rehearsal.log" >&2
     die "copier refused the move in the rehearsal (its last line above); nothing was written"
   }
@@ -1005,18 +1053,11 @@ rehearse() { # <cmd>
   deleted="$(git -C "$r" -c core.quotePath=false ls-files --deleted | sort -u)"
   owned=""
   [ -n "$deleted" ] || return 0
-  # The old archetype's render: copier's own, of the answers recorded at the
-  # base, at the tag they record (a move runs only at the target tag, the
-  # one the line fetches), into a folder holding nothing else. The same
-  # copier as the line; `recopy` renders without merging, so the folder is
-  # exactly what the template gave this repository (measured, 9.18.2).
-  prefix="${1%% copier update *}"; ref="$(sed -nE 's/.* --vcs-ref ([^ ]+).*/\1/p' <<<"$1")"
-  [ "$prefix" != "$1" ] && [ -n "$ref" ] || die "the move's line is not the copier update this script reads: $1"
-  read -ra words <<<"$prefix"
-  mkdir "$tmp/old-render" && git -C "$r" show HEAD:.copier-answers.yml > "$tmp/old-render/.copier-answers.yml" \
-    || die "could not read .copier-answers.yml at the base; nothing was written"
-  ( cd "$tmp/old-render" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" copier recopy --defaults --overwrite --quiet \
-      --vcs-ref "$ref" . < /dev/null ) > "$tmp/old-render.log" 2>&1 || {
+  # The old archetype's render, at the tag the answers record (a move runs
+  # only at the target tag, the one the line fetches).
+  ref="$(sed -nE 's/.* --vcs-ref ([^ ]+).*/\1/p' <<<"$1")"
+  [ "${1%% copier update *}" != "$1" ] && [ -n "$ref" ] || die "the move's line is not the copier update this script reads: $1"
+  render_old "$1" "$ref" || {
     tail -n 1 "$tmp/old-render.log" >&2
     die "copier could not make the old archetype's render to compare the deleted files with (its last line above); nothing was written"
   }
@@ -1024,13 +1065,26 @@ rehearse() { # <cmd>
   # repository's change: listed, never deleted unasked.
   while IFS= read -r p; do
     [ -n "$p" ] || continue
-    if [ -L "$tmp/old-render/$p" ]; then
-      [ "$(readlink "$tmp/old-render/$p")" = "$(git -C "$r" show "HEAD:$p")" ] && continue
-    elif [ -f "$tmp/old-render/$p" ]; then
-      git -C "$r" show "HEAD:$p" | cmp -s - "$tmp/old-render/$p" && continue
-    fi
-    owned="$owned$p"$'\n'
+    as_rendered "$p" || owned="$owned$p"$'\n'
   done <<<"$deleted"
+}
+# How to take the update back (#1184), before its pull request merges and
+# after, as commands run from the repository's folder; paths relative, as
+# they also go in the description. GitHub only: the GitLab path takes bug
+# fixes alone until a GitLab user is recorded (#1137, #1184's Decisions).
+undo_lines() { # <worktree> <branch>
+  local n rb rn
+  n="$(basename "$1")"; rb="revert/${2#chore/}"; rn="../$n-revert"
+  echo "Before it merges: close it, and delete its branch and worktree:"
+  echo "  gh pr close $2 --delete-branch"
+  echo "  git worktree remove --force $(q "../$n")"
+  echo "  git branch -D $2"
+  echo "After it merges: revert its commit in a pull request of its own:"
+  echo "  git fetch origin $default"
+  echo "  git worktree add -b $rb $(q "$rn") origin/$default"
+  echo "  git -C $(q "$rn") revert --no-edit \"\$(gh pr view $2 --json mergeCommit --jq .mergeCommit.oid)\""
+  echo "  git -C $(q "$rn") push -u origin $rb"
+  echo "  (cd $(q "$rn") && gh pr create --fill)"
 }
 if [ "$mode" = plan ] && [ -n "$move" ]; then
   at_base
@@ -1195,6 +1249,73 @@ if [ "$mode" = plan ]; then
      && [ -n "$(in_conflict "$recorded")$(in_conflict "$live_pin")$(only_comment "$live_pin")" ]; then
     echo "Pin conflict: .copier-answers.yml records plinth_sha $recorded; the workflows call $called."
     pin_says "The update" "$live_pin"
+  fi
+  # What the update does here, before the yes (#1184): the line run on a
+  # copy, as --apply will run it. The lists are read from what copier left,
+  # unmerged paths and conflict markers, never from its exit code, which is 0
+  # with conflicts left (measured, copier 9.18.2 and 9.19.1). On GitHub only,
+  # as undo_lines.
+  if [ "$host" = github ]; then
+    started=$SECONDS
+    rehearse_run "$cmd" || {
+      tail -n 1 "$tmp/rehearsal.log" >&2
+      die "copier failed in the rehearsal on a copy of origin/$default (its last line above); --apply runs the same line. Nothing was written"
+    }
+    conflicts="$(conflicts_in "$r" HEAD)"
+    changed="$(changed_since "$r" HEAD | grep -vxF -f <(printf '%s\n' "$conflicts" | sed '/^$/d') || true)"
+    # Compared with the template's render at the recorded tag: a file that
+    # differs there is this repository's change, and copier merged into it.
+    compared=yes; rendered=""; own=""
+    render_old "$cmd" "$from" || compared=no
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if [ "$compared" = yes ] && git -C "$r" cat-file -e "HEAD:$p" 2>/dev/null && ! as_rendered "$p"
+      then own="$own$p"$'\n'; else rendered="$rendered$p"$'\n'; fi
+    done <<<"$changed"
+    took=$((SECONDS - started))
+    listed() { if [ -n "$1" ]; then printf '%s\n' "$1" | sed '/^$/d' | indent; else echo "  none"; fi; }
+    echo
+    echo "Rehearsed on a copy of origin/$default outside this repository, in ${took} s; nothing of it is kept."
+    if [ "$compared" = yes ]; then
+      echo "Merges cleanly, where this repository has the template's render of $from:"; listed "$rendered"
+      echo "Merges cleanly into this repository's own changes (copier merged into its lines; worth a look):"; listed "$own"
+    else
+      echo "Merges cleanly:"; listed "$rendered"
+      echo "Not compared with the template's render of $from, so which of these hold this repository's own changes,"
+      echo "and the lines it added in each conflict, are not shown (copier's last line: $(tail -n 1 "$tmp/old-render.log"))."
+    fi
+    if [ -n "$conflicts" ]; then
+      echo "Left in conflict (copier exits 0 all the same; each is resolved after --apply, on the person's word):"
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        echo "  $p"
+        [ "$compared" = yes ] || continue
+        case "$p" in *.rej) echo "    the hunks copier could not apply to ${p%.rej}"; continue ;; esac
+        git -C "$r" cat-file -e "HEAD:$p" 2>/dev/null || continue
+        if [ ! -f "$tmp/old-render/$p" ]; then
+          echo "    not in the template's render of $from: every line of it is this repository's"
+          continue
+        fi
+        git -C "$r" show "HEAD:$p" > "$tmp/base-file"
+        added="$(git diff --no-index --no-color -U0 -- "$tmp/old-render/$p" "$tmp/base-file" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}')"
+        if [ -z "$added" ]; then echo "    this repository added no line to the template's render of $from"; continue; fi
+        echo "    lines this repository added to the template's render of $from:"
+        head -n 40 <<<"$added" | sed 's/^/      + /'
+        n="$(grep -c '' <<<"$added")"; [ "$n" -le 40 ] || echo "      ... and $((n - 40)) more"
+      done <<<"$conflicts"
+    else
+      echo "Left in conflict: none"
+    fi
+    if [ "$from" != "$to" ]; then
+      echo "What the template changed, $from to $to:"
+      if changes="$(python3 "$checker" --root "$tmp" --print-template-changes 2>"$tmp/changes-note")"; then
+        printf '%s\n' "$changes" | indent
+      else
+        echo "  its CHANGELOG was not read ($(tail -n 1 "$tmp/changes-note")); every change: $changes"
+      fi
+    fi
+    echo "Undo:"
+    undo_lines "$wt" "$branch" | indent
   fi
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
