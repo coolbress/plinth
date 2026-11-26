@@ -12,6 +12,7 @@
 #   new-project.sh --preflight [<the same arguments>]
 #   new-project.sh [<owner>/]<name> --check [<the same arguments>]
 #   new-project.sh --readiness
+#   new-project.sh --where
 #
 # --preflight runs steps 1 and 2 below (the tools, gh's login and its token)
 # and ends with `preflight: ok`, reading nothing about an owner, a repository
@@ -114,11 +115,58 @@ tutorial="https://github.com/coolbress/plinth/blob/main/docs/tutorials/getting-s
 # it suggests, and on a typed one, before showing it, and on the visibility
 # when private is chosen (#1067). Taken out here with --host, so a command
 # printed from the arguments never carries it.
-host=github; rest=(); host_next=0; check=0; readiness=0
+#
+# --where reads the folder it is run in, from local state only (no network, no
+# gh or glab), and prints one `folder:` line, plus `toplevel: <path>` inside a
+# repository, then exit 0 (#1121). /plinth:new-project runs it before its first
+# question, to offer the right path when the folder already holds a project:
+#   empty                      nothing but the ignore list (.DS_Store, .claude, …)
+#   home                       the home folder itself
+#   files                      something else, and not a repository
+#   git-no-remote              a repository with no remote
+#   git-remote <host> <path>   origin (else the first remote) on github.com or gitlab.com
+#   git-remote-other <host>    origin on another host
+#   plinth-made <path> <commit>  rendered from plinth's template (the guide's
+#                              test, scripts/lib/copier-answers.sh); <path> is
+#                              `none` with no remote on either host
+# A subfolder of a repository reads as the repository, named by `toplevel:`.
+host=github; rest=(); host_next=0; check=0; readiness=0; where=0
 for a in "$@"; do
   if [ "$host_next" = 1 ]; then host="$a"; host_next=0; continue; fi
-  case "$a" in --host) host_next=1 ;; --host=*) host="${a#*=}" ;; --check) check=1 ;; --readiness) readiness=1 ;; *) rest+=("$a") ;; esac
+  case "$a" in --host) host_next=1 ;; --host=*) host="${a#*=}" ;; --check) check=1 ;; --readiness) readiness=1 ;;
+    --where) where=1 ;; *) rest+=("$a") ;; esac
 done
+if [ "$where" = 1 ]; then
+  # shellcheck source=scripts/lib/copier-answers.sh
+  . "$here/lib/copier-answers.sh"
+  if top="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ]; then
+    remote="$(git -C "$top" remote | grep -x origin || git -C "$top" remote | head -n 1)"
+    url=""; [ -z "$remote" ] || url="$(git -C "$top" remote get-url "$remote" 2>/dev/null)" || url=""
+    # https://host/path(.git), ssh://user@host[:port]/path, user@host:path
+    rhost=""; rpath=""
+    case "$url" in
+      *://*) rest_url="${url#*://}"; rest_url="${rest_url#*@}"; rhost="${rest_url%%/*}"; rhost="${rhost%%:*}"; rpath="${rest_url#*/}" ;;
+      *@*:*) rest_url="${url#*@}"; rhost="${rest_url%%:*}"; rpath="${rest_url#*:}" ;;
+    esac
+    rhost="$(tr '[:upper:]' '[:lower:]' <<<"$rhost")"; rpath="${rpath%/}"; rpath="${rpath%.git}"
+    if made_by_plinth "$top/.copier-answers.yml" "$template_repo"; then
+      case "$rhost" in github.com|gitlab.com) ;; *) rpath=none ;; esac
+      echo "folder: plinth-made ${rpath:-none} $(copier_answer "$top/.copier-answers.yml" _commit)"
+    elif [ -z "$url" ]; then echo "folder: git-no-remote"
+    elif [ "$rhost" = github.com ] || [ "$rhost" = gitlab.com ]; then echo "folder: git-remote $rhost $rpath"
+    else echo "folder: git-remote-other ${rhost:-unknown}"; fi
+    echo "toplevel: $top"
+  elif [ "$(pwd -P)" = "$(cd "$HOME" 2>/dev/null && pwd -P)" ]; then echo "folder: home"
+  else
+    state=empty
+    for f in * .[!.]* ..?*; do
+      [ -e "$f" ] || [ -L "$f" ] || continue
+      case "$f" in .DS_Store|.localized|Thumbs.db|desktop.ini|.claude|.vscode|.idea) ;; *) state=files; break ;; esac
+    done
+    echo "folder: $state"
+  fi
+  exit 0
+fi
 if [ "$readiness" = 1 ]; then
   if ! command -v gh >/dev/null; then echo "github: missing, gh (GitHub CLI) is not installed"
   elif ! gh auth status >/dev/null 2>&1; then echo "github: missing, gh is not logged in"
@@ -143,7 +191,7 @@ case "$host" in
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--custom-user-model|--no-custom-user-model] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight] [--check] [--readiness]"
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--custom-user-model|--no-custom-user-model] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight] [--check] [--readiness] [--where]"
 preflight=0; target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
 coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""; lang=""; cum=""; cum_said=""
 for a in "$@"; do case "$a" in
