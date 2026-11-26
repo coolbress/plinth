@@ -263,7 +263,7 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
           # The block the job's log ends with on a failure (#1098, #1099).
           fail_check="ci / lint"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--lint"
           nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
@@ -356,9 +356,9 @@ jobs:
           v "$ZIZMOR" "zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
           [ "$ZIZMOR" != failure ] || nx "run uvx zizmor@1.29.0 --min-severity medium .github/workflows/ here, fix what it names, and push"
           kva="$RUNNER_TEMP/zizmor.kva"
-          if [ ! -f "$kva" ]; then say "not yet confirmed: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions), zizmor did not finish; a run where it does confirms it"
+          if [ ! -f "$kva" ]; then say "not yet confirmed: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions). Why: zizmor did not finish. What confirms it: a run where it does."
           elif [ ! -s "$kva" ]; then say "pass: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions)"
-          else while IFS= read -r a; do say "not yet confirmed: $a, a published advisory (zizmor known-vulnerable-actions), reported and not blocking; a pin raised past the advisory's fixed version confirms it"; done < "$kva"; fi
+          else while IFS= read -r a; do say "not yet confirmed: $a. Why: it is a published advisory (zizmor known-vulnerable-actions), reported and not blocking. What confirms it: a pin raised past the advisory's fixed version."; done < "$kva"; fi
 
   typecheck:
     runs-on: ubuntu-latest
@@ -405,7 +405,7 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
           # The block the job's log ends with on a failure (#1098, #1099).
           fail_check="ci / typecheck"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--typecheck"
           nx() { [ -n "$fail_next" ] || { fail_next="$1"; [ -z "${2:-}" ] || fail_what="$2"; }; }
@@ -678,7 +678,7 @@ jobs:
           out="$RUNNER_TEMP/changed.verdict"; rm -f "$out"
           if [ -z "$PR" ]; then echo "pass: $std, does not apply (not a pull request)" > "$out"; exit 0; fi
           if [ "$COV" != success ] || [ "$PYTEST" != success ]; then
-            echo "not yet confirmed: $std, it did not run because an earlier step failed; a run that gets past that step confirms it" > "$out"; exit 0
+            echo "not yet confirmed: $std. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." > "$out"; exit 0
           fi
           xml="$RUNNER_TEMP/coverage.xml"; json="$RUNNER_TEMP/diff-cover.json"; rm -f "$xml" "$json"
           uv run --no-sync coverage xml -o "$xml" || true
@@ -710,7 +710,7 @@ jobs:
           xml, report, out, changed, top = sys.argv[1:6]
           STD = "changed lines ran under the tests"
           TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")   # diff-size's
-          CONFIRMS = "a test that runs them, or `# pragma: no cover` with its reason, confirms it"
+          CONFIRMS = "What confirms it: a test that runs them, or `# pragma: no cover` with its reason."
           def say(*lines):
               with open(out, "w", encoding="utf-8") as f:
                   f.writelines(s + "\n" for s in lines)
@@ -722,23 +722,23 @@ jobs:
           except (OSError, ET.ParseError, ValueError):
               root, covered = None, 0   # `coverage xml` writes nothing when it has no data
           if covered == 0:
-              say(f"not yet confirmed: {STD}, coverage recorded no line in the whole project, "
+              say(f"not yet confirmed: {STD}. Why: coverage recorded no line in the whole project, "
                   "usually because another tool owns the tracer (pytest-cov's --cov in the "
-                  "project's addopts); a run where coverage records lines confirms it")
+                  "project's addopts). What confirms it: a run where coverage records lines.")
               sys.exit(0)
           try:
               with open(report, encoding="utf-8") as f:
                   stats = json.load(f)["src_stats"]
           except (OSError, ValueError, KeyError, TypeError):
-              say(f"not yet confirmed: {STD}, diff-cover did not finish (its error is in this "
-                  "step's log); a run where it does confirms it")
+              say(f"not yet confirmed: {STD}. Why: diff-cover did not finish (its error is in this "
+                  "step's log). What confirms it: a run where it does.")
               sys.exit(0)
           try:
               with open(changed, encoding="utf-8") as f:
                   files = [l for l in f.read().splitlines() if l and not TEST.search(l)]
           except OSError:
-              say(f"not yet confirmed: {STD}, git did not list the changed files (its error is in "
-                  "this step's log); a run where it does confirms it")
+              say(f"not yet confirmed: {STD}. Why: git did not list the changed files (its error is in "
+                  "this step's log). What confirms it: a run where it does.")
               sys.exit(0)
           # The files coverage's report has, as paths from the repository root,
           # and every file diff-cover matched in it.
@@ -751,9 +751,9 @@ jobs:
           if unmeasured:
               listed = ", ".join(unmeasured[:9]) + (f", and {len(unmeasured) - 9} more in this step's log"
                                                     if len(unmeasured) > 9 else "")
-              extra = [f"not yet confirmed: {STD}, {len(unmeasured)} changed Python files are not in "
-                       "coverage's report (outside the measured source, or omitted by the project's "
-                       f"coverage configuration): {listed}; a run that measures them confirms it"]
+              extra = [f"not yet confirmed: {STD}, for {len(unmeasured)} changed Python files: {listed}. "
+                       "Why: they are not in coverage's report (outside the measured source, or omitted "
+                       "by the project's coverage configuration). What confirms it: a run that measures them."]
           def ranges(ns):
               ns, rs = sorted(set(ns)), []
               for n in ns:
@@ -777,9 +777,9 @@ jobs:
           elif n == 0:
               say(f"pass: {STD}, all {total} changed lines ran", *extra)
           elif n == total:
-              say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}; {CONFIRMS}", *extra)
+              say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}. Why: no test runs them. {CONFIRMS}", *extra)
           else:
-              say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}; {CONFIRMS}", *extra)
+              say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}. Why: no test runs them. {CONFIRMS}", *extra)
           PY
 
       # Exercise the declared range for real. Empty input: this step does
@@ -828,7 +828,7 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
           # The time limit stopped it (#941): the step left a file saying so.
           limit() { [ -s "$RUNNER_TEMP/$1" ] && say "fail: $2, stopped at the time limit: the job's $LIMIT-minute limit (test-timeout-minutes) less $((LIMIT * 12 < TEST_MARGIN_SECONDS ? LIMIT * 12 : TEST_MARGIN_SECONDS)) s kept for the steps after it ended it, not a failing test; measure first: uv run pytest --durations=20 lists the slowest tests, and when a few take most of the time, make them faster; raise test-timeout-minutes under ci.yml's with: only when none stands out and the time moves between runs of the same commit"; }
           # The block the job's log ends with on a failure (#1098): the first
@@ -919,7 +919,7 @@ jobs:
           elif limit extra.time-limit "pytest on $VERSIONS"; then nx "$slow" "pytest on $VERSIONS, stopped at the time limit ($LIMIT minutes, test-timeout-minutes)"
           else v "$EXTRA" "pytest on $VERSIONS"; [ "$EXTRA" != failure ] || tests extra.log "the extra versions step's log"; fi
           if [ -s "$RUNNER_TEMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$RUNNER_TEMP/changed.verdict"
-          else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
+          else say "not yet confirmed: changed lines ran under the tests. Why: the judging step did not finish (its error is in its log). What confirms it: a run where it does."; fi
 
   # The schema of a `web` project (#614): no model change without its
   # migration, the migrations applied to an empty Postgres, and the base
@@ -1087,7 +1087,7 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
           if [ "$WEB" != true ]; then
             say "pass: migrations, does not apply (the web input is false: not a web project)"
             exit 0
@@ -1154,7 +1154,7 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
           if [ "$WEB" != true ]; then
             say "pass: deploy-check, does not apply (the web input is false: not a web project)"
             exit 0
@@ -1208,7 +1208,7 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
           v "$GITLEAKS" "gitleaks, the history included"
 
   # PR title is Conventional Commits with the standard eleven types only.
@@ -2505,7 +2505,7 @@ jobs:
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
           say() { printf '%s\n' "${1//[$'\r\n']/ }"; echo "- $1" >> "$GITHUB_STEP_SUMMARY"; case "$1" in "fail: "*) [ -n "$fail_what" ] || fail_what="${1#fail: }" ;; *"; left to /plinth:floor-check") ;; "not yet confirmed: "*) if [ -n "$fail_what" ] && [[ "$1" == *"did not run because an earlier step failed"* ]]; then return 0; fi; nw=$((nw + 1)); if [ "$nw" -le 9 ]; then w="${1//'%'/%25}"; w="${w//$'\r'/%0D}"; echo "::warning::${w//$'\n'/%0A}"; fi ;; esac; }
-          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2, it did not run because an earlier step failed; a run that gets past that step confirms it" ;; esac; }
+          v() { case "$1" in success) say "pass: $2" ;; failure) say "fail: $2" ;; *) say "not yet confirmed: $2. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." ;; esac; }
           v "$SYNC" "uv sync --locked"
           v "$BUILD" "uv build"
           v "$SMOKE" "install smoke, the wheel and the sdist in a clean venv"
