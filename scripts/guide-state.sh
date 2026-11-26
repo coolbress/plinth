@@ -1106,7 +1106,9 @@ echo "problems: ${problems:-none}"
 #   - releases (not drafts) and tags with no release, the 10 newest of each;
 #   - feat: merges by people, from the merged pull requests read above.
 # Every other merge is counted only. The newest five are printed, newest
-# first; with a problem open, only the totals line.
+# first; with a problem open, only the totals line. Each event keeps its whole
+# timestamp, in UTC (a tag's date may carry an offset), until the five are
+# picked: only the printed date is cut to the day.
 history_q='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
   createdAt pushedAt
   mergedPulls: pullRequests(states: MERGED) { totalCount }
@@ -1120,15 +1122,16 @@ history_q='query($owner: String!, $name: String!) { repository(owner: $owner, na
 history_jq='def clean: gsub("[\t\n\r]"; " ");
   def ago: ((now - fromdate) / 86400 | floor | if . < 0 then 0 else . end) as $d | "\(.[0:10]) (\($d) day\(if $d == 1 then "" else "s" end) ago)";
   def many($n; $w): "\($n) \($w)\(if $n == 1 then "" else "s" end)";
+  def utc: if test("[+-][0-9]{2}:[0-9]{2}$") then ((.[0:19] + "Z" | fromdate) - ((.[19:20] + "1" | tonumber) * ((.[20:22] | tonumber) * 3600 + (.[23:25] | tonumber) * 60)) | todate) else . end;
   .data.repository as $r
   | (["started", "started: \($r.createdAt | ago); last activity: \(($r.pushedAt // $r.createdAt) | ago)"],
      ["totals", "totals: \($r.mergedPulls.totalCount) merged, \(many($r.closedIssues.totalCount; "closed issue")), \(many($r.releases.totalCount; "release")), \(many($r.tags.totalCount; "tag"))"],
-     ["event", $r.createdAt[0:10], $repo, "created", ""],
+     ["event", $r.createdAt, $repo, "created", ""],
      ($r.records.nodes[] | ([.labels.nodes[].name | select(. == "spec" or (startswith("wayfinder:") and . != "wayfinder:task"))] | first) as $l
-       | select($l != null and .closedAt != null) | ["event", .closedAt[0:10], "#\(.number)", "closed \($l)", (.title | clean)]),
-     ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt)[0:10], .tagName, "release", ((.name // "") | clean)]),
+       | select($l != null and .closedAt != null) | ["event", .closedAt, "#\(.number)", "closed \($l)", (.title | clean)]),
+     ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt), .tagName, "release", ((.name // "") | clean)]),
      ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
-       | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", $at[0:10], .name, "tag", ""]),
+       | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", ($at | utc), .name, "tag", ""]),
      ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
        | ["first", .mergedAt, "#\(.number)", (.title | clean)]))
   | @tsv'
@@ -1142,13 +1145,13 @@ if history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo
     # the merged ones read above unless that read was cut.
     events="$( { awk -F '\t' '$1 == "event" || $1 == "first"' <<<"$history"
         [ -n "$past_first" ] || awk -F '\t' '$2 == "person" { print "first\t" ($5 != "" ? $5 : $3) "\t#" $1 "\t" $4 }' <<<"$merged"
-        awk -F '\t' '$2 == "person" && $4 ~ /^feat(\([^)]*\))?!?:/ { print "event\t" $3 "\t#" $1 "\tmerged\t" $4 }' <<<"$merged"; } |
+        awk -F '\t' '$2 == "person" && $4 ~ /^feat(\([^)]*\))?!?:/ { print "event\t" ($5 != "" ? $5 : $3) "\t#" $1 "\tmerged\t" $4 }' <<<"$merged"; } |
       awk -F '\t' '
         $1 == "first" { if (fd == "" || $2 < fd) { fd = $2; fr = $3; ft = $4 }; next }
         $2 != "" { n++; d[n] = $2; r[n] = $3; k[n] = $4; t[n] = $5 }
         END {
           # Compared on the whole timestamp, printed as the day (#1090 review).
-          if (fd != "") { n++; d[n] = substr(fd, 1, 10); r[n] = fr; k[n] = "first merge by a person"; t[n] = ft; first = fr }
+          if (fd != "") { n++; d[n] = fd; r[n] = fr; k[n] = "first merge by a person"; t[n] = ft; first = fr }
           for (i = 1; i <= n; i++) {
             # One line per pull request: its first merge, not also its feat: merge.
             if (k[i] == "merged" && r[i] == first) continue
@@ -1159,7 +1162,7 @@ if history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo
     if [ "$total" -eq 0 ]; then echo "so far: none recorded"
     else
       echo "so far: the newest $([ "$total" -lt 5 ] && echo "$total" || echo 5) of $total events, newest first:"
-      head -5 <<<"$events" | awk -F '\t' '{ printf "  %s %s %s%s\n", $1, $2, $3, ($4 == "" ? "" : ": " $4) }'
+      head -5 <<<"$events" | awk -F '\t' '{ printf "  %s %s %s%s\n", substr($1, 1, 10), $2, $3, ($4 == "" ? "" : ": " $4) }'
     fi
   fi
   totals="$(awk -F '\t' '$1 == "totals" { print $2 }' <<<"$history")"; printf '%s\n' "$totals"
