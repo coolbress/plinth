@@ -151,13 +151,17 @@ else:
 market = json.loads((docs / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
 entries = {p["name"]: p for p in market["plugins"]}
 n_matt, n_extra = len(entries["mattpocock-skills"]["skills"]), len(entries["mattpocock-skills-extra"]["skills"])
-arsenal_rel = "skills/arsenal/SKILL.md"
+# The counts live beside the arsenal's SKILL.md: the listed tools and the
+# skills in neither in listed.md, the default set in installed.md.
+arsenal_rel = "skills/arsenal/listed.md"
 arsenal = (docs / arsenal_rel).read_text(encoding="utf-8")
+installed_rel = "skills/arsenal/installed.md"
+installed_md = (docs / installed_rel).read_text(encoding="utf-8")
 notice = (docs / "NOTICE").read_text(encoding="utf-8")
 counted = {**words, **numbers, "fifteen": 15}
 def num(raw):
     return int(raw) if raw.isdigit() else counted.get(raw.lower(), -1)
-neither = re.search(r"The (\w+) in neither are ([^(]+)\(", arsenal)
+neither = re.search(r"The (\w+) in neither\s+are ([^(.]+)[(.]", arsenal)
 if not neither:
     fail(f"{arsenal_rel} has no \"The <n> in neither are ...\": the skills upstream ships cannot be counted")
     n_neither = -1
@@ -170,7 +174,7 @@ facts = [
     (arsenal_rel, arsenal, r"`mattpocock-skills` installs (\w+) of the", n_matt, "installed"),
     (arsenal_rel, arsenal, r"`mattpocock-skills` installs \w+ of the (\w+) skills", total, "shipped upstream"),
     (arsenal_rel, arsenal, r"`mattpocock-skills-extra` lists (\w+) more", n_extra, "listed"),
-    (arsenal_rel, arsenal, r"\| `mattpocock-skills` \| (\w+) skills:", n_matt, "installed"),
+    (installed_rel, installed_md, r"\| `mattpocock-skills` \| (\w+) skills:", n_matt, "installed"),
     (arsenal_rel, arsenal, r"\| `mattpocock-skills-extra` \| The (\w+) other", n_extra, "listed"),
     (arsenal_rel, arsenal, r"adds its\s+(\w+)\s+beside the default set's", n_extra, "listed"),
     (arsenal_rel, arsenal, r"beside the default set's\s+(\w+)", n_matt, "installed"),
@@ -339,24 +343,24 @@ copy; sed -i.bak 's/checks all five/checks all four/' "$tmp/docs/docs/tutorials/
 expect_fail_at "\"checks all four\" for five tools" "docs/tutorials/getting-started.md:$(tool_line '^- Tools: ' docs/tutorials/getting-started.md)"
 copy; printf '\nNeeds git 2.28 or newer.\n' >>"$tmp/docs/docs/tutorials/getting-started.md"
 expect_fail "a git floor other than the door's" docs/tutorials/getting-started.md
-copy; sed -i.bak 's/installs 15 of the 27 skills/installs 14 of the 27 skills/' "$tmp/docs/skills/arsenal/SKILL.md"
-expect_fail_at "an arsenal count other than the manifest's" "skills/arsenal/SKILL.md:$(tool_line 'installs 14 of the' skills/arsenal/SKILL.md)"
-copy; sed -i.bak 's/installs 15 of the 27 skills/installs 15 of the 25 skills/' "$tmp/docs/skills/arsenal/SKILL.md"
-expect_fail_at "an upstream total other than the lists add to" "skills/arsenal/SKILL.md:$(tool_line 'installs 15 of the' skills/arsenal/SKILL.md)"
+copy; sed -i.bak 's/installs 15 of the 27 skills/installs 14 of the 27 skills/' "$tmp/docs/skills/arsenal/listed.md"
+expect_fail_at "an arsenal count other than the manifest's" "skills/arsenal/listed.md:$(tool_line 'installs 14 of the' skills/arsenal/listed.md)"
+copy; sed -i.bak 's/installs 15 of the 27 skills/installs 15 of the 25 skills/' "$tmp/docs/skills/arsenal/listed.md"
+expect_fail_at "an upstream total other than the lists add to" "skills/arsenal/listed.md:$(tool_line 'installs 15 of the' skills/arsenal/listed.md)"
 copy; sed -i.bak 's/15 of the 27 upstream ships/14 of the 27 upstream ships/' "$tmp/docs/.claude-plugin/marketplace.json"
 expect_fail_at "a marketplace count other than its list" ".claude-plugin/marketplace.json:1"
 copy; sed -i.bak 's/15 skills installed, 6 listed/15 skills installed, 7 listed/' "$tmp/docs/NOTICE"
 expect_fail_at "a NOTICE count other than the manifest's" "NOTICE:$(tool_line '7 listed in' NOTICE)"
-copy; sed -i.bak "s/adds its six\$/adds its seven/" "$tmp/docs/skills/arsenal/SKILL.md"
-expect_fail_at "\"adds its seven\" for six" "skills/arsenal/SKILL.md:$(tool_line 'adds its seven' skills/arsenal/SKILL.md)"
+copy; sed -i.bak "s/adds its six\$/adds its seven/" "$tmp/docs/skills/arsenal/listed.md"
+expect_fail_at "\"adds its seven\" for six" "skills/arsenal/listed.md:$(tool_line 'adds its seven' skills/arsenal/listed.md)"
 copy; printf '\nclaude plugin update taste-skill@plinth\n' >>"$tmp/docs/docs/how-to/cut-a-release.md"
 expect_fail "a one-time command repeated outside the README" docs/how-to/cut-a-release.md
 copy; sed -i.bak 's/--squash --match-head-commit <sha> --body/--squash --body/' "$tmp/docs/docs/how-to/run-a-project.md"
 expect_fail_at "a squash-merge command that differs" "docs/how-to/run-a-project.md:$(tool_line 'gh pr merge <n> --squash' docs/how-to/run-a-project.md)"
 copy; sed -i.bak '/^  2\. "Can I see it?"$/d' "$tmp/docs/docs/how-to/run-a-project.md"
 expect_fail_at "a step 5 that lists two of the three questions" "docs/how-to/run-a-project.md:$(grep -n -m1 '^### 5\.' "$tmp/docs/docs/how-to/run-a-project.md" | cut -d: -f1)"
-copy; sed -i.bak 's/"Can I see it?", "What did the reviewer say?" |/"Can I see it?" |/' "$tmp/docs/skills/arsenal/SKILL.md"
-expect_fail_at "an arsenal cell that names the three questions and says two" "skills/arsenal/SKILL.md:$(tool_line '"Can I see it?" |' skills/arsenal/SKILL.md)"
+copy; sed -i.bak 's/"Can I see it?", "What did the reviewer say?" |/"Can I see it?" |/' "$tmp/docs/docs/reference/arsenal-evidence.md"
+expect_fail_at "an arsenal cell that names the three questions and says two" "docs/reference/arsenal-evidence.md:$(tool_line '"Can I see it?" |' docs/reference/arsenal-evidence.md)"
 copy; printf '\nThen ask the three questions.\n' >>"$tmp/docs/skills/guide/SKILL.md"
 expect_fail "a line that names the three questions and says none" skills/guide/SKILL.md
 copy; sed -i.bak '1,/gh auth login -s repo,workflow`/s/gh auth login -s repo,workflow`/gh auth login -s repo,workflow,delete_repo`/' "$tmp/docs/docs/tutorials/getting-started.md"

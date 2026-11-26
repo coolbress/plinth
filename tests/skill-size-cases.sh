@@ -18,7 +18,7 @@ fixture() {
   local d="$tmp/$3"
   mkdir -p "$d/tests"
   # one, and the skills skill-size.sh lists exceptions for, which must exist
-  for s in one arsenal floor-check; do
+  for s in one floor-check; do
     mkdir -p "$d/skills/$s"
     printf -- '---\nname: %s\ndescription: x\n---\nbody\n' "$s" > "$d/skills/$s/SKILL.md"
   done
