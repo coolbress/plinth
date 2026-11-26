@@ -433,7 +433,7 @@ Without them, or when they do not help:
       request yourself, then re-run this job.
 
    When nothing acknowledged the request, the error stays
-   `no third-party review is attached to this commit`, and steps 1 to 3 of
+   `No third-party review is attached to commit <sha>`, and steps 1 to 3 of
    this section apply.
 
 ## When to stop
