@@ -178,6 +178,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - A shipped SKILL.md stays within 500 lines and 20,000 bytes. 2026-11-25, #1126
 - `CLAUDE.md` keeps the Code Review Rules and the worktree rules byte for byte; procedures live in `docs/`. 2026-11-25, #1125
 - plinth's own `AGENTS.md` (`CLAUDE.md`) stays within 110 lines and 7,500 bytes; this reverses #25's 60-line cap for plinth's own file. 2026-11-25, #1125
+- An incident yields a check or nothing: rule text goes into `AGENTS.md` or a skill only when no check can hold it, and the pull request says why; a raised size cap is a change to the checks. 2026-11-25, #1138
 - No documentation site; `docs/` in the repository is enough until a reader asks for one. 2026-11-25, #1140
 
 ## Agents and safety
