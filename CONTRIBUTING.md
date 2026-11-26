@@ -39,13 +39,13 @@ A test can reach a file only through a shared library under `tests/lib/` or
 the library's own name too: in `tests/*.sh` for the tests that source it, and
 in `scripts/` for the scripts that do, then for those scripts' names in
 `tests/*.sh`. A change to a Markdown file reaches the tests that read every
-one: `markdownlint`, `de-jargon` and `doc-pinned-facts`.
+one: `markdownlint` and `doc-consistency`.
 
 The whole set, for whoever wants it locally, queues each test on its own in
 `scripts/heavy.sh`, plinth-template's queue (#989), so the slot goes back
 between tests and another project's heavy command can take it.
 install-smoke, markdownlint, workflow-lint, python-lint, gitlab-ci-cases,
-build-cases, release-allowlist, template-render, arsenal-freshness, uv-pin and
+build-cases, release-allowlist, template-render, doc-consistency, uv-pin and
 release-download-token need network:
 
 ```bash
@@ -90,9 +90,9 @@ version whose standard library parses TOML, as the runner's does.
 `tests/install-smoke-interrupt.sh` needs `perl`, `pkill` and `pgrep` and takes
 about 20 seconds. `tests/gitlab-ci-cases.sh` installs the GitLab
 `floor-check` job's PyYAML from PyPI, pinned by hash, so it needs network.
-The tests that compare plinth with the template (`template-rules-drift`,
+The tests that compare plinth with the template (`doc-consistency`,
 `archetype-single-source`, `off-by-default-cases`, `uv-pin`,
-`release-allowlist`, `arsenal-freshness`, `template-update-cases`,
+`release-allowlist`, `template-update-cases`,
 `template-render` and `install-smoke`) read the checkout `PLINTH_TEMPLATE_DIR`
 names, which must be at the pinned commit with nothing changed; without it,
 each fetches its own. Each `ci / install-<n>` job makes the checkout once, in a
