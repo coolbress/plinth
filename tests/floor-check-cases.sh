@@ -3905,6 +3905,11 @@ answers "must not pass: owner_has_pr_template: true and the owner's is gone is a
   "^  WARN  owner_has_pr_template: true, and the owner's .github repository no longer publishes PULL_REQUEST_TEMPLATE.md" \
   'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$gone_api"
 answers "owner_has_pr_template: false is not read" '!owner_has_pr_template' 'owner_has_pr_template: false\n'
+# Each owner copy is its own check (#1103): the pull-request template's
+# unreadable file is a SKIP too.
+bad_pr_api="$work/ans-bad-pr"; mkdir -p "$bad_pr_api/repos/o/.github/contents"; printf 'not json' > "$bad_pr_api/repos/o/.github/contents/PULL_REQUEST_TEMPLATE.md.json"; printf '{"visibility":"public"}' > "$bad_pr_api/repos/o/.github.json"
+answers "an owner's pull-request template that cannot be read is a SKIP, not a WARN" "^  SKIP  owner_has_pr_template: true; whether the owner's .github repository still publishes it not verified" \
+  'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$bad_pr_api"
 # The archetypes that get the tag ruleset: one list in the door, one in the checker.
 door_list="$(sed -n 's/^case "\$arch" in \([a-z|-]*\)) tag_ruleset=0.*/\1/p' "$root/scripts/new-project.sh")"
 checker_list="$(python3 -c "import importlib.util as u; s=u.spec_from_file_location('fc','$root/scripts/floor-check.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print('|'.join(m.TAG_NOT_RELEASING))")"

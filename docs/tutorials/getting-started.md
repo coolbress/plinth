@@ -84,7 +84,8 @@ type an answer instead):
 1. **Where should the repository live?** GitHub (recommended) or GitLab.com,
    each with what was just read beside it, for example "✓ gh logged in as
    you". Then it checks that host's tools, git's identity for the first
-   commit, and the login and its token, and lists every item missing at once,
+   commit (a name and email you set, not one git makes up from this
+   computer's name), and the login and its token, and lists every item missing at once,
    each with its fix; say "done" and it checks again.
 2. **What do you want to make?** A sentence or two in your own words; "I
    don't know" is an answer too. When that leaves the kind open, it asks how
