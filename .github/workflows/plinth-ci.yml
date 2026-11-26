@@ -225,6 +225,9 @@ jobs:
       - name: The door's skill shows every answer in one table before it creates anything
         run: ./tests/new-project-answer-table.sh
 
+      - name: The door reads the folder it starts in from local state only, and its skill offers the right path first
+        run: ./tests/new-project-where.sh
+
       - name: The door's shared .github decisions on fixtures, without the door
         run: ./tests/shared-github-cases.sh
 

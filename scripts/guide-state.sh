@@ -338,7 +338,9 @@ if ! git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 top="$(git -C "$dir" rev-parse --show-toplevel)"; folder_name="$(basename "$top")"
 answers="$top/.copier-answers.yml"
-answer() { sed -nE "s/^$1: *['\"]?([^'\"]*)['\"]? *\$/\\1/p" "$answers" 2>/dev/null | head -1; }
+# shellcheck source=scripts/lib/copier-answers.sh
+. "$plugin/scripts/lib/copier-answers.sh"
+answer() { copier_answer "$answers" "$1"; }
 
 # Made by plinth means rendered from its template in the form the door
 # writes, as floor-check's template item reads it; another Copier template
@@ -346,7 +348,7 @@ answer() { sed -nE "s/^$1: *['\"]?([^'\"]*)['\"]? *\$/\\1/p" "$answers" 2>/dev/n
 template_repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$plugin/scripts/new-project.sh" 2>/dev/null)"
 [ -n "$template_repo" ] || { echo "guide-state: no template_repo in $plugin/scripts/new-project.sh" >&2; exit 1; }
 src="$(answer _src_path)"
-if [ ! -f "$answers" ] || [ "$src" != "gh:$template_repo" ]; then
+if ! made_by_plinth "$answers" "$template_repo"; then
   made=no
   if [ -f "$answers" ]; then echo "made by plinth: no (.copier-answers.yml names ${src:-no} template, not gh:$template_repo)"
   else echo "made by plinth: no (no .copier-answers.yml)"; fi
