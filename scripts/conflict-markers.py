@@ -92,6 +92,18 @@ def escape(value, prop=False):
     return value.replace(":", "%3A").replace(",", "%2C") if prop else value
 
 
+def stopped(what, next_step):
+    """The diff was not read: an annotation, or with MESSAGE_FILE set, "<what><TAB><next>"
+    for the step that prints the check's one annotation (ci / diff-size, #1100)."""
+    path = os.environ.get("MESSAGE_FILE")
+    if path:
+        print(f"{what}; {next_step}")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"{what}\t{next_step}\n")
+    else:
+        print(f"::error::{what}. {next_step[:1].upper()}{next_step[1:]}: {HOW}")
+
+
 def main(argv):
     if not argv:
         print("usage: conflict-markers.py <git diff revisions>", file=sys.stderr)
@@ -105,10 +117,10 @@ def main(argv):
             elif MIDDLE.match(text):
                 middles.append((path, line, text))
     except RuntimeError as err:
-        print(f"::error::git could not produce the diff {err}. Update the branch from its base and push again: {HOW}")
+        stopped(f"git could not produce the diff {err}", "update the branch from its base and push again")
         return 2
     except Exception as err:  # noqa: BLE001  exit 1 means a marker was found; a crash is not one
-        print(f"::error::the conflict-marker check stopped ({type(err).__name__}: {err}); the diff was not read: {HOW}")
+        stopped(f"the conflict-marker check stopped ({type(err).__name__}: {err}), so the diff was not read", "re-run this job")
         return 2
     found = sorted(edges + [m for m in middles if m[0] in files])
     if not found:
@@ -120,7 +132,7 @@ def main(argv):
         print(f"::error file={escape(path, True)},line={line}::{escape(path)}:{line} is a merge conflict marker "
               f"({escape(text[:40])}). Resolve the conflict, delete the marker lines and push: {HOW}")
     if len(found) > ANNOTATED:
-        print(f"::error::{len(found) - ANNOTATED} more conflict marker lines are in the log: {HOW}")
+        print(f"::notice::showing {ANNOTATED} of {len(found)} conflict marker lines; every one is in the log: {HOW}")
     return 1
 
 

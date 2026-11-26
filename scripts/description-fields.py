@@ -100,8 +100,8 @@ def field_lines(body, what):
         why = ("there is no `What I checked myself` section" if checked is None
                else "its `What I checked myself` section is empty" if not checked.strip()
                else f'its `What I checked myself` section says only "{" ".join(checked.split())[:QUOTE]}"')
-        out.append(f"not yet confirmed: {what} description, does not say what the person checked themselves: {why};"
-                   f" edit it to say what you ran or read and saw, or `Skipped: <reason>`: {HOW}")
+        out.append(f"not yet confirmed: {what} description says what was checked. Why: {why}."
+                   f" What confirms it: an edit saying what you ran or read and saw, or `Skipped: <reason>` ({HOW}).")
     values = review_values(lines)
     if any(review_filled(v) for v in values):
         out.append(f"pass: {what} description, says which review ran")
@@ -109,8 +109,8 @@ def field_lines(body, what):
         why = ("there is no `Review:` line" if not values
                else "its `Review:` line is empty" if not values[-1].strip()
                else f'its `Review:` line says "{" ".join(values[-1].split())[:QUOTE]}"')
-        out.append(f"not yet confirmed: {what} description, does not say which review ran: {why};"
-                   f" write `{REVIEW_FORM}`: {HOW}")
+        out.append(f"not yet confirmed: {what} description names its review. Why: {why}."
+                   f" What confirms it: `{REVIEW_FORM}` ({HOW}).")
     return out
 
 
@@ -129,8 +129,8 @@ def unknown_numbers(body, highest, what):
                 continue
             seen.add((sigil, number))
             top, kind, form = highest[sigil]
-            out.append(f"not yet confirmed: {what} description, {sigil}{number} is above the highest {kind} number here"
-                       f" ({sigil}{top}), so it links to nothing; rewrite it as `{form}` if it is another repository's: {HOW}")
+            out.append(f"not yet confirmed: {what} description's {sigil}{number} links to something. Why: it is above the highest {kind} number here"
+                       f" ({sigil}{top}). What confirms it: `{form}` if it is another repository's ({HOW}).")
     return out
 
 
@@ -148,8 +148,8 @@ if __name__ == "__main__":
         with open(sys.argv[2], encoding="utf-8") as f:
             body = json.load(f)["data"]["repository"]["pullRequest"]["body"]
     except (OSError, ValueError, KeyError, TypeError) as e:
-        print(f"not yet confirmed: {sys.argv[1]} description, its fields could not be read ({type(e).__name__});"
-              f" re-run this job: {HOW}")
+        print(f"not yet confirmed: {sys.argv[1]} description's fields. Why: they could not be read ({type(e).__name__})."
+              f" What confirms it: a re-run of this job ({HOW}).")
         sys.exit(0)
     lines = field_lines(body, sys.argv[1])
     # The bare numbers: never the fields' verdict, never a red. Unread, the

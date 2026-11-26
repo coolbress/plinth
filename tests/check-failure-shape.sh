@@ -9,11 +9,10 @@
 # as the last lines the step prints, a `more:` link at the plinth commit the
 # workflow runs whose anchor is a heading in docs/reference/required-checks.md
 # at this commit, no "earlier step failed" warning, and exit 0.
-# `ci / test`, `ci / lint`, `ci / typecheck`, `ci / build`, `ci / secrets`,
-# `ci / deps`, `ci / migrations` and `ci / deploy-check` have the shape; the
-# other rows are printed as pending with the ticket that brings them (#1100), and
-# fail here once that job's Verdict prints a block, so the list is kept
-# honest.
+# Every required check has the shape (#1100 brought the last of them):
+# `ci / pr-title`, `ci / diff-size` and `ci / floor-check`, which have no
+# Verdict step, by running the steps that fail, and wanting exit 1. A row
+# with no case fails here.
 # `ci / test` also: pytest's FAILED and ERROR lines become at most nine
 # annotations at file and line plus one "showing 9 of N" line, read from
 # committed pytest output (tests/fixtures/pytest/); pytest's exit code, 124
@@ -97,9 +96,11 @@ for line in open(sys.argv[1], encoding="utf-8"):
         print(re.sub(r"[^\w\- ]", "", m.group(1).lower()).replace(" ", "-"))
 PY
 
-# shape <label> <file with the step's output> <exit>: the block's rules.
+# shape <label> <file with the step's output> <exit> [<the exit wanted>]: the
+# block's rules. A Verdict step exits 0; a check with no Verdict step
+# (pr-title, diff-size, floor-check) fails in the step that prints it, 1.
 shape() {
-  local label="$1" out="$2" rc="$3" why=() titled msg more anchor
+  local label="$1" out="$2" rc="$3" want="${4:-0}" why=() titled msg more anchor
   titled="$(grep -E '^::error title=' "$out")"
   if [ "$(grep -c . <<<"$titled")" != 1 ] || [ -z "$titled" ]; then why+=("$(grep -c . <<<"$titled") titled ::error, want one"); fi
   msg="${titled#*::error title=*::}"
@@ -113,8 +114,8 @@ shape() {
     *) why+=("more: is not a link to required-checks.md at the workflow's commit: $more") ;;
   esac
   ! grep -qE '^::warning::.*earlier step failed' "$out" || why+=("an earlier-step-failed warning")
-  [ "$rc" = 0 ] || why+=("exit $rc")
-  if [ "${#why[@]}" = 0 ]; then ok "$label: one titled ::error, the block last, a link that exists, exit 0"
+  [ "$rc" = "$want" ] || why+=("exit $rc, want $want")
+  if [ "${#why[@]}" = 0 ]; then ok "$label: one titled ::error, the block last, a link that exists, exit $want"
   else bad "$label: $(IFS=';'; echo "${why[*]}")" "$(cat "$out")"; fi
 }
 
@@ -177,6 +178,28 @@ jv() {
 }
 vuln_one='[{"change_type":"added","manifest":"uv.lock","ecosystem":"pip","name":"jinja2","version":"2.10","package_url":"pkg:pypi/jinja2@2.10","license":null,"source_repository_url":null,"vulnerabilities":[{"severity":"high","advisory_ghsa_id":"GHSA-462w-v97r-4m45","advisory_summary":"Jinja2 sandbox escape","advisory_url":"https://github.com/advisories/GHSA-462w-v97r-4m45"}]}]'
 
+# The checks with no Verdict step: their steps, run as the runner would.
+step pr-title "Check the title" "$work/title.sh"
+step pr-title "The description closes no issue outside its closing line" "$work/description.sh"
+step diff-size "Measure the reviewable diff" "$work/measure.sh"
+step diff-size "No line the pull request adds is a merge conflict marker" "$work/markers.sh"
+step diff-size "Name changes to the checks the description does not" "$work/names.py"
+step diff-size "Ask an admin to approve a change to the checks" "$work/ask.py"
+step floor-check "Floor check" "$work/floor.sh"
+newrt() { rt="$work/rt-$((++n))"; mkdir -p "$rt"; : > "$rt/summary"; }
+run_title() { newrt; (cd "$rt" && env GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" TITLE="$1" bash -e "$work/title.sh") > "$rt/out" 2>&1; rc=$?; }
+gr="$work/gitrepo"; mkdir -p "$gr/src"; git -C "$gr" init -q -b main; git -C "$gr" config user.email t@example.com; git -C "$gr" config user.name t
+git -C "$gr" config commit.gpgsign false; printf 'x = 1\n' > "$gr/src/m.py"; git -C "$gr" add -A; git -C "$gr" commit -qm base; gbase="$(git -C "$gr" rev-parse HEAD)"
+seq 1 500 > "$gr/src/big.txt"; git -C "$gr" add -A; git -C "$gr" commit -qm big; ghead="$(git -C "$gr" rev-parse HEAD)"
+# measure <max lines> <base> <head>: the measure step, in rt.
+measure() { newrt; (cd "$gr" && env RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" MAX_LINES="$1" EXCLUDE="" WORKDIR=. BASE_SHA="$2" HEAD_SHA="$3" bash -e "$work/measure.sh") > "$rt/out" 2>&1; rc=$?; }
+# floor <the verdict lines a fake checker writes, as a Python string>.
+floor() {
+  newrt; mkdir -p "$rt/plinth"
+  printf 'import sys\nopen(sys.argv[sys.argv.index("--verdicts") + 1], "w").write(%s)\nprint("  FAIL  x")\nsys.exit(1)\n' "$1" > "$rt/plinth/floor-check.py"
+  (cd "$rt" && env RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r bash -e "$work/floor.sh") > "$rt/out" 2>&1; rc=$?
+}
+
 echo "-- the matrix: every required check, every outcome its Verdict reads"
 while IFS=$'\t' read -r check var sid; do
   job="${check#ci / }"
@@ -222,12 +245,14 @@ while IFS=$'\t' read -r check var sid; do
         *) bad "$check: steps.$sid.outcome ($var) has no case here: add one"; continue ;;
       esac
       shape "$check, steps.$sid failed" "$rt/out" "$rc" ;;
-    *)
-      t="#1100"
-      what="$check"; [ "$var" = - ] || what="$check, steps.$sid"
-      if sed -n "/^  $job:/,/^  [a-z]/p" "$wf" | grep -qF "fail_check=\"$check\""; then
-        bad "$check sets fail_check now: give its rows cases here instead of pending"
-      else printf '  ----  %s: pending, %s brings the shape\n' "$what" "$t"; fi ;;
+    "ci / pr-title") run_title "Add a thing"; shape "$check, a title that is not Conventional Commits" "$rt/out" "$rc" 1 ;;
+    "ci / diff-size") measure 400 "$gbase" "$ghead"; shape "$check, over the limit" "$rt/out" "$rc" 1 ;;
+    # floor-check.py's own not yet confirmed lines (its SKIPs) keep their
+    # form, `<what>; left to /plinth:floor-check`, which the say helper keys
+    # on; the fake checker writes none, so the #1156 pin below does not read them.
+    "ci / floor-check") floor "'fail: one thing; run /plinth:floor-check, which writes the fix\n' + 'fail: another\n'"
+                        shape "$check, two FAILs" "$rt/out" "$rc" 1 ;;
+    *) bad "$check has no case here: add one" ;;
   esac
 done < "$work/matrix"
 
@@ -486,6 +511,51 @@ for j in build secrets deps migrations deploy-check; do
   else bad "ci / $j passing printed a block or an error" "$(cat "$rt/out")"; fi
 done
 jv migrations WEB=false; grep -qx 'pass: migrations, does not apply (the web input is false: not a web project)' "$rt/out" && [ "$rc" = 0 ] && ok "not a web project: migrations passes as not applying" || bad "migrations off the web archetype" "$(cat "$rt/out")"
+
+echo "-- ci / pr-title, ci / diff-size, ci / floor-check: one cause, one annotation"
+run_title "fix: a thing (#12)"
+grep -qx 'failed: PR title ends in a number: fix: a thing (#12)' "$rt/out" && grep -qx "next: remove the trailing (#N) and name the issue on the description's closing line" "$rt/out" \
+  && shape "a title ending in a number" "$rt/out" "$rc" 1 || bad "a title ending in a number" "$(cat "$rt/out")"
+# The description: closing-references.sh's failure is the step's one
+# annotation, not one of its own as well.
+mkdir -p "$work/ghbin"; cat > "$work/ghbin/gh" <<'SH'
+#!/usr/bin/env bash
+[[ "$*" == *"pullRequests(first: 1"* ]] && { echo '{"data":{"repository":{"issues":{"nodes":[{"number":90}]},"pullRequests":{"nodes":[{"number":91}]}}}}'; exit 0; }
+printf '%s' '{"data":{"repository":{"pullRequest":{"body":"The two fixes #65 decided.\n\n## What I checked myself\n\nRan it.\n\nReview: fresh-context","closingIssuesReferences":{"nodes":[{"number":65,"repository":{"nameWithOwner":"o/r"}}],"pageInfo":{"hasNextPage":false}}}}}}'
+SH
+chmod +x "$work/ghbin/gh"; newrt; mkdir -p "$rt/plinth-closing"
+cp "$root/scripts/closing-references.sh" "$root/scripts/closing-references.py" "$root/scripts/description-fields.py" "$rt/plinth-closing/"
+(cd "$rt" && env PATH="$work/ghbin:$PATH" RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" REPO=o/r GH_TOKEN=x EVENT_NAME=pull_request PR=7 FETCH=success bash "$work/description.sh") > "$rt/out" 2>&1; rc=$?
+if [ "$(grep -c '^::error' "$rt/out")" = 1 ] && grep -q "^failed: #7's description: " "$rt/out" && grep -q '^next: reword the sentence' "$rt/out"; then ok "a closing keyword in a sentence: closing-references.sh's message is the one annotation"
+else bad "the description's failure: want one ::error, closing-references.sh's" "$(grep -E '^(::|failed:|next:)' "$rt/out")"; fi
+shape "a closing keyword in a sentence" "$rt/out" "$rc" 1
+measure 400 "$gbase" "$ghead"
+if grep -q "^next: split the change into pull requests that land one after another, .*and do not shorten docs, docstrings or tests to fit$" "$rt/out" \
+   && grep -qx 'Split the change; do not shorten docs, docstrings or tests to fit.' "$rt/summary"; then ok "over the limit: split the change, do not shorten docs, docstrings or tests to fit (#1144)"
+else bad "over the limit: the split advice" "$(tail -3 "$rt/out"; cat "$rt/summary")"; fi
+measure 0 "$gbase" "$ghead"; [ "$rc" = 0 ] && ! grep -q '^::error' "$rt/out" && ok "max-diff-lines 0: measured, no annotation" || bad "max-diff-lines 0" "$(cat "$rt/out")"
+# Runs 44675262391 and 44495014302 of a project's template update: the head
+# was not fetched, and one cause printed three of plinth's annotations, one
+# from each step that read the diff. Now the measure step's is the only one.
+measure 400 "$gbase" 4fa0da4bae525838f4702c93b4e2eba82143493e; one="$rt"; m_rc=$rc
+(cd "$gr" && env RUNNER_TEMP="$one" GITHUB_STEP_SUMMARY="$one/summary" PLINTH_SHA="$SHA" FETCH=success MEASURE=failure BASE_SHA="$gbase" HEAD_SHA=4fa0da4bae525838f4702c93b4e2eba82143493e bash "$work/markers.sh") > "$one/markers" 2>&1; k_rc=$?
+(cd "$gr" && env RUNNER_TEMP="$one" GITHUB_STEP_SUMMARY="$one/summary" PLINTH_SHA="$SHA" MEASURE=failure BODY="" BASE_SHA="$gbase" HEAD_SHA=4fa0da4bae525838f4702c93b4e2eba82143493e CHANGES_FILE="$one/changes.json" WEB=false python3 "$work/names.py") > "$one/names" 2>&1; c_rc=$?
+(cd "$gr" && env RUNNER_TEMP="$one" GITHUB_STEP_SUMMARY="$one/summary" PLINTH_SHA="$SHA" MEASURE=failure EVENT=pull_request REPO=o/r RUN_ID=1 NUMBER=7 HEAD_SHA=4fa0da4bae525838f4702c93b4e2eba82143493e HEAD_REF=x HEAD_REPO=o/r CHANGES_FILE="$one/changes.json" python3 "$work/ask.py") > "$one/ask" 2>&1; a_rc=$?
+all="$(cat "$one/out" "$one/markers" "$one/names" "$one/ask")"
+if [ "$(grep -c '^::error' <<<"$all")" = 1 ] && [ "$(grep -c '^::warning' <<<"$all")" = 0 ] && [ "$m_rc/$k_rc/$c_rc/$a_rc" = 1/0/0/0 ]; then
+  ok "the merge base unreadable (runs 44675262391, 44495014302): one ::error in the job, the measure step's, which alone fails"
+else bad "the merge base unreadable: want one ::error and exits 1/0/0/0, got $m_rc/$k_rc/$c_rc/$a_rc" "$(grep -E '^(::|failed:)' <<<"$all")"; fi
+shape "the merge base unreadable" "$one/out" "$m_rc" 1
+[ "$(grep -c '^- not yet confirmed: .*Why: the diff could not be computed, as the measure step says\.' "$one/summary")" = 3 ] \
+  && ok "... and the summary says the three other reads are not yet confirmed, for that reason" || bad "the summary of the unreadable diff" "$(cat "$one/summary")"
+# Measure passed: a step that cannot read the diff still fails, never passes.
+newrt; (cd "$gr" && env RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" MEASURE=success BODY="" BASE_SHA=0000000000000000000000000000000000000000 HEAD_SHA="$ghead" CHANGES_FILE="$rt/changes.json" WEB=false python3 "$work/names.py") > "$rt/out" 2>&1; rc=$?
+shape "measure passed, the name step's git failed: its own block" "$rt/out" "$rc" 1
+newrt; (cd "$gr" && env RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" MEASURE=success EVENT=pull_request REPO=o/r RUN_ID=1 NUMBER=7 HEAD_SHA=1111111111111111111111111111111111111111 HEAD_REF=x HEAD_REPO=o/r CHANGES_FILE="$rt/none.json" python3 "$work/ask.py") > "$rt/out" 2>&1; rc=$?
+shape "measure passed, the list of changes missing: the approval step fails" "$rt/out" "$rc" 1
+floor "'fail: ' + 'y' * 400 + '; run /plinth:floor-check, which writes the fix\n'"
+grep -qE '^::error title=ci / floor-check::floor-check: 1 FAIL, the first: y+\.\.\. — run /plinth:floor-check here' "$rt/out" && shape "a 400-character FAIL" "$rt/out" "$rc" 1 \
+  || bad "a long FAIL is not cut with the next step kept" "$(grep '^::' "$rt/out")"
 
 echo "-- not yet confirmed: one fact per sentence (#1156)"
 # More of the lines: the changed-lines step itself, run with uv and git

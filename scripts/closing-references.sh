@@ -12,6 +12,9 @@
 # request's number, empty on any other event). GH_TOKEN is the job's token; it
 # needs `pull-requests: read` and `issues: read`. ANSWER_COPY, when set, is a
 # path that gets GitHub's answer once read, for description-fields.py (#810).
+# MESSAGE_FILE, when set, gets the failure as "<what><TAB><next step>" and
+# no annotation is printed: ci / pr-title's step prints the one annotation
+# for it (#1100). ci / docs leaves it unset and keeps the annotation.
 #
 # Anything that cannot be read fails: a pass here means GitHub's list was read
 # and compared, as it stood when this ran. An issue linked in the sidebar
@@ -27,7 +30,8 @@ if [ "${EVENT:-}" != pull_request ]; then
   exit 0
 fi
 case "${PR:-}" in
-  ''|*[!0-9]*) echo "::error::a pull_request event, but the pull request number reads '${PR:-}'. Re-run this job from the pull request: $HOW"; exit 1 ;;
+  ''|*[!0-9]*) if [ -n "${MESSAGE_FILE:-}" ]; then printf "%s\t%s\n" "a pull_request event, but the pull request number reads '${PR:-}'" "re-run this job from the pull request" > "$MESSAGE_FILE"
+              else echo "::error::a pull_request event, but the pull request number reads '${PR:-}'. Re-run this job from the pull request: $HOW"; fi; exit 1 ;;
 esac
 
 answer="$(mktemp)"; trap 'rm -f "$answer"' EXIT
@@ -44,7 +48,8 @@ if ! gh api graphql -f owner="${REPO%%/*}" -f name="${REPO#*/}" -F number="$PR" 
       }
     }
   }' >"$answer"; then
-  echo "::error::could not read #$PR's description and closing list from GitHub. Re-run this job; its token needs pull-requests: read and issues: read: $HOW"
+  if [ -n "${MESSAGE_FILE:-}" ]; then printf '%s\t%s\n' "#$PR's description and closing list could not be read from GitHub" "re-run this job; its token needs pull-requests: read and issues: read" > "$MESSAGE_FILE"
+  else echo "::error::could not read #$PR's description and closing list from GitHub. Re-run this job; its token needs pull-requests: read and issues: read: $HOW"; fi
   exit 1
 fi
 [ -z "${ANSWER_COPY:-}" ] || cp "$answer" "$ANSWER_COPY"
@@ -67,6 +72,7 @@ if [ "$rc" != 0 ]; then
     *"more than 100"*) next="Reword the description so it closes fewer issues" ;;
     *) next="Re-run this job" ;;
   esac
+  if [ -n "${MESSAGE_FILE:-}" ]; then printf '%s\t%s\n' "#$PR's description: $first" "$(printf '%s' "${next:0:1}" | tr '[:upper:]' '[:lower:]')${next:1}" > "$MESSAGE_FILE"; exit 1; fi
   # At most 300 characters: what is cut is the first FAIL, never the action and link.
   lead="#$PR's description: "; tail=". $next: $HOW"; room=$((300 - ${#lead} - ${#tail}))
   [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
