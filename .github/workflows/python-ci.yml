@@ -1185,7 +1185,7 @@ jobs:
           if [ "$DEPLOY" = failure ]; then
             ids="$(grep -oE '\([a-z0-9_]+\.[WEC][0-9]+\)' "$RUNNER_TEMP/deploy.log" 2>/dev/null | tr -d '()' | awk '!s[$0]++' || true)"
             n="$(grep -c . <<<"$ids" || true)"
-            if [ -n "$ids" ]; then nx "run DJANGO_SECRET_KEY=x DJANGO_ALLOWED_HOSTS=example.invalid uv run python manage.py check --deploy --fail-level WARNING here with DJANGO_DEBUG unset, fix each warning in the settings, and push" "manage.py check --deploy: $n issue$([ "$n" = 1 ] || echo s), the first $(head -n 1 <<<"$ids")"
+            if [ -n "$ids" ]; then nx "run DJANGO_SECRET_KEY=\$(openssl rand -hex 32) DJANGO_ALLOWED_HOSTS=example.invalid uv run python manage.py check --deploy --fail-level WARNING here with DJANGO_DEBUG unset, fix each warning in the settings, and push" "manage.py check --deploy: $n issue$([ "$n" = 1 ] || echo s), the first $(head -n 1 <<<"$ids")"
             else nx "read the deploy step's log above its last line, fix what it names, and push"; fi
           fi
 

@@ -478,7 +478,8 @@ grep -q '^next: take the model the rows step names out of tests/migration_rows.j
 d="$work/rt-$((n + 1))"; mkdir -p "$d"; echo "not yet confirmed: the base commit's rows survive this head's migrations. Why: the base commit has no tests/migration_rows.json. What confirms it: a base that has it." > "$d/rows.verdict"; jv migrations
 [ "$rc" = 0 ] && ! grep -qE '^(failed:|::error)' "$rt/out" && ok "a base with no rows file: not yet confirmed, no block" || bad "no rows file" "$(cat "$rt/out")"
 d="$work/rt-$((n + 1))"; mkdir -p "$d"; printf '%s\n' "?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting." "?: (security.W008) Your SECURE_SSL_REDIRECT setting is not set to True." "?: (security.W004) again" "?: (oauth2_provider.E001) a setting" > "$d/deploy.log"; jv deploy-check DEPLOY=failure
-grep -qx 'failed: manage.py check --deploy: 3 issues, the first security.W004' "$rt/out" && ok "deploy issues: counted once each, an app label with a digit included, the first named" || bad "deploy warnings" "$(tail -3 "$rt/out")"
+grep -qx 'failed: manage.py check --deploy: 3 issues, the first security.W004' "$rt/out" && grep -qF 'next: run DJANGO_SECRET_KEY=$(openssl rand -hex 32) DJANGO_ALLOWED_HOSTS=example.invalid uv run python manage.py check --deploy' "$rt/out" \
+  && ok "deploy issues: counted once each, an app label with a digit included, the first named; next: uses a random 64-character key, as the step does (a short one is security.W009 itself)" || bad "deploy warnings" "$(tail -3 "$rt/out")"
 for j in build secrets deps migrations deploy-check; do
   jv "$j"
   if [ "$rc" = 0 ] && ! grep -qE '^(::error|failed:|next:|more:)' "$rt/out"; then ok "ci / $j passing: no block, no ::error"
