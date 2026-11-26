@@ -54,10 +54,11 @@ jobs:
     uses: ./.github/workflows/python-ci-text.yml
     # A called workflow cannot widen what its caller grants: a job there that
     # asks for more than this grant fails the whole run at startup, no check
-    # reporting (measured for #586). python-ci-text.yml's floor-check asks for
-    # `issues: read` (labels) and diff-size for `pull-requests: read` and
-    # `actions: write` (the approval of a change to the checks). Scoped to
-    # this job, not raised for the whole file.
+    # reporting (measured for #586). The grant and the inputs are ci.yml's
+    # canary's, held equal by tests/ci-text.sh: pr-title and diff-size need
+    # `issues: read`, `pull-requests: read` and `actions: write` (the
+    # approval of a change to the checks), and `floor-check-required-checks`
+    # has no job to read it here. Scoped to this job, not the whole file.
     permissions:
       contents: read
       issues: read

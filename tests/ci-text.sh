@@ -98,7 +98,9 @@ else
 fi
 
 # 2. The wiring of ci.yml, ci-text.yml and the two reusable files.
-python3 - "$work" "$wf" "$root/scripts/check-ruleset.sh" >"$work/out" <<'PY'
+# A check that stops with an error fails the test, whatever it printed first.
+wiring_rc=0
+python3 - "$work" "$wf" "$root/scripts/check-ruleset.sh" >"$work/out" 2>"$work/err" <<'PY' || wiring_rc=$?
 import json, re, sys
 sys.path.insert(0, sys.argv[1]); import lib
 wf = sys.argv[2]
@@ -140,6 +142,7 @@ while read -r verdict msg; do
   [ "$verdict" = PASS ] && ok "$msg" || bad "$msg"
 done <"$work/out"
 [ -s "$work/out" ] || bad "the wiring checks printed nothing"
+[ "$wiring_rc" = 0 ] || bad "the wiring checks stopped with an error (exit $wiring_rc), so the ones after it did not run" "$(tail -5 "$work/err")"
 
 echo "ci-text: $pass passed, $fail failed"
 [ "$fail" = 0 ]
