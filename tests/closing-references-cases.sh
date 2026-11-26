@@ -109,6 +109,10 @@ check "the same number in another repository"                  1 "other/repo#5"
 echo "-- the closing line: passes"
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12\n\n'"$by" "12"
 check "\`Closes #12\` directly above the attribution"          0 "#12"
+# A release pull request carries the suite's link to #647 on its own line (#1134);
+# GitHub closes nothing for it, and neither does the step.
+setup "$what"$'\n\neval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-123>\n\n'"$how"$'\n\n'"$by"
+check "a release description with the suite's link to #647 and no closing line" 0
 grep -qF 'FAIL' "$FX/summary" 2>/dev/null && { echo "  FAIL  a pass wrote a failure to the job summary" >&2; fail=$((fail + 1)); }
 grep -qE 'number=7( |$)' "$FX/calls" && grep -qE 'owner=coolbress( |$)' "$FX/calls" && grep -qE 'name=plinth( |$)' "$FX/calls" \
   || { echo "  FAIL  the call does not ask for coolbress/plinth #7" >&2; sed 's/^/        gh: /' "$FX/calls" >&2; fail=$((fail + 1)); }

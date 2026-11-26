@@ -48,6 +48,12 @@ case "$*" in
     [ "${E2E_LIST_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$E2E_LIST_RC"; }
     [ -z "${E2E_LIST:-}" ] || printf '%s\n' "$E2E_LIST"
     exit 0 ;;
+  # The pull requests a commit belongs to, as the script's --jq prints them:
+  # the release pull request's description (#1134).
+  "api repos/"*"/commits/"*"/pulls "*)
+    [ "${PULLS_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$PULLS_RC"; }
+    [ -z "${RELEASE_PR_BODY:-}" ] || printf '%s\n' "$RELEASE_PR_BODY"
+    exit 0 ;;
   # A commit's tree, read from a real repository: the mock answers with the
   # tree that commit has, not with one a case says it has.
   "api repos/"*"/git/commits/"*)
@@ -213,6 +219,7 @@ printf 'A reason.\n\ntested with %s\n\neval suite: %s\n' "$moved" "$suite_link" 
 printf 'A reason.\n\ntested with %s\n\neval suite: <https://example.com/table>\n' "$moved" > "$work/moved-other-link.md"
 printf 'A reason.\n\ntested with %s\n\neval suite not run:  \n' "$moved" > "$work/moved-no-reason.md"
 printf 'A reason.\n\ntested with %s\n\neval suite: <%s>\neval suite not run: both.\n' "$moved" "$suite_link" > "$work/moved-two.md"
+printf 'A reason.\n\ntested with %s\n\neval suite: on the release candidate\n' "$moved" > "$work/moved-candidate.md"
 undo_bump() { g switch -q main; g branch -q -D "release/v$next"; }
 export COMPARE_OUT=$'3\nREADME.md\ntemplate/AGENTS.md.jinja\ntemplate/.claude/output-styles/new-name.md.jinja\ntemplate/.claude/output-styles/beginner-or-non-engineer.md.jinja'
 run "v$next" "$work/moved.md";     check "a moved pin that changes what the agent reads, without a suite line, is refused" no $?
@@ -240,6 +247,12 @@ is "  and the section carries the link" grep -qxF "eval suite: <$suite_link>" <(
 undo_bump
 run "v$next" "$work/moved-reason.md"; check "with a stated reason it bumps" ok $?
 is "  and the section carries the reason" grep -qxF "eval suite not run: only the README line changed in AGENTS.md." <(section_of "$next")
+undo_bump
+run "v$next" "$work/moved-candidate.md"; check "with 'eval suite: on the release candidate' it bumps (#1134)" ok $?
+is "  and the section carries that line" grep -qxF "eval suite: on the release candidate" <(section_of "$next")
+is "  and it names the one run on the candidate, --release, in place of --smoke" \
+  bash -c 'grep -qF "git switch release/$2 && scripts/eval-suite.sh --release" "$1" && ! grep -qF "eval-suite.sh --smoke" "$1"' _ "$work/out" "v$next"
+is "  and says the link goes in the pull request's description" says "eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>"
 undo_bump
 export COMPARE_OUT=$'2\nREADME.md\ntemplate/README.md.jinja'
 run "v$next" "$work/moved.md";     check "a moved pin that touches no file the agent reads is not asked" ok $?
@@ -478,6 +491,27 @@ is "  and the refusal names the section" says "## [$next]"
 back
 is "no tag on a refused section"   [ -z "$(git -C "$origin" tag -l)" ]
 is "no release on a refused section" not grep -q "release create" "$work"/log.*
+
+echo "-- run 2: the release run on the candidate, linked in the release pull request's description (#1134)"
+why_is "$(printf 'A reason.\n\ntested with %s\n\neval suite: on the release candidate' "$template")"
+run "v$next";                      check "a candidate line with no link in the release pull request's description is refused" no $?
+is "  and the refusal names the line it wants" says "eval suite: <https://github.com/"
+is "  after asking for the pull requests of the release commit" grep -qF "commits/$release_commit/pulls" "$GH_LOG"
+export RELEASE_PR_BODY="$(printf 'Run 1.\n\neval suite: %s\n' "$suite_link")"
+run "v$next";                      check "  a bare link there is refused" no $?
+export RELEASE_PR_BODY="$(printf 'eval suite: <%s>\neval suite: <%s>\n' "$suite_link" "$suite_link")"
+run "v$next";                      check "  two links there are refused" no $?
+export RELEASE_PR_BODY="$(printf 'eval suite: <%s>\n' "$suite_link")" PULLS_RC=4
+run "v$next";                      check "  a failed query is refused, not read as 'no link'" no $?
+unset PULLS_RC
+is "no tag on a candidate line without its link" [ -z "$(git -C "$origin" tag -l)" ]
+export RELEASE_PR_BODY="$(printf 'Run 1, e2e green.\n\neval suite: <%s>\n\nAssisted-by: x\n' "$suite_link")"
+run "v$next";                      check "with the link in the description it tags and releases" ok $?
+is "  and the Release carries the link in place of the candidate line" \
+  bash -c 'grep -qxF "eval suite: <$2>" "$1" && ! grep -qF "on the release candidate" "$1"' _ "$GH_LOG.body" "$suite_link"
+is "  while CHANGELOG.md keeps the line it was tested with" grep -qxF "eval suite: on the release candidate" <(section_of "$next")
+git -C "$origin" tag -d "v$next" >/dev/null; unset RELEASE_PR_BODY
+back
 
 rm -f "$work/deleted.md"
 run "v$next" "$work/deleted.md";   check "from the merged main, with a green e2e run on its commit, it tags and releases" ok $?

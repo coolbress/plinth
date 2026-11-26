@@ -131,6 +131,9 @@ mutate "$tmp/f-otherdel.json" "$fr"'files += [fr("changelog.d/one.md"), fr("READ
 mutate "$tmp/f-fragdir.json"  "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/.markdownlint.jsonc")]'
 mutate "$tmp/f-fragdot.json"  "$fr"'files += [fr("changelog.d/one.md"), fr("changelog.d/.hidden.md")]'
 mutate "$tmp/f-fragsub.json"  "$fr"'files += [fr("changelog.d/sub/x.md")]'
+# The suite run on the candidate (#1134): the section adds the line that says so;
+# the link is in the description, which the pass rule does not read.
+mutate "$tmp/f-candidate.json" 'c = files[2]; c["patch"] = c["patch"].replace("\n+tested with", "\n+eval suite: on the release candidate\n+\n+tested with", 1); assert "on the release candidate" in c["patch"]'
 python3 -c 'import json,sys; json.dump([{"filename": "x%d" % i, "status": "added", "patch": "+x"} for i in range(100)], open(sys.argv[1], "w"))' "$tmp/f-fullpage.json"
 R='TITLE=chore(release): v1.7.0'
 gate ''     'a release title with a file beyond the three is summoned'         PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-extra.json"
@@ -155,6 +158,7 @@ gate ''     'a release title that removes a dot file run 1 never deletes is summ
 gate ''     'a release title that removes a file below changelog.d/ is summoned' PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-fragsub.json"
 gate "$REL" 'the real v1.7.0 release diff passes under its title'              PASS_RELEASE=true "$R" FILES_JSON="$real"
 gate "$REL" 'the release diff with its changelog fragments removed passes'      PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-frags.json"
+gate "$REL" "a release whose section says the suite runs on the candidate passes" PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-candidate.json"
 if out="$(env -i PATH="$PATH" DRAFT=false MERGED=false PR_STATE=open PASS_RELEASE=true "$R" FILES_JSON="$tmp/f-extra.json" \
             ACTIVITY_JSON="$tmp/dependabot.json" HEAD_SHA="$HEAD" AUTHOR_LOGIN=coolbress bash "$gate_sh" 2>&1 >/dev/null)" \
    && printf '%s' "$out" | grep -q 'scripts/new-project.sh'; then

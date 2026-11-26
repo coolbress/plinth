@@ -43,9 +43,15 @@
 # reads: template/AGENTS.md.jinja, template/CLAUDE.md.jinja, anything under
 # template/.claude/ (settings, the output style, the default skills). The run
 # it names is scripts/eval-suite.sh --release (#876). The why
-# then carries one of two lines, which stay in the section and the Release:
+# then carries one of three lines, which stay in the section and the Release:
 #   eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>
+#   eval suite: on the release candidate
 #   eval suite not run: <the reason>
+# The second (#1134) is the run on release/vX.Y.Z, which gives the smoke
+# verdict too: its link cannot be in the commit it tests, so it goes in the
+# release pull request's description, and run 2 reads it there (the pull
+# request titled `chore(release): vX.Y.Z` that the release commit belongs to),
+# refuses without it, and publishes it in the Release in place of the line.
 # A release whose pin did not move, or whose move touches none of those
 # files, is not asked.
 #
@@ -73,6 +79,12 @@ template_repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$root/scripts/new-p
 template_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 [ -n "$template_repo" ] && [ -n "$template_ref" ] || stop "cannot read template_repo/template_ref from scripts/new-project.sh"
 tested="tested with ${template_repo##*/} ${template_ref}"
+# The suite's link, as the why or the release pull request's description gives it.
+suite_link_re='^eval suite: <https://github\.com/[^/[:space:]]+/[^/[:space:]]+/(issues|pull)/[0-9]+#issuecomment-[0-9]+>$'
+# The suite run on the release candidate, which also gives the smoke verdict
+# (#1134): the link cannot be in the commit it tests, so the why says this and
+# the release pull request's description carries the link.
+candidate_line="eval suite: on the release candidate"
 # The same test for the why-file in run 1 and the section in run 2. Reads the
 # text on stdin; $1 names it in the refusal.
 check_why() {
@@ -138,6 +150,7 @@ PY
 )"
   [ -n "$section" ] || stop "CHANGELOG.md has no '## [$ver]' section with text under it; run 2 publishes that section"
   check_why "the why above the first ### of CHANGELOG.md's [$ver] section" <<<"$(awk '/^### /{exit} 1' <<<"$section")"
+  on_candidate=""; grep -qxF -- "$candidate_line" <<<"$(awk '/^### /{exit} 1' <<<"$section")" && on_candidate=1
   # The tag goes on the commit that set this version, not on HEAD: a pull
   # request merged after the release one is unreleased and must stay so. The
   # release commit is the newest one whose top-level version is this one while
@@ -151,6 +164,20 @@ PY
     release_commit="$c"; break
   done
   [ -n "$release_commit" ] || stop "no commit on main sets version $ver in plugin.json"
+  # The suite run on the candidate (#1134): its link is in the release pull
+  # request's description, and goes into the Release in place of the line.
+  if [ -n "$on_candidate" ]; then
+    body="$(gh api "repos/{owner}/{repo}/commits/$release_commit/pulls" \
+              --jq ".[] | select(.title == \"chore(release): $tag\") | .body" 2>&1)" \
+      || stop "cannot read the release pull request of ${release_commit:0:12}: $body"
+    link="$(tr -d '\r' <<<"$body" | grep -E '^eval suite:' || true)"
+    [ "$(grep -c . <<<"$link")" = 1 ] && [[ "$link" =~ $suite_link_re ]] \
+      || stop "the section says '$candidate_line'; the description of the pull request 'chore(release): $tag' must then carry the run's link on one line, alone, in angle brackets:" \
+              "  eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>" \
+              "it has: ${link:-no 'eval suite:' line}"
+    section="$(awk -v c="$candidate_line" -v l="$link" '$0 == c { print l; next } 1' <<<"$section")"
+    echo "the suite's run on the candidate: $link"
+  fi
   # Tier 2 on this exact commit, green, or no tag. GitHub filters on head_sha;
   # the select repeats it so a mock or a lenient server cannot widen the
   # answer. `conclusion // status` names a running run as such.
@@ -279,9 +306,10 @@ if [ "$prev_ref" != "$template_ref" ]; then
   reads="$template_reads"
   if [ -n "$reads" ]; then
     case "$suite_line" in
+      "$candidate_line") ;;
       "eval suite:"*)
         # In angle brackets: a bare URL in the section fails markdownlint (MD034), and `ci / docs` with it.
-        [[ "$suite_line" =~ ^eval\ suite:\ \<https://github\.com/[^/[:space:]]+/[^/[:space:]]+/(issues|pull)/[0-9]+#issuecomment-[0-9]+\>$ ]] \
+        [[ "$suite_line" =~ $suite_link_re ]] \
           || stop "the why's 'eval suite:' line must be the link to the comment with the suite's table, alone, in angle brackets:" \
                   "  eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>" "it says: $suite_line" ;;
       "eval suite not run:"*)
@@ -293,6 +321,9 @@ if [ "$prev_ref" != "$template_ref" ]; then
              "run the eval suite's release run, scripts/eval-suite.sh --release (docs/how-to/run-the-eval-suite.md)," \
              "post its table, and add to the why-file one line:" \
              "  eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>" \
+             "or, to run it once on the release candidate, where it gives the smoke verdict too, the line" \
+             "  $candidate_line" \
+             "and the link in the release pull request's description;" \
              "or, if it is not run, the reason, which the release section then carries:" \
              "  eval suite not run: <why>" ;;
     esac
@@ -334,13 +365,23 @@ git add "$plugin" "$market" "$changelog"
 # such as changelog.d/.markdownlint.jsonc stay, as the assembler skips them.
 for f in "$root"/changelog.d/*.md; do if [ -e "$f" ]; then git rm -q -- "$f"; fi; done
 git commit -q -m "chore(release): $tag"
+if grep -qxF -- "$candidate_line" "$why_file"; then
+  gate_run="the eval suite's release run, which gives the smoke verdict too (#1134)"
+  gate_cmd="git switch release/$tag && scripts/eval-suite.sh --release"
+  gate_where="posts its table on #647, and puts the comment's link in the pull request's description on one line, which run 2 puts in the Release:
+  eval suite: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>"
+else
+  gate_run="the smoke run (about US\$0.90)"
+  gate_cmd="git switch release/$tag && scripts/eval-suite.sh --smoke"
+  gate_where="posts its table on #647:"
+fi
 cat <<MSG
 bumped $current -> $ver in plugin.json, marketplace.json and CHANGELOG.md, deleted the fragments in changelog.d/, committed on release/$tag;
 the why is in the [$ver] section now, and nothing reads $why_file again.
 next: push the branch, open the pull request, and run e2e on the branch:
   gh workflow run e2e.yml --ref release/$tag
-beside it, the owner runs the smoke run from a clone on this branch (it needs the owner's Claude login, about US\$0.90, every run must pass) and posts its table on #647:
-  git switch release/$tag && scripts/eval-suite.sh --smoke
+beside it, the owner runs $gate_run from a clone on this branch (it needs the owner's Claude login; every smoke row must pass), and $gate_where
+  $gate_cmd
 name the e2e run and that comment in the pull request's description.
 once e2e is green, merge with scripts/merge-when-green.sh <n>, which stops until then but does not read the smoke run: the merge is what reaches an installation with auto-update on.
 then from the merged main run

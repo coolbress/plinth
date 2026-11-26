@@ -140,7 +140,7 @@ from="the tag plinth $version was tested with"
 if [ -n "$template_reads" ]; then
   echo "eval suite: owed at the next release: $name's diff from $tested ($from) to $tag changes what a new project's agent reads:"
   sed 's/^/  /' <<<"$template_reads"
-  echo "  scripts/make-release.sh run 1 asks the why for 'eval suite: <link>' or 'eval suite not run: <why>' (docs/how-to/run-the-eval-suite.md)"
+  echo "  scripts/make-release.sh run 1 asks the why for 'eval suite: on the release candidate' (one run on the release branch, smoke verdict included), 'eval suite: <link>' or 'eval suite not run: <why>' (docs/how-to/cut-a-release.md, step 2)"
 else
   echo "eval suite: not owed by this raise: $name's diff from $tested ($from) to $tag changes none of template/AGENTS.md.jinja, template/CLAUDE.md.jinja, template/.claude/"
 fi
