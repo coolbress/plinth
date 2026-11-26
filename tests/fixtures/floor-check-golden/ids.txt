@@ -44,3 +44,31 @@ FC-B12 .claude/settings.json denies glab auth status --show-token
 FC-B13 .claude/settings.json denies glab auth status -t
 FC-B14 .claude/settings.json denies glab config get token
 FC-B15 .claude/settings.json denies glab config reads
+FC-C01 pyproject.toml present
+FC-C02 uv.lock committed
+FC-C03 the archetype is known
+FC-C04 read as a JavaScript or TypeScript project
+FC-C05 the Python items do not apply to a JavaScript project
+FC-C06 a Bun lockfile is not the only lockfile
+FC-C07 MODEL_CARD.md present
+FC-C08 the release workflow present
+FC-C09 the release workflow runs on a pushed tag only
+FC-C10 the release workflow reads no stored secret
+FC-C11 the release uploads no pickle
+FC-C12 render.yaml present
+FC-C13 render.yaml is read
+FC-C14 a Render web service has a health check
+FC-C15 a Render web service deploys after the checks pass
+FC-C16 a Render database is on a paid plan
+FC-C17 no secret-named Render variable carries a literal value
+FC-C18 a web app hosted elsewhere
+FC-C19 Dockerfile present
+FC-C20 every base image is pinned by digest
+FC-C21 the image does not run as root
+FC-C22 the image installs from the lockfile
+FC-C23 the image's CMD runs the package
+FC-C24 .dockerignore present
+FC-C25 .dockerignore keeps .git, .env and .venv out
+FC-C26 the service logs JSON
+FC-C27 .env.example present
+FC-C28 .env.example documents every variable the code reads
