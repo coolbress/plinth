@@ -1191,8 +1191,9 @@ release_runs=$((release_cells * 3))
 TMPDIR="$tmp" EVAL_STUB_COST=8 suite --release --out "$tmp/rel"
 check "--release stops at a US\$15 ceiling: two sessions at US\$8, then exit 3" \
   '[ "$(rc)" = 3 ] && [ "$(sessions)" = 2 ] && grep -qF "ceiling reached: spent \$16.0000 of \$15;" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
-check "it runs the repo-only arm, then plinth, of the first task, with plinth off in repo-only" \
-  '[ "$(grep "^session " "$log" | sed -E "s/^session run=([^ ]+) .* settings=(.).*/\1:\2/" | tr "\n" " ")" = "cli-name-repo-only-1:{ cli-name-plinth-1:n " ]' "$(grep '^session' "$log")"
+first_two="$(for t in $marked; do echo "$t-plinth-1"; done | head -2 | tr "\n" " ")"
+check "it runs the smoke tasks first, in the plinth arm (#1134)" \
+  '[ "$(grep "^session " "$log" | sed -E "s/^session run=([^ ]+) .*/\1/" | tr "\n" " ")" = "$first_two" ]' "$(grep '^session' "$log")"
 check "every task, both arms, three runs: the rest are counted as not started" \
   'grep -qF "; $((release_runs - 2)) not started." "$tmp/out.txt" && grep -q "^== run 1 of $release_runs: " "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 check "its records say what it ran" \
@@ -1220,6 +1221,46 @@ for clash in "--task ledger" "--arm none" "--runs 1" "--model haiku" "--config-d
   check "--release with ${clash%% *} is refused: the result means one thing (exit 2)" \
     '[ "$(rc)" = 2 ] && grep -qE -- "--release (takes no|and --smoke are)" "$tmp/out.txt" && [ "$(sessions)" = 0 ] && [ ! -e "$tmp/rel5" ]' "$(cat "$tmp/out.txt")"
 done
+
+# --- one release run serves the smoke gate too (#1134): the smoke rows first, their verdict, then the rest
+# Each session reports US$1; a ceiling of 7 runs the six smoke rows and one more.
+smoke_rows="$(for n in 1 2; do for t in $marked; do echo "$t-plinth-$n"; done; done)"
+: > "$log"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,smoke-pass EVAL_STUB_COST=1 suite --release --ceiling 7 --out "$tmp/rs1"
+check "the first sessions are the smoke run's rows, in its order" \
+  '[ "$(grep "^session " "$log" | head -"$all_runs" | sed -E "s/^session run=([^ ]+) .*/\1/")" = "$smoke_rows" ]' "$(grep '^session' "$log")"
+check "the smoke verdict line --smoke prints, after those rows" \
+  'grep -q "^smoke: $all_runs of $all_runs runs passed\.$" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "  before any other task starts" \
+  '[ "$(grep -n "^smoke: " "$tmp/out.txt" | head -1 | cut -d: -f1)" -lt "$(grep -n "^== run $((all_runs + 1)) of " "$tmp/out.txt" | cut -d: -f1)" ]' "$(cat "$tmp/out.txt")"
+check "  and the summary to post carries it" 'grep -q "^smoke: $all_runs of $all_runs runs passed\.$" "$tmp/rs1/summary.md"' "$(cat "$tmp/rs1/summary.md")"
+check "the ceiling still stops it after them: exit 3" '[ "$(rc)" = 3 ] && [ "$(sessions)" = $((all_runs + 1)) ]' "$(cat "$tmp/out.txt")"
+: > "$log"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,guide-old EVAL_STUB_COST=1 suite --release --ceiling 7 --out "$tmp/rs2"
+check "a failed smoke row makes the smoke verdict fail, named as --smoke names it" \
+  'grep -q "^smoke: $n_marked of $all_runs runs passed.*guide-plinth-2 (did not pass)" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "  and the verdict counts the smoke rows only, not the run after them" \
+  '! grep "^smoke: " "$tmp/out.txt" | grep -q "repo-only"' "$(cat "$tmp/out.txt")"
+# The rest of the release run, already graded: copies of a graded run, so a
+# resume starts nothing and reaches the end with the failed smoke rows in it.
+done_run="$(ls -d "$tmp/rs2/runs/"*-repo-only-1 | head -1)"
+for t in "$root/eval-suite/tasks"/*/; do
+  t="$(basename "$t")"
+  for a in repo-only plinth; do
+    if [ -f "$root/eval-suite/tasks/$t/arms" ] && ! grep -qx "$a" "$root/eval-suite/tasks/$t/arms"; then continue; fi
+    for n in 1 2 3; do [ -e "$tmp/rs2/runs/$t-$a-$n" ] || cp -R "$done_run" "$tmp/rs2/runs/$t-$a-$n"; done
+  done
+done
+: > "$log"
+TMPDIR="$tmp" EVAL_STUB_ACTIONS=smoke-pass,guide-old suite --release --ceiling 1000 --out "$tmp/rs2"
+check "a finished release run whose smoke rows did not all pass exits 1, as --smoke does" \
+  '[ "$(rc)" = 1 ] && [ "$(sessions)" = 0 ] && grep -q "^smoke: $n_marked of $all_runs runs passed" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+for r in $(grep "guide-plinth-2\|floor-gaps-plinth-2\|guide-reminder-plinth-2" <<<"$smoke_rows"); do
+  rm -rf "$tmp/rs2/runs/$r"; cp -R "$tmp/rs2/runs/${r%-2}-1" "$tmp/rs2/runs/$r"
+done
+TMPDIR="$tmp" suite --release --ceiling 1000 --out "$tmp/rs2"
+check "  and with every smoke row passed it exits 0" \
+  '[ "$(rc)" = 0 ] && grep -q "^smoke: $all_runs of $all_runs runs passed\.$" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the suite holds one of the machine's slots (#989)
 q="$tmp/queue"
