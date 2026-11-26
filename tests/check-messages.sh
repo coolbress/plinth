@@ -10,6 +10,9 @@
 # link. Not read: the count `N more not yet confirmed lines are in the job
 # summary`, a helper every job shares (weakened-checks-cases.sh holds them
 # equal), and the checks #837 does not name.
+# Since #1100 a failure's annotation is the #1098 block's: one
+# `::error title=ci / <job>::<what> — <next>`, whose link is the step's
+# `more:` line, read with it here.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
@@ -56,11 +59,12 @@ step floor-check "Floor check" "$work/floor.sh"
 annotations="$work/annotations"; : > "$annotations"
 seen() {
   local label="$1" want="$2" got="$3" file="$4" lines
-  lines="$(grep -E '^::(error|warning)::' "$file" | grep -vE '^::warning::[0-9]+ more not yet confirmed lines are in the job summary$')"
+  lines="$(grep -E '^::(error|warning)( [^:]*)?::' "$file" | grep -vE '^::warning::[0-9]+ more not yet confirmed lines are in the job summary$')"
   if [ "$got" != "$want" ]; then bad "$label: exit $got, want $want" "$(cat "$file")"; return; fi
   if [ -z "$lines" ]; then bad "$label: no annotation came out" "$(cat "$file")"; return; fi
   ok "$label: exit $got, $(wc -l <<<"$lines" | tr -d ' ') annotation(s) read"
-  while IFS= read -r l; do printf '%s\t%s\n' "$label" "$l" >> "$annotations"; done <<<"$lines"
+  local more; more="$(sed -n 's/^more: //p' "$file" | tail -n 1)"
+  while IFS= read -r l; do printf '%s\t%s\t%s\n' "$label" "$l" "$more" >> "$annotations"; done <<<"$lines"
 }
 
 echo "-- ci / pr-title: the title"
@@ -227,11 +231,11 @@ nfail="$(grep -c '^  FAIL ' <<<"$report")"
 tail="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/${PLINTH_SHA:0:12}/skills/floor-check/SKILL.md#report"
 if [ "$nfail" -gt 1 ] && grep -q '^  WARN ' <<<"$report" && ! grep -vF -- "; $tail" <<<"$report" | grep -q .; then ok "every FAIL and WARN line of the report ($(wc -l <<<"$report" | tr -d ' ')) ends in the one next action and link"
 else bad "a FAIL or WARN line lacks the next action and link, or the fixture has no WARN" "$(grep -vF -- "; $tail" <<<"$report")"; fi
-nerr="$(grep -c '^::error::' "$work/out")"
-if [ "$nerr" = 1 ] && grep -qE "^::error::floor-check: $nfail FAIL, first: " "$work/out"; then ok "several FAILs, one ::error::, with the count ($nfail)"
-else bad "expected one ::error:: counting $nfail FAILs" "$(grep '^::' "$work/out")"; fi
-if [ "$(grep -n '^::' "$work/out" | head -1 | cut -d: -f3)" = "" ] && grep -m1 '^::' "$work/out" | grep -q '^::error::'; then ok "the ::error:: is the step's first annotation"
-else bad "the first annotation is not the ::error::" "$(grep '^::' "$work/out")"; fi
+nerr="$(grep -c '^::error' "$work/out")"
+if [ "$nerr" = 1 ] && grep -qE "^::error title=ci / floor-check::floor-check: $nfail FAIL, the first: " "$work/out"; then ok "several FAILs, one ::error, titled, with the count ($nfail)"
+else bad "expected one titled ::error counting $nfail FAILs" "$(grep '^::' "$work/out")"; fi
+if [ "$(tail -n 3 "$work/out" | cut -d' ' -f1 | tr '\n' ' ')" = "failed: next: more: " ]; then ok "the block is the step's last lines (#1098)"
+else bad "the step does not end with the block" "$(tail -n 5 "$work/out")"; fi
 if grep -m1 '^- fail: ' "$work/sum" | grep -qF -- "; $tail"; then ok "the summary's fail line carries the next action and link"; else bad "the summary's fail line has no next action" "$(head -3 "$work/sum")"; fi
 if grep -qE '^::warning::not yet confirmed: .*render\.yaml' "$work/out"; then ok "the SKIP this fixture plants is annotated"; else bad "no annotated SKIP for render.yaml" "$(grep '^::' "$work/out")"; fi
 plain="$(cd "$empty" && FLOOR_CHECK_API_DIR="$work/api" python3 "$rt/plinth/floor-check.py" --root . --repo o/r --no-network 2>&1)"
@@ -243,12 +247,12 @@ fake_checker() { # the verdict lines it writes, as one Python string; exit 1
   printf 'import sys\nout = sys.argv[sys.argv.index("--verdicts") + 1]\nopen(out, "w").write(%s)\nprint("  FAIL  x")\nsys.exit(%s)\n' "$1" "$2" > "$rt/plinth/floor-check.py"
 }
 fake_checker "'fail: ' + 'y' * 900 + '; $tail\n' + 'fail: second; $tail\n'" 1; floor "a 900-character first FAIL" 1
-if grep -qE '^::error::floor-check: 2 FAIL, first: y+\.\.\.; run /plinth' "$work/out"; then ok "a long first FAIL is cut, and the action and link survive"; else bad "the long FAIL was not cut as expected" "$(grep '^::error' "$work/out")"; fi
+if grep -qE '^::error title=ci / floor-check::floor-check: 2 FAIL, the first: y+\.\.\. — run /plinth:floor-check here' "$work/out"; then ok "a long first FAIL is cut, and the action survives"; else bad "the long FAIL was not cut as expected" "$(grep '^::error' "$work/out")"; fi
 fake_checker "'fail: 100% of it; $tail\n'" 1; floor "a FAIL with a percent sign" 1
 if grep -qF '100%25 of it' "$work/out"; then ok "% is escaped in the ::error::"; else bad "% not escaped" "$(grep '^::error' "$work/out")"; fi
 fake_checker "'pass: the floor\n'" 0
 rm -f "$rt/floor.verdicts"; (cd "$empty" && env GITHUB_STEP_SUMMARY="$work/sum" RUNNER_TEMP="$rt" GH_TOKEN=x WORKDIR=. EXPECT="" GITHUB_REPOSITORY=o/r bash -e "$work/floor.sh") > "$work/out" 2>&1; rc=$?
-if [ "$rc" = 0 ] && ! grep -q '^::error::' "$work/out"; then ok "no FAIL: no ::error::, the step passes"; else bad "no FAIL: exit $rc or an ::error::" "$(cat "$work/out")"; fi
+if [ "$rc" = 0 ] && ! grep -q '^::error' "$work/out"; then ok "no FAIL: no ::error, the step passes"; else bad "no FAIL: exit $rc or an ::error::" "$(cat "$work/out")"; fi
 printf 'import sys\nsys.exit(3)\n' > "$rt/plinth/floor-check.py"; floor "a checker that wrote no verdicts: its exit stands" 3
 cp "$work/real-checker.py" "$rt/plinth/floor-check.py"
 long_skip="$(python3 - "$rt/plinth/floor-check.py" <<'PY'
@@ -268,7 +272,7 @@ python3 - "$root" "$annotations" <<'PY'
 import os, re, sys
 root, path = sys.argv[1:3]
 sys.path.insert(0, root)
-ACTION = re.compile(r"[.;:,]\s+(?:remove|rewrite|reword|split|re-run|run|name|edit|write|ask|update|read)\b", re.IGNORECASE)
+ACTION = re.compile(r"[.;:,—]\s+(?:remove|rewrite|reword|split|re-run|run|name|edit|write|ask|update|read|resolve|revoke|what confirms it)\b", re.IGNORECASE)
 LINK = re.compile(r"https://github\.com/coolbress/plinth/blob/" + re.escape(os.environ["PLINTH_SHA"][:12]) + r"/([^\s#]+)#([\w-]+)")
 def anchors(file):
     out = set()
@@ -280,11 +284,13 @@ def anchors(file):
     return out
 bad = n = 0
 for row in open(path, encoding="utf-8"):
-    label, line = row.rstrip("\n").split("\t", 1)
+    label, line, *more = row.rstrip("\n").split("\t")
     n += 1
-    msg = re.sub(r"^::(error|warning)::", "", line).replace("%25", "%")
+    titled = re.match(r"^::error title=[^:]*::", line)
+    msg = re.sub(r"^::(error|warning)( [^:]*)?::", "", line).replace("%25", "%")
     why = []
-    links = LINK.findall(msg)
+    # A titled annotation is the block's: its link is the step's more: line.
+    links = LINK.findall(msg + (" " + more[0] if titled and more else ""))
     if len(msg) > 300:
         why.append(f"{len(msg)} characters")
     if not links:
@@ -320,7 +326,7 @@ bad = n = 0
 for where, l in got:
     if l.lstrip().startswith("#") or not re.search(r"::(error|warning)::", l):
         continue
-    if "more not yet confirmed lines" in l or "say()" in l or "ends()" in l or '"::error::$e"' in l or '"::error::$lead$first$tail"' in l:  # built above: the fixtures read them
+    if "more not yet confirmed lines" in l or "say()" in l or "ends()" in l or '"::error::$e"' in l or '"::error::$lead$first$tail"' in l or '"::warning::" + line' in l:  # built above: the fixtures read them
         continue
     n += 1
     if "https://github.com/coolbress/plinth/blob/$at/" not in l and "{HOW}" not in l and "$HOW" not in l:

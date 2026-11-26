@@ -146,7 +146,7 @@ body=""; for _ in 1 2 3 4 5 6; do body="$body$lt HEAD"$'\n'"$gt main"$'\n'; done
 commit many.txt "$body"
 run
 if [ "$rc" = 1 ] && [ "$(grep -c '^many.txt:' <<<"$out")" = 12 ] && [ "$(grep -c '^::error file=' <<<"$out")" = 9 ] \
-  && grep -q '^::error::3 more conflict marker lines are in the log' <<<"$out"; then
+  && grep -q '^::notice::showing 9 of 12 conflict marker lines; every one is in the log' <<<"$out"; then
   ok "twelve markers: twelve log lines, nine annotations and one count"
 else bad "twelve markers: twelve log lines, nine annotations and one count" "rc=$rc"$'\n'"$out"; fi
 
