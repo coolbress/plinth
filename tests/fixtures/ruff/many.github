@@ -1,0 +1,12 @@
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=1,col=8,endLine=1,endColumn=12::src/many.py:1:8: F401 `mod0` imported but unused%0A  help: Remove unused import: `mod0`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=2,col=8,endLine=2,endColumn=12::src/many.py:2:8: F401 `mod1` imported but unused%0A  help: Remove unused import: `mod1`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=3,col=8,endLine=3,endColumn=12::src/many.py:3:8: F401 `mod2` imported but unused%0A  help: Remove unused import: `mod2`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=4,col=8,endLine=4,endColumn=12::src/many.py:4:8: F401 `mod3` imported but unused%0A  help: Remove unused import: `mod3`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=5,col=8,endLine=5,endColumn=12::src/many.py:5:8: F401 `mod4` imported but unused%0A  help: Remove unused import: `mod4`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=6,col=8,endLine=6,endColumn=12::src/many.py:6:8: F401 `mod5` imported but unused%0A  help: Remove unused import: `mod5`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=7,col=8,endLine=7,endColumn=12::src/many.py:7:8: F401 `mod6` imported but unused%0A  help: Remove unused import: `mod6`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=8,col=8,endLine=8,endColumn=12::src/many.py:8:8: F401 `mod7` imported but unused%0A  help: Remove unused import: `mod7`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=9,col=8,endLine=9,endColumn=12::src/many.py:9:8: F401 `mod8` imported but unused%0A  help: Remove unused import: `mod8`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=10,col=8,endLine=10,endColumn=12::src/many.py:10:8: F401 `mod9` imported but unused%0A  help: Remove unused import: `mod9`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=11,col=8,endLine=11,endColumn=13::src/many.py:11:8: F401 `mod10` imported but unused%0A  help: Remove unused import: `mod10`
+::error title=ruff (F401),file=@ROOT@/src/many.py,line=12,col=8,endLine=12,endColumn=13::src/many.py:12:8: F401 `mod11` imported but unused%0A  help: Remove unused import: `mod11`

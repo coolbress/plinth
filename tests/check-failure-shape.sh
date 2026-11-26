@@ -9,19 +9,24 @@
 # as the last lines the step prints, a `more:` link at the plinth commit the
 # workflow runs whose anchor is a heading in docs/reference/required-checks.md
 # at this commit, no "earlier step failed" warning, and exit 0.
-# Only `ci / test` has the shape yet; the other rows are printed as pending
-# with the ticket that brings them (#1099, #1100), and fail here once that
-# job's Verdict prints a block, so the list is kept honest.
+# `ci / test`, `ci / lint` and `ci / typecheck` have the shape; the other
+# rows are printed as pending with the ticket that brings them (#1100), and
+# fail here once that job's Verdict prints a block, so the list is kept
+# honest.
 # `ci / test` also: pytest's FAILED and ERROR lines become at most nine
 # annotations at file and line plus one "showing 9 of N" line, read from
 # committed pytest output (tests/fixtures/pytest/); pytest's exit code, 124
 # and 137 included, survives the `tee` that keeps its output.
+# `ci / lint` and `ci / typecheck` (#1099): ruff's and mypy's findings
+# become the same nine annotations and "showing 9 of N", read from committed
+# output (tests/fixtures/ruff/, tests/fixtures/mypy/), and the tool's own
+# error (exit 2) fails as "could not run", not as findings.
 # PLINTH_WF reads another copy of python-ci.yml (an older commit's, say).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="${PLINTH_WF:-$root/.github/workflows/python-ci.yml}"
 doc="$root/docs/reference/required-checks.md"
-fx="$root/tests/fixtures/pytest"
+fx="$root/tests/fixtures/pytest"; fxr="$root/tests/fixtures/ruff"; fxm="$root/tests/fixtures/mypy"
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
   || { echo "  FAIL  needs python3 3.11 or later, as the runner has; got $(python3 --version 2>&1)"; exit 1; }
 
@@ -128,6 +133,24 @@ pre() { # what a step left in RUNNER_TEMP before Verdict runs
   esac
 }
 
+step lint Verdict "$work/lint-verdict.sh"
+step typecheck Verdict "$work/typecheck-verdict.sh"
+# job_verdict <job> [VAR=value...]: that job's Verdict with every step
+# passed, then the given outcomes; jpre leaves what the failed step left.
+job_verdict() {
+  local job="$1"; shift
+  rt="$work/rt-$((++n))"; mkdir -p "$rt"; : > "$rt/summary"
+  (cd "$rt" && env RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" \
+     SYNC=success CHECK=success FORMAT=success ZIZMOR=success MYPY=success "$@" bash -e "$work/$job-verdict.sh") > "$rt/out" 2>&1
+  rc=$?
+}
+# jpre <rc file> <code> [<fixture> <as>]: the step's exit code and its kept output.
+jpre() {
+  local d="$work/rt-$((n + 1))"; mkdir -p "$d"; : > "$d/zizmor.kva"
+  [ -z "${1:-}" ] || echo "$2" > "$d/$1"
+  [ -z "${3:-}" ] || sed "s#@ROOT@#$(cd "$d" && pwd -P)#g" "$3" > "$d/$4"
+}
+
 echo "-- the matrix: every required check, every outcome its Verdict reads"
 while IFS=$'\t' read -r check var sid; do
   job="${check#ci / }"
@@ -143,8 +166,18 @@ while IFS=$'\t' read -r check var sid; do
         *) bad "$check: steps.$sid.outcome ($var) has no case here: add one"; continue ;;
       esac
       shape "$check, steps.$sid failed" "$rt/out" "$rc" ;;
+    "ci / lint" | "ci / typecheck")
+      case "$var" in
+        SYNC) jpre; job_verdict "$job" SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=skipped MYPY=skipped ;;
+        CHECK) jpre ruff-check.rc 1 "$fxr/one.github" ruff-check.github; job_verdict lint CHECK=failure ;;
+        FORMAT) jpre ruff-format.rc 1 "$fxr/format.log" ruff-format.log; job_verdict lint FORMAT=failure ;;
+        ZIZMOR) jpre; job_verdict lint ZIZMOR=failure ;;
+        MYPY) jpre mypy.rc 1 "$fxm/one.log" mypy.log; job_verdict typecheck MYPY=failure ;;
+        *) bad "$check: steps.$sid.outcome ($var) has no case here: add one"; continue ;;
+      esac
+      shape "$check, steps.$sid failed" "$rt/out" "$rc" ;;
     *)
-      case "$job" in lint|typecheck) t="#1099" ;; *) t="#1100" ;; esac
+      t="#1100"
       what="$check"; [ "$var" = - ] || what="$check, steps.$sid"
       if sed -n "/^  $job:/,/^  [a-z]/p" "$wf" | grep -qF "fail_check=\"$check\""; then
         bad "$check sets fail_check now: give its rows cases here instead of pending"
@@ -240,6 +273,80 @@ for code in 1 124 137; do   # pytest's own codes; 124 is what timeout returns at
   if [ "$code" != 124 ]; then [ ! -e "$d/pytest.time-limit" ] && ok "exit $code before the deadline is not the time limit" || bad "exit $code was taken for the time limit"
   else [ -s "$d/pytest.time-limit" ] && grep -q '^::error::pytest stopped at the time limit' "$d/out" && ok "exit $code still fires the time-limit message" \
     || bad "exit $code: no time-limit message" "$(cat "$d/out")"; fi
+done
+
+echo "-- ci / lint and ci / typecheck: the findings, named and annotated"
+jpre ruff-check.rc 1 "$fxr/one.github" ruff-check.github; job_verdict lint CHECK=failure; out="$rt/out"
+if [ "$(grep -c '^::error file=' "$out")" = 1 ] && grep -qx '::error file=src/one.py,line=1,col=8::F401 `os` imported but unused' "$out"; then
+  ok "ruff check, one finding: one annotation at its file and line, with its code"
+else bad "ruff check, one finding: want one annotation at src/one.py:1" "$(grep '^::' "$out")"; fi
+grep -qx 'failed: ruff check: 1 finding, the first F401 at src/one.py:1' "$out" && grep -qx 'next: run uv run ruff check . here, fix what it names, and push' "$out" \
+  && ok "ruff check: failed: names the finding, next: is the command that shows it" || bad "ruff check's block" "$(tail -3 "$out")"
+jpre ruff-check.rc 1 "$fxr/many.github" ruff-check.github; job_verdict lint CHECK=failure; out="$rt/out"
+if [ "$(grep -c '^::error file=src/many.py,line=[0-9]*,col=8::F401 ' "$out")" = 9 ] \
+   && grep -qx "::notice::showing 9 of 12 ruff check findings; every one is in the ruff check step's log" "$out"; then ok "ruff check, twelve findings: nine annotations and one showing 9 of 12"
+else bad "ruff check, twelve findings: want nine annotations and one showing line" "$(grep '^::' "$out")"; fi
+shape "ruff check, twelve findings" "$out" "$rc"
+jpre ruff-check.rc 2; job_verdict lint CHECK=failure; out="$rt/out"
+grep -qx 'failed: ruff check could not run (exit 2): the tool'"'"'s own error, not a finding' "$out" && ! grep -q '^::error file=' "$out" \
+  && grep -qx "next: run uv run ruff check . here and fix what stops it; its error is in the ruff check step's log" "$out" \
+  && ok "ruff check exits 2: could not run, not findings" || bad "ruff check exits 2" "$(cat "$out")"
+shape "ruff check could not run" "$out" "$rc"
+for f in format format-before-0.9; do
+  jpre ruff-format.rc 1 "$fxr/$f.log" ruff-format.log; job_verdict lint FORMAT=failure; out="$rt/out"
+  if grep -qx 'failed: ruff format --check: 2 files not formatted: src/f1.py, src/f2.py' "$out" && grep -qx 'next: run uv run ruff format here, commit what it changes, and push' "$out" \
+     && [ "$(grep -c '^::error file=src/f[12].py' "$out")" = 2 ]; then ok "ruff format --check ($f.log): the files named and annotated, next: is uv run ruff format"
+  else bad "ruff format --check ($f.log)" "$(cat "$out")"; fi
+done
+jpre ruff-format.rc 2; job_verdict lint FORMAT=failure
+grep -q '^failed: ruff format --check could not run (exit 2)' "$rt/out" && ok "ruff format --check exits 2: could not run" || bad "ruff format --check exits 2" "$(tail -3 "$rt/out")"
+jpre ruff-check.rc 1 "$fxr/many.github" ruff-check.github; jpre ruff-format.rc 1 "$fxr/format.log" ruff-format.log; job_verdict lint CHECK=failure FORMAT=failure
+[ "$(grep -c '^::error file=' "$rt/out")" = 9 ] && grep -qx '::notice::2 more files ruff format would change are not annotated; every one is in the ruff format --check step'"'"'s log' "$rt/out" \
+  && grep -q '^failed: ruff check: 12 findings' "$rt/out" && ok "ruff check and format both fail: nine annotations in the job, the first failure in the block" \
+  || bad "ruff check and format both fail" "$(grep -E '^(::|failed:)' "$rt/out")"
+
+jpre mypy.rc 1 "$fxm/one.log" mypy.log; job_verdict typecheck MYPY=failure; out="$rt/out"
+if [ "$(grep -c '^::error file=' "$out")" = 1 ] && grep -qxF '::error file=src/m1.py,line=2::Incompatible return value type (got "int", expected "str")  [return-value]' "$out"; then
+  ok "mypy, one error: one annotation at its file and line, with its code"
+else bad "mypy, one error: want one annotation at src/m1.py:2" "$(grep '^::' "$out")"; fi
+grep -qx 'failed: mypy: 1 error, the first at src/m1.py:2 \[return-value\]' "$out" && grep -qx 'next: run uv run mypy . here, fix what it names, and push' "$out" \
+  && ok "mypy: failed: names the error and its code, next: is the command that shows it" || bad "mypy's block" "$(tail -3 "$out")"
+jpre mypy.rc 1 "$fxm/many.log" mypy.log; job_verdict typecheck MYPY=failure; out="$rt/out"
+if [ "$(grep -c '^::error file=src/m12.py,line=[0-9]*::Incompatible' "$out")" = 9 ] \
+   && grep -qx "::notice::showing 9 of 12 mypy errors; every one is in the mypy step's log" "$out"; then ok "mypy, twelve errors: nine annotations and one showing 9 of 12"
+else bad "mypy, twelve errors: want nine annotations and one showing line" "$(grep '^::' "$out")"; fi
+shape "mypy, twelve errors" "$out" "$rc"
+jpre mypy.rc 2 /dev/stdin mypy.log <<<"mypy: can't read file 'nonexist': No such file or directory"; job_verdict typecheck MYPY=failure; out="$rt/out"
+grep -q '^failed: mypy could not run (exit 2)' "$out" && ! grep -q '^::error file=' "$out" && ok "mypy exits 2: could not run, not findings" || bad "mypy exits 2" "$(cat "$out")"
+shape "mypy could not run" "$out" "$rc"
+mkdir -p "$work/ws/app"; jpre mypy.rc 1 "$fxm/one.log" mypy.log; d="$work/rt-$((n + 1))"
+(cd "$work/ws/app" && env RUNNER_TEMP="$d" GITHUB_WORKSPACE="$work/ws" GITHUB_STEP_SUMMARY="$d/summary" PLINTH_SHA="$SHA" SYNC=success MYPY=failure bash -e "$work/typecheck-verdict.sh") > "$d/out" 2>&1
+n=$((n + 1))
+grep -q '^::error file=app/src/m1.py,line=2::' "$d/out" && ok "under working-directory app, mypy's annotation file is from the repository's root" \
+  || bad "mypy's annotation file ignores working-directory" "$(grep '^::' "$d/out")"
+for j in lint typecheck; do
+  jpre; job_verdict "$j"
+  if [ "$rc" = 0 ] && ! grep -qE '^(::error|failed:|next:|more:)' "$rt/out"; then ok "ci / $j passing: no block, no ::error"
+  else bad "ci / $j passing printed a block or an error" "$(cat "$rt/out")"; fi
+done
+
+echo "-- ci / lint and ci / typecheck: the steps keep the tool's exit code"
+cat > "$work/bin/uv" <<'SH'
+#!/usr/bin/env bash
+case " $* " in *" --output-format=github "*) echo "::error title=ruff (F401),file=x.py,line=1::x.py:1:1: F401 stub"; exit 0 ;; esac
+echo "x.py:1: error: from the stub  [misc]"
+exit "${STUB_RC:-0}"
+SH
+for s in "lint check ruff-check" "lint format ruff-format" "typecheck mypy mypy"; do
+  read -r j id f <<<"$s"; step "$j" "$id" "$work/$id.sh"
+  for code in 0 1 2; do
+    d="$work/s-$id-$code"; mkdir -p "$d"
+    (cd "$d" && env PATH="$work/bin:$PATH" RUNNER_TEMP="$d" STUB_RC="$code" bash -e "$work/$id.sh") > "$d/out" 2>&1; got=$?
+    gh=0; [ "$id" != check ] || { [ -s "$d/ruff-check.github" ] && gh=1; }
+    if [ "$got" = "$code" ] && [ "$(cat "$d/$f.rc" 2>/dev/null)" = "$code" ] && { [ "$id" != check ] || [ "$gh" = "$([ "$code" = 1 ] && echo 1 || echo 0)" ]; } \
+       && ! grep -q '^::error' "$d/out"; then ok "ci / $j, steps.$id: the tool exits $code, the step exits $code and records it, no annotation in its own log"
+    else bad "ci / $j, steps.$id: the tool exits $code, the step exited $got" "$(cat "$d/out")"; fi
+  done
 done
 
 echo "-- names, links and the page"

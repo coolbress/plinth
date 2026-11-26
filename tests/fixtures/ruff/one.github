@@ -1,0 +1,1 @@
+::error title=ruff (F401),file=@ROOT@/src/one.py,line=1,col=8,endLine=1,endColumn=10::src/one.py:1:8: F401 `os` imported but unused%0A  help: Remove unused import: `os`
