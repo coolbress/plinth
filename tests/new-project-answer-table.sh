@@ -4,7 +4,7 @@
 # text an agent follows, so this test reads skills/new-project/questions.md,
 # where the skill's questions are written out (and the skill itself for what it no longer says): each
 # row, the primary choice's form, the "change some" groups, what a change asks
-# next, and the text-mode line. The door's own half (a description shortened to
+# next, the text-mode line, and what a choice costs beside it (#1154). The door's own half (a description shortened to
 # 350 characters is accepted) is a case in tests/new-project-failpath.sh.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -102,6 +102,31 @@ echo "-- text mode"
 says "the step" "$step" 'Type 0 to create it as shown, or the numbers of the rows to change' \
   'Do not number `Create` and `Change some` as choices in text' 'only 0 creates. "Stop" ends it, with nothing created'
 says "the name step" "$(tr '\n' ' ' < "$questions" | tr -s ' ')" 'gives nothing to translate' 'plain names for the kind'
+
+echo "-- what a choice costs, beside the choice (#1154)"
+qflat="$(tr '\n' ' ' < "$questions" | tr -s ' ')"
+says "the questions" "$qflat" \
+  'the whole history, the issues and the Actions logs are public too' \
+  'a fork made while it is public stays public if the repository is made private later' \
+  'https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/setting-repository-visibility' \
+  'the month'"'"'s total' 'Claude Pro, US$20 a month (US$17 a month billed yearly' 'https://claude.com/pricing' \
+  'a US$7 web service and a US$6 Postgres' 'https://render.com/pricing' 'about US$33 a month in all' \
+  '`cli`, `library` and `data-ml`: no host cost' '`backend`: no host cost until its image runs somewhere' \
+  'each run is 13 jobs (14 for `backend`, `data-ml` and `web`)' 'each billed as at least one minute' \
+  'about 13 to 15 billed minutes for a small `cli` or `library` project and more for the other kinds' \
+  'an edited title or description runs it again' 'at 3 to 5 runs a pull request' \
+  'On GitHub, the whole history' 'On GitHub, CI then runs on the plan'"'"'s Actions minutes' \
+  'US$18 a month, about 3,000 Linux minutes at US$0.006' \
+  'https://docs.github.com/en/billing/reference/actions-runner-pricing' \
+  'https://docs.github.com/en/billing/concepts/product-billing/github-actions' \
+  'roughly 40 to 75 pull requests a month' 'an estimate, not measured on a private repository'
+# Every price is dated where it is printed.
+n_read="$(grep -o 'read 2026-11-26' <<<"$qflat" | wc -l | tr -d ' ')"
+# Four places print a figure: Claude, Render, the visibility page, the runner and billing pages.
+if [ "$n_read" -ge 4 ]; then ok "the questions date their figures ($n_read \"read 2026-11-26\")"
+else bad "the questions date $n_read figures, fewer than the 4 places that print one"; fi
+grep -qF '9 jobs' "$root/docs/explanation/concepts.md" && bad "concepts.md still says 9 jobs" || ok "concepts.md no longer says 9 jobs"
+says "concepts.md" "$(tr '\n' ' ' < "$root/docs/explanation/concepts.md" | tr -s ' ')" 'each CI run is 13 jobs (14 for backend, data-ml and web'
 
 echo "-- every answer stays a flag, so the command said before the run asks nothing"
 says "the step" "$step" 'Every row becomes a flag, a default included' \
