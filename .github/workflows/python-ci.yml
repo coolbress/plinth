@@ -2960,7 +2960,7 @@ jobs:
               told = [f"complexity {it['complexity']} where the convention is {MAX_C}"] if "complexity" in it else []
               told += [f"{it['statements']} statements where the convention is {MAX_S}"] if "statements" in it else []
               items.append((score, where(path), row, f"function `{name or '?'}` has " + " and ".join(said),
-                            f"Function {name or 'here'} has " + " and ".join(told)))
+                            (f"Function {name}" if name else "This function") + " has " + " and ".join(told)))
           nfiles = 0
           for n in names:
               with open(n, "rb") as f:

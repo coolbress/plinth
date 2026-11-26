@@ -470,12 +470,13 @@ jobs:
             if [ "$nap" -gt "$POLL" ]; then nap=$POLL; fi
             if [ "$nap" -lt 0 ]; then nap=0; fi
             sleep "$nap"
-            now=$(date +%s); at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            # The time of this look; `at` stays the plinth commit the links name.
+            now=$(date +%s); seen_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             fetch
             if judge; then exit 0; fi
             # The two ask points (see above), each once per run.
             if [ -z "$first_at" ] && [ "$now" -ge $(( start + WAIT / 3 )) ]; then
-              first_at="$at"
+              first_at="$seen_at"
               ask
             elif [ -n "$first_at" ] && [ "$second" -eq 0 ] && [ "$now" -ge $(( start + 2 * WAIT / 3 )) ]; then
               second=1

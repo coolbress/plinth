@@ -11,6 +11,9 @@
   (gh's words, the value given) moved to a plain log line before it. Its
   bare `(#205)`, `(#386)` and `(#674)` linked to the project's own issues;
   they are now links to `docs/how-to/configure-the-third-party-reviewer.md`
-  at the plinth commit the project calls. The titled annotation every
+  at the plinth commit the project calls. Fixed with them: after the
+  wait, the step's links named the time of its last look instead of the
+  plinth commit (a variable the wait reused), so its existing summons-token
+  link opened nothing. The titled annotation every
   failing check prints keeps #1098's form, what failed and the next step.
   No job, step id, check name, input or secret is renamed.
