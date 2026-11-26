@@ -121,14 +121,17 @@ fresh; NUMBER=""; run
 expect "not a pull request: no line, green" 0 none
 fresh; rm "$fx/changes.json"; run
 expect "the list is missing (its step did not finish): fail, re-running is the way out" 1 \
-  "^- fail: changes to the checks, the step that lists them did not finish.*; re-run this job: https://.*#required-by-rulesetjson$"
+  "^- fail: changes to the checks, the step that lists them did not finish.*is unknown$"
+grep -qx 'next: re-run this job' <<<"$out" && ok "  and the block's next: is to re-run it (#1100)" || bad "  no next: re-run" "$out"
 
 echo "-- a head a non-admin pushed"
 fresh; run
 expect "no approval: fail, naming the row, the way to approve and the person's way" 1 \
-  "^- fail: changes to the checks, agent pushed it and is not an admin, so this head \(111111111111\) needs admin approval for tests/test_b.py: a test file deleted; ask an admin to approve it: https://.*#required-by-rulesetjson$"
+  "^- fail: changes to the checks, agent pushed it and is not an admin, so this head \(111111111111\) needs admin approval for tests/test_b.py: a test file deleted$"
 grep -qF 'If you agree with the change, approve the pull request on GitHub: Files changed, Review changes, Approve. The approval re-runs the latest red run; if this check does not turn green, use "Re-run failed jobs" on the latest red ci / diff-size.' <<<"$sum" && ok "  and the summary has the way to approve and the re-run" || bad "  the summary lost the way to approve" "$sum"
-grep -q '^::error::fail: changes to the checks' <<<"$out" && ok "  and it is an error annotation" || bad "  no error annotation" "$out"
+if [ "$(grep -c '^::error' <<<"$out")" = 1 ] && grep -q '^::error title=ci / diff-size::changes to the checks, agent pushed it' <<<"$out" \
+   && grep -q '^next: ask an admin to approve the pull request on this head' <<<"$out" && grep -q '^more: https://.*#ci--diff-size$' <<<"$out"; then ok "  and it is the one error annotation, the block's (#1100)"
+else bad "  not one titled error annotation with next: and more:" "$out"; fi
 called "the pusher is read from the branch's activity, by the head's ref" "GET repos/o/r/activity?ref=refs/heads/agent/x&"
 fresh; review 1 boss APPROVED $H; run
 expect "an admin's approval on the head: pass, with the approver and the head" 0 \
@@ -145,25 +148,25 @@ expect "an admin's approval, then changes requested: fail" 1 "^- fail: changes t
 fresh; review 1 boss APPROVED $H; review 2 boss COMMENTED $H; run
 expect "an admin's approval, then a comment: still a pass" 0 "^- pass: changes to the checks, approved by boss"
 fresh; printf '[%s]\n' "$(for i in 1 2 3 4 5 6 7; do printf '{"path": "tests/t%s.py", "why": "a test file deleted"},' "$i"; done | sed 's/,$//')" > "$fx/changes.json"; run
-expect "seven rows: the first named, the rest counted" 1 "needs admin approval for tests/t1.py: a test file deleted; and 6 more; ask an admin"
+expect "seven rows: the first named, the rest counted" 1 "needs admin approval for tests/t1.py: a test file deleted; and 6 more$"
 
 echo "-- what cannot be read fails, with the way out"
 fresh; apierr "repos/$R/activity" "gh: Server Error (HTTP 502)"; run
 expect "the activity unreadable: fail, re-running is the way out" 1 \
-  "^- fail: changes to the checks, .*could not be read \(repos/o/r/activity: gh: Server Error \(HTTP 502\)\); re-run this job: https://.*#required-by-rulesetjson$"
+  "^- fail: changes to the checks, .*could not be read \(repos/o/r/activity: gh: Server Error \(HTTP 502\)\)$"
 fresh; api "repos/$R/activity" "[{\"after\": \"$OLD\", \"actor\": {\"login\": \"boss\", \"id\": 1}}]"; run
-expect "no push of the head in the activity: fail" 1 "could not be read \(no push of this head in the branch's activity\); re-run this job: "
+expect "no push of the head in the activity: fail" 1 "could not be read \(no push of this head in the branch's activity\)$"
 fresh; apierr "repos/$R/collaborators/agent/permission" "gh: Server Error (HTTP 500)"; run
-expect "the pusher's permission unreadable: fail" 1 "could not be read \(repos/o/r/collaborators/agent/permission: .*; re-run this job: "
+expect "the pusher's permission unreadable: fail" 1 "could not be read \(repos/o/r/collaborators/agent/permission: .*\)$"
 fresh; apierr "repos/$R/pulls/7/reviews" "gh: Resource not accessible by integration (HTTP 403)"; run
-expect "the reviews unreadable: fail" 1 "could not be read \(repos/o/r/pulls/7/reviews: .*; re-run this job: "
+expect "the reviews unreadable: fail" 1 "could not be read \(repos/o/r/pulls/7/reviews: .*\)$"
 fresh; review 1 boss APPROVED $H; apierr "repos/$R/collaborators/boss/permission" "gh: Server Error (HTTP 500)"; run
 expect "the approver's permission unreadable: fail" 1 "could not be read \(repos/o/r/collaborators/boss/permission: "
 
 echo "-- a head an admin pushed (one account for both)"
 fresh; pushed_by boss 1; run
 expect "an admin pushed it: green, one not yet confirmed line" 0 \
-  "^- not yet confirmed: changes to the checks, boss, an admin, pushed this head \(111111111111\), so no approval is asked; .*read the job summary's table before merging, it is your decision: https://.*#required-by-rulesetjson$"
+  "^- not yet confirmed: changes to the checks at 111111111111, no approval asked\. Why: boss, an admin, pushed it\. What confirms it: you, reading the summary table \(https://.*#ci--diff-size\)\.$"
 [ "$(grep -c '^- ' <<<"$sum")" = 1 ] && ok "  and only that line" || bad "  more than one line" "$sum"
 grep -q '^::warning::not yet confirmed: changes to the checks' <<<"$out" && ok "  and it is a warning annotation" || bad "  no warning annotation" "$out"
 notcalled "  and the reviews are not read" "pulls/7/reviews"
@@ -171,7 +174,7 @@ notcalled "  and the reviews are not read" "pulls/7/reviews"
 echo "-- Dependabot, by its account id"
 fresh; pushed_by 'dependabot[bot]' 49699333; run
 expect "account id 49699333 pushed it: green, a not yet confirmed line naming Dependabot" 0 \
-  "^- not yet confirmed: changes to the checks, Dependabot pushed this head \(111111111111\), so no approval is asked;"
+  "^- not yet confirmed: changes to the checks at 111111111111, no approval asked\. Why: Dependabot pushed it\."
 notcalled "  and no permission is read" "collaborators"
 fresh; pushed_by 'dependabot[bot]' 12345; run
 expect "the login dependabot[bot] with another id: not Dependabot, an approval is asked" 1 "^- fail: changes to the checks, .*dependabot\[bot\] pushed it and is not an admin"
@@ -223,7 +226,7 @@ fresh; EVENT=pull_request_review; run
 expect "a review run with no approval on the head: fail, nothing re-run" 1 "^- fail: changes to the checks"
 notcalled "  no re-run" "actions/"
 fresh; EVENT=pull_request_review; pushed_by boss 1; run
-expect "a review run on an admin's head: the line, nothing re-run" 0 "^- not yet confirmed: changes to the checks, boss, an admin"
+expect "a review run on an admin's head: the line, nothing re-run" 0 "^- not yet confirmed: changes to the checks at 111111111111, no approval asked\. Why: boss, an admin, pushed it"
 notcalled "  no re-run" "actions/"
 
 echo "-- the list the step reads: the six kinds, the workflow kind left out"

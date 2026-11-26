@@ -1344,10 +1344,11 @@ jobs:
             # two: `fix: x (#349) (#359)`. The issue belongs on the
             # description's closing or `Part of` line instead.
             if printf '%s' "$subject" | grep -qE '\(#[0-9]+\)[[:space:]]*$'; then # trailing-number
-              how='Remove the trailing (#N)'
-              [ "$subject" = "$TITLE" ] || how='Write it as Revert "type(scope): summary"'
-              echo "::error::PR title ends in a number: ${TITLE:0:92}. $how and name the issue on the description's closing line: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
+              how='remove the trailing (#N)'
+              [ "$subject" = "$TITLE" ] || how='write it as Revert "type(scope): summary"'
+              fail_check="ci / pr-title"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--pr-title"
               say "fail: PR title, it ends in a number"
+              fail_what="PR title ends in a number: ${TITLE:0:92}"; fail_next="$how and name the issue on the description's closing line"
               {
                 echo "### PR title ends in a number"
                 echo
@@ -1367,11 +1368,15 @@ jobs:
             exit 0
           fi
 
-          case "$TITLE" in
-            'Revert "'*) echo "::error::PR title reverts a title that is not Conventional Commits: ${TITLE:0:60}. Rewrite it as Revert \"type(scope): summary\", with one of the eleven types: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change" ;;
-            *) echo "::error::PR title is not Conventional Commits: ${TITLE:0:60}. Rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change" ;;
-          esac
+          # The block the job's log ends with (#1098, #1100), one annotation.
+          fail_check="ci / pr-title"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--pr-title"
           say "fail: PR title, it is not Conventional Commits"
+          case "$TITLE" in
+            'Revert "'*) fail_what="PR title reverts a title that is not Conventional Commits: ${TITLE:0:60}"
+                         fail_next="rewrite it as Revert \"type(scope): summary\", with one of the eleven types" ;;
+            *) fail_what="PR title is not Conventional Commits: ${TITLE:0:60}"
+               fail_next="rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert" ;;
+          esac
           {
             echo "### PR title does not follow the convention"
             echo
@@ -1440,18 +1445,24 @@ jobs:
             exit 0
           fi
           if [ "${FETCH:-}" != success ]; then
-            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read; re-run this job: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
+            say "fail: PR description, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the description was not read"
+            fail_check="ci / pr-title"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--pr-title"; fail_next="re-run this job"
             exit 1
           fi
           # The verdict lines first, then the script's report.
           report="$RUNNER_TEMP/closing-references.md"; : > "$report"; rc=0
           answer="$RUNNER_TEMP/description.json"; rm -f "$answer"
-          EVENT=pull_request GITHUB_STEP_SUMMARY="$report" ANSWER_COPY="$answer" \
+          # closing-references.sh's failure goes into this check's one
+          # annotation, the block below (#1098, #1100), not one of its own.
+          message="$RUNNER_TEMP/closing-references.message"; rm -f "$message"
+          EVENT=pull_request GITHUB_STEP_SUMMARY="$report" ANSWER_COPY="$answer" MESSAGE_FILE="$message" \
             bash "$RUNNER_TEMP/plinth-closing/closing-references.sh" || rc=$?
           if [ "$rc" = 0 ]; then
             say "pass: PR description, merging it closes no issue its closing line does not name"
           else
             say "fail: PR description, merging it would close an issue its closing line does not name, or GitHub's list could not be read"
+            fail_check="ci / pr-title"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--pr-title"
+            if [ -s "$message" ]; then IFS=$'\t' read -r fail_what fail_next < "$message"; else fail_next="re-run this job, and if it fails again read the error in this step's log"; fi
           fi
           # What the person checked themselves and which review ran (#810),
           # from the description just read: a missing, empty or bare "done"
@@ -1477,7 +1488,7 @@ jobs:
           elif python3 "$RUNNER_TEMP/plinth-closing/description-fields.py" PR "$answer" "$@" > "$fields"; then
             while IFS= read -r line; do [ -z "$line" ] || say "$line"; done < "$fields"
           else
-            say "not yet confirmed: PR description, the fields were not read: plinth's description-fields.py did not finish (its error is in the log); re-run this job: https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change"
+            say "not yet confirmed: PR description's fields. Why: plinth's description-fields.py did not finish (its error is in the log). What confirms it: a re-run of this job (https://github.com/coolbress/plinth/blob/$at/CONTRIBUTING.md#land-a-change)."
           fi
           { echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
@@ -1771,10 +1782,16 @@ jobs:
   # read this? A rule that lives only in an issue body never fires; a 400-line
   # limit written in prose was exceeded by 436 lines and nothing stopped it.
   #
-  # Why now (measured 2026): AI-assisted PRs are 2.6x the size of human ones
-  # (p75 408 vs 157 lines) and agent-opened PRs wait 5.3x longer for a
-  # reviewer. What predicts review effort is diff size, not the PR text
-  # (arXiv 2601.00753: body text AUC 0.57, no signal).
+  # The basis (#1144's Decision): small, revertable changes whose description
+  # says one thing. What the sources measured, and no more: the Cisco study
+  # SmartBear published recommends 200 to 400 lines per review sitting and
+  # measured defect detection trailing off after about 200 lines; its
+  # "plummet" is said of review duration, not of detection. arXiv 2601.00753
+  # measures how many review comments open-source agent pull requests draw,
+  # not defects found, and size alone reached AUC 0.65 across repositories.
+  # The 2.6x size (p75 408 vs 157 lines) and 5.3x wait figures are LinearB's
+  # vendor data. A change over the limit is split, never trimmed: docs,
+  # docstrings and tests are not shortened to fit.
   #
   # The meter matters as much as the rule: the same PR counted 452 lines with
   # everything and 385 without docs and lockfiles. The rule was right; the
@@ -1797,6 +1814,7 @@ jobs:
           persist-credentials: false   # nothing here pushes (zizmor `artipacked`)
 
       - name: Measure the reviewable diff
+        id: measure
         env:
           PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           MAX_LINES: ${{ inputs.max-diff-lines }}
@@ -1874,9 +1892,13 @@ jobs:
 
           # Three dots (base...head): changes since the merge base, which is
           # what GitHub shows on the PR.
+          # One cause, one annotation (#1100): the steps below that need the
+          # same diff read this file and say nothing of their own.
+          fail_check="ci / diff-size"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--diff-size"
           if ! numstat="$(git diff --numstat "${BASE_SHA}...${HEAD_SHA}" -- "${spec[@]}")"; then
-            echo "::error::Could not compute the diff (base=${BASE_SHA} head=${HEAD_SHA}). Update the branch from its base and push again: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
-            say "fail: diff size, the diff could not be computed"
+            [ -z "${RUNNER_TEMP:-}" ] || echo "base=${BASE_SHA} head=${HEAD_SHA}" > "$RUNNER_TEMP/diff-size.unreadable"
+            say "fail: diff size, the diff of base ${BASE_SHA:0:12} and head ${HEAD_SHA:0:12} could not be computed"
+            fail_next="update the branch from its base and push again, so both commits are fetched"
             exit 1
           fi
 
@@ -1918,7 +1940,7 @@ jobs:
           fi
 
           if [ "$total" -gt "$MAX_LINES" ]; then
-            echo "::error::Reviewable diff is ${total} lines (limit ${MAX_LINES}). Split it into pull requests that land one after another, each branched from main after the one before it merged: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
+            fail_next="split the change into pull requests that land one after another, each branched from main after the one before it merged, and do not shorten docs, docstrings or tests to fit"
             {
               echo
               echo "**Over the limit.** Docs and lockfiles are already excluded from this number."
@@ -1927,6 +1949,8 @@ jobs:
               echo "then wiring, then UX) into pull requests that land one after another,"
               echo "each branched from main after the one before it merged. Each piece can have"
               echo "a different reviewer."
+              echo
+              echo "Split the change; do not shorten docs, docstrings or tests to fit."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -1957,6 +1981,7 @@ jobs:
         env:
           PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           FETCH: ${{ steps.fetch-markers.outcome }}
+          MEASURE: ${{ steps.measure.outcome }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -1971,16 +1996,28 @@ jobs:
             say "pass: conflict markers, does not apply (not a pull request: no diff to read)"
             exit 0
           fi
+          # The diff the measure step could not compute (#1100): that step's
+          # annotation says why and keeps the job red; this one says nothing
+          # of its own, in the summary only.
+          if [ "${MEASURE:-}" = failure ] && [ -s "$RUNNER_TEMP/diff-size.unreadable" ]; then
+            echo "not read: the diff could not be computed, as the measure step says"
+            echo "- not yet confirmed: conflict markers. Why: the diff could not be computed, as the measure step says. What confirms it: a run that reads the diff." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          fail_check="ci / diff-size"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--diff-size"
           if [ "$FETCH" != success ]; then
-            echo "::error::plinth's conflict-marker check could not be fetched (the fetch step: ${FETCH:-did not run}). Re-run this job: https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#required-by-rulesetjson"
-            say "fail: conflict markers, plinth's check could not be fetched, so the diff was not read; re-run this job"
+            say "fail: conflict markers, plinth's check could not be fetched (the fetch step: ${FETCH:-did not run}), so the diff was not read"
+            fail_next="re-run this job"
             exit 1
           fi
-          rc=0; python3 "$RUNNER_TEMP/plinth-markers/conflict-markers.py" "${BASE_SHA}...${HEAD_SHA}" || rc=$?
+          message="$RUNNER_TEMP/conflict-markers.message"; rm -f "$message"
+          rc=0; MESSAGE_FILE="$message" python3 "$RUNNER_TEMP/plinth-markers/conflict-markers.py" "${BASE_SHA}...${HEAD_SHA}" || rc=$?
           case "$rc" in
             0) say "pass: conflict markers, no line the pull request adds is one" ;;
-            1) say "fail: conflict markers, a line the pull request adds is one; the log names each file and line" ;;
-            *) say "fail: conflict markers, the diff could not be read" ;;
+            1) say "fail: conflict markers, a line the pull request adds is one; the log names each file and line"
+               fail_next="resolve each conflict, delete the marker lines and push" ;;
+            *) say "fail: conflict markers, the diff could not be read"
+               if [ -s "$message" ]; then IFS=$'\t' read -r fail_what fail_next < "$message"; else fail_next="re-run this job"; fi ;;
           esac
           exit "$rc"
 
@@ -2010,8 +2047,18 @@ jobs:
           BODY: ${{ github.event.pull_request.body }}
           CHANGES_FILE: ${{ runner.temp }}/changes-to-the-checks.json
           WEB: ${{ inputs.web }}
+          MEASURE: ${{ steps.measure.outcome }}
         run: |
           import json, os, re, subprocess, sys
+          # The block the job's log ends with on a failure (#1098, #1100), as
+          # the shell steps' ends(): one titled annotation, then
+          # failed: / next: / more:, the last lines this step prints.
+          MORE = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#ci--diff-size"
+          def block(what, next_step):
+              w, x = (" ".join(t.split()) for t in (what, next_step))
+              e = w if len(w) <= 297 - len(x) else w[:294 - len(x)] + "..."
+              print("::error title=ci / diff-size::" + f"{e} — {x}".replace("%", "%25"))
+              print(f"failed: {w}\nnext: {x}\nmore: {MORE}")
 
           HOW = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#required-by-rulesetjson"
 
@@ -2037,7 +2084,13 @@ jobs:
               if r.returncode != 0:
                   err = r.stderr.decode("utf-8", "replace").strip().replace("\n", " ")
                   print(err)
-                  print("::error::" + fit(f"git {args[0]} failed (base={base} head={head}): {err}", f"; re-run this job: {HOW}"))
+                  unreadable = os.path.join(os.environ.get("RUNNER_TEMP", ""), "diff-size.unreadable")
+                  if os.environ.get("MEASURE") == "failure" and os.path.isfile(unreadable):
+                      # The measure step's annotation says why and keeps the job red (#1100).
+                      emit("- not yet confirmed: changes to the checks. Why: the diff could not be computed, "
+                           "as the measure step says. What confirms it: a run that reads the diff.")
+                      sys.exit(0)
+                  block(f"changes to the checks, git {args[0]} failed (base {base[:12]}, head {head[:12]}): {err}", "re-run this job")
                   sys.exit(1)
               return r.stdout.decode("utf-8", "surrogateescape")
 
@@ -2218,7 +2271,7 @@ jobs:
               if r.returncode not in (0, 1):   # 1 is no match; anything else is not an answer
                   err = " ".join(r.stderr.decode("utf-8", "replace").split())
                   print(err)
-                  print("::error::" + fit(f"git grep failed at {head}: {err}", f"; re-run this job: {HOW}").replace("%", "%25"))
+                  block(f"changes to the checks, git grep failed at {head[:12]}: {err}", "re-run this job")
                   sys.exit(1)
               lines = r.stdout.decode("utf-8", "replace").split("\n")
               while True:
@@ -2356,20 +2409,24 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           CHANGES_FILE: ${{ runner.temp }}/changes-to-the-checks.json
+          MEASURE: ${{ steps.measure.outcome }}
         run: |
           import json, os, subprocess, sys
           from urllib.parse import quote
+          # The block the job's log ends with on a failure (#1098, #1100), as
+          # the shell steps' ends(): one titled annotation, then
+          # failed: / next: / more:, the last lines this step prints.
+          MORE = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#ci--diff-size"
+          def block(what, next_step):
+              w, x = (" ".join(t.split()) for t in (what, next_step))
+              e = w if len(w) <= 297 - len(x) else w[:294 - len(x)] + "..."
+              print("::error title=ci / diff-size::" + f"{e} — {x}".replace("%", "%25"))
+              print(f"failed: {w}\nnext: {x}\nmore: {MORE}")
 
           E = os.environ.get
           repo, number, head, event = E("REPO", ""), E("NUMBER", ""), E("HEAD_SHA", ""), E("EVENT", "")
           summary = E("GITHUB_STEP_SUMMARY") or os.devnull
           DEPENDABOT = 49699333   # dependabot[bot]'s account id; a login can be spelled alike
-          HOW = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/docs/reference/required-checks.md#required-by-rulesetjson"
-
-          def fit(head, tail):   # at most 300 characters; what is cut is the head, never the action and link
-              room = 300 - len(tail)
-              return (head if len(head) <= room else head[:room - 3] + "...") + tail
-
           WAY = ("If you agree with the change, approve the pull request on GitHub: Files changed, "
                  "Review changes, Approve. The approval re-runs the latest red run; if this check "
                  "does not turn green, use \"Re-run failed jobs\" on the latest red ci / diff-size.")
@@ -2378,13 +2435,17 @@ jobs:
               with open(summary, "a", encoding="utf-8") as f:
                   f.write("\n".join(lines) + "\n")
 
-          def say(line):
+          def say(line):   # a fail: line's annotation is the block's (#1100)
               emit(f"- {line}")
-              kind = {"fail": "error", "not yet confirmed": "warning"}.get(line.split(":", 1)[0])
-              if kind:
-                  print(f"::{kind}::" + line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
-              else:
-                  print(line)
+              if line.startswith("not yet confirmed: "):
+                  print("::warning::" + line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+              else:   # a path with a line break must not start a command
+                  print(" ".join(line.split("\n")).replace("\r", " "))
+
+          def fails(what, next_step):
+              say(f"fail: {what}")
+              block(what, next_step)
+              sys.exit(1)
 
           class Unread(Exception):
               pass
@@ -2410,9 +2471,13 @@ jobs:
               with open(E("CHANGES_FILE", ""), encoding="utf-8") as f:
                   listed = json.load(f)
           except (OSError, ValueError):
-              say("fail: changes to the checks, the step that lists them did not finish, so whether "
-                  f"this pull request needs an admin's approval is unknown; re-run this job: {HOW}")
-              sys.exit(1)
+              if E("MEASURE") == "failure" and os.path.isfile(os.path.join(E("RUNNER_TEMP", ""), "diff-size.unreadable")):
+                  # The measure step's annotation says why and keeps the job red (#1100).
+                  emit("- not yet confirmed: changes to the checks. Why: the diff could not be computed, "
+                       "as the measure step says. What confirms it: a run that reads the diff.")
+                  sys.exit(0)
+              fails("changes to the checks, the step that lists them did not finish, so whether "
+                    "this pull request needs an admin's approval is unknown", "re-run this job")
           if not listed:
               sys.exit(0)
 
@@ -2430,12 +2495,12 @@ jobs:
                       raise Unread("no push of this head in the branch's activity")
                   why = f"{actor['login']} pushed it and is not an admin"
                   if actor.get("id") == DEPENDABOT:
-                      say(fit(f"not yet confirmed: changes to the checks, Dependabot pushed this head ({sha}), so no approval is asked",
-                              f"; read the job summary's table before merging, it is your decision: {HOW}"))
+                      say(f"not yet confirmed: changes to the checks at {sha}, no approval asked. Why: Dependabot pushed it. "
+                          f"What confirms it: you, reading the summary table ({MORE}).")
                       sys.exit(0)
                   if permission(actor["login"]) == "admin":
-                      say(fit(f"not yet confirmed: changes to the checks, {actor['login']}, an admin, pushed this head ({sha}), so no approval is asked",
-                              f"; read the job summary's table before merging, it is your decision: {HOW}"))
+                      say(f"not yet confirmed: changes to the checks at {sha}, no approval asked. Why: {actor['login']}, an admin, pushed it. "
+                          f"What confirms it: you, reading the summary table ({MORE}).")
                       sys.exit(0)
               reviews = [json.loads(l) for l in api(f"repos/{repo}/pulls/{number}/reviews",
                                                      "--paginate", "--jq", ".[] | tojson").splitlines() if l.strip()]
@@ -2447,15 +2512,13 @@ jobs:
                                if r["state"] == "APPROVED" and r.get("commit_id") == head
                                and permission(login) == "admin"), None)
           except Unread as e:
-              say(fit(f"fail: changes to the checks, what decides whether this pull request needs an "
-                      f"admin's approval could not be read ({e})", f"; re-run this job: {HOW}"))
-              sys.exit(1)
+              fails(f"changes to the checks, what decides whether this pull request needs an "
+                    f"admin's approval could not be read ({e})", "re-run this job")
 
           if not approver:
-              say(fit(f"fail: changes to the checks, {why}, so this head ({sha}) needs admin approval for {rows}",
-                      f"; ask an admin to approve it: {HOW}"))
               emit("", WAY)
-              sys.exit(1)
+              fails(f"changes to the checks, {why}, so this head ({sha}) needs admin approval for {rows}",
+                    "ask an admin to approve the pull request on this head: Files changed, Review changes, Approve")
           say(f"pass: changes to the checks, approved by {approver}, an admin, on this head ({sha})")
           if event != "pull_request_review":
               sys.exit(0)
@@ -2724,14 +2787,15 @@ jobs:
           while IFS= read -r l || [ -n "$l" ]; do
             case "$l" in "fail: "*) n=$((n + 1)); [ -n "$first" ] || first="${l#fail: }" ;; esac
           done < "$t.verdicts"
-          if [ "$n" -gt 0 ]; then
-            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/$at/skills/floor-check/SKILL.md#report"
-            first="${first%"; $next"}"; lead="floor-check: $n FAIL, first: "
-            room=$((300 - ${#lead} - ${#next} - 2))
-            [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
-            e="$lead$first; $next"; e="${e//'%'/%25}"; echo "::error::$e"
-          fi
           while IFS= read -r l || [ -n "$l" ]; do say "$l"; done < "$t.verdicts"
+          # The block the job's log ends with on a failure (#1098, #1100): one
+          # annotation however many FAILs, the first and the count.
+          if [ "$n" -gt 0 ]; then
+            fail_check="ci / floor-check"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--floor-check"
+            first="${first%%; run /plinth:floor-check*}"
+            fail_what="floor-check: $n FAIL, the first: $first"
+            fail_next="run /plinth:floor-check here, which writes the fix for each item, and push"
+          fi
           { echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
 

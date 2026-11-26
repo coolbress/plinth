@@ -174,7 +174,8 @@ echo "-- the first pull request's description, as ci / pr-title reads it (#856)"
 run;                       check "a filled description: the journey goes on" ok $?
 is "the log says the check warns about neither field" said "first pull request's description: pass: PR description, says which review ran"
 run 'FIRST_BODY=## What and why\n\nx'; check "a description missing both: a line in the log, and the journey goes on" ok $?
-is "the log names what is missing" said "first pull request's description: not yet confirmed: PR description, does not say which review ran"
+# The fields' line in #1156's form since #1100: what, then why (no Review line).
+is "the log names what is missing" said "first pull request's description: not yet confirmed: PR description names its review. Why: there is no \`Review:\` line"
 run BODY_RC=1;             check "a description that cannot be read does not stop the journey" ok $?
 is "the log says it was not read" said "first pull request's description: not read"
 
