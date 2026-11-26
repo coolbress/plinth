@@ -471,6 +471,8 @@ E="$madeup GIT_CONFIG_GLOBAL=$work/ident.gitconfig" run pre-ident-config ok no n
 # git reads EMAIL for the email when user.email is unset; someone set it, so it counts.
 printf '[user]\n\tname = T\n' > "$work/name-only.gitconfig"
 E="$madeup EMAIL=t@example.invalid GIT_CONFIG_GLOBAL=$work/name-only.gitconfig" run pre-ident-email-var ok no no "preflight: ok" -- --preflight
+# git reads EMAIL only after the configured email; an empty one hides nothing (review on #1195).
+E="$madeup EMAIL= GIT_CONFIG_GLOBAL=$work/ident.gitconfig" run pre-ident-empty-email-var ok no no "preflight: ok" -- --preflight
 E="$madeup GIT_CONFIG_GLOBAL=$work/name-only.gitconfig" run pre-ident-name-only err no no "no name and email are set" -- --preflight
 # A name someone set that git still refuses reaches git var, whose fatal line is shown.
 E="GIT_AUTHOR_NAME=<>" run pre-ident-refused err no no "git cannot tell who makes the first commit (fatal:" -- --preflight

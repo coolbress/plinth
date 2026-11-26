@@ -30,14 +30,27 @@ misses_stop() {
 # too (#1153): `git var` succeeds with it, and the first commit, public from
 # the start on GitHub, would carry the machine's host name. Each of the author
 # and the committer needs a name and an email that someone set: the
-# environment (GIT_<ROLE>_NAME/_EMAIL, and EMAIL, which git reads for the
-# email) or git's configuration at any level (<role>.name/.email, user.name/.email).
+# environment or git's configuration at any level, read in git's order: the
+# name from GIT_<ROLE>_NAME, <role>.name, user.name; the email from
+# GIT_<ROLE>_EMAIL, <role>.email, user.email, then EMAIL, which git reads only
+# when nothing before it is set. The first that is not empty counts.
+first_set() { # <source>...: env:<VAR> or config:<key>; prints the first non-empty value
+  local s val
+  for s in "$@"; do
+    case "$s" in
+      env:*)    val="$(printenv "${s#env:}")" || val="" ;;
+      config:*) val="$(git -C / config --get "${s#config:}")" || val="" ;;
+    esac
+    [ -z "$val" ] || { printf '%s' "$val"; return 0; }
+  done
+  return 1
+}
 git_identity() {
   local v err role name email
   for role in author committer; do
     v="$(tr '[:lower:]' '[:upper:]' <<<"$role")"
-    name="$(printenv "GIT_${v}_NAME" || git -C / config --get "$role.name" || git -C / config --get user.name)" || name=""
-    email="$(printenv "GIT_${v}_EMAIL" || printenv EMAIL || git -C / config --get "$role.email" || git -C / config --get user.email)" || email=""
+    name="$(first_set "env:GIT_${v}_NAME" "config:$role.name" config:user.name)" || name=""
+    email="$(first_set "env:GIT_${v}_EMAIL" "config:$role.email" config:user.email env:EMAIL)" || email=""
     if [ -z "$name" ] || [ -z "$email" ]; then
       miss "git cannot tell who makes the first commit: no name and email are set (user.name and user.email, or GIT_AUTHOR_*/GIT_COMMITTER_*), and git would make one up from your login and this computer's name, which a public repository would show" \
         "  fix: git config --global user.name \"Your Name\"" \
