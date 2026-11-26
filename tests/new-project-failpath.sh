@@ -438,8 +438,8 @@ E="MOCK_GIT_VERSION=2.36.1" run git-236 err no no "git 2.36.1 is too old (2.37 o
 
 echo "--preflight: every miss at once, git's identity among them (#1067)"
 # Before #1067 the first miss stopped the run, so a token without workflow on
-# a machine where git cannot name the author showed only the scope. git is
-# told to use its configuration only, with none there: it cannot guess.
+# a machine where git cannot name the author showed only the scope. Nothing
+# names the author here, so the door's own check names the miss (#1153).
 noident="-u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true"
 E="$noident MOCK_SCOPES=repo" run pre-two-misses err no no "2 things to fix; nothing was created:" -- --preflight
 for phrase in "lacks the scope(s) workflow" "fix: gh auth refresh -h github.com -s repo,workflow" \
@@ -472,6 +472,8 @@ E="$madeup GIT_CONFIG_GLOBAL=$work/ident.gitconfig" run pre-ident-config ok no n
 printf '[user]\n\tname = T\n' > "$work/name-only.gitconfig"
 E="$madeup EMAIL=t@example.invalid GIT_CONFIG_GLOBAL=$work/name-only.gitconfig" run pre-ident-email-var ok no no "preflight: ok" -- --preflight
 E="$madeup GIT_CONFIG_GLOBAL=$work/name-only.gitconfig" run pre-ident-name-only err no no "no name and email are set" -- --preflight
+# A name someone set that git still refuses reaches git var, whose fatal line is shown.
+E="GIT_AUTHOR_NAME=<>" run pre-ident-refused err no no "git cannot tell who makes the first commit (fatal:" -- --preflight
 E="-u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL" run pre-ident-half err no no "no name and email are set" -- --preflight
 # Tools missing together: no uv beside a logged-out gh, both named.
 E="MOCK_NOAUTH=1" P="$work/bin-nouv" run pre-nouv-noauth err no no "2 things to fix; nothing was created:" -- --preflight
