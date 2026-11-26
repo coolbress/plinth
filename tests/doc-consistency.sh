@@ -338,13 +338,17 @@ if on("skills"):
     market = json.loads((docs / ".claude-plugin/marketplace.json").read_text(encoding="utf-8"))
     entries = {p["name"]: p for p in market["plugins"]}
     n_matt, n_extra = len(entries["mattpocock-skills"]["skills"]), len(entries["mattpocock-skills-extra"]["skills"])
-    arsenal_rel = "skills/arsenal/SKILL.md"
+    # The counts live beside the arsenal's SKILL.md: the listed tools and the
+    # skills in neither in listed.md, the default set in installed.md.
+    arsenal_rel = "skills/arsenal/listed.md"
     arsenal = (docs / arsenal_rel).read_text(encoding="utf-8")
+    installed_rel = "skills/arsenal/installed.md"
+    installed_md = (docs / installed_rel).read_text(encoding="utf-8")
     notice = (docs / "NOTICE").read_text(encoding="utf-8")
     counted = {**words, **numbers, "fifteen": 15}
     def num(raw):
         return int(raw) if raw.isdigit() else counted.get(raw.lower(), -1)
-    neither = re.search(r"The (\w+) in neither are ([^(]+)\(", arsenal)
+    neither = re.search(r"The (\w+) in neither\s+are ([^(.]+)[(.]", arsenal)
     if not neither:
         fail(f"{arsenal_rel} has no \"The <n> in neither are ...\": the skills upstream ships cannot be counted")
         n_neither = -1
@@ -357,7 +361,7 @@ if on("skills"):
         (arsenal_rel, arsenal, r"`mattpocock-skills` installs (\w+) of the", n_matt, "installed"),
         (arsenal_rel, arsenal, r"`mattpocock-skills` installs \w+ of the (\w+) skills", total, "shipped upstream"),
         (arsenal_rel, arsenal, r"`mattpocock-skills-extra` lists (\w+) more", n_extra, "listed"),
-        (arsenal_rel, arsenal, r"\| `mattpocock-skills` \| (\w+) skills:", n_matt, "installed"),
+        (installed_rel, installed_md, r"\| `mattpocock-skills` \| (\w+) skills:", n_matt, "installed"),
         (arsenal_rel, arsenal, r"\| `mattpocock-skills-extra` \| The (\w+) other", n_extra, "listed"),
         (arsenal_rel, arsenal, r"adds its\s+(\w+)\s+beside the default set's", n_extra, "listed"),
         (arsenal_rel, arsenal, r"beside the default set's\s+(\w+)", n_matt, "installed"),
@@ -629,12 +633,13 @@ fx_rules() { # a fixture carrying every rule, one plinth file missing one, a tem
 # A row written before a release workflow existed told a real project that a
 # release on a tag was "planned, not built yet", and nothing tied the claim to
 # the template. These read the template at the pinned commit and the whole of
-# skills/arsenal/SKILL.md and fail when:
+# skills/arsenal/ (SKILL.md and the installed.md and listed.md beside it) and
+# fail when:
 #   - a table cell says "planned", "not built yet" or "nothing yet" about
 #     something the template renders or the plugin installs;
 #   - a cell names an issue as the plan and that issue is closed or unreadable;
-#   - a cell marks a tool "(listed", or the "Listed, not installed" table names
-#     a plugin, that the plugin installs;
+#   - a cell marks a tool "(listed", or the "Listed, not installed" table
+#     (listed.md) names a plugin, that the plugin installs;
 #   - the release row, the reminder row or run-a-project.md does not say what
 #     the template has, archetype by archetype;
 #   - plinth's own user-only skill is not on the one list of skills the person
@@ -649,8 +654,21 @@ release_row="| A merged change to put out"
 reminder_row="| Between pieces of work"
 plan_row="| A job bigger than one session"
 
-# Each table cell in the catalog, one per line.
-cells() { grep '^| ' "$1" | sed -e 's/^| //' -e 's/ |$//' | awk '{ gsub(/ \| /, "\n"); print }'; }
+# Each table cell in the catalog's files, one per line.
+cells() { grep -h '^| ' "$@" | sed -e 's/^| //' -e 's/ |$//' | awk '{ gsub(/ \| /, "\n"); print }'; }
+
+# arsenal_files <arsenal dir>: SKILL.md and the two files beside it that hold
+# tables; one missing is an error, not a file with no stale claim.
+arsenal_files() {
+  local f
+  for f in SKILL.md installed.md listed.md; do
+    [ -f "$1/$f" ] || { echo "no $f in $1" >&2; return 1; }
+  done
+}
+
+# The live rows also read the maintainers' page the evidence tables moved to,
+# which keeps the issue numbers the catalog's files no longer carry.
+evidence=""
 
 # real_state <owner/repo> <n>: open or closed; nothing when it cannot be read.
 real_state() { gh api "repos/$1/issues/$2" --jq .state 2>/dev/null; }
@@ -673,9 +691,10 @@ installed() {
 # release_sources <template dir>: the template's conditional release workflows.
 release_sources() { find "$1/template/.github/workflows" -type f -name '*release.yml*' 2>/dev/null; }
 
-# stale_claims <arsenal> <template dir> <plinth dir>: one line per stale claim.
+# stale_claims <arsenal dir> <template dir> <plinth dir>: one line per stale claim.
 stale_claims() {
-  local arsenal="$1" tdir="$2" pdir="$3" cell issue repo n state rc=0 name inst
+  local adir="$1" tdir="$2" pdir="$3" cell issue repo n state rc=0 name inst
+  arsenal_files "$adir" 2>&1 || return 1
   inst="$(installed "$pdir")"
   while IFS= read -r cell; do
     if grep -qiE 'planned|not built yet|nothing yet' <<<"$cell"; then
@@ -707,19 +726,19 @@ stale_claims() {
         echo "marks \`$name\` listed, and the plugin installs it: $cell"; rc=1
       fi
     done
-  done < <(cells "$arsenal")
+  done < <(cells "$adir/SKILL.md" "$adir/installed.md" "$adir/listed.md" ${evidence:+"$evidence"})
   while IFS= read -r name; do
     if grep -qxF -- "$name" <<<"$inst"; then
       echo "the \"Listed, not installed\" table names \`$name\`, and the plugin installs it"; rc=1
     fi
-  done < <(awk '/^## Listed, not installed/{on=1; next} on && /^## /{exit} on && /^\| `/' "$arsenal" | cut -d'`' -f2)
+  done < <(grep '^| `' "$adir/listed.md" | cut -d'`' -f2)
   return $rc
 }
 
-# missing_facts <arsenal> <run-a-project> <template dir>: what the template has
-# and the release row, the reminder row or step 9 does not say.
+# missing_facts <arsenal dir> <run-a-project> <template dir>: what the template
+# has and the release row, the reminder row or step 9 does not say.
 missing_facts() {
-  local arsenal="$1" howto="$2" tdir="$3" row src arch archs all_archs="" dest rc=0 step9 reminder title
+  local arsenal="$1/SKILL.md" howto="$2" tdir="$3" row src arch archs all_archs="" dest rc=0 step9 reminder title
   row="$(grep -F -- "$release_row" "$arsenal" | head -1)"
   [ -n "$row" ] || { echo "the arsenal has no row starting '$release_row'"; rc=1; }
   if [ -z "$(release_sources "$tdir")" ]; then
@@ -782,32 +801,39 @@ typed_list() {
   flat "$p/skills/guide/SKILL.md" | grep -qF "$typed_section" || { echo "skills/guide/SKILL.md does not point at the list"; rc=1; }
   grep -qF "$typed_anchor" "$p/docs/how-to/run-a-project.md" || { echo "run-a-project.md does not point at the list"; rc=1; }
   grep -qF "$typed_anchor" "$p/README.md" || { echo "README.md does not point at the list"; rc=1; }
-  grep -F -- '| `mattpocock-skills` |' "$p/skills/arsenal/SKILL.md" | grep -qF "$typed_section" || { echo "the mattpocock-skills row does not point at the list"; rc=1; }
+  grep -F -- '| `mattpocock-skills` |' "$p/skills/arsenal/installed.md" | grep -qF "$typed_section" || { echo "the mattpocock-skills row in installed.md does not point at the list"; rc=1; }
   if grep -F -- "$plan_row" "$p/skills/arsenal/SKILL.md" | grep -qi 'ask for it'; then
     echo "step 3's row says 'ask for it' for a skill the person must type"; rc=1
   fi
   return $rc
 }
 
-# stale_claims <stub|live> <arsenal> <template dir> <plinth dir>: no stale
-# claim; issue states from the stub or the network. Prints how the checkout is
-# named when it reads the template's.
+# ars_mode <stub|live>: issue states from the stub, or from the network with
+# the evidence page read beside the catalog.
+ars_mode() {
+  if [ "$1" = stub ]; then state_of=stub_state; evidence=""
+  else state_of=real_state; evidence="$root/docs/reference/arsenal-evidence.md"; fi
+}
+
+# stale_claims <stub|live> <arsenal dir> <template dir> <plinth dir>: no stale
+# claim; see ars_mode. Prints how the checkout is named when it reads the
+# template's.
 k_stale_claims() {
-  if [ "$1" = stub ]; then state_of=stub_state; else state_of=real_state; fi
+  ars_mode "$1"
   stale_claims "$(at "$2")" "$(at "$3")" "$(at "$4")" || return 1
   [ "$3" != TEMPLATE ] || echo "$template_at"
 }
 
-# stale_claim_names <stub|live> <phrase> <arsenal> <template dir> <plinth dir>:
+# stale_claim_names <stub|live> <phrase> <arsenal dir> <template dir> <plinth dir>:
 # a stale claim is found, and one of them says the phrase.
 k_stale_claim_names() {
   local out
-  if [ "$1" = stub ]; then state_of=stub_state; else state_of=real_state; fi
+  ars_mode "$1"
   if out="$(stale_claims "$(at "$3")" "$(at "$4")" "$(at "$5")")"; then echo "no stale claim found"; return 1; fi
   grep -qF -- "$2" <<<"$out" || { echo "no claim says \"$2\":"; printf '%s\n' "$out"; return 1; }
 }
 
-# missing_facts <arsenal> <run-a-project> <template dir>: no fact missing.
+# missing_facts <arsenal dir> <run-a-project> <template dir>: no fact missing.
 k_missing_facts() {
   missing_facts "$(at "$1")" "$(at "$2")" "$(at "$3")" || return 1
   [ "$3" != TEMPLATE ] || echo "$template_at"
@@ -847,19 +873,9 @@ fx_ars() { # a template and a plinth that agree, and the variants that must not 
 ## Skills only the person can start
 
 - `/plinth:guide`
-
-## Installed by default
-
-| Plugin | What |
-| --- | --- |
-| `mattpocock-skills` | See "Skills only the person can start" |
-
-## Listed, not installed
-
-| Plugin | What |
-| --- | --- |
-| `extra` | More |
 ROW
+  printf '# Installed by default\n\n| Plugin | What |\n| --- | --- |\n| `mattpocock-skills` | See "Skills only the person can start" |\n' >"$p/skills/arsenal/installed.md"
+  printf '# Listed, not installed\n\n| Plugin | What |\n| --- | --- |\n| `extra` | More |\n' >"$p/skills/arsenal/listed.md"
   printf -- '---\nname: guide\ndisable-model-invocation: true\n---\nThe arsenal, "Skills only the person can start".\n' >"$p/skills/guide/SKILL.md"
   printf '[list](x#skills-only-the-person-can-start)\n' >"$p/README.md"
   cat >"$p/docs/how-to/run-a-project.md" <<'H'
@@ -871,22 +887,27 @@ An issue "Template update available: …": type `/plinth:template-update`.
 
 ### Next
 H
-  a="$p/skills/arsenal/SKILL.md"; h="$p/docs/how-to/run-a-project.md"
+  a="$p/skills/arsenal"; h="$p/docs/how-to/run-a-project.md"
+  # ars_variant <name> <sed expression> [<file>]: a copy of the good catalog's
+  # folder with one line of SKILL.md (or of <file>) changed.
+  ars_variant() { cp -R "$a" "$d/$1"; sed -i.bak "$2" "$d/$1/${3:-SKILL.md}"; rm -f "$d/$1/"*.bak; }
   # The release row as it stood when it told a real project a release was not built (#833).
   local old_row='| A merged change to put out (release and deploy, after step 6) | A `web` app on Render goes out by itself once `main` is green; the other archetypes publish nothing yet | Render, from `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`; a release on a tag is planned for `library` and `cli` (#703) and `backend` (#706), not built yet |'
-  awk -v r="$old_row" 'index($0, "| A merged change to put out") == 1 { print r; next } { print }' "$a" >"$d/old.md"
-  # The good catalog with one line changed, one file per name.
-  sed 's/| Say |/| A release is planned (#900) |/' "$a" >"$d/a.md"
-  sed 's/| Say |/| Planned in #703 |/' "$a" >"$d/b.md"
-  sed 's/| Say |/| Planned in #901 |/' "$a" >"$d/c.md"
-  sed 's|Say |Planned in owner/repo#703 |' "$a" >"$d/d.md"
-  sed 's/| Say |/| The reminder is not built yet |/' "$a" >"$d/e.md"
-  sed 's/| Say |/| `\/implement` is planned |/' "$a" >"$d/f.md"
-  sed 's|`/ask-matt` (listed)|`/implement` (listed)|' "$a" >"$d/g.md"
-  { cat "$a"; printf '| `dep` | More |\n'; } >"$d/h.md"
-  sed 's/, `data-ml` its model as a GitHub release//' "$a" >"$d/i.md"
-  sed 's/`backend` its image to GHCR/`backend` its image to PyPI/' "$a" >"$d/j.md"
-  sed 's/The monthly issue "Template update available: …"/The monthly issue/' "$a" >"$d/k.md"
+  cp -R "$a" "$d/old"; awk -v r="$old_row" 'index($0, "| A merged change to put out") == 1 { print r; next } { print }' "$a/SKILL.md" >"$d/old/SKILL.md"
+  # The good catalog with one line changed, one folder per name.
+  ars_variant a 's/| Say |/| A release is planned (#900) |/'
+  ars_variant b 's/| Say |/| Planned in #703 |/'
+  ars_variant c 's/| Say |/| Planned in #901 |/'
+  ars_variant d 's|Say |Planned in owner/repo#703 |'
+  ars_variant e 's/| Say |/| The reminder is not built yet |/'
+  ars_variant f 's/| Say |/| `\/implement` is planned |/'
+  ars_variant g 's|`/ask-matt` (listed)|`/implement` (listed)|'
+  ars_variant h 's/^nothing$//' listed.md; printf '| `dep` | More |\n' >>"$d/h/listed.md"
+  ars_variant h2 's/| More |/| `\/implement` (listed) |/' listed.md
+  ars_variant h3 's/^nothing$//'; rm "$d/h3/listed.md"
+  ars_variant i 's/, `data-ml` its model as a GitHub release//'
+  ars_variant j 's/`backend` its image to GHCR/`backend` its image to PyPI/'
+  ars_variant k 's/The monthly issue "Template update available: …"/The monthly issue/'
   sed 's/An issue "Template update available: …"/An issue/' "$h" >"$d/h9.md"
   grep -v 'A merged change' "$h" >"$d/hr.md"
   mkdir -p "$d/empty/template"
@@ -1082,15 +1103,15 @@ planted ¦ a copy with a README tool list without python3 fails: {} ¦ README.md
 planted ¦ a copy with a tutorial tool list without python3 fails: {} ¦ docs/tutorials/getting-started.md ¦ sed ¦ s/`uv`, `python3`\. The$/`uv`. The/ ¦ grep:^- Tools:
 planted ¦ a copy with "checks all four" for five tools fails: {} ¦ docs/tutorials/getting-started.md ¦ sed ¦ s/checks all five/checks all four/ ¦ grep:^- Tools:
 planted ¦ a copy with a git floor other than the door's fails: {} ¦ docs/tutorials/getting-started.md ¦ append ¦ Needs git 2.28 or newer. ¦ end
-planted ¦ a copy with an arsenal count other than the manifest's fails: {} ¦ skills/arsenal/SKILL.md ¦ sed ¦ s/installs 15 of the 27 skills/installs 14 of the 27 skills/ ¦ grep:installs 14 of the
-planted ¦ a copy with an upstream total other than the lists add to fails: {} ¦ skills/arsenal/SKILL.md ¦ sed ¦ s/installs 15 of the 27 skills/installs 15 of the 25 skills/ ¦ grep:installs 15 of the
+planted ¦ a copy with an arsenal count other than the manifest's fails: {} ¦ skills/arsenal/listed.md ¦ sed ¦ s/installs 15 of the 27 skills/installs 14 of the 27 skills/ ¦ grep:installs 14 of the
+planted ¦ a copy with an upstream total other than the lists add to fails: {} ¦ skills/arsenal/listed.md ¦ sed ¦ s/installs 15 of the 27 skills/installs 15 of the 25 skills/ ¦ grep:installs 15 of the
 planted ¦ a copy with a marketplace count other than its list fails: {} ¦ .claude-plugin/marketplace.json ¦ sed ¦ s/15 of the 27 upstream ships/14 of the 27 upstream ships/ ¦ line:1
 planted ¦ a copy with a NOTICE count other than the manifest's fails: {} ¦ NOTICE ¦ sed ¦ s/15 skills installed, 6 listed/15 skills installed, 7 listed/ ¦ grep:7 listed in
-planted ¦ a copy with "adds its seven" for six fails: {} ¦ skills/arsenal/SKILL.md ¦ sed ¦ s/adds its six$/adds its seven/ ¦ grep:adds its seven
+planted ¦ a copy with "adds its seven" for six fails: {} ¦ skills/arsenal/listed.md ¦ sed ¦ s/adds its six$/adds its seven/ ¦ grep:adds its seven
 planted ¦ a copy with a one-time command repeated outside the README fails: {} ¦ docs/how-to/cut-a-release.md ¦ append ¦ claude plugin update taste-skill@plinth ¦ end
 planted ¦ a copy with a squash-merge command that differs fails: {} ¦ docs/how-to/run-a-project.md ¦ sed ¦ s/--squash --match-head-commit <sha> --body/--squash --body/ ¦ grep:gh pr merge <n> --squash
 planted ¦ a copy with a step 5 that lists two of the three questions fails: {} ¦ docs/how-to/run-a-project.md ¦ sed ¦ /^  2\. "Can I see it?"$/d ¦ grep:^### 5\.
-planted ¦ a copy with an arsenal cell that names the three questions and says two fails: {} ¦ skills/arsenal/SKILL.md ¦ sed ¦ s/"Can I see it?", "What did the reviewer say?" |/"Can I see it?" |/ ¦ grep:"Can I see it?" |
+planted ¦ a copy with an arsenal cell that names the three questions and says two fails: {} ¦ docs/reference/arsenal-evidence.md ¦ sed ¦ s/"Can I see it?", "What did the reviewer say?" |/"Can I see it?" |/ ¦ grep:"Can I see it?" |
 planted ¦ a copy with a line that names the three questions and says none fails: {} ¦ skills/guide/SKILL.md ¦ append ¦ Then ask the three questions. ¦ end
 planted ¦ a copy with a first login that asks for delete_repo fails: {} ¦ docs/tutorials/getting-started.md ¦ sed ¦ 1,/gh auth login -s repo,workflow`/s/gh auth login -s repo,workflow`/gh auth login -s repo,workflow,delete_repo`/ ¦ grep:gh auth login -s repo,workflow,delete_repo
 planted ¦ a copy with a refresh that asks for delete_repo with the needed scopes fails: {} ¦ skills/new-project/SKILL.md ¦ append ¦ fix: `! gh auth refresh -h github.com -s repo,workflow,delete_repo` ¦ end
@@ -1251,36 +1272,39 @@ lacks ¦ the skill no longer says "It never names the host or the visibility." �
 # Fixtures first, issue states from the stub; then the network and the
 # template at the pinned commit.
 -- ¦ arsenal-freshness
-stale_claims ¦ a catalog that matches the template has no stale claim ¦ stub ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/t ¦ @ars/p
-missing_facts ¦ a catalog that matches the template misses no fact ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
+stale_claims ¦ a catalog that matches the template has no stale claim ¦ stub ¦ @ars/p/skills/arsenal ¦ @ars/t ¦ @ars/p
+missing_facts ¦ a catalog that matches the template misses no fact ¦ @ars/p/skills/arsenal ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
 typed_list ¦ one typed list, with the pointers, passes ¦ @ars/p
-refuses ¦ the old release row is a stale claim ¦ stale_claims ¦ stub ¦ @ars/old.md ¦ @ars/t ¦ @ars/p
-stale_claim_names ¦ the old release row names a closed issue as the plan ¦ stub ¦ names #703 as the plan, and it is closed ¦ @ars/old.md ¦ @ars/t ¦ @ars/p
-refuses ¦ the old release row misses what each archetype does ¦ missing_facts ¦ @ars/old.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
-refuses ¦ a cell planning an open-issue feature the template renders fails ¦ stale_claims ¦ stub ¦ @ars/a.md ¦ @ars/t ¦ @ars/p
-refuses ¦ a cell naming a closed issue as the plan fails ¦ stale_claims ¦ stub ¦ @ars/b.md ¦ @ars/t ¦ @ars/p
-refuses ¦ a cell naming an issue whose state cannot be read fails ¦ stale_claims ¦ stub ¦ @ars/c.md ¦ @ars/t ¦ @ars/p
-refuses ¦ a cell naming another repository's closed issue as the plan fails ¦ stale_claims ¦ stub ¦ @ars/d.md ¦ @ars/t ¦ @ars/p
-refuses ¦ the reminder called not built yet fails ¦ stale_claims ¦ stub ¦ @ars/e.md ¦ @ars/t ¦ @ars/p
-refuses ¦ an installed skill called planned fails ¦ stale_claims ¦ stub ¦ @ars/f.md ¦ @ars/t ¦ @ars/p
-refuses ¦ an installed skill marked listed fails ¦ stale_claims ¦ stub ¦ @ars/g.md ¦ @ars/t ¦ @ars/p
-refuses ¦ an installed plugin in the Listed table fails ¦ stale_claims ¦ stub ¦ @ars/h.md ¦ @ars/t ¦ @ars/p
-refuses ¦ a release row without one archetype fails ¦ missing_facts ¦ @ars/i.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
-refuses ¦ a release row with an archetype's wrong destination fails ¦ missing_facts ¦ @ars/j.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
-refuses ¦ a reminder row without the issue's title fails ¦ missing_facts ¦ @ars/k.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
-refuses ¦ a step 9 without the issue's title fails ¦ missing_facts ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/h9.md ¦ @ars/t
-refuses ¦ a run-a-project.md without the release pointer fails ¦ missing_facts ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/hr.md ¦ @ars/t
-refuses ¦ a template with no release workflow fails ¦ missing_facts ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/empty
-refuses ¦ a template that dropped the reminder fails ¦ missing_facts ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t2
-refuses ¦ a template that dropped the release how-to fails ¦ missing_facts ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t3
-refuses ¦ a release workflow whose name carries no archetype fails ¦ missing_facts ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t4
-refuses ¦ a template that dropped one archetype's release workflow fails ¦ missing_facts ¦ @ars/p/skills/arsenal/SKILL.md ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t5
+refuses ¦ the old release row is a stale claim ¦ stale_claims ¦ stub ¦ @ars/old ¦ @ars/t ¦ @ars/p
+stale_claim_names ¦ the old release row names a closed issue as the plan ¦ stub ¦ names #703 as the plan, and it is closed ¦ @ars/old ¦ @ars/t ¦ @ars/p
+refuses ¦ the old release row misses what each archetype does ¦ missing_facts ¦ @ars/old ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
+refuses ¦ a cell planning an open-issue feature the template renders fails ¦ stale_claims ¦ stub ¦ @ars/a ¦ @ars/t ¦ @ars/p
+refuses ¦ a cell naming a closed issue as the plan fails ¦ stale_claims ¦ stub ¦ @ars/b ¦ @ars/t ¦ @ars/p
+refuses ¦ a cell naming an issue whose state cannot be read fails ¦ stale_claims ¦ stub ¦ @ars/c ¦ @ars/t ¦ @ars/p
+refuses ¦ a cell naming another repository's closed issue as the plan fails ¦ stale_claims ¦ stub ¦ @ars/d ¦ @ars/t ¦ @ars/p
+refuses ¦ the reminder called not built yet fails ¦ stale_claims ¦ stub ¦ @ars/e ¦ @ars/t ¦ @ars/p
+refuses ¦ an installed skill called planned fails ¦ stale_claims ¦ stub ¦ @ars/f ¦ @ars/t ¦ @ars/p
+refuses ¦ an installed skill marked listed fails ¦ stale_claims ¦ stub ¦ @ars/g ¦ @ars/t ¦ @ars/p
+refuses ¦ an installed plugin in the Listed table fails ¦ stale_claims ¦ stub ¦ @ars/h ¦ @ars/t ¦ @ars/p
+refuses ¦ an installed skill marked listed in listed.md fails ¦ stale_claims ¦ stub ¦ @ars/h2 ¦ @ars/t ¦ @ars/p
+refuses ¦ a catalog folder with no listed.md fails ¦ stale_claims ¦ stub ¦ @ars/h3 ¦ @ars/t ¦ @ars/p
+refuses ¦ a release row without one archetype fails ¦ missing_facts ¦ @ars/i ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
+refuses ¦ a release row with an archetype's wrong destination fails ¦ missing_facts ¦ @ars/j ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
+refuses ¦ a reminder row without the issue's title fails ¦ missing_facts ¦ @ars/k ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t
+refuses ¦ a step 9 without the issue's title fails ¦ missing_facts ¦ @ars/p/skills/arsenal ¦ @ars/h9.md ¦ @ars/t
+refuses ¦ a run-a-project.md without the release pointer fails ¦ missing_facts ¦ @ars/p/skills/arsenal ¦ @ars/hr.md ¦ @ars/t
+refuses ¦ a template with no release workflow fails ¦ missing_facts ¦ @ars/p/skills/arsenal ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/empty
+refuses ¦ a template that dropped the reminder fails ¦ missing_facts ¦ @ars/p/skills/arsenal ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t2
+refuses ¦ a template that dropped the release how-to fails ¦ missing_facts ¦ @ars/p/skills/arsenal ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t3
+refuses ¦ a release workflow whose name carries no archetype fails ¦ missing_facts ¦ @ars/p/skills/arsenal ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t4
+refuses ¦ a template that dropped one archetype's release workflow fails ¦ missing_facts ¦ @ars/p/skills/arsenal ¦ @ars/p/docs/how-to/run-a-project.md ¦ @ars/t5
 refuses ¦ a user-only skill missing from the list fails ¦ typed_list ¦ @ars/p2
 refuses ¦ a README without the pointer fails ¦ typed_list ¦ @ars/p3
 refuses ¦ step 3's row saying ask for it fails ¦ typed_list ¦ @ars/p4
+nonempty ¦ the evidence page is read with the catalog ¦ docs/reference/arsenal-evidence.md
 issue_state ¦ issue state reads over the network (#703 closed) ¦ coolbress/plinth ¦ 703 ¦ closed
-stale_claims ¦ no arsenal cell contradicts {} or what the plugin installs ¦ live ¦ skills/arsenal/SKILL.md ¦ TEMPLATE ¦ .
-missing_facts ¦ the release and reminder facts match {} ¦ skills/arsenal/SKILL.md ¦ docs/how-to/run-a-project.md ¦ TEMPLATE
+stale_claims ¦ no arsenal cell contradicts {} or what the plugin installs ¦ live ¦ skills/arsenal ¦ TEMPLATE ¦ .
+missing_facts ¦ the release and reminder facts match {} ¦ skills/arsenal ¦ docs/how-to/run-a-project.md ¦ TEMPLATE
 typed_list ¦ the person-typed skills are one list, and the other pages point at it ¦ .
 
 # ---- From tests/de-jargon.sh: no internal vocabulary in public text.

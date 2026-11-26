@@ -227,8 +227,41 @@ grep -q 'fail:' "$FX/summary" && no "a pass wrote a fail line" "$FX/summary" || 
 
 echo "-- not a pull request, or unreadable"
 setup "" "" push; export PR=""
-run "a push: passes as does not apply, no call to GitHub" 0 "no description" "pass: PR description, does not apply"
+run "a push: the description step passes, saying nothing" 0
+[ -s "$FX/out" ] || [ -s "$FX/summary" ] && no "a push: the description step printed something" "$FX/out" "$FX/summary" || ok "a push: the description step prints nothing; the title step said it"
 [ -s "$FX/calls" ] && no "a push called gh" "$FX/calls" || ok "a push asks GitHub nothing"
+
+echo "-- a push through the whole job: one line, nothing fetched (#1141)"
+# The three steps as the runner runs them on a push: no title, no pull request.
+n=$((n + 1)); FX="$work/$n"; export FX; mkdir -p "$FX/temp"; : >"$FX/calls"; : >"$FX/curl"; : >"$FX/summary"
+touch "$FX/curl_fails"   # a fetch would fail here, as raw.githubusercontent.com's 503 did
+{ GITHUB_STEP_SUMMARY="$FX/summary" TITLE="" bash "$work/title.sh"; echo "rc=$?"
+  PATH="$work/bin:$PATH" RUNNER_TEMP="$FX/temp" PLINTH_SHA="$SHA" PR="" GITHUB_STEP_SUMMARY="$FX/summary" bash "$work/fetch.sh"; echo "rc=$?"
+  PATH="$work/bin:$PATH" RUNNER_TEMP="$FX/temp" REPO=coolbress/plinth GH_TOKEN=x PR="" FETCH=success GITHUB_STEP_SUMMARY="$FX/summary" bash "$work/check.sh"; echo "rc=$?"
+} >"$FX/out" 2>&1
+lines="$(grep -v '^rc=' "$FX/out" | grep -c .)"
+if [ "$lines" = 1 ] && grep -qx 'pass: PR title and description, do not apply (not a pull request: no title or description to read)' "$FX/out" \
+   && [ "$(grep -c '^rc=0$' "$FX/out")" = 3 ] && [ ! -s "$FX/curl" ] && ! grep -q curl "$FX/out"; then
+  ok "a push: one line in the job's log, three steps green, nothing fetched, no curl error"
+else no "a push: want one line, three green steps and no fetch" "$FX/out" "$FX/curl"; fi
+[ "$(grep -c . "$FX/summary")" = 1 ] && ok "... and one line in the summary" || no "a push: the summary" "$FX/summary"
+
+echo "-- a pull request a bot wrote (#1141)"
+# Dependabot's own description: no Review line, no What I checked myself.
+dependabot=$'Bumps [ruff](https://github.com/astral-sh/ruff) from 0.17.4 to 0.17.5.\n<details>\n<summary>Release notes</summary>\n\nSee #457 upstream.\n</details>\n\nDependabot will resolve any conflicts with this PR as long as you don\'t alter it yourself.'
+setup "$dependabot" ""
+AUTHOR_TYPE=Bot run "Dependabot's description: passes" 0 \
+  "pass: PR description, the person-only fields (\`Review:\`, \`What I checked myself\`) do not apply: a bot wrote this pull request"
+if ! grep -q 'not yet confirmed: PR description says what was checked\|not yet confirmed: PR description names its review' "$FX/out" "$FX/summary" \
+   && [ "$(grep -c '^pass: PR description, the person-only fields' "$FX/out")" = 1 ]; then ok "... one pass line for the two fields, no not yet confirmed line for them"
+else no "a bot's pull request still warns about the person-only fields" "$FX/out"; fi
+grep -q "not yet confirmed: PR description's #457 links to something" "$FX/out" && ok "... the bare #N check still runs on a bot's description" \
+  || no "a bot's description: the bare #N check did not run" "$FX/out"
+grep -q '^pass: PR description, merging it closes no issue' "$FX/out" && ok "... and the closing-keyword comparison still runs" || no "a bot's description: no closing comparison" "$FX/out"
+setup "$dependabot Fixes #12." "12"
+AUTHOR_TYPE=Bot run "a bot's description that closes an issue outside its closing line still fails" 1 "" "fail: PR description, merging it would close"
+setup "## What and why"$'\n\nx' ""
+AUTHOR_TYPE=User run "a person's pull request missing both fields still warns" 0 "not yet confirmed: PR description says what was checked" "not yet confirmed: PR description names its review"
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12\n\n'"$by" "12"; echo 1 >"$FX/gh_rc"
 run "GitHub cannot be read: fails" 1 "could not be read" "fail: PR description"
 setup "$what"$'\n\n'"$how"$'\n\nCloses #12\n\n'"$by" "12"; export FETCH=failure

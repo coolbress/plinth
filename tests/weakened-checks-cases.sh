@@ -1047,7 +1047,7 @@ grep -qx '::warning::3 more not yet confirmed lines are in the job summary' <<<"
 
 echo "-- verdict lines: ci / pr-title"
 verdict pr-title "Check the title" TITLE=""
-first "not a pull request: pass, does not apply" '^- pass: PR title, does not apply \(not a pull request'
+first "not a pull request: pass, does not apply" '^- pass: PR title and description, do not apply \(not a pull request'
 verdict pr-title "Check the title" TITLE="feat(x): a thing"
 first "a conventional title: pass" '^- pass: PR title follows the convention$'
 verdict pr-title "Check the title" TITLE="feat: a thing (#12)"

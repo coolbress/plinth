@@ -255,6 +255,22 @@ put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false S
 put "$d/issues.json" "$(issue 4 'Ask the user for their name' '')" "$(issue 5 'Show monthly totals' ready-for-agent)"
 expect "an issue open: the ready-for-agent one, not the lowest number" "$d" "A ticket ready (step 4)" "/implement #5" "before: /clear"
 grep -q "hosting: render" <<<"$(MOCK_DIR="$d" "$script" "$d")" && ok "a web project says where it runs" || bad "web: no hosting line"
+# /retro after a person's merge (#1081): the newest merge a person's, within
+# the past day, and the route prints before: /clear. The fixtures' merges are
+# from 2026-10, so the case above is the one without a recent merge.
+retro_line="after the merge: if anything in that piece of work should go differently next time, type /retro in that session before /clear"
+grep -qF "$retro_line" <<<"$(MOCK_DIR="$d" "$script" "$d")" && bad "no merge in the past day, yet the /retro line" || ok "no merge in the past day: no /retro line"
+just() { sed "s/\"mergedAt\":\"[^\"]*\"/\"mergedAt\":\"$(ago "$1")\"/"; }
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)" "$(pr 3 'feat: totals' false SUCCESS | just 3600)"
+expect "a person merged an hour ago, a ticket next: /retro before /clear" "$d" "A ticket ready (step 4)" "/implement #5" "$retro_line"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS | just 7200)" "$(pr 3 'chore(deps): bump x' true SUCCESS | just 3600)"
+out="$(MOCK_DIR="$d" "$script" "$d")"
+grep -qxF "command: /implement #5" <<<"$out" && ! grep -qF "$retro_line" <<<"$out" && ok "Dependabot's merge is the newest: no /retro line" || bad "Dependabot's merge is the newest, yet the /retro line (or no /implement #5)"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)" "$(pr 3 'feat: totals' false SUCCESS | just 3600)"
+put "$d/issues.json" "$(issue 4 'Ask the user for their name' needs-triage)"
+out="$(MOCK_DIR="$d" "$script" "$d")"
+grep -qxF "command: /triage" <<<"$out" && ! grep -qF "$retro_line" <<<"$out" && ok "a merge an hour ago, no before: /clear: no /retro line" || bad "the /retro line without before: /clear"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
 # What it started with off (#763), through scripts/off-by-default.sh. The
 # whole list is the features view's (#1087), no longer the map's.
 out="$(MOCK_DIR="$d" "$script" "$d" features)"
@@ -1781,6 +1797,20 @@ miss=""
 grep -qF "with its revoke list" <<<"$broke_row" && grep -qF "#### If something bad ran on this computer" "$root/docs/how-to/run-a-project.md" &&
 miss="$(in_order "$step7" "The \`gh\` login and every GitHub token" "Other personal access tokens" "SSH keys" "The project's service and API keys" "Cloud and npm credentials" "the account's security log" "repositories nobody here made" "self-hosted runners nobody here added" "authorised OAuth apps and GitHub Apps")" &&
   ok "the row names the revoke list, and the list is in its order" || bad "the revoke list: ${miss:-the row or the heading lost it}"
+
+# Where the loop ends (#1081): users' reports, /retro, /design at step 2.
+operate_row="$(grep '^| The project in use (operate) |' "$arsenal")"
+grep -qF "what users report is written as an issue and sorted with \`/triage\`" <<<"$operate_row" &&
+  ok "the operate row: users' reports become issues sorted by /triage" || bad "the operate row no longer names /triage for users' reports"
+grep -qF "what users report: write it as an issue" <<<"$step7" && grep -qF "/triage" <<<"$step7" &&
+  ok "step 7's /triage sentence takes users' reports" || bad "step 7's /triage sentence lost users' reports"
+idea_row="$(grep '^| An idea in your own words (step 2) |' "$arsenal")"
+step2="$(awk '/^### 2\. Shape the idea/{on=1; print; next} /^### 3\./{on=0} on' "$root/docs/how-to/run-a-project.md" | tr '\n' ' ' | tr -s ' ')"
+grep -qF '`/design` (built in, screen mockups on a canvas)' <<<"$idea_row" && grep -qF 'Type `/grilling`' <<<"$idea_row" &&
+  grep -qF '`/design` (built in)' <<<"$step2" && grep -qF 'type `/grilling` with the idea' <<<"$step2" &&
+  ok "step 2 names /design for a page people look at, and /grilling stays its command" || bad "step 2 lost /design or /grilling"
+grep -qF 'An `after the merge:` line goes in part 4 as one sentence' "$guide_md" &&
+  ok "the skill puts the /retro line in Then" || bad "the skill does not place the after the merge: line"
 
 # The skill's answer (#1076): seven parts, four status words, no bar, so far
 # only as printed, the depth rule, the /clear line, the gloss rule.
