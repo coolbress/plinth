@@ -80,3 +80,41 @@ FC-D05 a web project's ci job passes web: true
 FC-D06 ci.yml carries the image job
 FC-D07 .gitlab-ci.yml carries the docker-image job
 FC-D08 .gitlab-ci.yml includes plinth's GitLab pipeline at a commit, with a checksum
+FC-E01 the GitLab default branch is protected
+FC-E02 a GitLab merge request merges only on a green pipeline
+FC-E03 a GitLab merge request is squashed and fast-forwarded
+FC-E04 the default branch carries the GitLab pipeline definition
+FC-E05 every label the door creates is present
+FC-E06 the repository is read for the wall
+FC-E07 the default branch is main
+FC-E08 squash commits carry the pull request title and description
+FC-E09 push protection is on
+FC-E10 SECURITY.md names a route this repository takes
+FC-E11 private vulnerability reporting is on
+FC-E12 rules govern the default branch
+FC-E13 the default branch has a deletion rule
+FC-E14 the default branch has a non_fast_forward rule
+FC-E15 the default branch has a pull_request rule
+FC-E16 the default branch has a required_status_checks rule
+FC-E17 merge methods stay within the ruleset's
+FC-E18 required checks are strict
+FC-E19 every expected check is required
+FC-E20 each required check comes from its expected app
+FC-E21 CodeQL is enforced on the default branch
+FC-E22 CodeQL's alert thresholds are the ruleset's
+FC-E23 CodeQL default setup analyses the project's language
+FC-E24 no ruleset has a bypass actor
+FC-E25 a ruleset reserves the merge to the repository admin
+FC-E26 the merge is a boundary for this login
+FC-E27 the Actions allowlist lets every action the workflows use start
+FC-E28 the Actions token reads only and cannot approve a pull request
+FC-E29 a tag ruleset keeps released tags from being moved or deleted
+FC-E30 the repository has a description
+FC-F01 the recorded template tag is the one plinth is tested with
+FC-F02 this installed plinth targets the newest template tag
+FC-F03 third_party_review: true has its workflow
+FC-F04 code_of_conduct: true has its CODE_OF_CONDUCT.md
+FC-F05 the owner's .github still publishes CODE_OF_CONDUCT.md (answered owner_has_code_of_conduct)
+FC-F06 every plinth workflow pin names one commit
+FC-F07 the recorded host is one this checker reads
+FC-F08 the owner's .github still publishes PULL_REQUEST_TEMPLATE.md (answered owner_has_pr_template)
