@@ -444,11 +444,22 @@ would read them and stop differing by the rules under test.
 ## The release run
 
 When a release must run the eval suite ([How to cut a release](cut-a-release.md),
-step 2), run this from the top folder of your plinth clone:
+step 2), run it once on the release candidate, in a clone on the release branch,
+after run 1 made it:
 
 ```bash
+git switch release/vX.Y.Z
 scripts/eval-suite.sh --release
 ```
+
+That one run serves the smoke gate too (#1134). It starts with
+[the smoke run](#the-release-smoke-run)'s six rows, the three marked tasks in the
+`plinth` arm, runs 1 and 2. It prints the smoke verdict line from those rows
+alone, the one `--smoke` prints, before any other run starts. Then it runs the
+rest. Its exit is the smoke run's for those rows: 1 when one of them did not
+pass, 3 when the ceiling or the usage limit stopped it. The other rows' results
+are in the table, not in the exit. A release that only owes the smoke run runs
+`--smoke`, as before.
 
 It runs every task in the `repo-only` and `plinth` arms only, three runs each,
 90 runs in all, under a US$15 ceiling. It leaves out the `none` arm: that arm
@@ -464,7 +475,10 @@ result always means the same thing; `--ceiling` and `--out` still work. The
 first line of its summary says it is a release run, and its last line names the
 branch and commit plinth was installed from, as the smoke run's does. Records it made resume only
 with `--release`, and records made without it do not resume with it. Post the
-table on #647 and put the comment's link in the why-file.
+table on #647 and put the comment's link in the release pull request's
+description, one line, `eval suite: <link>`. Run 2 of `scripts/make-release.sh`
+puts that line in the GitHub Release in place of the why's
+`eval suite: on the release candidate`.
 
 ## The release smoke run
 
