@@ -48,6 +48,11 @@
 #   eval suite not run: <the reason>
 # A release whose pin did not move, or whose move touches none of those
 # files, is not asked.
+#
+# Run 1 holds the train (#1132): it stops, before any change, when origin's
+# highest vX.Y.Z tag is less than 7 days old, unless the why carries one line
+#   hotfix: <reason>
+# which stays in the section and the Release. An empty reason always stops.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -215,6 +220,37 @@ check_why "the why-file" < "$why_file"
   || stop "$ver is not above the current version $current"
 if tag_on_origin; then
   stop "$tag already exists on origin; a number is used once"
+fi
+# The train (#1132): at most one release a week. Sooner is a hotfix, and the
+# why says so on one line, `hotfix: <reason>`, which the section and the
+# Release then carry. The release before is origin's highest vX.Y.Z tag, and
+# its age is the tag's own date (the tagger's; a lightweight tag's commit).
+hotfix_line="$(grep -E '^hotfix:' "$why_file" || true)"
+[ "$(grep -c . <<<"$hotfix_line")" -le 1 ] || stop "the why-file has more than one 'hotfix:' line:" "$hotfix_line"
+if [ -n "$hotfix_line" ] && [ -z "$(tr -cd '[:alpha:]' <<<"${hotfix_line#hotfix:}")" ]; then
+  stop "the why's 'hotfix:' line must give the reason: a published advisory reaching what plinth ships or pins," \
+       "installing plinth as the README says failing, or a consumer's required check failing because of plinth"
+fi
+rc=0; tags="$(git ls-remote --exit-code --tags --refs origin 'refs/tags/v*' 2>&1)" || rc=$?
+case "$rc" in 0|2) ;; *) stop "cannot list origin's tags (git ls-remote exit $rc); nothing changed" ;; esac
+prev_tag="$(sed -nE 's|^[0-9a-f]+[[:space:]]+refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$|\1|p' <<<"$tags" | sort -V | tail -1)"
+if [ -n "$prev_tag" ]; then
+  git fetch -q origin "refs/tags/$prev_tag" || stop "cannot fetch $prev_tag from origin; nothing changed"
+  if [ "$(git cat-file -t FETCH_HEAD)" = tag ]; then
+    born="$(git cat-file tag FETCH_HEAD | sed -nE 's/^tagger .* ([0-9]+) [-+][0-9]{4}$/\1/p')"
+  else
+    born="$(git log -1 --format=%ct FETCH_HEAD)"
+  fi
+  [[ "$born" =~ ^[0-9]+$ ]] || stop "cannot read the date of $prev_tag; nothing changed"
+  age=$(( $(date +%s) - born ))
+  if [ "$age" -lt $(( 7 * 86400 )) ] && [ -z "$hotfix_line" ]; then
+    stop "$prev_tag is $(( age / 86400 )) days $(( age % 86400 / 3600 )) hours old: plinth releases at most once a week (docs/how-to/cut-a-release.md)." \
+         "wait until it is 7 days old, or, for a hotfix, add one line to the why-file:" \
+         "  hotfix: <reason>" \
+         "(a published advisory reaching what plinth ships or pins, installing plinth as the README says failing," \
+         " or a consumer's required check failing because of plinth); the release section and the Release carry it"
+  fi
+  echo "the release before, $prev_tag, is $(( age / 86400 )) days old${hotfix_line:+; $hotfix_line}"
 fi
 grep -q '^## \[Unreleased\]$' "$changelog" || stop "CHANGELOG.md has no '## [Unreleased]' section to release from"
 grep -qE '^\[Unreleased\]: [^[:space:]]+/compare/[^[:space:]]+\.\.\.HEAD$' "$changelog" \
