@@ -268,7 +268,7 @@ Where the other facts in `skills/arsenal/installed.md` and `listed.md` come from
     `/grilling` is its one tool; `domain-modeling`, which keeps
     `GLOSSARY.md`, stays installed and `installed.md` names it. `/design` moved here from the build row as the
     idea row's Also, with its two conditions from Claude Code's commands
-    reference (read 2026-11-26).
+    reference (read 2026-11-26, and again 2026-11-27).
   - `/wayfinder` became the plan row's Also, for when the way is unclear.
   - `/debug` left "Something broke": it debugs Claude Code, and `/doctor` is
     the row's one tool for Claude Code itself; `installed.md` keeps the

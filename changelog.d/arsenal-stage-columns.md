@@ -12,7 +12,7 @@
   `/debug` leave the rows and stay where they are installed or listed. The
   build row names the project's `verify` skill as its check before a commit,
   in place of Claude Code's bundled `/verify`. `SKILL.md` is 93 lines and
-  10,265 bytes, from 94 and 15,906.
+  10,263 bytes, from 94 and 15,906.
 - `/plinth:guide` says the same as before: what it says of each step (Next
   action, How to use it, It leaves) moved to `skills/guide/steps.md`, and
   `scripts/guide-state.sh` joins it to the arsenal's row by the step's name
@@ -23,10 +23,14 @@
 
 - `tests/skill-size.sh` holds the arsenal's `SKILL.md` to 250 lines and
   12,000 bytes, tighter than other skills' 500 and 20,000.
-- `tests/guidance-skills.sh` fails when a Tool cell names two tools for one
-  job, when the Class cell does not give one of the four classes for each job,
-  when an Also cell is not one tool with its class and condition, and when a
-  tool on the "Not used with plinth" line is in an Also cell.
+- `tests/guidance-skills.sh` fails when a job in a Tool cell, or an Also
+  cell, names a second tool anywhere in its text (a sequence "X, then Y"
+  counts each step once), when a job's class is not the one its tool has
+  (installed or listed by plinth's manifests, built in, or platform when it
+  names no tool), when an Also cell is not one tool with its class and
+  condition, and when a tool on the "Not used with plinth" line is in an Also
+  cell.
 - `tests/guide-cases.sh` fails when a stage has no row in the guide's steps,
-  or one without four cells, when a row there names no stage, and when one
+  or one without four cells or two rows, when a row there names no stage,
+  when the tool cell loses its plinth piece, `also:` or `class:`, and when one
   names a command the arsenal's table does not.

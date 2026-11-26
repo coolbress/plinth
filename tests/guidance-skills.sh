@@ -122,9 +122,52 @@ def cells(row):
     return row[2:-2].split(" | ")
 
 
-def tools_in(head):
-    """The tools a job's head names: backticked spans, a sequence counting once."""
-    return [len(re.findall(r"`[^`]+`", part)) or 1 for part in head.split(", then ")]
+def tool_names(text):
+    """The tools a text names: each backticked span that is a slash command or
+    a skill or plugin plinth installs or lists, by its first word."""
+    out = []
+    for span in re.findall(r"`([^`]+)`", text):
+        word = span.split()[0].lstrip("/")
+        if span.startswith("/") or word in default or word in listed_skills or word in entries:
+            out.append(word)
+    return out
+
+
+def class_for(name):
+    """The class a tool has by what plinth installs or lists, or None."""
+    if name in default or "plinth:" + name in default:
+        return "installed"
+    if name in BUILT_IN:
+        return "built in"
+    if name in listed_skills or name in entries:
+        return "listed"
+    return None
+
+
+def job_problems(trig, where, text, cls):
+    """One job, or the Also cell: each part of a sequence names at most one
+    tool anywhere in its text, and its class is the class that tool has."""
+    out = []
+    parts = text.split(", then ")
+    kinds = cls.split(", then ")
+    if len(kinds) not in (1, len(parts)):
+        out.append(f"{trig}: {len(parts)} steps in a {where} job and {len(kinds)} classes for it")
+        return out
+    for i, part in enumerate(parts):
+        names = tool_names(part)
+        if len(names) > 1 or " or `" in part:
+            out.append(f"{trig}: a {where} cell names two tools for one job: {part[:70]}")
+            continue
+        k = kinds[i] if len(kinds) > 1 else kinds[0]
+        if k not in CLASSES:
+            out.append(f"{trig}: the class {k!r} is not one of {sorted(CLASSES)}")
+            continue
+        want = class_for(names[0]) if names else "platform"
+        if want is None:
+            out.append(f"{trig}: `{names[0]}` in a {where} cell is neither installed, built in nor listed")
+        elif want != k:
+            out.append(f"{trig}: the class of {names[0] if names else part[:40]!r} is {k!r}, and it is {want}")
+    return out
 
 
 def columns(rows):
@@ -137,18 +180,17 @@ def columns(rows):
         trig, tool, cls, _, also, _ = c
         jobs = [] if tool == "-" else tool.split("; ")
         classes = [] if cls == "-" else cls.split("; ")
-        for j in jobs:
-            head = j.split(": ", 1)[0]
-            if " or " in head or any(n > 1 for n in tools_in(head)):
-                out.append(f"{trig}: a Tool cell names two tools for one job: {head}")
         if len(jobs) != len(classes):
             out.append(f"{trig}: {len(jobs)} jobs in Tool and {len(classes)} classes in Class")
-        for k in classes:
-            for part in k.split(", then "):
-                if part not in CLASSES:
-                    out.append(f"{trig}: the class {part!r} is not one of {sorted(CLASSES)}")
-        if also != "-" and not ALSO.match(also):
-            out.append(f"{trig}: the Also cell is not one tool, its class and a condition: {also[:60]}")
+        else:
+            for j, k in zip(jobs, classes):
+                out += job_problems(trig, "Tool", j, k)
+        if also != "-":
+            m = ALSO.match(also)
+            if not m:
+                out.append(f"{trig}: the Also cell is not one tool, its class and a condition: {also[:60]}")
+            else:
+                out += job_problems(trig, "Also", also, m.group(1))
     return out
 
 
@@ -281,6 +323,26 @@ case("must fail: a job with no class",
 case("must fail: a class outside the four",
      problems(arsenal.replace("| `/grilling`: an interview before any code | installed |", "| `/grilling`: an interview before any code | bundled |"), howto, guide),
      "the class 'bundled'")
+case("must fail: a second tool after a job's colon",
+     problems(arsenal.replace("what is out of place in it, read-only", "what is out of place in it, read-only, or `/ponytail-audit` (listed) instead"), howto, guide),
+     "two tools for one job")
+case("must fail: a second tool in an Also cell's condition",
+     problems(arsenal.replace("(installed): when the code has grown hard to change", "(installed): when unsure use `/ask-matt` (listed), or when the code has grown hard to change"), howto, guide),
+     "two tools for one job")
+case("must fail: an installed tool marked listed",
+     problems(arsenal.replace("| `/retro`: it reads the session and suggests rules and checks, most serious first, and changes nothing | installed |",
+                              "| `/retro`: it reads the session and suggests rules and checks, most serious first, and changes nothing | listed |"), howto, guide),
+     "is 'listed', and it is installed")
+case("must fail: an installed sequence marked built in",
+     problems(arsenal.replace("| `/to-spec`, then `/to-tickets` | installed |", "| `/to-spec`, then `/to-tickets` | built in |"), howto, guide),
+     "is 'built in', and it is installed")
+case("must fail: a platform job marked installed",
+     problems(arsenal.replace("| the host's dashboard: its deploy-failure notification first, then its logs | platform |",
+                              "| the host's dashboard: its deploy-failure notification first, then its logs | installed |"), howto, guide),
+     "and it is platform")
+case("must fail: a sequence with a class for one step of two",
+     problems(arsenal.replace("| built in, then installed; installed |", "| built in, then installed, then listed; installed |"), howto, guide),
+     "2 steps in a Tool job and 3 classes")
 case("must fail: an Also cell with two tools",
      problems(arsenal.replace("`/wayfinder` (installed): when the way is unclear", "`/wayfinder` (installed) or `/ask-matt`: when the way is unclear"), howto, guide),
      "the Also cell is not one tool")

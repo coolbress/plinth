@@ -6,8 +6,8 @@
 # Then; the guide's steps.md gives the rest, joined by the first cell. The tool
 # cell is the arsenal's Tool, then its plinth piece, then "also: " and its
 # Also, then "class: " and its Class, each after "; ", a `-` left out. An arsenal row without six cells is
-# printed as it is, for the reader to refuse; a stage steps.md has no row for
-# is an error (exit 1).
+# printed as it is, for the reader to refuse; a stage steps.md has no row for,
+# or two, is an error (exit 1).
 stage_table() {
   local a="$1" s="$2"
   awk -F ' \\| ' '
@@ -20,8 +20,10 @@ stage_table() {
     !on || !/^\| / { next }
     { n = cells($0, c); if (c[1] == "Trigger" || c[1] == "Where you are" || c[1] ~ /^---/) next }
     file == 1 { order[++rows] = c[1]; raw[c[1]] = $0; nf[c[1]] = n; for (i = 1; i <= n; i++) A[c[1], i] = c[i]; next }
-    file == 2 { if (n == 4) { G[c[1]] = 1; for (i = 2; i <= 4; i++) S[c[1], i] = c[i] } else bad4[c[1]] = n }
+    file == 2 && (c[1] in seen) { printf "guide-state: the guide'"'"'s steps have two rows for \x27%s\x27\n", c[1] > "/dev/stderr"; dup = 1; exit 1 }
+    file == 2 { seen[c[1]] = 1; if (n == 4) { G[c[1]] = 1; for (i = 2; i <= 4; i++) S[c[1], i] = c[i] } else bad4[c[1]] = n }
     END {
+      if (dup) exit 1
       print "| Where you are | Next action | Tool | How to use it | It leaves | Then |"
       print "| --- | --- | --- | --- | --- | --- |"
       for (r = 1; r <= rows; r++) {

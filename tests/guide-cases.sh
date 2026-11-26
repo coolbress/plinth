@@ -1357,6 +1357,15 @@ sed 's/^\(| A ticket ready (step 4) | [^|]*|\).*/\1/' "$root/skills/guide/steps.
 out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
 [ "$rc" -eq 1 ] && grep -qF "the guide's row 'A ticket ready (step 4)' does not have four cells" <<<"$out" &&
   ok "a row of the guide's steps without four cells: exit 1, named" || bad "a short row of the guide's steps: exit $rc: $(head -3 <<<"$out")"
+{ cat "$root/skills/guide/steps.md"; grep '^| A ticket ready (step 4) |' "$root/skills/guide/steps.md" | sed 's/| [^|]* |$/| DUP |/'; } > "$work/plugin/skills/guide/steps.md"
+out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && grep -qF "the guide's steps have two rows for 'A ticket ready (step 4)'" <<<"$out" &&
+  ok "two rows of the guide's steps for one stage: exit 1, named" || bad "a stage twice in the guide's steps: exit $rc: $(head -3 <<<"$out")"
+# The tool cell the join makes, held in its words, not by the join itself:
+# Tool, plinth piece, then "also:" and "class:".
+out="$("$script" "$work/plain" map 4 2>&1)"
+grep -qF '  tool: `/clear`, then `/implement #N`: one ticket per session, test first; `/design-taste-frontend`: a page a person will look at; the project'"'"'s `verify` skill, its check before each commit, which takes the place of the bundled `/verify` (that one runs the app, as `/run` does); also: `/simplify` (built in): cleanup of the changed code; class: built in, then installed; installed' <<<"$out" &&
+  ok "the tool cell: Tool, plinth piece, also: and class:, in that order" || bad "the tool cell: $(grep '^  tool: ' <<<"$out")"
 cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/steps.md"
 orphans="$(awk '/^## Steps/{on=1; next} on && /^\| /' "$root/skills/guide/steps.md" | awk -F ' \\| ' '{ c = $1; sub(/^\| /, "", c) } c != "Where you are" && c !~ /^---/ { print c }' |
   while IFS= read -r w; do grep -qF -- "| $w |" "$joined" || echo "$w"; done)"
