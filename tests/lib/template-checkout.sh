@@ -3,7 +3,7 @@
 # One checkout of plinth-template at the commit scripts/new-project.sh pins
 # (#953). The tests that compare plinth with the template read files from it,
 # so the comparison is local, and a network error is the fetch failing, not a
-# test. `ci / install` makes it once, before its tests, and hands them its
+# test. Each `ci / install-<n>` job makes it once, before its tests, and hands them its
 # path in PLINTH_TEMPLATE_DIR.
 #
 # Run:     tests/lib/template-checkout.sh <dest>
