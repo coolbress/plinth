@@ -460,6 +460,180 @@ def _agent() -> tuple[dict, ...]:
     )
 
 
+PROJECT_DOCS = f"{DOCS}#what-the-static-checks-read-and-what-they-do-not"
+SERVICES = ("backend", "data-ml", "web")   # CONDITIONAL_ARCHETYPES, which is defined above
+RENDER_FIX = "the fix line under this item says what to set"
+
+
+def _project() -> tuple[dict, ...]:
+    """Area C: the project --project points at, by its archetype."""
+    two = ("pass", "fail")
+    return (
+        check("FC-C01", "pyproject.toml present", states=("pass", "fail", "info"), handoff="agent", docs=PROJECT_DOCS,
+              fix="add a pyproject.toml, or run again with --project=<the directory that has one>",
+              baseline=("OSPS-QA-02.01",),
+              messages={"good": "pyproject.toml present", "bad": "pyproject.toml missing",
+                        "found": "pyproject.toml missing here; found {one}/pyproject.toml: run again with {flag}",
+                        "below": "  pyproject.toml below the root in {dirs}: run again with --project=<one of them>"}),
+        check("FC-C02", "uv.lock committed", states=two, handoff="agent", docs=PROJECT_DOCS,
+              fix="run `uv lock` and commit uv.lock",
+              messages={"good": "uv.lock committed", "bad": "uv.lock missing: CI runs `uv sync --locked`",
+                        "found": "uv.lock missing here; found {one}/uv.lock: run again with {flag}",
+                        "below": "{one}/uv.lock missing: CI runs `uv sync --locked`"}),
+        check("FC-C03", "the archetype is known", states=("unknown", "info"), handoff="person", docs=PROJECT_DOCS,
+              fix="pass --archetype, or keep .copier-answers.yml",
+              messages={"none": "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped",
+                        "plain": "archetype {archetype}: no container image, .env.example or JSON logs required",
+                        "service": "archetype {archetype}: container image, .env.example and JSON logs required{render}"}),
+        check("FC-C04", "read as a JavaScript or TypeScript project", states=("info",), handoff="person",
+              docs=PROJECT_DOCS, hosts=("github",), fix="",
+              messages={"info": "read as a JavaScript or TypeScript project (package.json here, no pyproject.toml): "
+                                "plinth has no checks for its language, so no lint, typecheck, test or build check; "
+                                "the checks that do not depend on the language still apply: the documents, "
+                                ".claude/settings.json, .gitattributes, Dependabot, tracked .env files, action pins "
+                                "and, with a repository name, the ruleset, push protection and CodeQL"}),
+        check("FC-C05", "the Python items do not apply to a JavaScript project", states=("not_applicable",),
+              handoff="person", docs=PROJECT_DOCS, hosts=("github",), fix="",
+              messages={"pyproject": "pyproject.toml does not apply: it describes a Python project, and this one is "
+                                     "described by package.json",
+                        "uvlock": "uv.lock does not apply: it is the lockfile of uv, Python's package manager; "
+                                  "this project's own lockfile is not checked",
+                        "service": "the container image, .env.example and JSON logs items: does not apply: they "
+                                   "belong to plinth's Python archetypes, which check a Python image and Python source"}),
+        check("FC-C06", "a Bun lockfile is not the only lockfile", states=("info",), handoff="agent",
+              docs=PROJECT_DOCS, hosts=("github",), fix="commit an npm, yarn or pnpm lockfile beside it",
+              messages={"info": "{name} is the only lockfile here: GitHub's dependency review does not read it, "
+                                "so a vulnerable dependency is not reported before a merge"}),
+        check("FC-C07", "MODEL_CARD.md present", states=("pass", "warn", "info"), handoff="agent", docs=PROJECT_DOCS,
+              archetypes=("data-ml",), fix="copier update, which adds MODEL_CARD.md with the training run",
+              messages={"good": "MODEL_CARD.md present",
+                        "bad": "MODEL_CARD.md missing: a release publishes the model without saying what it was trained on",
+                        "update": "  plinth-template {since} adds it with the training run: copier update"}),
+        check("FC-C08", "the release workflow present", states=("pass", "warn", "info"), handoff="agent",
+              docs=PROJECT_DOCS, archetypes=("cli", "library", "backend", "data-ml"),
+              fix="copier update, then follow docs/how-to/publish-a-release.md",
+              messages={"good": "{workflow} present",
+                        "bad": "{workflow} missing: a version tag does not publish {what}",
+                        "update": "  plinth-template {since} adds it, with its steps in docs/how-to/publish-a-release.md: "
+                                  "copier update, then follow that page",
+                        "gitlab": "{workflow} not required: on GitLab the template renders no release workflow"}),
+        check("FC-C09", "the release workflow runs on a pushed tag only", states=("pass", "warn"), handoff="agent",
+              docs=PROJECT_DOCS, hosts=("github",), archetypes=("cli", "library", "backend", "data-ml"),
+              fix="make `on:` a push of tags and nothing else",
+              messages={"good": "{workflow} runs on a pushed tag only",
+                        "bad": "{workflow} is not read as tag-only (first line not read: {seen}): "
+                               "a branch push or a pull request could publish"}),
+        check("FC-C10", "the release workflow reads no stored secret", states=("pass", "warn"), handoff="agent",
+              docs=PROJECT_DOCS, hosts=("github",), archetypes=("cli", "library", "backend", "data-ml"),
+              fix="publish with the run's own token or Trusted Publishing, and delete the stored secret",
+              messages={"good": "{workflow} reads no stored secret",
+                        "bad": "{workflow} reads a stored secret ({secrets}): {instead}, and a stored token can be "
+                               "copied and used from anywhere"}),
+        check("FC-C11", "the release uploads no pickle", states=("pass", "warn", "unknown"), handoff="agent",
+              docs=PROJECT_DOCS, hosts=("github",), archetypes=("data-ml",),
+              fix="save the model with skops, safetensors or ONNX",
+              messages={"good": "{workflow} uploads no pickle (ASSETS: {assets})",
+                        "bad": "{workflow} uploads a pickle ({pickles}): loading one runs whatever code it holds; "
+                               "save the model with skops, safetensors or ONNX",
+                        "none": "{workflow}: no ASSETS line this checker reads; uploaded files not verified",
+                        "form": "{workflow}: ASSETS is not a one-line list of file names this checker reads "
+                                "(ASSETS: {assets}); uploaded files not verified"}),
+        check("FC-C12", "render.yaml present", states=("pass", "fail", "info"), handoff="agent", docs=PROJECT_DOCS,
+              archetypes=("web",), fix="git restore --source=origin/main -- render.yaml",
+              messages={"good": "render.yaml present",
+                        "bad": "render.yaml missing: the web archetype deploys from it, after the checks pass",
+                        "restore": "  restore it from the default branch: git restore --source=origin/main -- render.yaml"}),
+        check("FC-C13", "render.yaml is read", states=("unknown",), handoff="person", docs=PROJECT_DOCS,
+              fix="write render.yaml in the block form plinth-template's is in",
+              messages={"form": "render.yaml not read ({why}, a form this checker does not read): "
+                                "health check, deploy trigger, database plan and secret values not verified",
+                        "mapping": "render.yaml not read (it is not a mapping): "
+                                   "health check, deploy trigger, database plan and secret values not verified",
+                        "layout": "render.yaml not read (its {keys} layout is not one this checker reads): "
+                                  "health check, deploy trigger, database plan and secret values not verified"}),
+        check("FC-C14", "a Render web service has a health check", states=("pass", "warn", "info"), handoff="agent",
+              docs=PROJECT_DOCS, fix=RENDER_FIX,
+              messages={"good": "render.yaml: web service {svc} has a health check (healthCheckPath: {path})",
+                        "bad": "render.yaml: web service {svc} has no healthCheckPath: Render sends traffic to a "
+                               "new deploy without asking it whether it started",
+                        "add": "  add healthCheckPath: /healthz to the service (the template's route that answers "
+                               "without touching the database)",
+                        "none": "render.yaml declares no web service: health check and deploy trigger not read"}),
+        check("FC-C15", "a Render web service deploys after the checks pass", states=("pass", "warn", "info"),
+              handoff="agent", docs=PROJECT_DOCS, fix=RENDER_FIX,
+              messages={"good": "render.yaml: web service {svc} deploys only after the checks pass "
+                                "(autoDeployTrigger: checksPass)",
+                        "bad": "render.yaml: web service {svc} deploys without waiting for the checks ({said})",
+                        "add": "  set autoDeployTrigger: checksPass on the service"}),
+        check("FC-C16", "a Render database is on a paid plan", states=("pass", "warn", "info"), handoff="person",
+              docs=PROJECT_DOCS, fix=RENDER_FIX,
+              messages={"good": "render.yaml: database {db} is on a paid plan ({plan})",
+                        "bad": "render.yaml: database {db} {said}: Render deletes a free Postgres after 30 days, "
+                               "and it has no backups",
+                        "add": "  set plan: to a paid one, as the template's plan: 0.1c-256mb (about US $6 a month)"}),
+        check("FC-C17", "no secret-named Render variable carries a literal value", states=("pass", "warn", "info"),
+              handoff="agent", docs=PROJECT_DOCS, fix=RENDER_FIX, baseline=("OSPS-BR-07.01",),
+              not_keepable="a literal secret reaches everyone who can read the repository, and stays in its history",
+              messages={"good": "render.yaml: no secret-named envVars entry carries a literal value",
+                        "bad": "render.yaml: secret-named envVars set with a literal value ({keys}): "
+                               "the value sits in the repository and in every clone of it",
+                        "add": "  set each with sync: false (typed in Render's dashboard), generateValue: true or "
+                               "fromDatabase instead, then change the exposed value where it is used",
+                        "none": "render.yaml declares no envVars entries: secret values not read"}),
+        check("FC-C18", "a web app hosted elsewhere", states=("info",), handoff="person", docs=PROJECT_DOCS,
+              archetypes=("web",), fix="",
+              messages={"info": "render.yaml not required: hosting is elsewhere ({place}), and only Render reads that file",
+                        "self": "not checked by plinth: on {place}, HTTPS, backups and keeping the app's and the "
+                                "database's ports closed are a person's to set up"}),
+        check("FC-C19", "Dockerfile present", states=two, handoff="agent", docs=PROJECT_DOCS, archetypes=SERVICES,
+              fix="add a Dockerfile; plinth-template's builds from uv.lock as a non-root user",
+              messages={"good": "Dockerfile present", "bad": "Dockerfile missing"}),
+        check("FC-C20", "every base image is pinned by digest", states=two, handoff="agent", docs=PROJECT_DOCS,
+              archetypes=SERVICES, fix="pin each FROM image as name@sha256:<digest>",
+              messages={"good": "every base image is pinned by digest",
+                        "bad": "base images not pinned by digest: {unpinned}"}),
+        check("FC-C21", "the image does not run as root", states=two, handoff="agent", docs=PROJECT_DOCS,
+              archetypes=SERVICES, fix="end the Dockerfile with a USER that is not root",
+              messages={"good": "the image does not run as root",
+                        "bad": "the image runs as root (no USER, or the last USER is root)"}),
+        check("FC-C22", "the image installs from the lockfile", states=two, handoff="agent", docs=PROJECT_DOCS,
+              archetypes=SERVICES, fix="install with `uv sync --locked` in the Dockerfile",
+              messages={"good": "the image installs from the lockfile (uv sync --locked)",
+                        "bad": "the image does not use `uv sync --locked`: it can drift from the repository"}),
+        check("FC-C23", "the image's CMD runs the package", states=two, handoff="agent", docs=PROJECT_DOCS,
+              archetypes=SERVICES, fix="make CMD [\"python\", \"-m\", \"<package>\"] with src/<package>/__main__.py",
+              messages={"good": "CMD runs python -m {pkg} and src/{pkg}/__main__.py exists",
+                        "bad": "CMD {parts} does not run an existing module python -m {pkg}"}),
+        check("FC-C24", ".dockerignore present", states=two, handoff="agent", docs=PROJECT_DOCS, archetypes=SERVICES,
+              fix="add a .dockerignore that leaves out .git, .env and .venv",
+              messages={"good": ".dockerignore present", "bad": ".dockerignore missing"}),
+        check("FC-C25", ".dockerignore keeps .git, .env and .venv out", states=two, handoff="agent",
+              docs=PROJECT_DOCS, archetypes=SERVICES, fix="add the missing names to .dockerignore",
+              messages={"good": ".dockerignore keeps .git, .env, .venv out of the image",
+                        "bad": ".dockerignore lacks {missing}: they ship inside the image"}),
+        check("FC-C26", "the service logs JSON", states=("pass", "warn", "unknown", "info"), handoff="agent",
+              docs=PROJECT_DOCS, archetypes=SERVICES,
+              fix="give the root logger a handler whose formatter writes one JSON object per record",
+              messages={"good": "JSON logs: static hint in {rel} ({label}); a hint in the source, not proof of what "
+                                "the process prints",
+                        "nosrc": "JSON logs not verified: no Python file under src/",
+                        "unknown": "JSON logs not verified: {files} set up logging in a way this checker does not "
+                                   "recognise (known: a logging.Formatter with json.dumps, structlog JSONRenderer, "
+                                   "python-json-logger, loguru serialize=True)",
+                        "bad": "JSON logs: no logging found under src/ (entry point {entry}): a container's "
+                               "plain-text output is collected as unparsed lines",
+                        "add": "  in {entry}, give the root logger a StreamHandler(sys.stdout) whose logging.Formatter "
+                               "returns json.dumps(...) per record"}),
+        check("FC-C27", ".env.example present", states=two, handoff="agent", docs=PROJECT_DOCS, archetypes=SERVICES,
+              fix="add a .env.example naming each variable the code reads, with no real value",
+              messages={"good": ".env.example present", "bad": ".env.example missing"}),
+        check("FC-C28", ".env.example documents every variable the code reads", states=two, handoff="agent",
+              docs=PROJECT_DOCS, archetypes=SERVICES, fix="add the missing names to .env.example",
+              messages={"good": ".env.example documents every variable the code reads",
+                        "bad": ".env.example is missing variables the code reads: {missing}"}),
+    )
+
+
 REGISTRY = _registry(
     # Where a result() call not yet given its id reports: any state, the
     # message its text. Not a check; the golden test counts what is left in it.
@@ -469,6 +643,7 @@ REGISTRY = _registry(
      "view": "report", "ci_visible": True, "view_why": None},
     *_documents(),
     *_agent(),
+    *_project(),
 )
 
 # The run, as emit() records it: one result per line printed, in order, and
@@ -2647,15 +2822,11 @@ def javascript_project(project: Path, root: Path) -> bool:
 def check_javascript_project(project: Path) -> None:
     """In place of check_project on a JavaScript or TypeScript repository:
     each Python item does not apply, said with its reason (#681)."""
-    result("N/A", "pyproject.toml does not apply: it describes a Python project, and this one is described by package.json")
-    result("N/A", "uv.lock does not apply: it is the lockfile of uv, Python's package manager; "
-                  "this project's own lockfile is not checked")
-    result("N/A", "the container image, .env.example and JSON logs items: does not apply: they belong to "
-                  "plinth's Python archetypes, which check a Python image and Python source")
+    for key in ("pyproject", "uvlock", "service"):
+        emit("FC-C05", "not_applicable", key)
     bun = [n for n in BUN_LOCKFILES if (project / n).is_file()]
     if bun and not any((project / n).is_file() for n in NODE_LOCKFILES):
-        result("INFO", f"{bun[0]} is the only lockfile here: GitHub's dependency review does not read it, "
-                       "so a vulnerable dependency is not reported before a merge")
+        emit("FC-C06", "info", "info", {"name": bun[0]})
     # What Render deploys does not depend on the language (#811 review).
     if (project / "render.yaml").is_file():
         check_render_blueprint(project / "render.yaml")
@@ -2682,12 +2853,11 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
     # than as this one's value.
     flag = f"--project={shlex.quote(one)}" if one else ""
     if one:
-        result("FAIL", f"pyproject.toml missing here; found {one}/pyproject.toml: run again with {flag}")
+        emit("FC-C01", "fail", "found", {"one": one, "flag": flag})
     else:
-        ok(present, "pyproject.toml present", "pyproject.toml missing")
+        verdict("FC-C01", present)
         if below:
-            result("INFO", "  pyproject.toml below the root in " + ", ".join(f"{d}/" for d in below)
-                           + ": run again with --project=<one of them>")
+            emit("FC-C01", "info", "below", {"dirs": ", ".join(f"{d}/" for d in below)})
     # Once a project has been found below the root, both items speak about it.
     # The root holds no pyproject.toml, so a uv.lock sitting there is not that
     # project's lockfile: reporting it as one passed an item for a file that
@@ -2695,12 +2865,11 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
     # where `--project=` reports it missing straight away (#238 review).
     if one:
         if (root / one / "uv.lock").is_file():
-            result("FAIL", f"uv.lock missing here; found {one}/uv.lock: run again with {flag}")
+            emit("FC-C02", "fail", "found", {"one": one, "flag": flag})
         else:
-            result("FAIL", f"{one}/uv.lock missing: CI runs `uv sync --locked`")
+            emit("FC-C02", "fail", "below", {"one": one})
     else:
-        ok((project / "uv.lock").is_file(), "uv.lock committed",
-           "uv.lock missing: CI runs `uv sync --locked`")
+        verdict("FC-C02", (project / "uv.lock").is_file())
 
     answers = copier_answers(project) or {}
     on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
@@ -2710,18 +2879,17 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
     if not on_render and (project / "render.yaml").is_file():
         check_render_blueprint(project / "render.yaml")
     if archetype is None:
-        result("SKIP", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped")
+        emit("FC-C03", "unknown", "none", reason="no archetype")
         return
     if archetype not in CONDITIONAL_ARCHETYPES:
-        result("INFO", f"archetype {archetype}: no container image, .env.example or JSON logs required")
+        emit("FC-C03", "info", "plain", {"archetype": archetype})
         if archetype in PACKAGE_ARCHETYPES:
             # A repository-level file: GitHub reads workflows at the root, not
             # under --project, and the host is the one the run resolved,
             # --host before the answers (#720 review).
             check_release_workflow(root, host, archetype)
         return
-    result("INFO", f"archetype {archetype}: container image, .env.example and JSON logs required"
-                   + (", and render.yaml" if on_render else ""))
+    emit("FC-C03", "info", "service", {"archetype": archetype, "render": ", and render.yaml" if on_render else ""})
     check_dockerfile(project)
     check_env_example(project)
     check_json_logs(project)
@@ -2740,10 +2908,10 @@ def check_model_card(project: Path) -> None:
     personal-data question (plinth-template 1.31.0, #716). A WARN, never a
     FAIL: an instance rendered before the card existed passes as it did."""
     if (project / "MODEL_CARD.md").is_file():
-        result("PASS", "MODEL_CARD.md present")
+        emit("FC-C07", "pass", "good")
     else:
-        result("WARN", "MODEL_CARD.md missing: a release publishes the model without saying what it was trained on")
-        result("INFO", f"  plinth-template {RELEASES['data-ml'][1]} adds it with the training run: copier update")
+        emit("FC-C07", "warn", "bad")
+        emit("FC-C07", "info", "update", {"since": RELEASES["data-ml"][1]})
 
 
 def check_release_workflow(root: Path, host: str, archetype: str) -> None:
@@ -2757,15 +2925,14 @@ def check_release_workflow(root: Path, host: str, archetype: str) -> None:
     an instance rendered before the file existed passes as it did."""
     what, since, instead = RELEASES[archetype]
     if host == "gitlab":
-        result("INFO", f"{RELEASE_WORKFLOW} not required: on GitLab the template renders no release workflow")
+        emit("FC-C08", "info", "gitlab", {"workflow": RELEASE_WORKFLOW})
         return
     p = root / RELEASE_WORKFLOW
     if not p.is_file():
-        result("WARN", f"{RELEASE_WORKFLOW} missing: a version tag does not publish {what}")
-        result("INFO", f"  plinth-template {since} adds it, with its steps in docs/how-to/publish-a-release.md: "
-                       "copier update, then follow that page")
+        emit("FC-C08", "warn", "bad", {"workflow": RELEASE_WORKFLOW, "what": what})
+        emit("FC-C08", "info", "update", {"since": since})
         return
-    result("PASS", f"{RELEASE_WORKFLOW} present")
+    emit("FC-C08", "pass", "good", {"workflow": RELEASE_WORKFLOW})
     # Comments dropped first: the file explains itself at length, and a
     # word in a comment is not a trigger or a secret.
     text = "\n".join(line.split(" #", 1)[0] for line in read(p).splitlines() if not line.lstrip().startswith("#"))
@@ -2778,25 +2945,24 @@ def check_release_workflow(root: Path, host: str, archetype: str) -> None:
     tag_only = (len(lines) >= 2 and lines[0] == "  push:" and lines[1].startswith("    tags:")
                 and all(line.startswith("      - ") for line in lines[2:]))
     if tag_only:
-        result("PASS", f"{RELEASE_WORKFLOW} runs on a pushed tag only")
+        emit("FC-C09", "pass", "good", {"workflow": RELEASE_WORKFLOW})
     else:
         unread = next((line.strip() for line in lines if not re.fullmatch(r"  push:|    tags:.*|      - .*", line)),
                       None) if lines else "no on: block this checker reads"
         seen = unread or "push: without tags:"
-        result("WARN", f"{RELEASE_WORKFLOW} is not read as tag-only (first line not read: {seen}): "
-                       "a branch push or a pull request could publish")
+        emit("FC-C09", "warn", "bad", {"workflow": RELEASE_WORKFLOW, "seen": seen})
     # secrets.GITHUB_TOKEN is the run's own token, made for the run and not stored.
     stored = [x for x in re.findall(r"secrets\.\w+|^\s*password:", text, re.MULTILINE) if x != "secrets.GITHUB_TOKEN"]
     if stored:
-        result("WARN", f"{RELEASE_WORKFLOW} reads a stored secret ({', '.join(sorted({s.strip() for s in stored}))}): "
-                       f"{instead}, and a stored token can be copied and used from anywhere")
+        emit("FC-C10", "warn", "bad", {"workflow": RELEASE_WORKFLOW, "instead": instead,
+                                       "secrets": ", ".join(sorted({s.strip() for s in stored}))})
     else:
-        result("PASS", f"{RELEASE_WORKFLOW} reads no stored secret")
+        emit("FC-C10", "pass", "good", {"workflow": RELEASE_WORKFLOW})
     if archetype == "data-ml":
         # The template names what a release uploads once, in `env: ASSETS:`.
         found = list(re.finditer(r"^([ \t]*)ASSETS:[ \t]*(.*)$", text, re.MULTILINE))
         if not found:
-            result("SKIP", f"{RELEASE_WORKFLOW}: no ASSETS line this checker reads; uploaded files not verified")
+            emit("FC-C11", "unknown", "none", {"workflow": RELEASE_WORKFLOW}, reason="no ASSETS line")
             return
         m = found[0]
         names = m.group(2).strip("'\" ").split()
@@ -2808,15 +2974,14 @@ def check_release_workflow(root: Path, host: str, archetype: str) -> None:
         continued = len(following) - len(following.lstrip()) > len(m.group(1))
         if (len(found) > 1 or continued or not names
                 or not all(re.fullmatch(r"[\w./-]+", f) for f in names)):
-            result("SKIP", f"{RELEASE_WORKFLOW}: ASSETS is not a one-line list of file names this checker reads "
-                           f"(ASSETS: {m.group(2).strip()}); uploaded files not verified")
+            emit("FC-C11", "unknown", "form", {"workflow": RELEASE_WORKFLOW, "assets": m.group(2).strip()},
+                 reason="ASSETS in a form not read")
             return
         pickles = [f for f in names if f.lower().endswith(PICKLE_SUFFIXES)]
         if pickles:
-            result("WARN", f"{RELEASE_WORKFLOW} uploads a pickle ({', '.join(pickles)}): loading one runs "
-                           "whatever code it holds; save the model with skops, safetensors or ONNX")
+            emit("FC-C11", "warn", "bad", {"workflow": RELEASE_WORKFLOW, "pickles": ", ".join(pickles)})
         else:
-            result("PASS", f"{RELEASE_WORKFLOW} uploads no pickle (ASSETS: {m.group(2).strip()})")
+            emit("FC-C11", "pass", "good", {"workflow": RELEASE_WORKFLOW, "assets": m.group(2).strip()})
 
 
 def check_render_yaml(project: Path) -> None:
@@ -2824,9 +2989,8 @@ def check_render_yaml(project: Path) -> None:
     deploy that waits for the checks (#615). Asked of a `hosting: render`
     instance and of one with no hosting answer, rendered before the question
     existed (plinth-template#128)."""
-    if not ok((project / "render.yaml").is_file(), "render.yaml present",
-              "render.yaml missing: the web archetype deploys from it, after the checks pass"):
-        result("INFO", "  restore it from the default branch: git restore --source=origin/main -- render.yaml")
+    if not verdict("FC-C12", (project / "render.yaml").is_file()):
+        emit("FC-C12", "info", "restore")
         return
     check_render_blueprint(project / "render.yaml")
 
@@ -2972,12 +3136,10 @@ def check_render_blueprint(path: Path) -> None:
     try:
         doc = read_block_yaml(read(path))
     except Unreadable as e:
-        result("SKIP", f"render.yaml not read ({e}, a form this checker does not read): "
-                       "health check, deploy trigger, database plan and secret values not verified")
+        emit("FC-C13", "unknown", "form", {"why": e}, reason="a form not read")
         return
     if not isinstance(doc, dict):
-        result("SKIP", "render.yaml not read (it is not a mapping): "
-                       "health check, deploy trigger, database plan and secret values not verified")
+        emit("FC-C13", "unknown", "mapping", reason="not a mapping")
         return
     # Resources can also sit under projects[].environments[] and ungrouped
     # (Render's root-level fields), which this reads no further: a file
@@ -2985,8 +3147,7 @@ def check_render_blueprint(path: Path) -> None:
     # out (#817 review).
     nested = [k for k in ("projects", "ungrouped") if k in doc]
     if nested:
-        result("SKIP", f"render.yaml not read (its {' and '.join(nested)} layout is not one this checker reads): "
-                       "health check, deploy trigger, database plan and secret values not verified")
+        emit("FC-C13", "unknown", "layout", {"keys": " and ".join(nested)}, reason="a layout not read")
         return
 
     def entries(key: str) -> list:
@@ -2999,47 +3160,41 @@ def check_render_blueprint(path: Path) -> None:
 
     webs = [(name(s, i), s) for i, s in enumerate(entries("services")) if s.get("type") == "web"]
     if not webs:
-        result("INFO", "render.yaml declares no web service: health check and deploy trigger not read")
+        emit("FC-C14", "info", "none")
     for svc, s in webs:
         path_ = s.get("healthCheckPath")
         if isinstance(path_, str) and path_.startswith("/"):
-            result("PASS", f"render.yaml: web service {svc} has a health check (healthCheckPath: {path_})")
+            emit("FC-C14", "pass", "good", {"svc": svc, "path": path_})
         else:
-            result("WARN", f"render.yaml: web service {svc} has no healthCheckPath: Render sends traffic to a "
-                           "new deploy without asking it whether it started")
-            result("INFO", "  add healthCheckPath: /healthz to the service (the template's route that answers "
-                           "without touching the database)")
+            emit("FC-C14", "warn", "bad", {"svc": svc})
+            emit("FC-C14", "info", "add")
         trigger = s.get("autoDeployTrigger")
         if trigger == "checksPass":
-            result("PASS", f"render.yaml: web service {svc} deploys only after the checks pass "
-                           "(autoDeployTrigger: checksPass)")
+            emit("FC-C15", "pass", "good", {"svc": svc})
         else:
             said = f"autoDeployTrigger: {trigger}" if isinstance(trigger, str) else "no autoDeployTrigger"
-            result("WARN", f"render.yaml: web service {svc} deploys without waiting for the checks ({said})")
-            result("INFO", "  set autoDeployTrigger: checksPass on the service")
+            emit("FC-C15", "warn", "bad", {"svc": svc, "said": said})
+            emit("FC-C15", "info", "add")
     for i, d in enumerate(entries("databases")):
         db, plan = name(d, i), d.get("plan")
         if isinstance(plan, str) and plan and plan.lower() != "free":
-            result("PASS", f"render.yaml: database {db} is on a paid plan ({plan})")
+            emit("FC-C16", "pass", "good", {"db": db, "plan": plan})
         else:
             said = f"is on plan {plan}" if isinstance(plan, str) and plan else "names no plan, so it is not read as a paid one"
-            result("WARN", f"render.yaml: database {db} {said}: Render deletes a free Postgres after 30 days, "
-                           "and it has no backups")
-            result("INFO", "  set plan: to a paid one, as the template's plan: 0.1c-256mb (about US $6 a month)")
+            emit("FC-C16", "warn", "bad", {"db": db, "said": said})
+            emit("FC-C16", "info", "add")
     # Under a service, or under a group several services share.
     env = [v for h in entries("services") + entries("envVarGroups")
            for v in (h.get("envVars") if isinstance(h.get("envVars"), list) else [])
            if isinstance(v, dict) and isinstance(v.get("key"), str)]
     literal = sorted({v["key"] for v in env if SECRET_NAME.search(v["key"]) and "value" in v})
     if not env:
-        result("INFO", "render.yaml declares no envVars entries: secret values not read")
+        emit("FC-C17", "info", "none")
     elif literal:
-        result("WARN", f"render.yaml: secret-named envVars set with a literal value ({', '.join(literal)}): "
-                       "the value sits in the repository and in every clone of it")
-        result("INFO", "  set each with sync: false (typed in Render's dashboard), generateValue: true or "
-                       "fromDatabase instead, then change the exposed value where it is used")
+        emit("FC-C17", "warn", "bad", {"keys": ", ".join(literal)})
+        emit("FC-C17", "info", "add")
     else:
-        result("PASS", "render.yaml: no secret-named envVars entry carries a literal value")
+        emit("FC-C17", "pass", "good")
 
 
 # The places whose README section tells a person to set up HTTPS, backups and
@@ -3050,41 +3205,34 @@ SELF_RUN_PLACES = ("vps", "home")
 def check_hosted_elsewhere(place: str | None) -> None:
     """`hosting: elsewhere` (#678): the template renders no render.yaml, and
     no item reads the chosen place's own setup."""
-    result("INFO", f"render.yaml not required: hosting is elsewhere ({place or 'no hosting_elsewhere answer'}), "
-                   "and only Render reads that file")
+    emit("FC-C18", "info", "info", {"place": place or "no hosting_elsewhere answer"})
     if place in SELF_RUN_PLACES:
-        result("INFO", f"not checked by plinth: on {place}, HTTPS, backups and keeping the app's and the "
-                       "database's ports closed are a person's to set up")
+        emit("FC-C18", "info", "self", {"place": place})
 
 
 def check_dockerfile(project: Path) -> None:
     d = project / "Dockerfile"
-    if not ok(d.is_file(), "Dockerfile present", "Dockerfile missing"):
+    if not verdict("FC-C19", d.is_file()):
         return
     text = read(d)
     froms = [re.sub(r"^--\S+\s+", "", f).split() for f in re.findall(r"^FROM\s+(.+)$", text, re.MULTILINE)]
     aliases = {parts[2] for parts in froms if len(parts) >= 3 and parts[1].upper() == "AS"}
     bases = [parts[0] for parts in froms if parts and parts[0] not in aliases and parts[0] != "scratch"]
     unpinned = [b for b in bases if "@sha256:" not in b]
-    ok(bool(froms) and not unpinned, "every base image is pinned by digest",
-       f"base images not pinned by digest: {unpinned or 'no FROM at all'}")
+    verdict("FC-C20", bool(froms) and not unpinned, {"unpinned": unpinned or "no FROM at all"})
     users = re.findall(r"^USER\s+(\S+)", text, re.MULTILINE)
-    ok(bool(users) and users[-1].split(":")[0] not in {"root", "0"}, "the image does not run as root",
-       "the image runs as root (no USER, or the last USER is root)")
-    ok("uv sync --locked" in text, "the image installs from the lockfile (uv sync --locked)",
-       "the image does not use `uv sync --locked`: it can drift from the repository")
+    verdict("FC-C21", bool(users) and users[-1].split(":")[0] not in {"root", "0"})
+    verdict("FC-C22", "uv sync --locked" in text)
     pkg = package_name(project)
     cmd = re.search(r"^CMD\s+\[(.+)\]", text, re.MULTILINE)
     parts = [p.strip().strip('"') for p in cmd.group(1).split(",")] if cmd else []
     entry = project / "src" / (pkg or "") / "__main__.py"
-    ok(parts[:2] == ["python", "-m"] and len(parts) > 2 and parts[2] == pkg and entry.is_file(),
-       f"CMD runs python -m {pkg} and src/{pkg}/__main__.py exists",
-       f"CMD {parts or 'missing'} does not run an existing module python -m {pkg}")
+    verdict("FC-C23", parts[:2] == ["python", "-m"] and len(parts) > 2 and parts[2] == pkg and entry.is_file(),
+            {"pkg": pkg, "parts": parts or "missing"})
     di = project / ".dockerignore"
-    if ok(di.is_file(), ".dockerignore present", ".dockerignore missing"):
+    if verdict("FC-C24", di.is_file()):
         missing = [m for m in (".git", ".env", ".venv") if m not in read(di)]
-        ok(not missing, ".dockerignore keeps .git, .env, .venv out of the image",
-           f".dockerignore lacks {missing}: they ship inside the image")
+        verdict("FC-C25", not missing, {"missing": missing})
 
 
 # What a JSON log setup looks like in source: every pattern of one entry in one file.
@@ -3103,7 +3251,7 @@ def check_json_logs(project: Path) -> None:
     a source tree with no logging at all is a finding."""
     files = sorted((project / "src").rglob("*.py")) if (project / "src").is_dir() else []
     if not files:
-        result("SKIP", "JSON logs not verified: no Python file under src/")
+        emit("FC-C26", "unknown", "nosrc", reason="no Python file under src/")
         return
     # Comments are dropped: `# TODO: add pythonjsonlogger` is not a setup. A string
     # is kept, because logging.config.dictConfig names its formatter in one.
@@ -3111,17 +3259,16 @@ def check_json_logs(project: Path) -> None:
     for rel, text in texts.items():
         for label, patterns in JSON_LOG_HINTS:
             if all(re.search(p, text) for p in patterns):
-                result("PASS", f"JSON logs: static hint in {rel} ({label}); a hint in the source, not proof of what the process prints")
+                emit("FC-C26", "pass", "good", {"rel": rel, "label": label})
                 return
     logging_in = [rel for rel, text in texts.items()
                   if re.search(r"^\s*(?:import|from)\s+[^#\n]*\b(?:logging|structlog|loguru)\b", text, re.MULTILINE)]
     if logging_in:
-        result("SKIP", f"JSON logs not verified: {', '.join(logging_in)} set up logging in a way this checker does not recognise "
-                       "(known: a logging.Formatter with json.dumps, structlog JSONRenderer, python-json-logger, loguru serialize=True)")
+        emit("FC-C26", "unknown", "unknown", {"files": ", ".join(logging_in)}, reason="logging not recognised")
         return
     entry = f"src/{package_name(project) or '<package>'}/__main__.py"
-    result("WARN", f"JSON logs: no logging found under src/ (entry point {entry}): a container's plain-text output is collected as unparsed lines")
-    result("INFO", f"  in {entry}, give the root logger a StreamHandler(sys.stdout) whose logging.Formatter returns json.dumps(...) per record")
+    emit("FC-C26", "warn", "bad", {"entry": entry})
+    emit("FC-C26", "info", "add", {"entry": entry})
 
 
 def check_image_job(root: Path) -> None:
@@ -3420,14 +3567,13 @@ def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -
 
 def check_env_example(project: Path) -> None:
     e = project / ".env.example"
-    if not ok(e.is_file(), ".env.example present", ".env.example missing"):
+    if not verdict("FC-C27", e.is_file()):
         return
     pattern = re.compile(r"""os\.(?:environ\s*\[\s*|environ\.get\s*\(\s*|getenv\s*\(\s*)['"]([A-Z_][A-Z0-9_]*)['"]""")
     used = {m for f in (project / "src").rglob("*.py") for m in pattern.findall(read(f))} if (project / "src").is_dir() else set()
     documented = set(re.findall(r"^\s*#?\s*([A-Z_][A-Z0-9_]*)\s*=", read(e), re.MULTILINE))
     missing = sorted(used - documented)
-    ok(not missing, ".env.example documents every variable the code reads",
-       f".env.example is missing variables the code reads: {missing}")
+    verdict("FC-C28", not missing, {"missing": missing})
 
 
 # ── the wall ──────────────────────────────────────────────────────────────
@@ -5335,11 +5481,7 @@ def main() -> int:
           + (" host=gitlab" if host == "gitlab" else ""))
     javascript = host == "github" and javascript_project(project, root)
     if javascript:
-        result("INFO", "read as a JavaScript or TypeScript project (package.json here, no pyproject.toml): plinth has "
-                       "no checks for its language, so no lint, typecheck, test or build check; the checks that do not "
-                       "depend on the language still apply: the documents, .claude/settings.json, .gitattributes, "
-                       "Dependabot, tracked .env files, action pins and, with a repository name, the ruleset, push "
-                       "protection and CodeQL")
+        emit("FC-C04", "info", "info")
     check_files(root, owner, network, host)
     if not a.actions_token:
         check_plugin_skew(root, network, host)
