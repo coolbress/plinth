@@ -19,7 +19,17 @@
 #       template CHANGELOG's sections between the two tags (the compare link
 #       when it is not read), and how to undo the update before and after it
 #       merges. copier failing on the copy stops the plan.
-#   template-update.sh --apply <base-sha> [--assisted-by <agent>:<model>]
+#       It also lists each question the target tag asks that this repository
+#       never answered and that applies to it (#1185): copier's own record of
+#       the copy says which, so its `when:` is evaluated as copier evaluates
+#       it. Each is named with the default it would take and its help; one
+#       with no default stops the plan, since copier's --defaults would
+#       record null.
+#   template-update.sh --apply <base-sha> [--answer <name> <value>]... [--assisted-by <agent>:<model>]
+#       Each --answer gives a listed question the person's answer, passed to
+#       copier as --data <name>=<value> (GitHub only); a name the plan does
+#       not list is refused (exit 2), checked on a copy first. A question
+#       given no answer keeps its default, and the description says so.
 #       Branches a worktree beside the repository from <base-sha> (it must
 #       still be origin/<default>), requires it clean, runs the command and,
 #       when copier leaves no conflict, commits, pushes the branch and opens
@@ -85,9 +95,9 @@ state_name="plinth-template-update"
 . "$here/lib/shell-word.sh" || { printf 'template-update: no %s\n' "$here/lib/shell-word.sh" >&2; exit 1; }
 q() { sq "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
-usage() { printf 'usage: %s [--apply <base-sha> [--archetype <a> [--keep <path> | --drop <path>]...] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
+usage() { printf 'usage: %s [--apply <base-sha> [--answer <name> <value>]... [--archetype <a> [--keep <path> | --drop <path>]...] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 
-mode=plan; base_arg=""; wt_arg=""; assisted=""; resolutions=(); over_limit=no; move=""; chosen_files=()
+mode=plan; base_arg=""; wt_arg=""; assisted=""; resolutions=(); over_limit=no; move=""; chosen_files=(); answers=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)       [ $# -ge 2 ] || usage; mode=apply; base_arg="$2"; shift 2 ;;
@@ -97,6 +107,11 @@ while [ $# -gt 0 ]; do
                    case "$2$3" in *$'\n'* | *$'\t'*) usage ;; esac
                    resolutions+=("$2" "$3"); shift 3 ;;
     --over-limit)  over_limit=yes; shift ;;
+    # A new question's answer (#1185): a question's name, and one line.
+    --answer)      [ $# -ge 3 ] || usage
+                   [[ "$2" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || usage
+                   case "$3" in *$'\n'* | *$'\t'*) usage ;; esac
+                   answers+=("$2" "$3"); shift 3 ;;
     --keep | --drop)
                    [ $# -ge 2 ] && [ -n "$2" ] || usage
                    case "$2" in *$'\n'* | *$'\t'*) usage ;; esac
@@ -114,6 +129,11 @@ done
 [ "$over_limit" = no ] || [ "$mode" = finish ] || usage
 # --finish reads the move from its record.
 [ -z "$move" ] || [ "$mode" != finish ] || usage
+# Each question answered once.
+dupes="$(for ((i = 0; i < ${#answers[@]}; i += 2)); do echo "${answers[i]}"; done | sort | uniq -d)"
+[ -z "$dupes" ] || usage
+# Answers go with the plain update's --apply; the move keeps the recorded tag.
+[ ${#answers[@]} = 0 ] || { [ "$mode" = apply ] && [ -z "$move" ]; } || usage
 # What becomes of a changed file the move deletes is said where copier runs.
 [ ${#chosen_files[@]} = 0 ] || { [ "$mode" = apply ] && [ -n "$move" ]; } || usage
 
@@ -726,6 +746,15 @@ finish() { # <worktree>
     echo "$cmd"
     echo '```'
     echo
+    if grep -q '^question=' "$sf"; then
+      echo "Questions the template asks that this repository had never answered (#1185), each as the person answered it:"
+      echo
+      sed -n 's/^question=//p' "$sf" | while IFS=$'\t' read -r name how value; do
+        if [ "$how" = answered ]; then echo "- \`$name\`: $value"
+        else echo "- \`$name\`: $value (default kept)"; fi
+      done
+      echo
+    fi
     if [ -n "$new" ]; then
       local names; names="$(git -C "$wt" -c core.quotePath=false diff --name-status --no-renames "${tree[@]}")"
       echo
@@ -992,6 +1021,45 @@ if [ -n "$move" ]; then wt="$(dirname "$top")/$(basename "$top")-archetype-$move
 # names whose `.github` the checker reads for the two answers the update
 # carries, as the door's render did, and whose open pull requests it reads
 # for the one that raises the pin; a read that fails gives no line (#726).
+# The questions copier recorded an answer for in <new> that <old> has none
+# for, as `<name>\t<value>` lines, the value as copier wrote it (`''` an empty
+# string; `null` when it had none to give): the questions the target tag
+# asks that this repository never answered, and that apply to it, since
+# copier records no answer for a question whose `when:` is false (#1185).
+# The names the line itself passes with --data are not questions to ask.
+new_questions() { # <old answers> <new answers> <cmd>
+  python3 -I -c '
+import re, sys
+def flat(path):
+    out = {}
+    for line in open(path, encoding="utf-8").read().splitlines():
+        m = re.match(r"^([A-Za-z]\w*):[ \t]*(.*)$", line)
+        if m:
+            out.setdefault(m.group(1), m.group(2).strip())
+    return out
+old, new = flat(sys.argv[1]), flat(sys.argv[2])
+given = set(re.findall(r"(?:^| )--data ([A-Za-z]\w*)=", sys.argv[3]))
+for k, v in new.items():
+    if k not in old and k not in given:
+        print(k + "\t" + (v if v not in ("", "~") else "null"))
+' "$1" "$2" "$3"
+}
+# The --answer pairs as copier words and as the shell words shown and
+# recorded, quoted by the one quoting function (#1091), so Hangul shows as
+# typed. Sets ans_words and ans_shown.
+answer_words() {
+  local i
+  ans_words=(); ans_shown=""
+  for ((i = 0; i < ${#answers[@]}; i += 2)); do
+    ans_words+=(--data "${answers[i]}=${answers[i+1]}")
+    ans_shown="$ans_shown --data $(q "${answers[i]}=${answers[i+1]}")"
+  done
+}
+answered() { # <name>: given an --answer?
+  local i
+  for ((i = 0; i < ${#answers[@]}; i += 2)); do [ "${answers[i]}" = "$1" ] && return 0; done
+  return 1
+}
 cmd_at() { # <dir>
   python3 "$checker" --root "$1" --repo "$repo" ${host_arg+"${host_arg[@]}"} --print-update-command
 }
@@ -1310,6 +1378,33 @@ if [ "$mode" = plan ]; then
     else
       echo "Left in conflict: none"
     fi
+    # The questions this repository never answered (#1185), from copier's
+    # record of the copy.
+    git -C "$r" show HEAD:.copier-answers.yml > "$tmp/answers-base" 2>/dev/null || : > "$tmp/answers-base"
+    asked="$( [ ! -f "$r/.copier-answers.yml" ] || new_questions "$tmp/answers-base" "$r/.copier-answers.yml" "$cmd")"
+    no_default=""
+    if [ -n "$asked" ]; then
+      echo "New questions, never answered here (each takes its default unless the person answers it; --answer <name> <value>):"
+      read -ra qnames <<<"$(cut -f1 <<<"$asked" | tr '\n' ' ')"
+      help="$(python3 "$checker" --root "$tmp" --print-question-help "${qnames[@]}" 2>"$tmp/help-note")" \
+        || help=""
+      while IFS=$'\t' read -r name value; do
+        [ -n "$name" ] || continue
+        if [ "$value" = null ]; then
+          echo "  $name, no default: copier's --defaults would record null"
+          no_default="$no_default $name"
+        else
+          echo "  $name, default $value"
+        fi
+        if [ -n "$help" ]; then
+          awk -v n="$name" '!/^ / { f = ($0 == n); next } f' <<<"$help" | sed 's/^/  /'
+        else
+          echo "    (its help was not read: $(tail -n 1 "$tmp/help-note"))"
+        fi
+      done <<<"$asked"
+    else
+      echo "New questions: none"
+    fi
     if [ "$from" != "$to" ]; then
       echo "What the template changed, $from to $to:"
       if changes="$(python3 "$checker" --root "$tmp" --print-template-changes 2>"$tmp/changes-note")"; then
@@ -1320,10 +1415,16 @@ if [ "$mode" = plan ]; then
     fi
     echo "Undo:"
     undo_lines "$wt" "$branch" | indent
+    if [ -n "$no_default" ]; then
+      echo
+      echo "Nothing has been written (the fetch moved only origin/$default)." >&2
+      die "stopped: no default for${no_default}; copier's --defaults would record null. Ask the person, then: $(q "$0") --apply $base$(for n in $no_default; do printf ' --answer %s <value>' "$n"; done)"
+    fi
   fi
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
   echo "  $(q "$0") --apply $base"
+  [ -z "${asked:-}" ] || echo "  with --answer <name> <value> for each new question above the person answers; one left out keeps its default"
   exit 0
 fi
 
@@ -1386,12 +1487,33 @@ fi
 # the one the target tag was tested with, or not compared with it, stops
 # here, as it stops the plan (#1183). Read again in the worktree below.
 if [ -z "$move" ]; then
-  cmd_at "$tmp" >/dev/null 2>"$tmp/gate" || {
+  gate_cmd="$(cmd_at "$tmp" 2>"$tmp/gate")" || {
     grep -v '^moves: ' "$tmp/gate" >&2
     grep -q "workflow pins disagree" "$tmp/gate" \
       && die "the workflows call plinth at more than one commit and the update cannot carry one (above); nothing was created"
     die "no update command at the base (above); nothing was created"
   }
+fi
+# The answers given (#1185), checked against the questions the plan lists,
+# from the same run on a copy, before anything is created: a name it does not
+# list is not one this update asks, and is refused.
+answer_words
+if [ ${#answers[@]} -gt 0 ]; then
+  [ "$host" = github ] || { echo "template-update: --answer is built for GitHub only (#1185); nothing was created" >&2; exit 2; }
+  rehearse_run "$gate_cmd" || {
+    tail -n 1 "$tmp/rehearsal.log" >&2
+    die "copier failed on a copy of origin/$default while checking the answers (its last line above); nothing was created"
+  }
+  git -C "$r" show HEAD:.copier-answers.yml > "$tmp/answers-base" 2>/dev/null || : > "$tmp/answers-base"
+  listed_q="$(new_questions "$tmp/answers-base" "$r/.copier-answers.yml" "$gate_cmd" | cut -f1)"
+  unknown=""
+  for ((i = 0; i < ${#answers[@]}; i += 2)); do
+    grep -qxF -- "${answers[i]}" <<<"$listed_q" || unknown="$unknown ${answers[i]}"
+  done
+  if [ -n "$unknown" ]; then
+    echo "template-update: not a new question of this update:$unknown (the plan lists: $(paste -sd' ' - <<<"$listed_q" | sed 's/^$/none/')); nothing was created" >&2
+    exit 2
+  fi
 fi
 [ -e "$wt" ] && die "$wt already exists: finish it ($(q "$0") --finish $(q "$wt")) or discard it (git worktree remove --force $(q "$wt") && git branch -D $branch)"
 git -C "$top" rev-parse -q --verify "refs/heads/$branch" >/dev/null \
@@ -1450,9 +1572,10 @@ fi
 case "$cmd" in *" --vcs-ref ${to_sha:-?} "*) ;; *) die "the command does not update to $to ($to_sha): $cmd" ;; esac
 read -ra words <<<"$cmd"
 echo "Running in $wt:"
-echo "  $cmd"
-# As the door runs copier: without the token in its environment.
-( cd "$wt" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) \
+echo "  $cmd$ans_shown"
+# As the door runs copier: without the token in its environment. The
+# answers as words of their own, never split on a space.
+( cd "$wt" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" ${ans_words+"${ans_words[@]}"} < /dev/null ) \
   || die "copier update failed (above); nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $(q "$wt") && git branch -D $branch"
 
 # When the pins disagreed at the base (#793), every plinth uses: that copier
@@ -1476,6 +1599,23 @@ if [ -n "$moves" ]; then
     printf 'template-update: after copier, a plinth uses: line does not name the pin the command carried:\n%s' "$stale" >&2
     die "nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $(q "$wt") && git branch -D $branch"
   fi
+fi
+
+# Each new question copier recorded (#1185): the person's answer, or the
+# default kept, for the description. One that recorded null had no default
+# and no answer: copier's --defaults wrote null, which is not an answer.
+questions=""
+if [ "$host" = github ] && [ -z "$move" ]; then
+  git -C "$wt" show "$base:.copier-answers.yml" > "$tmp/answers-base" 2>/dev/null || : > "$tmp/answers-base"
+  asked="$( [ ! -f "$wt/.copier-answers.yml" ] || new_questions "$tmp/answers-base" "$wt/.copier-answers.yml" "$cmd")"
+  nulls=""
+  while IFS=$'\t' read -r name value; do
+    [ -n "$name" ] || continue
+    if answered "$name"; then questions="$questions$name"$'\t'answered$'\t'"$value"$'\n'
+    elif [ "$value" = null ]; then nulls="$nulls $name"
+    else questions="$questions$name"$'\t'default$'\t'"$value"$'\n'; fi
+  done <<<"$asked"
+  [ -z "$nulls" ] || die "copier recorded null for${nulls}: no default and no answer. Nothing committed or pushed; discard it (git worktree remove --force $(q "$wt") && git branch -D $branch) and run --apply again with --answer <name> <value> for each"
 fi
 
 # The changed files the person chose to keep (#1016), as they are at the
@@ -1520,7 +1660,7 @@ fi
 sf="$(state_file "$wt")"
 {
   printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin_note=%s\nhost=%s\n' \
-    "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin_note" "$host"
+    "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd${ans_shown:-}" "$pin_note" "$host"
   [ "$host" = github ] || printf 'gl_host=%s\ngl_enc=%s\ngl_id=%s\n' "$gl_host" "$gl_enc" "$gl_id"
   if [ -n "$move" ]; then
     printf 'archetype=%s\nold_archetype=%s\ncompared=yes\n' "$move" "$old_arch"
@@ -1530,6 +1670,7 @@ sf="$(state_file "$wt")"
     printf '%s\n' "$actions_rec" | sed '/^$/d'
   fi
   while IFS= read -r p; do [ -n "$p" ] && printf 'renamed=%s\n' "$p"; done <<<"$renamed"
+  while IFS= read -r p; do [ -n "$p" ] && printf 'question=%s\n' "$p"; done <<<"$questions"
   while IFS= read -r p; do [ -n "$p" ] && printf 'moves=%s\n' "$p"; done <<<"$moves"
   while IFS= read -r p; do [ -n "$p" ] && printf 'not_renamed=%s\n' "$p"; done <<<"$not_renamed"
   conflicts="$(conflicts_in "$wt" "$base")"

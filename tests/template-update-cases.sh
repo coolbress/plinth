@@ -181,6 +181,20 @@ fi
 [ "$ref" = "$TARGET_SHA" ] && ref="$TARGET_REF"
 sed -i.bak "s/^_commit: .*/_commit: $ref/" .copier-answers.yml && rm .copier-answers.yml.bak
 printf 'template line\n' >> AGENTS.md
+# MOCK_QUESTIONS (#1185): a file of `<name>\t<default>\t<applies>` lines,
+# questions the target tag asks. As copier does, each that applies (its
+# `when:` true) and is not recorded yet is recorded with its --data value or
+# else its default (`null` when it has none); one that does not apply is not
+# recorded. records_language is also said in AGENTS.md, as the template
+# renders it.
+if [ -n "${MOCK_QUESTIONS:-}" ]; then
+  while IFS=$'\t' read -r qn qd qa; do
+    [ "$qa" = yes ] && ! grep -q "^$qn:" .copier-answers.yml || continue
+    qv="$qd"; for a in "$@"; do case "$a" in "$qn="*) qv="${a#"$qn="}" ;; esac; done
+    printf '%s: %s\n' "$qn" "$qv" >> .copier-answers.yml
+    [ "$qn" != records_language ] || printf 'Records are written in %s.\n' "$qv" >> AGENTS.md
+  done < "$MOCK_QUESTIONS"
+fi
 # MOCK_TOUCH: more files the template changes, each merged cleanly (#1184).
 for f in ${MOCK_TOUCH:-}; do printf 'template line\n' >> "$f"; done
 # MOCK_BIG: an update over ci / diff-size's default limit of 400, mostly
@@ -399,6 +413,82 @@ if [ "$rc" = 0 ] && grep -qF "its CHANGELOG was not read (coolbress/plinth-templ
 then ok "a CHANGELOG read that fails: the plan prints the compare link and says the read failed"
 else bad "plan, CHANGELOG read failed (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
+
+# ── new questions (#1185) ───────────────────────────────────────────────
+# A question the target tag asks that the repository never answered takes
+# its default under --defaults, unasked. The plan names each that applies,
+# with its default and help; one with no default stops it; --apply passes
+# the person's answers as --data and the description records each, or
+# "default kept". The mock records them as copier does (MOCK_QUESTIONS).
+repo_was="$repo"; bare_was="$BARE"
+api_q="$work/api-q"; tag_names "$api_q" "$target_sha"
+{ printf 'plinth_sha:\n  type: str\n  default: "%s"\n\n' "$sha40"
+  printf 'description:\n  type: str\n  help: One line saying what this project is.\n  default: ""\n\n'
+  printf 'records_language:\n  type: str\n  help: |\n    The language records are written in,\n    named in English. Example Korean.\n  default: English\n\n'
+  printf 'hosting:\n  type: str\n  when: "{{ archetype == '"'web'"' }}"\n  help: Where will your app run?\n  default: render\n\n'
+  printf 'contact:\n  type: str\n  help: Where reports go.\n'
+} | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
+  > "$api_q/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
+printf 'records_language\tEnglish\tyes\ndescription\t'"''"'\tyes\nhosting\trender\tno\n' > "$work/questions.txt"
+{ cat "$work/questions.txt"; printf 'contact\tnull\tyes\n'; } > "$work/questions-nodefault.txt"
+q_run() { # <env...> -- <args...>: the script in $repo
+  local e=()
+  while [ "$1" != -- ]; do e+=("$1"); shift; done; shift
+  reset_logs
+  out="$(cd "$repo" && env ${e[@]+"${e[@]}"} FLOOR_CHECK_API_DIR="$api_q" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" "$@" 2>&1)"; rc=$?
+}
+fixture questions
+q_run MOCK_QUESTIONS="$work/questions.txt" --
+asked="$(awk 'index($0, "New questions") == 1 { f = 1; next } f && /^[^ ]/ { exit } f' <<<"$out")"
+want_asked="$(printf '%s\n' "  records_language, default English" "    The language records are written in," "    named in English. Example Korean." \
+  "  description, default ''" "    One line saying what this project is.")"
+if [ "$rc" = 0 ] && [ "$asked" = "$want_asked" ] && grep -qF -- "with --answer <name> <value> for each new question" <<<"$out"
+then ok "the plan names each new question that applies, with its default and its help, and leaves out one whose when: is false"
+else bad "plan, new questions (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+q_run MOCK_QUESTIONS="$work/questions-nodefault.txt" --
+if [ "$rc" = 1 ] && grep -qx "  contact, no default: copier's --defaults would record null" <<<"$out" \
+   && grep -qF "stopped: no default for contact" <<<"$out" && grep -qF -- "--answer contact <value>" <<<"$out" \
+   && ! grep -qF "To apply it" <<<"$out" && [ ! -e "$(wt_of questions)" ]
+then ok "a new question with no default stops the plan with its name, and says to answer it on --apply"
+else bad "plan, a question with no default (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+base="$(git -C "$BARE" rev-parse main)"
+q_run MOCK_QUESTIONS="$work/questions.txt" -- --apply "$base" --answer hosting render
+if [ "$rc" = 2 ] && grep -qF "not a new question of this update: hosting (the plan lists: records_language description)" <<<"$out" \
+   && [ ! -e "$(wt_of questions)" ] && ! git -C "$repo" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
+then ok "--apply given an answer for a question the plan does not list exits 2 and creates nothing"
+else bad "--apply, an unlisted answer (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+q_run MOCK_QUESTIONS="$work/questions.txt" -- --apply "$base" --answer records_language Korean --answer description '한국어 설명, 두 단어'
+wt="$(wt_of questions)"; body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -qx "records_language: Korean" "$wt/.copier-answers.yml" && grep -qx "Records are written in Korean." "$wt/AGENTS.md" \
+   && grep -qx "description: 한국어 설명, 두 단어" "$wt/.copier-answers.yml"
+then ok "--apply with records_language answered Korean records Korean in .copier-answers.yml and in the rendered AGENTS.md; an answer with spaces stays one word"
+else bad "--apply, the answers (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$wt/.copier-answers.yml" 2>/dev/null | sed 's/^/        /'; fi
+if grep -qxF -- "- \`records_language\`: Korean" <<<"$body" && grep -qxF -- "- \`description\`: 한국어 설명, 두 단어" <<<"$body" \
+   && grep -qF -- " --data records_language=Korean --data 'description=한국어 설명, 두 단어'" <<<"$body" && ! grep -q "default kept" <<<"$body"
+then ok "the description records each answer, and the command with the answers quoted, Hangul as typed"
+else bad "the description, answers"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+fixture questions-default
+base="$(git -C "$BARE" rev-parse main)"
+q_run MOCK_QUESTIONS="$work/questions.txt" -- --apply "$base"
+wt="$(wt_of questions-default)"; body="$(cat "$work/gh.log.body" 2>/dev/null)"
+if [ "$rc" = 0 ] && grep -qx "records_language: English" "$wt/.copier-answers.yml" \
+   && grep -qxF -- "- \`records_language\`: English (default kept)" <<<"$body" && grep -qxF -- "- \`description\`: '' (default kept)" <<<"$body" \
+   && ! grep -q "hosting" <<<"$body"
+then ok "--apply given no answer records each new question at its default, and the description says default kept for each"
+else bad "--apply, defaults kept (rc=$rc)"; printf '%s\n' "$out" "$body" | sed 's/^/        /'; fi
+fixture questions-null
+base="$(git -C "$BARE" rev-parse main)"
+q_run MOCK_QUESTIONS="$work/questions-nodefault.txt" -- --apply "$base"
+if [ "$rc" = 1 ] && grep -qF "copier recorded null for contact" <<<"$out" && ! grep -q "pr create" "$work/gh.log" \
+   && [ "$(git -C "$BARE" rev-parse main)" = "$base" ] && ! git -C "$BARE" rev-parse -q --verify "refs/heads/chore/template-$target_ref" >/dev/null
+then ok "--apply that leaves a question with no default unanswered stops before committing: copier recorded null"
+else bad "--apply, a null recorded (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+q_run -- --apply "$base" --archetype cli --answer records_language Korean
+if [ "$rc" = 2 ]; then ok "--answer is refused with an archetype move (usage)"; else bad "--answer with --archetype (rc=$rc)"; fi
+q_run -- --apply "$base" --answer records_language Korean --answer records_language English
+if [ "$rc" = 2 ]; then ok "--answer naming one question twice is refused (usage)"; else bad "--answer twice (rc=$rc)"; fi
+rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
+repo="$repo_was"; BARE="$bare_was"; export BARE
 
 # ── the base must be the verified default branch ────────────────────────
 reset_logs
