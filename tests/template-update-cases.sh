@@ -39,12 +39,19 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 # one case that reads the default.
 mkdir -p "$work/admin"; export TEMPLATE_UPDATE_ADMIN_TMP="$work/admin"
 # The checker's GitHub reads come from fixtures, never the network: a
-# missing file answers 404, so the tested pin is "not read" unless a case
-# writes one (#511). Each directory answers that the target tag still names
-# the commit plinth was tested with (#519), unless a case says otherwise.
+# missing file answers 404. Each directory answers that the target tag still
+# names the commit plinth was tested with (#519), and that it was tested with
+# the plinth the fixtures' workflows call, $sha40 (#511), so the update is
+# not held for the pin (#1183), unless a case writes another first.
+tested_is() { # <fixture dir> <plinth_sha default>: the target tag's copier.yml
+  mkdir -p "$1/repos/coolbress/plinth-template/contents"
+  printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$2" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
+    > "$1/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
+}
 tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub
   mkdir -p "$1/repos/coolbress/plinth-template/commits"
   printf '{"sha":"%s"}\n' "$2" > "$1/repos/coolbress/plinth-template/commits/$target_ref.json"
+  [ -e "$1/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json" ] || tested_is "$1" "$sha40"
 }
 export FLOOR_CHECK_API_DIR="$work/api-none"; tag_names "$FLOOR_CHECK_API_DIR" "$target_sha"
 
@@ -705,52 +712,116 @@ fixture raised; reset_logs
 raised="$(printf '%040d' 9)"
 sed -i.bak "s/@$sha40/@$raised/" "$repo/.github/workflows/ci.yml" && rm "$repo/.github/workflows/ci.yml.bak"
 git -C "$repo" commit -q -am "bump plinth" && git -C "$repo" push -q origin main
+# Newer than the pin the target tag was tested with: the update keeps it.
+mkdir -p "$FLOOR_CHECK_API_DIR/repos/coolbress/plinth/compare"
+printf '{"status":"behind","behind_by":1}\n' > "$FLOOR_CHECK_API_DIR/repos/coolbress/plinth/compare/$raised...$sha40.json"
 run --apply "$(git -C "$BARE" rev-parse main)"
 if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$raised$no_shared\$" "$work/uvx.log"; then ok "copier is given the pin the workflows carry today, not the one first rendered"
 else bad "raised pin (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; fi
 
-# ── the plinth pin: live by default, tested on a person's choice (#511) ─
+# ── the plinth pin: raised first, never moved by the update (#511, #1183) ─
 tested="$(printf '%040d' 8)"
 pin_api="$work/api-pin"
-mkdir -p "$pin_api/repos/coolbress/plinth-template/contents" "$pin_api/repos/coolbress/plinth/compare"
-printf 'plinth_sha:\n  type: str\n  default: "%s"\n' "$tested" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
-  > "$pin_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
+mkdir -p "$pin_api/repos/coolbress/plinth/compare"
+tested_is "$pin_api" "$tested"
 printf '{"status":"ahead","ahead_by":2}\n' > "$pin_api/repos/coolbress/plinth/compare/$sha40...$tested.json"
 tag_names "$pin_api" "$target_sha"
 pinrun() { # <fixture dir> <args...>: run with that API fixture
   local api="$1"; shift
   out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$api" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" "$@" 2>&1)"; rc=$?
 }
-fixture pinplan; reset_logs
-base="$(git -C "$BARE" rev-parse main)"
-pinrun "$pin_api"
-if [ "$rc" = 0 ] && grep -q "^Command: .*plinth_sha=$sha40$no_shared\$" <<<"$out" && grep -q "^With the tested pin: .*plinth_sha=$tested$no_shared\$" <<<"$out" \
-   && grep -q "^Plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 2 commit(s) newer" <<<"$out" \
-   && grep -qF -- "--apply $base --plinth-pin live" <<<"$out" && grep -qF -- "--apply $base --plinth-pin tested" <<<"$out"
-then ok "a tested pin newer than the live one: the plan prints the comparison, both lines and an --apply line for each choice"
-else bad "plan with two pins (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-# The tested pin is recommended, with what it gains, and offered first (#519).
-if grep -q "^Recommended: move the plinth pin to $tested: this repository's checks then run the plinth commit $target_ref was tested with, 2 commit(s) newer than the one they run now" <<<"$out" \
-   && [ "$(grep -n -- "--plinth-pin tested\$" <<<"$out" | cut -d: -f1)" -lt "$(grep -n -- "--plinth-pin live\$" <<<"$out" | cut -d: -f1)" ] \
-   && grep -q "moving it to the one $target_ref was tested with (recommended):" <<<"$out"
-then ok "a newer tested pin is recommended in one sentence on what it gains, and its --apply line comes first"
-else bad "recommendation (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-# A live pin newer than the tested one is kept: no recommendation, one line.
-behind_api="$work/api-behind"; rm -rf "$behind_api"; cp -R "$pin_api" "$behind_api"
+# What the plan and --apply may not touch when they stop: the worktree list,
+# the branches and every file under .git but those a fetch rewrites.
+git_state() { # <repo>
+  git -C "$1" worktree list --porcelain
+  git -C "$1" for-each-ref --format='%(refname) %(objectname)' refs/heads
+  (cd "$1/.git" && find . -type f ! -name FETCH_HEAD ! -path './logs/*' ! -path './refs/remotes/*' ! -name packed-refs -exec shasum {} + | sort)
+}
+# The open pull requests: #12 raises the plinth pin in ci.yml and label.yml,
+# #13 changes something else.
+pulls_open() { # <fixture dir>
+  mkdir -p "$1/repos/o/r/pulls/12" "$1/repos/o/r/pulls/13"
+  printf '[{"number":12,"title":"chore(deps): bump coolbress/plinth"},{"number":13,"title":"docs: a typo"}]\n' > "$1/repos/o/r/pulls?state=open&per_page=100.json"
+  jq -n --arg a "$sha40" --arg b "$tested" '[{filename: ".github/workflows/ci.yml", patch: ("-    uses: coolbress/plinth/.github/workflows/python-ci.yml@" + $a + "\n+    uses: coolbress/plinth/.github/workflows/python-ci.yml@" + $b + " # v9.0.0")}]' \
+    > "$1/repos/o/r/pulls/12/files?per_page=100.json"
+  printf '[{"filename":"README.md","patch":"+uses: coolbress/plinth/x@y"}]\n' > "$1/repos/o/r/pulls/13/files?per_page=100.json"
+}
+labelled() { # a label.yml calling plinth at $sha40, as the template renders it
+  printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/label.yml@%s\n' "$sha40" > "$repo/.github/workflows/label.yml"
+  git -C "$repo" add -A && git -C "$repo" commit -q -m label && git -C "$repo" push -q origin main
+}
+
+# The live pin older than the tested one, with the pin's pull request open:
+# the plan stops before anything is written and names it.
+pr_api="$work/api-pin-pr"; rm -rf "$pr_api"; cp -R "$pin_api" "$pr_api"; pulls_open "$pr_api"
+fixture pinbehind; labelled; reset_logs
+pinrun "$pr_api"; git_before="$(git_state "$repo")"
+pinrun "$pr_api"
+if [ "$rc" = 1 ] && grep -q "^no update command: the plinth pin is behind; the workflows call $sha40; $target_ref was tested with $tested, 2 commit(s) newer" <<<"$out" \
+   && grep -qF "https://github.com/coolbress/plinth/compare/$sha40...$tested" <<<"$out" \
+   && grep -q "^merge first: #12 chore(deps): bump coolbress/plinth (https://github.com/o/r/pull/12)" <<<"$out" && ! grep -q "#13" <<<"$out" \
+   && grep -q "^Nothing has been written" <<<"$out" && ! grep -q "^Command:" <<<"$out" && ! grep -q -- "--apply" <<<"$out"
+then ok "a live pin older than the tested one: the plan exits 1, names both SHAs, the compare and the open pin pull request (#1183)"
+else bad "plan, pin behind, pull request open (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if [ "$git_before" = "$(git_state "$repo")" ] && [ ! -e "$(wt_of pinbehind)" ] && [ ! -e "$work/uvx.log" ]
+then ok "and it writes nothing: no worktree, no branch, no change under .git but the fetch, no copier"
+else bad "the stopped plan wrote something"; diff <(printf '%s\n' "$git_before") <(git_state "$repo") | sed 's/^/        /'; fi
+# --apply on the same base stops the same way, before anything is created.
+reset_logs; pinrun "$pr_api" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 1 ] && grep -q "^merge first: #12 " <<<"$out" && grep -q "nothing was created" <<<"$out" \
+   && [ "$git_before" = "$(git_state "$repo")" ] && [ ! -e "$(wt_of pinbehind)" ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.log"
+then ok "--apply with the pin behind stops the same way: no worktree, no branch, no copier, nothing opened"
+else bad "--apply, pin behind (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# No open pull request changes the pin: the plan prints the change to make,
+# every file that calls plinth at the one tested SHA, and makes none.
+none_api="$work/api-pin-nopr"; rm -rf "$none_api"; cp -R "$pin_api" "$none_api"; mkdir -p "$none_api/repos/o/r"
+printf '[]\n' > "$none_api/repos/o/r/pulls?state=open&per_page=100.json"
+reset_logs; pinrun "$none_api"
+if [ "$rc" = 1 ] && grep -q "^no open pull request changes the plinth uses: lines" <<<"$out" \
+   && grep -q "^raise it first in one pull request of its own: every coolbress/plinth uses: line in .github/workflows/ci.yml, .github/workflows/label.yml to $tested, all at that one SHA; merge it, then plan the update again" <<<"$out" \
+   && [ "$git_before" = "$(git_state "$repo")" ] && [ "$(git -C "$repo" status --porcelain)" = "" ] && ! grep -q "^Command:" <<<"$out"
+then ok "the pin behind and no pull request open: the plan prints the change to ci.yml and label.yml at one SHA, and makes none"
+else bad "plan, pin behind, no pull request (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The open pull requests not read: said, and the change printed.
+reset_logs; pinrun "$pin_api"
+if [ "$rc" = 1 ] && grep -q "^the open pull requests were not read (offline or API error)" <<<"$out" && grep -q "^raise it first in one pull request" <<<"$out"
+then ok "the open pull requests not read: said, never read as none, and the change printed"
+else bad "plan, pin behind, pulls unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+
+# Live equal to the tested one (every other case here) or newer: no stop.
+equal_api="$work/api-pin-equal"; rm -rf "$equal_api"; mkdir -p "$equal_api"; tag_names "$equal_api" "$target_sha"
+fixture pinequal; reset_logs; pinrun "$equal_api"
+if [ "$rc" = 0 ] && grep -q "^Plinth pin: the workflows call $sha40, the one $target_ref was tested with$" <<<"$out" && grep -q "^Command: .*plinth_sha=$sha40$no_shared\$" <<<"$out" \
+   && grep -qF -- "--apply $(git -C "$BARE" rev-parse main)" <<<"$out" && ! grep -q -- "--plinth-pin" <<<"$out"
+then ok "the live pin equal to the tested one: the plan goes on, one --apply line and no pin choice"
+else bad "plan, pin equal (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+behind_api="$work/api-pin-newer"; rm -rf "$behind_api"; cp -R "$pin_api" "$behind_api"
 printf '{"status":"behind","behind_by":3}\n' > "$behind_api/repos/coolbress/plinth/compare/$sha40...$tested.json"
 reset_logs; pinrun "$behind_api"
-if [ "$rc" = 0 ] && ! grep -q "^Recommended:" <<<"$out" && ! grep -q -- "--plinth-pin" <<<"$out" && grep -q "never moved backwards" <<<"$out"
-then ok "a live pin newer than the tested one: no recommendation, one --apply line, kept and said so"
-else bad "plan, live ahead (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-reset_logs; pinrun "$work/api-none"
-if [ "$rc" = 0 ] && ! grep -q "With the tested pin" <<<"$out" && ! grep -q -- "--plinth-pin" <<<"$out" && grep -q "^Plinth pin: .*was not read" <<<"$out"
-then ok "the tested pin not read: the plan prints one line, one --apply line, and says it was not read"
-else bad "plan with one pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if [ "$rc" = 0 ] && grep -q "^Plinth pin: the workflows call $sha40, newer than $tested that $target_ref was tested with; the update keeps it" <<<"$out" \
+   && grep -q "^Command: .*plinth_sha=$sha40$no_shared\$" <<<"$out" && ! grep -q -- "--plinth-pin" <<<"$out"
+then ok "the live pin newer than the tested one: the plan goes on with the live pin, and says it is kept"
+else bad "plan, pin newer (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The tested pin unreadable, or the two not compared: a stop that says what
+# was not read, never an update as if the pin were current.
+unread_api="$work/api-pin-unread"; rm -rf "$unread_api"; mkdir -p "$unread_api/repos/coolbress/plinth-template/contents"
+printf 'not json\n' > "$unread_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"; tag_names "$unread_api" "$target_sha"
+reset_logs; pinrun "$unread_api"
+if [ "$rc" = 1 ] && grep -q "^no update command: whether the plinth pin is older than the one $target_ref was tested with was not read; the one $target_ref was tested with was not read (coolbress/plinth-template copier.yml at $target_ref: offline or API error)" <<<"$out" \
+   && ! grep -q "^Command:" <<<"$out" && [ ! -e "$(wt_of pinequal)" ]
+then ok "the tested pin unreadable: the plan stops and says what it could not read"
+else bad "plan, tested unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+uncmp_api="$work/api-pin-uncompared"; rm -rf "$uncmp_api"; cp -R "$pin_api" "$uncmp_api"; rm "$uncmp_api/repos/coolbress/plinth/compare/$sha40...$tested.json"
+reset_logs; pinrun "$uncmp_api" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 1 ] && grep -q "$target_ref was tested with $tested, but the two were not compared (offline or API error)" <<<"$out" \
+   && grep -q "nothing was created" <<<"$out" && [ ! -e "$(wt_of pinequal)" ] && [ ! -e "$work/uvx.log" ]
+then ok "the two pins not compared: --apply stops before anything is created, and says so"
+else bad "--apply, pins uncompared (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
 # A pin raised by hand in the workflows, not in the answers file (#1015):
-# copier's old render names the recorded plinth_sha, so a line carrying a
-# third pin leaves each plinth uses: line it renders in conflict. The plan
-# says so before anything is written, and which side to keep.
+# copier's old render names the recorded plinth_sha. The line carries the
+# pin the workflows call, so the uses: line is not in conflict for that; the
+# plan says so before anything is written.
 recorded="$(printf '%040d' 6)"
 handraised() { # <name> <recorded plinth_sha>: answers record it, ci.yml and label.yml call $sha40
   fixture "$1"
@@ -760,53 +831,29 @@ handraised() { # <name> <recorded plinth_sha>: answers record it, ci.yml and lab
   git -C "$repo" add -A && git -C "$repo" commit -q -m "raise the pin by hand" && git -C "$repo" push -q origin main
 }
 handraised pinhand "'$recorded'  # quoted, with a comment"; reset_logs
-pinrun "$pin_api"
-conflict_line="$(grep -A2 "^ *with --plinth-pin tested" <<<"$out" | tr '\n' ' ')"
+run
 if [ "$rc" = 0 ] && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40" <<<"$out" \
-   && grep -q "ci.yml, label.yml" <<<"$conflict_line" && ! grep -q "own.yml" <<<"$conflict_line" \
-   && grep -q "keep the side naming $tested" <<<"$conflict_line" \
-   && grep -q "with --plinth-pin live, the update carries the pin the workflows call: no conflict on that line is expected" <<<"$out" \
-   && [ ! -e "$work/uvx.log" ]
-then ok "a pin raised by hand and a third carried: the plan names each workflow whose uses: line will conflict and the side to keep"
-else bad "hand-raised pin, tested carried (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-# The plan's line only names files; nothing is written before --apply.
-if [ "$(grep -n "^Pin conflict:" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "^Nothing has been written" <<<"$out" | cut -d: -f1)" ]
-then ok "the expected conflict is said before the --apply lines"
-else bad "pin conflict line placement"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-# Only the live line on offer (a live pin newer than the tested one): it
-# carries the workflows' pin, so no conflict on that line.
-reset_logs; pinrun "$behind_api"
-if [ "$rc" = 0 ] && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40" <<<"$out" \
-   && grep -q "no conflict on that line is expected" <<<"$out" && ! grep -q "keep the side" <<<"$out"
+   && grep -q "The update carries the pin the workflows call: no conflict on that line is expected" <<<"$out" && ! grep -q "keep the side" <<<"$out"
 then ok "a pin raised by hand, the live pin carried: the plan says no conflict on that line is expected"
 else bad "hand-raised pin, live carried (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # The recorded plinth_sha equal to the workflows': nothing new.
 handraised pinrecorded "$sha40"; reset_logs
-pinrun "$pin_api"
-if [ "$rc" = 0 ] && ! grep -q "Pin conflict" <<<"$out" && grep -q "^With the tested pin:" <<<"$out"
+run
+if [ "$rc" = 0 ] && ! grep -q "Pin conflict" <<<"$out"
 then ok "the recorded plinth_sha equal to the workflows' pin: the plan says nothing of a pin conflict"
 else bad "recorded equal to live (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-# The tested pin is the recorded one (a pin lowered by hand): that line
-# conflicts nowhere, but moves no pin either, and the plan says so.
-handraised pinrecordedtested "$tested"; reset_logs
-pinrun "$pin_api"
-if [ "$rc" = 0 ] && grep -q "^ *with --plinth-pin tested, the update carries the recorded pin itself: .*moves no pin" <<<"$out" \
-   && ! grep -q "keep the side" <<<"$out"
-then ok "the tested pin equal to the recorded one: the plan says that line moves no pin, and names no conflict"
-else bad "tested equal to recorded (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # An answers file with CRLF line endings: the recorded pin is still read.
 handraised pincrlf "$recorded"
 sed -i.bak $'s/$/\r/' "$repo/.copier-answers.yml" && rm "$repo/.copier-answers.yml.bak"
 git -C "$repo" commit -q -am crlf && git -C "$repo" push -q origin main; reset_logs
-pinrun "$pin_api"
+run
 if [ "$rc" = 0 ] && grep -q $'\r' "$repo/.copier-answers.yml" \
-   && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40\.$" <<<"$out" \
-   && grep -q "keep the side naming $tested" <<<"$out"
-then ok "an answers file with CRLF line endings: the recorded pin is read and the conflict named"
+   && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40\.$" <<<"$out"
+then ok "an answers file with CRLF line endings: the recorded pin is read"
 else bad "CRLF answers file (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # No plinth_sha recorded at all (every older fixture): nothing new either.
 fixture pinnorecord; reset_logs
-pinrun "$pin_api"
+run
 if [ "$rc" = 0 ] && ! grep -q "Pin conflict" <<<"$out"
 then ok "no plinth_sha recorded: the plan says nothing of a pin conflict"
 else bad "no recorded pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
@@ -821,7 +868,7 @@ commented() { # <file>...: a `# v2.41.0` after each plinth pin
   git -C "$repo" commit -q -am "a version comment" && git -C "$repo" push -q origin main
 }
 handraised pincomment "$recorded"; commented ci.yml label.yml; reset_logs
-pinrun "$behind_api"
+run
 said="$(grep -A2 "^ *The update leaves" <<<"$out" | tr '\n' ' ')"
 if [ "$rc" = 0 ] && grep -q "# v2.41.0" "$repo/.github/workflows/ci.yml" \
    && grep -q "^Pin conflict: .*records plinth_sha $recorded; the workflows call $sha40" <<<"$out" \
@@ -829,72 +876,59 @@ if [ "$rc" = 0 ] && grep -q "# v2.41.0" "$repo/.github/workflows/ci.yml" \
    && ! grep -q "no conflict on that line is expected" <<<"$out" && [ ! -e "$work/uvx.log" ]
 then ok "a pin raised by hand with a version comment, the live pin carried: the plan says the line conflicts by the comment alone (#1045)"
 else bad "a commented pin, live carried (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The plan's line only names files; nothing is written before --apply.
+if [ "$(grep -n "^Pin conflict:" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "^Nothing has been written" <<<"$out" | cut -d: -f1)" ]
+then ok "the expected conflict is said before the --apply line"
+else bad "pin conflict line placement"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # One file with the comment, one without: only the commented one is named.
 handraised pincommentone "$recorded"; commented label.yml; reset_logs
-pinrun "$behind_api"
+run
 if [ "$rc" = 0 ] && grep -q "in conflict in label.yml (" <<<"$out" && ! grep -q "in conflict in ci.yml" <<<"$out"
 then ok "only the workflow whose line carries a comment is named (#1045)"
 else bad "one commented file (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-# The workflows at the recorded pin, with a comment: the tested line moves
-# the pin, and the commented line conflicts; the live line moves nothing.
+# The workflows at the recorded pin, with a comment: the line carries that
+# pin, which copier's two renders name alike, so the comment stays and no
+# conflict is said.
 handraised pincommentrecorded "$sha40"; commented ci.yml label.yml; reset_logs
-pinrun "$pin_api"
-if [ "$rc" = 0 ] && grep -q "^Pin conflict: .*records plinth_sha $sha40; the workflows call $sha40" <<<"$out" \
-   && grep -A1 "^ *with --plinth-pin tested, the update leaves" <<<"$out" | grep -q "keep the side naming $tested" \
-   && grep -q "^ *with --plinth-pin live, the update carries the recorded pin itself" <<<"$out"
-then ok "the recorded pin with a version comment: the tested line's conflict is said, the live line moves no pin (#1045)"
+run
+if [ "$rc" = 0 ] && ! grep -q "Pin conflict" <<<"$out" && grep -q "# v2.41.0" "$repo/.github/workflows/ci.yml"
+then ok "the recorded pin with a version comment, carried as it is: no pin conflict said (#1045)"
 else bad "a commented recorded pin (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # A comment on another line of the file, not the uses: line, changes nothing.
 handraised pincommentelse "$recorded"
 printf '# v2.41.0 is the version\n' >> "$repo/.github/workflows/ci.yml"
 git -C "$repo" commit -q -am "a comment elsewhere" && git -C "$repo" push -q origin main; reset_logs
-pinrun "$behind_api"
+run
 if [ "$rc" = 0 ] && grep -q "no conflict on that line is expected" <<<"$out" && ! grep -q "trailing comment" <<<"$out"
 then ok "a comment elsewhere in the file: no conflict said (#1045)"
 else bad "a comment elsewhere (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 
-for choice in tested live default; do
-  fixture "pin$choice"; reset_logs
-  base="$(git -C "$BARE" rev-parse main)"
-  if [ "$choice" = default ]; then pinrun "$pin_api" --apply "$base"; else pinrun "$pin_api" --apply "$base" --plinth-pin "$choice"; fi
-  want_sha="$sha40"; [ "$choice" = tested ] && want_sha="$tested"
-  body="$(cat "$work/gh.log.body" 2>/dev/null)"
-  if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_sha --data plinth_sha=$want_sha$no_shared\$" "$work/uvx.log"
-  then ok "--apply $([ "$choice" = default ] && echo "without --plinth-pin" || echo "--plinth-pin $choice") runs copier with the $([ "$choice" = tested ] && echo tested || echo live) SHA"
-  else bad "--plinth-pin $choice (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-  if grep -qF -- "--plinth-pin $([ "$choice" = tested ] && echo tested || echo live)" <<<"$body" && grep -q "$sha40" <<<"$body" && grep -q "$tested" <<<"$body"
-  then ok "the description says which pin was chosen ($choice) and names both SHAs"
-  else bad "description for $choice"; printf '%s\n' "$body" | sed 's/^/        /'; fi
-  if section "$work/gh.log.body" "What I checked myself" | grep -q "^- The plan's plinth pin line: .*$tested"
-  then ok "What I checked myself carries the plan's plinth pin line ($choice)"
-  else bad "the plan's pin line, $choice"; sed 's/^/        /' "$work/gh.log.body"; fi
-done
-
-# The live pin already the tested one: --plinth-pin tested runs the same
-# line, and the description does not claim a move.
-same_api="$work/api-same"; rm -rf "$same_api"; mkdir -p "$same_api/repos/coolbress/plinth-template/contents"
-printf 'plinth_sha:\n  default: "%s"\n' "$sha40" | base64 | tr -d '\n' | jq -R '{encoding: "base64", content: .}' \
-  > "$same_api/repos/coolbress/plinth-template/contents/copier.yml?ref=$target_sha.json"
-tag_names "$same_api" "$target_sha"
-fixture pinsame; reset_logs
-pinrun "$same_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin tested
+# --apply runs the live line, and the description says nothing of a pin
+# choice; the plan's pin line is in what the script checked.
+fixture pinapply; reset_logs
+pinrun "$behind_api" --apply "$(git -C "$BARE" rev-parse main)"
 body="$(cat "$work/gh.log.body" 2>/dev/null)"
-if [ "$rc" = 0 ] && grep -q -- "--data plinth_sha=$sha40$no_shared\$" "$work/uvx.log" && grep -q "The plinth pin: unchanged" <<<"$body" && ! grep -q "moved to" <<<"$body"
-then ok "--plinth-pin tested when the live pin is the tested one: the same line runs, and the description says nothing moved"
-else bad "--plinth-pin tested, equal (rc=$rc)"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
+if [ "$rc" = 0 ] && grep -q -- "--vcs-ref $target_sha --data plinth_sha=$sha40$no_shared\$" "$work/uvx.log" \
+   && ! grep -q "The plinth pin:" <<<"$body" && ! grep -q -- "--plinth-pin" <<<"$body"
+then ok "--apply runs copier with the live SHA, and the description offers no pin choice"
+else bad "--apply, live (rc=$rc): uvx got '$(cat "$work/uvx.log" 2>/dev/null)'"; printf '%s\n%s\n' "$out" "$body" | sed 's/^/        /'; fi
+if section "$work/gh.log.body" "What I checked myself" | grep -q "^- The plan's plinth pin line: the workflows call $sha40, newer than $tested"
+then ok "What I checked myself carries the plan's plinth pin line"
+else bad "the plan's pin line"; sed 's/^/        /' "$work/gh.log.body"; fi
 
-fixture pinunread; reset_logs
-pinrun "$work/api-none" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin tested
-if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && grep -q "no update command with the tested pin" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
-then ok "--plinth-pin tested with the tested pin not read stops before copier, opens nothing"
-else bad "--plinth-pin tested, unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-reset_logs
-pinrun "$pin_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin newest
-if [ "$rc" = 2 ] && [ ! -e "$work/uvx.log" ]; then ok "an unknown --plinth-pin value exits 2 before anything runs"
-else bad "--plinth-pin newest (rc=$rc)"; fi
-pinrun "$pin_api" --plinth-pin tested
-if [ "$rc" = 2 ]; then ok "--plinth-pin without --apply exits 2: the choice is made where copier runs"
-else bad "--plinth-pin on the plan (rc=$rc)"; fi
+# --plinth-pin is gone (#1183): in any form, exit 2 with the new order, so
+# an older skill text never gets the live pin unawares.
+fixture pinflag
+for args in "--apply $(git -C "$BARE" rev-parse main) --plinth-pin tested" "--apply $(git -C "$BARE" rev-parse main) --plinth-pin live" \
+            "--plinth-pin tested" "--plinth-pin=tested" "--plinth-pin"; do
+  reset_logs
+  # shellcheck disable=SC2086 # the words of one case
+  pinrun "$pin_api" $args
+  if [ "$rc" = 2 ] && grep -q "^template-update: --plinth-pin is gone: .*the plan stops and names the pull request that raises it; merge that first" <<<"$out" \
+     && [ ! -e "$work/uvx.log" ] && [ ! -e "$(wt_of pinflag)" ]
+  then ok "$args: exit 2 with the new order, nothing run"
+  else bad "$args (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+done
 
 # ── the target tag names another commit than plinth was tested with (#519)
 moved_api="$work/api-moved"; rm -rf "$moved_api"; cp -R "$pin_api" "$moved_api"
@@ -904,16 +938,14 @@ pinrun "$moved_api"
 if [ "$rc" = 1 ] && grep -q "$target_ref now names commit $(printf '%040d' 5), not $target_sha" <<<"$out" && ! grep -q -- "--apply" <<<"$out"
 then ok "a moved target tag: the plan stops, names both commits, and offers no --apply line"
 else bad "plan, moved tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-for choice in live tested; do
-  reset_logs
-  pinrun "$moved_api" --apply "$(git -C "$BARE" rev-parse main)" --plinth-pin "$choice"
-  if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.log" && grep -q "now names commit" <<<"$out"
-  then ok "a moved target tag: --apply --plinth-pin $choice stops before copier, opens nothing"
-  else bad "--apply, moved tag, $choice (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
-  git -C "$repo" worktree remove --force "$(dirname "$repo")/$(basename "$repo")-template-$target_ref" 2>/dev/null
-  git -C "$repo" branch -q -D "chore/template-$target_ref" 2>/dev/null
-done
-unread_api="$work/api-tag-unread"; rm -rf "$unread_api"; cp -R "$pin_api" "$unread_api"
+reset_logs
+pinrun "$moved_api" --apply "$(git -C "$BARE" rev-parse main)"
+if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && ! grep -q "pr create" "$work/gh.log" && grep -q "now names commit" <<<"$out"
+then ok "a moved target tag: --apply stops before copier, opens nothing"
+else bad "--apply, moved tag (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+git -C "$repo" worktree remove --force "$(dirname "$repo")/$(basename "$repo")-template-$target_ref" 2>/dev/null
+git -C "$repo" branch -q -D "chore/template-$target_ref" 2>/dev/null
+unread_api="$work/api-tag-unread"; rm -rf "$unread_api"; cp -R "$equal_api" "$unread_api"
 rm "$unread_api/repos/coolbress/plinth-template/commits/$target_ref.json"
 reset_logs
 pinrun "$unread_api" --apply "$(git -C "$BARE" rev-parse main)"
@@ -1335,8 +1367,9 @@ else bad "apply, run block (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'
 two_fixture pins-unread; reset_logs
 out="$(cd "$repo" && MOCK_PINS=move FLOOR_CHECK_API_DIR="$FLOOR_CHECK_API_DIR" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$(git -C "$BARE" rev-parse main)" 2>&1)"; rc=$?
 if [ "$rc" = 1 ] && [ ! -e "$work/uvx.log" ] && grep -q "workflow pins disagree" <<<"$out" \
-   && grep -q "more than one commit and the update cannot carry one" <<<"$out" && ! grep -q "pr create" "$work/gh.log"
-then ok "two pins and the compare unread at the apply: it stops before copier, names why, opens nothing"
+   && grep -q "more than one commit and the update cannot carry one (above); nothing was created" <<<"$out" && ! grep -q "pr create" "$work/gh.log" \
+   && [ ! -e "$(wt_of pins-unread)" ]
+then ok "two pins and the compare unread at the apply: it stops before any worktree, names why, opens nothing"
 else bad "apply, compare unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 two_fixture pins-ahead; reset_logs
 out="$(cd "$repo" && FLOOR_CHECK_API_DIR="$work/api-ahead" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" 2>&1)"; rc=$?

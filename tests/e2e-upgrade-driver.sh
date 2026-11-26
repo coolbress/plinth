@@ -3,8 +3,10 @@
 # `gh`, a mocked copier and a stub template-update.sh. No network, nothing
 # created.
 #
-# Two properties: exit 0 only when the tested pin landed on every plinth
-# `uses:` line and in .copier-answers.yml; and any other exit leaves no
+# Three properties: the plinth pin is raised first, after a plan that stops
+# on it, and the update applied after (#1183); exit 0 only when the tested
+# pin landed on every plinth `uses:` line and in .copier-answers.yml; and
+# any other exit leaves no
 # repository behind without naming it. template-update.sh itself is tested
 # in template-update-cases.sh; here it is a stub that writes what an update
 # would, with the pins a case asks for.
@@ -45,12 +47,23 @@ plinth() { # <dir> <head ref> <tag>=<ref>... (oldest first)
 # repository, its branch pushed, a draft pull request.
 printf 'template-update %s\n' "$*" >> "$GH_LOG"
 top="$(git rev-parse --show-toplevel)"
+# As the script stops: with the workflows behind the tested pin, the plan
+# names the change and writes nothing (STUB_NO_STOP: a plan that goes on).
+behind="$(grep -l "@$OLD_PIN" "$top"/.github/workflows/*.yml 2>/dev/null | sed 's|.*/||' | paste -sd, -)"
+if [ $# = 0 ] && [ -n "$behind" ] && [ "${STUB_NO_STOP:-0}" = 0 ]; then
+  echo "no update command: the plinth pin is behind; the workflows call $OLD_PIN; v1.1.0 was tested with $NEW_PIN, 1 commit(s) newer: https://example.invalid"
+  echo "no open pull request changes the plinth uses: lines"
+  echo "raise it first in one pull request of its own: every coolbress/plinth uses: line in .github/workflows/ci.yml, .github/workflows/label.yml to ${STUB_TO:-$NEW_PIN}, all at that one SHA; merge it, then plan the update again"
+  [ "${STUB_PLAN_WRITES:-0}" = 0 ] || : > "$top/stray"
+  exit 1
+fi
 if [ $# = 0 ]; then
   [ "${PLAN_RC:-0}" = 0 ] || { echo "template-update: no update command"; exit "$PLAN_RC"; }
   echo "Template:   v1.0.0 -> v1.1.0"
-  printf '  %s --apply %s --plinth-pin live\n  %s --apply %s --plinth-pin tested\n' "$0" "$(git rev-parse HEAD)" "$0" "$(git rev-parse HEAD)"
+  printf '  %s --apply %s\n' "$0" "$(git rev-parse HEAD)"
   exit 0
 fi
+[ -z "$behind" ] || { echo "no update command: the plinth pin is behind ($behind)"; exit 1; }
 wt="$(dirname "$top")/$(basename "$top")-template-v1.1.0"
 if [ "$1" = --finish ]; then
   [ "$2" = "$wt" ] && [ "${3:-}" = --over-limit ] || { echo "finish: not this worktree, or not --over-limit"; exit 2; }
@@ -169,7 +182,10 @@ run GITHUB_STEP_SUMMARY="$work/summary0"; check "the tested pin lands: exit 0" o
 is "rendered at the start's template tag, with the start's copier pin" saw "^uvx --quiet --from copier==9.0.0 .*--vcs-ref v1.0.0 gh:coolbress/plinth-template "
 is "a public repository, under the token's user" saw "^gh repo create tester/plinth-e2e-upgrade-42 --public"
 is "Actions turned off on it" saw "^gh api -X PUT repos/tester/plinth-e2e-upgrade-42/actions/permissions -F enabled=false"
-is "the plan, then --apply with the tested pin" bash -c 'grep -q "^template-update $" "$1" && grep -qE "^template-update --apply [0-9a-f]{40} --plinth-pin tested$" "$1"' _ "$GH_LOG"
+is "the plan, the pin raised and pushed, the plan again, then --apply with no pin choice" bash -c '
+  grep -E "^(template-update|git .* push )" "$1" | sed -E "s/[0-9a-f]{40}/SHA/; s/^git .* push .*origin main$/push main/; s/^git .* push .*/push other/" > "$1.order"
+  printf "%s\n" "push main" "template-update " "push main" "template-update " "template-update --apply SHA" | cmp -s - "$1.order"' _ "$GH_LOG"
+is "the plan's stop is recorded" said "upgrade: the plan stopped on the plinth pin $old_pin, older than $new_pin, and named the change"
 is "the start and the target are recorded" said "upgrade: from v0.9.0's template v1.0.0 (plinth $old_pin) to v1.1.0 (tested with plinth $new_pin)"
 is "what landed is recorded, in the job summary too" grep -q "upgrade: landed on https://github.com/tester/x/pull/1: 2 plinth uses: line(s) and .copier-answers.yml name $new_pin" "$work/summary0"
 is "deleted once"              deletes 1
@@ -194,6 +210,16 @@ is "named"                     said "records _commit v1.0.0, not v1.1.0"
 run STALE_PUSH=1;              check "the branch on GitHub is not the update commit" no $?
 is "named"                     said "is absent, not the update commit"
 is "deleted"                   deletes 1
+
+echo "-- the pin first (#1183)"
+run STUB_NO_STOP=1;            check "a plan that goes on with the pin behind is a failure" no $?
+is "named"                     said "it must stop (exit 1) and name the pin to raise first"
+is "no --apply"                not saw "^template-update --apply"
+is "deleted"                   deletes 1
+run STUB_TO="$old_pin";        check "a plan that stops naming another pin than the tested one is a failure" no $?
+is "named"                     said "did not name the change that raises the plinth pin to $new_pin"
+run STUB_PLAN_WRITES=1;        check "a plan that stops but leaves a file behind is a failure" no $?
+is "named"                     said "left a change or a worktree behind"
 
 echo "-- the update stops"
 run APPLY_RC=3;                check "a conflict copier left is a failure" no $?

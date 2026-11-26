@@ -65,28 +65,37 @@ none of its own, the plan names each answer that turns false and gives a
 line that re-renders the same tag, which writes the template's copies.
 
 The command keeps the plinth commit the repository's workflows call today,
-so an update never undoes a pin Dependabot moved. On GitHub it also carries
+so an update never undoes a pin Dependabot moved, and it never moves that
+pin. On GitHub it also carries
 whether the owner's `.github` repository publishes a pull-request template
 and issue forms, so an update never writes a form that hides the owner's
-shared ones; when that cannot be read, the plan says so and stops. When the target tag was
-tested with a newer plinth commit, the plan also prints a `Plinth pin:` line
-comparing the two, a second command `With the tested pin:`, a `Recommended:`
-line saying in one sentence what moving to the tested pin gains, and two
-`--apply` lines, `--plinth-pin tested` (recommended) first, then
-`--plinth-pin live`. A live pin newer than the tested one is kept, never
-moved backwards: the plan then prints one `--apply` line and no
-recommendation.
+shared ones; when that cannot be read, the plan says so and stops. A
+`Plinth pin:` line compares that pin with the one the target tag was tested
+with when they differ; a newer live pin is kept.
+
+The pin comes first, the update second. When the workflows call a plinth
+older than the one the target tag was tested with, the plan exits 1 having
+written nothing, and says so: the two commits, the compare link, and either
+`merge first: #<n> ...`, an open pull request that changes the plinth `uses:`
+lines (Dependabot's, or one a person opened), or, when none is open,
+`raise it first in one pull request of its own: ...`, the change to make,
+every workflow that calls plinth moved to the one SHA. Show that whole and
+stop. The person merges that pull request (or opens and merges one with the
+change), then runs `/plinth:template-update` again. Do not make the change
+or merge it for them in this skill. When the comparison could not be read
+(offline, or the tag's `copier.yml` unreadable), the plan stops too and
+names what it could not read: pass that on and stop; it never updates as if
+the pin were current.
 
 When `.copier-answers.yml` records a `plinth_sha` other than a pin the
 workflows call (raised in the workflows only, by Dependabot or by hand), the
-plan prints a `Pin conflict:` line, with one line under it for each
-`--apply` line on offer. copier's old render names the recorded pin, so a
-workflow whose plinth pin is neither the recorded one nor the one a line
-carries has its plinth `uses:` line left in conflict: with the tested pin,
-each workflow the plan names; the side to keep is the one naming the pin
-that line carries (copier's `after updating` side). A line that carries the
-pin every workflow calls, the live one usually, leaves no conflict on that
-line (measured with copier 9.18.2). A plinth `uses:` line that
+plan prints a `Pin conflict:` line, with one line under it. copier's old
+render names the recorded pin; the command carries the pin the workflows
+call, so their plinth `uses:` lines are not in conflict for that (measured
+with copier 9.18.2). Two cases still are. A workflow whose pin is neither
+the recorded one nor the one the command carries (the `Moves:` case above)
+has its line left in conflict; the side to keep is the one naming the pin
+the command carries (copier's `after updating` side). A plinth `uses:` line that
 carries a trailing comment (`# v2.41.0`, as Dependabot writes it) is
 changed too, since the template renders none: the plan names those files
 as in conflict though both sides name the same pin, and either side runs
@@ -98,23 +107,17 @@ an exit 3 on those files is the conflict they were told of.
 Ask the user whether to apply exactly that plan. Invoking this skill is not
 the yes: the yes is to the plan they have just read. Without it, stop.
 
-When the plan printed two `--apply` lines, recommend the tested pin: give
-the `Recommended:` line's reason in plain words, and ask whether to apply the
-plan with the tested pin, as recommended, or to keep the pin the workflows
-call today. A yes to that question is a yes to the tested pin; the user may
-pick the live one instead. Never recommend a pin older than the live one:
-the plan does not offer it.
-
-On a yes, run the `--apply` line the plan printed, as printed (the one the
-user picked, when there were two), adding your own agent and model:
+On a yes, run the `--apply` line the plan printed, as printed, adding your
+own agent and model:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> [--plinth-pin live|tested] --assisted-by <agent>:<model>
+${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> --assisted-by <agent>:<model>
 ```
 
 For example `--assisted-by Claude:claude-fable-5-1`. The line ends the pull
 request description. The script refuses if the default branch moved since
-the plan; then show the plan again and ask again.
+the plan; then show the plan again and ask again. It stops as the plan does,
+having created nothing, when the plinth pin is behind.
 
 ## 3. What it says
 
@@ -203,8 +206,7 @@ the plan; then show the plan again and ask again.
   conflict is followed by the files that are; run `--finish` again naming
   those.
 
-The pull request's description says which plinth pin was chosen and names
-both SHAs, and lists what copier merged cleanly, each conflicted file with
+The pull request's description gives the plan's plinth pin line, and lists what copier merged cleanly, each conflicted file with
 how it was resolved (from `--resolved`), and anything else a person changed
 after the update. When the updated template names `GLOSSARY.md` and the
 repository's glossary is still `CONTEXT.md` (and `CONTEXT-MAP.md`), the
