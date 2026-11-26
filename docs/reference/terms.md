@@ -24,6 +24,9 @@ language and leaves the term itself as it is.
 | **draft** | A pull request marked as not finished yet: it can be read and checked, but it is not offered for merge. |
 | **review** | Someone, a person or an automated reviewer, reading a pull request's change and saying what is wrong or unclear before it is merged. |
 | **template update** | Bringing the files the project started with up to a newer version of the template, through a pull request like any other change. |
+| **workflow run** | One run of the checks on one commit: GitHub starts it when a change is pushed, and its page in the Actions tab lists each check and its log. On GitLab it is a pipeline. |
+| **job summary** | The short report a check writes at the top of its page in a workflow run: what passed, what failed, and what is not yet confirmed. |
+| **annotation** | A note a check pins to a pull request: on the changed file and line when it names one, and in the list on the workflow run's page. |
 
 Words with a plinth-specific meaning (wall, floor, door) are in
 [GLOSSARY.md](../../GLOSSARY.md).

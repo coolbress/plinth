@@ -21,6 +21,10 @@
 # become the same nine annotations and "showing 9 of N", read from committed
 # output (tests/fixtures/ruff/, tests/fixtures/mypy/), and the tool's own
 # error (exit 2) fails as "could not run", not as findings.
+# A not yet confirmed line says one fact per sentence (#1156): "not yet
+# confirmed: <what>. Why: <reason>. What confirms it: <run>.", pinned on
+# every such line ci / test, ci / lint and ci / typecheck print here and on
+# the changed-lines step's own lines.
 # PLINTH_WF reads another copy of python-ci.yml (an older commit's, say).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -125,7 +129,7 @@ test_verdict() {
 n=0
 pre() { # what a step left in RUNNER_TEMP before Verdict runs
   mkdir -p "$work/rt-$((n + 1))"; local d="$work/rt-$((n + 1))"
-  printf 'not yet confirmed: changed lines ran under the tests, it did not run because an earlier step failed; a run that gets past that step confirms it\n' > "$d/changed.verdict"
+  printf 'not yet confirmed: changed lines ran under the tests. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step.\n' > "$d/changed.verdict"
   case "$1" in
     pytest) cp "$fx/${2:-one}.txt" "$d/pytest.log" ;;
     extra) { echo "── python 3.13"; cat "$fx/${2:-one}.txt"; } > "$d/extra.log" ;;
@@ -249,7 +253,7 @@ pre none; test_verdict x
 if [ "$rc" = 0 ] && ! grep -qE '^(::error|failed:|next:|more:)' "$rt/out"; then ok "a passing run: no block, no ::error"
 else bad "a passing run printed a block or an error" "$(cat "$rt/out")"; fi
 pre none
-echo "not yet confirmed: changed lines ran under the tests, it did not run because an earlier step failed; a run that gets past that step confirms it" > "$work/rt-$((n + 1))/changed.verdict"
+echo "not yet confirmed: changed lines ran under the tests. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." > "$work/rt-$((n + 1))/changed.verdict"
 test_verdict x
 grep -q '^::warning::not yet confirmed: changed lines' "$rt/out" && ok "with no fail line, a step that did not run is still a warning" \
   || bad "with no fail line the warning went" "$(cat "$rt/out")"
@@ -382,6 +386,30 @@ for s in "lint check ruff-check" "lint format ruff-format" "typecheck mypy mypy"
     else bad "ci / $j, steps.$id: the tool exits $code, the step exited $got" "$(cat "$d/out")"; fi
   done
 done
+
+echo "-- not yet confirmed: one fact per sentence (#1156)"
+# More of the lines: the changed-lines step itself, run with uv and git
+# failing (no pull request; pytest stopped; coverage recorded nothing), and
+# lint's zizmor lines (it did not finish; an advisory).
+step test "Changed lines under the tests" "$work/changed.sh"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$work/bin/uv"; chmod +x "$work/bin/uv"
+for c in "PR= COV=success PYTEST=success" "PR=7 COV=failure PYTEST=failure" "PR=7 COV=success PYTEST=success"; do
+  d="$work/rt-$((++n))"; mkdir -p "$d"
+  (cd "$d" && env PATH="$work/bin:$PATH" RUNNER_TEMP="$d" GIT_DIR="$d/no-git" $c bash -e "$work/changed.sh") > "$d/out" 2>&1
+  cat "$d/changed.verdict" >> "$d/out" 2>/dev/null
+done
+jpre; rm "$work/rt-$((n + 1))/zizmor.kva"; job_verdict lint
+jpre; echo "GHSA-mrrh-fwg8-r2c3 for tj-actions/changed-files@v35 (.github/workflows/ci.yml:9)" > "$work/rt-$((n + 1))/zizmor.kva"; job_verdict lint
+# Every line, whether a run printed it or the step left it for the summary.
+nyc="$(cat "$work"/rt-*/out "$work"/rt-*/summary 2>/dev/null | sed -n 's/^\(- \|::warning::\)\{0,1\}\(not yet confirmed: .*\)$/\2/p' | sort -u)"
+bad_form="$(grep -vE '^not yet confirmed: .+\. Why: .+\. What confirms it: .+\.$' <<<"$nyc" | grep -v '^$')"
+shapes="$(grep -oE '^not yet confirmed: (changed lines ran under the tests|no published advisory|GHSA|[^.]*)\. Why: [a-z]+ [a-z]+' <<<"$nyc" | sort -u | wc -l | tr -d ' ')"
+if [ -z "$bad_form" ] && [ "$shapes" -ge 6 ]; then ok "every not yet confirmed line read ($(grep -c . <<<"$nyc"), $shapes kinds) is what. Why: reason. What confirms it: run."
+else bad "not yet confirmed lines not in the form, or too few kinds read ($shapes)" "$bad_form"; fi
+grep -q '^not yet confirmed: changed lines ran under the tests. Why: coverage recorded no line' <<<"$nyc" \
+  && grep -q '^not yet confirmed: ruff check. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step.$' <<<"$nyc" \
+  && grep -q '^not yet confirmed: GHSA-mrrh-fwg8-r2c3 for tj-actions/changed-files@v35 (.github/workflows/ci.yml:9). Why: ' <<<"$nyc" \
+  && ok "the changed-lines step's, a stopped step's and an advisory's lines were among them" || bad "a kind of line was not read" "$nyc"
 
 echo "-- names, links and the page"
 python3 - "$wf" <<'PY' && ok "every step of ci / test that runs pytest has a name" || bad "a step that runs pytest has no name"

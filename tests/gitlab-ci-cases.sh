@@ -883,7 +883,7 @@ case "$(printf '%s\n' "$out" | grep "fail: pytest on .python-version, stopped at
   *) bad "the Verdict's time-limit line does not say to measure before raising the limit" "$out" ;;
 esac
 tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60 PLINTH_EXTRA_PYTHON_VERSIONS="3.13 3.14"
-expect "pytest stopped at the limit: the extra versions do not run" 1 "not yet confirmed: pytest on 3.13 3.14, it did not run"
+expect "pytest stopped at the limit: the extra versions do not run" 1 "not yet confirmed: pytest on 3.13 3.14. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step."
 tjob PLINTH_TEST_TIMEOUT_MINUTES=10 STUB_RC=1
 expect "a failing test is still a plain fail line" 1 "- fail: pytest on .python-version"
 refuse "a failing test is not blamed on the time limit" "stopped at the time limit"

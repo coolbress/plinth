@@ -637,6 +637,99 @@ def _project() -> tuple[dict, ...]:
     )
 
 
+CI_DOCS = f"{DOCS}#what-the-static-checks-read-and-what-they-do-not"
+
+
+def _ci() -> tuple[dict, ...]:
+    """Area D: the ci job, what it calls and passes, and the pins in the workflows."""
+    gh = ("github",)
+    caller_fix = "make the `ci` job call coolbress/plinth's python-ci.yml at a full commit SHA, as the template renders it"
+    return (
+        check("FC-D01", "every action is pinned to a commit", states=("pass", "warn", "unknown", "info"),
+              handoff="agent", docs=CI_DOCS, hosts=gh,
+              fix="pin each uses: to a full commit SHA, with the old ref as its comment",
+              messages={"good": "every action in {count} workflow file{s} is pinned to a commit ({total} uses)",
+                        "none": "no workflow file under .github/workflows: no action pin to check",
+                        "bad": "{rel}: not pinned to a full commit SHA: {lines}",
+                        "docker": "  {value}: pin the image by digest (docker://image@sha256:<digest>)",
+                        "sha": "  gh api {path} --jq .sha   (then pin the uses: to that SHA, the old ref as its comment)",
+                        "form": "  {value}: write it as owner/repo@<full commit SHA>",
+                        "unread": "{rel}: action pins not verified: line {lines} mentions uses in a form this "
+                                  "checker does not read"}),
+        check("FC-D02", "the ci job calls plinth's python-ci.yml at a commit",
+              states=("pass", "fail", "unknown", "info", "not_applicable"), handoff="agent", docs=CI_DOCS, hosts=gh,
+              needs=("files", "network"), fix=caller_fix,
+              messages={"repo": "the ci job on the default branch not verified: repos/{repo} could not be read",
+                        "nofile": "no {rel} on the default branch of {repo}: no `ci` job calls {workflow}",
+                        "notfile": "the ci job on the default branch not verified (the API did not return {rel} as a file)",
+                        "nocheckout": "the ci job not verified: no {rel} in the checkout, and the default branch was "
+                                      "not read ({why})",
+                        "unread": "the ci job {where} not verified: {value}",
+                        "missing": "{rel} {where}: {value}, so nothing calls {workflow} and plain jobs could report "
+                                   "its check names",
+                        "skippable": "the ci job {where} has {value}: only uses:, with:, secrets: and permissions: are "
+                                     "allowed; another key can get it skipped, renamed or cut short while plain jobs "
+                                     "report its check names",
+                        "remove": "  remove {value} from the `ci` job",
+                        "own": "the ci job {where} calls {value} ({repo} calls its own workflow by local path)",
+                        "good": "the ci job {where} calls {value}",
+                        "ref": "the ci job {where} calls {value}: not pinned to a full commit SHA, so what runs can "
+                               "change without a pull request",
+                        "other": "the ci job {where} calls {value}, not {workflow}",
+                        "hint": "  {command}",
+                        "js": "the ci job's call to {workflow} does not apply: that workflow runs Python's lint, "
+                              "typecheck, test and build, which have nothing to run on here"}),
+        check("FC-D03", "the ci job keeps max-diff-lines at or below plinth's default", states=("warn", "unknown"),
+              handoff="agent", docs=CI_DOCS, hosts=gh, fix="remove max-diff-lines from the ci job's with:, or lower it",
+              messages={"line": "the ci job {where} has a with: line this checker does not read: {line}; "
+                                "max-diff-lines and deps-fail-on-severity not verified",
+                        "value": "the ci job {where} passes {name}: its value is not read (an expression, or a form "
+                                 "this checker does not read)",
+                        "number": "the ci job {where} passes max-diff-lines: {value}: not read as a whole number",
+                        "off": "the ci job {where} passes max-diff-lines: {value}: ci / diff-size measures and never "
+                               "fails (plinth's default is {default})",
+                        "above": "the ci job {where} passes max-diff-lines: {value}, above plinth's default of "
+                                 "{default}: a larger diff passes ci / diff-size"}),
+        check("FC-D04", "the ci job keeps deps-fail-on-severity at plinth's default or stricter",
+              states=("warn", "unknown"), handoff="agent", docs=CI_DOCS, hosts=gh,
+              fix="remove deps-fail-on-severity from the ci job's with:, or set it to high or lower",
+              messages={"value": "the ci job {where} passes {name}: its value is not read (an expression, or a form "
+                                 "this checker does not read)",
+                        "critical": "the ci job {where} passes deps-fail-on-severity: {value}: a high-severity "
+                                    "advisory passes ci / deps (plinth's default is {default})",
+                        "severity": "the ci job {where} passes deps-fail-on-severity: {value}: not read as a severity"}),
+        check("FC-D05", "a web project's ci job passes web: true", states=("pass", "fail", "info"), handoff="agent",
+              docs=CI_DOCS, hosts=gh, archetypes=("web",), fix="add `web: true` under the ci job's with:",
+              messages={"good": "the ci job {where} passes web: true, so ci / migrations and ci / deploy-check run",
+                        "bad": "the ci job {where} has {seen}: on the web archetype ci / migrations and "
+                               "ci / deploy-check then pass as \"does not apply\" while the ruleset requires them",
+                        "add": "  add `web: true` under the ci job's with:, as plinth-template renders it"}),
+        check("FC-D06", "ci.yml carries the image job", states=("pass", "fail"), handoff="agent", docs=CI_DOCS,
+              hosts=gh, archetypes=CONDITIONAL_ARCHETYPES,
+              fix="add the template's `image` job, which builds and runs the container, to ci.yml",
+              messages={"good": "ci.yml carries the image job (docker build, docker run)",
+                        "bad": "ci.yml has no `image` job that builds and runs the container; the ruleset requires "
+                               "that check for this archetype"}),
+        check("FC-D07", ".gitlab-ci.yml carries the docker-image job", states=("pass", "fail"), handoff="agent",
+              docs=GITLAB_DOCS, hosts=("gitlab",), archetypes=CONDITIONAL_ARCHETYPES,
+              fix="add the template's docker-image job, which builds and runs the container, to .gitlab-ci.yml",
+              messages={"good": ".gitlab-ci.yml carries the {job} job (docker build, docker run)",
+                        "bad": ".gitlab-ci.yml has no `{job}` job that builds and runs the container; this "
+                               "archetype's floor has one"}),
+        check("FC-D08", ".gitlab-ci.yml includes plinth's GitLab pipeline at a commit, with a checksum",
+              states=("pass", "fail", "unknown"), handoff="agent", docs=GITLAB_DOCS, hosts=("gitlab",),
+              needs=("files", "network"),
+              fix="include plinth's gitlab/python-ci.yml at a full commit SHA with its integrity checksum, as the "
+                  "template renders it",
+              messages={"rule": "{msg}",
+                        "norule": "{what} not verified: the rule in {pipeline}'s floor-check job could not be read",
+                        "nopython": "{what} not verified: {why}",
+                        "norun": "{what} not verified: the rule did not run ({error})",
+                        "printed": "{what} not verified: the rule printed {line}",
+                        "silent": "{what} not verified: the rule printed no verdict ({why})"}),
+    )
+
+
 REGISTRY = _registry(
     # Where a result() call not yet given its id reports: any state, the
     # message its text. Not a check; the golden test counts what is left in it.
@@ -647,6 +740,7 @@ REGISTRY = _registry(
     *_documents(),
     *_agent(),
     *_project(),
+    *_ci(),
 )
 
 # The run, as emit() records it: one result per line printed, in order, and
@@ -1253,7 +1347,7 @@ def check_action_pins(root: Path) -> None:
     upstream is not asked."""
     files = workflow_files(root)
     if not files:
-        result("INFO", "no workflow file under .github/workflows: no action pin to check")
+        emit("FC-D01", "info", "none")
         return
     total, clean = 0, True
     for p in files:
@@ -1268,22 +1362,22 @@ def check_action_pins(root: Path) -> None:
                 unread.append(n)
         if unpinned:
             clean = False
-            result("WARN", f"{rel}: not pinned to a full commit SHA: " + ", ".join(f"line {n} {v}" for n, v in unpinned))
+            emit("FC-D01", "warn", "bad", {"rel": rel, "lines": ", ".join(f"line {n} {v}" for n, v in unpinned)})
             for v in sorted({v for _, v in unpinned}):
                 m = re.fullmatch(r"([^/@]+/[^/@]+)(?:/[^@]*)?@(.+)", v)
                 if v.startswith("docker://"):
-                    result("INFO", f"  {v}: pin the image by digest (docker://image@sha256:<digest>)")
+                    emit("FC-D01", "info", "docker", {"value": v})
                 elif m:
                     # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
-                    result("INFO", f"  gh api {shlex.quote(f'repos/{m.group(1)}/commits/{m.group(2)}')} --jq .sha   (then pin the uses: to that SHA, the old ref as its comment)")
+                    emit("FC-D01", "info", "sha", {"path": shlex.quote(f"repos/{m.group(1)}/commits/{m.group(2)}")})
                 else:
-                    result("INFO", f"  {v}: write it as owner/repo@<full commit SHA>")
+                    emit("FC-D01", "info", "form", {"value": v})
         if unread:
             clean = False
-            result("SKIP", f"{rel}: action pins not verified: line {', '.join(map(str, unread))} "
-                           "mentions uses in a form this checker does not read")
+            emit("FC-D01", "unknown", "unread", {"rel": rel, "lines": ", ".join(map(str, unread))},
+                 reason="uses in a form not read")
     if clean:
-        result("PASS", f"every action in {len(files)} workflow file{'s' * (len(files) != 1)} is pinned to a commit ({total} uses)")
+        emit("FC-D01", "pass", "good", {"count": len(files), "s": "s" * (len(files) != 1), "total": total})
 
 
 # The reusable workflow a consumer's `ci` job calls (#325). Its jobs report as
@@ -1471,14 +1565,14 @@ def check_inputs(inputs: dict[str, str | None], where: str) -> None:
     default, a SKIP for each it passes in a form not read, and a SKIP for a
     line that could pass either."""
     if UNREAD_LINE in inputs:
-        result("SKIP", f"the ci job {where} has a with: line this checker does not read: {inputs[UNREAD_LINE]}; "
-                       "max-diff-lines and deps-fail-on-severity not verified")
+        emit("FC-D03", "unknown", "line", {"where": where, "line": inputs[UNREAD_LINE]}, reason="a with: line not read")
     for name in ("max-diff-lines", "deps-fail-on-severity"):
         if name not in inputs:
             continue
         value = inputs[name]
         if value is None or "${{" in value:
-            result("SKIP", f"the ci job {where} passes {name}: its value is not read (an expression, or a form this checker does not read)")
+            emit("FC-D03" if name == "max-diff-lines" else "FC-D04", "unknown", "value", {"where": where, "name": name},
+                 reason="a value not read")
             continue
         if name == "max-diff-lines":
             try:
@@ -1486,19 +1580,16 @@ def check_inputs(inputs: dict[str, str | None], where: str) -> None:
             except ValueError:
                 n = math.nan
             if not math.isfinite(n) or n != int(n):
-                result("SKIP", f"the ci job {where} passes max-diff-lines: {value}: not read as a whole number")
+                emit("FC-D03", "unknown", "number", {"where": where, "value": value}, reason="not a whole number")
                 continue
             if n <= 0:
-                result("WARN", f"the ci job {where} passes max-diff-lines: {value}: ci / diff-size measures and never fails "
-                               f"(plinth's default is {DEFAULT_MAX_DIFF_LINES})")
+                emit("FC-D03", "warn", "off", {"where": where, "value": value, "default": DEFAULT_MAX_DIFF_LINES})
             elif n > DEFAULT_MAX_DIFF_LINES:
-                result("WARN", f"the ci job {where} passes max-diff-lines: {value}, above plinth's default of "
-                               f"{DEFAULT_MAX_DIFF_LINES}: a larger diff passes ci / diff-size")
+                emit("FC-D03", "warn", "above", {"where": where, "value": value, "default": DEFAULT_MAX_DIFF_LINES})
         elif value == "critical":
-            result("WARN", f"the ci job {where} passes deps-fail-on-severity: {value}: a high-severity advisory passes ci / deps "
-                           f"(plinth's default is {DEFAULT_SEVERITY})")
+            emit("FC-D04", "warn", "critical", {"where": where, "value": value, "default": DEFAULT_SEVERITY})
         elif value not in {"high", "moderate", "low"}:
-            result("SKIP", f"the ci job {where} passes deps-fail-on-severity: {value}: not read as a severity")
+            emit("FC-D04", "unknown", "severity", {"where": where, "value": value}, reason="not a severity")
 
 
 def check_web_input(inputs: dict[str, str | None], where: str, archetype: str | None) -> None:
@@ -1511,12 +1602,11 @@ def check_web_input(inputs: dict[str, str | None], where: str, archetype: str | 
         return
     value = inputs.get("web")
     if value is not None and value.strip().strip("'\"") in {"true", "True", "TRUE"}:
-        result("PASS", f"the ci job {where} passes web: true, so ci / migrations and ci / deploy-check run")
+        emit("FC-D05", "pass", "good", {"where": where})
         return
     seen = "no web: line" if "web" not in inputs else f"web: {value}" if value is not None else "a web: line this checker does not read"
-    result("FAIL", f"the ci job {where} has {seen}: on the web archetype ci / migrations and ci / deploy-check "
-                   "then pass as \"does not apply\" while the ruleset requires them")
-    result("INFO", "  add `web: true` under the ci job's with:, as plinth-template renders it")
+    emit("FC-D05", "fail", "bad", {"where": where, "seen": seen})
+    emit("FC-D05", "info", "add")
 
 
 def check_caller(root: Path, repo: str | None, network: bool, from_checkout: bool = False,
@@ -1541,9 +1631,9 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
             # A 404 is also what a repository that does not exist, or that
             # this token cannot see, answers for every file in it.
             if not isinstance(api(f"repos/{repo}", network), dict):
-                result("SKIP", f"the ci job on the default branch not verified: repos/{repo} could not be read")
+                emit("FC-D02", "unknown", "repo", {"repo": repo}, reason="the repository could not be read")
             else:
-                result("FAIL", f"no {rel} on the default branch of {repo}: no `ci` job calls {CALLER_WORKFLOW}")
+                emit("FC-D02", "fail", "nofile", {"rel": rel, "repo": repo, "workflow": CALLER_WORKFLOW})
             return
         text = None
         if isinstance(data, dict) and data.get("encoding") == "base64" and isinstance(data.get("content"), str):
@@ -1552,50 +1642,50 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
             except ValueError:
                 text = None
         if text is None:
-            result("SKIP", f"the ci job on the default branch not verified (the API did not return {rel} as a file)")
+            emit("FC-D02", "unknown", "notfile", {"rel": rel}, reason="not returned as a file")
             return
     else:
         why = "--caller-from-checkout" if from_checkout else "--no-network" if not network else "no --repo"
         where = f"in the checkout ({why})" if from_checkout else f"in the checkout, not the default branch ({why})"
         p = root / rel
         if not p.is_file():
-            result("SKIP", f"the ci job not verified: no {rel} in the checkout, and the default branch was not read ({why})")
+            emit("FC-D02", "unknown", "nocheckout", {"rel": rel, "why": why}, reason="no ci.yml in the checkout")
             return
         text = read(p)
     kind, value, inputs = caller_job(text)
     if kind == "unread":
-        result("SKIP", f"the ci job {where} not verified: {value}")
+        emit("FC-D02", "unknown", "unread", {"where": where, "value": value}, reason="the ci job not read")
         return
     then = f"then set the ci job's uses: to {CALLER_WORKFLOW}@<that SHA>"
     latest = (f'gh api "repos/{PLINTH_REPO}/commits/$(gh api repos/{PLINTH_REPO}/releases/latest --jq .tag_name)" '
               f"--jq .sha   (plinth's latest release; {then})")
     if kind == "missing":
-        result("FAIL", f"{rel} {where}: {value}, so nothing calls {CALLER_WORKFLOW} and plain jobs could report its check names")
-        result("INFO", f"  {latest}")
+        emit("FC-D02", "fail", "missing", {"rel": rel, "where": where, "value": value, "workflow": CALLER_WORKFLOW})
+        emit("FC-D02", "info", "hint", {"command": latest})
         return
     if kind == "skippable":
-        result("FAIL", f"the ci job {where} has {value}: only uses:, with:, secrets: and permissions: are allowed; "
-                       "another key can get it skipped, renamed or cut short while plain jobs report its check names")
-        result("INFO", f"  remove {value} from the `ci` job")
+        emit("FC-D02", "fail", "skippable", {"where": where, "value": value})
+        emit("FC-D02", "info", "remove", {"value": value})
         return
     if repo and repo.lower() == PLINTH_REPO and value == PLINTH_OWN_CALLER:
-        result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflow by local path)")
+        emit("FC-D02", "pass", "own", {"where": where, "value": value, "repo": PLINTH_REPO})
         check_inputs(inputs, where)
         check_web_input(inputs, where, archetype)
         return
     m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@(.*)", value)
     if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
         if re.fullmatch(r"[0-9a-fA-F]{40}", m.group(3)):
-            result("PASS", f"the ci job {where} calls {value}")
+            emit("FC-D02", "pass", "good", {"where": where, "value": value})
         else:
-            result("FAIL", f"the ci job {where} calls {value}: not pinned to a full commit SHA, so what runs can change without a pull request")
+            emit("FC-D02", "fail", "ref", {"where": where, "value": value})
             # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
-            result("INFO", f"  gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})")
+            emit("FC-D02", "info", "hint",
+                 {"command": f"gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})"})
         check_inputs(inputs, where)
         check_web_input(inputs, where, archetype)
     else:
-        result("FAIL", f"the ci job {where} calls {value}, not {CALLER_WORKFLOW}")
-        result("INFO", f"  {latest}")
+        emit("FC-D02", "fail", "other", {"where": where, "value": value, "workflow": CALLER_WORKFLOW})
+        emit("FC-D02", "info", "hint", {"command": latest})
 
 
 def plinth_pins(root: Path) -> dict:
@@ -3281,9 +3371,7 @@ def check_image_job(root: Path) -> None:
     m = re.search(r"^  image:\s*$", text, re.MULTILINE)
     # The job's own lines: up to the next two-space key. `buildx build` is a build too.
     block = re.split(r"^  \S", text[m.end():], maxsplit=1, flags=re.MULTILINE)[0] if m else ""
-    ok(m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
-       "ci.yml carries the image job (docker build, docker run)",
-       "ci.yml has no `image` job that builds and runs the container; the ruleset requires that check for this archetype")
+    verdict("FC-D06", m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block)
 
 
 def check_gitlab_image_job(root: Path) -> None:
@@ -3293,9 +3381,8 @@ def check_gitlab_image_job(root: Path) -> None:
     text = read(p) if p.is_file() else ""
     m = re.search(rf"^{GITLAB_IMAGE_JOB}:\s*$", text, re.MULTILINE)
     block = re.split(r"^\S", text[m.end():], maxsplit=1, flags=re.MULTILINE)[0] if m else ""
-    ok(m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
-       f".gitlab-ci.yml carries the {GITLAB_IMAGE_JOB} job (docker build, docker run)",
-       f".gitlab-ci.yml has no `{GITLAB_IMAGE_JOB}` job that builds and runs the container; this archetype's floor has one")
+    verdict("FC-D07", m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
+            {"job": GITLAB_IMAGE_JOB})
 
 
 def gitlab_job_block(tag: str) -> str | None:
@@ -3354,12 +3441,12 @@ def check_gitlab_include(root: Path, network: bool, text: str | None = None, sho
     what = f"{shown} includes plinth's GitLab pipeline at a full commit SHA"
     rule = gitlab_job_block("PY")
     if rule is None:
-        result("SKIP", f"{what} not verified: the rule in {GITLAB_PIPELINE.name}'s floor-check job could not be read")
+        emit("FC-D08", "unknown", "norule", {"what": what, "pipeline": GITLAB_PIPELINE.name}, reason="the rule not read")
         return
     with tempfile.TemporaryDirectory() as tmp:
         py, why = gitlab_rule_python(Path(tmp), network)
         if py is None:
-            result("SKIP", f"{what} not verified: {why}")
+            emit("FC-D08", "unknown", "nopython", {"what": what, "why": why}, reason="no python for the rule")
             return
         config = str(root / ".gitlab-ci.yml")
         if text is not None:
@@ -3369,16 +3456,20 @@ def check_gitlab_include(root: Path, network: bool, text: str | None = None, sho
             run = subprocess.run([py, "-c", rule], cwd=tmp, capture_output=True, text=True,
                                  env={**os.environ, "CONFIG": config}, timeout=60, check=False)
         except (OSError, subprocess.TimeoutExpired) as e:
-            result("SKIP", f"{what} not verified: the rule did not run ({e.__class__.__name__})")
+            emit("FC-D08", "unknown", "norun", {"what": what, "error": e.__class__.__name__}, reason="the rule did not run")
             return
     lines = [ln.replace(config, shown) for ln in run.stdout.splitlines() if ln.strip()]
-    kinds = {"pass": "PASS", "fail": "FAIL", "not yet confirmed": "SKIP"}
+    states = {"pass": "pass", "fail": "fail", "not yet confirmed": "unknown"}
     for ln in lines:
         kind, _, msg = ln.partition(": ")
-        result(kinds.get(kind, "SKIP"), msg if kind in kinds else f"{what} not verified: the rule printed {ln[:200]!r}")
+        if kind in states:
+            emit("FC-D08", states[kind], "rule", {"msg": msg},
+                 reason="the rule did not confirm it" if states[kind] == "unknown" else None)
+        else:
+            emit("FC-D08", "unknown", "printed", {"what": what, "line": repr(ln[:200])}, reason="the rule printed no verdict")
     if not lines:
         why = " ".join(run.stderr.split())[-200:] or f"exit {run.returncode}"
-        result("SKIP", f"{what} not verified: the rule printed no verdict ({why})")
+        emit("FC-D08", "unknown", "silent", {"what": what, "why": why}, reason="the rule printed no verdict")
 
 
 GITLAB_HOST = "gitlab.com"
@@ -5506,8 +5597,7 @@ def main() -> int:
             result("SKIP", "no --repo: wall not checked" if not a.repo else "--no-network: the GitLab wall not checked")
     else:
         if javascript:
-            result("N/A", f"the ci job's call to {CALLER_WORKFLOW} does not apply: that workflow runs Python's lint, "
-                          "typecheck, test and build, which have nothing to run on here")
+            emit("FC-D02", "not_applicable", "js", {"workflow": CALLER_WORKFLOW})
         else:
             check_caller(root, a.repo, network, a.caller_from_checkout, archetype)
         check_plinth_pins_agree(root)
