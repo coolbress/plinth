@@ -372,6 +372,21 @@ release needs a green run on the commit it tags, or on a commit with its tree
    closed ([closing an issue](docs/agents/issue-tracker.md#closing-an-issue)). It only reads; an issue it cannot read is printed as
    "not read", and the exit status does not change.
 
+## After something goes wrong
+
+An incident yields a check or nothing. The fix is a check that fails on what
+went wrong (a test under `tests/`, a CI step, or a script that stops), or only
+the record of what happened, in its issue; no new sentence of rule text goes
+into `AGENTS.md` (`CLAUDE.md`) or a shipped skill unless a check cannot hold
+it. Then the pull request says why: the check it considered, and what that
+check could not see (a judgement no file or command output shows, say).
+`tests/skill-size.sh` holds the sizes, `AGENTS.md` at most 110 lines and
+7,500 bytes and each `skills/*/SKILL.md` at most 500 lines and 20,000 bytes.
+Text that needs more raises its cap in `tests/size_caps.py` in the same pull
+request; `ci / diff-size` lists that file as a change to the checks (here
+`canary / diff-size`, which runs the same step), so an admin approves the
+raise, or decides it by pushing it.
+
 ## Cut a release
 
 [How to cut a release](docs/how-to/cut-a-release.md). A release that moves

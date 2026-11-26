@@ -4,20 +4,49 @@
 # machine:
 #
 #   - each skills/*/SKILL.md is at most 500 lines and 20,000 bytes;
+#   - AGENTS.md is at most 110 lines and 7,500 bytes, so rule text does not
+#     grow back one incident at a time;
 #   - it has no issue number (`#` and digits not after a letter or a slash);
 #   - a reference file beside it (skills/*/*.md other than SKILL.md) over 100
 #     lines opens with a `## Contents` list within its first 10 lines.
 #
 # A skill whose trim is another ticket's is a listed exception below, naming
 # that ticket; the ticket carries a criterion that removes its line here.
-# Optional first argument: another plugin root to read (the test's own cases).
+# The numbers are in tests/size_caps.py, which says why they are not here.
+# Optional first argument: another plugin root to read
+# (tests/skill-size-cases.sh); its tests/size_caps.py is read.
 set -uo pipefail
 root="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-max_lines=500
-max_bytes=20000
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
+
+# A cap that cannot be read stops the test: an empty one would hold nothing.
+# So does a name set twice: a raise by an added line loses no line, and
+# ci / diff-size lists only a test file that lost lines.
+cap() {
+  local v
+  v="$(sed -n "s/^$1 = \([0-9][0-9]*\)\$/\1/p" "$root/tests/size_caps.py" 2>/dev/null)"
+  [ -n "$v" ] || { echo >&2 "  FAIL  no '$1 = <number>' line in $root/tests/size_caps.py"; exit 1; }
+  [ "$(printf '%s\n' "$v" | wc -l | tr -d ' ')" = 1 ] \
+    || { echo >&2 "  FAIL  $1 is set more than once in $root/tests/size_caps.py: change its one line"; exit 1; }
+  printf '%s\n' "$v"
+}
+max_lines="$(cap SKILL_MAX_LINES)" || exit 1
+max_bytes="$(cap SKILL_MAX_BYTES)" || exit 1
+agents_lines="$(cap AGENTS_MAX_LINES)" || exit 1
+agents_bytes="$(cap AGENTS_MAX_BYTES)" || exit 1
+
+# AGENTS.md: CLAUDE.md is a link to it, so one file holds both.
+if [ -f "$root/AGENTS.md" ]; then
+  lines="$(wc -l < "$root/AGENTS.md" | tr -d ' ')"
+  bytes="$(wc -c < "$root/AGENTS.md" | tr -d ' ')"
+  if [ "$lines" -le "$agents_lines" ] && [ "$bytes" -le "$agents_bytes" ]
+  then ok "AGENTS.md: $lines lines, $bytes bytes"
+  else bad "AGENTS.md: $lines lines and $bytes bytes; the caps are $agents_lines lines and $agents_bytes bytes: make the incident a check, not a sentence (CONTRIBUTING.md, \"After something goes wrong\")"; fi
+else
+  bad "no AGENTS.md under $root: its size was not checked"
+fi
 
 # skill<TAB>ticket that trims it and removes this line
 exceptions='arsenal	coolbress/plinth#1086

@@ -82,6 +82,9 @@ jobs:
       - name: Shipped skills within size, with no issue numbers
         run: ./tests/skill-size.sh
 
+      - name: The size test fails AGENTS.md over its caps, and a cap it cannot read
+        run: ./tests/skill-size-cases.sh
+
       - name: The wall the door applies is a wall
         run: ./scripts/check-ruleset.sh
 
