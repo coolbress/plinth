@@ -640,6 +640,594 @@ def _project() -> tuple[dict, ...]:
     )
 
 
+CI_DOCS = f"{DOCS}#what-the-static-checks-read-and-what-they-do-not"
+
+
+def _ci() -> tuple[dict, ...]:
+    """Area D: the ci job, what it calls and passes, and the pins in the workflows."""
+    gh = ("github",)
+    caller_fix = "make the `ci` job call coolbress/plinth's python-ci.yml at a full commit SHA, as the template renders it"
+    return (
+        check("FC-D01", "every action is pinned to a commit", states=("pass", "warn", "unknown", "info"),
+              handoff="agent", docs=CI_DOCS, hosts=gh,
+              fix="pin each uses: to a full commit SHA, with the old ref as its comment",
+              messages={"good": "every action in {count} workflow file{s} is pinned to a commit ({total} uses)",
+                        "none": "no workflow file under .github/workflows: no action pin to check",
+                        "bad": "{rel}: not pinned to a full commit SHA: {lines}",
+                        "docker": "  {value}: pin the image by digest (docker://image@sha256:<digest>)",
+                        "sha": "  gh api {path} --jq .sha   (then pin the uses: to that SHA, the old ref as its comment)",
+                        "form": "  {value}: write it as owner/repo@<full commit SHA>",
+                        "unread": "{rel}: action pins not verified: line {lines} mentions uses in a form this "
+                                  "checker does not read"}),
+        check("FC-D02", "the ci job calls plinth's python-ci.yml at a commit",
+              states=("pass", "fail", "unknown", "info", "not_applicable"), handoff="agent", docs=CI_DOCS, hosts=gh,
+              needs=("files", "network"), fix=caller_fix,
+              messages={"repo": "the ci job on the default branch not verified: repos/{repo} could not be read",
+                        "nofile": "no {rel} on the default branch of {repo}: no `ci` job calls {workflow}",
+                        "notfile": "the ci job on the default branch not verified (the API did not return {rel} as a file)",
+                        "nocheckout": "the ci job not verified: no {rel} in the checkout, and the default branch was "
+                                      "not read ({why})",
+                        "unread": "the ci job {where} not verified: {value}",
+                        "missing": "{rel} {where}: {value}, so nothing calls {workflow} and plain jobs could report "
+                                   "its check names",
+                        "skippable": "the ci job {where} has {value}: only uses:, with:, secrets: and permissions: are "
+                                     "allowed; another key can get it skipped, renamed or cut short while plain jobs "
+                                     "report its check names",
+                        "remove": "  remove {value} from the `ci` job",
+                        "own": "the ci job {where} calls {value} ({repo} calls its own workflow by local path)",
+                        "good": "the ci job {where} calls {value}",
+                        "ref": "the ci job {where} calls {value}: not pinned to a full commit SHA, so what runs can "
+                               "change without a pull request",
+                        "other": "the ci job {where} calls {value}, not {workflow}",
+                        "hint": "  {command}",
+                        "js": "the ci job's call to {workflow} does not apply: that workflow runs Python's lint, "
+                              "typecheck, test and build, which have nothing to run on here"}),
+        check("FC-D03", "the ci job keeps max-diff-lines at or below plinth's default", states=("warn", "unknown"),
+              handoff="agent", docs=CI_DOCS, hosts=gh, fix="remove max-diff-lines from the ci job's with:, or lower it",
+              messages={"line": "the ci job {where} has a with: line this checker does not read: {line}; "
+                                "max-diff-lines and deps-fail-on-severity not verified",
+                        "value": "the ci job {where} passes {name}: its value is not read (an expression, or a form "
+                                 "this checker does not read)",
+                        "number": "the ci job {where} passes max-diff-lines: {value}: not read as a whole number",
+                        "off": "the ci job {where} passes max-diff-lines: {value}: ci / diff-size measures and never "
+                               "fails (plinth's default is {default})",
+                        "above": "the ci job {where} passes max-diff-lines: {value}, above plinth's default of "
+                                 "{default}: a larger diff passes ci / diff-size"}),
+        check("FC-D04", "the ci job keeps deps-fail-on-severity at plinth's default or stricter",
+              states=("warn", "unknown"), handoff="agent", docs=CI_DOCS, hosts=gh,
+              fix="remove deps-fail-on-severity from the ci job's with:, or set it to high or lower",
+              messages={"value": "the ci job {where} passes {name}: its value is not read (an expression, or a form "
+                                 "this checker does not read)",
+                        "critical": "the ci job {where} passes deps-fail-on-severity: {value}: a high-severity "
+                                    "advisory passes ci / deps (plinth's default is {default})",
+                        "severity": "the ci job {where} passes deps-fail-on-severity: {value}: not read as a severity"}),
+        check("FC-D05", "a web project's ci job passes web: true", states=("pass", "fail", "info"), handoff="agent",
+              docs=CI_DOCS, hosts=gh, archetypes=("web",), fix="add `web: true` under the ci job's with:",
+              messages={"good": "the ci job {where} passes web: true, so ci / migrations and ci / deploy-check run",
+                        "bad": "the ci job {where} has {seen}: on the web archetype ci / migrations and "
+                               "ci / deploy-check then pass as \"does not apply\" while the ruleset requires them",
+                        "add": "  add `web: true` under the ci job's with:, as plinth-template renders it"}),
+        check("FC-D06", "ci.yml carries the image job", states=("pass", "fail"), handoff="agent", docs=CI_DOCS,
+              hosts=gh, archetypes=CONDITIONAL_ARCHETYPES,
+              fix="add the template's `image` job, which builds and runs the container, to ci.yml",
+              messages={"good": "ci.yml carries the image job (docker build, docker run)",
+                        "bad": "ci.yml has no `image` job that builds and runs the container; the ruleset requires "
+                               "that check for this archetype"}),
+        check("FC-D07", ".gitlab-ci.yml carries the docker-image job", states=("pass", "fail"), handoff="agent",
+              docs=GITLAB_DOCS, hosts=("gitlab",), archetypes=CONDITIONAL_ARCHETYPES,
+              fix="add the template's docker-image job, which builds and runs the container, to .gitlab-ci.yml",
+              messages={"good": ".gitlab-ci.yml carries the {job} job (docker build, docker run)",
+                        "bad": ".gitlab-ci.yml has no `{job}` job that builds and runs the container; this "
+                               "archetype's floor has one"}),
+        check("FC-D08", ".gitlab-ci.yml includes plinth's GitLab pipeline at a commit, with a checksum",
+              states=("pass", "fail", "unknown"), handoff="agent", docs=GITLAB_DOCS, hosts=("gitlab",),
+              needs=("files", "network"),
+              fix="include plinth's gitlab/python-ci.yml at a full commit SHA with its integrity checksum, as the "
+                  "template renders it",
+              messages={"rule": "{msg}",
+                        "norule": "{what} not verified: the rule in {pipeline}'s floor-check job could not be read",
+                        "nopython": "{what} not verified: {why}",
+                        "norun": "{what} not verified: the rule did not run ({error})",
+                        "printed": "{what} not verified: the rule printed {line}",
+                        "silent": "{what} not verified: the rule printed no verdict ({why})"}),
+    )
+
+
+WALL_DOCS = f"{DOCS}#run"
+PUSH_DOCS = f"{DOCS}#push-protection"
+ALLOWLIST_DOCS = f"{DOCS}#the-actions-allowlist-and-private-vulnerability-reporting"
+BESIDE_DOCS = f"{DOCS}#what-the-door-sets-beside-the-wall-and-the-projects-own-answers"
+PRIVATE_DOCS = f"{DOCS}#a-private-repository"
+# The rule types the door's ruleset carries on the default branch, each its own check (#1103).
+WALL_RULES = (("FC-E13", "deletion"), ("FC-E14", "non_fast_forward"), ("FC-E15", "pull_request"),
+              ("FC-E16", "required_status_checks"))
+WALL_IS_THE_RULES = "an unprotected default branch lets a push or merge reach everyone, and a pushed commit stays"
+
+
+def _wall() -> tuple[dict, ...]:
+    """Area E: the wall, the repository settings read live with --repo."""
+    gh, gl = ("github",), ("gitlab",)
+    net, admin = ("network",), ("network", "admin")
+    rule_baseline = {"deletion": ("OSPS-AC-03.02",), "pull_request": ("OSPS-AC-03.01",),
+                     "required_status_checks": ("OSPS-QA-03.01",)}
+    return (
+        check("FC-E01", "the GitLab default branch is protected", states=("pass", "fail", "unknown", "info"),
+              handoff="admin", docs=GITLAB_DOCS, hosts=gl, needs=net, baseline=("OSPS-AC-03.01",),
+              not_keepable=WALL_IS_THE_RULES,
+              fix="protect the default branch: no one pushes, Maintainers merge, no force push",
+              messages={"unread": "the GitLab wall of {repo} not verified: {why}",
+                        "nobranch": "{repo} has no default branch GitLab names; its protection, merge checks and "
+                                    "include not verified",
+                        "norepo": "no --repo: wall not checked",
+                        "offline": "--no-network: the GitLab wall not checked",
+                        "rules": "the protection of {branch} not verified: protected branches are not readable with "
+                                 "this login (it needs the Maintainer role on GitLab.com), or an API error",
+                        "none": "{branch} is not a protected branch on {repo}: anyone with Developer can push to it",
+                        "create": "  glab api --hostname {host} -X POST projects/{enc}/protected_branches -f "
+                                  "name={branch} -F push_access_level=0 -F merge_access_level=40 -F "
+                                  "allow_force_push=false   (a Maintainer)",
+                        "weak": "{branch}'s protection on {repo} is weaker than the door's (rules that apply: "
+                                "{names}): {bad}",
+                        "edit": "  {edit}#js-protected-branches-settings   (each rule that matches {branch}: Allowed "
+                                "to push and merge: No one; Allowed to merge: Maintainers; Allowed to force push: off)",
+                        "good": "{branch} is protected on {repo}: no one pushes, Maintainers merge, no force push "
+                                "(rules that apply: {names})"}),
+        check("FC-E02", "a GitLab merge request merges only on a green pipeline",
+              states=("pass", "fail", "unknown", "info"), handoff="admin", docs=GITLAB_DOCS, hosts=gl, needs=net,
+              baseline=("OSPS-QA-03.01",), not_keepable=WALL_IS_THE_RULES,
+              fix="turn on \"Pipelines must succeed\" and do not count skipped pipelines",
+              messages={"bad": "the merge checks of {repo} let a merge request merge without a green pipeline: {off}",
+                        "hint": "  glab api --hostname {host} -X PUT projects/{enc} -F "
+                                "only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false"
+                                "   (a Maintainer; or {url})",
+                        "absent": "{fields} of {repo} not verified: GitLab did not return {them} to this login (a "
+                                  "project member reads them)",
+                        "good": "{repo} merges only on a green pipeline (\"Pipelines must succeed\" on, skipped "
+                                "pipelines not counted)"}),
+        check("FC-E03", "a GitLab merge request is squashed and fast-forwarded",
+              states=("pass", "fail", "unknown", "info"), handoff="admin", docs=GITLAB_DOCS, hosts=gl, needs=net,
+              not_keepable=WALL_IS_THE_RULES, fix="set squash to always and the merge method to fast-forward",
+              messages={"bad": "{repo} merges other than squash and fast-forward: {off}; main gains commits that are "
+                               "not one squash per merge request",
+                        "hint": "  glab api --hostname {host} -X PUT projects/{enc} -f squash_option=always -f "
+                                "merge_method=ff   (a Maintainer; or {url})",
+                        "absent": "{fields} of {repo} not verified: GitLab did not return {them} to this login (a "
+                                  "project member reads them)",
+                        "good": "{repo} squashes every merge request and fast-forwards"}),
+        check("FC-E04", "the default branch carries the GitLab pipeline definition", states=("fail", "unknown"),
+              handoff="agent", docs=GITLAB_DOCS, hosts=gl, needs=net,
+              fix="commit .gitlab-ci.yml, as the template renders it, to the default branch",
+              messages={"outside": "the include on {branch} not verified: the pipeline definition is {cfg}, outside "
+                                   "this project",
+                        "absent": "no {cfg} on {branch} of {repo}: no pipeline runs, so \"Pipelines must succeed\" "
+                                  "holds nothing back",
+                        "error": "the include on {branch} not verified: {cfg} could not be read (an API error)"}),
+        check("FC-E05", "every label the door creates is present", states=("pass", "warn", "unknown", "info"),
+              handoff="agent", docs=WALL_DOCS, needs=net, fix="create each missing label, as the fix line says",
+              messages={"nofile": "labels.txt not found next to the checker; labels not checked",
+                        "unread": "labels not verified (offline, not logged in, or API error)",
+                        "good": "every label the door creates is present ({count})",
+                        "bad": "labels the door creates that are missing: {missing}",
+                        "gh": "  gh label create {name} --repo {repo} --color {colour}",
+                        "glab": "  glab label create --name {name} --color '#{colour}' --repo {repo}"}),
+        check("FC-E06", "the repository is read for the wall", states=("fail", "unknown", "info"), handoff="person",
+              docs=WALL_DOCS, hosts=gh, needs=net, fix="pass --repo owner/name, online, with a login that can read it",
+              messages={"norepo": "no --repo: wall not checked",
+                        "offline": "wall not checked (offline)",
+                        "absent": "repos/{repo} not found (404)",
+                        "error": "could not read repos/{repo} (API error)",
+                        "expect": "wall expectation: checks {expected}, merge methods {methods}"}),
+        check("FC-E07", "the default branch is main", states=("warn", "unknown", "info"), handoff="admin",
+              docs=WALL_DOCS, hosts=gh, needs=net, fix="make main the default branch",
+              messages={"nobranch": "default branch not verified (the API did not report one); reading the wall on main",
+                        "where": "the wall is checked on {branch}, the repository's default branch",
+                        "notmain": "the default branch is {branch}, not main: the rules below govern {branch}. "
+                                   "If main is where the work happens, main is unprotected",
+                        "hint": "  gh api repos/{repo} -X PATCH -f default_branch=main   (then run this again)"}),
+        check("FC-E08", "squash commits carry the pull request title and description",
+              states=("pass", "fail", "unknown", "review"), handoff="admin", docs=WALL_DOCS, hosts=gh, needs=net,
+              fix="set the squash commit title to PR_TITLE and its message to PR_BODY",
+              messages={"review": "squash commit settings not visible with this token; /plinth:floor-check reads them "
+                                  "with a login that administers the repository",
+                        "unread": "squash commit settings not visible with this token (a push-access token sees them)",
+                        "good": "squash commits carry the pull request title and description",
+                        "bad": "squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, "
+                               "PR_BODY)"}),
+        check("FC-E09", "push protection is on", states=("pass", "warn", "unknown", "review", "info"),
+              handoff="admin", docs=PUSH_DOCS, hosts=gh, needs=admin, baseline=("OSPS-BR-07.01",),
+              not_keepable="a pushed secret reaches everyone who can read the repository, and stays in its history",
+              fix="turn on secret scanning and push protection",
+              messages={"review": "push protection is not read here: the Actions token does not get the repository's "
+                                  "security settings; /plinth:floor-check reads it with a person's login",
+                        "plan": "push protection not verified (GitHub answers no security settings for this private "
+                                "repository to a login that administers it, with a token that reads its Actions "
+                                "permissions: GitHub Secret Protection (a paid product for Team and Enterprise) not "
+                                "on its plan. In its place: `ci / secrets`, which finds a secret after the push)",
+                        "token": "push protection not verified (GitHub answers no security settings for this private "
+                                 "repository to a login that administers it, and this token was not shown to read an "
+                                 "administration setting: a token without the Administration permission, or GitHub "
+                                 "Secret Protection (a paid product for Team and Enterprise) not on its plan)",
+                        "admin": "{line}",
+                        "unread": "push protection not verified (this token does not read the repository's security "
+                                  "settings; one with repository administration does)",
+                        "good": "push protection is on: GitHub refuses a push that carries a secret in a format it "
+                                "knows; anyone with write access can still push it past the block by giving a reason",
+                        "gap": "push protection is not expected here: GitHub Secret Protection is not enabled on this "
+                               "private repository (a paid product for Team and Enterprise), so a push that carries a "
+                               "secret is not refused. In its place: `ci / secrets`, which finds a secret after the "
+                               "push, when it has to be revoked. {turn_on}",
+                        "nostatus": "push protection not verified (it is off, and GitHub reports no secret scanning "
+                                    "status for this private repository: whether GitHub Secret Protection is enabled "
+                                    "there was not read)",
+                        "bad": "push protection is off: a push that carries a secret reaches GitHub, and "
+                               "`ci / secrets` reports it only afterwards",
+                        "hint": "  gh api -X PATCH repos/{repo} --input - <<<'{body}'   (needs repository "
+                                "administration; on a private repository, GitHub Secret Protection too)",
+                        "bypass": "  once on, anyone with write access can still push a secret past it by giving a "
+                                  "reason, and GitHub records who and why",
+                        "none": "push protection not verified (GitHub reports no push protection status for this "
+                                "repository)"}),
+        check("FC-E10", "SECURITY.md names a route this repository takes", states=("warn", "info"), handoff="agent",
+              docs=ALLOWLIST_DOCS, hosts=gh, fix="re-render SECURITY.md with the repository's visibility",
+              messages={"form": "SECURITY.md sends a reporter to Security → Report a vulnerability, which a private "
+                                "repository is not offered: a report has nowhere to go",
+                        "form_fix": "  re-render it with the issue route: copier update --defaults --data "
+                                    "visibility=private (or /plinth:template-update with that answer), then commit "
+                                    "SECURITY.md and .copier-answers.yml",
+                        "issue": "SECURITY.md tells a reporter to open an issue, and this repository is public: the "
+                                 "report is public too",
+                        "issue_fix": "  re-render it with the form: copier update --defaults --data visibility=public, "
+                                     "then turn private vulnerability reporting on"}),
+        check("FC-E11", "private vulnerability reporting is on", states=("pass", "warn", "unknown", "review", "info"),
+              handoff="admin", docs=ALLOWLIST_DOCS, hosts=gh, needs=admin, baseline=("OSPS-VM-03.01",),
+              fix="turn private vulnerability reporting on",
+              messages={"private": "private vulnerability reporting is not offered on a private repository",
+                        "good": "private vulnerability reporting is on: SECURITY.md's Security → Report a "
+                                "vulnerability works",
+                        "bad": "private vulnerability reporting is off: SECURITY.md sends a reporter to Security → "
+                               "Report a vulnerability, which this repository does not show",
+                        "hint": "  gh api -X PUT repos/{repo}/private-vulnerability-reporting   (needs repository "
+                                "administration)",
+                        "review": "private vulnerability reporting is not read here: /plinth:floor-check reads it with "
+                                  "a login that administers the repository",
+                        "unread": "private vulnerability reporting not verified (GitHub gave no answer this checker "
+                                  "reads; a login with repository administration reads it)"}),
+        check("FC-E12", "rules govern the default branch", states=("fail", "unknown"), handoff="admin",
+              docs=WALL_DOCS, hosts=gh, needs=net, baseline=("OSPS-AC-03.01",), not_keepable=WALL_IS_THE_RULES,
+              fix="apply the door's ruleset to the default branch",
+              messages={"unread": "could not read the rules of {branch} (API error)",
+                        "none": "no rules govern {branch}: the wall is down"}),
+        *(check(cid, f"the default branch has a {t} rule", states=TWO_WAY, handoff="admin", docs=WALL_DOCS,
+                hosts=gh, needs=net, baseline=rule_baseline.get(t, ()), not_keepable=WALL_IS_THE_RULES,
+                fix=f"add the {t} rule of the door's ruleset to the default branch",
+                messages={"good": "{branch}: " + t + " rule active", "bad": "{branch}: " + t + " rule missing"})
+          for cid, t in WALL_RULES),
+        check("FC-E17", "merge methods stay within the ruleset's", states=TWO_WAY, handoff="admin", docs=WALL_DOCS,
+              hosts=gh, needs=net, not_keepable=WALL_IS_THE_RULES,
+              fix="set the pull_request rule's allowed merge methods to the ruleset's",
+              messages={"good": "{branch}: merge methods within {allowed}",
+                        "bad": "{branch}: merge methods widened to {methods}"}),
+        check("FC-E18", "required checks are strict", states=TWO_WAY, handoff="admin", docs=WALL_DOCS, hosts=gh,
+              needs=net, not_keepable=WALL_IS_THE_RULES,
+              fix="require branches to be up to date before merging in the required-checks rule",
+              messages={"good": "{branch}: required checks are strict (branch must be current)",
+                        "bad": "{branch}: required checks are not strict"}),
+        check("FC-E19", "every expected check is required",
+              states=("pass", "fail", "unknown", "info", "not_applicable"), handoff="admin", docs=WALL_DOCS,
+              hosts=gh, needs=net, baseline=("OSPS-QA-03.01",), not_keepable=WALL_IS_THE_RULES,
+              fix="require the dropped checks again, as the fix line says",
+              messages={"na": "{branch}: requiring {checks} does not apply: python-ci.yml runs those checks, and a "
+                              "JavaScript or TypeScript repository does not call it",
+                        "held": "{branch}: required check {check} not required yet: this checkout records the "
+                                "{archetype} archetype, which runs it, and {branch} records {old}, which does not (an "
+                                "archetype move). Once it is merged and {check} has run on {branch}, a person "
+                                "requires it (repository administration): scripts/with-admin-token.sh "
+                                "scripts/require-check.sh --repo {repo} '{check}'",
+                        "good": "{branch}: all {count} expected checks are required",
+                        "bad": "{branch}: required checks dropped: {missing}",
+                        "hint": "  require them again (repository administration): scripts/with-admin-token.sh "
+                                "scripts/upgrade-ruleset.sh {repo} {pairs}"}),
+        check("FC-E20", "each required check comes from its expected app", states=("pass", "fail", "unknown", "info"),
+              handoff="admin", docs=WALL_DOCS, hosts=gh, needs=net, not_keepable=WALL_IS_THE_RULES,
+              fix="pin each required check to the app the door's ruleset names",
+              messages={"nocompare": "{branch}: the source of each required check is not compared (no --ruleset)",
+                        "unknown": "{branch}: the expected app for required check {check} is not known (not pinned in "
+                                   "--ruleset); its source is not compared",
+                        "any": "{branch}: required check {check} accepts a status from any source (expected app "
+                               "{want}); anyone with write access can satisfy it",
+                        "other": "{branch}: required check {check} comes from app {got}, not {want}",
+                        "good": "{branch}: required checks come from the expected {label} ({apps})"}),
+        check("FC-E21", "CodeQL is enforced on the default branch",
+              states=("pass", "fail", "unknown", "review", "info"), handoff="admin", docs=PRIVATE_DOCS, hosts=gh,
+              needs=admin, baseline=("OSPS-VM-06.02",), not_keepable=WALL_IS_THE_RULES,
+              fix="add the door's code_scanning rule for CodeQL (scripts/add-ruleset-rule.sh <repo> code-scanning)",
+              messages={"good": "{branch}: CodeQL enforced ({how})",
+                        "bad": "{branch}: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check "
+                               "name",
+                        "gap": "{branch}: CodeQL is not expected here: GitHub Code Security is not enabled on this "
+                               "private repository (a paid product for Team and Enterprise), so no code_scanning rule "
+                               "for CodeQL and no scan. In its place: `ci / lint`'s security rules. {turn_on}",
+                        "review": "{branch}: CodeQL is not judged here: no code_scanning rule for CodeQL and no CodeQL "
+                                  "check name, which on a private repository is a defect only where GitHub Code "
+                                  "Security is enabled, and the Actions token does not get the repository's security "
+                                  "settings. The licence state is judged when /plinth:floor-check is run with a login "
+                                  "that administers the repository",
+                        "plan": "{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check "
+                                "name, which on a private repository is a defect only where GitHub Code Security is "
+                                "enabled (GitHub answers no security settings for this private repository to a login "
+                                "that administers it, with a token that reads its Actions permissions: GitHub Code "
+                                "Security (a paid product for Team and Enterprise) not on its plan. In its place: "
+                                "`ci / lint`'s security rules)",
+                        "token": "{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check "
+                                 "name, which on a private repository is a defect only where GitHub Code Security is "
+                                 "enabled (GitHub answers no security settings for this private repository to a login "
+                                 "that administers it, and this token was not shown to read an administration "
+                                 "setting: a token without the Administration permission, or GitHub Code Security not "
+                                 "on its plan)",
+                        "admin": "{line}",
+                        "unread": "{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check "
+                                  "name, which on a private repository is a defect only where GitHub Code Security is "
+                                  "enabled ({why})"}),
+        check("FC-E22", "CodeQL's alert thresholds are the ruleset's", states=("pass", "fail", "unknown", "info"),
+              handoff="admin", docs=WALL_DOCS, hosts=gh, needs=net, baseline=("OSPS-VM-06.02",),
+              not_keepable=WALL_IS_THE_RULES, fix="set the CodeQL rule's alert thresholds back to the ruleset's",
+              messages={"nopolicy": "{branch}: CodeQL alert thresholds not compared (no --ruleset)",
+                        "bad": "{branch}: CodeQL alert thresholds weakened: {weak}",
+                        "edit": "  the rule is edited in https://github.com/{repo}/settings/rules/{rid}",
+                        "unread": "{branch}: CodeQL alert thresholds not verified: {fields} unreadable",
+                        "good": "{branch}: CodeQL alert thresholds {alerts} / {security} (expected {want_alerts} / "
+                                "{want_security})",
+                        "name": "{branch}: CodeQL alert thresholds not verified: a check name does not set them; the "
+                                "door's code_scanning rule does (scripts/add-ruleset-rule.sh {repo} code-scanning)"}),
+        check("FC-E23", "CodeQL default setup analyses the project's language",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="admin", docs=WALL_DOCS, hosts=gh,
+              needs=admin, fix="add the project's language to CodeQL default setup",
+              messages={"review": "CodeQL default setup languages not read here: the Actions token cannot read "
+                                  "code-scanning/default-setup; /plinth:floor-check reads them with a login that "
+                                  "administers the repository",
+                        "plan": "CodeQL default setup languages not verified (code-scanning/default-setup gave no "
+                                "answer on a private repository whose plan answers no security settings to its "
+                                "administrator)",
+                        "unread": "CodeQL default setup languages not verified (the token cannot read "
+                                  "code-scanning/default-setup)",
+                        "good": "CodeQL default setup analyses {langs}",
+                        "bad": "CodeQL default setup analyses {langs}, not {code}",
+                        "hint": "  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' "
+                                "-f 'languages[]={lang}'"}),
+        check("FC-E24", "no ruleset has a bypass actor", states=("pass", "fail", "unknown", "review"),
+              handoff="admin", docs=WALL_DOCS, hosts=gh, needs=admin, not_keepable=WALL_IS_THE_RULES,
+              fix="remove the bypass actors from the ruleset",
+              messages={"review": "ruleset {rid}: bypass actors not visible with this token; /plinth:floor-check "
+                                  "reads them with a login that administers the repository",
+                        "unread": "ruleset {rid}: bypass actors not visible with this token (an admin-read token sees "
+                                  "them)",
+                        "good": "ruleset {rid}: no bypass actors",
+                        "bad": "ruleset {rid}: bypass actors present: {actors}"}),
+        check("FC-E25", "a ruleset reserves the merge to the repository admin",
+              states=("pass", "fail", "warn", "unknown", "review", "info"), handoff="admin", docs=WALL_DOCS,
+              hosts=gh, needs=admin, not_keepable=WALL_IS_THE_RULES,
+              fix="apply the door's merge ruleset (scripts/create-merge-ruleset.sh)",
+              messages={"nocompare": "{branch}: the ruleset that reserves the merge to an admin is not compared (no "
+                                     "--merge-ruleset)",
+                        "outside": "{branch}: the merge ruleset not verified: the update rule comes from a ruleset "
+                                   "outside this repository, whose bypass actors are not read here",
+                        "unlisted": "{branch}: the merge ruleset not verified: no ruleset in effect carries update, "
+                                    "and this repository's rulesets could not be listed",
+                        "idle": "{branch}: the merge ruleset is not in effect: {idle}. Any account with write access "
+                                "can merge; expected enforcement {enforcement} on {conditions}",
+                        "missing": "{branch}: no ruleset reserves the merge to an admin: any account with write "
+                                   "access, an agent's own account included, can merge a pull request",
+                        "create": "  scripts/with-admin-token.sh scripts/create-merge-ruleset.sh {repo}   (from a "
+                                  "plinth checkout)",
+                        "types": "{branch}: ruleset {rid} carries {types}, not {want} alone: a bypass actor on it "
+                                 "would reach every one of those rules",
+                        "scope": "ruleset {rid}: the merge ruleset applies to {scope}, expected {want}",
+                        "review": "ruleset {rid}: the merge ruleset's bypass actors not visible with this token; "
+                                  "/plinth:floor-check reads them with a login that administers the repository",
+                        "unread": "ruleset {rid}: the merge ruleset's bypass actors not visible with this token (an "
+                                  "admin-read token sees them)",
+                        "actors": "ruleset {rid}: the merge ruleset's bypass actors are {actors}, expected {want}",
+                        "noscope": "ruleset {rid}: the merge ruleset's scope (target, enforcement, conditions) not read",
+                        "good": "ruleset {rid}: the merge is reserved to the repository admin (update, the admin role "
+                                "exempt)"}),
+        check("FC-E26", "the merge is a boundary for this login", states=("pass", "unknown", "review", "info"),
+              handoff="person", docs=WALL_DOCS, hosts=gh, needs=net,
+              fix="leave no admin login where the agent can reach it",
+              messages={"review": "the merge: not verified here: the Actions token is not the agent's login; "
+                                  "/plinth:floor-check decides guidance or boundary with the login the agent inherits",
+                        "role": "the merge: not verified: whether this login is the repository's admin could not be "
+                                "read",
+                        "readonly": "the merge: boundary. This login cannot write to the repository, so it cannot "
+                                    "merge; you merge. It holds while no login with write access is left where the "
+                                    "agent can reach it",
+                        "write": "the merge: not verified: whether this login can write to the repository could not "
+                                 "be read",
+                        "admin": "the merge: guidance. This login is the repository's admin, and GitHub lets the admin "
+                                 "merge, so an agent working under it can merge too; it is asked to wait for your "
+                                 "word, not stopped",
+                        "stands": "the merge: boundary. This login is not the repository's admin and the merge ruleset "
+                                  "stands on {branch}, so GitHub refuses its merge; you merge, with the button or your "
+                                  "own login. It holds while no admin login is left where the agent can reach it",
+                        "never": "the merge: boundary. This login is not the repository's admin, and GitHub says it "
+                                 "can never bypass the merge ruleset on {branch}, so GitHub refuses its merge. It "
+                                 "holds while no admin login is left where the agent can reach it. Whether the admin "
+                                 "is still exempt, so that your own merge goes through, is not read with this login: "
+                                 "run /plinth:floor-check with yours",
+                        "missing": "the merge: guidance. This login is not the repository's admin, but no ruleset "
+                                   "reserves the merge to the admin, so it can merge; the WARN above adds that ruleset",
+                        "norules": "the merge: guidance. This login is not the repository's admin, but no rules "
+                                   "govern {branch}, so nothing reserves the merge to the admin and it can merge; the "
+                                   "FAIL above is the wall to restore",
+                        "unread": "the merge: not verified: this login is not the repository's admin, and the rules of "
+                                  "{branch} could not be read, so whether a ruleset reserves the merge is not known",
+                        "shape": "the merge: not verified: this login is not the repository's admin, but the merge "
+                                 "ruleset above was not found in its shape"}),
+        check("FC-E27", "the Actions allowlist lets every action the workflows use start",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="admin", docs=ALLOWLIST_DOCS, hosts=gh,
+              needs=("files", "network", "admin"), fix="allow each refused action, as the fix line says",
+              messages={"review": "the Actions allowlist is not read here: /plinth:floor-check reads it with a login "
+                                  "that administers the repository",
+                        "unread": "the Actions allowlist not verified (this token does not read the repository's "
+                                  "Actions permissions; one with repository administration does)",
+                        "off": "GitHub Actions is turned off on this repository: no workflow runs",
+                        "docker": "{file}: line {line} {value}: whether the Actions allowlist lets an image run is not "
+                                  "judged here",
+                        "form": "{file}: the Actions allowlist not verified for line {lines}: it mentions uses in a "
+                                "form this checker does not read",
+                        "blocking": "the Actions allowlist not verified: it carries the blocking pattern{s} "
+                                    "{patterns}, and GitHub documents no order between blocking and allowing patterns",
+                        "good": "the Actions allowlist lets every action the workflows use start ({count} uses)",
+                        "bad": "the Actions allowlist refuses: {refused}. A run that uses one ends in startup_failure, "
+                               "with no job and no message saying why",
+                        "select": "  gh api -X PUT repos/{repo}/actions/permissions -F enabled=true -f "
+                                  "allowed_actions=selected   (needs repository administration; then run this again "
+                                  "for the allowlist)",
+                        "allow": "  gh api -X PUT repos/{repo}/actions/permissions/selected-actions --input - "
+                                 "<<<{body}   (needs repository administration)"}),
+        check("FC-E28", "the Actions token reads only and cannot approve a pull request",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="admin", docs=BESIDE_DOCS, hosts=gh,
+              needs=admin, baseline=("OSPS-AC-04.01",),
+              fix="set default_workflow_permissions to read and can_approve_pull_request_reviews to false",
+              messages={"review": "the Actions token's default permissions are not read here: /plinth:floor-check "
+                                  "reads them with a login that administers the repository",
+                        "unread": "the Actions token's default permissions not verified (this token does not read the "
+                                  "repository's Actions settings; one with repository administration does)",
+                        "good": "the Actions token reads only by default and cannot approve a pull request",
+                        "bad": "the Actions settings: {off}",
+                        "hint": "  gh api -X PUT repos/{repo}/actions/permissions/workflow -f "
+                                "default_workflow_permissions=read -F can_approve_pull_request_reviews=false   (needs "
+                                "repository administration)"}),
+        check("FC-E29", "a tag ruleset keeps released tags from being moved or deleted",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="admin", docs=BESIDE_DOCS, hosts=gh,
+              archetypes=RELEASING, needs=admin,
+              not_keepable="a moved or deleted release tag changes what a release names for everyone who installs it",
+              fix="add the door's tag ruleset, as the fix line says",
+              messages={"good": "the tag ruleset keeps {tags} tags from being moved or deleted, with no bypass actor "
+                                "(ruleset {rid})",
+                        "review": "the tag ruleset (ruleset {rid}) covers {tags} tags, and its bypass actors are not "
+                                  "read here: /plinth:floor-check reads them with a login that administers the "
+                                  "repository",
+                        "actors": "the tag ruleset (ruleset {rid}) covers {tags} tags, and its bypass actors are not "
+                                  "read here: this token does not get them; one with repository administration does",
+                        "unread": "the tag ruleset not verified: a tag ruleset is listed and could not be read",
+                        "member": "{why}: [tool.plinth.release] own-tags in pyproject.toml releases {name} on {tags} "
+                                  "tags, so anyone with write access can move or delete a released tag of it",
+                        "bad": "{why}: for a {archetype}, which releases from a v* tag, anyone with write access can "
+                               "move or delete a released tag",
+                        "create": "  gh api -X POST repos/{repo}/rulesets --input - <<<{body}   (needs repository "
+                                  "administration)",
+                        "unlisted": "the tag ruleset not verified: this repository's rulesets could not be listed",
+                        "members": "the tag ruleset for members released on their own tags not verified: "
+                                   "[tool.plinth.release] own-tags in pyproject.toml could not be read here"}),
+        check("FC-E30", "the repository has a description", states=("pass", "info"), handoff="admin",
+              docs=BESIDE_DOCS, hosts=gh, needs=net, fix="set one with gh repo edit <repo> --description '<one line>'",
+              messages={"good": "the repository has a description",
+                        "none": "the repository has no description: GitHub's community profile counts one; set it "
+                                "with gh repo edit {repo} --description '<one line>'"}),
+    )
+
+
+DRIFT_DOCS = f"{DOCS}#template-drift"
+
+
+# The answers that rely on a file in the owner's .github repository, one
+# check each: (id, answer, the file GitHub inherits).
+OWNER_COPIES = (("FC-F05", "owner_has_code_of_conduct", "CODE_OF_CONDUCT.md"),
+                ("FC-F08", "owner_has_pr_template", "PULL_REQUEST_TEMPLATE.md"))
+
+
+def _plinth() -> tuple[dict, ...]:
+    """Area F: plinth, the template this repository was made from, its recorded answers and its plinth pins."""
+    gh = ("github",)
+    net = ("files", "network")
+    again = "  /plinth:template-update looks at the owner's .github again and passes what it finds"
+    return (
+        check("FC-F01", "the recorded template tag is the one plinth is tested with",
+              states=("pass", "warn", "unknown", "info"), handoff="person", docs=DRIFT_DOCS, needs=net,
+              fix="run /plinth:template-update to move the repository to the target tag",
+              messages={"unread": "template drift not verified ({reason})",
+                        "ahead": "template: the recorded tag {recorded} is ahead of {target}, the tag plinth is "
+                                 "tested with",
+                        "moved": "template: the recorded tag is the target tag ({target}), but {target} now names "
+                                 "commit {now}, not {sha}, the commit plinth was tested with",
+                        "good": "template: the recorded tag is the target tag ({target})",
+                        "tag": "  not verified that {target} still names {sha}, the commit plinth was tested with "
+                               "({why})",
+                        "behindunread": "template: {recorded} is behind {target}, the tag plinth is tested with; the "
+                                        "changed files could not be read ({why})",
+                        "behind": "template: {recorded} is behind {target}, the tag plinth is tested with; changed in "
+                                  "the template: {names}",
+                        "own": "  the template's own change between the two tags, not this repository's diff: another "
+                               "archetype, inherited forms or a hand-made edit can mean some of it was never rendered "
+                               "here",
+                        "file": "  {name}:",
+                        "patch": "    {line}",
+                        "nocmd": "  no update command: {why}",
+                        "pins": "  the \"workflow pins disagree\" WARN below names each file and the line that makes "
+                                "them one",
+                        "line": "  {line}",
+                        "movedcmd": "{line}",
+                        "cmdtag": "  not verified that {target} still names {sha}, the commit plinth was tested with "
+                                  "({why}); the template-update skill checks it before it runs this line:",
+                        "raise": "  no update command until the plinth pin is raised to the one the target tag was "
+                                 "tested with:",
+                        "uncompared": "  the template-update skill stops before it runs this line until the two are "
+                                      "compared"}),
+        check("FC-F02", "this installed plinth targets the newest template tag", states=("warn", "info"),
+              handoff="person", docs=DRIFT_DOCS, needs=net, ci_visible=False,
+              fix="update the plinth plugin, then run /plinth:template-update",
+              messages={"bad": "template: {head}",
+                        "step": "  {step}",
+                        "unreleased": "  {line}",
+                        "unread": "template: {line}",
+                        "note": "template: {note}"}),
+        check("FC-F03", "third_party_review: true has its workflow", states=("pass", "warn", "info"),
+              handoff="agent", docs=BESIDE_DOCS, hosts=gh,
+              fix="bring back .github/workflows/third-party.yml, or record third_party_review: false",
+              messages={"good": "third_party_review: true, and .github/workflows/third-party.yml is there",
+                        "bad": "third_party_review: true, and .github/workflows/third-party.yml is missing: no pull "
+                               "request gets the third-party / review check the project was made with",
+                        "hint": "  bring it back from the commit that removed it (git log --diff-filter=D -- "
+                                ".github/workflows/third-party.yml), or record third_party_review: false with "
+                                "/plinth:template-update if the reviewer is no longer wanted"}),
+        check("FC-F04", "code_of_conduct: true has its CODE_OF_CONDUCT.md", states=("pass", "warn", "info"),
+              handoff="agent", docs=BESIDE_DOCS, fix="bring back CODE_OF_CONDUCT.md, or record code_of_conduct: false",
+              messages={"good": "code_of_conduct: true, and CODE_OF_CONDUCT.md is there",
+                        "bad": "code_of_conduct: true, and CODE_OF_CONDUCT.md is missing",
+                        "hint": "  bring it back from the commit that removed it (git log --diff-filter=D -- "
+                                "CODE_OF_CONDUCT.md), or record code_of_conduct: false with /plinth:template-update"}),
+        *(check(cid, f"the owner's .github still publishes {name} (answered {key})",
+              states=("pass", "warn", "unknown", "info"), handoff="person", docs=BESIDE_DOCS, hosts=gh, needs=net,
+              fix="publish the file from a public <owner>/.github, or add the repository's own",
+              messages={"own": "{name} is the repository's own, which applies in place of the owner's",
+                        "norepo": "{key}: true; whether the owner's .github repository still publishes {name} not "
+                                  "verified (no --repo)",
+                        "visibility": "{key}: true; whether {owner}/.github is public not verified ({why}), and "
+                                      "GitHub inherits only from a public one",
+                        "private": "{key}: true, and {owner}/.github is private or gone: GitHub inherits {name} only "
+                                   "from a public .github repository, so this repository has none in effect",
+                        "again": again,
+                        "good": "{key}: true, and the owner's .github repository publishes {name}",
+                        "unread": "{key}: true; whether the owner's .github repository still publishes it not "
+                                  "verified (offline or API error)",
+                        "gone": "{key}: true, and the owner's .github repository no longer publishes {name}: this "
+                                "repository has none in effect"})
+          for cid, key, name in OWNER_COPIES),
+        check("FC-F06", "every plinth workflow pin names one commit", states=("warn", "unknown", "info"),
+              handoff="agent", docs=STATIC, hosts=gh,
+              fix="move every plinth uses: to the SHA the ci job calls, as the fix line says",
+              messages={"unread": "plinth workflow pins not compared: {where} mentions uses in a form this checker "
+                                  "does not read, and could pin coolbress/plinth at another commit",
+                        "bad": "{line}",
+                        "one": "  set every {repo} uses: to the one commit the ci job should call",
+                        "fix": "  {line}   (moves it to the SHA the ci job calls)"}),
+        check("FC-F07", "the recorded host is one this checker reads", states=("unknown",), handoff="person",
+              docs=GITLAB_DOCS, fix="pass --host github or --host gitlab",
+              messages={"other": ".copier-answers.yml says host: {host}, which this checker does not read; read as "
+                                 "github (pass --host to choose)"}),
+    )
+
+
 REGISTRY = _registry(
     # Where a result() call not yet given its id reports: any state, the
     # message its text. Not a check; the golden test counts what is left in it.
@@ -650,6 +1238,9 @@ REGISTRY = _registry(
     *_documents(),
     *_agent(),
     *_project(),
+    *_ci(),
+    *_wall(),
+    *_plinth(),
 )
 
 # The run, as emit() records it: one result per line printed, in order, and
@@ -658,6 +1249,7 @@ results: list[dict] = []
 verdicts: list[str] = []
 TRACE = os.environ.get("FLOOR_CHECK_TRACE")   # tests/floor-check-golden.sh: one `<id> <state>` line per result
 HERE = "cannot be read here"                   # an unknown no change to this machine or repository clears (#1002)
+ADMIN_READER = "/plinth:floor-check with a login that administers the repository"   # who reads a review
 
 
 def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
@@ -1256,7 +1848,7 @@ def check_action_pins(root: Path) -> None:
     upstream is not asked."""
     files = workflow_files(root)
     if not files:
-        result("INFO", "no workflow file under .github/workflows: no action pin to check")
+        emit("FC-D01", "info", "none")
         return
     total, clean = 0, True
     for p in files:
@@ -1271,22 +1863,22 @@ def check_action_pins(root: Path) -> None:
                 unread.append(n)
         if unpinned:
             clean = False
-            result("WARN", f"{rel}: not pinned to a full commit SHA: " + ", ".join(f"line {n} {v}" for n, v in unpinned))
+            emit("FC-D01", "warn", "bad", {"rel": rel, "lines": ", ".join(f"line {n} {v}" for n, v in unpinned)})
             for v in sorted({v for _, v in unpinned}):
                 m = re.fullmatch(r"([^/@]+/[^/@]+)(?:/[^@]*)?@(.+)", v)
                 if v.startswith("docker://"):
-                    result("INFO", f"  {v}: pin the image by digest (docker://image@sha256:<digest>)")
+                    emit("FC-D01", "info", "docker", {"value": v})
                 elif m:
                     # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
-                    result("INFO", f"  gh api {shlex.quote(f'repos/{m.group(1)}/commits/{m.group(2)}')} --jq .sha   (then pin the uses: to that SHA, the old ref as its comment)")
+                    emit("FC-D01", "info", "sha", {"path": shlex.quote(f"repos/{m.group(1)}/commits/{m.group(2)}")})
                 else:
-                    result("INFO", f"  {v}: write it as owner/repo@<full commit SHA>")
+                    emit("FC-D01", "info", "form", {"value": v})
         if unread:
             clean = False
-            result("SKIP", f"{rel}: action pins not verified: line {', '.join(map(str, unread))} "
-                           "mentions uses in a form this checker does not read")
+            emit("FC-D01", "unknown", "unread", {"rel": rel, "lines": ", ".join(map(str, unread))},
+                 reason="uses in a form not read")
     if clean:
-        result("PASS", f"every action in {len(files)} workflow file{'s' * (len(files) != 1)} is pinned to a commit ({total} uses)")
+        emit("FC-D01", "pass", "good", {"count": len(files), "s": "s" * (len(files) != 1), "total": total})
 
 
 # The reusable workflow a consumer's `ci` job calls (#325). Its jobs report as
@@ -1474,14 +2066,14 @@ def check_inputs(inputs: dict[str, str | None], where: str) -> None:
     default, a SKIP for each it passes in a form not read, and a SKIP for a
     line that could pass either."""
     if UNREAD_LINE in inputs:
-        result("SKIP", f"the ci job {where} has a with: line this checker does not read: {inputs[UNREAD_LINE]}; "
-                       "max-diff-lines and deps-fail-on-severity not verified")
+        emit("FC-D03", "unknown", "line", {"where": where, "line": inputs[UNREAD_LINE]}, reason="a with: line not read")
     for name in ("max-diff-lines", "deps-fail-on-severity"):
         if name not in inputs:
             continue
         value = inputs[name]
         if value is None or "${{" in value:
-            result("SKIP", f"the ci job {where} passes {name}: its value is not read (an expression, or a form this checker does not read)")
+            emit("FC-D03" if name == "max-diff-lines" else "FC-D04", "unknown", "value", {"where": where, "name": name},
+                 reason="a value not read")
             continue
         if name == "max-diff-lines":
             try:
@@ -1489,19 +2081,16 @@ def check_inputs(inputs: dict[str, str | None], where: str) -> None:
             except ValueError:
                 n = math.nan
             if not math.isfinite(n) or n != int(n):
-                result("SKIP", f"the ci job {where} passes max-diff-lines: {value}: not read as a whole number")
+                emit("FC-D03", "unknown", "number", {"where": where, "value": value}, reason="not a whole number")
                 continue
             if n <= 0:
-                result("WARN", f"the ci job {where} passes max-diff-lines: {value}: ci / diff-size measures and never fails "
-                               f"(plinth's default is {DEFAULT_MAX_DIFF_LINES})")
+                emit("FC-D03", "warn", "off", {"where": where, "value": value, "default": DEFAULT_MAX_DIFF_LINES})
             elif n > DEFAULT_MAX_DIFF_LINES:
-                result("WARN", f"the ci job {where} passes max-diff-lines: {value}, above plinth's default of "
-                               f"{DEFAULT_MAX_DIFF_LINES}: a larger diff passes ci / diff-size")
+                emit("FC-D03", "warn", "above", {"where": where, "value": value, "default": DEFAULT_MAX_DIFF_LINES})
         elif value == "critical":
-            result("WARN", f"the ci job {where} passes deps-fail-on-severity: {value}: a high-severity advisory passes ci / deps "
-                           f"(plinth's default is {DEFAULT_SEVERITY})")
+            emit("FC-D04", "warn", "critical", {"where": where, "value": value, "default": DEFAULT_SEVERITY})
         elif value not in {"high", "moderate", "low"}:
-            result("SKIP", f"the ci job {where} passes deps-fail-on-severity: {value}: not read as a severity")
+            emit("FC-D04", "unknown", "severity", {"where": where, "value": value}, reason="not a severity")
 
 
 def check_web_input(inputs: dict[str, str | None], where: str, archetype: str | None) -> None:
@@ -1514,12 +2103,11 @@ def check_web_input(inputs: dict[str, str | None], where: str, archetype: str | 
         return
     value = inputs.get("web")
     if value is not None and value.strip().strip("'\"") in {"true", "True", "TRUE"}:
-        result("PASS", f"the ci job {where} passes web: true, so ci / migrations and ci / deploy-check run")
+        emit("FC-D05", "pass", "good", {"where": where})
         return
     seen = "no web: line" if "web" not in inputs else f"web: {value}" if value is not None else "a web: line this checker does not read"
-    result("FAIL", f"the ci job {where} has {seen}: on the web archetype ci / migrations and ci / deploy-check "
-                   "then pass as \"does not apply\" while the ruleset requires them")
-    result("INFO", "  add `web: true` under the ci job's with:, as plinth-template renders it")
+    emit("FC-D05", "fail", "bad", {"where": where, "seen": seen})
+    emit("FC-D05", "info", "add")
 
 
 def check_caller(root: Path, repo: str | None, network: bool, from_checkout: bool = False,
@@ -1544,9 +2132,9 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
             # A 404 is also what a repository that does not exist, or that
             # this token cannot see, answers for every file in it.
             if not isinstance(api(f"repos/{repo}", network), dict):
-                result("SKIP", f"the ci job on the default branch not verified: repos/{repo} could not be read")
+                emit("FC-D02", "unknown", "repo", {"repo": repo}, reason="the repository could not be read")
             else:
-                result("FAIL", f"no {rel} on the default branch of {repo}: no `ci` job calls {CALLER_WORKFLOW}")
+                emit("FC-D02", "fail", "nofile", {"rel": rel, "repo": repo, "workflow": CALLER_WORKFLOW})
             return
         text = None
         if isinstance(data, dict) and data.get("encoding") == "base64" and isinstance(data.get("content"), str):
@@ -1555,50 +2143,50 @@ def check_caller(root: Path, repo: str | None, network: bool, from_checkout: boo
             except ValueError:
                 text = None
         if text is None:
-            result("SKIP", f"the ci job on the default branch not verified (the API did not return {rel} as a file)")
+            emit("FC-D02", "unknown", "notfile", {"rel": rel}, reason="not returned as a file")
             return
     else:
         why = "--caller-from-checkout" if from_checkout else "--no-network" if not network else "no --repo"
         where = f"in the checkout ({why})" if from_checkout else f"in the checkout, not the default branch ({why})"
         p = root / rel
         if not p.is_file():
-            result("SKIP", f"the ci job not verified: no {rel} in the checkout, and the default branch was not read ({why})")
+            emit("FC-D02", "unknown", "nocheckout", {"rel": rel, "why": why}, reason="no ci.yml in the checkout")
             return
         text = read(p)
     kind, value, inputs = caller_job(text)
     if kind == "unread":
-        result("SKIP", f"the ci job {where} not verified: {value}")
+        emit("FC-D02", "unknown", "unread", {"where": where, "value": value}, reason="the ci job not read")
         return
     then = f"then set the ci job's uses: to {CALLER_WORKFLOW}@<that SHA>"
     latest = (f'gh api "repos/{PLINTH_REPO}/commits/$(gh api repos/{PLINTH_REPO}/releases/latest --jq .tag_name)" '
               f"--jq .sha   (plinth's latest release; {then})")
     if kind == "missing":
-        result("FAIL", f"{rel} {where}: {value}, so nothing calls {CALLER_WORKFLOW} and plain jobs could report its check names")
-        result("INFO", f"  {latest}")
+        emit("FC-D02", "fail", "missing", {"rel": rel, "where": where, "value": value, "workflow": CALLER_WORKFLOW})
+        emit("FC-D02", "info", "hint", {"command": latest})
         return
     if kind == "skippable":
-        result("FAIL", f"the ci job {where} has {value}: only uses:, with:, secrets: and permissions: are allowed; "
-                       "another key can get it skipped, renamed or cut short while plain jobs report its check names")
-        result("INFO", f"  remove {value} from the `ci` job")
+        emit("FC-D02", "fail", "skippable", {"where": where, "value": value})
+        emit("FC-D02", "info", "remove", {"value": value})
         return
     if repo and repo.lower() == PLINTH_REPO and value == PLINTH_OWN_CALLER:
-        result("PASS", f"the ci job {where} calls {value} ({PLINTH_REPO} calls its own workflow by local path)")
+        emit("FC-D02", "pass", "own", {"where": where, "value": value, "repo": PLINTH_REPO})
         check_inputs(inputs, where)
         check_web_input(inputs, where, archetype)
         return
     m = re.fullmatch(r"([^/@]+/[^/@]+)(/[^@]*)@(.*)", value)
     if m and m.group(1).lower() == PLINTH_REPO and m.group(2) == CALLER_WORKFLOW[len(PLINTH_REPO):]:
         if re.fullmatch(r"[0-9a-fA-F]{40}", m.group(3)):
-            result("PASS", f"the ci job {where} calls {value}")
+            emit("FC-D02", "pass", "good", {"where": where, "value": value})
         else:
-            result("FAIL", f"the ci job {where} calls {value}: not pinned to a full commit SHA, so what runs can change without a pull request")
+            emit("FC-D02", "fail", "ref", {"where": where, "value": value})
             # Quoted: the line is pasted into a shell, and a ref may hold `$(...)` or `;`.
-            result("INFO", f"  gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})")
+            emit("FC-D02", "info", "hint",
+                 {"command": f"gh api {shlex.quote(f'repos/{PLINTH_REPO}/commits/{m.group(3)}')} --jq .sha   ({then})"})
         check_inputs(inputs, where)
         check_web_input(inputs, where, archetype)
     else:
-        result("FAIL", f"the ci job {where} calls {value}, not {CALLER_WORKFLOW}")
-        result("INFO", f"  {latest}")
+        emit("FC-D02", "fail", "other", {"where": where, "value": value, "workflow": CALLER_WORKFLOW})
+        emit("FC-D02", "info", "hint", {"command": latest})
 
 
 def plinth_pins(root: Path) -> dict:
@@ -1659,16 +2247,16 @@ def check_plinth_pins_agree(root: Path) -> None:
     pins = plinth_pins(root)
     if pins["warn"] is None:
         if pins["unread"]:
-            result("SKIP", f"plinth workflow pins not compared: {', '.join(pins['unread'])} mentions uses in a form "
-                           "this checker does not read, and could pin coolbress/plinth at another commit")
+            emit("FC-F06", "unknown", "unread", {"where": ", ".join(pins["unread"])},
+                 reason="a uses: line not read")
         return
     # The ci job's file first: the fix moves the others to the SHA it calls.
-    result("WARN", pins["warn"])
+    emit("FC-F06", "warn", "bad", {"line": pins["warn"]})
     if pins["target"] is None:
-        result("INFO", f"  set every {PLINTH_REPO} uses: to the one commit the ci job should call")
+        emit("FC-F06", "info", "one", {"repo": PLINTH_REPO})
         return
     for line in pins["fix"]:
-        result("INFO", f"  {line}   (moves it to the SHA the ci job calls)")
+        emit("FC-F06", "info", "fix", {"line": line})
 
 
 def pins_disagree_stop(root: Path, network: bool) -> list[str]:
@@ -2309,27 +2897,25 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
     hand-made edit can mean a changed template file was never rendered here."""
     d = template_drift(root, host, network)
     if d["state"] == "skip":
-        result("SKIP", f"template drift not verified ({d['reason']})")
+        emit("FC-F01", "unknown", "unread", {"reason": d["reason"]}, reason="template drift not read")
         return
     template_repo, target = d["template_repo"], d["target"]
     recorded = d["recorded"]
     if d["state"] == "ahead":
-        result("INFO", f"template: the recorded tag {recorded} is ahead of {target}, the tag plinth is tested with")
+        emit("FC-F01", "info", "ahead", {"recorded": recorded, "target": target})
         return
     if d["state"] == "current":
         # A tag moved since this repository was rendered from it (#519).
         tag, now = target_tag(d, network)
         if tag == "moved":
-            result("WARN", f"template: the recorded tag is the target tag ({target}), but {target} now names "
-                           f"commit {now}, not {d['target_sha']}, the commit plinth was tested with")
+            emit("FC-F01", "warn", "moved", {"target": target, "now": now, "sha": d["target_sha"]})
             return
         # The PASS claims the tags only; whether the tag still names its
         # commit is said beside it when unread, not counted: every offline
         # run would otherwise count it as not verified.
-        result("PASS", f"template: the recorded tag is the target tag ({target})")
+        emit("FC-F01", "pass", "good", {"target": target})
         if tag == "unread":
-            result("INFO", f"  not verified that {target} still names {d['target_sha']}, the commit "
-                           f"plinth was tested with ({now})")
+            emit("FC-F01", "info", "tag", {"target": target, "sha": d["target_sha"], "why": now})
         return
 
     cmp = api(f"repos/{template_repo}/compare/{recorded}...{target}", network)
@@ -2344,14 +2930,12 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
         changed, unread_reason = None, "an unexpected compare response"
 
     if changed is None:
-        result("WARN", f"template: {recorded} is behind {target}, the tag plinth is tested with; "
-                       f"the changed files could not be read ({unread_reason})")
+        emit("FC-F01", "warn", "behindunread", {"recorded": recorded, "target": target, "why": unread_reason})
     else:
         names = sorted(f["filename"][len("template/"):] for f in changed)
-        result("WARN", f"template: {recorded} is behind {target}, the tag plinth is tested with; "
-                       f"changed in the template: {', '.join(names) if names else '(nothing under template/)'}")
-        result("INFO", "  the template's own change between the two tags, not this repository's diff: another "
-                       "archetype, inherited forms or a hand-made edit can mean some of it was never rendered here")
+        emit("FC-F01", "warn", "behind", {"recorded": recorded, "target": target,
+                                          "names": ", ".join(names) if names else "(nothing under template/)"})
+        emit("FC-F01", "info", "own")
         by_name = {f["filename"][len("template/"):]: f for f in changed}
         for name in TEMPLATE_DRIFT_DIFF_FILES:
             # Its source as named or with .jinja; a rename git did not pair
@@ -2360,42 +2944,41 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
             entry = next((e for e in found if e.get("status") != "removed"), found[0] if found else None)
             patch = entry.get("patch") if isinstance(entry, dict) else None
             if patch:
-                result("INFO", f"  {name}:")
+                emit("FC-F01", "info", "file", {"name": name})
                 for pline in patch.splitlines():
-                    result("INFO", f"    {pline}")
+                    emit("FC-F01", "info", "patch", {"line": pline})
 
     owner_shared(d, owner, network, root)
     if not d["cmd"]:
-        result("INFO", f"  no update command: {d['why_not']}")
+        emit("FC-F01", "info", "nocmd", {"why": d["why_not"]})
         if str(d["why_not"]).startswith("workflow pins disagree"):
-            result("INFO", "  the \"workflow pins disagree\" WARN below names each file and the line that makes them one")
+            emit("FC-F01", "info", "pins")
         return
     for note in d.get("owner_notes", []):
-        result("INFO", f"  {note}")
+        emit("FC-F01", "info", "line", {"line": note})
     tag, why = target_tag(d, network)
     if tag == "moved":
-        result("WARN", moved_note(d, why))
+        emit("FC-F01", "warn", "movedcmd", {"line": moved_note(d, why)})
         return
     if tag == "unread":
-        result("INFO", f"  not verified that {target} still names {d['target_sha']}, the commit plinth was tested "
-                       f"with ({why}); the template-update skill checks it before it runs this line:")
+        emit("FC-F01", "info", "cmdtag", {"target": target, "sha": d["target_sha"], "why": why})
     # A live pin older than the tested one is raised first, in a pull
     # request of its own (#1183): no line until then.
     choice = plinth_pin_choice(d, network)
     if choice["state"] == "behind":
-        result("INFO", f"  {choice['note']}")
-        result("INFO", "  no update command until the plinth pin is raised to the one the target tag was tested with:")
+        emit("FC-F01", "info", "line", {"line": choice["note"]})
+        emit("FC-F01", "info", "raise")
         for line in raise_first(root, choice, None, network):
-            result("INFO", f"  {line}")
+            emit("FC-F01", "info", "line", {"line": line})
         return
-    result("INFO", f"  {d['cmd']}")
+    emit("FC-F01", "info", "line", {"line": d["cmd"]})
     for line in moves_lines(d):
-        result("INFO", f"  {line}")
+        emit("FC-F01", "info", "line", {"line": line})
     if choice["state"] == "equal":
         return
-    result("INFO", f"  {choice['note']}")
+    emit("FC-F01", "info", "line", {"line": choice["note"]})
     if choice["state"] == "unread":
-        result("INFO", "  the template-update skill stops before it runs this line until the two are compared")
+        emit("FC-F01", "info", "uncompared")
 
 
 PLUGIN_UPDATE_STEPS = ("claude plugin marketplace update plinth", "claude plugin update plinth@plinth",
@@ -2494,16 +3077,16 @@ def check_plugin_skew(root: Path, network: bool, host: str | None = None) -> Non
     plugin anyone installed."""
     s = plugin_skew(root, network, host)
     if s["state"] == "older":
-        result("WARN", f"template: {plugin_skew_head(s)}")
+        emit("FC-F02", "warn", "bad", {"head": plugin_skew_head(s)})
         # template-update.sh serves GitLab too (#1012), so the last step is the same on both hosts.
         for step in PLUGIN_UPDATE_STEPS:
-            result("INFO", f"  {step}")
+            emit("FC-F02", "info", "step", {"step": step})
         if s.get("unreleased"):
-            result("INFO", f"  {s['unreleased']}")
+            emit("FC-F02", "info", "unreleased", {"line": s["unreleased"]})
     elif s["state"] == "unread":
-        result("INFO", f"template: {plugin_skew_unread(s)}")
+        emit("FC-F02", "info", "unread", {"line": plugin_skew_unread(s)})
     if s.get("note"):
-        result("INFO", f"template: {s['note']}")
+        emit("FC-F02", "info", "note", {"note": s["note"]})
 
 
 def print_plugin_skew(root: Path, network: bool = True, host: str | None = None) -> int:
@@ -3352,9 +3935,7 @@ def check_image_job(root: Path) -> None:
     m = re.search(r"^  image:\s*$", text, re.MULTILINE)
     # The job's own lines: up to the next two-space key. `buildx build` is a build too.
     block = re.split(r"^  \S", text[m.end():], maxsplit=1, flags=re.MULTILINE)[0] if m else ""
-    ok(m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
-       "ci.yml carries the image job (docker build, docker run)",
-       "ci.yml has no `image` job that builds and runs the container; the ruleset requires that check for this archetype")
+    verdict("FC-D06", m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block)
 
 
 def check_gitlab_image_job(root: Path) -> None:
@@ -3364,9 +3945,8 @@ def check_gitlab_image_job(root: Path) -> None:
     text = read(p) if p.is_file() else ""
     m = re.search(rf"^{GITLAB_IMAGE_JOB}:\s*$", text, re.MULTILINE)
     block = re.split(r"^\S", text[m.end():], maxsplit=1, flags=re.MULTILINE)[0] if m else ""
-    ok(m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
-       f".gitlab-ci.yml carries the {GITLAB_IMAGE_JOB} job (docker build, docker run)",
-       f".gitlab-ci.yml has no `{GITLAB_IMAGE_JOB}` job that builds and runs the container; this archetype's floor has one")
+    verdict("FC-D07", m is not None and re.search(r"docker (buildx )?build", block) is not None and "docker run" in block,
+            {"job": GITLAB_IMAGE_JOB})
 
 
 def gitlab_job_block(tag: str) -> str | None:
@@ -3425,12 +4005,12 @@ def check_gitlab_include(root: Path, network: bool, text: str | None = None, sho
     what = f"{shown} includes plinth's GitLab pipeline at a full commit SHA"
     rule = gitlab_job_block("PY")
     if rule is None:
-        result("SKIP", f"{what} not verified: the rule in {GITLAB_PIPELINE.name}'s floor-check job could not be read")
+        emit("FC-D08", "unknown", "norule", {"what": what, "pipeline": GITLAB_PIPELINE.name}, reason="the rule not read")
         return
     with tempfile.TemporaryDirectory() as tmp:
         py, why = gitlab_rule_python(Path(tmp), network)
         if py is None:
-            result("SKIP", f"{what} not verified: {why}")
+            emit("FC-D08", "unknown", "nopython", {"what": what, "why": why}, reason="no python for the rule")
             return
         config = str(root / ".gitlab-ci.yml")
         if text is not None:
@@ -3440,16 +4020,20 @@ def check_gitlab_include(root: Path, network: bool, text: str | None = None, sho
             run = subprocess.run([py, "-c", rule], cwd=tmp, capture_output=True, text=True,
                                  env={**os.environ, "CONFIG": config}, timeout=60, check=False)
         except (OSError, subprocess.TimeoutExpired) as e:
-            result("SKIP", f"{what} not verified: the rule did not run ({e.__class__.__name__})")
+            emit("FC-D08", "unknown", "norun", {"what": what, "error": e.__class__.__name__}, reason="the rule did not run")
             return
     lines = [ln.replace(config, shown) for ln in run.stdout.splitlines() if ln.strip()]
-    kinds = {"pass": "PASS", "fail": "FAIL", "not yet confirmed": "SKIP"}
+    states = {"pass": "pass", "fail": "fail", "not yet confirmed": "unknown"}
     for ln in lines:
         kind, _, msg = ln.partition(": ")
-        result(kinds.get(kind, "SKIP"), msg if kind in kinds else f"{what} not verified: the rule printed {ln[:200]!r}")
+        if kind in states:
+            emit("FC-D08", states[kind], "rule", {"msg": msg},
+                 reason="the rule did not confirm it" if states[kind] == "unknown" else None)
+        else:
+            emit("FC-D08", "unknown", "printed", {"what": what, "line": repr(ln[:200])}, reason="the rule printed no verdict")
     if not lines:
         why = " ".join(run.stderr.split())[-200:] or f"exit {run.returncode}"
-        result("SKIP", f"{what} not verified: the rule printed no verdict ({why})")
+        emit("FC-D08", "unknown", "silent", {"what": what, "why": why}, reason="the rule printed no verdict")
 
 
 GITLAB_HOST = "gitlab.com"
@@ -3503,12 +4087,12 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
     if not isinstance(project, dict):
         why = ("it was not found, or this login cannot see it" if project is ABSENT
                else f"offline, glab missing or not logged in ({login}), or an API error")
-        result("SKIP", f"the GitLab wall of {repo} not verified: {why}")
+        emit("FC-E01", "unknown", "unread", {"repo": repo, "why": why}, reason="the project not read")
         check_gitlab_include(root, network)
         return
     branch = project.get("default_branch")
     if not isinstance(branch, str) or not branch:
-        result("SKIP", f"{repo} has no default branch GitLab names; its protection, merge checks and include not verified")
+        emit("FC-E01", "unknown", "nobranch", {"repo": repo}, reason="no default branch named")
         return
 
     # Every rule whose name or wildcard pattern matches the branch applies, and
@@ -3518,8 +4102,7 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
     # they count the same way.
     rules = gl_api(f"projects/{enc}/protected_branches?per_page=100", network, paginate=True)
     if not isinstance(rules, list):
-        result("SKIP", f"the protection of {branch} not verified: protected branches are not readable with this login "
-                       "(it needs the Maintainer role on GitLab.com), or an API error")
+        emit("FC-E01", "unknown", "rules", {"branch": branch}, reason="protected branches not read")
     else:
         def matches(pattern: object) -> bool:
             return isinstance(pattern, str) and re.fullmatch(".*".join(map(re.escape, pattern.split("*"))), branch) is not None
@@ -3536,10 +4119,10 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
         push, merge = levels("push_access_levels"), levels("merge_access_levels")
         names = ", ".join(str(r.get("name")) for r in applying)
         bad = []
+        values = {"branch": branch, "repo": repo, "host": GITLAB_HOST, "enc": enc, "edit": edit, "names": names}
         if not applying:
-            result("FAIL", f"{branch} is not a protected branch on {repo}: anyone with Developer can push to it")
-            result("INFO", f"  glab api --hostname {GITLAB_HOST} -X POST projects/{enc}/protected_branches -f name={branch} "
-                           "-F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false   (a Maintainer)")
+            emit("FC-E01", "fail", "none", values)
+            emit("FC-E01", "info", "create", values)
         else:
             if not push or any(a.get("access_level") != 0 for a in push) or named(push):
                 bad.append(f"push allowed ({described(push)}), want No one")
@@ -3549,73 +4132,65 @@ def check_gitlab_wall(root: Path, repo: str, network: bool) -> None:
             if force:
                 bad.append(f"force push {force[0]!r}, want false")
             if bad:
-                result("FAIL", f"{branch}'s protection on {repo} is weaker than the door's (rules that apply: {names}): {'; '.join(bad)}")
-                result("INFO", f"  {edit}#js-protected-branches-settings   (each rule that matches {branch}: Allowed to push "
-                               "and merge: No one; Allowed to merge: Maintainers; Allowed to force push: off)")
+                emit("FC-E01", "fail", "weak", {**values, "bad": "; ".join(bad)})
+                emit("FC-E01", "info", "edit", values)
             else:
-                result("PASS", f"{branch} is protected on {repo}: no one pushes, Maintainers merge, no force push "
-                               f"(rules that apply: {names})")
+                emit("FC-E01", "pass", "good", values)
 
     # Each group is judged on the fields GitLab returned (#548 review, round 2):
     # a readable mismatch is a FAIL even when another field is missing, and
     # only the missing fields are a SKIP.
     merge_url = f"https://{GITLAB_HOST}/{repo}/-/settings/merge_requests"
     groups = (
-        ({"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False},
-         f"the merge checks of {repo} let a merge request merge without a green pipeline",
-         f"{repo} merges only on a green pipeline (\"Pipelines must succeed\" on, skipped pipelines not counted)",
-         (f"glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -F only_allow_merge_if_pipeline_succeeds=true "
-          "-F allow_merge_on_skipped_pipeline=false"), ""),
-        ({"squash_option": "always", "merge_method": "ff"},
-         f"{repo} merges other than squash and fast-forward",
-         f"{repo} squashes every merge request and fast-forwards",
-         f"glab api --hostname {GITLAB_HOST} -X PUT projects/{enc} -f squash_option=always -f merge_method=ff",
-         "; main gains commits that are not one squash per merge request"),
+        ("FC-E02", {"only_allow_merge_if_pipeline_succeeds": True, "allow_merge_on_skipped_pipeline": False}),
+        ("FC-E03", {"squash_option": "always", "merge_method": "ff"}),
     )
-    for want, bad_msg, good_msg, fix, why in groups:
+    for cid, want in groups:
         off = {k: project[k] for k, v in want.items() if k in project and project[k] != v}
         absent = [k for k in want if k not in project]
+        values = {"repo": repo, "host": GITLAB_HOST, "enc": enc, "url": merge_url}
         if off:
-            result("FAIL", f"{bad_msg}: " + ", ".join(f"{k}={v!r}" for k, v in off.items()) + why)
-            result("INFO", f"  {fix}   (a Maintainer; or {merge_url})")
+            emit(cid, "fail", "bad", {**values, "off": ", ".join(f"{k}={v!r}" for k, v in off.items())})
+            emit(cid, "info", "hint", values)
         if absent:
-            result("SKIP", f"{', '.join(absent)} of {repo} not verified: GitLab did not return "
-                           f"{'it' if len(absent) == 1 else 'them'} to this login (a project member reads them)")
+            emit(cid, "unknown", "absent", {**values, "fields": ", ".join(absent),
+                                            "them": "it" if len(absent) == 1 else "them"},
+                 reason="not returned to this login")
         if not off and not absent:
-            result("PASS", good_msg)
+            emit(cid, "pass", "good", values)
 
     # The definition GitLab runs: ci_config_path, .gitlab-ci.yml when empty.
     # One in another project or at a URL (`path@group/project`, http) is not read.
     cfg = project.get("ci_config_path") or ".gitlab-ci.yml"
     shown = f"{cfg} on {branch}"
     if "@" in cfg or "://" in cfg:
-        result("SKIP", f"the include on {branch} not verified: the pipeline definition is {cfg}, outside this project")
+        emit("FC-E04", "unknown", "outside", {"branch": branch, "cfg": cfg}, reason="outside this project")
     else:
         text = gl_api(f"projects/{enc}/repository/files/{urllib.parse.quote(cfg, safe='')}/raw?ref="
                       f"{urllib.parse.quote(branch, safe='')}", network, raw=True)
         if text is ABSENT:
-            result("FAIL", f"no {cfg} on {branch} of {repo}: no pipeline runs, so \"Pipelines must succeed\" holds nothing back")
+            emit("FC-E04", "fail", "absent", {"cfg": cfg, "branch": branch, "repo": repo})
         elif not isinstance(text, str):
-            result("SKIP", f"the include on {branch} not verified: {cfg} could not be read (an API error)")
+            emit("FC-E04", "unknown", "error", {"branch": branch, "cfg": cfg}, reason="an API error")
         else:
             check_gitlab_include(root, network, text, shown)
 
     labels = gl_api(f"projects/{enc}/labels?per_page=100", network, paginate=True)
     f = labels_file()
     if f is None:
-        result("SKIP", "labels.txt not found next to the checker; labels not checked")
+        emit("FC-E05", "unknown", "nofile", reason="labels.txt not found")
     elif not isinstance(labels, list):
-        result("SKIP", "labels not verified (offline, not logged in, or API error)")
+        emit("FC-E05", "unknown", "unread", reason="labels not read")
     else:
         rows = [ln.split("|") for ln in read(f).splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
         have = {e.get("name") for e in labels if isinstance(e, dict)}
         missing = [r for r in rows if r[0] not in have]
         if not missing:
-            result("PASS", f"every label the door creates is present ({len(rows)})")
+            emit("FC-E05", "pass", "good", {"count": len(rows)})
         else:
-            result("WARN", f"labels the door creates that are missing: {', '.join(r[0] for r in missing)}")
+            emit("FC-E05", "warn", "bad", {"missing": ", ".join(r[0] for r in missing)})
             for r in missing:
-                result("INFO", f"  glab label create --name {shlex.quote(r[0])} --color '#{r[1]}' --repo {repo}")
+                emit("FC-E05", "info", "glab", {"name": shlex.quote(r[0]), "colour": r[1], "repo": repo})
 
 
 def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -> dict:
@@ -3674,7 +4249,7 @@ def check_labels(repo: str, network: bool) -> None:
     stone (#78)."""
     f = labels_file()
     if f is None:
-        result("SKIP", "labels.txt not found next to the checker; labels not checked")
+        emit("FC-E05", "unknown", "nofile", reason="labels.txt not found")
         return
     want = [ln.split("|")[0] for ln in read(f).splitlines()
             if ln.strip() and not ln.lstrip().startswith("#")]
@@ -3684,16 +4259,16 @@ def check_labels(repo: str, network: bool) -> None:
     if data is ERROR or not isinstance(data, list):
         # Unreadable is not empty. Reporting every label missing because the API
         # failed is the fail-open case in reverse, and just as useless.
-        result("SKIP", "labels not verified (offline, not logged in, or API error)")
+        emit("FC-E05", "unknown", "unread", reason="labels not read")
         return
     have = {e.get("name") for e in data if isinstance(e, dict)}
     missing = [n for n in want if n not in have]
     if not missing:
-        result("PASS", f"every label the door creates is present ({len(want)})")
+        emit("FC-E05", "pass", "good", {"count": len(want)})
         return
-    result("WARN", f"labels the door creates that are missing: {', '.join(missing)}")
+    emit("FC-E05", "warn", "bad", {"missing": ", ".join(missing)})
     for n in missing:
-        result("INFO", f"  gh label create {n} --repo {repo} --color {colour[n]}")
+        emit("FC-E05", "info", "gh", {"name": n, "repo": repo, "colour": colour[n]})
 
 
 # The values GitHub documents for a code_scanning rule's thresholds, weakest
@@ -3721,7 +4296,7 @@ def check_codeql_policy(repo: str, branch: str, tools: list[dict], policy: dict[
     strictest live value is what governs; weaker is a FAIL, a value that
     cannot be read (or is not one GitHub documents) is not verified."""
     if policy is None:
-        result("SKIP", f"{branch}: CodeQL alert thresholds not compared (no --ruleset)")
+        emit("FC-E22", "unknown", "nopolicy", {"branch": branch}, reason="no --ruleset")
         return
     weak, unread, live = [], [], {}
     for field, order in THRESHOLDS.items():
@@ -3734,14 +4309,17 @@ def check_codeql_policy(repo: str, branch: str, tools: list[dict], policy: dict[
         if max(ranks) < order.index(want):
             weak.append(f"{field}={live[field]} (expected {want})")
     if weak:
-        result("FAIL", f"{branch}: CodeQL alert thresholds weakened: {', '.join(weak)}")
+        emit("FC-E22", "fail", "bad", {"branch": branch, "weak": ", ".join(weak)})
         for rid in sorted({t["ruleset_id"] for t in tools if t.get("ruleset_id")}):
-            result("INFO", f"  the rule is edited in https://github.com/{repo}/settings/rules/{rid}")
+            emit("FC-E22", "info", "edit", {"repo": repo, "rid": rid})
     if unread:
-        result("SKIP", f"{branch}: CodeQL alert thresholds not verified: {', '.join(unread)} unreadable")
+        emit("FC-E22", "unknown", "unread", {"branch": branch, "fields": ", ".join(unread)},
+             reason="a threshold not read")
     if not weak and not unread:
-        result("PASS", f"{branch}: CodeQL alert thresholds {live['alerts_threshold']} / {live['security_alerts_threshold']} "
-                       f"(expected {policy['alerts_threshold']} / {policy['security_alerts_threshold']})")
+        emit("FC-E22", "pass", "good", {"branch": branch, "alerts": live["alerts_threshold"],
+                                        "security": live["security_alerts_threshold"],
+                                        "want_alerts": policy["alerts_threshold"],
+                                        "want_security": policy["security_alerts_threshold"]})
 
 
 # A private repository's wall is read against what its licences allow (#351,
@@ -3819,58 +4397,42 @@ def check_push_protection(repo: str, meta: dict, actions_token: bool = False, hi
     verified."""
     security = meta.get("security_and_analysis")
     if security is None and actions_token:
-        result("INFO", "push protection is not read here: the Actions token does not get the repository's security "
-                       "settings; /plinth:floor-check reads it with a person's login", deferred=True)
+        emit("FC-E09", "review", "review", reader=ADMIN_READER)
         return
     if hidden == "plan":
         # Measured on a personal account's private repository (#811): GitHub
         # leaves the settings out even for its administrator when no
         # security product is on offer there. Still not read, so a SKIP.
-        result("SKIP", "push protection not verified (GitHub answers no security settings for this private "
-                       "repository to a login that administers it, with a token that reads its Actions "
-                       "permissions: GitHub Secret Protection (a paid product for Team and Enterprise) not on its "
-                       "plan. In its place: `ci / secrets`, which finds a secret after the push)", here=True)
+        emit("FC-E09", "unknown", "plan", reason=HERE)
         return
     if hidden == "token":
-        result("SKIP", "push protection not verified (GitHub answers no security settings for this private "
-                       "repository to a login that administers it, and this token was not shown to read an "
-                       "administration setting: a token without the Administration permission, or GitHub Secret "
-                       "Protection (a paid product for Team and Enterprise) not on its plan)")
-        result("INFO", ADMIN_TOKEN_FIX)
+        emit("FC-E09", "unknown", "token", reason="the security settings not answered")
+        emit("FC-E09", "info", "admin", {"line": ADMIN_TOKEN_FIX})
         return
     if security is None:
-        result("SKIP", "push protection not verified (this token does not read the repository's security settings; "
-                       "one with repository administration does)")
+        emit("FC-E09", "unknown", "unread", reason="the security settings not read")
         return
     entry = security.get("secret_scanning_push_protection") if isinstance(security, dict) else None
     status = entry.get("status") if isinstance(entry, dict) else None
     protection = product_status(meta, "secret_scanning") if is_private(meta) else "enabled"
     if status == "enabled":
-        result("PASS", "push protection is on: GitHub refuses a push that carries a secret in a format it knows; "
-                       "anyone with write access can still push it past the block by giving a reason")
+        emit("FC-E09", "pass", "good")
     elif protection == "disabled":
-        result("INFO", "push protection is not expected here: GitHub Secret Protection is not enabled on this private "
-                       "repository (a paid product for Team and Enterprise), so a push that carries a secret is not "
-                       "refused. In its place: `ci / secrets`, which finds a secret after the push, when it has to "
-                       f"be revoked. {TURN_ON}")
+        emit("FC-E09", "info", "gap", {"turn_on": TURN_ON})
     elif status == "disabled" and protection is None:
-        result("SKIP", "push protection not verified (it is off, and GitHub reports no secret scanning status for this "
-                       "private repository: whether GitHub Secret Protection is enabled there was not read)")
+        emit("FC-E09", "unknown", "nostatus", reason="no secret scanning status")
     elif status == "disabled":
-        result("WARN", "push protection is off: a push that carries a secret reaches GitHub, "
-                       "and `ci / secrets` reports it only afterwards")
+        emit("FC-E09", "warn", "bad")
         # The body the door sends, both fields: push protection is a part of
         # secret scanning. As JSON on stdin, the form set-security-setting.sh
         # writes and reads back, so it does not depend on how a gh version
         # reads `-f a[b][c]=v`.
         body = json.dumps({"security_and_analysis": {k: {"status": "enabled"}
                                                      for k in ("secret_scanning", "secret_scanning_push_protection")}})
-        result("INFO", f"  gh api -X PATCH repos/{repo} --input - <<<'{body}'"
-                       "   (needs repository administration; on a private repository, GitHub Secret Protection too)")
-        result("INFO", "  once on, anyone with write access can still push a secret past it by giving a reason, "
-                       "and GitHub records who and why")
+        emit("FC-E09", "info", "hint", {"repo": repo, "body": body})
+        emit("FC-E09", "info", "bypass")
     else:
-        result("SKIP", "push protection not verified (GitHub reports no push protection status for this repository)")
+        emit("FC-E09", "unknown", "none", reason="no push protection status")
 
 
 # The two routes plinth-template's SECURITY.md names (#747), by the line
@@ -3889,15 +4451,11 @@ def check_security_route(root: Path, private: bool) -> None:
     f = root / "SECURITY.md"
     text = read(f) if f.is_file() else ""
     if private and ROUTE_FORM in text:
-        result("WARN", "SECURITY.md sends a reporter to Security → Report a vulnerability, which a private "
-                       "repository is not offered: a report has nowhere to go")
-        result("INFO", "  re-render it with the issue route: copier update --defaults --data visibility=private "
-                       "(or /plinth:template-update with that answer), then commit SECURITY.md and .copier-answers.yml")
+        emit("FC-E10", "warn", "form")
+        emit("FC-E10", "info", "form_fix")
     elif not private and ROUTE_ISSUE in text:
-        result("WARN", "SECURITY.md tells a reporter to open an issue, and this repository is public: "
-                       "the report is public too")
-        result("INFO", "  re-render it with the form: copier update --defaults --data visibility=public, "
-                       "then turn private vulnerability reporting on")
+        emit("FC-E10", "warn", "issue")
+        emit("FC-E10", "info", "issue_fix")
 
 
 def check_private_reporting(repo: str, meta: dict, network: bool, actions_token: bool = False,
@@ -3918,22 +4476,19 @@ def check_private_reporting(repo: str, meta: dict, network: bool, actions_token:
     if root is not None and meta.get("private") in (True, False):
         check_security_route(root, is_private(meta))
     if is_private(meta):
-        result("INFO", "private vulnerability reporting is not offered on a private repository")
+        emit("FC-E11", "info", "private")
         return
     got = api(f"repos/{repo}/private-vulnerability-reporting", network)
     enabled = got.get("enabled") if isinstance(got, dict) else None
     if enabled is True:
-        result("PASS", "private vulnerability reporting is on: SECURITY.md's Security → Report a vulnerability works")
+        emit("FC-E11", "pass", "good")
     elif enabled is False:
-        result("WARN", "private vulnerability reporting is off: SECURITY.md sends a reporter to "
-                       "Security → Report a vulnerability, which this repository does not show")
-        result("INFO", f"  gh api -X PUT repos/{repo}/private-vulnerability-reporting   (needs repository administration)")
+        emit("FC-E11", "warn", "bad")
+        emit("FC-E11", "info", "hint", {"repo": repo})
     elif actions_token:
-        result("INFO", "private vulnerability reporting is not read here: /plinth:floor-check reads it "
-                       "with a login that administers the repository", deferred=True)
+        emit("FC-E11", "review", "review", reader=ADMIN_READER)
     else:
-        result("SKIP", "private vulnerability reporting not verified (GitHub gave no answer this checker reads; "
-                       "a login with repository administration reads it)")
+        emit("FC-E11", "unknown", "unread", reason="no answer read")
 
 
 # Owners whose actions `github_owned_allowed` lets run (GitHub Docs, "Managing
@@ -4078,46 +4633,39 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
     perms, allowed, selected = read_allowlist(repo, network)
     if perms is None:
         if actions_token:
-            result("INFO", "the Actions allowlist is not read here: /plinth:floor-check reads it with a login "
-                           "that administers the repository", deferred=True)
+            emit("FC-E27", "review", "review", reader=ADMIN_READER)
         else:
-            result("SKIP", "the Actions allowlist not verified (this token does not read the repository's Actions "
-                           "permissions; one with repository administration does)")
+            emit("FC-E27", "unknown", "unread", reason="the Actions permissions not read")
         return
     if perms.get("enabled") is False:
-        result("WARN", "GitHub Actions is turned off on this repository: no workflow runs")
+        emit("FC-E27", "warn", "off")
         return
     docker = [(f, n, v) for f, n, v in uses if v.startswith("docker://")]
     uses = [(f, n, v) for f, n, v in uses if not v.startswith("docker://")]
     refused, patterns = refused_by(uses, allowed, selected)
     for f, n, v in docker:
-        result("SKIP", f"{f}: line {n} {v}: whether the Actions allowlist lets an image run is not judged here")
+        emit("FC-E27", "unknown", "docker", {"file": f, "line": n, "value": v}, reason="an image not judged")
     for f in sorted({f for f, _ in unread}):
         lines = ", ".join(str(n) for g, n in unread if g == f)
-        result("SKIP", f"{f}: the Actions allowlist not verified for line {lines}: it mentions uses in a form "
-                       "this checker does not read")
+        emit("FC-E27", "unknown", "form", {"file": f, "lines": lines}, reason="uses in a form not read")
     blocking = [p for p in patterns if p.startswith("!")]
     if blocking and uses:
-        result("SKIP", "the Actions allowlist not verified: it carries the blocking pattern"
-                       + ("s " if len(blocking) > 1 else " ") + ", ".join(blocking)
-                       + ", and GitHub documents no order between blocking and allowing patterns")
+        emit("FC-E27", "unknown", "blocking", {"s": "s" if len(blocking) > 1 else "", "patterns": ", ".join(blocking)},
+             reason="a blocking pattern")
     if not refused:
         if uses and not unread and not blocking:
-            result("PASS", f"the Actions allowlist lets every action the workflows use start ({len(uses)} uses)")
+            emit("FC-E27", "pass", "good", {"count": len(uses)})
         return
-    result("WARN", "the Actions allowlist refuses: " + ", ".join(f"{f} line {n} {v.split('@', 1)[0]}" for f, n, v in refused)
-           + ". A run that uses one ends in startup_failure, with no job and no message saying why")
+    emit("FC-E27", "warn", "bad", {"refused": ", ".join(f"{f} line {n} {v.split('@', 1)[0]}" for f, n, v in refused)})
     if allowed != "selected":
-        result("INFO", f"  gh api -X PUT repos/{repo}/actions/permissions -F enabled=true -f allowed_actions=selected"
-                       "   (needs repository administration; then run this again for the allowlist)")
+        emit("FC-E27", "info", "select", {"repo": repo})
         return
     assert isinstance(selected, dict)
     add = sorted({v.split("@", 1)[0] + "@*" for _, _, v in refused})
     body = json.dumps({"github_owned_allowed": selected.get("github_owned_allowed") is True,
                        "verified_allowed": selected.get("verified_allowed") is True,
                        "patterns_allowed": [*patterns, *add]})
-    result("INFO", f"  gh api -X PUT repos/{repo}/actions/permissions/selected-actions --input - <<<{shlex.quote(body)}"
-                   "   (needs repository administration)")
+    emit("FC-E27", "info", "allow", {"repo": repo, "body": shlex.quote(body)})
 
 
 # The archetypes that release from a `v*` tag, and get the door's tag
@@ -4144,11 +4692,9 @@ def check_actions_token(repo: str, network: bool, actions_token: bool = False) -
     w = api(f"repos/{repo}/actions/permissions/workflow", network)
     if not isinstance(w, dict) or "default_workflow_permissions" not in w:
         if actions_token:
-            result("INFO", "the Actions token's default permissions are not read here: /plinth:floor-check reads "
-                           "them with a login that administers the repository", deferred=True)
+            emit("FC-E28", "review", "review", reader=ADMIN_READER)
         else:
-            result("SKIP", "the Actions token's default permissions not verified (this token does not read the "
-                           "repository's Actions settings; one with repository administration does)")
+            emit("FC-E28", "unknown", "unread", reason="the Actions settings not read")
         return
     off = []
     if w.get("default_workflow_permissions") != "read":
@@ -4158,11 +4704,10 @@ def check_actions_token(repo: str, network: bool, actions_token: bool = False) -
         off.append("a workflow can approve a pull request (can_approve_pull_request_reviews: "
                    f"{json.dumps(w.get('can_approve_pull_request_reviews'))})")
     if not off:
-        result("PASS", "the Actions token reads only by default and cannot approve a pull request")
+        emit("FC-E28", "pass", "good")
         return
-    result("WARN", "the Actions settings: " + "; ".join(off))
-    result("INFO", f"  gh api -X PUT repos/{repo}/actions/permissions/workflow -f default_workflow_permissions=read "
-                   "-F can_approve_pull_request_reviews=false   (needs repository administration)")
+    emit("FC-E28", "warn", "bad", {"off": "; ".join(off)})
+    emit("FC-E28", "info", "hint", {"repo": repo})
 
 
 # The patterns that cover every `v*` tag: the door's, and the two wider ones.
@@ -4275,34 +4820,30 @@ def judge_tag_rulesets(repo: str, archetype: str, rulesets: list[tuple[object, d
     for rid, rs in rulesets:
         gaps, actors_read = tag_ruleset_covers(rs, member[1] if member else None)
         if not gaps and actors_read:
-            result("PASS", f"the tag ruleset keeps {tags} tags from being moved or deleted, with no bypass actor (ruleset {rid})")
+            emit("FC-E29", "pass", "good", {"tags": tags, "rid": rid})
             return
         if not gaps:
             actors_unread = rid
             continue
         best = gaps if best is None or len(gaps) < len(best) else best
     if actors_unread is not None:
-        msg = (f"the tag ruleset (ruleset {actors_unread}) covers {tags} tags, and its bypass actors are not read here")
         if actions_token:
-            result("INFO", f"{msg}: /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+            emit("FC-E29", "review", "review", {"rid": actors_unread, "tags": tags}, reader=ADMIN_READER)
         else:
-            result("SKIP", f"{msg}: this token does not get them; one with repository administration does")
+            emit("FC-E29", "unknown", "actors", {"rid": actors_unread, "tags": tags}, reason="bypass actors not read")
         return
     if unread and best is None:
-        result("SKIP", "the tag ruleset not verified: a tag ruleset is listed and could not be read")
+        emit("FC-E29", "unknown", "unread", reason="a tag ruleset not read")
         return
     why = f"the tag rulesets here leave {tags} tags open: {'; '.join(best)}" if best else "no tag ruleset"
     if member:
-        result("WARN", f"{why}: [tool.plinth.release] own-tags in pyproject.toml releases {member[0]} on {tags} "
-                       "tags, so anyone with write access can move or delete a released tag of it")
+        emit("FC-E29", "warn", "member", {"why": why, "name": member[0], "tags": tags})
         body = {**TAG_RULESET, "name": f"tags: {tags} not moved or deleted",
                 "conditions": {"ref_name": {"include": [f"refs/tags/{tags}"], "exclude": []}}}
     else:
-        result("WARN", f"{why}: for a {archetype}, which releases from a v* tag, anyone with write access can move "
-                       "or delete a released tag")
+        emit("FC-E29", "warn", "bad", {"why": why, "archetype": archetype})
         body = TAG_RULESET
-    result("INFO", f"  gh api -X POST repos/{repo}/rulesets --input - <<<{shlex.quote(json.dumps(body))}"
-                   "   (needs repository administration)")
+    emit("FC-E29", "info", "create", {"repo": repo, "body": shlex.quote(json.dumps(body))})
 
 
 def check_tag_ruleset(repo: str, archetype: str | None, network: bool, actions_token: bool = False,
@@ -4321,7 +4862,7 @@ def check_tag_ruleset(repo: str, archetype: str | None, network: bool, actions_t
         return
     listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
     if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
-        result("SKIP", "the tag ruleset not verified: this repository's rulesets could not be listed")
+        emit("FC-E29", "unknown", "unlisted", reason="the rulesets not listed")
         return
     rulesets: list[tuple[object, dict]] = []
     unread = False
@@ -4336,8 +4877,7 @@ def check_tag_ruleset(repo: str, archetype: str | None, network: bool, actions_t
     judge_tag_rulesets(repo, archetype, rulesets, unread, actions_token)
     members = own_tag_prefixes(project) if project is not None else {}
     if members is None:
-        result("SKIP", "the tag ruleset for members released on their own tags not verified: [tool.plinth.release] "
-                       "own-tags in pyproject.toml could not be read here")
+        emit("FC-E29", "unknown", "members", reason="own-tags not read")
         return
     for name, prefix in sorted(members.items()):
         judge_tag_rulesets(repo, archetype, rulesets, unread, actions_token, (name, prefix))
@@ -4353,10 +4893,9 @@ def check_description(repo: str, network: bool) -> None:
     if not isinstance(meta, dict) or "description" not in meta:
         return
     if (meta.get("description") or "").strip():
-        result("PASS", "the repository has a description")
+        emit("FC-E30", "pass", "good")
     else:
-        result("INFO", f"the repository has no description: GitHub's community profile counts one; "
-                       f"set it with gh repo edit {repo} --description '<one line>'")
+        emit("FC-E30", "info", "none", {"repo": repo})
 
 
 def answered_true(answers: dict[str, str], key: str) -> bool:
@@ -4374,54 +4913,41 @@ def check_answers(root: Path, owner: str | None, network: bool, host: str = "git
         return
     if answered_true(answers, "third_party_review") and host == "github":
         caller = root / ".github" / "workflows" / "third-party.yml"
-        if caller.is_file():
-            result("PASS", "third_party_review: true, and .github/workflows/third-party.yml is there")
-        else:
-            result("WARN", "third_party_review: true, and .github/workflows/third-party.yml is missing: no pull "
-                           "request gets the third-party / review check the project was made with")
-            result("INFO", "  bring it back from the commit that removed it (git log --diff-filter=D -- "
-                           ".github/workflows/third-party.yml), or record third_party_review: false with "
-                           "/plinth:template-update if the reviewer is no longer wanted")
+        if not verdict("FC-F03", caller.is_file(), bad="warn"):
+            emit("FC-F03", "info", "hint")
     want_own = answered_true(answers, "code_of_conduct") and not (
         host == "github" and answered_true(answers, "owner_has_code_of_conduct"))
-    if want_own:
-        if (root / "CODE_OF_CONDUCT.md").is_file():
-            result("PASS", "code_of_conduct: true, and CODE_OF_CONDUCT.md is there")
-        else:
-            result("WARN", "code_of_conduct: true, and CODE_OF_CONDUCT.md is missing")
-            result("INFO", "  bring it back from the commit that removed it (git log --diff-filter=D -- "
-                           "CODE_OF_CONDUCT.md), or record code_of_conduct: false with /plinth:template-update")
+    if want_own and not verdict("FC-F04", (root / "CODE_OF_CONDUCT.md").is_file(), bad="warn"):
+        emit("FC-F04", "info", "hint")
     if host == "github":
         # The owner's copy, answered at creation and relied on since: still
         # published, or this repository has none in effect. Issue forms are
         # judged in the document set above, local or inherited.
-        for key, name in (("owner_has_code_of_conduct", "CODE_OF_CONDUCT.md"),
-                          ("owner_has_pr_template", "PULL_REQUEST_TEMPLATE.md")):
+        for cid, key, name in OWNER_COPIES:
             if answered_true(answers, key):
-                check_owner_copy(root, owner, network, key, name)
+                check_owner_copy(cid, root, owner, network, key, name)
 
 
-def check_owner_copy(root: Path, owner: str | None, network: bool, key: str, name: str) -> None:
+def check_owner_copy(cid: str, root: Path, owner: str | None, network: bool, key: str, name: str) -> None:
     """`<key>: true` and the owner's `.github` still publishing `name` at one
     of the three places GitHub reads it from, unless the repository has its
     own, which applies in its place."""
     places = (name, f".github/{name}", f"docs/{name}")
+    values = {"key": key, "name": name, "owner": owner}
     if any((root / p).is_file() for p in places):
-        result("PASS", f"{name} is the repository's own, which applies in place of the owner's")
+        emit(cid, "pass", "own", values)
         return
     if owner is None:
-        result("SKIP", f"{key}: true; whether the owner's .github repository still publishes {name} not verified "
-                       "(no --repo)")
+        emit(cid, "unknown", "norepo", values, reason="no --repo")
         return
     vis = owner_dotgithub_public(owner, network)
     if vis.startswith("unknown"):
-        result("SKIP", f"{key}: true; whether {owner}/.github is public not verified "
-                       f"({vis.removeprefix('unknown: ')}), and GitHub inherits only from a public one")
+        emit(cid, "unknown", "visibility", {**values, "why": vis.removeprefix("unknown: ")},
+             reason="visibility of the owner's .github not read")
         return
     if vis != "yes":
-        result("WARN", f"{key}: true, and {owner}/.github is private or gone: GitHub inherits {name} only from "
-                       "a public .github repository, so this repository has none in effect")
-        result("INFO", "  /plinth:template-update looks at the owner's .github again and passes what it finds")
+        emit(cid, "warn", "private", values)
+        emit(cid, "info", "again")
         return
     found, failed = False, False
     for path in places:
@@ -4431,14 +4957,12 @@ def check_owner_copy(root: Path, owner: str | None, network: bool, key: str, nam
             break
         failed = failed or got is ERROR
     if found:
-        result("PASS", f"{key}: true, and the owner's .github repository publishes {name}")
+        emit(cid, "pass", "good", values)
     elif failed:
-        result("SKIP", f"{key}: true; whether the owner's .github repository still "
-                       "publishes it not verified (offline or API error)")
+        emit(cid, "unknown", "unread", values, reason="offline or API error")
     else:
-        result("WARN", f"{key}: true, and the owner's .github repository no longer "
-                       f"publishes {name}: this repository has none in effect")
-        result("INFO", "  /plinth:template-update looks at the owner's .github again and passes what it finds")
+        emit(cid, "warn", "gone", values)
+        emit(cid, "info", "again")
 
 
 def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: dict[str, str] | None, network: bool,
@@ -4454,14 +4978,14 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     When nothing is left, the required-checks rule is not asked for either,
     and CodeQL's default setup is asked to analyse that language, not Python."""
     if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
-        result("SKIP", "wall not checked (offline)")
+        emit("FC-E06", "unknown", "offline", reason="offline")
         return
     meta = api(f"repos/{repo}", network)
     if meta in (ABSENT, ERROR) or not isinstance(meta, dict):
         if meta is ABSENT:
-            result("FAIL", f"repos/{repo} not found (404)")
+            emit("FC-E06", "fail", "absent", {"repo": repo})
         else:
-            result("SKIP", f"could not read repos/{repo} (API error)")
+            emit("FC-E06", "unknown", "error", {"repo": repo}, reason="an API error")
         return
     branch = meta.get("default_branch")
     # The ruleset the door applies targets ~DEFAULT_BRANCH, so every rule below
@@ -4473,19 +4997,18 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # Said once and plainly, not only as the prefix on each rule line: a check
     # that passes should not depend on someone noticing a prefix.
     if branch is None:
-        result("SKIP", "default branch not verified (the API did not report one); reading the wall on main")
+        emit("FC-E07", "unknown", "nobranch", reason="no default branch reported")
         branch = "main"
     else:
-        result("INFO", f"the wall is checked on {branch}, the repository's default branch")
+        emit("FC-E07", "info", "where", {"branch": branch})
     # WARN, never FAIL. `ci / floor-check` runs with --repo in every consumer's
     # CI, so a FAIL here blocks their merges -- and a repository whose default
     # is deliberately `master` or `trunk` is not broken, it just is not what the
     # door builds. Naming it is the whole job; deciding for them is not (#106,
     # the same reasoning that keeps a missing label a WARN in #84).
     if branch is not None and branch != "main":
-        result("WARN", f"the default branch is {branch}, not main: the rules below govern {branch}. "
-                       f"If main is where the work happens, main is unprotected")
-        result("INFO", f"  gh api repos/{repo} -X PATCH -f default_branch=main   (then run this again)")
+        emit("FC-E07", "warn", "notmain", {"branch": branch})
+        emit("FC-E07", "info", "hint", {"repo": repo})
     # The squash commit is the pull request (title and description), not a
     # list of the branch's commits. The door sets it; a button merge in the
     # web UI uses it. The fields are visible to a token with push access.
@@ -4494,13 +5017,11 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # left to the skill there, as push protection below, not a SKIP no
     # consumer can clear.
     if title is None and msg is None and actions_token:
-        result("INFO", "squash commit settings not visible with this token; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+        emit("FC-E08", "review", "review", reader=ADMIN_READER)
     elif title is None and msg is None:
-        result("SKIP", "squash commit settings not visible with this token (a push-access token sees them)")
+        emit("FC-E08", "unknown", "unread", reason="squash commit settings not read")
     else:
-        ok(title == "PR_TITLE" and msg == "PR_BODY",
-           "squash commits carry the pull request title and description",
-           f"squash commit settings drifted: title={title}, message={msg} (expected PR_TITLE, PR_BODY)")
+        verdict("FC-E08", title == "PR_TITLE" and msg == "PR_BODY", {"title": title, "msg": msg})
     hidden = hidden_security(repo, meta, network, actions_token)
     check_push_protection(repo, meta, actions_token, hidden)
     check_private_reporting(repo, meta, network, actions_token, root)
@@ -4508,37 +5029,34 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # The merge line is printed on these two paths as well (#583): the skill's
     # summary relays it, and the role alone decides much of it.
     if rules is ERROR:
-        result("SKIP", f"could not read the rules of {branch} (API error)")
+        emit("FC-E12", "unknown", "unread", {"branch": branch}, reason="an API error")
         if merge is not None:
             check_merge_setup(branch, meta, "unread", actions_token)
         return
     if rules is ABSENT or not rules:
-        result("FAIL", f"no rules govern {branch}: the wall is down")
+        emit("FC-E12", "fail", "none", {"branch": branch})
         if merge is not None:
             check_merge_setup(branch, meta, "no rules", actions_token)
         return
     by_type = {r["type"]: r for r in rules}
     checks = not not_applying or bool(expected)
-    for t in ("deletion", "non_fast_forward", "pull_request") + (("required_status_checks",) if checks else ()):
-        ok(t in by_type, f"{branch}: {t} rule active", f"{branch}: {t} rule missing")
+    for cid, t in WALL_RULES:
+        if t != "required_status_checks" or checks:
+            verdict(cid, t in by_type, {"branch": branch})
 
     pr = by_type.get("pull_request", {}).get("parameters", {})
     methods = set(pr.get("allowed_merge_methods", []))
-    ok(bool(methods) and methods <= merge_methods,
-       f"{branch}: merge methods within {sorted(merge_methods)}",
-       f"{branch}: merge methods widened to {sorted(methods) or 'unknown'}")
+    verdict("FC-E17", bool(methods) and methods <= merge_methods,
+            {"branch": branch, "allowed": sorted(merge_methods), "methods": sorted(methods) or "unknown"})
 
     # Strict when any active required-checks rule is strict: GitHub enforces
     # each rule, so one strict rule already requires a current branch.
     strict = any(r.get("parameters", {}).get("strict_required_status_checks_policy") is True
                  for r in rules if r.get("type") == "required_status_checks")
     if not_applying:
-        result("N/A", f"{branch}: requiring {', '.join(not_applying)} does not apply: python-ci.yml runs those "
-                      "checks, and a JavaScript or TypeScript repository does not call it")
+        emit("FC-E19", "not_applicable", "na", {"branch": branch, "checks": ", ".join(not_applying)})
     if checks:
-        ok(strict,
-           f"{branch}: required checks are strict (branch must be current)",
-           f"{branch}: required checks are not strict")
+        verdict("FC-E18", strict, {"branch": branch})
     # Every active required-checks rule counts: GitHub enforces each of them,
     # so a check is required when any rule requires it, and pinned when any
     # rule pins it. Keeping only the last rule of the type gave a false
@@ -4558,18 +5076,14 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     held = [c for c in missing if c in gained]
     missing = [c for c in missing if c not in gained]
     for c in held:
-        result("SKIP", f"{branch}: required check {c} not required yet: this checkout records the {archetype} archetype, "
-                       f"which runs it, and {branch} records {old}, which does not (an archetype move). Once it is merged "
-                       f"and {c} has run on {branch}, a person requires it (repository administration): "
-                       f"scripts/with-admin-token.sh scripts/require-check.sh --repo {repo} '{c}'")
+        emit("FC-E19", "unknown", "held", {"branch": branch, "check": c, "archetype": archetype, "old": old, "repo": repo},
+             reason="an archetype move")
     if not checks or (held and not missing):
         pass
-    elif not ok(not missing, f"{branch}: all {len(expected)} expected checks are required",
-              f"{branch}: required checks dropped: {missing}") and sources is not None \
-            and all(sources.get(c) is not None for c in missing):
+    elif not verdict("FC-E19", not missing, {"branch": branch, "count": len(expected), "missing": missing}) \
+            and sources is not None and all(sources.get(c) is not None for c in missing):
         # The script only adds checks, and asks for repository administration.
-        result("INFO", "  require them again (repository administration): scripts/with-admin-token.sh "
-                       f"scripts/upgrade-ruleset.sh {repo} " + " ".join(shlex.quote(f"{c}:{sources[c]}") for c in missing))
+        emit("FC-E19", "info", "hint", {"repo": repo, "pairs": " ".join(shlex.quote(f"{c}:{sources[c]}") for c in missing)})
     # Which app may report each check is part of the wall. Without the pin, a
     # commit status of the same name, which anyone with write access can post,
     # satisfies the requirement.
@@ -4578,7 +5092,7 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     if not checks:
         pass
     elif sources is None:
-        result("INFO", f"{branch}: the source of each required check is not compared (no --ruleset)")
+        emit("FC-E20", "info", "nocompare", {"branch": branch})
     else:
         bad = unknown = 0
         for c in expected:
@@ -4587,24 +5101,22 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                 continue
             want = sources.get(c)
             if want is None:
-                result("SKIP", f"{branch}: the expected app for required check {c} is not known "
-                               "(not pinned in --ruleset); its source is not compared")
+                emit("FC-E20", "unknown", "unknown", {"branch": branch, "check": c}, reason="no expected app")
                 unknown += 1
                 continue
             if want in live[c]:
                 continue
             bad += 1
             if None in live[c]:
-                result("FAIL", f"{branch}: required check {c} accepts a status from any source "
-                               f"(expected app {want}); anyone with write access can satisfy it")
+                emit("FC-E20", "fail", "any", {"branch": branch, "check": c, "want": want})
             else:
                 got = ", ".join(str(i) for i in sorted(i for i in live[c] if i is not None))
-                result("FAIL", f"{branch}: required check {c} comes from app {got}, not {want}")
+                emit("FC-E20", "fail", "other", {"branch": branch, "check": c, "got": got, "want": want})
         apps = sorted({v for v in sources.values() if v is not None})
         # A PASS speaks for every expected check; with one uncompared it would not.
         if not bad and not unknown and apps:
             label = "app" if len(apps) == 1 else "apps"
-            result("PASS", f"{branch}: required checks come from the expected {label} ({', '.join(map(str, apps))})")
+            emit("FC-E20", "pass", "good", {"branch": branch, "label": label, "apps": ", ".join(map(str, apps))})
 
     # CodeQL is part of the floor whatever the ruleset names: the door requires
     # it through a code_scanning rule (blocks with a reason, and on the alerts
@@ -4626,45 +5138,27 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
     # clear, and with or without the licence that run cannot fail the item.
     scanning = product_status(meta, "code_security", "advanced_security") if is_private(meta) else "enabled"
     if tools or by_name or scanning == "enabled":
-        ok(bool(tools) or by_name,
-           f"{branch}: CodeQL enforced ({'rule' if tools else 'check name'})",
-           f"{branch}: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name")
+        verdict("FC-E21", bool(tools) or by_name, {"branch": branch, "how": "rule" if tools else "check name"})
     elif scanning == "disabled":
-        result("INFO", f"{branch}: CodeQL is not expected here: GitHub Code Security is not enabled on this private "
-                       "repository (a paid product for Team and Enterprise), so no code_scanning rule for CodeQL and "
-                       f"no scan. In its place: `ci / lint`'s security rules. {TURN_ON}")
+        emit("FC-E21", "info", "gap", {"branch": branch, "turn_on": TURN_ON})
     elif meta.get("security_and_analysis") is None and actions_token:
-        result("INFO", f"{branch}: CodeQL is not judged here: no code_scanning rule for CodeQL and no CodeQL check "
-                       "name, which on a private repository is a defect only where GitHub Code Security is enabled, "
-                       "and the Actions token does not get the repository's security settings. The licence state is "
-                       "judged when /plinth:floor-check is run with a login that administers the repository", deferred=True)
+        emit("FC-E21", "review", "review", {"branch": branch}, reader=ADMIN_READER)
     elif hidden == "plan":
-        result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
-                       "which on a private repository is a defect only where GitHub Code Security is enabled "
-                       "(GitHub answers no security settings for this private repository to a login that "
-                       "administers it, with a token that reads its Actions permissions: GitHub Code Security "
-                       "(a paid product for Team and Enterprise) not on its plan. In its place: `ci / lint`'s "
-                       "security rules)", here=True)
+        emit("FC-E21", "unknown", "plan", {"branch": branch}, reason=HERE)
     elif hidden == "token":
-        result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
-                       "which on a private repository is a defect only where GitHub Code Security is enabled "
-                       "(GitHub answers no security settings for this private repository to a login that "
-                       "administers it, and this token was not shown to read an administration setting: a token "
-                       "without the Administration permission, or GitHub Code Security not on its plan)")
-        result("INFO", ADMIN_TOKEN_FIX)
+        emit("FC-E21", "unknown", "token", {"branch": branch}, reason="the security settings not answered")
+        emit("FC-E21", "info", "admin", {"line": ADMIN_TOKEN_FIX})
     else:
         why = ("this token does not read the repository's security settings; one with repository administration does"
                if meta.get("security_and_analysis") is None else
                "GitHub reports no Code Security status for this repository")
-        result("SKIP", f"{branch}: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name, "
-                       f"which on a private repository is a defect only where GitHub Code Security is enabled ({why})")
+        emit("FC-E21", "unknown", "unread", {"branch": branch, "why": why}, reason="no Code Security status read")
     if tools:
         check_codeql_policy(repo, branch, tools, policy)
     elif by_name:
         # A check name only asks the analysis to finish: the alerts it finds
         # block nothing. Said as not verified, not as the rule's policy.
-        result("SKIP", f"{branch}: CodeQL alert thresholds not verified: a check name does not set them; "
-                       f"the door's code_scanning rule does (scripts/add-ruleset-rule.sh {repo} code-scanning)")
+        emit("FC-E22", "unknown", "name", {"branch": branch, "repo": repo}, reason="a check name sets no threshold")
     # The rule is only as wide as the languages default setup analyses. Enabled
     # before GitHub's language detection had run, it analysed `actions` alone
     # and the Python under src/ was never scanned while this line said
@@ -4676,16 +5170,13 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         setup = api(f"repos/{repo}/code-scanning/default-setup", network)
         langs = setup.get("languages") if isinstance(setup, dict) else None
         if not isinstance(langs, list) and actions_token:
-            result("INFO", "CodeQL default setup languages not read here: the Actions token cannot read "
-                           "code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+            emit("FC-E23", "review", "review", reader=ADMIN_READER)
         # A CodeQL rule or check name means Code Security is there, so on
         # that repository a failed read is one a re-run can clear (#1002).
         elif not isinstance(langs, list) and hidden == "plan" and not (tools or by_name):
-            result("SKIP", "CodeQL default setup languages not verified (code-scanning/default-setup gave no answer "
-                           "on a private repository whose plan answers no security settings to its administrator)",
-                   here=True)
+            emit("FC-E23", "unknown", "plan", reason=HERE)
         elif not isinstance(langs, list):
-            result("SKIP", "CodeQL default setup languages not verified (the token cannot read code-scanning/default-setup)")
+            emit("FC-E23", "unknown", "unread", reason="default setup not read")
         else:
             # CodeQL's name for the language; `javascript` and `typescript`
             # are the older spellings GitHub still accepts (#681 review).
@@ -4695,10 +5186,10 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
                 lang, code = "javascript-typescript", "the JavaScript or TypeScript code"
                 accepted = {lang, "javascript", "typescript"}
             if any(a in langs for a in accepted):
-                result("PASS", f"CodeQL default setup analyses {langs}")
+                emit("FC-E23", "pass", "good", {"langs": langs})
             else:
-                result("WARN", f"CodeQL default setup analyses {langs}, not {code}")
-                result("INFO", f"  gh api -X PATCH repos/{repo}/code-scanning/default-setup -f 'languages[]=actions' -f 'languages[]={lang}'")
+                emit("FC-E23", "warn", "bad", {"langs": langs, "code": code})
+                emit("FC-E23", "info", "hint", {"repo": repo, "lang": lang})
 
     # The merge ruleset is the one ruleset allowed a bypass actor, judged by
     # its own shape; every other ruleset keeps none.
@@ -4713,11 +5204,11 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             # Only visible with repository-administration read, which the
             # Actions token never has. The skill, run by the owner, sees it.
             if actions_token:
-                result("INFO", f"ruleset {rid}: bypass actors not visible with this token; /plinth:floor-check reads them with a login that administers the repository", deferred=True)
+                emit("FC-E24", "review", "review", {"rid": rid}, reader=ADMIN_READER)
                 continue
-            result("SKIP", f"ruleset {rid}: bypass actors not visible with this token (an admin-read token sees them)")
+            emit("FC-E24", "unknown", "unread", {"rid": rid}, reason="bypass actors not read")
         else:
-            ok(actors == [], f"ruleset {rid}: no bypass actors", f"ruleset {rid}: bypass actors present: {actors}")
+            verdict("FC-E24", actors == [], {"rid": rid, "actors": actors})
 
 
 def bypass_key(actor: dict) -> tuple[str, str, str]:
@@ -4739,12 +5230,11 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
                 and r.get("ruleset_source_type") == "Repository" and r.get("ruleset_id")}
     if merge is None:
         if carriers:
-            result("INFO", f"{branch}: the ruleset that reserves the merge to an admin is not compared (no --merge-ruleset)")
+            emit("FC-E25", "info", "nocompare", {"branch": branch})
         return set(), None
     if not carriers:
         if any(r.get("type") == "update" for r in rules):
-            result("SKIP", f"{branch}: the merge ruleset not verified: the update rule comes from a ruleset "
-                           "outside this repository, whose bypass actors are not read here")
+            emit("FC-E25", "unknown", "outside", {"branch": branch}, reason="a ruleset outside this repository")
             return set(), None
         # Not in effect is not absent: a merge ruleset switched to evaluate or
         # disabled, or scoped off the default branch, is missing from the
@@ -4753,8 +5243,7 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
         # one that carries `update`.
         listed = api(f"repos/{repo}/rulesets?per_page=100", network, paginate=True)
         if listed is ERROR or (listed is not ABSENT and not isinstance(listed, list)):
-            result("SKIP", f"{branch}: the merge ruleset not verified: no ruleset in effect carries update, "
-                           "and this repository's rulesets could not be listed")
+            emit("FC-E25", "unknown", "unlisted", {"branch": branch}, reason="the rulesets not listed")
             return set(), None
         in_effect = {r.get("ruleset_id") for r in rules}
         idle = []
@@ -4769,15 +5258,14 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
                     and any(r.get("type") == "update" for r in rs.get("rules", [])):
                 idle.append(f"ruleset {rid} ({rs.get('enforcement')}, {rs.get('target')}, {rs.get('conditions')})")
         if idle:
-            result("FAIL", f"{branch}: the merge ruleset is not in effect: {'; '.join(idle)}. Any account with write "
-                           f"access can merge; expected enforcement {merge['enforcement']} on {merge['conditions']}")
+            emit("FC-E25", "fail", "idle", {"branch": branch, "idle": "; ".join(idle),
+                                            "enforcement": merge["enforcement"], "conditions": merge["conditions"]})
             return set(), None
         # A WARN, not a FAIL: every repository made before #568 lacks it, and
         # `ci / floor-check` runs in each of them; while the agent works under
         # the person's own account it changes nothing.
-        result("WARN", f"{branch}: no ruleset reserves the merge to an admin: any account with write access, "
-                       "an agent's own account included, can merge a pull request")
-        result("INFO", f"  scripts/with-admin-token.sh scripts/create-merge-ruleset.sh {repo}   (from a plinth checkout)")
+        emit("FC-E25", "warn", "missing", {"branch": branch})
+        emit("FC-E25", "info", "create", {"repo": repo})
         return set(), "missing"
     want_types = sorted(r["type"] for r in merge["rules"])
     want_actors = sorted(bypass_key(a) for a in merge["bypass_actors"])
@@ -4787,8 +5275,7 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
     for rid in sorted(carriers):
         types = sorted({r.get("type") for r in rules if r.get("ruleset_id") == rid})
         if types != want_types:
-            result("FAIL", f"{branch}: ruleset {rid} carries {types}, not {want_types} alone: "
-                           "a bypass actor on it would reach every one of those rules")
+            emit("FC-E25", "fail", "types", {"branch": branch, "rid": rid, "types": types, "want": want_types})
             continue
         judged.add(rid)
         rs = api(f"repos/{repo}/rulesets/{rid}", network)
@@ -4799,23 +5286,21 @@ def check_merge_ruleset(repo: str, branch: str, rules: list, merge: dict | None,
         scope = {k: rs[k] for k in scope_keys} if isinstance(rs, dict) and all(k in rs for k in scope_keys) else None
         want_scope = {k: merge[k] for k in scope_keys}
         if scope is not None and scope != want_scope:
-            result("FAIL", f"ruleset {rid}: the merge ruleset applies to {scope}, expected {want_scope}")
+            emit("FC-E25", "fail", "scope", {"rid": rid, "scope": scope, "want": want_scope})
             continue
         actors = rs.get("bypass_actors") if isinstance(rs, dict) else None
         # GitHub's own answer for this login, readable without the actors.
         cannot_bypass.append(isinstance(rs, dict) and rs.get("current_user_can_bypass") == "never")
         if actors is None and actions_token:
-            result("INFO", f"ruleset {rid}: the merge ruleset's bypass actors not visible with this token; "
-                           "/plinth:floor-check reads them with a login that administers the repository", deferred=True)
+            emit("FC-E25", "review", "review", {"rid": rid}, reader=ADMIN_READER)
         elif actors is None:
-            result("SKIP", f"ruleset {rid}: the merge ruleset's bypass actors not visible with this token "
-                           "(an admin-read token sees them)")
+            emit("FC-E25", "unknown", "unread", {"rid": rid}, reason="bypass actors not read")
         elif sorted(bypass_key(a) for a in actors) != want_actors:
-            result("FAIL", f"ruleset {rid}: the merge ruleset's bypass actors are {actors}, expected {merge['bypass_actors']}")
+            emit("FC-E25", "fail", "actors", {"rid": rid, "actors": actors, "want": merge["bypass_actors"]})
         elif scope is None:
-            result("SKIP", f"ruleset {rid}: the merge ruleset's scope (target, enforcement, conditions) not read")
+            emit("FC-E25", "unknown", "noscope", {"rid": rid}, reason="the scope not read")
         else:
-            result("PASS", f"ruleset {rid}: the merge is reserved to the repository admin (update, the admin role exempt)")
+            emit("FC-E25", "pass", "good", {"rid": rid})
             passed.append(rid)
     if passed and len(passed) == len(carriers):
         return judged, "stands"
@@ -4839,45 +5324,33 @@ def check_merge_setup(branch: str, meta: dict, reserved: str | None, actions_tok
     `reserved` is check_merge_ruleset's answer, or "no rules" and "unread"
     when the branch's rules were empty or could not be read."""
     if actions_token:
-        result("INFO", "the merge: not verified here: the Actions token is not the agent's login; "
-                       "/plinth:floor-check decides guidance or boundary with the login the agent inherits", deferred=True)
+        emit("FC-E26", "review", "review", reader=ADMIN_READER)
         return
     perms = meta.get("permissions")
     admin = perms.get("admin") if isinstance(perms, dict) else None
     push = perms.get("push") if isinstance(perms, dict) else None
     if not isinstance(admin, bool):
-        result("SKIP", "the merge: not verified: whether this login is the repository's admin could not be read")
+        emit("FC-E26", "unknown", "role", reason="the role not read")
     elif not admin and push is False:
-        result("PASS", "the merge: boundary. This login cannot write to the repository, so it cannot merge; "
-                       "you merge. It holds while no login with write access is left where the agent can reach it")
+        emit("FC-E26", "pass", "readonly")
     elif not admin and push is not True:
-        result("SKIP", "the merge: not verified: whether this login can write to the repository could not be read")
+        emit("FC-E26", "unknown", "write", reason="write access not read")
     elif admin:
-        result("INFO", "the merge: guidance. This login is the repository's admin, and GitHub lets the admin merge, "
-                       "so an agent working under it can merge too; it is asked to wait for your word, not stopped")
+        emit("FC-E26", "info", "admin")
     elif reserved == "stands":
-        result("PASS", f"the merge: boundary. This login is not the repository's admin and the merge ruleset stands "
-                       f"on {branch}, so GitHub refuses its merge; you merge, with the button or your own login. "
-                       "It holds while no admin login is left where the agent can reach it")
+        emit("FC-E26", "pass", "stands", {"branch": branch})
     elif reserved == "never":
         # Only this login's answer: whether the admin is still exempt, so
         # the person's merge goes through, is in the actors it cannot read.
-        result("PASS", f"the merge: boundary. This login is not the repository's admin, and GitHub says it can never "
-                       f"bypass the merge ruleset on {branch}, so GitHub refuses its merge. It holds while no admin "
-                       "login is left where the agent can reach it. Whether the admin is still exempt, so that your "
-                       "own merge goes through, is not read with this login: run /plinth:floor-check with yours")
+        emit("FC-E26", "pass", "never", {"branch": branch})
     elif reserved == "missing":
-        result("INFO", "the merge: guidance. This login is not the repository's admin, but no ruleset reserves the "
-                       "merge to the admin, so it can merge; the WARN above adds that ruleset")
+        emit("FC-E26", "info", "missing")
     elif reserved == "no rules":
-        result("INFO", f"the merge: guidance. This login is not the repository's admin, but no rules govern {branch}, "
-                       "so nothing reserves the merge to the admin and it can merge; the FAIL above is the wall to restore")
+        emit("FC-E26", "info", "norules", {"branch": branch})
     elif reserved == "unread":
-        result("SKIP", f"the merge: not verified: this login is not the repository's admin, and the rules of {branch} "
-                       "could not be read, so whether a ruleset reserves the merge is not known")
+        emit("FC-E26", "unknown", "unread", {"branch": branch}, reason="the rules not read")
     else:
-        result("SKIP", "the merge: not verified: this login is not the repository's admin, "
-                       "but the merge ruleset above was not found in its shape")
+        emit("FC-E26", "unknown", "shape", reason="the merge ruleset not in its shape")
 
 
 # ── this machine ──────────────────────────────────────────────────────────
@@ -5540,8 +6013,7 @@ def main() -> int:
 
     host = a.host or (copier_answers(root) or {}).get("host") or "github"
     if host not in ("github", "gitlab"):
-        result("SKIP", f".copier-answers.yml says host: {host}, which this checker does not read; "
-                       "read as github (pass --host to choose)")
+        emit("FC-F07", "unknown", "other", {"host": host}, reason="an unknown host")
         host = "github"
     print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
           + (" host=gitlab" if host == "gitlab" else ""))
@@ -5566,11 +6038,11 @@ def main() -> int:
             check_gitlab_wall(root, a.repo, network)
         else:
             check_gitlab_include(root, network)
-            result("SKIP", "no --repo: wall not checked" if not a.repo else "--no-network: the GitLab wall not checked")
+            emit("FC-E01", "unknown", "norepo" if not a.repo else "offline",
+                 reason="no --repo" if not a.repo else "--no-network")
     else:
         if javascript:
-            result("N/A", f"the ci job's call to {CALLER_WORKFLOW} does not apply: that workflow runs Python's lint, "
-                          "typecheck, test and build, which have nothing to run on here")
+            emit("FC-D02", "not_applicable", "js", {"workflow": CALLER_WORKFLOW})
         else:
             check_caller(root, a.repo, network, a.caller_from_checkout, archetype)
         check_plinth_pins_agree(root)
@@ -5609,7 +6081,7 @@ def main() -> int:
             expected = [c for c in expected if c not in not_applying]
         if a.ruleset:
             sources = {c: pinned.get(c, common) for c in expected}
-        result("INFO", f"wall expectation: checks {expected}, merge methods {sorted(merge_methods)}")
+        emit("FC-E06", "info", "expect", {"expected": expected, "methods": sorted(merge_methods)})
         merge = json.loads(read(Path(a.merge_ruleset))) if a.merge_ruleset else None
         check_wall(a.repo, expected, merge_methods, policy, network, sources, a.actions_token, merge, not_applying, root,
                    None if a.archetype else archetype, (project / ".copier-answers.yml").relative_to(root).as_posix())
@@ -5619,7 +6091,7 @@ def main() -> int:
         check_description(a.repo, network)
         check_labels(a.repo, network)
     else:
-        result("SKIP", "no --repo: wall not checked")
+        emit("FC-E06", "unknown", "norepo", reason="no --repo")
 
     if a.sandbox:
         check_sandbox()

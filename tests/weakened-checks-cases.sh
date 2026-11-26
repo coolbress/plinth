@@ -589,7 +589,7 @@ done
 verdict migrations Verdict WEB=true PG=success SYNC=success MISSING=failure EMPTY=skipped ROWS=skipped
 first "migrations: web true opens with the database" "^- pass: a disposable Postgres$"
 if grep -qx -- "- fail: no model change without its migration (makemigrations --check)" <<<"$sum" \
-  && grep -q "^- not yet confirmed: the migrations apply to an empty Postgres, it did not run" <<<"$sum"; then
+  && grep -q "^- not yet confirmed: the migrations apply to an empty Postgres. Why: it did not run" <<<"$sum"; then
   ok "migrations: a missing migration is a fail, and the steps after it are not yet confirmed"
 else bad "migrations: a failed makemigrations --check did not read as fail, then not yet confirmed" "$sum"; fi
 printf 'fail: the base commit'"'"'s rows survive this head'"'"'s migrations: auth_user 2 -> 1\n' > "$tmp/rt/rows.verdict"
@@ -670,16 +670,16 @@ verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR=som
 first "not a pull request: pass, does not apply" '^- pass: dependency review, does not apply \(not a pull request'
 warned "not a pull request: no warning" 0
 verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped OSV=skipped SEVERITY=high ACTOR=someone
-first "refused, osv-scanner stopped by an earlier step: not yet confirmed (#1073)" '^- not yet confirmed: dependency review, osv-scanner did not run because an earlier step failed'
+first "refused, osv-scanner stopped by an earlier step: not yet confirmed (#1073)" '^- not yet confirmed: dependency review\. Why: osv-scanner did not run because an earlier step failed\.'
 warned "refused, osv-scanner stopped: one warning, the same text" 1
 verdict deps Verdict EVENT=pull_request SERVED=refused REVIEW=skipped OSV=failure SEVERITY=high ACTOR=someone
-first "refused, osv-scanner failed with no line of its own: fail, never a pass" '^- fail: dependency review, the scan could not run'
+first "refused, osv-scanner failed with no line of its own: fail, never a pass" '^- fail: dependency review could not run, osv-scanner did not compare the two lockfiles'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=success SEVERITY=moderate ACTOR=someone
 first "reviewed: pass, at the input's severity" '^- pass: dependency review, no added dependency version with an advisory at moderate or above$'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=failure SEVERITY=high ACTOR=someone
 first "review failed: fail" '^- fail: dependency review'
 verdict deps Verdict EVENT=pull_request SERVED=run REVIEW=success SEVERITY=high ACTOR='dependabot[bot]'
-if grep -qE '^- not yet confirmed: CodeQL on this head, Dependabot pushed it .*`main` is analysed after the merge$' <<<"$sum"; then ok "a head Dependabot pushed: CodeQL not yet confirmed"
+if grep -qE '^- not yet confirmed: CodeQL on this head\. Why: Dependabot pushed it.*What confirms it: the analysis of `main` after the merge\.$' <<<"$sum"; then ok "a head Dependabot pushed: CodeQL not yet confirmed"
 else bad "a head Dependabot pushed: no CodeQL line" "$sum"; fi
 warned "a head Dependabot pushed: one warning" 1
 verdict deps Verdict EVENT=push SERVED="" REVIEW=skipped SEVERITY=high ACTOR='dependabot[bot]'
@@ -693,7 +693,7 @@ verdict lint Verdict SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=skipped
 first "a failed sync: fail" '^- fail: uv sync --locked$'
 # Once a fail line is said, a step it stopped is in the summary only: the
 # warning repeated the failure and read like the cause (#1098).
-if [ "$(grep -c '^- not yet confirmed: .*, it did not run because an earlier step failed;' <<<"$sum")" = 3 ] \
+if [ "$(grep -c '^- not yet confirmed: .*\. Why: it did not run because an earlier step failed\.' <<<"$sum")" = 3 ] \
   && ! grep -q '^::warning::.*earlier step failed' <<<"$out" \
   && [ "$(grep -c '^::warning::not yet confirmed: ' <<<"$out")" = 1 ] && grep -q '^::warning::not yet confirmed: no published advisory' <<<"$out"; then
   ok "a failed sync: the three steps it stopped are in the summary only; known-vulnerable-actions, not stopped by it, still warns"
@@ -745,7 +745,7 @@ zz "[$kva1,$kva2]" 14
 [ "$(grep -c '^known-vulnerable-actions High ' <<<"$zout")" = 2 ] && ok "only known-vulnerable-actions: each finding in the log" || bad "the advisories are not in the log" "$zout"
 grep -qx -- "- pass: $rest" <<<"$sum" && ok "only known-vulnerable-actions: pass for the rest" || bad "only known-vulnerable-actions: no pass for the rest" "$sum"
 warned "only known-vulnerable-actions: one not yet confirmed line and one warning per finding" 2
-grep -qE '^- not yet confirmed: GHSA-mrrh-fwg8-r2c3 .*tj-actions/changed-files@v35.*fixed version confirms it$' <<<"$sum" && ok "the line names the advisory, the action and its ref, and what confirms it" || bad "the line does not name the advisory, action and ref" "$sum"
+grep -qE '^- not yet confirmed: GHSA-mrrh-fwg8-r2c3 .*tj-actions/changed-files@v35.*What confirms it: a pin raised past the advisory.s fixed version\.$' <<<"$sum" && ok "the line names the advisory, the action and its ref, and what confirms it" || bad "the line does not name the advisory, action and ref" "$sum"
 
 zz "[$kva1,$imp]" 14
 [ "$zrc" != 0 ] && grep -qx -- "- fail: $rest" <<<"$sum" && ok "both: fail for the rest" || bad "both: no fail" "$zout"$'\n'"$sum"
@@ -845,7 +845,7 @@ line() {
   if [ "$(tail -1 <<<"$sum")" != "" ] && grep -qE -- "$2" <<<"$(tail -1 <<<"$sum")"; then warned "$1" "$3"
   else bad "$1 (last summary line does not match '$2')" "$sum"$'\n'"$jout"; fi
 }
-confirms='; a test that runs them, or `# pragma: no cover` with its reason, confirms it$'
+confirms='\. Why: no test runs them\. What confirms it: a test that runs them, or `# pragma: no cover` with its reason\.$'
 
 judge none.xml none.json
 line "none ran: not yet confirmed, the lines named, a green step" "^- not yet confirmed: none of the 4 changed lines ran under the tests: sub/src/canary/extra\.py:1-4$confirms" 1
@@ -871,7 +871,7 @@ PY
 reqcheck "$tmp/args.diff-cover-requirements.txt" "diff-cover and each dependency: one version, every file by its sha256" \
   diff-cover==9.7.1 chardet==5.2.0 jinja2==3.1.6 markupsafe==3.0.3 pluggy==1.6.0 pygments==2.19.2
 judge none.xml none.json FAKE_PIP_RC=1
-line "diff-cover's install refused (a hash that does not match): not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, diff-cover did not finish' 1
+line "diff-cover's install refused (a hash that does not match): not yet confirmed" '^- not yet confirmed: changed lines ran under the tests\. Why: diff-cover did not finish' 1
 if grep -q '^diff-cover ' "$tmp/args"; then bad "diff-cover ran after its install failed" "$(cat "$tmp/args")"; else ok "diff-cover does not run when its install failed"; fi
 judge flat.xml flat.json
 line "none ran, a test file in the report (flat layout, --source=.): the test file is left out" "^- not yet confirmed: none of the 4 changed lines ran under the tests: sub/canary/extra\.py:1-4$confirms" 1
@@ -882,30 +882,30 @@ line "all ran: pass" '^- pass: changed lines ran under the tests, all 4 changed 
 judge noexec.xml noexec.json
 line "a comment only: pass, does not apply" '^- pass: changed lines ran under the tests, does not apply \(no changed executable line\)$' 0
 judge nothing.xml nothing.json
-line "nothing collected in the project: not yet confirmed, not a fail" '^- not yet confirmed: changed lines ran under the tests, coverage recorded no line in the whole project, .*pytest-cov' 1
+line "nothing collected in the project: not yet confirmed, not a fail" '^- not yet confirmed: changed lines ran under the tests\. Why: coverage recorded no line in the whole project, .*pytest-cov' 1
 judge - -
-line "coverage xml has no data: not yet confirmed, coverage recorded no line" '^- not yet confirmed: changed lines ran under the tests, coverage recorded no line in the whole project' 1
+line "coverage xml has no data: not yet confirmed, coverage recorded no line" '^- not yet confirmed: changed lines ran under the tests\. Why: coverage recorded no line in the whole project' 1
 # A changed Python file coverage's report does not have: named, not passed.
 judge noexec.xml noexec.json FAKE_CHANGED='sub/src/canary/__init__.py\nsub/src/canary/generated.py\nsub/tests/test_gen.py'
-line "a changed file the project's coverage configuration omits: not yet confirmed, named" "^- not yet confirmed: changed lines ran under the tests, 1 changed Python files are not in coverage's report \\(outside the measured source, or omitted by the project's coverage configuration\\): sub/src/canary/generated\\.py; a run that measures them confirms it$" 1
+line "a changed file the project's coverage configuration omits: not yet confirmed, named" "^- not yet confirmed: changed lines ran under the tests, for 1 changed Python files: sub/src/canary/generated\\.py\\. Why: they are not in coverage's report \\(outside the measured source, or omitted by the project's coverage configuration\\)\\. What confirms it: a run that measures them\\.$" 1
 if grep -q 'does not apply (no changed executable line)' <<<"$sum"; then bad "an unmeasured file still gets the does-not-apply pass" "$sum"; else ok "an unmeasured file: no does-not-apply pass"; fi
 grep -q "^git diff --name-only --diff-filter=d HEAD^1 HEAD -- \*\.py$" "$tmp/args" && ok "the changed Python files are git's, against HEAD^1, deletions left out" || bad "git's arguments" "$(cat "$tmp/args")"
 judge all.xml all.json FAKE_CHANGED='sub/src/canary/__init__.py\nsub/scripts/tool.py'
-line "all measured lines ran, a file outside the source changed: the pass, then the file named" '^- not yet confirmed: changed lines ran under the tests, 1 changed Python files are not in .*: sub/scripts/tool\.py;' 1
+line "all measured lines ran, a file outside the source changed: the pass, then the file named" '^- not yet confirmed: changed lines ran under the tests, for 1 changed Python files: sub/scripts/tool\.py\. Why: ' 1
 grep -qx -- '- pass: changed lines ran under the tests, all 4 changed lines ran' <<<"$sum" && ok "the pass line is still there" || bad "the pass line is gone" "$sum"
 judge some.xml some.json FAKE_CHANGED='sub/src/canary/__init__.py\nsub/scripts/tool.py'
 grep -q '^- not yet confirmed: 3 of 4 changed lines did not run' <<<"$sum" && warned "some ran and a file outside the source: two lines, each a warning" 2 || bad "some ran and a file outside the source" "$sum"
 judge noexec.xml noexec.json FAKE_GIT_RC=1
-line "git did not list the changed files: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, git did not list the changed files' 1
+line "git did not list the changed files: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests\. Why: git did not list the changed files' 1
 judge none.xml none.json PR=""
 line "not a pull request: pass, does not apply" '^- pass: changed lines ran under the tests, does not apply \(not a pull request\)$' 0
 [ ! -s "$tmp/args" ] && ok "not a pull request: no tool runs" || bad "not a pull request: a tool ran" "$(cat "$tmp/args")"
 judge none.xml none.json PYTEST=failure
-line "pytest failed: not yet confirmed, the existing form" '^- not yet confirmed: changed lines ran under the tests, it did not run because an earlier step failed; a run that gets past that step confirms it$' 1
+line "pytest failed: not yet confirmed, the existing form" '^- not yet confirmed: changed lines ran under the tests\. Why: it did not run because an earlier step failed\. What confirms it: a run that gets past that step\.$' 1
 judge none.xml none.json COV=failure PYTEST=success
-line "coverage did not install: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, it did not run because an earlier step failed' 1
+line "coverage did not install: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests\. Why: it did not run because an earlier step failed' 1
 judge none.xml - FAKE_DC_RC=1
-line "diff-cover failed: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests, diff-cover did not finish' 1
+line "diff-cover failed: not yet confirmed" '^- not yet confirmed: changed lines ran under the tests\. Why: diff-cover did not finish' 1
 # Eleven files missed: nine named, the rest counted.
 python3 - "$tmp/many.json" <<'PY'
 import json, sys
@@ -913,12 +913,12 @@ s = {f"src/m{i:02}.py": {"covered_lines": [1], "violation_lines": [2, 3, 5]} for
 json.dump({"src_stats": s}, open(sys.argv[1], "w"))
 PY
 cp "$tmp/many.json" "$fx/.many.json"; judge some.xml .many.json; rm -f "$fx/.many.json"
-line "eleven files: nine named, the rest counted" '^- not yet confirmed: 33 of 44 changed lines did not run under the tests: src/m00\.py:2-3,5, .*src/m08\.py:2-3,5, and 2 more files in this step.s log;' 1
+line "eleven files: nine named, the rest counted" '^- not yet confirmed: 33 of 44 changed lines did not run under the tests: src/m00\.py:2-3,5, .*src/m08\.py:2-3,5, and 2 more files in this step.s log\. Why: ' 1
 [ "$(grep -c '^did not run under the tests: src/m[0-9]*\.py:2-3,5$' <<<"$jout")" = 11 ] && ok "eleven files: the step's log lists all eleven" || bad "the log does not list every file" "$jout"
 # A step that broke left no verdict file.
 rm -f "$tmp/rt/changed.verdict"
 verdict test Verdict SYNC=success PYTEST=success EXTRA=skipped VERSIONS=""
-if grep -qE '^- not yet confirmed: changed lines ran under the tests, the judging step did not finish' <<<"$(tail -1 <<<"$sum")" && [ "$rc" = 0 ]; then ok "the judging step left no verdict: not yet confirmed, the Verdict step passes"
+if grep -qE '^- not yet confirmed: changed lines ran under the tests\. Why: the judging step did not finish' <<<"$(tail -1 <<<"$sum")" && [ "$rc" = 0 ]; then ok "the judging step left no verdict: not yet confirmed, the Verdict step passes"
 else bad "no verdict file" "$sum"; fi
 # The recordings are of the releases the workflow pins.
 grep -q "coverage\\[toml\\]==7.10.7" "$fx/record.sh" && grep -q 'diff-cover@9.7.1' "$fx/record.sh" \

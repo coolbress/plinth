@@ -13,7 +13,7 @@ pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 
-terms=(repository issue "pull request" branch commit check CI merge ruleset draft review "template update")
+terms=(repository issue "pull request" branch commit check CI merge ruleset draft review "template update" "workflow run" "job summary" annotation)
 
 # check_table <file>: prints each missing or empty row; returns 1 if any.
 check_table() {

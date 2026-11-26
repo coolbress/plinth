@@ -734,6 +734,13 @@ wall "private vulnerability reporting on is a PASS" "PASS  private vulnerability
 wall "private vulnerability reporting off is a WARN" "WARN  private vulnerability reporting is off" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
 wall "private vulnerability reporting off carries the call that turns it on" "INFO    gh api -X PUT repos/o/r/private-vulnerability-reporting   (needs repository administration)" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
 wall "private vulnerability reporting unread is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
+# With the Actions token an unanswered setting is left to the skill (#1103:
+# every state a check declares is reached by a fixture).
+rm "$api/repos/o/r/private-vulnerability-reporting.json"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
+if grep -q "^  INFO  private vulnerability reporting is not read here: /plinth:floor-check reads it" <<<"$out"; then ok "private vulnerability reporting unread with the Actions token is left to the skill"
+else bad "private vulnerability reporting unread with the Actions token is left to the skill"; grep -i "vulnerability" <<<"$out" | sed 's/^/        /'; fi
+printf '{"enabled":true}' > "$api/repos/o/r/private-vulnerability-reporting.json"
 wall "private vulnerability reporting on a private repository is an INFO, not read" "INFO  private vulnerability reporting is not offered on a private repository" "jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\"; rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
 # SECURITY.md's route against the repository (#747): an instance rendered
 # before the template asked `visibility`, updated with --defaults, names the
@@ -1722,6 +1729,14 @@ wall "an unpinned duplicate beside a pinned one is not a source FAIL" "required 
   "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["required_status_checks"]=[{"context":"ci / a"}]; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
 wall "a strict rule beside a loose one is still strict" "required checks are strict" \
   "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["strict_required_status_checks_policy"]=False; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
+# Each rule of the wall missing, and a required-checks rule that is not
+# strict, each once (#1103: every state a check declares is reached).
+for t in non_fast_forward pull_request required_status_checks; do
+  wall "a missing $t rule is caught" "FAIL  main: $t rule missing" \
+    "jq -c 'map(select(.type != \"$t\"))' <<<\"\$good_rules\" > \"\$api/repos/o/r/rules/branches/main.json\""
+done
+wall "a required-checks rule that is not strict is caught" "FAIL  main: required checks are not strict" \
+  "jq -c 'map(if .type == \"required_status_checks\" then .parameters.strict_required_status_checks_policy = false else . end)' <<<\"\$good_rules\" > \"\$api/repos/o/r/rules/branches/main.json\""
 # A ruleset that pins its checks to different apps is compared check by
 # check; it does not switch the comparison off.
 mixed="$work/mixed-ruleset.json"
@@ -3571,6 +3586,7 @@ glw "squash not required: FAIL" "setp ../o%2Fr.json '{\"squash_option\":\"defaul
 glw "a merge commit method: FAIL" "setp ../o%2Fr.json '{\"merge_method\":\"merge\"}'" "FAIL  .*merge_method='merge'"
 glw "merge settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"squash_option\",\"merge_method\")]; json.dump(d,open(p,\"w\"))'" "SKIP  squash_option, merge_method of o/r not verified: GitLab did not return them"
 grep -q "PASS  o/r merges only on a green pipeline" <<<"$out" && ok "the merge checks returned are still judged" || bad "the merge checks returned are still judged"
+glw "pipeline settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"only_allow_merge_if_pipeline_succeeds\",\"allow_merge_on_skipped_pipeline\")]; json.dump(d,open(p,\"w\"))'" "SKIP  only_allow_merge_if_pipeline_succeeds, allow_merge_on_skipped_pipeline of o/r not verified"
 glw "a readable mismatch fails beside a missing field" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); d.pop(\"squash_option\"); d[\"only_allow_merge_if_pipeline_succeeds\"]=False; d[\"merge_method\"]=\"merge\"; json.dump(d,open(p,\"w\"))'" \
   "FAIL  the merge checks of o/r let a merge request merge without a green pipeline: only_allow_merge_if_pipeline_succeeds=False"
 grep -q "FAIL  o/r merges other than squash and fast-forward: merge_method='merge'" <<<"$out" && grep -q "SKIP  squash_option of o/r not verified: GitLab did not return it" <<<"$out" \
@@ -3918,6 +3934,11 @@ answers "must not pass: owner_has_pr_template: true and the owner's is gone is a
   "^  WARN  owner_has_pr_template: true, and the owner's .github repository no longer publishes PULL_REQUEST_TEMPLATE.md" \
   'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$gone_api"
 answers "owner_has_pr_template: false is not read" '!owner_has_pr_template' 'owner_has_pr_template: false\n'
+# Each owner copy is its own check (#1103): the pull-request template's
+# unreadable file is a SKIP too.
+bad_pr_api="$work/ans-bad-pr"; mkdir -p "$bad_pr_api/repos/o/.github/contents"; printf 'not json' > "$bad_pr_api/repos/o/.github/contents/PULL_REQUEST_TEMPLATE.md.json"; printf '{"visibility":"public"}' > "$bad_pr_api/repos/o/.github.json"
+answers "an owner's pull-request template that cannot be read is a SKIP, not a WARN" "^  SKIP  owner_has_pr_template: true; whether the owner's .github repository still publishes it not verified" \
+  'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$bad_pr_api"
 # The archetypes that get the tag ruleset: one list in the door, one in the checker.
 door_list="$(sed -n 's/^case "\$arch" in \([a-z|-]*\)) tag_ruleset=0.*/\1/p' "$root/scripts/new-project.sh")"
 checker_list="$(python3 -c "import importlib.util as u; s=u.spec_from_file_location('fc','$root/scripts/floor-check.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print('|'.join(m.TAG_NOT_RELEASING))")"

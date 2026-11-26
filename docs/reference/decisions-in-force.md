@@ -32,7 +32,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 - The wall is fail-closed: anything that cannot be raised stops before anything is created, and says why. 2026-09-02, #19
 - `/plinth:new-project` and `/plinth:template-update` keep `disable-model-invocation: true`, with no router skill that runs them on an ordinary request; the agent names the command for the person to type. 2026-10-15, #515
-- When the current folder already holds something, new-project's recommended option writes nothing there and creates no repository from it; publishing existing code is offered as printed commands. 2026-11-25, #1121 (decided; not built yet: #1121)
+- When the current folder already holds something, new-project's recommended option writes nothing there and creates no repository from it; publishing existing code is offered as printed commands. 2026-11-25, #1121
 - The door never overwrites an owner's shared issue or pull-request templates; changing them happens only on a maintainer's word, as a draft pull request. 2026-09-19, #88
 - Questions come host first (each host's readiness shown), then what the project is, then name and visibility; every answer stays a flag. 2026-11-24, #1067 (decided; not built yet: #1067)
 - Every answer is shown in one table before anything is created; only the rows picked are asked again. 2026-11-24, #1068 (decided; not built yet: #1068)

@@ -207,13 +207,19 @@ What to keep to:
   its head was pushed was not read`: say both halves, and guess neither.
 - A `token step: not done:` line means the credential this session's `gh`
   uses still reaches the repository's Administration, so the agent can still
-  change the checks: say so in part 2, as a blocking problem, and name the three
-  pages it lists, in that order, as the step to finish before going on. The
+  change the checks: say so in part 2, as a blocking problem, and name the
+  token page it lists as the step to finish before going on; the two pages
+  after `recommended` are recommended next, not in the way. The
   command stays the one `command:` prints. `token step: not verified:` means
   that reach could not be told, for the reason the line gives: say that
-  reason, that whether the step is done is not known, and name the pages as
-  the way to make sure; do not say it is done or not done. No `token step:`
+  reason, that whether the step is done is not known, and name the token
+  page as the way to make sure; do not say it is done or not done. No `token step:`
   line: say nothing about the step.
+- A `then also:` line (the token step done, one merge, whatever the route)
+  goes in part 4 as one sentence: the agent's own account and the four
+  things by hand, recommended, not in the way. For a `web` project it also
+  names what waits for the first deploy, with the bill and when to read the
+  Billing page, and the page's section to read; say each as the line does.
 - A spec's line says what was cut from it (`tickets cut from it:`). With
   `none`, `command:` is step 3's `/to-tickets #N`, which cuts it into
   tickets; `not read` there is not none: say it was not read, and guess
