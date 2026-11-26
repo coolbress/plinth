@@ -72,3 +72,11 @@ FC-C25 .dockerignore keeps .git, .env and .venv out
 FC-C26 the service logs JSON
 FC-C27 .env.example present
 FC-C28 .env.example documents every variable the code reads
+FC-D01 every action is pinned to a commit
+FC-D02 the ci job calls plinth's python-ci.yml at a commit
+FC-D03 the ci job keeps max-diff-lines at or below plinth's default
+FC-D04 the ci job keeps deps-fail-on-severity at plinth's default or stricter
+FC-D05 a web project's ci job passes web: true
+FC-D06 ci.yml carries the image job
+FC-D07 .gitlab-ci.yml carries the docker-image job
+FC-D08 .gitlab-ci.yml includes plinth's GitLab pipeline at a commit, with a checksum
