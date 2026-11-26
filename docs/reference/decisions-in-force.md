@@ -104,7 +104,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Shared inline Python moves into scripts without splitting the workflow into several callers. 2026-11-25, #1127 (decided; not built yet: #1127)
 - The code-growth sensor is report-only. 2026-10-28, #705
 - GitLab keeps the same nine job names as GitHub. 2026-10-13, #353
-- The GitLab pipeline is supported and skills are GitHub-first: what exists for GitLab keeps working, and a new feature reaches GitLab when a GitLab user is recorded. 2026-11-25, #1137 (decided; not built yet: #1137)
+- The GitLab pipeline is supported and skills are GitHub-first: what exists for GitLab keeps working, and a new feature reaches GitLab when a GitLab user is recorded. 2026-11-25, #1137
 
 ## Releases and pins
 

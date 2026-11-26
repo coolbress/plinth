@@ -77,7 +77,8 @@ each check by name.
 > ones get a read-only `floor-check` · GitLab.com projects too, Free and up,
 > with `/plinth:new-project <name> --host gitlab` and `glab` 1.122.0 or newer:
 > a lower wall, no required checks by name
-> ([about GitLab](docs/explanation/concepts.md#about-gitlab)) · **Claude Code 2.1.274 or newer** as the
+> ([about GitLab](docs/explanation/concepts.md#about-gitlab)); the GitLab pipeline
+> is supported, skills are GitHub-first ([scope](docs/reference/gitlab-ci.md#scope)) · **Claude Code 2.1.274 or newer** as the
 > harness (CI installs plinth on that version and on the stable channel; the
 > user tasks ran on 2.1.282 and 2.1.283; skills follow the Agent Skills
 > format and may load elsewhere, but only Claude Code is tested) · macOS / Linux (Windows via WSL) · tools: `claude`,
