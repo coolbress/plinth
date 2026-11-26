@@ -556,7 +556,9 @@ if [ -n "$smoke" ]; then
   for n in 1 2; do for t in "${tasks[@]}"; do smoke_rows+=("$t plinth $n"); done; done
 elif [ -n "$release" ]; then
   for n in 1 2; do
-    for t in "${tasks[@]}"; do [ ! -f "$root/eval-suite/tasks/$t/smoke" ] || smoke_rows+=("$t plinth $n"); done
+    for t in "${tasks[@]}"; do
+      [ -f "$root/eval-suite/tasks/$t/smoke" ] && task_in_arm "$t" plinth && smoke_rows+=("$t plinth $n")
+    done
   done
   [ "${#smoke_rows[@]}" -gt 0 ] || die "--release: no task has a smoke file"
 fi
