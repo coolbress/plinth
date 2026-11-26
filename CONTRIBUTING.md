@@ -399,6 +399,10 @@ the template tag starts with
 
 ## What a change must keep true
 
+- The GitLab pipeline is supported; skills are GitHub-first. A change keeps
+  the existing GitLab jobs and the tests that run them passing
+  (`tests/gitlab-ci-cases.sh` among them); a new check or skill need not reach GitLab parity until a
+  GitLab user is recorded ([GitLab scope](docs/reference/gitlab-ci.md#scope)).
 - Check names are the contract with every consumer. `ci / <job>` in
   `python-ci.yml` and the contexts in `ruleset.json` must stay identical;
   `tests/python-ci-contract.sh` holds the snapshot, and

@@ -40,10 +40,14 @@ elif not any(a.startswith("--print-") for a in args):
                        stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, check=False)
     second = {"exit": q.returncode, "verdicts": v.read_text(encoding="utf-8") if v.is_file() else "<no file>"}
     v.unlink(missing_ok=True)
+# Whether the run read a root with a .plinth-adoption.yml (#1112): the runs
+# without one stay byte for byte the golden ones through every ticket that reads it.
+root = Path(args[args.index("--root") + 1]) if "--root" in args[:-1] else Path.cwd()
+adoption = (root / ".plinth-adoption.yml").exists()
 emitted = trace.read_text(encoding="utf-8").splitlines() if trace.is_file() else []
 trace.unlink(missing_ok=True)
 (Path(record_dir) / f"{stamp}.json").write_text(json.dumps({
     "args": args, "exit": p.returncode, "stdout": p.stdout.decode("utf-8", "replace"),
-    "verdicts": verdicts, "second": second, "emitted": emitted,
+    "verdicts": verdicts, "second": second, "emitted": emitted, "adoption": adoption,
 }), encoding="utf-8")
 sys.exit(p.returncode)
