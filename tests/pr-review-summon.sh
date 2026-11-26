@@ -287,7 +287,7 @@ post_step() {  # name, $MOCK/fail lines (one per try), expected exit, expected p
   printf '[]' > "$tmp/m/icomments.json"; printf '%s' "$2" > "$tmp/m/fail"
   PATH="$tmp/bin:$PATH" MOCK="$tmp/m" RUNNER_TEMP="$tmp/rt" REPO=o/r NUMBER=7 HEAD_SHA="$HEAD" HEAD_REF=b \
     AUTHOR_LOGIN=coolbress TITLE=t LOGINS="$BOT" ASK="please review" SUMMONS_TOKEN=tok OWNER=coolbress \
-    WAIT=60 POLL=10 bash "$tmp/step.sh" >"$tmp/out" 2>&1
+    PLINTH_SHA=0123456789abcdef0123456789abcdef01234567 WAIT=60 POLL=10 bash "$tmp/step.sh" >"$tmp/out" 2>&1
   got=$?
   at="$(python3 -c 'import json,sys; print(" ".join(str(p["at"] - int(sys.argv[2])) for p in json.load(open(sys.argv[1])) if "at" in p))' "$tmp/m/icomments.json" "$T0")"
   tries="$(wc -c < "$tmp/m/posts-tried" 2>/dev/null | tr -d ' ')"
@@ -304,16 +304,18 @@ has() {  # what, text: the step's log must carry it
 lacks() {  # what, text: the step's log must not carry it
   ! grep -qF -- "$2" "$tmp/out" || { echo "  FAIL  $1: the log has '$2'" >&2; fails=$((fails + 1)); }
 }
-TOKEN_LINE="the token needs Pull requests: Read and write on this repository"
-RERUN_LINE="Re-run this job before changing summons-token"
+TOKEN_LINE="give it Pull requests read and write on this repository"
+RERUN_LINE="re-run this job before changing the summons-token secret"
 echo "-- a post that fails is tried once more, and the error says what is known (#674)"
 # The first ask's two tries: 20 s, then 30 s after the pause; the second ask at 40 s.
 post_step "a dropped connection, then a post: posted once, the wait goes on" "$NET
 ok" 1 "30 40" 3 && {
   has "the first failure" "the summons was not posted (try 1/2); gh said: $NET"
   has "the post after it" "asking (1/2) as coolbress"
-  has "the wait to its end" "no third-party review is attached to this commit"
-  lacks "no error for the post" "::error::summons-token could not post"
+  has "the wait to its end" "No third-party review is attached to commit"
+  lacks "no error for the post" "::error::The summons-token secret cannot comment"
+  # The links name the plinth commit, not the time of a look in the wait (#1100).
+  has "the how-to at the plinth commit" "https://github.com/coolbress/plinth/blob/0123456789ab/docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer"
 }
 post_step "a post that landed but answered with an error: not posted again" "landed: $NET" 1 "20 40" 2 && {
   has "the first try found" "the first try was posted after all: not posting again"
@@ -322,8 +324,9 @@ post_step "a 403 twice: names the token, with gh's words" "HTTP 403: $DENIED
 HTTP 403: $DENIED" 1 "" 2 && {
   has "the token's permission" "$TOKEN_LINE"
   has "gh's words" "gh said: HTTP 403: $DENIED"
+  has "the link names the plinth commit, after the wait's looks" "blob/0123456789ab/docs/how-to/configure-the-third-party-reviewer.md#summoning-the-reviewer"
   lacks "no re-run advice" "$RERUN_LINE"
-  lacks "not after the wait" "no third-party review is attached to this commit"
+  lacks "not after the wait" "No third-party review is attached to commit"
 }
 post_step "GraphQL's refusal twice (as measured on #207): names the token" "$DENIED
 $DENIED" 1 "" 2 && {
@@ -336,11 +339,11 @@ HTTP 404: Not Found (https://api.github.com/graphql)" 1 "" 2 && {
 }
 post_step "a dropped connection twice: says re-run first, with gh's words" "$NET
 $NET" 1 "" 2 && {
-  has "could not be posted" "::error::the summons could not be posted, on two tries"
+  has "could not be posted" "::error::The summons could not be posted, so re-run this job"
   has "gh's words" "gh said: $NET"
   has "re-run first" "$RERUN_LINE"
   lacks "not the token" "$TOKEN_LINE"
-  lacks "not after the wait" "no third-party review is attached to this commit"
+  lacks "not after the wait" "No third-party review is attached to commit"
 }
 post_step "a network error, then a 403: the last answer decides" "$NET
 HTTP 403: $DENIED" 1 "" 2 && {
@@ -410,7 +413,7 @@ for bad in 0 1 9 abc ""; do
        AUTHOR_LOGIN=coolbress TITLE=t LOGINS="$BOT" ASK="" SUMMONS_TOKEN="" OWNER=coolbress \
        WAIT=30 POLL="$bad" with_limit 20 bash "$tmp/step.sh" >"$tmp/out" 2>&1; then
     echo "  FAIL  poll-seconds '$bad' passed" >&2; fails=$((fails + 1))
-  elif grep -q "poll-seconds must be a whole number of seconds, 10 or more" "$tmp/out"; then
+  elif grep -q "::error::The poll-seconds input is not a whole number of 10 or more" "$tmp/out"; then
     echo "  PASS  poll-seconds '$bad' is refused, and says why"
   else
     echo "  FAIL  poll-seconds '$bad' stopped without saying why" >&2; sed 's/^/        /' "$tmp/out" >&2; fails=$((fails + 1))

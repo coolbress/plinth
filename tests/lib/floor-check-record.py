@@ -7,9 +7,10 @@ tests/floor-check-golden.sh puts a `python3` first on PATH that sends every
 unchanged, with its stdin and stderr; its stdout is passed through after it
 exits, and one JSON record is written: the arguments, the exit code, stdout,
 the --verdicts file, and the ids and states the checker emitted
-(FLOOR_CHECK_TRACE). A run that asked for no --verdicts file is run a second
-time with one, and that file and exit code are recorded too: --verdicts also
-adds the next action to stdout, so the case's own run cannot carry it.
+(FLOOR_CHECK_TRACE, copied to the caller's own trace when it set one). A run
+that asked for no --verdicts file is run a second time with one, and that
+file and exit code are recorded too: --verdicts also adds the next action to
+stdout, so the case's own run cannot carry it.
 Nothing here judges; the golden test compares.
 """
 
@@ -46,6 +47,11 @@ root = Path(args[args.index("--root") + 1]) if "--root" in args[:-1] else Path.c
 adoption = (root / ".plinth-adoption.yml").exists()
 emitted = trace.read_text(encoding="utf-8").splitlines() if trace.is_file() else []
 trace.unlink(missing_ok=True)
+# tests/floor-check-cases.sh reads its own trace to judge by id and state:
+# the lines go there too when it set one.
+if os.environ.get("FLOOR_CHECK_TRACE") and emitted:
+    with open(os.environ["FLOOR_CHECK_TRACE"], "a", encoding="utf-8") as t:
+        t.write("".join(f"{line}\n" for line in emitted))
 (Path(record_dir) / f"{stamp}.json").write_text(json.dumps({
     "args": args, "exit": p.returncode, "stdout": p.stdout.decode("utf-8", "replace"),
     "verdicts": verdicts, "second": second, "emitted": emitted, "adoption": adoption,

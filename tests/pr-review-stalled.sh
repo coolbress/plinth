@@ -112,8 +112,8 @@ lacks() {  # what, text
   if ! grep -qF -- "$2" "$tmp/out"; then echo "  PASS  $1"; else
     echo "  FAIL  $1: the log has '$2'" >&2; fails=$((fails + 1)); fi
 }
-TODAY="::error::no third-party review is attached to this commit"
-ACK="::error::acknowledged, not finished: the reviewer took the request for this commit"
+TODAY="::error::No third-party review is attached to commit"
+ACK="acknowledged, not finished: the reviewer took the request for this commit"
 
 H712=02183290ca748c35d3d5eacc1900e39479f6e726
 H717=a47af6c25bc3821de8e369b3eabf725bd85b24c2
@@ -123,6 +123,7 @@ H717B=46c042e0aa2b22014581b8c6da4192cc65047bf2
 echo "-- acknowledged, not finished: fails, names the state, the times and the steps"
 replay "#712, run of 08:55:58" plinth-712.json "$H712" 2026-10-28T08:55:58Z 1 && {
   has "#712: the state" "$ACK ($H712)"
+  has "#712: one annotation, naming the commit and the next step" "::error::The reviewer acknowledged commit $H712 and attached no review within the wait, so follow the steps below"
   has "#712: requested, acknowledged, how long" "requested 2026-10-28T09:02:48Z (the summons); acknowledged 2026-10-28T09:03:03Z (eyes reaction on the request); 12 min 55 s ago, read at 2026-10-28T09:15:58Z."
   has "#712: the summary's running state" "also: summary says running for this commit at 2026-10-28T09:03:06Z."
   lacks "#712: not today's words" "$TODAY"
@@ -148,7 +149,7 @@ NO_REACTIONS=1 replay "#712, the reactions calls fail: the summary alone" plinth
 
 echo "-- nothing acknowledged the request: today's words, unchanged"
 DROP="$BOT" replay "#712 with every trace of the reviewer left out" plinth-712.json "$H712" 2026-10-28T08:55:58Z 1 && {
-  has "today's error" "$TODAY ($H712)."
+  has "today's error" "$TODAY $H712, so follow the steps below"
   has "today's first hint" "is the reviewer's automatic review on for this repository?"
   has "today's summons hint" "comment '@codex review' on the pull request yourself and re-run this job"
   lacks "not the acknowledged state" "acknowledged, not finished"

@@ -31,12 +31,13 @@ except Exception:
 PYLOGIN
 )"
 if [ -z "$login" ]; then
-  echo "::error::summons-token is set but no login could be read with it; fix or remove the secret." >&2
+  echo "::error::The summons-token secret is set but no login could be read with it, so fix or remove it." >&2
   exit 1
 fi
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 if [ "$(lower "$login")" != "$(lower "${OWNER:-}")" ]; then
-  echo "::error::summons-token belongs to '$login', not to the repository owner '${OWNER:-}'; the summons is posted only as the owner." >&2
+  echo "summons-token belongs to '$login', not to the repository owner '${OWNER:-}'." >&2
+  echo "::error::The summons-token secret belongs to $login and not to the repository owner, so use a token of the owner's, since the summons is posted only as the owner." >&2
   exit 1
 fi
 echo "post"

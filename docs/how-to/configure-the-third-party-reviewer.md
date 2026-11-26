@@ -416,7 +416,9 @@ Without them, or when they do not help:
    take `third-party / review` out of the ruleset in Settings and add it back
    afterwards with `scripts/upgrade-ruleset.sh`; say so on the pull request.
    Never merge with `--admin`: it bypasses every other rule as well.
-4. If the error says `acknowledged, not finished`, the reviewer took the
+4. If the error says the reviewer acknowledged the commit and attached no
+   review within the wait (the log's line above it reads
+   `acknowledged, not finished`), the reviewer took the
    request and did not finish within the wait: its eyes reaction is on the
    summons or on the pull request, or its summary comment says it is running
    on this commit. On #712, #717 and plinth-template#136 the eyes came within
@@ -433,7 +435,7 @@ Without them, or when they do not help:
       request yourself, then re-run this job.
 
    When nothing acknowledged the request, the error stays
-   `no third-party review is attached to this commit`, and steps 1 to 3 of
+   `No third-party review is attached to commit <sha>`, and steps 1 to 3 of
    this section apply.
 
 ## When to stop
