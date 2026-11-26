@@ -2126,7 +2126,7 @@ done
 # and a team-internal tool started public under MIT. The table shows it again
 # as a row; it is changed by typing into Other, which goes back to this one
 # question, so the question is written once. The table's own wording is
-# pinned in tests/new-project-answer-table.sh.
+# pinned in tests/doc-consistency.sh.
 vis_q="$(both | grep -nF 'Header `Visibility`: "Who may see this project'"'"'s code?"' | head -n 1 | cut -d: -f1)"
 def_q="$(both | grep -nF 'header `Create`' | head -n 1 | cut -d: -f1)"
 if [ -n "$vis_q" ] && [ -n "$def_q" ] && [ "$vis_q" -lt "$def_q" ]
