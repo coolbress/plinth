@@ -6,8 +6,12 @@
 #       The plan. Fetches and verifies origin/<default> against GitHub, then
 #       prints the tags, the command and where it will run. Writes nothing.
 #       Stops first, here and in --apply, when the installed plinth targets an
-#       older template tag than the latest release's or the CI pin's (#843).
-#   template-update.sh --apply <base-sha> [--plinth-pin live|tested] [--assisted-by <agent>:<model>]
+#       older template tag than the latest release's or the CI pin's (#843),
+#       and, before anything is written, when the workflows call a plinth
+#       older than the one the target tag was tested with, or one not
+#       compared with it (#1183): it names the open pull request that raises
+#       the pin, to merge first, or the change to make in one.
+#   template-update.sh --apply <base-sha> [--assisted-by <agent>:<model>]
 #       Branches a worktree beside the repository from <base-sha> (it must
 #       still be origin/<default>), requires it clean, runs the command and,
 #       when copier leaves no conflict, commits, pushes the branch and opens
@@ -49,12 +53,11 @@
 #
 # The command is the checker's own line (floor-check.py
 # --print-update-command), run word for word: never a second construction of
-# it. It carries the plinth pin the workflows call today (#219), unless the
-# person chose --plinth-pin tested: then the line with the pin the target tag
-# was tested with, which the checker gives only when that one is newer
-# (#511). The plan prints both when there are two, and recommends the tested
-# one with the checker's one-sentence reason; only the person's confirmation
-# applies it (#519). The draft is opened as soon as the tree is clean; nothing waits for the
+# it. It carries the plinth pin the workflows call today (#219), and never
+# moves it: a template tag never lands on a plinth older than the one it was
+# tested with (#511) because the pin is raised first, in a pull request of
+# its own, and the checker gives no line until it is (#1183). The draft is
+# opened as soon as the tree is clean; nothing waits for the
 # branch's checks. Nothing is pushed to the default branch, and nothing
 # here resolves a conflict by choosing a side (#88): a person, or the agent
 # on a person's word for that file (#556), resolves it in the worktree.
@@ -74,9 +77,9 @@ state_name="plinth-template-update"
 . "$here/lib/shell-word.sh" || { printf 'template-update: no %s\n' "$here/lib/shell-word.sh" >&2; exit 1; }
 q() { sq "$1"; }
 die()  { printf 'template-update: %s\n' "$*" >&2; exit 1; }
-usage() { printf 'usage: %s [--apply <base-sha> [--plinth-pin live|tested | --archetype <a> [--keep <path> | --drop <path>]...] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
+usage() { printf 'usage: %s [--apply <base-sha> [--archetype <a> [--keep <path> | --drop <path>]...] | --archetype <a> | --finish <worktree> [--resolved <path> <how>]... [--over-limit]] [--assisted-by <agent>:<model>]\n' "$0" >&2; exit 2; }
 
-mode=plan; base_arg=""; wt_arg=""; assisted=""; pin=""; resolutions=(); over_limit=no; move=""; chosen_files=()
+mode=plan; base_arg=""; wt_arg=""; assisted=""; resolutions=(); over_limit=no; move=""; chosen_files=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)       [ $# -ge 2 ] || usage; mode=apply; base_arg="$2"; shift 2 ;;
@@ -91,22 +94,20 @@ while [ $# -gt 0 ]; do
                    case "$2" in *$'\n'* | *$'\t'*) usage ;; esac
                    chosen_files+=("${1#--}"$'\t'"$2"); shift 2 ;;
     --archetype)   [ $# -ge 2 ] && [ -n "$2" ] || usage; move="$2"; shift 2 ;;
-    --plinth-pin)  [ $# -ge 2 ] || usage; pin="$2"; shift 2
-                   case "$pin" in live|tested) ;; *) usage ;; esac ;;
+    # Gone (#1183): said, so an older skill text does not get the live pin
+    # unawares.
+    --plinth-pin*) printf 'template-update: --plinth-pin is gone: the update always carries the plinth pin the workflows call. When that is older than the one the target tag was tested with, the plan stops and names the pull request that raises it; merge that first, then plan the update again.\n' >&2
+                   exit 2 ;;
     *) usage ;;
   esac
 done
-# The pin is chosen on --apply, where copier runs; anywhere else it would be
-# a choice that does nothing.
-[ -z "$pin" ] || [ "$mode" = apply ] || usage
 [ ${#resolutions[@]} = 0 ] || [ "$mode" = finish ] || usage
 # Opening over the limit is a choice made after reading the measurement.
 [ "$over_limit" = no ] || [ "$mode" = finish ] || usage
-# A move carries the live pin, and --finish reads the move from its record.
-[ -z "$move" ] || { [ -z "$pin" ] && [ "$mode" != finish ]; } || usage
+# --finish reads the move from its record.
+[ -z "$move" ] || [ "$mode" != finish ] || usage
 # What becomes of a changed file the move deletes is said where copier runs.
 [ ${#chosen_files[@]} = 0 ] || { [ "$mode" = apply ] && [ -n "$move" ]; } || usage
-pin="${pin:-live}"
 
 # GitHub or GitLab (#1012; #924 stopped on GitLab). Told by origin's URL as
 # configured (gitlab.com, *.gitlab.com, or a gitlab.* host) or by `host:
@@ -524,7 +525,7 @@ finish() { # <worktree>
   from="$(state_get "$sf" from)"; to="$(state_get "$sf" to)"; cmd="$(state_get "$sf" command)"
   pr="$(state_get "$sf" pr)"
   gl_host="$(state_get "$sf" gl_host)"; local gl_enc gl_id; gl_enc="$(state_get "$sf" gl_enc)"; gl_id="$(state_get "$sf" gl_id)"
-  local chosen pin_note; chosen="$(state_get "$sf" pin)"; pin_note="$(state_get "$sf" pin_note)"
+  local pin_note; pin_note="$(state_get "$sf" pin_note)"
   if [ -n "$pr" ]; then
     echo "The draft $noun is already open: $pr"
     echo "Nothing pushed and nothing changed; further commits there are a person's."
@@ -695,13 +696,6 @@ finish() { # <worktree>
     echo "$cmd"
     echo '```'
     echo
-    if [ "$chosen" = tested ]; then
-      echo "The plinth pin: moved to the one $to was tested with (\`--plinth-pin tested\`, recommended, on a person's word)."
-    elif [ "$chosen" = same ]; then
-      echo "The plinth pin: unchanged; the workflows already called the one $to was tested with."
-    else
-      echo "The plinth pin: kept at the one the workflows called before the update (\`--plinth-pin live\`)."
-    fi
     if [ -n "$new" ]; then
       local names; names="$(git -C "$wt" -c core.quotePath=false diff --name-status --no-renames "${tree[@]}")"
       echo
@@ -953,12 +947,14 @@ if [ -n "$move" ]; then wt="$(dirname "$top")/$(basename "$top")-archetype-$move
 
 # The command, from the checker, on exactly the files it reads at the base:
 # the answers file, the workflows and the repository's own issue and
-# pull-request templates (#726). With `tested`, the line with the tested
-# pin, the comparison on stderr whether or not there is one. `--repo` names
-# whose `.github` the checker reads for the two answers the update carries,
-# as the door's render did; a read that fails gives no line (#726).
-cmd_at() { # <dir> [live|tested]
-  python3 "$checker" --root "$1" --repo "$repo" ${host_arg+"${host_arg[@]}"} --print-update-command --plinth-pin "${2:-live}"
+# pull-request templates (#726), with the live pin; none while that pin is
+# older than the one the target tag was tested with, or not compared with it,
+# and then stderr names the pull request to merge first (#1183). `--repo`
+# names whose `.github` the checker reads for the two answers the update
+# carries, as the door's render did, and whose open pull requests it reads
+# for the one that raises the pin; a read that fails gives no line (#726).
+cmd_at() { # <dir>
+  python3 "$checker" --root "$1" --repo "$repo" ${host_arg+"${host_arg[@]}"} --print-update-command
 }
 move_at() { # <dir>: the move's line; check-drop:/check-add:/moves: on stderr
   python3 "$checker" --root "$1" --repo "$repo" ${host_arg+"${host_arg[@]}"} --print-update-command --move-archetype "$move"
@@ -1132,10 +1128,12 @@ if [ "$mode" = plan ]; then
   plugin_gate
   # Its stderr as before, but for the `moves:` lines (#793), which the plan
   # prints under the command.
-  cmd="$(cmd_at "$tmp" 2>"$tmp/live-note")" || { cat "$tmp/live-note" >&2; exit 1; }
-  grep -v '^moves: ' "$tmp/live-note" >&2
-  tested_cmd="$(cmd_at "$tmp" tested 2>"$tmp/pin-note")" || tested_cmd=""
-  [ "$tested_cmd" != "$cmd" ] || tested_cmd=""
+  cmd="$(cmd_at "$tmp" 2>"$tmp/live-note")" || {
+    cat "$tmp/live-note" >&2
+    echo "Nothing has been written (the fetch moved only origin/$default)." >&2
+    exit 1
+  }
+  grep -vE '^(moves|plinth pin): ' "$tmp/live-note" >&2
   echo "Repository: $repo, base origin/$default at $base (verified against $hostname)"
   if [ "$from" = "$to" ]; then echo "Template:   $to, re-rendered for the owner answers named above"
   else echo "Template:   $from -> $to"; fi
@@ -1143,19 +1141,14 @@ if [ "$mode" = plan ]; then
   echo "Command:    $cmd"
   echo "            (--defaults: each question takes the recorded answer; one never answered takes the template's default)"
   sed -n 's/^moves: /Moves:      /p' "$tmp/live-note"
-  if [ -n "$tested_cmd" ] && grep -q '^moves: ' "$tmp/live-note"; then
-    echo "            (with the tested pin, each moves to that pin instead, and so does ci.yml)"
-  fi
-  sed -n 's/^plinth pin: /Plinth pin: /p' "$tmp/pin-note"
-  if [ -n "$tested_cmd" ]; then
-    echo "With the tested pin: $tested_cmd"
-    sed -n 's/^recommended: /Recommended: /p' "$tmp/pin-note"
-  fi
+  sed -n 's/^plinth pin: /Plinth pin: /p' "$tmp/live-note"
   # A pin raised in the workflows (by Dependabot or by hand) and not in the
   # answers file (#1015): copier's old render names the recorded plinth_sha,
   # so a workflow whose plinth pin is neither that one nor the one a line
   # carries meets three pins, and its plinth uses: line is left in conflict
-  # (measured, copier 9.18.2). Said here, for each line on offer, before
+  # (measured, copier 9.18.2). The line carries the pin the workflows call
+  # (#1183), so what is left is a workflow at another pin than the ci job's
+  # (#793) and a trailing comment (#1045). Said here, before
   # anything is written; the person still resolves it after --apply. Files
   # copier does not render (a workflow the project added) have nothing to
   # conflict with, which the line says; a `Moves:` file at an older pin
@@ -1163,7 +1156,7 @@ if [ "$mode" = plan ]; then
   recorded="$(tr -d '\r' < "$tmp/.copier-answers.yml" 2>/dev/null \
     | sed -nE "s/^plinth_sha:[[:space:]]*['\"]?([0-9a-fA-F]{40})['\"]?([[:space:]#].*)?$/\1/p" | head -n 1 | tr 'A-F' 'a-f')"
   carried() { sed -nE 's/.* --data plinth_sha=([0-9a-fA-F]{40})( .*)?$/\1/p' <<<"$1" | tr 'A-F' 'a-f'; }
-  live_pin="$(carried "$cmd")"; tested_pin="$(carried "${tested_cmd:-}")"
+  live_pin="$(carried "$cmd")"
   pins_now="$( [ -z "$recorded" ] || python3 "$checker" --root "$tmp" --print-plinth-pins | awk '$2 !~ /^unread$/ { print $1, tolower($2) }')"
   called="$(awk '!s[$2]++ { printf "%s%s", (n++ ? " and " : ""), $2 }' <<<"$pins_now")"
   # A trailing comment (`# v2.41.0`, as Dependabot writes it, #1045) is a
@@ -1198,32 +1191,14 @@ if [ "$mode" = plan ]; then
     fi
     [ -n "$files$only" ] || echo "            $1 carries the pin the workflows call: no conflict on that line is expected."
   }
-  offered_conflicts() { # whether a line on offer leaves a plinth uses: line in conflict
-    local c
-    for c in "$live_pin" ${tested_pin:+"$tested_pin"}; do
-      [ -n "$(in_conflict "$c")$(only_comment "$c")" ] && return 0
-    done
-    return 1
-  }
-  if [ -n "$recorded" ] && [ -n "$live_pin" ] && { [ -n "$(in_conflict "$recorded")" ] || offered_conflicts; }; then
+  if [ -n "$recorded" ] && [ -n "$live_pin" ] \
+     && [ -n "$(in_conflict "$recorded")$(in_conflict "$live_pin")$(only_comment "$live_pin")" ]; then
     echo "Pin conflict: .copier-answers.yml records plinth_sha $recorded; the workflows call $called."
-    if [ -n "$tested_pin" ]; then
-      pin_says "with --plinth-pin tested, the update" "$tested_pin"
-      pin_says "with --plinth-pin live, the update" "$live_pin"
-    else
-      pin_says "The update" "$live_pin"
-    fi
+    pin_says "The update" "$live_pin"
   fi
   echo
   echo "Nothing has been written (the fetch moved only origin/$default). To apply it, on the user's word:"
-  if [ -n "$tested_cmd" ]; then
-    echo "  moving it to the one $to was tested with (recommended):"
-    echo "  $(q "$0") --apply $base --plinth-pin tested"
-    echo "  or keeping the plinth pin the workflows call today:"
-    echo "  $(q "$0") --apply $base --plinth-pin live"
-  else
-    echo "  $(q "$0") --apply $base"
-  fi
+  echo "  $(q "$0") --apply $base"
   exit 0
 fi
 
@@ -1282,6 +1257,17 @@ if [ -n "$move" ]; then
     die "name each changed file once, as the person chooses: --keep <path> restores it after copier, as this repository's own file; --drop <path> lets the move delete it. Nothing was created"
   fi
 fi
+# The line, read at the base before anything is created: a pin older than
+# the one the target tag was tested with, or not compared with it, stops
+# here, as it stops the plan (#1183). Read again in the worktree below.
+if [ -z "$move" ]; then
+  cmd_at "$tmp" >/dev/null 2>"$tmp/gate" || {
+    grep -v '^moves: ' "$tmp/gate" >&2
+    grep -q "workflow pins disagree" "$tmp/gate" \
+      && die "the workflows call plinth at more than one commit and the update cannot carry one (above); nothing was created"
+    die "no update command at the base (above); nothing was created"
+  }
+fi
 [ -e "$wt" ] && die "$wt already exists: finish it ($(q "$0") --finish $(q "$wt")) or discard it (git worktree remove --force $(q "$wt") && git branch -D $branch)"
 git -C "$top" rev-parse -q --verify "refs/heads/$branch" >/dev/null \
   && die "branch $branch already exists: delete it (git branch -D $branch) or finish its worktree"
@@ -1319,35 +1305,22 @@ if [ -n "$move" ]; then
   [ "$cmd" = "$rehearsed" ] || die "the move's line in the worktree is not the one rehearsed ($rehearsed); $wt left for inspection"
   pin_note=""
 else
-# The comparison is read whichever pin was chosen, for the description; only
-# --plinth-pin tested takes its line, and stops when there is none.
-note_file="$(mktemp)"
-tested_cmd="$(cmd_at "$wt" tested 2>"$note_file")"; tested_rc=$?
-pin_note="$(sed -n '/^plinth pin: /{p;q;}' "$note_file")"
-why_none="${pin_note:-$(head -n 1 "$note_file")}"; rm -f "$note_file"
-# The live line, read once: the command itself with --plinth-pin live, and
-# with either pin the files it moves forward to the ci job's commit (#793),
-# its `moves:` lines. A read that fails while the pins disagree is a stop,
-# never an empty list that would skip the check after copier.
+# The line, read once in the worktree: the command itself, the comparison
+# of the pins for the description, and the files it moves forward to the ci
+# job's commit (#793), its `moves:` lines. A read that fails while the pins
+# disagree is a stop, never an empty list that would skip the check after
+# copier.
 live_note="$(mktemp)"
 live_cmd="$(cmd_at "$wt" 2>"$live_note")"; live_rc=$?
 moves="$(sed -n 's/^moves: //p' "$live_note")"
+pin_note="$(sed -n '/^plinth pin: /{p;q;}' "$live_note")"
 if [ "$live_rc" != 0 ] && grep -q "workflow pins disagree" "$live_note"; then
   cat "$live_note" >&2; rm -f "$live_note"
   die "the workflows call plinth at more than one commit and the update cannot carry one (above); $wt left for inspection"
 fi
-if [ "$pin" = tested ]; then
-  rm -f "$live_note"
-  [ "$tested_rc" = 0 ] && cmd="$tested_cmd" \
-    || die "no update command with the tested pin (${why_none:-no reason given}); $wt left for inspection. Run the plan again, or --apply with --plinth-pin live"
-  # The live pin is already the tested one: nothing moved, and the
-  # description must not say it did.
-  [ "$cmd" != "$live_cmd" ] || pin=same
-else
-  [ "$live_rc" = 0 ] && cmd="$live_cmd" \
-    || { grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"; die "no update command at the base (above); $wt left for inspection"; }
-  grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"
-fi
+[ "$live_rc" = 0 ] && cmd="$live_cmd" \
+  || { grep -v '^moves: ' "$live_note" >&2; rm -f "$live_note"; die "no update command at the base (above); $wt left for inspection"; }
+grep -vE '^(moves|plinth pin): ' "$live_note" >&2; rm -f "$live_note"
 fi
 case "$cmd" in *" --vcs-ref ${to_sha:-?} "*) ;; *) die "the command does not update to $to ($to_sha): $cmd" ;; esac
 read -ra words <<<"$cmd"
@@ -1421,8 +1394,8 @@ fi
 
 sf="$(state_file "$wt")"
 {
-  printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin=%s\npin_note=%s\nhost=%s\n' \
-    "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin" "$pin_note" "$host"
+  printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin_note=%s\nhost=%s\n' \
+    "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd" "$pin_note" "$host"
   [ "$host" = github ] || printf 'gl_host=%s\ngl_enc=%s\ngl_id=%s\n' "$gl_host" "$gl_enc" "$gl_id"
   if [ -n "$move" ]; then
     printf 'archetype=%s\nold_archetype=%s\ncompared=yes\n' "$move" "$old_arch"
