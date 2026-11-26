@@ -10,7 +10,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 script="$root/scripts/guide-state.sh"
 names="$root/tests/lib/guide-names.sh"
 arsenal="$root/skills/arsenal/SKILL.md"
-work="$(cd "$(mktemp -d)" && pwd -P)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" && work="$(cd "$work" && pwd -P)" || { echo "guide-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }

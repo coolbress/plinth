@@ -9,7 +9,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "add-ruleset-rule: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 
 cat > "$work/bin/gh" <<'MOCK'

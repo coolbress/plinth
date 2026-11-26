@@ -8,7 +8,7 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 heavy="$root/scripts/heavy.sh"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/heavy-cases.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/heavy-cases.XXXXXX")" || { echo "heavy-cases: could not make a temp folder" >&2; exit 1; }
 pids=()
 # Whatever is still running when the test ends, failed or not, is killed.
 cleanup() {

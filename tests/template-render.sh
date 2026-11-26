@@ -34,7 +34,7 @@ dir="canary-template"
 . "$root/tests/lib/template-checkout.sh"
 copier_version="$(sed -n 's/^copier_version="\(.*\)"$/\1/p' "$door")"
 copier_newer="$(sed -n 's/^copier_newer="\(.*\)"$/\1/p' "$door")"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "template-render: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }

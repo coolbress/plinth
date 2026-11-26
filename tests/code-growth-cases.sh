@@ -12,7 +12,7 @@ wf="$root/.github/workflows/python-ci.yml"
 # shellcheck source=tests/lib/lint-tools.sh
 . "$root/tests/lib/lint-tools.sh"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/code-growth.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/code-growth.XXXXXX")" || { echo "code-growth-cases: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 pass=0; fail=0

@@ -289,7 +289,7 @@ echo "the docs in this checkout:"
 check "$root" || status=1
 
 # The checker on copies with one wrong line each must fail.
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+tmp="$(mktemp -d)" || { echo "doc-pinned-facts: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$tmp"' EXIT
 copy() {
   rm -rf "$tmp/docs"; mkdir -p "$tmp/docs"
   cp "$root"/README.md "$root"/GLOSSARY.md "$root"/CONTRIBUTING.md "$root"/NOTICE "$tmp/docs/"

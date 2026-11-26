@@ -11,7 +11,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
 command -v jq >/dev/null || { echo "  FAIL  jq is needed to build the fixtures"; exit 1; }
 
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "pr-title-description-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 
 # step <name> <out>: the step of the pr-title job with that name; its `run:`
