@@ -8,7 +8,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 script="$root/scripts/merge-when-green.sh"
 command -v jq >/dev/null || { echo "  FAIL  jq is needed to run the fake gh's filters"; exit 1; }
 
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "merge-when-green-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash

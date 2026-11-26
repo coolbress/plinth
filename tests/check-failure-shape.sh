@@ -30,7 +30,7 @@ fx="$root/tests/fixtures/pytest"; fxr="$root/tests/fixtures/ruff"; fxm="$root/te
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
   || { echo "  FAIL  needs python3 3.11 or later, as the runner has; got $(python3 --version 2>&1)"; exit 1; }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/check-failure-shape.XXXXXX")"; trap 'rm -r "$work"' EXIT
+work="$(mktemp -d "${TMPDIR:-/tmp}/check-failure-shape.XXXXXX")" || { echo "check-failure-shape: could not make a temp folder" >&2; exit 1; }; trap 'rm -r "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  PASS  %s\n' "$1"; }
 bad() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | sed 's/^/        | /'; }

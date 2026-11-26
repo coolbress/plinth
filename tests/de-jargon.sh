@@ -40,7 +40,7 @@ if scan "$planted" >/dev/null; then echo "  FAIL  the gate did not catch a plant
 rm -f "$planted"
 echo "  PASS  the gate catches a planted word"
 # The history exemption covers released CHANGELOG.md sections only (#752).
-dir="$(mktemp -d)"
+dir="$(mktemp -d)" || { echo "de-jargon: could not make a temp folder" >&2; exit 1; }
 printf 'the evidence is in plinth-lab\n' >"$dir/page.md"
 printf '# Changelog\n\n## [Unreleased]\n\n## [1.0.0]\n\n- moved to plinth-lab\n' >"$dir/CHANGELOG.md"
 if scan "$dir/page.md" >/dev/null; then echo "  FAIL  the gate did not catch plinth-lab in a page"; exit 1; fi

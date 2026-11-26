@@ -34,14 +34,14 @@ merge_invariants() { # <file>
   echo "RESULT FAIL"; return 1
 }
 # plinth's own repository (coolbress/plinth) requires its own checks, not
-# ruleset.json's nine: the jobs of .github/workflows/plinth-ci.yml under the
-# caller `ci`, and the reviewer. `ci / release-gate` (#863) holds a release
+# ruleset.json's nine: the jobs of .github/workflows/plinth-ci.yml and
+# plinth-ci-text.yml under the caller `ci`, and the reviewer. `ci / release-gate` (#863) holds a release
 # pull request's merge until a green e2e on its head. Consumers are
 # unaffected: none of these is a job of python-ci.yml, and ruleset.json, the
 # wall every repository the door creates gets, names none of them.
 own_checks='["ci / docs","ci / install","ci / tools","ci / release-gate","third-party / review"]'
 # Offline, on every run: each `ci / <job>` of the list is a job of
-# plinth-ci.yml and not of python-ci.yml. `--own <file>` also checks a ruleset
+# plinth-ci.yml or plinth-ci-text.yml and not of python-ci.yml. `--own <file>` also checks a ruleset
 # as GitHub returns it (gh api repos/coolbress/plinth/rulesets/<id>), the read
 # back after a change to plinth's own `main protection`; a saved file and
 # `--own <(gh api …)` give the same result.
@@ -50,8 +50,11 @@ own_invariants() { # [<live ruleset file>]
   echo "plinth's own required checks: $own_checks"
   for c in $(jq -r '.[]|select(startswith("ci / "))|sub("^ci / ";"")' <<<"$own_checks"); do
     job="^  $c:\$"
+    # ci.yml's `ci` job calls plinth-ci.yml; ci-text.yml's, plinth-ci-text.yml
+    # (the checks an edit re-runs, #1133). Each name is in one of the two.
     if grep -qE "$job" .github/workflows/plinth-ci.yml; then printf '  PASS  ci / %s is a job of plinth-ci.yml\n' "$c"
-    else printf '  FAIL  ci / %s is not a job of plinth-ci.yml\n' "$c"; fail=1; fi
+    elif grep -qE "$job" .github/workflows/plinth-ci-text.yml; then printf '  PASS  ci / %s is a job of plinth-ci-text.yml\n' "$c"
+    else printf '  FAIL  ci / %s is a job of neither plinth-ci.yml nor plinth-ci-text.yml\n' "$c"; fail=1; fi
     if grep -qE "$job" .github/workflows/python-ci.yml; then printf '  FAIL  ci / %s is a job of python-ci.yml: every consumer would report it\n' "$c"; fail=1
     else printf '  PASS  ci / %s is not in python-ci.yml, so consumers are unaffected\n' "$c"; fi
   done

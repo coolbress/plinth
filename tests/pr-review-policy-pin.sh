@@ -12,7 +12,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d)" || { echo "pr-review-policy-pin: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 # The step's `run:` is taken from the workflow itself; a copy here would drift.

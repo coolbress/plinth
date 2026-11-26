@@ -12,6 +12,18 @@ through `glab` the protected branch, the merge checks, squash and
 fast-forward, the labels, and this include on the default branch, judged by
 this pipeline's own `floor-check` rule.
 
+## Scope
+
+The GitLab pipeline is supported; skills are GitHub-first. What exists for
+GitLab keeps working: this pipeline, `tests/gitlab-ci-cases.sh` and the
+GitLab path of `/plinth:new-project`, each still run in CI. A new check or
+skill goes to GitHub first and need not reach GitLab parity until a GitLab
+user is recorded ([#1137](https://github.com/coolbress/plinth/issues/1137)).
+
+A GitLab user is recorded when an issue in this repository comes from someone
+running a plinth-made project on GitLab, and that issue is linked here.
+Recorded so far: none.
+
 ## Include it
 
 A project's `.gitlab-ci.yml` includes the file from GitHub, at a full commit

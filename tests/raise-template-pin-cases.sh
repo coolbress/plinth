@@ -12,7 +12,7 @@
 # scripts/make-release.sh's run 1 asks from.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "raise-template-pin-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
@@ -49,7 +49,7 @@ chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH" W="$work" GH_LOG="$work/gh.log"
 
 files=(scripts/new-project.sh README.md docs/tutorials/getting-started.md
-       tests/new-project-failpath.sh .github/workflows/ci.yml CHANGELOG.md)
+       tests/new-project-failpath.sh .github/workflows/ci.yml .github/workflows/ci-text.yml CHANGELOG.md)
 door="$root/scripts/new-project.sh"
 old_ref="$(sed -nE 's/^template_ref="([^"]+)"$/\1/p' "$door")"
 old_sha="$(sed -nE 's/^template_sha="([0-9a-f]{40})"$/\1/p' "$door")"
@@ -105,16 +105,16 @@ fresh; COMPARE_OUT=$'1\nREADME.md' raise v9.9.9 "${new_sha:0:7}"; rc=$?
 check "a published tag naming the given commit is raised" '[ "$rc" = 0 ] && grep -q "^raised the template pin: plinth-template $old_ref (${old_sha:0:7}) -> v9.9.9 (${new_sha:0:7})" "$work/out"'
 git -C "$work/repo" add -N changelog.d/template-pin.md   # new: counted in the diff
 diffs="$(git -C "$work/repo" diff --numstat | awk '{print $3, $1, $2}' | sort)"
-want="$(printf '%s\n' ".github/workflows/ci.yml 1 1" "changelog.d/template-pin.md 3 0" "README.md 1 1" \
+want="$(printf '%s\n' ".github/workflows/ci.yml 1 1" ".github/workflows/ci-text.yml 1 1" "changelog.d/template-pin.md 3 0" "README.md 1 1" \
           "docs/tutorials/getting-started.md 1 1" "scripts/new-project.sh 2 2" "tests/new-project-failpath.sh 1 1" | sort)"
-check "it changes the five files #947 and #952 changed by hand, and canary-template's name (#958)" '[ "$diffs" = "$want" ] || { echo "$diffs" >&2; false; }'
+check "it changes the five files #947 and #952 changed by hand, and canary-template's name in both callers (#958, #1133)" '[ "$diffs" = "$want" ] || { echo "$diffs" >&2; false; }'
 # Each removed line, with the tag and the commit moved, is the added line.
 moved="$(git -C "$work/repo" diff -U0 -- . ':!CHANGELOG.md' ':!changelog.d' | grep '^-[^-]' | cut -c2- |
          sed -e "s/$old_ref/v9.9.9/g" -e "s/$old_sha/$new_sha/g" -e "s/${old_sha:0:7}/${new_sha:0:7}/g")"
 added="$(git -C "$work/repo" diff -U0 -- . ':!CHANGELOG.md' ':!changelog.d' | grep '^+[^+]' | cut -c2-)"
 check "every edited line differs only in the tag and the commit" '[ -n "$moved" ] && [ "$moved" = "$added" ]'
 check "new-project.sh pins the tag's full commit" 'grep -qx "template_sha=\"$new_sha\"" "$work/repo/scripts/new-project.sh" && grep -qx "template_ref=\"v9.9.9\"" "$work/repo/scripts/new-project.sh"'
-check "canary-template's name says the new tag and commit" 'grep -qF "name: canary-template (plinth-template v9.9.9 at ${new_sha:0:7})" "$work/repo/.github/workflows/ci.yml"'
+check "canary-template's name says the new tag and commit, in ci.yml and ci-text.yml" 'grep -qF "name: canary-template (plinth-template v9.9.9 at ${new_sha:0:7})" "$work/repo/.github/workflows/ci.yml" && grep -qF "name: canary-template (plinth-template v9.9.9 at ${new_sha:0:7})" "$work/repo/.github/workflows/ci-text.yml"'
 check "a changelog fragment says it, one Changed line naming the new tag, and reads as a fragment (#1136)" '[ "$(cat "$work/repo/changelog.d/template-pin.md")" = "$(printf "### Changed\n\n- \`/plinth:new-project\` renders plinth-template v9.9.9 instead of %s." "$old_ref")" ] && "$root/scripts/changelog-fragments.py" check "$work/repo" >/dev/null'
 check "CHANGELOG.md and the other fragment are untouched" 'git -C "$work/repo" diff --quiet -- CHANGELOG.md changelog.d/other.md'
 check "it prints that no eval suite is owed for a diff that misses what the agent reads" 'grep -q "^eval suite: not owed" "$work/out" && grep -q "from $tested" "$work/out"'

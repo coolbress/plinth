@@ -231,14 +231,12 @@ SKIP_NEXT = f"; run /plinth:floor-check where it can read this: {REPORT}"
 #   pass PASS, fail FAIL, warn WARN, unknown SKIP (with a reason),
 #   review INFO left to someone who can read it (with who), not_applicable N/A,
 #   info INFO.
-# Areas, as the checks fall in the run:
-#   A  the documents and issue templates      E  the ci job and its pins
-#   B  repository files and agent settings    F  the wall and the repository's settings
-#   C  template drift, the plugin, answers    G  this machine (--sandbox, --plugins, --credentials)
-#   D  the project: its archetype's files
-AREAS = {"A": "documents and issue templates", "B": "repository files and agent settings",
-         "C": "template drift, the plugin and the recorded answers", "D": "the project and its archetype's files",
-         "E": "the ci job and its pins", "F": "the wall and the repository's settings", "G": "this machine"}
+# Areas, one name per letter (#1103). The letter groups the checks; it does
+# not define them: a check that moves area keeps its id, and its entry's
+# `area` names where it is now.
+#   A files    B agent    C project    D ci    E wall    F plinth    G machine    R records
+AREAS = {"A": "files", "B": "agent", "C": "project", "D": "ci", "E": "wall", "F": "plinth", "G": "machine",
+         "R": "records"}
 STATES = ("pass", "fail", "warn", "unknown", "review", "not_applicable", "info")
 SHOWN = {"pass": "PASS", "fail": "FAIL", "warn": "WARN", "unknown": "SKIP", "review": "INFO",
          "not_applicable": "N/A", "info": "INFO"}
@@ -246,6 +244,12 @@ HOSTS = ("github", "gitlab")
 NEEDS = ("files", "git", "network", "gh", "admin", "machine")
 HANDOFFS = ("agent", "person", "admin", "ci")
 LIFECYCLES = ("experimental", "stable")
+# Where a check's result is shown (#1103): in the report, only in the JSON
+# (#1105), or only when the skill is asked for that view.
+VIEWS = ("report", "json", "opt-in:machine", "opt-in:standards", "opt-in:all")
+# The OSPS Baseline release an entry's `baseline` ids come from;
+# tests/floor-check-registry.sh holds every id to that release's list.
+OSPS_BASELINE = "v2026.08.28"
 UNASSIGNED = "FC-UNASSIGNED"
 DOCS = "skills/floor-check/SKILL.md"
 
@@ -253,20 +257,30 @@ DOCS = "skills/floor-check/SKILL.md"
 def check(cid: str, name: str, *, states: tuple[str, ...], handoff: str, fix: str, docs: str,
           messages: dict[str, str], hosts: tuple[str, ...] = HOSTS, archetypes: tuple[str, ...] | None = None,
           needs: tuple[str, ...] = ("files",), lifecycle: str = "stable", aliases: tuple[str, ...] = (),
-          unreached: dict[str, str] | None = None) -> dict:
+          unreached: dict[str, str] | None = None, area: str | None = None, not_keepable: str | None = None,
+          baseline: tuple[str, ...] = (), view: str = "report", ci_visible: bool = True,
+          view_why: str | None = None) -> dict:
     """One REGISTRY entry. `archetypes` None is every archetype; `unreached`
     names, for a declared state no fixture of tests/floor-check-cases.sh
-    reaches, why not."""
-    area = cid[3]
-    assert re.fullmatch(r"FC-[A-G]\d\d", cid) and area in AREAS, cid
+    reaches, why not. `area` is the id's letter unless the check moved.
+    `not_keepable` says why .plinth-adoption.yml may not keep this finding
+    (#1112); every other entry is keepable. `baseline` names the OSPS
+    Baseline controls (OSPS_BASELINE) the check reads. `view` other than
+    `report` says why in `view_why`; `ci_visible` is whether `ci /
+    floor-check` prints it."""
+    area = area or cid[3]
+    assert re.fullmatch(r"FC-[A-Z]\d\d", cid) and cid[3] in AREAS and area in AREAS, cid
     assert states and set(states) <= set(STATES), (cid, states)
     assert handoff in HANDOFFS and lifecycle in LIFECYCLES and set(hosts) <= set(HOSTS) and set(needs) <= set(NEEDS), cid
     # An experimental check has not earned a FAIL: it may only warn.
     assert lifecycle == "stable" or "fail" not in states, cid
     assert set(unreached or {}) <= set(states), cid
+    assert view in VIEWS and (view == "report") == (view_why is None), cid
     return {"id": cid, "name": name, "area": area, "hosts": hosts, "archetypes": archetypes, "needs": needs,
             "lifecycle": lifecycle, "states": states, "handoff": handoff, "fix": fix, "docs": docs,
-            "messages": messages, "aliases": aliases, "unreached": unreached or {}}
+            "messages": messages, "aliases": aliases, "unreached": unreached or {},
+            "keepable": not_keepable is None, "not_keepable": not_keepable, "baseline": baseline,
+            "view": view, "ci_visible": ci_visible, "view_why": view_why}
 
 
 def _registry(*entries: dict) -> dict[str, dict]:
@@ -288,15 +302,17 @@ def _documents() -> tuple[dict, ...]:
     """Area A: the documents and issue templates a repository carries."""
     top = tuple(check(cid, f"{doc} present", states=TWO_WAY, handoff="agent", docs=STATIC,
                       fix=f"add a {doc} that says what it is for; /plinth:new-project renders one",
-                      messages={"good": f"{doc} present", "bad": f"{doc} missing or empty"})
+                      messages={"good": f"{doc} present", "bad": f"{doc} missing or empty"},
+                      baseline=("OSPS-LE-03.01",) if doc == "LICENSE" else ())
                 for cid, doc in (("FC-A01", "LICENSE"), ("FC-A02", "README.md"), ("FC-A03", "CHANGELOG.md"),
                                  ("FC-A04", "AGENTS.md")))
     return top + (
         check("FC-A05", "CONTRIBUTING.md present", states=TWO_WAY, handoff="agent", docs=STATIC,
               fix="add a CONTRIBUTING.md with the build and test commands and how a change lands",
+              baseline=("OSPS-GV-03.01",),
               messages={"good": "CONTRIBUTING.md present", "bad": "CONTRIBUTING.md missing"}),
         check("FC-A06", "CONTRIBUTING.md says how to build and test", states=TWO_WAY, handoff="agent", docs=STATIC,
-              fix="write the commands that build and test the project in CONTRIBUTING.md",
+              fix="write the commands that build and test the project in CONTRIBUTING.md", baseline=("OSPS-DO-07.01",),
               messages={"good": "CONTRIBUTING.md says how to build and test",
                         "bad": "CONTRIBUTING.md has no build or test command"}),
         check("FC-A07", "CONTRIBUTING.md says how to land a change", states=TWO_WAY, handoff="agent", docs=STATIC,
@@ -308,7 +324,7 @@ def _documents() -> tuple[dict, ...]:
               messages={"good": "CONTRIBUTING.md is not a stub ({lines} lines)",
                         "bad": "CONTRIBUTING.md looks like a stub ({lines} lines)"}),
         check("FC-A09", "SECURITY.md present or inherited", states=("pass", "fail", "unknown"), handoff="agent",
-              docs=STATIC, needs=("files", "network"),
+              docs=STATIC, needs=("files", "network"), baseline=("OSPS-VM-02.01",),
               fix="add a SECURITY.md that says how to report a vulnerability, or one in the owner's .github repository",
               messages={"local": "SECURITY.md present",
                         "inherited": "SECURITY.md inherited from the owner's .github repository",
@@ -376,6 +392,71 @@ def _documents() -> tuple[dict, ...]:
               docs=GITLAB_DOCS, hosts=("gitlab",), fix="add a `/label ~name` line to the template",
               messages={"good": "{name} labels its issues",
                         "bad": "{name} has no `/label ~name` line: those issues never sort in a list"}),
+        check("FC-A23", ".gitattributes present", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="add a .gitattributes; plinth-template's normalises line endings and folds lockfiles",
+              messages={"good": ".gitattributes present", "bad": ".gitattributes missing"}),
+        check("FC-A24", ".gitattributes normalises line endings", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="add `* text=auto` to .gitattributes",
+              messages={"good": ".gitattributes normalises line endings (* text=auto)",
+                        "bad": ".gitattributes does not normalise line endings"}),
+        check("FC-A25", ".gitattributes folds uv.lock in diffs", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="add `uv.lock linguist-generated` to .gitattributes",
+              messages={"good": ".gitattributes folds uv.lock in diffs (linguist-generated)",
+                        "bad": "uv.lock is not marked linguist-generated: review reads machine-written lines"}),
+        check("FC-A26", ".gitattributes needs no local git config", states=TWO_WAY, handoff="agent", docs=STATIC,
+              fix="remove the diff=, merge= or filter= driver that only works with each user's local git config",
+              messages={"good": ".gitattributes has no rule that needs local git config",
+                        "bad": ".gitattributes rules need local git config: {rules}"}),
+        check("FC-A27", "relative links in the Markdown documents resolve", states=TWO_WAY, handoff="agent",
+              docs=STATIC, fix="point each broken link at a file that exists, or remove it",
+              messages={"good": "relative links in {count} markdown files resolve", "bad": "{why}",
+                        "none": "no markdown document found at all"}),
+        check("FC-A28", "no dotenv file is tracked", states=("pass", "warn", "unknown", "info"), handoff="agent",
+              docs=STATIC, needs=("files", "git"), baseline=("OSPS-BR-07.01",),
+              not_keepable="a tracked secret reaches everyone who can read the repository, and stays in its history",
+              fix="untrack the file and ignore it in .gitignore; rotate a value that was ever real",
+              messages={"good": "no dotenv file is tracked ({count} tracked files read; names only, not contents or history)",
+                        "bad": "tracked dotenv file: {file}",
+                        "untrack": "  git rm --cached -- {quoted}   (ignore it in .gitignore; a value that was ever "
+                                   "real is rotated, not only untracked)",
+                        "unread": "tracked dotenv files not verified (git could not list the tracked files of --root)"}),
+    )
+
+
+AGENT_DOCS = f"{DOCS}#what-the-static-checks-read-and-what-they-do-not"
+# What .claude/settings.json's permissions.deny is read for, one check each:
+# (id, what, hosts). The rules that match each are check_agent_settings'.
+AGENT_DENIES = (
+    ("FC-B04", "rm -rf", HOSTS), ("FC-B05", "gh auth token", ("github",)), ("FC-B06", ".env reads", HOSTS),
+    ("FC-B07", "`. ./.env`", HOSTS), ("FC-B08", "`source .env`", HOSTS), ("FC-B09", "`cat .env`", HOSTS),
+    ("FC-B10", "`grep KEY .env`", HOSTS), ("FC-B11", "gh config reads", ("github",)),
+    ("FC-B12", "glab auth status --show-token", ("gitlab",)), ("FC-B13", "glab auth status -t", ("gitlab",)),
+    ("FC-B14", "glab config get token", ("gitlab",)), ("FC-B15", "glab config reads", ("gitlab",)),
+)
+
+
+def _agent() -> tuple[dict, ...]:
+    """Area B: what the repository's agent settings stop an agent doing."""
+    return (
+        check("FC-B01", ".claude/settings.json present", states=TWO_WAY, handoff="agent", docs=AGENT_DOCS,
+              fix="add .claude/settings.json with plinth-template's permissions.deny",
+              messages={"good": ".claude/settings.json present", "bad": ".claude/settings.json missing"}),
+        check("FC-B02", ".claude/settings.json is valid JSON", states=("fail",), handoff="agent", docs=AGENT_DOCS,
+              fix="make .claude/settings.json valid JSON",
+              messages={"bad": ".claude/settings.json is not valid JSON"}),
+        check("FC-B03", ".claude/settings.json denies force push", states=("pass", "fail", "warn", "info"),
+              handoff="agent", docs=AGENT_DOCS,
+              fix="add plinth-template's force-push rules to permissions.deny; /plinth:template-update brings them",
+              messages={"good": ".claude/settings.json denies force push: {denied}",
+                        "bad": ".claude/settings.json does not deny force push",
+                        "partly": ".claude/settings.json denies force push only as {denied}; not {missing}",
+                        "add": "  add to permissions.deny: {rules}   (plinth-template's rules; an existing project "
+                               "gets them from /plinth:template-update)"}),
+        *(check(cid, f".claude/settings.json denies {what}", states=TWO_WAY, handoff="agent", docs=AGENT_DOCS,
+                hosts=hosts, fix=f"add a permissions.deny rule that stops {what}",
+                messages={"good": f".claude/settings.json denies {what}",
+                          "bad": f".claude/settings.json does not deny {what}"})
+          for cid, what, hosts in AGENT_DENIES),
     )
 
 
@@ -384,8 +465,10 @@ REGISTRY = _registry(
     # message its text. Not a check; the golden test counts what is left in it.
     {"id": UNASSIGNED, "name": "not yet given an id", "area": None, "hosts": HOSTS, "archetypes": None,
      "needs": NEEDS, "lifecycle": "stable", "states": STATES, "handoff": "agent", "fix": "", "docs": DOCS,
-     "messages": {}, "aliases": (), "unreached": {}},
+     "messages": {}, "aliases": (), "unreached": {}, "keepable": True, "not_keepable": None, "baseline": (),
+     "view": "report", "ci_visible": True, "view_why": None},
     *_documents(),
+    *_agent(),
 )
 
 # The run, as emit() records it: one result per line printed, in order, and
@@ -759,7 +842,7 @@ def check_gitlab_templates(root: Path) -> None:
 
 def check_gitattributes(root: Path) -> None:
     p = root / ".gitattributes"
-    if not ok(p.is_file(), ".gitattributes present", ".gitattributes missing"):
+    if not verdict("FC-A23", p.is_file()):
         return
     rules: list[tuple[str, list[str]]] = []
     for line in read(p).splitlines():
@@ -767,13 +850,9 @@ def check_gitattributes(root: Path) -> None:
         if line:
             pattern, *attrs = line.split()
             rules.append((pattern, attrs))
-    ok(any(pat == "*" and "text=auto" in attrs for pat, attrs in rules),
-       ".gitattributes normalises line endings (* text=auto)",
-       ".gitattributes does not normalise line endings")
+    verdict("FC-A24", any(pat == "*" and "text=auto" in attrs for pat, attrs in rules))
     if any(root.rglob("uv.lock")):
-        ok(any(pat == "uv.lock" and "linguist-generated" in attrs for pat, attrs in rules),
-           ".gitattributes folds uv.lock in diffs (linguist-generated)",
-           "uv.lock is not marked linguist-generated: review reads machine-written lines")
+        verdict("FC-A25", any(pat == "uv.lock" and "linguist-generated" in attrs for pat, attrs in rules))
     # diff=/merge=/filter= drivers need each user's local git config; a committed
     # rule that only works with local setup makes people think it is working.
     builtin = {
@@ -785,18 +864,17 @@ def check_gitattributes(root: Path) -> None:
     }
     local_only = [f"{pat}: {a}" for pat, attrs in rules for a in attrs
                   if a.partition("=")[0] in builtin and a.partition("=")[2] not in builtin[a.partition("=")[0]]]
-    ok(not local_only, ".gitattributes has no rule that needs local git config",
-       f".gitattributes rules need local git config: {local_only}")
+    verdict("FC-A26", not local_only, {"rules": local_only})
 
 
 def check_agent_settings(root: Path, host: str = "github") -> None:
     p = root / ".claude" / "settings.json"
-    if not ok(p.is_file(), ".claude/settings.json present", ".claude/settings.json missing"):
+    if not verdict("FC-B01", p.is_file()):
         return
     try:
         deny = json.loads(read(p)).get("permissions", {}).get("deny", [])
     except json.JSONDecodeError:
-        result("FAIL", ".claude/settings.json is not valid JSON")
+        emit("FC-B02", "fail", "bad")
         return
     def bash_rule_stops(cmd: str, d: str) -> bool:
         """A `*` in a Bash rule matches any text and nothing else is special
@@ -829,9 +907,9 @@ def check_agent_settings(root: Path, host: str = "github") -> None:
         wants["glab config get token"] = lambda d: bash_rule_stops("glab config get token", d)
         wants["glab config reads"] = lambda d: d.startswith("Read(~/.config/glab-cli")
     check_force_push_deny(deny)
+    ids = {what: cid for cid, what, _ in AGENT_DENIES}
     for what, match in wants.items():
-        ok(any(match(d) for d in deny), f".claude/settings.json denies {what}",
-           f".claude/settings.json does not deny {what}")
+        verdict(ids[what], any(match(d) for d in deny))
 
 
 # The spellings of a force push an agent writes, each with the command probed
@@ -879,17 +957,15 @@ def check_force_push_deny(deny: list) -> None:
     denied = [label for label, hit in stops.items() if hit]
     floor = [label for label, _, _ in FORCE_PUSH_SPELLINGS[:2]]
     if not any(stops[label] for label in floor):
-        result("FAIL", ".claude/settings.json does not deny force push")
+        emit("FC-B03", "fail", "bad")
         return
     missing = [(label, rule) for label, _, rule in FORCE_PUSH_SPELLINGS if not stops[label]]
     if not missing:
-        result("PASS", f".claude/settings.json denies force push: {', '.join(denied)}")
+        emit("FC-B03", "pass", "good", {"denied": ", ".join(denied)})
         return
-    result("WARN", f".claude/settings.json denies force push only as {', '.join(denied)}; "
-                   f"not {', '.join(label for label, _ in missing)}")
+    emit("FC-B03", "warn", "partly", {"denied": ", ".join(denied), "missing": ", ".join(label for label, _ in missing)})
     adds = list(dict.fromkeys(rule for _, rule in missing))
-    result("INFO", "  add to permissions.deny: " + ", ".join(json.dumps(r) for r in adds)
-           + "   (plinth-template's rules; an existing project gets them from /plinth:template-update)")
+    emit("FC-B03", "info", "add", {"rules": ", ".join(json.dumps(r) for r in adds)})
 
 
 # The three predicates below were named by #42 and shipped by #95. Each is new
@@ -911,16 +987,16 @@ def check_tracked_dotenv(root: Path) -> None:
     except (OSError, subprocess.TimeoutExpired):
         r = None
     if r is None or r.returncode != 0:
-        result("SKIP", "tracked dotenv files not verified (git could not list the tracked files of --root)")
+        emit("FC-A28", "unknown", "unread", reason="git could not list the tracked files")
         return
     tracked = [f for f in r.stdout.split("\0") if f]
     found = sorted(f for f in tracked if (n := f.rsplit("/", 1)[-1]) not in DOTENV_PLACEHOLDERS
                    and (n == ".env" or n.startswith(".env.")))
     if not found:
-        result("PASS", f"no dotenv file is tracked ({len(tracked)} tracked files read; names only, not contents or history)")
+        emit("FC-A28", "pass", "good", {"count": len(tracked)})
     for f in found:
-        result("WARN", f"tracked dotenv file: {f}")
-        result("INFO", f"  git rm --cached -- {shlex.quote(f)}   (ignore it in .gitignore; a value that was ever real is rotated, not only untracked)")
+        emit("FC-A28", "warn", "bad", {"file": f})
+        emit("FC-A28", "info", "untrack", {"quoted": shlex.quote(f)})
 
 
 USES_LINE = re.compile(r"""^\s*(?:-\s+)?uses:\s+(['"]?)([^'"\s#]+)\1\s*(?:#.*)?$""")
@@ -2480,7 +2556,7 @@ def check_doc_links(root: Path) -> None:
     inline = re.compile(r"`[^`\n]*`")
     docs = [p for p in root.rglob("*.md") if not (set(p.relative_to(root).parts) & SKIP_DIRS)]
     if not docs:
-        result("FAIL", "no markdown document found at all")
+        emit("FC-A27", "fail", "none")
         return
     broken: dict[str, list[str]] = {}
     # A symbolic link whose target is missing has nothing to read: named, not
@@ -2504,8 +2580,7 @@ def check_doc_links(root: Path) -> None:
     if dangling:
         why.append("symbolic links to files that do not exist: " + ", ".join(
             f"{d.relative_to(root).as_posix()} -> {os.readlink(d)}" for d in dangling))
-    ok(not broken and not dangling, f"relative links in {len(docs)} markdown files resolve",
-       "; ".join(why))
+    verdict("FC-A27", not broken and not dangling, {"count": len(docs), "why": "; ".join(why)})
 
 
 # ── project-level floor ───────────────────────────────────────────────────

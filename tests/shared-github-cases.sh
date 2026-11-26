@@ -11,7 +11,7 @@
 # config", so the config-only warning never printed).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "shared-github-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 
 # Any `gh` a decision reaches for is a failure, not a network call.
 mkdir -p "$work/bin"

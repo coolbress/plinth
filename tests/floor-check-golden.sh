@@ -29,7 +29,7 @@ py="$(command -v python3)" || { echo "  FAIL  no python3"; exit 1; }
 "$py" -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
   || { echo "  FAIL  needs python3 3.11 or later, as the runner has; got $("$py" --version 2>&1)"; exit 1; }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/floor-golden.XXXXXX")"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d "${TMPDIR:-/tmp}/floor-golden.XXXXXX")" || { echo "floor-check-golden: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 work="$(cd "$work" && pwd -P)"
 mkdir -p "$work/bin" "$work/records" "$work/tmp"
 pass=0; fail=0
@@ -106,6 +106,15 @@ ci_form="$(grep -E '^=== ' "$work/cases.txt" | grep -c -- '--actions-token.*--ve
 want="$(grep -c '^=== ' "$golden" 2>/dev/null || echo 0)"
 if [ "$n" -gt 100 ] && [ "$n" -ge "$want" ] && [ "$ci_form" -gt 0 ]; then ok "$n checker runs recorded, $ci_form of them in the CI form (--actions-token --verdicts)"
 else bad "$n checker runs recorded, $want in the golden file ($ci_form in the CI form): the cases test did not run as it should" "$(tail -20 "$work/cases.log")"; fi
+
+# The runs whose root has no .plinth-adoption.yml (#1112) are in the
+# comparison below: they stay byte for byte the golden ones through every
+# ticket that reads that file.
+bare="$("$py" -c 'import json, sys
+from pathlib import Path
+print(sum(not json.loads(f.read_text(encoding="utf-8")).get("adoption", True) for f in Path(sys.argv[1]).glob("*.json")))' "$work/records")"
+if [ "${bare:-0}" -gt 0 ]; then ok "$bare recorded runs read a root with no .plinth-adoption.yml, and are compared below"
+else bad "no recorded run reads a root without .plinth-adoption.yml: nothing holds the output without one"; fi
 
 if [ "$write" = 1 ]; then
   mkdir -p "$(dirname "$golden")"; cp "$work/cases.txt" "$golden"; echo "  wrote $golden"
