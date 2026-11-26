@@ -1,101 +1,45 @@
 name: CI
-#
-# The caller job is named `ci` on purpose: the checks report as `ci / install`,
-# `ci / tools` and `ci / docs`, and rulesets require those names. Rename it and
-# the required checks never report again.
-
+# Probe for #1133, on a test pull request that is closed unmerged. Plain jobs
+# report the five names plinth's ruleset requires. `ci / docs` reads the
+# description from the event payload, waits DOCS_WAIT seconds, and fails when
+# the description it read holds PROBE-FAIL.
 on:
-  push:
-    branches: [main]
-  # `edited` besides the default types: a retitled pull request re-runs the
-  # title check, and an edited description re-reads the diff-size warning,
-  # without a push (#322). The whole workflow re-runs; concurrency cancels the
-  # run the edit replaces.
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, edited]
-
+    types: [opened, synchronize, reopened]
 permissions:
   contents: read
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+  group: probe-push-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  ci:
-    # A called workflow cannot widen what its caller grants. `ci / docs` reads
-    # the pull request's description and the issues its merge will close
-    # (#293); `ci / release-gate` reads the e2e runs on the head (#863);
-    # `ci / install` reads which step of its install-<n> jobs failed (#1135);
-    # plinth-ci.yml's other jobs keep `contents: read` alone.
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-      actions: read
-    uses: ./.github/workflows/plinth-ci.yml
-
-  # The canary calls the reusable workflow for real: a workflow that parses is
-  # not a workflow that runs. Consumers break here first. Inputs are passed on
-  # purpose; an input nobody passes is a code path nobody runs.
-  canary:
-    uses: ./.github/workflows/python-ci.yml
-    # A called workflow cannot widen what its caller grants: a job there that
-    # asks for more than this grant fails the whole run at startup, no check
-    # reporting (measured for #586). python-ci.yml's floor-check asks for
-    # `issues: read` (labels) and diff-size for `pull-requests: read` and
-    # `actions: write` (the approval of a change to the checks). Scoped to
-    # this job, not raised for the whole file.
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-      actions: write
-    with:
-      working-directory: canary
-      extra-python-versions: "3.13"
-      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"   # CodeQL is a code_scanning rule; floor-check sees it either way
-
-  # The same call on the `web` archetype as plinth-template renders it, a
-  # Django project (#614): the checks every archetype runs, on a project whose
-  # mypy loads Django's settings and whose pytest runs pytest-django, and with
-  # `web: true` the two web-only jobs and the tests' Postgres. Its check names
-  # are `canary-web / …`, required by no ruleset.
-  canary-web:
-    uses: ./.github/workflows/python-ci.yml
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-      actions: write
-    with:
-      working-directory: canary-web
-      web: true
-      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"
-
-  # plinth-template's `cli` project as the door renders it today, at the
-  # commit scripts/new-project.sh pins, committed under canary-template/,
-  # through this commit's python-ci.yml (#953). The grant and the inputs are
-  # the rendered caller's `ci` job, copied: a python-ci.yml change that the
-  # template's caller cannot run fails here, in plinth's pull request, not in
-  # a project after the release. tests/template-render.sh fails when the
-  # copy, the render or this name falls behind the pin; a pin raise re-renders
-  # with `tests/template-render.sh --write`. Added to the copy, and only these:
-  # the directory, plinth's own ruleset's checks (as `canary` passes them),
-  # and no diff limit, since the render is generated, not reviewed line by
-  # line. Its check names are `canary-template (…) / …`, required by no
-  # ruleset; the name moves with the pin.
-  canary-template:
-    name: canary-template (plinth-template v1.51.0 at f0ed80e)
-    uses: ./.github/workflows/python-ci.yml
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-      actions: write
-    with:
-      working-directory: canary-template
-      extra-python-versions: "3.14"
-      max-diff-lines: 0
-      floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"
+  install:
+    name: ci / install
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 20
+  tools:
+    name: ci / tools
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
+  release-gate:
+    name: ci / release-gate
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
+  review:
+    name: third-party / review
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
+  docs:
+    name: ci / docs
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf 'push run read: %s\n' "$BODY"
+          sleep 150
+          case "$BODY" in *PROBE-FAIL*) echo "::error::PROBE-FAIL in the description read at the push"; exit 1 ;; esac

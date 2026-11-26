@@ -1,0 +1,19 @@
+name: CI edit
+# Probe for #1133: on an edit only, `ci / docs` again, at once, from the
+# edit's payload. No concurrency group: it must not cancel the push's run.
+on:
+  pull_request:
+    branches: [main]
+    types: [edited]
+permissions:
+  contents: read
+jobs:
+  docs:
+    name: ci / docs
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf 'edit run read: %s\n' "$BODY"
+          case "$BODY" in *PROBE-FAIL*) echo "::error::PROBE-FAIL in the description read at the edit"; exit 1 ;; esac
