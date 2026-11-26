@@ -167,6 +167,11 @@ jobs:
       - name: Floor checker output unchanged, its ids registered
         run: ./tests/floor-check-golden.sh
 
+      # What the registry declares: one name per area letter, ids never
+      # renamed, and the keepable, baseline and view lists (#1103).
+      - name: Floor checker's registry holds its areas, ids, keepable, baseline and view
+        run: ./tests/floor-check-registry.sh
+
       - name: Every uv pin is one release and its checksum, the template's too
         run: ./tests/uv-pin.sh
 
