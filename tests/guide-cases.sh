@@ -1484,6 +1484,29 @@ d2="$(repo so-far-same-day)"
 printf '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":2},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[{"number":1,"title":"docs: opened first, merged at six","mergedAt":"2026-10-22T18:00:00Z","author":{"__typename":"User","login":"someone"}},{"number":2,"title":"docs: opened second, merged at nine","mergedAt":"2026-10-22T09:00:00Z","author":{"__typename":"User","login":"someone"}}]}}}}' > "$d2/history.json"
 state "so far: the first merge the same day is the earlier timestamp" "$d2" \
   "  2026-10-22 #2 first merge by a person: docs: opened second, merged at nine" "!#1 first merge by a person"
+# Six events the same day, read in another order (records come by update
+# time): the five shown are the newest by the whole timestamp, and a tag's
+# date with an offset counts in UTC (15:00+09:00 is 06:00Z). #30 at 01:00 is
+# the one left out. Review on #1090, round 3.
+d4="$(repo so-far-six-same-day)"
+put "$d4/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+printf '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-26T08:00:00Z","mergedPulls":{"totalCount":1},"closedIssues":{"totalCount":4},"records":{"nodes":[%s,%s,%s,%s]},"releases":{"totalCount":1,"nodes":[{"tagName":"v1.0.0","name":"First release","isDraft":false,"publishedAt":"2026-10-26T02:00:00Z","createdAt":"2026-10-26T02:00:00Z"}]},"tags":{"totalCount":2,"nodes":[{"name":"v1.1.0","target":{"tagger":{"date":"2026-10-26T15:00:00+09:00"}}}]},"firstMerges":{"nodes":[]}}}}' \
+  '{"number":30,"title":"At one","closedAt":"2026-10-26T01:00:00Z","labels":{"nodes":[{"name":"spec"}]}}' \
+  '{"number":31,"title":"At five","closedAt":"2026-10-26T05:00:00Z","labels":{"nodes":[{"name":"spec"}]}}' \
+  '{"number":32,"title":"At three","closedAt":"2026-10-26T03:00:00Z","labels":{"nodes":[{"name":"spec"}]}}' \
+  '{"number":33,"title":"At seven","closedAt":"2026-10-26T07:00:00Z","labels":{"nodes":[{"name":"spec"}]}}' > "$d4/history.json"
+state "so far: six events the same day, the newest five by timestamp" "$d4" \
+  "so far: the newest 5 of 8 events, newest first:" \
+  "  2026-10-26 #33 closed spec: At seven" \
+  "  2026-10-26 v1.1.0 tag" \
+  "  2026-10-26 #31 closed spec: At five" \
+  "  2026-10-26 #32 closed spec: At three" \
+  "  2026-10-26 v1.0.0 release: First release" \
+  "!#30"
+out="$(MOCK_DIR="$d4" "$script" "$d4" 2>&1)"
+[ "$(grep -A5 '^so far:' <<<"$out" | sed -n '2,6p' | awk '{ print $2 }' | paste -sd' ' -)" = "#33 v1.1.0 #31 #32 v1.0.0" ] &&
+  ok "so far: the same day's five in timestamp order" ||
+  { bad "so far: the same day's order"; grep -A5 '^so far' <<<"$out" | sed 's/^/        /'; }
 # Before the first merge, a failing check on the first pull request is a
 # problem: the history is the counts line.
 d3="$(repo so-far-first-fails)"
