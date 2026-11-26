@@ -165,7 +165,9 @@ Asked when the arguments carry none. Header `Name`: "What should
 the repository be called?" Offer two or three names in ASCII that
 translate what step 2 means, short, lowercase, with `-` between words: a
 translation, not a romanization of the person's words, since `gh` and
-github.com turn every letter outside ASCII into `-`. The picker's own Other
+github.com turn every letter outside ASCII into `-`. When step 2's answer
+gives nothing to translate ("I don't know"), suggest plain names for the kind
+instead, such as `my-tool` for cli, checked the same way. The picker's own Other
 takes a typed name; add no choice for it. Say in one line that
 `owner/name` puts it under an organization. The name is at most 46
 characters, the owner not counted: the new project's Python package takes
@@ -368,8 +370,10 @@ When the arguments give every row, show the table and ask nothing: the
 command said before an earlier run asks no question when typed again.
 
 In text (a `claude -p` run, or a call with no answer), show the same
-numbered table, then: "Create `VISIBILITY` repository `owner/name`? Type
-the numbers to change, comma-separated; 0 to keep." Each number asks its
+numbered table, then: "Create `VISIBILITY` repository `owner/name`? Type 0
+to create it as shown, or the numbers of the rows to change,
+comma-separated." Do not number `Create` and `Change some` as choices in text:
+the numbers are the rows', and only 0 creates. Each number asks its
 row's question in text, rows 1 to 3 going back to their question as
 above; then the table again, the changed rows marked.
 

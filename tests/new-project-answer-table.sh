@@ -98,7 +98,10 @@ says "the step" "$step" 'Only the groups picked are asked' \
   'each changed row marked' 'show the table again'
 
 echo "-- text mode"
-says "the step" "$step" 'numbers to change, comma-separated; 0 to keep'
+# #1067: a claude -p run numbered Create as 1, the same number as row 1; 0 never said it creates.
+says "the step" "$step" 'Type 0 to create it as shown, or the numbers of the rows to change' \
+  'Do not number `Create` and `Change some` as choices in text' 'only 0 creates'
+says "the name step" "$(tr '\n' ' ' < "$questions" | tr -s ' ')" 'gives nothing to translate' 'plain names for the kind'
 
 echo "-- every answer stays a flag, so the command said before the run asks nothing"
 says "the step" "$step" 'Every row becomes a flag, a default included' \
