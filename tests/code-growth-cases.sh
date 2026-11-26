@@ -92,9 +92,24 @@ expect() {
   if ! printf '%s\n' "$sum" | head -1 | grep -qE -- "$first"; then bad "$label (summary opens otherwise)" "$sum"; return 1; fi
   if [ -n "$each" ] && [ "$(printf '%s\n' "$warns" | grep -cF -- "$each")" != "$n" ]; then
     bad "$label (not every warning carries '$each')" "$warns"; return 1; fi
+  # Every annotation in its form (#1100): a Code growth warning is one
+  # sentence naming the thing and the fix, with no symbol carrying meaning (a
+  # command's own name, /plinth:arsenal, aside); a not yet confirmed one is
+  # #1156's what. Why. What confirms it.
+  local off; off="$(printf '%s\n' "$warns" | python3 -c '
+import re, sys
+for l in sys.stdin.read().splitlines():
+    if "title=Code growth::" in l:
+        m = re.sub(r"/[\w:.-]+", "", l.split("title=Code growth::", 1)[1])
+        if not m.endswith(".") or re.search(r"[:;`—|]|\. |\(|\)", m[:-1]):
+            print(l)
+    elif l.startswith("::warning::not yet confirmed: ") and not re.fullmatch(r"::warning::not yet confirmed: .+\. Why: .+\. What confirms it: .+\.", l):
+        print(l)
+')"
+  if [ -n "$off" ]; then bad "$label (an annotation not in its form)" "$off"; return 1; fi
   ok "$label"
 }
-NEXT="Next: ask Claude to run /improve-codebase-architecture on"
+NEXT="so ask Claude to run /improve-codebase-architecture on"
 
 echo "ci / code-growth: below the conventions"
 new_repo; small a > "$p/src/pkg/a.py"; complex in_tests > "$p/tests/test_x.py"; run
@@ -113,11 +128,11 @@ new_repo
 lines 1300 > "$p/src/pkg/big.py"
 run
 if expect "one complex function, one long one, one 1300-line file: three warnings, each naming the next step" 3 \
-  '^- not yet confirmed: code size within the conventions, 2 functions and 1 file are above them, largest first: ' "$NEXT"; then
-  printf '%s\n' "$warns" | head -1 | grep -qF '::warning file=src/pkg/a.py,line=28,title=Code growth::src/pkg/a.py:28 function `straight` has 79 statements (convention 50)' \
+  '^- not yet confirmed: code size within the conventions, for 2 functions and 1 file, largest first: ' "$NEXT"; then
+  printf '%s\n' "$warns" | head -1 | grep -qF '::warning file=src/pkg/a.py,line=28,title=Code growth::Function straight has 79 statements where the convention is 50, so ask Claude' \
     && ok "the largest comes first, a statement-only function named from its def line" \
     || bad "the first warning is not the long function" "$warns"
-  printf '%s\n' "$warns" | grep -qF 'file=src/pkg/big.py,line=1,title=Code growth::src/pkg/big.py:1 file has 1300 lines (convention 1000)' \
+  printf '%s\n' "$warns" | grep -qF 'file=src/pkg/big.py,line=1,title=Code growth::This file has 1300 lines where the convention is 1000, so' \
     && ok "the long file is a warning" || bad "no warning names the long file" "$warns"
   printf '%s\n' "$sum" | grep -qF 'conventions, not validated numbers' \
     && printf '%s\n' "$sum" | grep -qF '| `src/pkg/a.py:1` | function `tangled` has complexity 12 (convention 10) |' \
@@ -128,19 +143,19 @@ fi
 
 new_repo; for f in one two three four five; do complex "$f"; done > "$p/src/pkg/a.py"; run
 expect "five complex functions: still three warnings, and the summary lists all five" 3 \
-  '^- not yet confirmed: code size within the conventions, 5 functions and 0 files' "$NEXT" \
+  '^- not yet confirmed: code size within the conventions, for 5 functions and 0 files' "$NEXT" \
   && { [ "$(printf '%s\n' "$sum" | grep -c '^| `src/pkg/a.py')" = 5 ] && ok "all five are in the summary's table" || bad "the table does not list five" "$sum"; }
 
 new_repo; complex tangled > "$p/src/pkg/a.py"
 printf '\n[tool.ruff.lint.mccabe]\nmax-complexity = 50\n\n[tool.ruff.lint.pylint]\nmax-statements = 500\n' >> "$p/pyproject.toml"; run
 expect "a project's own looser ruff limits do not change the conventions" 1 \
-  '^- not yet confirmed: code size within the conventions, 1 function and 0 files' "$NEXT src/pkg/a.py"
+  '^- not yet confirmed: code size within the conventions, for 1 function and 0 files' "$NEXT src/pkg/a.py"
 
 new_repo; complex tangled | sed '1s/$/  # noqa: C901/' > "$p/src/pkg/a.py"
 complex hidden > "$p/src/pkg/b.py"; mkdir -p "$p/src/pkg/gen"; complex generated > "$p/src/pkg/gen/c.py"
 printf '\n[tool.ruff]\nextend-exclude = ["src/pkg/gen"]\n\n[tool.ruff.lint.per-file-ignores]\n"src/pkg/b.py" = ["C901"]\n' >> "$p/pyproject.toml"; run
 expect "a # noqa, a per-file ignore and an excluded directory hide nothing from the measure" 3 \
-  '^- not yet confirmed: code size within the conventions, 3 functions and 0 files' "$NEXT" \
+  '^- not yet confirmed: code size within the conventions, for 3 functions and 0 files' "$NEXT" \
   && { printf '%s\n' "$warns" | grep -qF 'file=src/pkg/gen/c.py' && ok "the excluded directory's function is named" || bad "no warning names src/pkg/gen/c.py" "$warns"; }
 
 new_repo; rm -rf "$p/src"; complex tangled > "$p/app.py"; run
@@ -156,8 +171,8 @@ echo "ci / code-growth: one list for both measures (#723)"
 new_repo; printf 'gen/\n' > "$r/.gitignore"; mkdir -p "$p/src/gen"; complex generated > "$p/src/gen/big.py"
 lines 1100 > "$p/src/gen/long.py"; git -C "$r" add -f "$p/src/gen" >/dev/null; run
 expect "a tracked file .gitignore also matches is measured by both: its function and its length are warned about" 2 \
-  '^- not yet confirmed: code size within the conventions, 1 function and 1 file are above them' "$NEXT" \
-  && { printf '%s\n' "$warns" | grep -qF 'file=src/gen/big.py,line=1,title=Code growth::src/gen/big.py:1 function `generated` has complexity 12' \
+  '^- not yet confirmed: code size within the conventions, for 1 function and 1 file,' "$NEXT" \
+  && { printf '%s\n' "$warns" | grep -qF 'file=src/gen/big.py,line=1,title=Code growth::Function generated has complexity 12' \
          && ok "the ignored file's function is named" || bad "no warning names src/gen/big.py's function" "$warns"; }
 
 new_repo; rm -rf "$p/src"; complex tangled > "$p/-dash.py"; run
@@ -176,47 +191,47 @@ fi
 echo "ci / code-growth: when it could not measure"
 new_repo; complex tangled > "$p/src/pkg/a.py"; printf 'def broken(:\n    pass\n' >> "$p/src/pkg/a.py"; run
 expect "a file ruff cannot parse is not yet confirmed and named, never a pass, even with nothing measured above" 1 \
-  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/a.py \(could not parse\); ' \
-  'ruff did not measure the functions in 1 Python file'
+  '^- not yet confirmed: code size within the conventions, for 1 Python file: src/pkg/a.py \(could not parse\)\. Why: ruff did not measure their functions' \
+  'ruff did not measure their functions'
 new_repo; for f in one two three; do complex "$f"; done > "$p/src/pkg/a.py"; printf 'def broken(:\n' > "$p/src/pkg/b.py"; run
 if expect "an unparsed file and three functions above: still three warnings, the unparsed file first" 3 \
-  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/b.py \(could not parse\)'; then
-  printf '%s\n' "$sum" | grep -qE '^- not yet confirmed: code size within the conventions, 3 functions and 0 files are above them' \
+  '^- not yet confirmed: code size within the conventions, for 1 Python file: src/pkg/b.py \(could not parse\)\. Why: ruff did not measure their functions'; then
+  printf '%s\n' "$sum" | grep -qE '^- not yet confirmed: code size within the conventions, for 3 functions and 0 files' \
     && ok "the summary carries both verdict lines" || bad "the summary lacks the line for the functions above" "$sum"
-  printf '%s\n' "$warns" | head -1 | grep -qF '::warning::not yet confirmed: code size within the conventions, ruff did not measure' \
+  printf '%s\n' "$warns" | head -1 | grep -qF '::warning::not yet confirmed: code size within the conventions, for 1 Python file' \
     && ok "the first warning is the unparsed file's" || bad "the first warning is not the unparsed file's" "$warns"
 fi
 new_repo; complex tangled > "$p/src/pkg/a.py"; { printf "x = '\351'\n"; complex hidden; } > "$p/src/pkg/b.py"; run
 expect "a file ruff cannot read (not UTF-8) is named as not measured, never passed" 2 \
-  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/b.py \(could not read\); '
+  '^- not yet confirmed: code size within the conventions, for 1 Python file: src/pkg/b.py \(could not read\)\. Why: ruff did not measure their functions'
 
 # A ruff that leaves a listed file out of what it checks: named as skipped.
 printf '#!/bin/sh\ncase " $* " in *" --show-files "*) "%s" "$@" | grep -v "/b\\.py$"; exit 0 ;; esac\nexec "%s" "$@"\n' "$bin/ruff" "$bin/ruff" > "$tmp/skip-ruff"; chmod +x "$tmp/skip-ruff"
 new_repo; small ok > "$p/src/pkg/a.py"; small fine > "$p/src/pkg/b.py"; ln -sf "$tmp/skip-ruff" "$tmp/bin/ruff"; run; ln -sf "$bin/ruff" "$tmp/bin/ruff"
 expect "a listed file ruff skipped is named as not measured, never passed" 1 \
-  '^- not yet confirmed: code size within the conventions, ruff did not measure the functions in 1 Python file: src/pkg/b.py \(skipped\); ' \
+  '^- not yet confirmed: code size within the conventions, for 1 Python file: src/pkg/b.py \(skipped\)\. Why: ruff did not measure their functions' \
   'src/pkg/b.py (skipped)'
 
 new_repo; complex tangled > "$p/src/pkg/a.py"; run failure
 expect "a failed uv sync is one not yet confirmed warning, never a pass" 1 \
-  '^- not yet confirmed: code size within the conventions, it did not run because an earlier step failed' 'not yet confirmed'
+  '^- not yet confirmed: code size within the conventions\. Why: it did not run because an earlier step failed' 'not yet confirmed'
 
 new_repo; complex tangled > "$p/src/pkg/a.py"; printf '[tool.ruff\n' > "$p/pyproject.toml"; run
 expect "a project configuration ruff cannot read does not stop the measure: it is not read" 1 \
-  '^- not yet confirmed: code size within the conventions, 1 function and 0 files' "$NEXT"
+  '^- not yet confirmed: code size within the conventions, for 1 function and 0 files' "$NEXT"
 
 # A ruff that prints a well-formed empty list and exits 2: its exit code is
 # what says it did not finish, never the list.
 mkdir -p "$tmp/broken"; printf '#!/bin/sh\necho "[]"; exit 2\n' > "$tmp/broken/ruff"; chmod +x "$tmp/broken/ruff"
 new_repo; complex tangled > "$p/src/pkg/a.py"; ln -sf "$tmp/broken/ruff" "$tmp/bin/ruff"; run; ln -sf "$bin/ruff" "$tmp/bin/ruff"
 expect "ruff that exits with an error is not yet confirmed, even when it printed a list" 1 \
-  '^- not yet confirmed: code size within the conventions, ruff did not finish' 'ruff did not finish'
+  '^- not yet confirmed: code size within the conventions\. Why: ruff did not finish' 'ruff did not finish'
 
 new_repo; rm -rf "$tmp/rt"; mkdir -p "$tmp/rt"; : > "$tmp/rt/summary"
 out="$(cd "$p" && RUNNER_TEMP="$tmp/rt" GITHUB_STEP_SUMMARY="$tmp/rt/summary" bash -e "$tmp/verdict.sh" 2>&1; echo "verdict exit $?")"
 out="measure exit 0"$'\n'"$out"; sum="$(cat "$tmp/rt/summary")"; warns="$(printf '%s\n' "$out" | grep '^::warning' || true)"
 expect "a measuring step that wrote nothing is not yet confirmed" 1 \
-  '^- not yet confirmed: code size within the conventions, the measuring step did not finish'
+  '^- not yet confirmed: code size within the conventions\. Why: the measuring step did not finish'
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

@@ -385,8 +385,8 @@ def stalled(reactions_p, now):
         ago = f"{secs // 60} min {secs % 60} s ago, read at {now}Z"
     else:
         ago = "how long ago not read"
-    print(f"::error::{ACK_NOT_DONE}: the reviewer took the request for this commit ({head})"
-          " and attached no review within the wait.")
+    print(f"{ACK_NOT_DONE}: the reviewer took the request for this commit ({head}) and attached no review within the wait.")
+    print(f"::error::The reviewer acknowledged commit {head} and attached no review within the wait, so follow the steps below in this job's log.")
     print(f"  requested {req}; acknowledged {first}Z ({how}); {ago}.")
     for when, what in acks[1:3]:
         print(f"  also: {what} at {when}Z.")
