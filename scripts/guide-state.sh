@@ -635,14 +635,21 @@ history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/
 run_ok=""; main_red=""
 run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
       --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10], ((.head_commit.message // "") | (split("\n")[0] // "") | gsub("\t"; " "))] | @tsv' 2>&1)" && run_ok=yes
-# A merge broke main (#1079): the failing run's head is a squash merge, its
-# title ending in (#N) as GitHub writes it; the route undoes #N first.
+# A merge broke main (#1079): the latest completed run failed (a failure,
+# not a cancelled or timed-out run) and its head is a squash merge, its title
+# ending in (#N) as GitHub writes it, and #N is still the newest merge (else
+# main moved on, the run is an older commit's). Not when #N is itself a
+# revert (that would undo the undo), nor while a revert of #N is open (that
+# pull request is the way, routed below). The route undoes #N first.
 main_undo=""; main_undo_title=""
 if [ -n "$run_ok" ] && [ -n "$run" ]; then
   case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
-  if [ -n "$main_red" ]; then
+  if [ "$(cut -f2 <<<"$run")" = failure ]; then
     main_undo_title="$(cut -f4 <<<"$run")"
     main_undo="$(sed -nE 's/.* \(#([0-9]+)\)$/\1/p' <<<"$main_undo_title")"
+    case "$main_undo_title" in 'Revert "'*|revert:*|revert\(*) main_undo="" ;; esac
+    [ -z "$main_undo" ] || [ "$(head -1 <<<"$merged" | cut -f1)" = "$main_undo" ] || main_undo=""
+    [ -z "$main_undo" ] || ! awk -F '\t' -v n="$main_undo" 'index($6, "Revert \"") == 1 && index($6, "(#" n ")")' <<<"$prs" | grep -q . || main_undo=""
   fi
 fi
 
@@ -1083,7 +1090,7 @@ elif [ -n "$main_undo" ]; then
   # Ahead of an open pull request's failing check: main stays broken while a
   # fix is written. /rewind is the session's own undo and never touches main.
   run_id_red="$(cut -f1 <<<"$run")"
-  note="main's latest CI run (run $run_id_red) failed on the merge of pull request #$main_undo (${main_undo_title% (#*}); undoing it opens a revert pull request that goes through the same checks; /rewind undoes the agent's edits in a session, never a merge"
+  note="main's latest CI run (run $run_id_red) failed on the merge of pull request #$main_undo (${main_undo_title% (#*}); read its log first (gh run view $run_id_red --log-failed): a failure that is not the change's own (a flaky job, an outside service) is run again, not undone; otherwise undoing it opens a revert pull request that goes through the same checks; /rewind undoes the agent's edits in a session, never a merge"
   say "Something broke" "none: undo pull request #$main_undo first, as the project's docs/how-to/undo-a-merged-change.md says"
   if [ "$archetype" = web ]; then restore="with the README's \"Where it runs\" and the restore you tried (step 3 of $plugin/docs/how-to/set-four-things-by-hand.md)"
   else restore="this archetype's project has no restore steps of its own"; fi

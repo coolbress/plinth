@@ -250,7 +250,8 @@ see these: guidance only.
     every credential your user account can read as gone, and work through
     [the revoke list](#if-something-bad-ran-on-this-computer) below.
   - **Anything else** (a failing check on an open pull request, an error):
-    show the agent the exact error and what you did before it. It makes a
+    say `diagnose this: …` and show the agent the exact error and what you
+    did before it. It makes a
     command that fails the same way, then, where a test can reach it, a test
     that fails for this bug, then fixes it.
 
@@ -278,7 +279,8 @@ Revoke or rotate, in this order:
 
 Then look, on GitHub: the account's security log; repositories nobody here
 made; self-hosted runners nobody here added; authorised OAuth apps and
-GitHub Apps. A 2025 attack on npm packages went after exactly these
+GitHub Apps. A 2025 attack on npm packages stole such tokens and made
+repositories in the accounts it reached
 ([CISA, 2025-09-23](https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem),
 [Nx postmortem](https://nx.dev/blog/s1ngularity-postmortem)).
 

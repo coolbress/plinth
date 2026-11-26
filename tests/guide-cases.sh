@@ -1734,6 +1734,22 @@ state "main green, a failing pull request: still diagnose this" "$d" "command: d
 # A red run whose head is not a merge (a direct push): no undo route.
 redrun 'wip' > "$d/runs.json"; printf '[]' > "$d/open.json"
 state "main red on a commit that is not a merge: no undo" "$d" "!undo pull request" "problems: main's latest CI run fails (run 31)"
+# Review of this change: what is not "a merge broke main".
+d="$(repo undo-not)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals' false SUCCESS)"
+redrun 'Revert \"feat: totals (#7)\" (#9)' > "$d/runs.json"
+state "main red on a revert's merge: never undo the undo" "$d" "!undo pull request" "problems: main's latest CI run fails (run 31)"
+printf '{"total_count":1,"workflow_runs":[{"id":33,"conclusion":"cancelled","created_at":"2026-10-28T10:00:00Z","head_commit":{"message":"feat: totals (#9)"}}]}' > "$d/runs.json"
+state "a cancelled run on a merge: no undo" "$d" "!undo pull request"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 7 'feat: totals' false SUCCESS)" "$(pr 9 'Revert \"feat: totals (#7)\"' false SUCCESS)"
+redrun 'feat: totals (#7)' > "$d/runs.json"
+state "the failing run is an older merge's, main moved on: no undo" "$d" "!undo pull request"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals' false SUCCESS)"
+redrun 'feat: totals (#9)' > "$d/runs.json"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals (#9)\"' false run)"
+state "a revert of the breaking merge is open: its route, no second undo" "$d" "!undo pull request" "command: /run"
+out="$(MOCK_DIR="$work/undo-cli" "$script" "$work/undo-cli" 2>&1)"
+grep -qF "read its log first (gh run view 31 --log-failed)" <<<"$out" && ok "  the undo note says to read the log first" || bad "the undo note does not say to read the log first"
 
 # The row and step 7 (#1079): the undo page named; the order undo, restore,
 # reproduce and fix, incident note; a secret revoked before any history
