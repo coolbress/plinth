@@ -526,8 +526,8 @@ else bad "no base: expected exit 0 and 'Not a pull request'" "$out"; fi
 echo "-- a diff that cannot be computed fails, it does not pass silently"
 new_repo
 out="$(cd "$r" && BASE_SHA=0000000000000000000000000000000000000000 HEAD_SHA="$(git rev-parse HEAD)" BODY="" GITHUB_STEP_SUMMARY="$tmp/summary" python3 "$tmp/step.py" 2>&1)"; rc=$?
-if [ "$rc" != 0 ] && printf '%s\n' "$out" | grep -q '^::error::'; then ok "unknown base: exit $rc with ::error::"
-else bad "unknown base: expected a non-zero exit and ::error::" "$out"; fi
+if [ "$rc" != 0 ] && printf '%s\n' "$out" | grep -q '^::error title=ci / diff-size::'; then ok "unknown base: exit $rc with the block's ::error (#1100)"
+else bad "unknown base: expected a non-zero exit and the block's ::error" "$out"; fi
 
 echo "-- a path cannot forge a workflow command"
 new_repo; mkdir -p "$r/.github/workflows"; printf 'on: push\n' > "$r/.github/workflows/"$'x\n::error::forged.yml'; commit

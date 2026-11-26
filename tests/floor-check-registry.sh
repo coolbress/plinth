@@ -27,7 +27,7 @@ from pathlib import Path
 root, mode = Path(sys.argv[1]), sys.argv[2]
 spec = importlib.util.spec_from_file_location("floor_check", root / "scripts/floor-check.py")
 fc = importlib.util.module_from_spec(spec); spec.loader.exec_module(fc)
-reg = {i: e for i, e in fc.REGISTRY.items() if i != fc.UNASSIGNED}
+reg = fc.REGISTRY
 passed = failed = 0
 def ok(msg):
     global passed; passed += 1; print(f"  PASS  {msg}")

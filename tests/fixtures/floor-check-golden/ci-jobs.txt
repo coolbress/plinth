@@ -65,14 +65,15 @@
           while IFS= read -r l || [ -n "$l" ]; do
             case "$l" in "fail: "*) n=$((n + 1)); [ -n "$first" ] || first="${l#fail: }" ;; esac
           done < "$t.verdicts"
-          if [ "$n" -gt 0 ]; then
-            next="run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/$at/skills/floor-check/SKILL.md#report"
-            first="${first%"; $next"}"; lead="floor-check: $n FAIL, first: "
-            room=$((300 - ${#lead} - ${#next} - 2))
-            [ "${#first}" -le "$room" ] || first="${first:0:$((room - 3))}..."
-            e="$lead$first; $next"; e="${e//'%'/%25}"; echo "::error::$e"
-          fi
           while IFS= read -r l || [ -n "$l" ]; do say "$l"; done < "$t.verdicts"
+          # The block the job's log ends with on a failure (#1098, #1100): one
+          # annotation however many FAILs, the first and the count.
+          if [ "$n" -gt 0 ]; then
+            fail_check="ci / floor-check"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--floor-check"
+            first="${first%%; run /plinth:floor-check*}"
+            fail_what="floor-check: $n FAIL, the first: $first"
+            fail_next="run /plinth:floor-check here, which writes the fix for each item, and push"
+          fi
           { echo; cat "$t.txt"; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
 
