@@ -227,8 +227,8 @@ SKIP_NEXT = f"; run /plinth:floor-check where it can read this: {REPORT}"
 # check reports through emit(id, state, msg_key, values); the text and
 # verdicts renderers turn the results into the lines this file printed before
 # ids existed, byte for byte (tests/floor-check-golden.sh holds them).
-# `FC-UNASSIGNED` is where a call not yet given its id reports; each area's
-# pull request moves its calls out of it.
+# Every line the checker prints comes from a registered check: there is no
+# way left to print a verdict without an id (tests/floor-check-golden.sh).
 #
 # The states, one to one with the verdicts printed:
 #   pass PASS, fail FAIL, warn WARN, unknown SKIP (with a reason),
@@ -253,7 +253,6 @@ VIEWS = ("report", "json", "opt-in:machine", "opt-in:standards", "opt-in:all")
 # The OSPS Baseline release an entry's `baseline` ids come from;
 # tests/floor-check-registry.sh holds every id to that release's list.
 OSPS_BASELINE = "v2026.08.28"
-UNASSIGNED = "FC-UNASSIGNED"
 DOCS = "skills/floor-check/SKILL.md"
 
 
@@ -1228,19 +1227,158 @@ def _plinth() -> tuple[dict, ...]:
     )
 
 
+MACHINE_DOCS = f"{DOCS}#run"
+# What none_found() prints: finding nothing is not a pass.
+NONE_FOUND = "{what}; no other credential found by these rules; best effort, see the guide's list"
+
+
+def _machine() -> tuple[dict, ...]:
+    """Area G: this machine, read only when the skill asks (--sandbox, --plugins, --credentials)."""
+    m = ("machine",)
+    creds = "--credentials runs it; it reads this machine's logins, variables and git configuration, not the repository"
+
+    def machine(cid: str, name: str, **kw) -> dict:
+        kw.setdefault("needs", m)
+        kw.setdefault("view_why", creds)
+        return check(cid, name, docs=MACHINE_DOCS, view="opt-in:machine", ci_visible=False, **kw)
+    return (
+        machine("FC-G01", "this machine's Claude Code sandbox setting", states=("unknown", "info"), handoff="person",
+                view_why="--sandbox runs it; it reads this machine's Claude Code settings, not the repository",
+                fix="read the measured lines before turning the sandbox on; nothing in the repository changes it",
+                messages={"on": "sandbox.enabled is true in {path}",
+                          "unset": "sandbox not verified: sandbox.enabled is not true in {conf}/settings.json or "
+                                   "settings.local.json, and /sandbox (Claude Code 2.1.278) does not write it there, "
+                                   "so this cannot tell on from off",
+                          "off": "  off: a `bash -c`, a `$(head -1 .env)`, a `grep -r` that names no file, or a script "
+                                 "that opens `.env` itself still reads it; the sandbox is what closes those",
+                          "gh": "  on, macOS (measured on Claude Code 2.1.278): `gh` stops working, because the sandbox "
+                                "enforces the floor's deny `Read(~/.config/gh/**)` against `gh` itself; its fix, mask "
+                                "mode, is ignored in a repository's .claude/settings.json and on macOS blocks like deny "
+                                "even from user settings, so no project setting fixes it: anthropics/claude-code#95135 "
+                                "and anthropics/claude-code#67105 track it upstream",
+                          "uvx": "  on, macOS: /plinth:new-project stops at `uvx --from copier copier`: ~/.cache/uv is "
+                                 "not writable, and with UV_CACHE_DIR moved to a writable path uv panics reading the "
+                                 "system proxy configuration",
+                          "other": "  Linux, WSL2 and native Windows: not measured"}),
+        machine("FC-G02", "each plugin from the plinth marketplace is at its pin", states=("warn", "unknown", "info"),
+                handoff="person",
+                view_why="--plugins runs it; it reads this machine's installed Claude Code plugins, not the repository",
+                fix="run the claude plugin update line the WARN names",
+                messages={"unread": "plugins not checked: {path} not read ({err})",
+                          "shape": "plugins not checked: {path} is not in the shape read here (version 2 with a "
+                                   "plugins map)",
+                          "market": "plugins not checked: the plinth marketplace's copy and its marketplace.json not "
+                                    "read through {path} ({err})",
+                          "norecord": "{pid} not checked: no install record read",
+                          "nopin": "{pid} ({where}) not checked: {how}",
+                          "noinstall": "{pid} ({where}) not checked: its install records no full {how}",
+                          "bad": "{pid} ({where}) is behind its pin: installed {how} {have}, the plinth marketplace "
+                                 "pins {want}; its skills may report \"Path not found\". fix: {fix}",
+                          "current": "at the plinth marketplace's pin: {names}",
+                          "other": "plugins from another marketplace, outside what plinth compares: {names}"}),
+        machine("FC-G03", "the agent's login lists no scope that changes the workflows",
+                states=("warn", "unknown", "info"), handoff="person", needs=("machine", "gh"),
+                fix="once the first pull request is merged, give the agent a token without the workflow scope",
+                messages={"noactive": "the permissions of the agent's gh login not verified: `gh auth status --json "
+                                      "hosts` could not be read or names no active github.com account",
+                          "unread": "the permissions of the agent's gh login ({login}) not verified: the scopes `gh "
+                                    "auth status` lists for it could not be read{aside}",
+                          "none": "the permissions of the agent's gh login ({login}) not verified: `gh auth status` "
+                                  "lists no scopes for it (a fine-grained token lists none){aside}",
+                          "bad": "the agent's gh login ({login}) holds `workflow`: it can push a change to "
+                                 "`.github/workflows/`, the checks included{aside}",
+                          "hint": "  once the first pull request is merged, give the agent a token without it: "
+                                  "docs/how-to/give-the-agent-a-token.md",
+                          "good": "the agent's gh login ({login}) lists its scopes without `workflow`{aside}",
+                          "glab": "the permissions of the agent's glab login not verified: glab's token scopes are "
+                                  "not read here"}),
+        machine("FC-G04", "no token variable is set in this environment", states=("warn", "info"), handoff="person",
+                fix="remove the variable where it is set, then restart Claude Code",
+                messages={"bad": "{var} is set in this environment: {cli}, and the git push it serves, use it before "
+                                 "any stored login",
+                          "hint": "  remove {var} where it is set (a shell startup file), then restart Claude Code"}),
+        machine("FC-G05", "no variable moves the gh or git configuration read", states=("unknown",), handoff="agent",
+                fix="unset the variable, then run the check again",
+                messages={"set": "{var} is set: the gh or git configuration read without it was not read, and the "
+                                 "agent can unset it"}),
+        machine("FC-G06", "the CLI stores one login for the host", states=("warn", "unknown", "info"),
+                handoff="person", needs=("machine", "gh"),
+                fix="keep only the account that holds the agent's token; log out each of the others",
+                messages={"glab": "the login glab stores for gitlab.com not verified: glab's configuration is not "
+                                  "read here; `glab auth status --hostname gitlab.com` shows it",
+                          "unread": "accounts stored in gh not verified: `gh auth status --json hosts` could not be "
+                                    "read",
+                          "many": "gh stores {n} accounts for github.com (active: {active}): each is one `gh auth "
+                                  "switch` away",
+                          "keep": "  keep only the account that holds the agent's token; log out each of the others:",
+                          "logout": "  gh auth logout --hostname github.com --user {login}",
+                          "beside": "gh stores 1 account for github.com ({login}) besides {vars}: unsetting the "
+                                    "variable uses it",
+                          "keepone": "  keep one: the agent's token stored in gh with the variable removed, or gh auth "
+                                     "logout --hostname github.com --user {login}",
+                          "none": NONE_FOUND}),
+        machine("FC-G07", "git asks no credential helper but the CLI's for the host",
+                states=("warn", "unknown", "info"), handoff="person", needs=("machine", "files"),
+                fix="delete the other helper's entry for the host, then clear the list with an empty helper before "
+                    "the CLI's",
+                messages={"unread": "git credential helpers not verified: `git config` could not be read",
+                          "url": "git config [{section} \"{shown}\"] not verified: its URL could not be parsed, so "
+                                 "whether it applies to {name} is unknown",
+                          "bad": "git has {n} credential helper{s} for {name} besides {cli}'s: {others} (`git config "
+                                 "--show-origin --get-regexp 'credential.*helper'` shows where)",
+                          "hint": "  one listed before {cli}'s, or any while {cli} has no login, answers the push; one "
+                                  "listed after {cli}'s was seen storing the credential a push succeeded with. Delete "
+                                  "its {name} entry, then clear the list with an empty `helper =` before {cli}'s under "
+                                  "`[credential \"https://{name}\"]` in ~/.gitconfig",
+                          "none": NONE_FOUND}),
+        machine("FC-G08", "git config sends no Authorization header to the host", states=("warn",), handoff="person",
+                needs=("machine", "files"), fix="remove the http.extraHeader entry that names the host",
+                messages={"bad": "git config sends an Authorization header to {name} (http.extraHeader): `git config "
+                                 "--show-origin --get-regexp extraheader` shows where"}),
+        machine("FC-G09", "~/.netrc holds no login for the host", states=("warn", "unknown", "info"), handoff="person",
+                fix="delete the host's entry (or the default one) from ~/.netrc",
+                messages={"unread": "{netrc} not verified: it exists and could not be read",
+                          "quote": "{netrc} not verified: a quoted token is not closed",
+                          "shape": "{netrc} not verified: a token sequence this reader does not place (a stray word, "
+                                   "a keyword without its value, or macdef)",
+                          "bad": "{netrc} holds a login for {name} (or a default one): git over HTTPS uses it",
+                          "none": NONE_FOUND}),
+        machine("FC-G10", "the SSH keys that push", states=("unknown", "info"), handoff="person",
+                fix="read the host's SSH key and deploy key settings; this machine cannot tell which keys push",
+                messages={"github": "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the "
+                                    "repository's Deploy keys, say which keys push; see "
+                                    "docs/how-to/give-the-agent-a-token.md",
+                          "gitlab": "SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's "
+                                    "Deploy keys, say which keys push",
+                          "askpass": "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved "
+                                     "in any other file"}),
+        machine("FC-G11", "no production database URL is within the agent's reach",
+                states=("warn", "unknown", "info"), handoff="person", needs=("machine", "files"),
+                view_why="--credentials runs it; it reads this machine's environment and Claude Code settings beside "
+                         "the repository's .env* files and .claude settings",
+                not_keepable="a command run against a production database can change or delete its data, which "
+                             "cannot be undone and reaches every user of it",
+                fix="keep the production URL only in the host's settings and use a local database for work",
+                messages={"bad": "a production database URL is within the agent's reach: {where}",
+                          "hint": "  {fix}; {db}",
+                          "unread": "{rel} not verified: it could not be read",
+                          "json": "{shown} not verified: it could not be read as JSON",
+                          "env": "{shown} not verified: its env is not an object",
+                          "none": "no production database URL found in this environment, the repository's .env* "
+                                  "files or the env of .claude/settings*.json (the repository's and the user's); best "
+                                  "effort: shell profile files, other files and schemes other than postgres:// and "
+                                  "postgresql:// are not read"}),
+    )
+
+
 REGISTRY = _registry(
-    # Where a result() call not yet given its id reports: any state, the
-    # message its text. Not a check; the golden test counts what is left in it.
-    {"id": UNASSIGNED, "name": "not yet given an id", "area": None, "hosts": HOSTS, "archetypes": None,
-     "needs": NEEDS, "lifecycle": "stable", "states": STATES, "handoff": "agent", "fix": "", "docs": DOCS,
-     "messages": {}, "aliases": (), "unreached": {}, "keepable": True, "not_keepable": None, "baseline": (),
-     "view": "report", "ci_visible": True, "view_why": None},
     *_documents(),
     *_agent(),
     *_project(),
     *_ci(),
     *_wall(),
     *_plinth(),
+    *_machine(),
 )
 
 # The run, as emit() records it: one result per line printed, in order, and
@@ -1255,14 +1393,13 @@ ADMIN_READER = "/plinth:floor-check with a login that administers the repository
 def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
          reason: str | None = None, reader: str | None = None) -> None:
     """Report one result of check `cid`: `state` one it declares, the message
-    its entry's `msg_key` with `values` filled in (for FC-UNASSIGNED,
-    `msg_key` is the message). An unknown says why (`reason`; HERE marks one
+    its entry's `msg_key` with `values` filled in. An unknown says why (`reason`; HERE marks one
     no change clears), a review who reads it (`reader`)."""
     e = REGISTRY[cid]
     assert state in e["states"], (cid, state)
     assert (state == "unknown") == (reason is not None), (cid, state, reason)
     assert (state == "review") == (reader is not None), (cid, state, reader)
-    msg = msg_key if cid == UNASSIGNED else e["messages"][msg_key].format(**(values or {}))
+    msg = e["messages"][msg_key].format(**(values or {}))
     r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader}
     results.append(r)
     verdicts.extend(verdict_lines(r))
@@ -1275,24 +1412,6 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
 def verdict(cid: str, cond: bool, values: dict | None = None, bad: str = "fail") -> bool:
     """A two-way check: `good` when cond holds, else `bad` (fail, or warn)."""
     emit(cid, "pass" if cond else bad, "good" if cond else "bad", values)
-    return cond
-
-
-def result(kind: str, msg: str, *, deferred: bool = False, here: bool = False) -> None:
-    """A call not yet given its id (#1103): `kind` the verdict printed.
-    `deferred` marks an INFO for a read this run cannot make and a run with
-    a login that administers the repository does (#436), `here` a SKIP that
-    cannot be read from this machine or repository whatever the person
-    changes there (#1002)."""
-    assert not here or kind == "SKIP", "only a SKIP is marked as not readable here"
-    assert not deferred or kind == "INFO", "only an INFO is left to the skill"
-    state = "review" if deferred else {v: k for k, v in SHOWN.items() if k != "review"}[kind]
-    emit(UNASSIGNED, state, msg, reason=(HERE if here else "unstated") if kind == "SKIP" else None,
-         reader="/plinth:floor-check with a login that administers the repository" if deferred else None)
-
-
-def ok(cond: bool, good: str, bad: str) -> bool:
-    result("PASS" if cond else "FAIL", good if cond else bad)
     return cond
 
 
@@ -1351,7 +1470,7 @@ def run_record(rs: list[dict]) -> dict:
     """The run beyond its lines: the registered checks that reported nothing
     (not evaluated: another host, archetype or flag), for #1105's report."""
     seen = {r["id"] for r in rs}
-    return {"results": rs, "not_evaluated": [i for i in REGISTRY if i != UNASSIGNED and i not in seen],
+    return {"results": rs, "not_evaluated": [i for i in REGISTRY if i not in seen],
             "crashed": None}
 
 
@@ -5374,19 +5493,11 @@ def check_sandbox() -> None:
     # A fact either way, never a PASS: on is not "good" here, since on macOS it
     # stops gh and the door, so the measured lines follow both.
     if on:
-        result("INFO", f"sandbox.enabled is true in {on}")
+        emit("FC-G01", "info", "on", {"path": on})
     else:
-        result("SKIP", f"sandbox not verified: sandbox.enabled is not true in {conf}/settings.json or settings.local.json, "
-               "and /sandbox (Claude Code 2.1.278) does not write it there, so this cannot tell on from off", here=True)
-    result("INFO", "  off: a `bash -c`, a `$(head -1 .env)`, a `grep -r` that names no file, or a script that opens "
-           "`.env` itself still reads it; the sandbox is what closes those")
-    result("INFO", "  on, macOS (measured on Claude Code 2.1.278): `gh` stops working, because the sandbox enforces the floor's "
-           "deny `Read(~/.config/gh/**)` against `gh` itself; its fix, mask mode, is ignored in a repository's "
-           ".claude/settings.json and on macOS blocks like deny even from user settings, so no project setting fixes it: "
-           "anthropics/claude-code#95135 and anthropics/claude-code#67105 track it upstream")
-    result("INFO", "  on, macOS: /plinth:new-project stops at `uvx --from copier copier`: ~/.cache/uv is not writable, "
-           "and with UV_CACHE_DIR moved to a writable path uv panics reading the system proxy configuration")
-    result("INFO", "  Linux, WSL2 and native Windows: not measured")
+        emit("FC-G01", "unknown", "unset", {"conf": conf}, reason=HERE)
+    for key in ("off", "gh", "uvx", "other"):
+        emit("FC-G01", "info", key)
 
 
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -5413,11 +5524,12 @@ def check_plugins() -> None:
     try:
         installed = json.loads(read(plugins_dir / "installed_plugins.json"))
     except (OSError, ValueError) as e:
-        result("SKIP", f"plugins not checked: {plugins_dir / 'installed_plugins.json'} not read ({type(e).__name__})")
+        emit("FC-G02", "unknown", "unread", {"path": plugins_dir / "installed_plugins.json", "err": type(e).__name__},
+             reason="the installed plugins not read")
         return
     if not isinstance(installed, dict) or installed.get("version") != 2 or not isinstance(installed.get("plugins"), dict):
-        result("SKIP", f"plugins not checked: {plugins_dir / 'installed_plugins.json'} is not in the shape read here "
-                       "(version 2 with a plugins map)")
+        emit("FC-G02", "unknown", "shape", {"path": plugins_dir / "installed_plugins.json"},
+             reason="the installed plugins not in a shape read here")
         return
     try:
         loc = Path(json.loads(read(plugins_dir / "known_marketplaces.json"))["plinth"]["installLocation"])
@@ -5426,8 +5538,8 @@ def check_plugins() -> None:
             raise ValueError("not the plinth marketplace")
         entries = {e["name"]: e for e in market["plugins"]}
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-        result("SKIP", f"plugins not checked: the plinth marketplace's copy and its marketplace.json not read "
-                       f"through {plugins_dir / 'known_marketplaces.json'} ({type(e).__name__})")
+        emit("FC-G02", "unknown", "market", {"path": plugins_dir / "known_marketplaces.json", "err": type(e).__name__},
+             reason="the marketplace's pins not read")
         return
 
     def pinned(name: str) -> tuple[str | None, str]:
@@ -5454,7 +5566,7 @@ def check_plugins() -> None:
             continue
         want, how = pinned(name)
         if not isinstance(installs, list) or not installs:
-            result("SKIP", f"{pid} not checked: no install record read")
+            emit("FC-G02", "unknown", "norecord", {"pid": pid}, reason="no install record")
             continue
         for rec in installs:
             rec = rec if isinstance(rec, dict) else {}
@@ -5463,9 +5575,11 @@ def check_plugins() -> None:
                 where += f" in {rec['projectPath']}"
             have = rec.get("gitCommitSha") if how == "commit" else rec.get("version")
             if want is None:
-                result("SKIP", f"{pid} ({where}) not checked: {how}")
+                emit("FC-G02", "unknown", "nopin", {"pid": pid, "where": where, "how": how},
+                     reason="the entry pins nothing comparable")
             elif not isinstance(have, str) or (how == "commit" and not SHA.fullmatch(have)):
-                result("SKIP", f"{pid} ({where}) not checked: its install records no full {how}")
+                emit("FC-G02", "unknown", "noinstall", {"pid": pid, "where": where, "how": how},
+                     reason="the install records nothing comparable")
             elif have != want:
                 shown = (lambda s: s[:12]) if how == "commit" else (lambda s: s)
                 # The install's own scope, always named: without --scope,
@@ -5481,16 +5595,15 @@ def check_plugins() -> None:
                     path = rec.get("projectPath")
                     fix = f"cd {shlex.quote(path)} && {fix}" if isinstance(path, str) and path else \
                         f"{fix}, run from the project folder it was installed for"
-                result("WARN", f"{pid} ({where}) is behind its pin: installed {how} {shown(have)}, the plinth "
-                               f"marketplace pins {shown(want)}; its skills may report \"Path not found\". "
-                               f"fix: {fix}")
+                emit("FC-G02", "warn", "bad", {"pid": pid, "where": where, "how": how, "have": shown(have),
+                                               "want": shown(want), "fix": fix})
             else:
                 current.append(f"{pid} ({where})")
     if current:
-        result("INFO", "at the plinth marketplace's pin: " + ", ".join(current))
+        emit("FC-G02", "info", "current", {"names": ", ".join(current)})
     if other:
         # Outside what this item compares, not a read that failed (#1002).
-        result("INFO", "plugins from another marketplace, outside what plinth compares: " + ", ".join(other))
+        emit("FC-G02", "info", "other", {"names": ", ".join(other)})
 
 
 # gh's own git helper, whatever path it was installed under, and nothing else:
@@ -5564,11 +5677,12 @@ def netrc_has_host(words: list[str], host: str = "github.com") -> bool | None:
     return found
 
 
-def none_found(what: str) -> None:
+def none_found(cid: str, what: str) -> None:
     """Finding nothing is not a pass: these rules read gh's and git's formats
     as far as they go, and a credential they do not recognise is not reported
-    (#344's review found one after another). A WARN is what they found."""
-    result("INFO", f"{what}; no other credential found by these rules; best effort, see the guide's list")
+    (#344's review found one after another). A WARN is what they found. An
+    INFO of check `cid`, whose `none` message is NONE_FOUND."""
+    emit(cid, "info", "none", {"what": what})
 
 
 def check_workflow_scope(accounts: object, env_tokens: list[str]) -> None:
@@ -5580,8 +5694,7 @@ def check_workflow_scope(accounts: object, env_tokens: list[str]) -> None:
     fine-grained token lists no scopes, so none listed is not verified."""
     active = [a for a in accounts if isinstance(a, dict) and a.get("active")] if isinstance(accounts, list) else []
     if not active:
-        result("SKIP", "the permissions of the agent's gh login not verified: "
-               "`gh auth status --json hosts` could not be read or names no active github.com account")
+        emit("FC-G03", "unknown", "noactive", reason="no active gh login read")
         return
     login, scopes = str(active[0].get("login", "?")), active[0].get("scopes")
     aside = (f" ({' and '.join(env_tokens)} is set: the token in use may not have these scopes)" if env_tokens else "")
@@ -5590,21 +5703,17 @@ def check_workflow_scope(accounts: object, env_tokens: list[str]) -> None:
     elif isinstance(scopes, str):
         scopes = scopes.split(",")
     if not isinstance(scopes, list) or not all(isinstance(s, str) for s in scopes):
-        result("SKIP", f"the permissions of the agent's gh login ({login}) not verified: "
-               f"the scopes `gh auth status` lists for it could not be read{aside}")
+        emit("FC-G03", "unknown", "unread", {"login": login, "aside": aside}, reason="the scopes not read")
         return
     listed = [s.strip() for s in scopes if s.strip()]
     if not listed:
-        result("SKIP", f"the permissions of the agent's gh login ({login}) not verified: "
-               f"`gh auth status` lists no scopes for it (a fine-grained token lists none){aside}")
+        emit("FC-G03", "unknown", "none", {"login": login, "aside": aside}, reason="no scopes listed")
         return
     if "workflow" in listed:
-        result("WARN", f"the agent's gh login ({login}) holds `workflow`: it can push a change to `.github/workflows/`, "
-               f"the checks included{aside}")
-        result("INFO", "  once the first pull request is merged, give the agent a token without it: "
-               "docs/how-to/give-the-agent-a-token.md")
+        emit("FC-G03", "warn", "bad", {"login": login, "aside": aside})
+        emit("FC-G03", "info", "hint")
     else:
-        result("INFO", f"the agent's gh login ({login}) lists its scopes without `workflow`{aside}")
+        emit("FC-G03", "info", "good", {"login": login, "aside": aside})
 
 
 def check_credentials(root: Path, host: str = "github") -> None:
@@ -5627,20 +5736,18 @@ def check_credentials(root: Path, host: str = "github") -> None:
     token_vars = GLAB_TOKEN_VARS if gitlab else ("GH_TOKEN", "GITHUB_TOKEN")
     env_tokens = [var for var in token_vars if os.environ.get(var)]
     for var in env_tokens:
-        result("WARN", f"{var} is set in this environment: {cli}, and the git push it serves, use it before any stored login")
-        result("INFO", f"  remove {var} where it is set (a shell startup file), then restart Claude Code")
+        emit("FC-G04", "warn", "bad", {"var": var, "cli": cli})
+        emit("FC-G04", "info", "hint", {"var": var})
 
     # Each points gh or git away from, or adds to, the configuration read by
     # default; that one is not read here, and the agent can unset the variable.
     for var in (GLAB_CONFIG_MASKS if gitlab else CONFIG_MASKS):
         if var in os.environ:   # set but empty counts: `GIT_CONFIG_GLOBAL=` reads no global file
-            result("SKIP", f"{var} is set: the gh or git configuration read without it was not read, "
-                   "and the agent can unset it")
+            emit("FC-G05", "unknown", "set", {"var": var}, reason="the default configuration not read")
 
     if gitlab:
-        result("SKIP", "the login glab stores for gitlab.com not verified: glab's configuration is not read here; "
-               "`glab auth status --hostname gitlab.com` shows it")
-        result("SKIP", "the permissions of the agent's glab login not verified: glab's token scopes are not read here")
+        emit("FC-G06", "unknown", "glab", reason="glab's configuration not read")
+        emit("FC-G03", "unknown", "glab", reason="glab's token scopes not read")
     else:
         env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
         try:
@@ -5650,26 +5757,23 @@ def check_credentials(root: Path, host: str = "github") -> None:
         except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError, AttributeError):
             accounts = None
         if not isinstance(accounts, list):
-            result("SKIP", "accounts stored in gh not verified: `gh auth status --json hosts` could not be read")
+            emit("FC-G06", "unknown", "unread", reason="gh's answer not read")
         else:
             logins = [str(acct.get("login", "?")) if isinstance(acct, dict) else "?" for acct in accounts]
             active = [str(acct.get("login", "?")) for acct in accounts if isinstance(acct, dict) and acct.get("active")]
             if len(logins) > 1:
-                result("WARN", f"gh stores {len(logins)} accounts for github.com (active: {', '.join(active) or 'none'}): "
-                       "each is one `gh auth switch` away")
+                emit("FC-G06", "warn", "many", {"n": len(logins), "active": ", ".join(active) or "none"})
                 # Which account holds the agent's token is not known here, active or
                 # not (third-party review round 9 on #344): the person chooses.
-                result("INFO", "  keep only the account that holds the agent's token; log out each of the others:")
+                emit("FC-G06", "info", "keep")
                 for login in logins:
-                    result("INFO", f"  gh auth logout --hostname github.com --user {shlex.quote(login)}")
+                    emit("FC-G06", "info", "logout", {"login": shlex.quote(login)})
             elif logins and env_tokens:
                 # The agent can unset the variable itself, and the stored login answers.
-                result("WARN", f"gh stores 1 account for github.com ({logins[0]}) besides {' and '.join(env_tokens)}: "
-                       "unsetting the variable uses it")
-                result("INFO", "  keep one: the agent's token stored in gh with the variable removed, or "
-                       f"gh auth logout --hostname github.com --user {shlex.quote(logins[0])}")
+                emit("FC-G06", "warn", "beside", {"login": logins[0], "vars": " and ".join(env_tokens)})
+                emit("FC-G06", "info", "keepone", {"login": shlex.quote(logins[0])})
             else:
-                none_found(f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
+                none_found("FC-G06", f"gh stores {len(logins) or 'no'} account{'' if len(logins) == 1 else 's'} for github.com"
                            + (f": {logins[0]}" if logins else ""))
         check_workflow_scope(accounts, env_tokens)
 
@@ -5681,7 +5785,7 @@ def check_credentials(root: Path, host: str = "github") -> None:
     except (OSError, subprocess.TimeoutExpired):
         g = None
     if g is None or g.returncode not in (0, 1):   # 1: no such key
-        result("SKIP", "git credential helpers not verified: `git config` could not be read")
+        emit("FC-G07", "unknown", "unread", reason="git config not read")
     else:
         helpers: list[str] = []
         headers = 0
@@ -5696,8 +5800,8 @@ def check_credentials(root: Path, host: str = "github") -> None:
                 # before it, with or without a scheme, is never printed.
                 shown = "…@" + sub.rpartition("@")[2] if "@" in sub else sub
                 shown = shown if shown.isprintable() else "a URL with a control character"
-                result("SKIP", f'git config [{section} "{shown}"] not verified: its URL could not be parsed, '
-                       f"so whether it applies to {name} is unknown")
+                emit("FC-G07", "unknown", "url", {"section": section, "shown": shown, "name": name},
+                     reason="a URL not parsed")
                 continue
             if applies is False:
                 continue
@@ -5711,17 +5815,13 @@ def check_credentials(root: Path, host: str = "github") -> None:
         others = ["a `!` shell command" if h.startswith("!") else h.split()[0]
                   for h in helpers if not (GLAB_HELPER if gitlab else GH_HELPER).fullmatch(h)]
         if others:
-            result("WARN", f"git has {len(others)} credential helper{'s' if len(others) > 1 else ''} for {name} "
-                   f"besides {cli}'s: {', '.join(others)} (`git config --show-origin --get-regexp 'credential.*helper'` "
-                   "shows where)")
-            result("INFO", f"  one listed before {cli}'s, or any while {cli} has no login, answers the push; one listed after "
-                   f"{cli}'s was seen storing the credential a push succeeded with. Delete its {name} entry, then clear the list with an "
-                   f"empty `helper =` before {cli}'s under `[credential \"https://{name}\"]` in ~/.gitconfig")
+            emit("FC-G07", "warn", "bad", {"n": len(others), "s": "s" if len(others) > 1 else "", "name": name,
+                                           "cli": cli, "others": ", ".join(others)})
+            emit("FC-G07", "info", "hint", {"cli": cli, "name": name})
         else:
-            none_found(f"git asks {'only ' + cli if helpers else 'no credential helper'} for {name}")
+            none_found("FC-G07", f"git asks {'only ' + cli if helpers else 'no credential helper'} for {name}")
         if headers:
-            result("WARN", f"git config sends an Authorization header to {name} (http.extraHeader): "
-                   "`git config --show-origin --get-regexp extraheader` shows where")
+            emit("FC-G08", "warn", "bad", {"name": name})
 
     netrc = Path(os.environ.get("HOME") or Path.home()) / ".netrc"
     try:
@@ -5735,25 +5835,19 @@ def check_credentials(root: Path, host: str = "github") -> None:
     words = [re.sub(r"\\(.)", r"\1", m.group(1)) if m.group(1) is not None else m.group(2) or "" for m in tokens]
     github = netrc_has_host(words, name)
     if lines is None:
-        result("SKIP", f"{netrc} not verified: it exists and could not be read")
+        emit("FC-G09", "unknown", "unread", {"netrc": netrc}, reason="~/.netrc not read")
     elif any(m.group(3) is not None for m in tokens):
-        result("SKIP", f"{netrc} not verified: a quoted token is not closed")
+        emit("FC-G09", "unknown", "quote", {"netrc": netrc}, reason="a quote not closed")
     # Host names and keywords in any case: curl 8.5.0 matched `GITHUB.COM` (third-party review on #344).
     elif github is None:
-        result("SKIP", f"{netrc} not verified: a token sequence this reader does not place (a stray word, "
-               "a keyword without its value, or macdef)")
+        emit("FC-G09", "unknown", "shape", {"netrc": netrc}, reason="a token sequence not placed")
     elif github:
-        result("WARN", f"{netrc} holds a login for {name} (or a default one): git over HTTPS uses it")
+        emit("FC-G09", "warn", "bad", {"netrc": netrc, "name": name})
     else:
-        none_found(f"no {name} login in {netrc}")
+        none_found("FC-G09", f"no {name} login in {netrc}")
 
-    if gitlab:
-        result("SKIP", "SSH keys not verified here: GitLab's Preferences → SSH Keys, and the project's Deploy keys, "
-               "say which keys push", here=True)
-    else:
-        result("SKIP", "SSH keys not verified here: GitHub's Settings → SSH and GPG keys, and the repository's Deploy keys, "
-               "say which keys push; see docs/how-to/give-the-agent-a-token.md", here=True)
-    result("INFO", "  not read either: a program named by GIT_ASKPASS or core.askPass, a token saved in any other file")
+    emit("FC-G10", "unknown", "gitlab" if gitlab else "github", reason=HERE)
+    emit("FC-G10", "info", "askpass")
 
 
 # A PostgreSQL URL, the scheme in any case and with an optional SQLAlchemy
@@ -5853,8 +5947,8 @@ def check_database_urls(root: Path) -> None:
     def warn(where: str, fix: str) -> None:
         nonlocal found
         found += 1
-        result("WARN", f"a production database URL is within the agent's reach: {where}")
-        result("INFO", f"  {fix}; {DB_FIX}")
+        emit("FC-G11", "warn", "bad", {"where": where})
+        emit("FC-G11", "info", "hint", {"fix": fix, "db": DB_FIX})
 
     def named(name: str | None, what: str) -> str:
         return name if name is not None and PRINTABLE_NAME.fullmatch(name) else what
@@ -5872,7 +5966,7 @@ def check_database_urls(root: Path) -> None:
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
-            result("SKIP", f"{rel} not verified: it could not be read")
+            emit("FC-G11", "unknown", "unread", {"rel": rel}, reason="a .env file not read")
             continue
         for n, name, value in dotenv_values(text):
             if production_url_in(value):
@@ -5886,19 +5980,17 @@ def check_database_urls(root: Path) -> None:
         try:
             env = json.loads(read(p)).get("env", {})
         except (OSError, ValueError, AttributeError):
-            result("SKIP", f"{shown} not verified: it could not be read as JSON")
+            emit("FC-G11", "unknown", "json", {"shown": shown}, reason="a settings file not read")
             continue
         if not isinstance(env, dict):
-            result("SKIP", f"{shown} not verified: its env is not an object")
+            emit("FC-G11", "unknown", "env", {"shown": shown}, reason="a settings env not an object")
             continue
         for var in sorted(env):
             if production_url_in(env[var]):
                 warn(f"{named(var, 'an entry')} in the env of {shown}", "delete the entry")
 
     if not found:
-        result("INFO", "no production database URL found in this environment, the repository's .env* files or the env of "
-               ".claude/settings*.json (the repository's and the user's); best effort: shell profile files, other files "
-               "and schemes other than postgres:// and postgresql:// are not read")
+        emit("FC-G11", "info", "none")
 
 
 # ── main ──────────────────────────────────────────────────────────────────

@@ -259,9 +259,10 @@ long_skip="$(python3 - "$rt/plinth/floor-check.py" <<'PY'
 import importlib.util, io, contextlib, sys
 s = importlib.util.spec_from_file_location("fc", sys.argv[1]); m = importlib.util.module_from_spec(s)
 sys.modules["fc"] = m; s.loader.exec_module(m)
+# The --verdicts line a 900-character SKIP makes, from the renderer emit() uses.
 with contextlib.redirect_stdout(io.StringIO()):
-    m.result("SKIP", "z" * 900)
-print(m.verdicts[-1])
+    line = m.verdict_lines({"id": "FC-D02", "state": "unknown", "msg": "z" * 900, "reason": "a test", "reader": None})[-1]
+print(line)
 PY
 )"
 printf '%s\t::warning::%s\n' "a 900-character SKIP" "$long_skip" >> "$annotations"
