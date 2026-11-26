@@ -246,8 +246,8 @@ expect "just created, Dependabot's pull request first: the door's is the one to 
 d="$(repo first-merged)"
 put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
 put "$d/open.json" "$(pr 3 'chore(deps): bump x' true SUCCESS)"
-expect "first pull request merged, no issue: the token, the account, four things; then step 2" "$d" \
-  "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "then: An idea in your own words (step 2)"
+MOCK_ADMIN=true expect "first pull request merged, the token step not done: the token page, the other two recommended; then step 2" "$d" \
+  "First pull request merged (step 1)" "none: the token page first (the tool cell's first page); the other two pages are recommended next" "then: An idea in your own words (step 2)"
 
 d="$(repo issue-open "archetype: web
 hosting: render")"
@@ -570,7 +570,7 @@ put "$d/issues.json" "$(two_labels 14 'Renew the domain' ready-for-agent ready-f
 expect "ready-for-human and ready-for-agent on one issue: never /implement" "$d" "An idea in your own words (step 2)" "/grilling" "#14 [ready-for-agent,ready-for-human] a person's task"
 put "$d/issues.json" "$(issue 14 'Renew the domain' ready-for-human)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
-expect "a ready-for-human issue, one merge so far: the row after the first merge" "$d" "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "#14 [ready-for-human]"
+MOCK_ADMIN=true expect "a ready-for-human issue, one merge so far: the row after the first merge" "$d" "First pull request merged (step 1)" "none: the token page first (the tool cell's first page); the other two pages are recommended next" "#14 [ready-for-human]"
 
 # The token step (#922): while the credential gh uses in the session reaches
 # the repository's Administration, a line of its own names the three pages,
@@ -580,8 +580,9 @@ expect "a ready-for-human issue, one merge so far: the row after the first merge
 # scripts/lib/admin-reach.sh, as new-project.sh reads it. No reach: no line.
 # Read-only, or not read: not verified, with why.
 pages="$(row_tool 'First pull request merged')"; pages="${pages%%; *}"
-token_line="token step: not done: the credential gh uses in this session reaches the Administration of o/r, so the agent can still change the checks; before going on, follow the three pages of First pull request merged (step 1), in order: $pages"
-unverified() { echo "token step: not verified: $1; the agent's token should have Administration at No access, as the three pages of First pull request merged (step 1) say, in order: $pages"; }
+tpage="${pages%%, *}"; rpages="${pages#*, }"; rpages="${rpages% there}, in the same folder"
+token_line="token step: not done: the credential gh uses in this session reaches the Administration of o/r, so the agent can still change the checks; before going on, finish the token page of First pull request merged (step 1), $tpage; then, recommended: $rpages"
+unverified() { echo "token step: not verified: $1; the agent's token should have Administration at No access, as the token page of First pull request merged (step 1) says, $tpage; then, recommended: $rpages"; }
 d="$(repo token)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 put "$d/issues.json" "$(issue 15 'Export to CSV' ready-for-agent)"
@@ -610,7 +611,7 @@ MOCK_ADMIN=false no_token "token: a role below admin on a personal account's rep
 MOCK_ADMIN=false MOCK_ROLE=maintain no_token "token: maintain on a personal account's repository: no line" "$d" "/implement #15"
 # Not verified: read-only, or the reach not read.
 MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=ok no_token "token: a fine-grained token that reads Administration: not verified" "$d" "/implement #15" \
-  "token step: not verified: the credential gh uses in this session reads the Administration of o/r, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the three pages of First pull request merged (step 1) say, in order: $pages"
+  "token step: not verified: the credential gh uses in this session reads the Administration of o/r, and whether it can also change it cannot be read; the agent's token should have Administration at No access, as the token page of First pull request merged (step 1) says, $tpage; then, recommended: $rpages"
 MOCK_ADMIN_FAIL=1 no_token "token: the role read failing: not verified, with why" "$d" "/implement #15" \
   "$(unverified 'the role on o/r was not read (HTTP 403: Resource not accessible by integration)')"
 MOCK_ADMIN=null MOCK_ROLE=null no_token "token: an answer with no permissions: not verified, with why" "$d" "/implement #15" \
@@ -623,7 +624,73 @@ MOCK_ADMIN=false MOCK_KIND=Organization no_token "token: a role below admin in a
   "$(unverified 'the role on o/r is write, in an organization, whose own roles can grant editing its rules')"
 # The first merge's own row already names the pages: unchanged, no line.
 printf '[]' > "$d/issues.json"; put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
-MOCK_ADMIN=true no_token "token: First pull request merged with nothing open: unchanged, no second line" "$d" "none: three pages to follow, in order (the tool cell)"
+MOCK_ADMIN=true no_token "token: First pull request merged with nothing open: unchanged, no second line" "$d" "none: the token page first (the tool cell's first page); the other two pages are recommended next"
+# #1078: only the token blocks step 2. Done (no reach): one merge and nothing
+# else open is step 2, and the account and the four things are a "then also"
+# line; a web project's line names what waits for the first deploy too.
+MOCK_ADMIN=false state "the token step done, one merge: step 2, the rest a then-also line" "$d" \
+  "command: /grilling" "then also: recommended, not in the way of step 2, from First pull request merged (step 1): \`$(dirname "$(tr -d '`' <<<"$tpage")")/give-the-agent-its-own-account.md\`, then \`$(dirname "$(tr -d '`' <<<"$tpage")")/set-four-things-by-hand.md\`" \
+  "!after the first deploy" "!token step:"
+# Review of this change: a Dependabot pull request open too: its route, and
+# the then-also line still.
+put "$d/open.json" "$(pr 3 'chore(deps): bump x' true SUCCESS)"
+MOCK_ADMIN=false state "the token step done, one merge, Dependabot open: its route, the then-also line still" "$d" \
+  "command: /plinth:floor-check" "!token step:"
+out="$(MOCK_ADMIN=false MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -q '^then also: recommended' <<<"$out" && ok "  and the then-also line is there" || bad "no then-also line beside Dependabot"
+printf '[]' > "$d/open.json"
+MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=ok state "the token step not verified, one merge: the first merge's row, the token page first" "$d" \
+  "command: none: the token page first (the tool cell's first page); the other two pages are recommended next" "!then also"
+MOCK_ADMIN_FAIL=1 state "the reach not read, one merge: the first merge's row" "$d" "command: none: the token page first (the tool cell's first page); the other two pages are recommended next"
+dw="$(repo token-web 'archetype: web')"
+put "$dw/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+out="$(MOCK_ADMIN=false MOCK_DIR="$dw" "$script" "$dw" 2>&1)"
+also="$(grep '^then also: ' <<<"$out")"
+miss=""
+for w in "after the first deploy, from " "set-four-things-by-hand.md#after-the-first-deploy" "deploy-failure notification" "an uptime monitor and an error tracker" \
+         "one copy of the data off the host, in a place the agent cannot reach" "pg_dump" "past 3 days" "counts one table's rows before and after" \
+         "US\$7 web service, a US\$6 Postgres" "Billing page after the first month" "usage credits billed at API rates"; do
+  grep -qF -- "$w" <<<"$also" || miss="$miss [$w]"
+done
+grep -qx 'command: /grilling' <<<"$out" && [ -z "$miss" ] && ok "a web project, the token step done, one merge: the then-also line names what waits for the first deploy" ||
+  { bad "the web then-also line:$miss"; grep -E '^(command|then also)' <<<"$out" | sed 's/^/        /'; }
+de="$(repo token-web-elsewhere 'archetype: web
+hosting: elsewhere
+hosting_elsewhere: Fly.io')"
+put "$de/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+also="$(MOCK_ADMIN=false MOCK_DIR="$de" "$script" "$de" 2>&1 | grep '^then also: ')"
+grep -qF "after the first deploy" <<<"$also" && grep -qF "the bill to expect from where it runs" <<<"$also" && ! grep -q 'Render' <<<"$also" &&
+  ok "a web project that runs elsewhere: the after-deploy part, no Render figures" || bad "web elsewhere then-also: $also"
+# The page those lines send to (#1078): each provider's spend-limit row in
+# step 2, dated, with its link; the restore's row count; what waits for the
+# first deploy. A row that loses its fact fails here.
+four="$root/docs/how-to/set-four-things-by-hand.md"
+step2="$(awk '/^2\. For every paid service/{on=1} /^3\. Restore once/{on=0} on' "$four")"
+miss=""
+while IFS='|' read -r what words; do
+  grep -qF -- "$words" <<<"$(tr '\n' ' ' <<<"$step2" | tr -s ' ')" || miss="$miss [$what: $words]"
+done <<'ROWS'
+below what you can afford|Set each limit below what you can afford to lose
+Anthropic|a limit on the default workspace might not count or stop some usage in it (2026-11-26, [spend limits](https://platform.claude.com/docs/en/api/rate-limits#spend-limits))
+OpenAI|unless **Enforce a hard limit** is on
+OpenAI link|(https://help.openai.com/en/articles/9186755-managing-your-work-in-the-api-platform-with-projects)
+Railway|every workload is taken offline until you raise or remove it (2026-11-26, [usage limits](https://docs.railway.com/reference/usage-limits))
+Fly.io|on Pay As You Go there is no cap, and it sends no billing alerts
+Fly.io link|(https://docs.fly.io/about/cost-management)
+Render|Its one documented spend limit is on build pipeline minutes
+GitHub Actions|it counts only usage from the day it is created
+GitHub link|(https://docs.github.com/en/billing/concepts/budgets-and-alerts)
+subscription|a session limit that resets every five hours and a weekly limit
+usage credits|usage credits bill at API rates, and turning them on is your choice
+usage link|(https://support.claude.com/en/articles/12429409-extra-usage-for-paid-claude-plans)
+/usage|`/usage` shows where you are
+ROWS
+for w in "count that table's rows there: the same number says your data came back" "## After the first deploy" \
+         "Render it needs no other account" "Better Stack" "past 3 days only" "run \`pg_dump\`" "US\$7 a month web service and a US\$6 a month Postgres" \
+         "a free Postgres expires 30 days after it is made" "Read the Billing page after the first month"; do
+  grep -qF -- "$w" <<<"$(tr '\n' ' ' <<<"$(cat "$four")" | tr -s ' ')" || miss="$miss [$w]"
+done
+[ -z "$miss" ] && ok "set-four-things-by-hand.md: each provider's spend limit, dated, and what waits for the first deploy" || bad "set-four-things-by-hand.md lost:$miss"
 # Before the first merge the step is still ahead: no line, and no read.
 printf '[]' > "$d/merged.json"; put "$d/open.json" "$(pr 2 'docs: first pull request' false SUCCESS)"
 : > "$work/admin.log"
@@ -1028,8 +1095,8 @@ expect "100 merged, one by a person among them: not taken for the only one" "$d"
 # Under 100 the read is everything: the count is the total and exact.
 d="$(repo under-the-read)"
 many 99 1 > "$d/merged.json"
-expect "99 merged, one by a person 98 merges ago: the total, and still the one" "$d" \
-  "First pull request merged (step 1)" "none: three pages to follow, in order (the tool cell)" "first pull request merged: yes (1 merged by people)"
+MOCK_ADMIN=true expect "99 merged, one by a person 98 merges ago: the total, and still the one" "$d" \
+  "First pull request merged (step 1)" "none: the token page first (the tool cell's first page); the other two pages are recommended next" "first pull request merged: yes (1 merged by people)"
 d="$(repo under-the-read-bots)"
 many 99 0 > "$d/merged.json"; put "$d/open.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
 expect "99 merged, all a bot's, the first pull request open: still the first merge" "$d" \
@@ -1073,7 +1140,7 @@ out="$("$script" "$d" 2>&1)"
 missing=""
 for line in \
   'why: A merged change to put out (release and deploy, after step 6): plinth does not deploy a `web` app that runs anywhere else' \
-  "why: The project in use (operate): an uptime monitor and an error tracker with a free plan each. Neither is installed: the person sets them up in the service's own account" \
+  "why: The project in use (operate): an uptime monitor (UptimeRobot or Better Stack) and an error tracker with a free plan each, one copy of the data off the host and the bill to expect. None is installed: the person sets each up in the service's own account" \
   'why: Looking back on a piece of work (retrospective): it reads the session and suggests rules and checks, most serious first, and changes nothing' \
   'why: Ending the project, or handing it over (end): the table gives no reason'; do
   grep -qxF -- "$line" <<<"$out" || missing="$missing
@@ -1698,7 +1765,7 @@ has "map: when needed, unnumbered except step 9, release for this archetype, /re
   "!    7 " "!    8 "
 grep -qF '`backend`' <<<"$(map_of "$out")" && bad "map: the release line names another archetype's release" || ok "map: the release line names only this archetype's"
 has "map: the own-account step and the things set by hand: not yet, since nothing reads them" "$out" \
-  "  · 1 The agent's own account (recommended): " "  · 1 Four things by hand: "
+  "  · 1 The agent's own account (recommended): " "  · 1 Four things by hand (recommended): "
 n="$(map_of "$out" | grep -c .)"
 [ "$n" -ge 25 ] && [ "$n" -le 35 ] && ok "map: one screen ($n lines)" || bad "map: $n lines, not about 30"
 "$names" "$arsenal" <(map_of "$out") >/dev/null && ok "map: every command it names is in the table" || bad "map names a command outside the table"

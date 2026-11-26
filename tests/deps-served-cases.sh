@@ -169,7 +169,7 @@ expect() { # <label> <want rc: 0|1> <verdict line, a regex> [<log text>]
   then ok "$1"; else bad "$1: exit $rc, verdict '$sum'"; sed 's/^/        /' <<<"$log" >&2; fi
 }
 high="$(finding jinja2 3.1.2 GHSA-high 8.8)"; mod="$(finding requests 2.25.0 GHSA-mod 5.3)"
-couldnt='^- fail: dependency review, the scan could not run'
+couldnt='^- fail: dependency review could not run, osv-scanner did not compare the two lockfiles'
 
 osv_case "$(report "$high")" "$(report)"
 expect "refused, an added version with a high advisory fails and names it" 1 \
@@ -214,7 +214,7 @@ expect "refused, a report that is not JSON fails" 1 "$couldnt" "not the JSON rep
 : > "$work/sum"
 GITHUB_STEP_SUMMARY="$work/sum" RUNNER_TEMP="$work/empty" EVENT=pull_request SERVED=refused REVIEW=skipped OSV=skipped \
   SEVERITY=high ACTOR=someone bash "$verdict_run" >/dev/null 2>&1
-if grep -qE '^- not yet confirmed: dependency review, osv-scanner did not run because an earlier step failed' "$work/sum"
+if grep -qE '^- not yet confirmed: dependency review\. Why: osv-scanner did not run because an earlier step failed\.' "$work/sum"
 then ok "refused, osv-scanner skipped by an earlier failure: not yet confirmed, never a pass"
 else bad "refused, osv-scanner skipped: $(cat "$work/sum")"; fi
 
