@@ -26,8 +26,25 @@ misses_stop() {
 # machine where git cannot work out an identity would fail after the create;
 # the GitLab door commits first (#1067). Read in /, where no repository's own
 # configuration applies: the doors commit in a new folder, with the global one.
+# An identity git makes up from the login and the host name counts as missing
+# too (#1153): `git var` succeeds with it, and the first commit, public from
+# the start on GitHub, would carry the machine's host name. Each of the author
+# and the committer needs a name and an email that someone set: the
+# environment (GIT_<ROLE>_NAME/_EMAIL, and EMAIL, which git reads for the
+# email) or git's configuration at any level (<role>.name/.email, user.name/.email).
 git_identity() {
-  local v err
+  local v err role name email
+  for role in author committer; do
+    v="$(tr '[:lower:]' '[:upper:]' <<<"$role")"
+    name="$(printenv "GIT_${v}_NAME" || git -C / config --get "$role.name" || git -C / config --get user.name)" || name=""
+    email="$(printenv "GIT_${v}_EMAIL" || printenv EMAIL || git -C / config --get "$role.email" || git -C / config --get user.email)" || email=""
+    if [ -z "$name" ] || [ -z "$email" ]; then
+      miss "git cannot tell who makes the first commit: no name and email are set (user.name and user.email, or GIT_AUTHOR_*/GIT_COMMITTER_*), and git would make one up from your login and this computer's name, which a public repository would show" \
+        "  fix: git config --global user.name \"Your Name\"" \
+        "  fix: git config --global user.email \"you@example.com\""
+      return 0
+    fi
+  done
   for v in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
     if ! err="$(git -C / var "$v" 2>&1 >/dev/null)"; then
       miss "git cannot tell who makes the first commit ($(grep -m1 '^fatal:' <<<"$err" || echo "git var $v failed"))" \

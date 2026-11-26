@@ -453,6 +453,26 @@ grep -qF "things to fix" "$work/home-pre-no-ident/out" && bad pre-no-ident "one 
 # The whole run stops at it too, before the create (the GitHub door creates
 # the repository before its first commit).
 E="$noident" run no-ident err no no "git cannot tell who makes the first commit" -- probe
+# An identity git made up from the login and the host name counts as missing
+# (#1153): `git var` succeeds on such a machine, and the first commit would
+# publish the host name. Present means user.name and user.email in git's
+# configuration, or the author and committer pairs in the environment.
+madeup="-u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL"
+E="$madeup" run pre-made-up err no no "no name and email are set" -- --preflight
+for phrase in "git would make one up from your login and this computer's name" \
+              'fix: git config --global user.name "Your Name"' 'fix: git config --global user.email "you@example.com"'; do
+  grep -qF -- "$phrase" "$work/home-pre-made-up/out" && ok pre-made-up "shows \"$phrase\"" \
+    || { bad pre-made-up "does not show \"$phrase\""; sed 's/^/        /' "$work/home-pre-made-up/out"; }
+done
+E="$madeup" run made-up err no no "no name and email are set" -- probe
+run pre-ident-env ok no no "preflight: ok" -- --preflight
+printf '[user]\n\tname = T\n\temail = t@example.invalid\n' > "$work/ident.gitconfig"
+E="$madeup GIT_CONFIG_GLOBAL=$work/ident.gitconfig" run pre-ident-config ok no no "preflight: ok" -- --preflight
+# git reads EMAIL for the email when user.email is unset; someone set it, so it counts.
+printf '[user]\n\tname = T\n' > "$work/name-only.gitconfig"
+E="$madeup EMAIL=t@example.invalid GIT_CONFIG_GLOBAL=$work/name-only.gitconfig" run pre-ident-email-var ok no no "preflight: ok" -- --preflight
+E="$madeup GIT_CONFIG_GLOBAL=$work/name-only.gitconfig" run pre-ident-name-only err no no "no name and email are set" -- --preflight
+E="-u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL" run pre-ident-half err no no "no name and email are set" -- --preflight
 # Tools missing together: no uv beside a logged-out gh, both named.
 E="MOCK_NOAUTH=1" P="$work/bin-nouv" run pre-nouv-noauth err no no "2 things to fix; nothing was created:" -- --preflight
 grep -qF "uv is not installed" "$work/home-pre-nouv-noauth/out" && grep -qF "gh is not logged in" "$work/home-pre-nouv-noauth/out" \
@@ -1793,6 +1813,7 @@ E="$noident MOCK_GLAB_NOAUTH=1" gl_run gl-two-misses err no no "2 things to fix;
 grep -qF "git cannot tell who makes the first commit" "$work/home-gl-two-misses/out" && grep -qF "glab is not logged in" "$work/home-gl-two-misses/out" \
   && ok gl-two-misses "the identity and the login both named" || { bad gl-two-misses "not both named"; sed 's/^/        /' "$work/home-gl-two-misses/out"; }
 E="$noident" gl_run gl-no-ident err no no "git cannot tell who makes the first commit" -- probe --host gitlab
+E="$madeup" gl_run gl-made-up err no no "no name and email are set" -- probe --host gitlab
 # --check on GitLab.com: the namespace, the path, the folder and the
 # template's refusals, then `check: ok` with nothing created.
 gl_run gl-check-ok ok no no "check: ok (gitlab.com/tester/probe, private, cli" -- probe --host gitlab --check
