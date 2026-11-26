@@ -32,7 +32,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 - The wall is fail-closed: anything that cannot be raised stops before anything is created, and says why. 2026-09-02, #19
 - `/plinth:new-project` and `/plinth:template-update` keep `disable-model-invocation: true`, with no router skill that runs them on an ordinary request; the agent names the command for the person to type. 2026-10-15, #515
-- When the current folder already holds something, new-project's recommended option writes nothing there and creates no repository from it; publishing existing code is offered as printed commands. 2026-11-25, #1121 (decided; not built yet: #1121)
+- When the current folder already holds something, new-project's recommended option writes nothing there and creates no repository from it; publishing existing code is offered as printed commands. 2026-11-25, #1121
 - The door never overwrites an owner's shared issue or pull-request templates; changing them happens only on a maintainer's word, as a draft pull request. 2026-09-19, #88
 - Questions come host first (each host's readiness shown), then what the project is, then name and visibility; every answer stays a flag. 2026-11-24, #1067 (decided; not built yet: #1067)
 - Every answer is shown in one table before anything is created; only the rows picked are asked again. 2026-11-24, #1068 (decided; not built yet: #1068)
@@ -158,6 +158,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 - English is canonical; `.ko.md` translations are optional, and agent-facing text is English only. 2026-09-03, #18
 - plinth is for beginner engineers and non-engineers. 2026-10-13, #514
+- plinth bets on the process: a good process can be checked where a good outcome cannot; plinth guides it, enforces only what a check can hold, and points to proven tools for each step rather than rebuilding them. 2026-11-25, #1142
 - Only Claude Code is the tested host. 2026-09-03, #15
 - Each guidance item says its kind; a failure is met first with a simpler default, then a boundary, and guidance only where neither fits. 2026-10-15, #515
 - A reversal is written on the earlier record as a dated "reversed by" line. 2026-11-25, #1109 (decided; not built yet: #1109)

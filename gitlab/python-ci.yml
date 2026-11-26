@@ -92,7 +92,7 @@ workflow:
       step() {
         local std="$1"; shift
         if [ "$plinth_failed" != 0 ]; then
-          say "not yet confirmed: $std, it did not run because an earlier step failed; a run that gets past that step confirms it"
+          say "not yet confirmed: $std. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step."
           plinth_last=skipped; return 0
         fi
         printf '$ %s\n' "$*"
@@ -289,7 +289,7 @@ test:
         local out="$PLINTH_TMP/changed.verdict"; rm -f "$out"
         if [ -z "${CI_MERGE_REQUEST_IID:-}" ]; then echo "pass: $std, does not apply (not a merge request)" > "$out"; return 0; fi
         if [ "$cov" != success ] || [ "$pytest_outcome" != success ]; then
-          echo "not yet confirmed: $std, it did not run because an earlier step failed; a run that gets past that step confirms it" > "$out"; return 0
+          echo "not yet confirmed: $std. Why: it did not run because an earlier step failed. What confirms it: a run that gets past that step." > "$out"; return 0
         fi
         local xml="$PLINTH_TMP/coverage.xml" json="$PLINTH_TMP/diff-cover.json"
         uv run --no-sync coverage xml -o "$xml" || true
@@ -320,7 +320,7 @@ test:
       xml, report, out, changed, top = sys.argv[1:6]
       STD = "changed lines ran under the tests"
       TEST = re.compile(r"(^|/)tests?/|(^|/)test_[^/]*\.py$|_test\.py$")   # diff-size's
-      CONFIRMS = "a test that runs them, or `# pragma: no cover` with its reason, confirms it"
+      CONFIRMS = "What confirms it: a test that runs them, or `# pragma: no cover` with its reason."
       def say(*lines):
           with open(out, "w", encoding="utf-8") as f:
               f.writelines(s + "\n" for s in lines)
@@ -332,23 +332,23 @@ test:
       except (OSError, ET.ParseError, ValueError):
           root, covered = None, 0   # `coverage xml` writes nothing when it has no data
       if covered == 0:
-          say(f"not yet confirmed: {STD}, coverage recorded no line in the whole project, "
+          say(f"not yet confirmed: {STD}. Why: coverage recorded no line in the whole project, "
               "usually because another tool owns the tracer (pytest-cov's --cov in the "
-              "project's addopts); a run where coverage records lines confirms it")
+              "project's addopts). What confirms it: a run where coverage records lines.")
           sys.exit(0)
       try:
           with open(report, encoding="utf-8") as f:
               stats = json.load(f)["src_stats"]
       except (OSError, ValueError, KeyError, TypeError):
-          say(f"not yet confirmed: {STD}, diff-cover did not finish (its error is in this "
-              "step's log); a run where it does confirms it")
+          say(f"not yet confirmed: {STD}. Why: diff-cover did not finish (its error is in this "
+              "step's log). What confirms it: a run where it does.")
           sys.exit(0)
       try:
           with open(changed, encoding="utf-8") as f:
               files = [l for l in f.read().splitlines() if l and not TEST.search(l)]
       except OSError:
-          say(f"not yet confirmed: {STD}, git did not list the changed files (its error is in "
-              "this step's log); a run where it does confirms it")
+          say(f"not yet confirmed: {STD}. Why: git did not list the changed files (its error is in "
+              "this step's log). What confirms it: a run where it does.")
           sys.exit(0)
       # The files coverage's report has, as paths from the repository root,
       # and every file diff-cover matched in it.
@@ -361,9 +361,9 @@ test:
       if unmeasured:
           listed = ", ".join(unmeasured[:9]) + (f", and {len(unmeasured) - 9} more in this step's log"
                                                 if len(unmeasured) > 9 else "")
-          extra = [f"not yet confirmed: {STD}, {len(unmeasured)} changed Python files are not in "
-                   "coverage's report (outside the measured source, or omitted by the project's "
-                   f"coverage configuration): {listed}; a run that measures them confirms it"]
+          extra = [f"not yet confirmed: {STD}, for {len(unmeasured)} changed Python files: {listed}. "
+                   "Why: they are not in coverage's report (outside the measured source, or omitted "
+                   "by the project's coverage configuration). What confirms it: a run that measures them."]
       def ranges(ns):
           ns, rs = sorted(set(ns)), []
           for n in ns:
@@ -387,9 +387,9 @@ test:
       elif n == 0:
           say(f"pass: {STD}, all {total} changed lines ran", *extra)
       elif n == total:
-          say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}; {CONFIRMS}", *extra)
+          say(f"not yet confirmed: none of the {n} changed lines ran under the tests: {shown}. Why: no test runs them. {CONFIRMS}", *extra)
       else:
-          say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}; {CONFIRMS}", *extra)
+          say(f"not yet confirmed: {n} of {total} changed lines did not run under the tests: {shown}. Why: no test runs them. {CONFIRMS}", *extra)
       PY
       }
       if plinth_branch_of_mr "changed lines ran under the tests"; then branch_of_mr=1; else branch_of_mr=; changed_lines || true; fi
@@ -408,7 +408,7 @@ test:
       else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
       if [ -n "$branch_of_mr" ]; then :
       elif [ -s "$PLINTH_TMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/changed.verdict"
-      else say "not yet confirmed: changed lines ran under the tests, the judging step did not finish (its error is in its log); a run where it does confirms it"; fi
+      else say "not yet confirmed: changed lines ran under the tests. Why: the judging step did not finish (its error is in its log). What confirms it: a run where it does."; fi
       verdict
 
 # Secret detection, history included: a deleted secret is still in history.
