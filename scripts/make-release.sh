@@ -224,7 +224,7 @@ fi
 # The train (#1132): at most one release a week. Sooner is a hotfix, and the
 # why says so on one line, `hotfix: <reason>`, which the section and the
 # Release then carry. The release before is origin's highest vX.Y.Z tag, and
-# its age is the tag's own date (the tagger's; a lightweight tag's commit).
+# its age is the tag's own date, the tagger's.
 hotfix_line="$(grep -E '^hotfix:' "$why_file" || true)"
 [ "$(grep -c . <<<"$hotfix_line")" -le 1 ] || stop "the why-file has more than one 'hotfix:' line:" "$hotfix_line"
 if [ -n "$hotfix_line" ] && [ -z "$(tr -cd '[:alpha:]' <<<"${hotfix_line#hotfix:}")" ]; then
@@ -236,11 +236,11 @@ case "$rc" in 0|2) ;; *) stop "cannot list origin's tags (git ls-remote exit $rc
 prev_tag="$(sed -nE 's|^[0-9a-f]+[[:space:]]+refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$|\1|p' <<<"$tags" | sort -V | tail -1)"
 if [ -n "$prev_tag" ]; then
   git fetch -q origin "refs/tags/$prev_tag" || stop "cannot fetch $prev_tag from origin; nothing changed"
-  if [ "$(git cat-file -t FETCH_HEAD)" = tag ]; then
-    born="$(git cat-file tag FETCH_HEAD | sed -nE 's/^tagger .* ([0-9]+) [-+][0-9]{4}$/\1/p')"
-  else
-    born="$(git log -1 --format=%ct FETCH_HEAD)"
-  fi
+  # Run 2 makes annotated tags; a lightweight one has no date of its own, and
+  # its commit's date could be older than the release, so it stops.
+  [ "$(git cat-file -t FETCH_HEAD)" = tag ] \
+    || stop "$prev_tag on origin is not an annotated tag, so its release date cannot be read; nothing changed"
+  born="$(git cat-file tag FETCH_HEAD | sed -nE 's/^tagger .* ([0-9]+) [-+][0-9]{4}$/\1/p')"
   [[ "$born" =~ ^[0-9]+$ ]] || stop "cannot read the date of $prev_tag; nothing changed"
   age=$(( $(date +%s) - born ))
   if [ "$age" -lt $(( 7 * 86400 )) ] && [ -z "$hotfix_line" ]; then

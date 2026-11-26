@@ -318,6 +318,11 @@ run "v$next" "$work/why.md";       check "7 days after, without a hotfix line, i
 undo_bump
 run "v$next" "$work/hotfix-empty.md"; check "an empty hotfix reason is refused on any day" no $?
 untag
+g tag "v$current" HEAD; g push -q origin "refs/tags/v$current"; g tag -d "v$current" >/dev/null
+run "v$next" "$work/why.md";       check "a lightweight tag, with no date of its own, is refused" no $?
+is "  and nothing changed"         untouched
+is "  and the refusal says why"    says "not an annotated tag"
+untag
 is "no tag left on origin"         [ -z "$(git -C "$origin" tag -l)" ]
 
 echo "-- bump"
