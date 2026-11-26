@@ -497,15 +497,15 @@ why_is "$(printf 'A reason.\n\ntested with %s\n\neval suite: on the release cand
 run "v$next";                      check "a candidate line with no link in the release pull request's description is refused" no $?
 is "  and the refusal names the line it wants" says "eval suite: <https://github.com/"
 is "  after asking for the pull requests of the release commit" grep -qF "commits/$release_commit/pulls" "$GH_LOG"
-export RELEASE_PR_BODY="$(printf 'Run 1.\n\neval suite: %s\n' "$suite_link")"
+RELEASE_PR_BODY="$(printf 'Run 1.\n\neval suite: %s\n' "$suite_link")"; export RELEASE_PR_BODY
 run "v$next";                      check "  a bare link there is refused" no $?
-export RELEASE_PR_BODY="$(printf 'eval suite: <%s>\neval suite: <%s>\n' "$suite_link" "$suite_link")"
+RELEASE_PR_BODY="$(printf 'eval suite: <%s>\neval suite: <%s>\n' "$suite_link" "$suite_link")"; export RELEASE_PR_BODY
 run "v$next";                      check "  two links there are refused" no $?
-export RELEASE_PR_BODY="$(printf 'eval suite: <%s>\n' "$suite_link")" PULLS_RC=4
+RELEASE_PR_BODY="$(printf 'eval suite: <%s>\n' "$suite_link")"; export RELEASE_PR_BODY PULLS_RC=4
 run "v$next";                      check "  a failed query is refused, not read as 'no link'" no $?
 unset PULLS_RC
 is "no tag on a candidate line without its link" [ -z "$(git -C "$origin" tag -l)" ]
-export RELEASE_PR_BODY="$(printf 'Run 1, e2e green.\n\neval suite: <%s>\n\nAssisted-by: x\n' "$suite_link")"
+RELEASE_PR_BODY="$(printf 'Run 1, e2e green.\n\neval suite: <%s>\n\nAssisted-by: x\n' "$suite_link")"; export RELEASE_PR_BODY
 run "v$next";                      check "with the link in the description it tags and releases" ok $?
 is "  and the Release carries the link in place of the candidate line" \
   bash -c 'grep -qxF "eval suite: <$2>" "$1" && ! grep -qF "on the release candidate" "$1"' _ "$GH_LOG.body" "$suite_link"
