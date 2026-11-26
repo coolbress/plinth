@@ -10,7 +10,7 @@ wf="$root/.github/workflows/python-ci.yml"
 ask="Ask an admin to approve a change to the checks"
 names="Name changes to the checks the description does not"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/approval.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/approval.XXXXXX")" || { echo "checks-approval-cases: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 extract() {  # <step name> <out file>: the step's `run: |` block, dedented

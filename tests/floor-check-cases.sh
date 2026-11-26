@@ -13,7 +13,7 @@ target_sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-proje
 # The short list's template sources are read at the pin (#969).
 # shellcheck source=tests/lib/template-checkout.sh
 . "$root/tests/lib/template-checkout.sh"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "floor-check-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub (#519)
   mkdir -p "$1/repos/coolbress/plinth-template/commits"
   printf '{"sha":"%s"}\n' "$2" > "$1/repos/coolbress/plinth-template/commits/$target_ref.json"

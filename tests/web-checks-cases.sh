@@ -19,7 +19,7 @@ if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
 fi
 command -v uv >/dev/null || { echo "  FAIL  uv is not installed"; exit 1; }
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/web-checks.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/web-checks.XXXXXX")" || { echo "web-checks-cases: could not make a temp folder" >&2; exit 1; }
 pg="web-checks-$$-$RANDOM"
 trap 'docker rm -f "$pg" >/dev/null 2>&1; rm -rf "$tmp"' EXIT
 

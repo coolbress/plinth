@@ -70,10 +70,10 @@ if [ -n "$out" ]; then
   [ ! -e "$out" ] || die "--out $out already exists; name a new directory"
   mkdir -p "$out"
 else
-  out="$(mktemp -d "${TMPDIR:-/tmp}/plinth-probe.XXXXXX")"
+  out="$(mktemp -d "${TMPDIR:-/tmp}/plinth-probe.XXXXXX")" || die "could not make a temp folder"
 fi
 out="$(cd "$out" && pwd -P)"
-work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-probe-work.XXXXXX")"
+work="$(mktemp -d "${TMPDIR:-/tmp}/plinth-probe-work.XXXXXX")" || die "could not make a temp folder"
 work="$(cd "$work" && pwd -P)"
 
 # plugin eval keeps each run's sandbox directory (--keep-temp, and on its own

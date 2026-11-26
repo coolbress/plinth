@@ -76,6 +76,9 @@ jobs:
       - name: Every test file is wired
         run: ./tests/all-tests-are-wired.sh
 
+      - name: A failed mktemp stops a script and removes nothing it did not make
+        run: ./tests/mktemp-failure-cases.sh
+
       - name: Shipped skills within size, with no issue numbers
         run: ./tests/skill-size.sh
 

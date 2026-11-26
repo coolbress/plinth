@@ -5,7 +5,7 @@
 # default branch, with no bypass actor. Each fixture breaks one of those.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d "${TMPDIR:-/tmp}/check-ruleset-own.XXXXXX")"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d "${TMPDIR:-/tmp}/check-ruleset-own.XXXXXX")" || { echo "check-ruleset-own: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 
 cat >"$work/good.json" <<'EOF'

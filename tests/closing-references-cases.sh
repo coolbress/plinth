@@ -11,7 +11,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 script="$root/scripts/closing-references.sh"
 command -v jq >/dev/null || { echo "  FAIL  jq is needed to build the fixtures"; exit 1; }
 
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "closing-references-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash

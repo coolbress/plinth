@@ -16,14 +16,14 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gl="$root/gitlab/python-ci.yml"
 gh="$root/.github/workflows/python-ci.yml"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/gitlab-ci.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/gitlab-ci.XXXXXX")" || { echo "gitlab-ci-cases: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 # The job's before_script makes PLINTH_TMP with a bare `mktemp -d` and never
 # removes it: a runner discards it, this machine would keep one per job run
 # (#575). run_job sends it inside $tmp and writes $mark into it; the last case
 # looks for $mark where a bare `mktemp -d` lands, which on macOS 27 was
 # measured not to be TMPDIR. Another process's tmp.* there has no $mark (#666).
-caller_tmp="$(probe="$(mktemp -d)" && dirname "$probe" && rmdir "$probe")"
+caller_tmp="$(probe="$(mktemp -d)" && dirname "$probe" && rmdir "$probe")" || { echo "gitlab-ci-cases: could not make a temp folder" >&2; exit 1; }
 mark="plinth-gitlab-ci-cases.${tmp##*/}"
 
 # 3.11 for tomllib, as the image has; at most 3.14, the newest CPython whose

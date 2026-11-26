@@ -964,7 +964,7 @@ move_at() { # <dir>: the move's line; check-drop:/check-add:/moves: on stderr
   python3 "$checker" --root "$1" --repo "$repo" ${host_arg+"${host_arg[@]}"} --print-update-command --move-archetype "$move"
 }
 at_base() { # sets $tmp: the files the checker reads, as they are at the base
-  tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+  tmp="$(mktemp -d)" || die "could not make a temp folder"; trap 'rm -rf "$tmp"' EXIT
   paths=()
   # .gitlab-ci.yml: on GitLab the pin and its checksum are its include's (#1012).
   for p in .copier-answers.yml .github/workflows .github/ISSUE_TEMPLATE .gitlab-ci.yml \
