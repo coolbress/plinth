@@ -365,7 +365,7 @@ if [ "$changes" = "$want_changes" ]
 then ok "the plan prints the CHANGELOG's section headings between the two tags, quoting the files-and-questions heading where a section has it"
 else bad "plan, the template's changes"; printf '%s\n' "$changes" | sed 's/^/        /'; fi
 undo="$(block "Undo:")"
-if grep -qxF "    gh pr close chore/template-$target_ref --delete-branch" <<<"$undo" && grep -qF "revert --no-edit" <<<"$undo" \
+if grep -qxF "    gh pr close chore/template-$target_ref" <<<"$undo" && grep -qF "revert --no-edit" <<<"$undo" \
    && grep -qxF "    git worktree remove --force ../rehearse-template-$target_ref" <<<"$undo"
 then ok "the plan says how to undo the update before it merges and after"
 else bad "plan, undo"; printf '%s\n' "$out" | sed 's/^/        /'; fi
@@ -390,6 +390,14 @@ plan_run FLOOR_CHECK_API_DIR="$work/api-none" MOCK_OLD_RENDER="$work/old-render"
 if [ "$rc" = 0 ] && grep -qF "its CHANGELOG was not read (coolbress/plinth-template CHANGELOG.md at $target_ref: not found); every change: https://github.com/coolbress/plinth-template/compare/v1.0.0...$target_ref" <<<"$out"
 then ok "a CHANGELOG not read: the plan prints the compare link instead"
 else bad "plan, CHANGELOG unread (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The CHANGELOG read failing (an answer that does not parse, as the API
+# failing is served): the compare link too, with that reason.
+api_bad="$work/api-badcl"; tag_names "$api_bad" "$target_sha"
+echo 'not json' > "$api_bad/repos/coolbress/plinth-template/contents/CHANGELOG.md?ref=$target_sha.json"
+plan_run FLOOR_CHECK_API_DIR="$api_bad" MOCK_OLD_RENDER="$work/old-render"
+if [ "$rc" = 0 ] && grep -qF "its CHANGELOG was not read (coolbress/plinth-template CHANGELOG.md at $target_ref: offline or API error); every change: https://github.com/coolbress/plinth-template/compare/v1.0.0...$target_ref" <<<"$out"
+then ok "a CHANGELOG read that fails: the plan prints the compare link and says the read failed"
+else bad "plan, CHANGELOG read failed (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
 
 # ── the base must be the verified default branch ────────────────────────
@@ -629,7 +637,7 @@ if grep -qi "wait" "$work/gh.log"; then bad "something waited on checks"; else o
 # Undo (#1184): before merge and after, the plan's own lines, no home path.
 undo="$(awk '/^To undo it, from the repository/ { f = 1; next } f && /^## / { exit } f' <<<"$body")"
 n="$(basename "$wt")"
-if grep -qxF "  gh pr close chore/template-$target_ref --delete-branch" <<<"$undo" \
+if grep -qxF "  gh pr close chore/template-$target_ref" <<<"$undo" && grep -qxF "  git push origin --delete chore/template-$target_ref" <<<"$undo" \
    && grep -qxF "  git worktree remove --force ../$n" <<<"$undo" && grep -qxF "  git branch -D chore/template-$target_ref" <<<"$undo" \
    && grep -qxF "  git worktree add -b revert/template-$target_ref ../$n-revert origin/main" <<<"$undo" \
    && grep -qF "revert --no-edit \"\$(gh pr view chore/template-$target_ref --json mergeCommit --jq .mergeCommit.oid)\"" <<<"$undo" \

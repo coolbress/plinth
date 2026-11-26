@@ -1076,7 +1076,10 @@ undo_lines() { # <worktree> <branch>
   local n rb rn
   n="$(basename "$1")"; rb="revert/${2#chore/}"; rn="../$n-revert"
   echo "Before it merges: close it, and delete its branch and worktree:"
-  echo "  gh pr close $2 --delete-branch"
+  # Not --delete-branch: gh deletes the local branch first, which git refuses
+  # while the update's worktree has it checked out (review on #1184).
+  echo "  gh pr close $2"
+  echo "  git push origin --delete $2"
   echo "  git worktree remove --force $(q "../$n")"
   echo "  git branch -D $2"
   echo "After it merges: revert its commit in a pull request of its own:"
