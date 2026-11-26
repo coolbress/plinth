@@ -1380,7 +1380,7 @@ REGISTRY = _registry(
 # the --verdicts lines they make (tests/check-messages.sh reads the last one).
 results: list[dict] = []
 verdicts: list[str] = []
-TRACE = os.environ.get("FLOOR_CHECK_TRACE")   # tests/floor-check-golden.sh: one `<id> <state>` line per result
+TRACE = os.environ.get("FLOOR_CHECK_TRACE")   # the tests: one `<id> <state>\t<printed line>` line per result
 HERE = "cannot be read here"                   # an unknown no change to this machine or repository clears (#1002)
 ADMIN_READER = "/plinth:floor-check with a login that administers the repository"   # who reads a review
 
@@ -1398,10 +1398,11 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader}
     results.append(r)
     verdicts.extend(verdict_lines(r))
-    print(render_text(r))
+    line = render_text(r)
+    print(line)
     if TRACE:
         with open(TRACE, "a", encoding="utf-8") as t:
-            t.write(f"{cid} {state}\n")
+            t.write(f"{cid} {state}\t{line.splitlines()[0]}\n")
 
 
 def verdict(cid: str, cond: bool, values: dict | None = None, bad: str = "fail") -> bool:

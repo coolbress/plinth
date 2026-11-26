@@ -21,6 +21,23 @@ tag_names() { # <fixture dir> <commit>: what the target tag names on GitHub (#51
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
+# A case names the check it expects and the state that check reports (#1103):
+# `FC-… <state>`, not a sentence, so a wording change breaks only the golden
+# files (tests/floor-check-golden.sh), which hold every line byte for byte.
+# The checker's trace pairs each line it prints with its id and state.
+export FLOOR_CHECK_TRACE="$work/emitted"; : > "$FLOOR_CHECK_TRACE"
+# A line two checks print alike is credited to neither: the trace holds every
+# run so far, so it cannot say which printed it here (a case names its text).
+states() { # <output>: the `<id> <state>` of each of its lines
+  awk -F'\t' 'NR==FNR { if (NF > 1) m[$2] = ($2 in m && m[$2] != $1) ? "?" : $1; next }
+               ($0 in m) && m[$0] != "?" { print m[$0] }' "$FLOOR_CHECK_TRACE" - <<<"$1"
+}
+reports() { states "$1" | grep -qxF -- "$2"; }   # <output> <`<id> <state>`>: that check reported that state in it
+is() { reports "$1" "$2 $3"; }                    # <output> <id> <state>
+sees() { # <output> <expectation> <grep options and pattern>: by id and state when the expectation is `FC-… <state>`, else the pattern
+  local o="$1" e="$2"; shift 2
+  case "$e" in FC-[A-Z][0-9][0-9]\ [a-z]*) reports "$o" "$e" ;; *) grep -q "$@" <<<"$o" ;; esac
+}
 
 good="$work/good"; mkdir -p "$good/.github/ISSUE_TEMPLATE" "$good/.claude" "$good/src/app"
 cat > "$good/CONTRIBUTING.md" <<'MD'
@@ -91,7 +108,7 @@ skips "no archetype: the skipped conditional items are counted (and template dri
   "3 not verified" --root "$noarch" --no-network
 
 # Planted defects, each must be named.
-plant() { # <description> <shell to break the copy> <expected FAIL substring>
+plant() { # <description> <shell to break the copy> <`<id> fail` expected>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
   ( cd "$copy" && eval "$2" )
   local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
@@ -99,63 +116,63 @@ plant() { # <description> <shell to break the copy> <expected FAIL substring>
     if grep -q -- '-- 0 failed' <<<"$out"; then ok "$1"; else bad "$1 (should not fail)"; printf '%s\n' "$out" | grep FAIL | sed 's/^/        /'; fi
     return
   fi
-  if grep -q "FAIL.*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a FAIL mentioning '$3')"; printf '%s\n' "$out" | grep FAIL | sed 's/^/        /'; fi
+  if reports "$out" "$3"; then ok "$1"; else bad "$1 (expected $3)"; printf '%s\n' "$out" | grep FAIL | sed 's/^/        /'; fi
 }
-infos() { # <description> <shell to break the copy> <expected INFO or SKIP substring>
+infos() { # <description> <shell to break the copy> <`<id> <state>` expected>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
   ( cd "$copy" && eval "$2" )
   local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
-  if grep -qE "(INFO|SKIP).*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected an INFO or SKIP mentioning '$3')"; printf '%s\n' "$out" | grep -E 'INFO|SKIP|FAIL' | sed 's/^/        /'; fi
+  if reports "$out" "$3"; then ok "$1"; else bad "$1 (expected $3)"; printf '%s\n' "$out" | grep -E 'INFO|SKIP|FAIL' | sed 's/^/        /'; fi
 }
-warns() { # <description> <shell to break the copy> <expected WARN substring>
+warns() { # <description> <shell to break the copy> <`<id> warn` expected>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
   ( cd "$copy" && eval "$2" )
   local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
-  if grep -q "WARN.*$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a WARN mentioning '$3')"; printf '%s\n' "$out" | grep -E 'WARN|FAIL' | sed 's/^/        /'; fi
+  if reports "$out" "$3"; then ok "$1"; else bad "$1 (expected $3)"; printf '%s\n' "$out" | grep -E 'WARN|FAIL' | sed 's/^/        /'; fi
 }
-plant "stub CONTRIBUTING is caught" "printf '# Contributing\nSee the wiki.\n' > CONTRIBUTING.md" "no build or test command"
-plant "unpinned base image is caught" "sed -i.bak 's/@sha256:[0-9a-f]*//' Dockerfile" "not pinned by digest"
-plant "root user is caught" "sed -i.bak 's/^USER app/USER root/' Dockerfile" "runs as root"
-plant "undocumented env var is caught" "printf 'x\n' > .env.example" "missing variables"
-plant "missing token deny is caught" "printf '{\"permissions\":{\"deny\":[]}}' > .claude/settings.json" "does not deny gh auth token"
-plant "a Read-only .env deny is caught" "sed -i.bak 's/\"Bash(\. \*\.env\*)\",\"Bash(source \*\.env\*)\",//' .claude/settings.json" "does not deny \`. ./.env\`"
-plant "a sourcing deny without its closing parenthesis is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source .env*\"/' .claude/settings.json" "does not deny \`source .env\`"
-plant "a sourcing deny spelt with a ? is caught: only * is a wildcard" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source .en?)\"/' .claude/settings.json" "does not deny \`source .env\`"
-plant "a settings without the cat rule is caught" "sed -i.bak 's/\"Bash(cat \*\.env)\",//' .claude/settings.json" "does not deny \`cat .env\`"
-plant "a grep rule that names only .env.example is caught" "sed -i.bak 's/\"Bash(grep \*\.env)\"/\"Bash(grep *.env.example)\"/' .claude/settings.json" "does not deny \`grep KEY .env\`"
-plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source *.env.local*)\"/' .claude/settings.json" "does not deny \`source .env\`"
+plant "stub CONTRIBUTING is caught" "printf '# Contributing\nSee the wiki.\n' > CONTRIBUTING.md" "FC-A06 fail"
+plant "unpinned base image is caught" "sed -i.bak 's/@sha256:[0-9a-f]*//' Dockerfile" "FC-C20 fail"
+plant "root user is caught" "sed -i.bak 's/^USER app/USER root/' Dockerfile" "FC-C21 fail"
+plant "undocumented env var is caught" "printf 'x\n' > .env.example" "FC-C28 fail"
+plant "missing token deny is caught" "printf '{\"permissions\":{\"deny\":[]}}' > .claude/settings.json" "FC-B05 fail"
+plant "a Read-only .env deny is caught" "sed -i.bak 's/\"Bash(\. \*\.env\*)\",\"Bash(source \*\.env\*)\",//' .claude/settings.json" "FC-B07 fail"
+plant "a sourcing deny without its closing parenthesis is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source .env*\"/' .claude/settings.json" "FC-B08 fail"
+plant "a sourcing deny spelt with a ? is caught: only * is a wildcard" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source .en?)\"/' .claude/settings.json" "FC-B08 fail"
+plant "a settings without the cat rule is caught" "sed -i.bak 's/\"Bash(cat \*\.env)\",//' .claude/settings.json" "FC-B09 fail"
+plant "a grep rule that names only .env.example is caught" "sed -i.bak 's/\"Bash(grep \*\.env)\"/\"Bash(grep *.env.example)\"/' .claude/settings.json" "FC-B10 fail"
+plant "a sourcing deny that names only .env.local is caught" "sed -i.bak 's/\"Bash(source \*\.env\*)\"/\"Bash(source *.env.local*)\"/' .claude/settings.json" "FC-B08 fail"
 # The force-push item names the spellings it found denied (#942): the
 # template's rules pass, the two old rules alone warn with the lines to add,
 # and neither of those two is still a FAIL.
 fp_out() { local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"; ( cd "$copy" && eval "$1" ); python3 "$checker" --root "$copy" --no-network 2>&1; }
 out="$(fp_out :)"
-if grep -qF 'PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`' <<<"$out"; then ok "the template's force-push rules pass, naming each spelling (#942)"
+if is "$out" FC-B03 pass; then ok "the template's force-push rules pass, naming each spelling (#942)"
 else bad "the template's force-push rules should pass naming each spelling"; grep 'force push' <<<"$out" | sed 's/^/        /'; fi
 only_two="python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); d=j[\"permissions\"][\"deny\"]; j[\"permissions\"][\"deny\"]=[\"Bash(git push --force:*)\",\"Bash(git push -f:*)\"]+[x for x in d if \"push\" not in x]; json.dump(j,open(p,\"w\"))'"
 out="$(fp_out "$only_two")"
-if grep -qF 'WARN  .claude/settings.json denies force push only as `git push --force`, `git push -f`; not `--force-with-lease`, `--force` after other arguments' <<<"$out" \
-  && grep -qF 'INFO    add to permissions.deny: "Bash(git push *--force*)", "Bash(git push * -f)", "Bash(git push *+*)", "Bash(git * push *--force*)"' <<<"$out" \
+if is "$out" FC-B03 warn \
+  && is "$out" FC-B03 info \
   && grep -q -- '-- 0 failed' <<<"$out"; then ok "the two old force-push rules alone are a WARN with the rules to add (#942)"
 else bad "the two old force-push rules alone should WARN with the rules to add"; grep -E 'force push|add to' <<<"$out" | sed 's/^/        /'; fi
 # A trailing ` *` matches the bare command only as a rule's one wildcard:
 # `Bash(git push * -f *)` leaves `git push origin b -f` open (#946 review).
 no_end_f="python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if x not in (\"Bash(git push * -f)\",\"Bash(git * push -f)\",\"Bash(git * push * -f)\")]; json.dump(j,open(p,\"w\"))'"
 out="$(fp_out "$no_end_f")"
-if grep -qF 'not `-f` after other arguments, `git -C <dir> push -f`, `git -C <dir> push <b> -f`' <<<"$out" \
-  && grep -qF 'INFO    add to permissions.deny: "Bash(git push * -f)", "Bash(git * push -f)", "Bash(git * push * -f)"' <<<"$out"; then ok "a rule ending \` -f *\` does not stand in for one ending \` -f\`: a WARN naming the three (#946)"
+if is "$out" FC-B03 warn \
+  && is "$out" FC-B03 info; then ok "a rule ending \` -f *\` does not stand in for one ending \` -f\`: a WARN naming the three (#946)"
 else bad "rules ending \` -f *\` alone should WARN for a trailing -f"; grep -E 'force push|add to' <<<"$out" | sed 's/^/        /'; fi
-plant "no force-push rule at all fails" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "does not deny force push"
-plant "a deny of --force-with-lease alone is not the floor" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[\"Bash(git push --force-with-lease)\"]+[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "does not deny force push"
-plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "do not exist"
+plant "no force-push rule at all fails" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "FC-B03 fail"
+plant "a deny of --force-with-lease alone is not the floor" "python3 -c 'import json; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[\"Bash(git push --force-with-lease)\"]+[x for x in j[\"permissions\"][\"deny\"] if \"push\" not in x]; json.dump(j,open(p,\"w\"))'" "FC-B03 fail"
+plant "broken doc link is caught" "printf '[x](nope.md)\n' >> README.md" "FC-A27 fail"
 # A *.md symbolic link whose target is missing was read like a file and
 # crashed the checker before any verdict (#525). It is a FAIL naming the link
 # and its target, every other item is still reported, and a link to a file
 # that exists is read through it.
-plant "a dangling *.md link is a FAIL naming the link and its target (#525)" "ln -s MISSING.md CLAUDE.md" "CLAUDE.md -> MISSING.md"
+plant "a dangling *.md link is a FAIL naming the link and its target (#525)" "ln -s MISSING.md CLAUDE.md" "FC-A27 fail"
 plant "a *.md link to an existing file is read through it" "ln -s README.md NOTES.md" "__none__"
 dl="$work/dangling"; rm -rf "$dl"; cp -R "$good" "$dl"; ln -s MISSING.md "$dl/CLAUDE.md"
 out="$(python3 "$checker" --root "$dl" --no-network --verdicts "$dl.verdicts" 2>&1)"; rc=$?
-if [ "$rc" = 1 ] && [ -s "$dl.verdicts" ] && ! grep -q Traceback <<<"$out" && grep -q '^  PASS  LICENSE present' <<<"$out" \
+if [ "$rc" = 1 ] && [ -s "$dl.verdicts" ] && ! grep -q Traceback <<<"$out" && is "$out" FC-A01 pass \
   && grep -q -- '-- 1 failed' <<<"$out"; then ok "a dangling *.md link still writes the verdicts and reports the other items"
 else bad "a dangling *.md link stops the checker (rc=$rc, verdicts $( [ -s "$dl.verdicts" ] && echo written || echo missing ))"; printf '%s\n' "$out" | grep -E 'Traceback|Error|FAIL|failed' | sed 's/^/        /'; fi
 # A proprietary notice grants nothing and is still the LICENSE item (#995):
@@ -168,25 +185,25 @@ printf '%s\n' 'Copyright (c) 2026 tester. All rights reserved.' '' \
   'sublicense or sell it is granted to anyone, except by written permission of' \
   'the copyright holder.' > "$pr/LICENSE"
 out="$(python3 "$checker" --root "$pr" --no-network 2>&1)"
-if grep -q '^  PASS  LICENSE present' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "a proprietary notice passes the LICENSE item"
+if is "$out" FC-A01 pass && grep -q -- '-- 0 failed' <<<"$out"; then ok "a proprietary notice passes the LICENSE item"
 else bad "a proprietary notice does not pass the LICENSE item"; grep -E 'LICENSE|FAIL' <<<"$out" | sed 's/^/        /'; fi
 # Three failing states no other case reached (#1103: every state a check
 # declares is reached by a fixture).
-plant "uv.lock not folded in diffs is caught" "printf '* text=auto eol=lf\n' > .gitattributes" "uv.lock is not marked linguist-generated"
+plant "uv.lock not folded in diffs is caught" "printf '* text=auto eol=lf\n' > .gitattributes" "FC-A25 fail"
 plant "a .gitattributes driver that needs local git config is caught" \
-  "printf '* text=auto eol=lf\nuv.lock linguist-generated\n*.py diff=mine\n' > .gitattributes" "rules need local git config"
-plant ".claude/settings.json that is not JSON is caught" "printf '{' > .claude/settings.json" "settings.json is not valid JSON"
+  "printf '* text=auto eol=lf\nuv.lock linguist-generated\n*.py diff=mine\n' > .gitattributes" "FC-A26 fail"
+plant ".claude/settings.json that is not JSON is caught" "printf '{' > .claude/settings.json" "FC-B02 fail"
 # The service archetype's files, each failing state once (#1103).
-plant "a missing Dockerfile is caught" "rm Dockerfile" "Dockerfile missing"
-plant "an image not built from the lockfile is caught" "sed -i.bak 's/uv sync --locked/uv sync/' Dockerfile" "does not use .uv sync --locked."
-plant "a missing .dockerignore is caught" "rm .dockerignore" ".dockerignore missing"
-plant "a .dockerignore that lets .venv in is caught" "printf '.git\n.env\n' > .dockerignore" ".dockerignore lacks \\['.venv'\\]"
-plant "a missing .env.example is caught" "rm .env.example" ".env.example missing"
-plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "no labels"
-plant "missing lockfile is caught" "rm uv.lock" "uv.lock missing"
+plant "a missing Dockerfile is caught" "rm Dockerfile" "FC-C19 fail"
+plant "an image not built from the lockfile is caught" "sed -i.bak 's/uv sync --locked/uv sync/' Dockerfile" "FC-C22 fail"
+plant "a missing .dockerignore is caught" "rm .dockerignore" "FC-C24 fail"
+plant "a .dockerignore that lets .venv in is caught" "printf '.git\n.env\n' > .dockerignore" "FC-C25 fail"
+plant "a missing .env.example is caught" "rm .env.example" "FC-C27 fail"
+plant "unlabelled issue form is caught" "printf 'name: t\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "FC-A15 fail"
+plant "missing lockfile is caught" "rm uv.lock" "FC-C02 fail"
 # The image check is the service archetypes' own required check (#127): the job
 # has to exist in the caller, and a cli instance is not asked for it.
-plant "a service instance whose ci.yml has no image job is caught" "rm .github/workflows/ci.yml" "no \`image\` job"
+plant "a service instance whose ci.yml has no image job is caught" "rm .github/workflows/ci.yml" "FC-D06 fail"
 plant "a cli instance is not asked for the image job" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm .github/workflows/ci.yml" "__none__" || true
 # Issue forms: GitHub reads every form in the folder whatever it is called, in
 # either YAML spelling, plus the legacy Markdown templates. A name this checker
@@ -198,55 +215,55 @@ plant "forms spelled .yaml are accepted" \
 plant "a legacy Markdown template counts as a form and is not read as a broken one" \
   "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname: Bug\nabout: x\n---\nWhat happened?\n' > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
 plant "config.yml is configuration, not a form" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'blank_issues_enabled: false\n' > .github/ISSUE_TEMPLATE/config.yml" "no issue template"
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'blank_issues_enabled: false\n' > .github/ISSUE_TEMPLATE/config.yml" "FC-A10 fail"
 # An empty folder is not a local template set: GitHub falls back to the owner's
 # shared forms, and offline that cannot be checked. Absence is not concluded here.
 infos "an empty folder falls through to inheritance, not to a verdict" \
-  "rm .github/ISSUE_TEMPLATE/*.yml" "inheritance not verified"
+  "rm .github/ISSUE_TEMPLATE/*.yml" "FC-A10 unknown"
 plant "an empty folder alone is not called a missing form" "rm .github/ISSUE_TEMPLATE/*.yml" "__none__" || true
 warns "front matter with an empty name is named as unusable" \
-  "printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
+  "printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "FC-A12 warn"
 plant "a defect inside a renamed form is still caught" \
-  "cd .github/ISSUE_TEMPLATE && mv task.yml work_item.yml && printf 'name: t\ndescription: \"x\"\nbody: []\n' > work_item.yml" "no labels"
+  "cd .github/ISSUE_TEMPLATE && mv task.yml work_item.yml && printf 'name: t\ndescription: \"x\"\nbody: []\n' > work_item.yml" "FC-A15 fail"
 # Widening the net must not fail a repository that passed yesterday: `.yml` keeps
 # its severity, and a defect found only because `.yaml` and `.md` are now read is
 # a WARN. `labels:` is plinth policy, not GitHub's syntax (#85).
 plant "an unlabelled .yaml next to good forms warns, it does not fail" \
   "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "__none__" || true
 plant "an unlabelled .yml still fails" \
-  "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "no labels"
+  "printf 'name: e\ndescription: \"x\"\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "FC-A15 fail"
 # The two other per-form checks, each in both severities (#1103: every state
 # a check declares is reached by a fixture).
 plant "a .yml without description fails" \
-  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "extra.yml lacks \['description:'\]"
+  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "FC-A13 fail"
 warns "a .yaml without description warns" \
-  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "extra.yaml lacks \['description:'\]"
+  "printf 'name: e\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "FC-A13 warn"
 plant "a .yml value that starts with * fails" \
-  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "extra.yml line \[2\]: value starts with"
+  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yml" "FC-A14 fail"
 warns "a .yaml value that starts with * warns" \
-  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "extra.yaml line \[2\]: value starts with"
+  "printf 'name: e\ndescription: *x\nlabels: [x]\nbody: []\n' > .github/ISSUE_TEMPLATE/extra.yaml" "FC-A14 warn"
 # An invalid extra warns, because the repository passed without that file being
 # read. A repository whose *every* template is invalid never passed the old
 # filename check either, so it fails: leaving it green would be a loosening.
 warns "an empty Markdown template beside good forms only warns" \
-  ": > .github/ISSUE_TEMPLATE/bug.md" "no front matter"
+  ": > .github/ISSUE_TEMPLATE/bug.md" "FC-A12 warn"
 plant "an empty Markdown template beside good forms does not fail" \
   ": > .github/ISSUE_TEMPLATE/bug.md" "__none__" || true
 plant "an empty Markdown template as the only one fails" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
+  "rm .github/ISSUE_TEMPLATE/*.yml && : > .github/ISSUE_TEMPLATE/bug.md" "FC-A17 fail"
 plant "a bare name: as the only template fails" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname:\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "FC-A17 fail"
 plant "a quoted empty name as the only template fails" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname: \"\"\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "no usable issue template"
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf -- '---\nname: \"\"\n---\n' > .github/ISSUE_TEMPLATE/bug.md" "FC-A17 fail"
 # GitHub rejects a form whose `body` is not a sequence. The check is new ground,
 # so it never fails on its own; it decides usability only for the extensions this
 # checker did not read before.
 plant "a .yaml whose body is not a list is not a usable template" \
-  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'name: x\ndescription: x\nlabels: [x]\nbody: nope\n' > .github/ISSUE_TEMPLATE/custom.yaml" "no usable issue template"
+  "rm .github/ISSUE_TEMPLATE/*.yml && printf 'name: x\ndescription: x\nlabels: [x]\nbody: nope\n' > .github/ISSUE_TEMPLATE/custom.yaml" "FC-A17 fail"
 plant "the same defect in .yml, which passed before, only warns" \
   "cd .github/ISSUE_TEMPLATE && for f in bug feature task; do printf 'name: %s\ndescription: x\nlabels: [\"%s\"]\nbody: nope\n' \$f \$f > \$f.yml; done" "__none__" || true
 warns "the .yml body defect is still named" \
-  "printf 'name: bug\ndescription: x\nlabels: [\"bug\"]\nbody: nope\n' > .github/ISSUE_TEMPLATE/bug.yml" "body is not a list"
+  "printf 'name: bug\ndescription: x\nlabels: [\"bug\"]\nbody: nope\n' > .github/ISSUE_TEMPLATE/bug.yml" "FC-A16 warn"
 plant "block-list labels are accepted" "printf 'name: t\ndescription: \"x\"\nlabels:\n  - task\nbody: []\n' > .github/ISSUE_TEMPLATE/task.yml" "__none__" || true
 plant "multi-stage and --platform FROM are understood" "printf 'FROM --platform=linux/amd64 python:3.12-slim@sha256:%064d AS base\nFROM base\nRUN uv sync --locked\nUSER app\nCMD [\"python\", \"-m\", \"app\"]\n' 0 > Dockerfile" "__none__" || true
 
@@ -254,11 +271,11 @@ plant "multi-stage and --platform FROM are understood" "printf 'FROM --platform=
 # pinned to a commit, a service with no JSON logs. Each is new ground, so each
 # is a WARN and never a FAIL; each names the path and carries its repair; and
 # what the checker cannot read is a SKIP, never a PASS.
-says() { # <description> <shell to change the copy> <expected ERE on one output line>
+says() { # <description> <shell to change the copy> <`<id> <state>` expected>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
   ( cd "$copy" && eval "$2" )
   local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"
-  if grep -qE -- "$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -E 'WARN|FAIL|SKIP' | sed 's/^/        /'; fi
+  if reports "$out" "$3"; then ok "$1"; else bad "$1 (expected $3)"; printf '%s\n' "$out" | grep -E 'WARN|FAIL|SKIP' | sed 's/^/        /'; fi
 }
 quiet() { # <description> <shell to change the copy> <ERE no WARN, FAIL or SKIP line may match>
   local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
@@ -272,53 +289,53 @@ sha40="$(printf '%040d' 0)"; sha64="$(printf '%064d' 0)"
 
 # Dotenv: the evidence is the index, not the disk. An untracked local `.env` is
 # what `.gitignore` is for; a tracked one is in every clone.
-says  "the good fixture says no dotenv file is tracked" ":" "PASS  no dotenv file is tracked"
-warns "a tracked .env is named" "printf 'AUDIT_DUMMY=not-a-secret\n' > .env && git add -f .env" "tracked dotenv file: \.env$"
-says  "a tracked .env carries its repair" "printf 'A=b\n' > .env && git add -f .env" "INFO    git rm --cached -- \.env"
-warns "a tracked dotenv in a subdirectory is named by its path" "mkdir -p deploy && printf 'A=b\n' > deploy/.env.production && git add -f deploy/.env.production" "tracked dotenv file: deploy/\.env\.production$"
+says  "the good fixture says no dotenv file is tracked" ":" "FC-A28 pass"
+warns "a tracked .env is named" "printf 'AUDIT_DUMMY=not-a-secret\n' > .env && git add -f .env" "FC-A28 warn"
+says  "a tracked .env carries its repair" "printf 'A=b\n' > .env && git add -f .env" "FC-A28 info"
+warns "a tracked dotenv in a subdirectory is named by its path" "mkdir -p deploy && printf 'A=b\n' > deploy/.env.production && git add -f deploy/.env.production" "FC-A28 warn"
 # The repair line is pasted into a shell, and the path is the repository's to choose.
-says  "a path with shell syntax in it is quoted in the repair" "mkdir 'a\$(touch PWN)' && printf 'A=b\n' > 'a\$(touch PWN)/.env' && git add -f ." "INFO    git rm --cached -- 'a\\\$\(touch PWN\)/\.env'"
+says  "a path with shell syntax in it is quoted in the repair" "mkdir 'a\$(touch PWN)' && printf 'A=b\n' > 'a\$(touch PWN)/.env' && git add -f ." "FC-A28 info"
 # A file name is any bytes, and macOS refuses to create one that is not UTF-8,
 # so git is a shim here: the listing must be decoded without a traceback.
 mkdir -p "$work/gitshim"; printf '#!/bin/sh\nprintf "caf\\351.txt\\0README.md\\0"\n' > "$work/gitshim/git"; chmod +x "$work/gitshim/git"
 out="$(PATH="$work/gitshim:$PATH" python3 "$checker" --root "$good" --no-network 2>&1)"
-if grep -q "PASS  no dotenv file is tracked (2 tracked files" <<<"$out" && ! grep -q Traceback <<<"$out"; then ok "a file name that is not UTF-8 does not abort the check"
+if is "$out" FC-A28 pass && ! grep -q Traceback <<<"$out"; then ok "a file name that is not UTF-8 does not abort the check"
 else bad "a non-UTF-8 file name"; printf '%s\n' "$out" | grep -E 'dotenv|Error|Traceback' | sed 's/^/        /'; fi
 quiet "an untracked local .env is not the defect" "printf 'A=b\n' > .env" "dotenv"
 quiet "tracked placeholders are allowed" "printf 'A=\n' | tee .env.sample > .env.template && git add -f .env.example .env.sample .env.template" "dotenv"
 quiet "a tracked directory named .env is not a dotenv file" "mkdir .env && printf 'x\n' > .env/pyvenv.cfg && git add -f .env/pyvenv.cfg" "dotenv"
-says  "outside a git work tree the dotenv check is not verified, not passed" "rm -rf .git" "SKIP  tracked dotenv files not verified"
+says  "outside a git work tree the dotenv check is not verified, not passed" "rm -rf .git" "FC-A28 unknown"
 
 # Actions: every `uses:` in .github/workflows, read as workflow syntax.
-says  "the good fixture's SHA-pinned reusable workflow passes" ":" "PASS  every action in 2 workflow files is pinned to a commit \(1 uses\)"
-warns "an action pinned to a tag is named with its file and line" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "\.github/workflows/t\.yml: not pinned to a full commit SHA: line 5 actions/checkout@v4$"
-says  "a tag-pinned action carries the command that finds its SHA" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "INFO    gh api repos/actions/checkout/commits/v4 --jq \.sha"
-says  "a ref with shell syntax in it is quoted in the repair" "wf '- uses: a/b@\$(id)' > .github/workflows/t.yml" "INFO    gh api 'repos/a/b/commits/\\\$\(id\)' --jq"
-warns "a branch ref, a short SHA and a quoted value are all unpinned" "wf '- uses: a/b@main' '- uses: c/d@3d3c42e' '- uses: \"e/f/sub@v1\"' > .github/workflows/t.yaml" "line 5 a/b@main, line 6 c/d@3d3c42e, line 7 e/f/sub@v1$"
-warns "a docker action pinned to a tag is unpinned" "wf '- uses: docker://alpine:3.20' > .github/workflows/t.yml" "line 5 docker://alpine:3.20"
+says  "the good fixture's SHA-pinned reusable workflow passes" ":" "FC-D01 pass"
+warns "an action pinned to a tag is named with its file and line" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "FC-D01 warn"
+says  "a tag-pinned action carries the command that finds its SHA" "wf '- uses: actions/checkout@v4' > .github/workflows/t.yml" "FC-D01 info"
+says  "a ref with shell syntax in it is quoted in the repair" "wf '- uses: a/b@\$(id)' > .github/workflows/t.yml" "FC-D01 info"
+warns "a branch ref, a short SHA and a quoted value are all unpinned" "wf '- uses: a/b@main' '- uses: c/d@3d3c42e' '- uses: \"e/f/sub@v1\"' > .github/workflows/t.yaml" "FC-D01 warn"
+warns "a docker action pinned to a tag is unpinned" "wf '- uses: docker://alpine:3.20' > .github/workflows/t.yml" "FC-D01 warn"
 quiet "SHA pins, a local action, a docker digest, a comment and a run block are not findings" \
   "wf '- uses: actions/checkout@$sha40 # v4' '- uses: ./.github/actions/x' '- uses: docker://alpine@sha256:$sha64' '# - uses: old/one@v1' '- run: |' '    uses: not/yaml@v1' '  env:' '    A: b' > .github/workflows/t.yml" "pinned|workflow"
 quiet "the word uses inside a run line is not a uses key" "wf '- run: grep -rn \"uses:\" .github/workflows' > .github/workflows/t.yml" "pins not verified"
 # A `: |` inside a trailing comment is not a block scalar (#334); one ending the key's value is.
-warns "a comment ending in ': |' does not hide the uses below it" "printf 'jobs:  # note: |\n  t:\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "line 4 actions/checkout@v4$"
-warns "a comment ending in ': >' does not hide it either" "printf 'jobs:\n  t:  # a: >-\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "line 4 actions/checkout@v4$"
+warns "a comment ending in ': |' does not hide the uses below it" "printf 'jobs:  # note: |\n  t:\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "FC-D01 warn"
+warns "a comment ending in ': >' does not hide it either" "printf 'jobs:\n  t:  # a: >-\n    steps:\n      - uses: actions/checkout@v4\n' > .github/workflows/t.yml" "FC-D01 warn"
 quiet "an explicit-key run block (? run, then : |) is still a block" "wf '- ? run' '  : |' '    uses: not/yaml@v1' > .github/workflows/t.yml" "pinned|workflow"
 quiet "a run block with a trailing comment is still a block" "wf '- run: |  # note: |' '    uses: not/yaml@v1' '- \"a # b\": |' '    uses: not/yaml@v1' > .github/workflows/t.yml" "pinned|workflow"
-says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
-says  "an explicit-key uses is not verified either" "wf '- ? uses' '  : actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
-says  "an anchored uses key is not verified either" "wf '- &step uses: actions/checkout@v4' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
-says  "a uses later in a flow mapping is not verified either" "wf '- {name: a, uses: actions/checkout@v4}' > .github/workflows/t.yml" "SKIP  \.github/workflows/t\.yml: action pins not verified: line 5"
-says  "a repository with no workflow says so rather than pass" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm -r .github/workflows" "INFO  no workflow file under \.github/workflows"
+says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "FC-D01 unknown"
+says  "an explicit-key uses is not verified either" "wf '- ? uses' '  : actions/checkout@v4' > .github/workflows/t.yml" "FC-D01 unknown"
+says  "an anchored uses key is not verified either" "wf '- &step uses: actions/checkout@v4' > .github/workflows/t.yml" "FC-D01 unknown"
+says  "a uses later in a flow mapping is not verified either" "wf '- {name: a, uses: actions/checkout@v4}' > .github/workflows/t.yml" "FC-D01 unknown"
+says  "a repository with no workflow says so rather than pass" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm -r .github/workflows" "FC-D01 info"
 
 # JSON logs: a service archetype's source, read statically. A hint is a hint:
 # the PASS line says it is not proof of what the process prints.
-says  "the good fixture's formatter is a static hint, and is called one" ":" "PASS  JSON logs: static hint in src/app/__main__\.py .*not proof"
-warns "a service that only prints is named with its entry point" "printf 'print(\"plain text startup\")\n' > src/app/__main__.py" "JSON logs: no logging found under src/ (entry point src/app/__main__\.py)"
-warns "a hint that is only a comment is not a hint" "printf '# TODO: add pythonjsonlogger\nprint(1)\n' > src/app/__main__.py" "JSON logs: no logging found"
-says  "structlog's JSONRenderer is a hint" "printf 'import structlog\nstructlog.configure(processors=[structlog.processors.JSONRenderer()])\n' > src/app/__main__.py" "PASS  JSON logs: static hint in src/app/__main__\.py"
-says  "python-json-logger in another module is a hint, named by its path" "printf 'print(1)\n' > src/app/__main__.py && printf 'from pythonjsonlogger import jsonlogger\n' > src/app/log.py" "PASS  JSON logs: static hint in src/app/log\.py"
-says  "logging this checker does not recognise is not verified, not passed" "printf 'import logging\nlogging.basicConfig()\n' > src/app/__main__.py" "SKIP  JSON logs not verified: src/app/__main__\.py"
-says  "logging imported beside other modules is still logging" "printf 'import json, logging, sys\nlogging.basicConfig(stream=sys.stdout)\n' > src/app/__main__.py" "SKIP  JSON logs not verified"
+says  "the good fixture's formatter is a static hint, and is called one" ":" "FC-C26 pass"
+warns "a service that only prints is named with its entry point" "printf 'print(\"plain text startup\")\n' > src/app/__main__.py" "FC-C26 warn"
+warns "a hint that is only a comment is not a hint" "printf '# TODO: add pythonjsonlogger\nprint(1)\n' > src/app/__main__.py" "FC-C26 warn"
+says  "structlog's JSONRenderer is a hint" "printf 'import structlog\nstructlog.configure(processors=[structlog.processors.JSONRenderer()])\n' > src/app/__main__.py" "FC-C26 pass"
+says  "python-json-logger in another module is a hint, named by its path" "printf 'print(1)\n' > src/app/__main__.py && printf 'from pythonjsonlogger import jsonlogger\n' > src/app/log.py" "FC-C26 pass"
+says  "logging this checker does not recognise is not verified, not passed" "printf 'import logging\nlogging.basicConfig()\n' > src/app/__main__.py" "FC-C26 unknown"
+says  "logging imported beside other modules is still logging" "printf 'import json, logging, sys\nlogging.basicConfig(stream=sys.stdout)\n' > src/app/__main__.py" "FC-C26 unknown"
 quiet "unrecognised logging is not called a defect either" "printf 'import logging\nlogging.basicConfig()\n' > src/app/__main__.py" "no logging found"
 quiet "a cli instance is not asked for JSON logs" "sed -i.bak 's/backend/cli/' .copier-answers.yml && printf 'print(1)\n' > src/app/__main__.py" "JSON logs"
 
@@ -337,19 +354,19 @@ inh="$work/inh-api"; mkdir -p "$inh/repos/o/.github/contents/.github/ISSUE_TEMPL
 form_b64() { printf 'name: %s\ndescription: "x"\nlabels: ["%s"]\nbody: []\n' "$1" "$1" | base64 | tr -d '\n'; }
 printf '[{"name":"bug.yml"},{"name":"feature.yml"}]' > "$inh/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
 for f in bug feature; do printf '{"content":"%s"}' "$(form_b64 $f)" > "$inh/repos/o/.github/contents/.github/ISSUE_TEMPLATE/$f.yml.json"; done
-inherit() { # <description> <expected substring> <local ISSUE_TEMPLATE shell, or ""> [api dir]
+inherit() { # <description> <`<id> <state>` expected> <local ISSUE_TEMPLATE shell, or ""> [api dir]
   local copy="$work/inh"; rm -rf "$copy"; cp -R "$good" "$copy"
   rm -rf "$copy/.github/ISSUE_TEMPLATE"; [ -n "$3" ] && ( cd "$copy" && eval "$3" )
   local out; out="$(FLOOR_CHECK_API_DIR="${4:-$inh}" python3 "$checker" --root "$copy" --repo o/r 2>&1)"
-  if grep -q -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected '$2')"; printf '%s\n' "$out" | grep -E 'issue form|inherited' | sed 's/^/        /'; fi
+  if reports "$out" "$2"; then ok "$1"; else bad "$1 (expected $2)"; printf '%s\n' "$out" | grep -E 'issue form|inherited' | sed 's/^/        /'; fi
 }
-inherit "the owner's shared forms are read when the repository has none" "PASS  issue templates found (inherited): bug.yml, feature.yml" ""
-inherit "a local .gitkeep is not a template: the shared set still applies" "PASS  issue templates found (inherited)" "mkdir -p .github/ISSUE_TEMPLATE && : > .github/ISSUE_TEMPLATE/.gitkeep"
-inherit "a local form suppresses the shared set, and says so" "INFO  a local ISSUE_TEMPLATE replaces the owner" "mkdir -p .github/ISSUE_TEMPLATE && printf 'name: t\ndescription: \"x\"\nlabels: [\"t\"]\nbody: []\n' > .github/ISSUE_TEMPLATE/t.yml"
+inherit "the owner's shared forms are read when the repository has none" "FC-A10 pass" ""
+inherit "a local .gitkeep is not a template: the shared set still applies" "FC-A10 pass" "mkdir -p .github/ISSUE_TEMPLATE && : > .github/ISSUE_TEMPLATE/.gitkeep"
+inherit "a local form suppresses the shared set, and says so" "FC-A11 info" "mkdir -p .github/ISSUE_TEMPLATE && printf 'name: t\ndescription: \"x\"\nlabels: [\"t\"]\nbody: []\n' > .github/ISSUE_TEMPLATE/t.yml"
 # A file listed but unreadable is an API failure, not an absent template.
 bad_api="$work/inh-bad"; mkdir -p "$bad_api/repos/o/.github/contents/.github"
 printf '[{"name":"bug.md"}]' > "$bad_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
-inherit "an unreadable inherited file is not verified, not absent" "SKIP  inherited forms not verified" "" "$bad_api"
+inherit "an unreadable inherited file is not verified, not absent" "FC-A10 unknown" "" "$bad_api"
 out_bad="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.github/ISSUE_TEMPLATE"; FLOOR_CHECK_API_DIR="$bad_api" python3 "$checker" --root "$work/inh" --repo o/r 2>&1)"
 if grep -qE "FAIL.*(issue form|neither local)" <<<"$out_bad"; then bad "an unreadable inherited file was called absent"
 else ok "an unreadable inherited file yields no absence verdict"; fi
@@ -362,17 +379,17 @@ printf '{"content":"%s"}' "$(printf 'blank_issues_enabled: false\n' | base64 | t
 out_mix="$(rm -rf "$work/inh"; cp -R "$good" "$work/inh"; rm -rf "$work/inh/.github/ISSUE_TEMPLATE"; FLOOR_CHECK_API_DIR="$mixed_api" python3 "$checker" --root "$work/inh" --repo o/r 2>&1)"
 if grep -qE "FAIL.*(issue template|neither local)" <<<"$out_mix"; then bad "a readable config was taken as proof the forms are absent"
 else ok "a readable config next to an unreadable form yields no absence verdict"; fi
-grep -q "SKIP  inherited forms not verified" <<<"$out_mix" && ok "the unreadable form is named" || bad "the unreadable form is not named"
+is "$out_mix" FC-A10 unknown && ok "the unreadable form is named" || bad "the unreadable form is not named"
 
 # A listing holding only a config proves no form is there: configuration is never
 # fetched, so a failed read of it cannot hide that.
 cfg_api="$work/inh-cfg"; mkdir -p "$cfg_api/repos/o/.github/contents/.github"
 printf '[{"name":"config.yml"}]' > "$cfg_api/repos/o/.github/contents/.github/ISSUE_TEMPLATE.json"
-inherit "a shared listing of only a config is a real absence, not an unread file" "FAIL  no issue template (inherited)" "" "$cfg_api"
+inherit "a shared listing of only a config is a real absence, not an unread file" "FC-A10 fail" "" "$cfg_api"
 
 # Nothing local and nothing shared: a 404 on the listing is a real absence.
 none_api="$work/inh-none"; mkdir -p "$none_api/repos/o"
-inherit "no templates anywhere is still caught" "FAIL  issue forms neither local nor in the owner" "" "$none_api"
+inherit "no templates anywhere is still caught" "FC-A10 fail" "" "$none_api"
 
 # The wall, against a fixture API laid out like api.github.com paths.
 api="$work/api"; mkdir -p "$api/repos/o/r/rules/branches" "$api/repos/o/r/rulesets"
@@ -411,7 +428,7 @@ wall() { # <description> <expected substring in output> [shell that edits the fi
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
   # A summary naming N not verified must sit above exactly N SKIP lines.
   local n want; n="$(grep -c '^  SKIP ' <<<"$out")"; want="${2##*failed, }"; want="${want%% *}"
-  if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
+  if sees "$out" "$2" -- "$2" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
   else bad "$1 (expected '$2', SKIP lines=$n)"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP|failed' | sed 's/^/        /'; fi
   printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
   printf '%s' "$good_meta" > "$api/repos/o/r.json"
@@ -423,17 +440,17 @@ wall() { # <description> <expected substring in output> [shell that edits the fi
   printf '%s' "$good_listing" > "$api/repos/o/r/rulesets?per_page=100.json"; printf '%s' "$good_tags" > "$api/repos/o/r/rulesets/3.json"
 }
 wall "intact wall passes" "-- 0 failed"
-wall "squash commits are the pull request title and description" "PASS  squash commits carry"
-wall "drifted squash settings are caught" "squash commit settings drifted: title=COMMIT_OR_PR_TITLE" "printf '{\"default_branch\":\"main\",\"squash_merge_commit_title\":\"COMMIT_OR_PR_TITLE\",\"squash_merge_commit_message\":\"COMMIT_MESSAGES\"}' > \"$api/repos/o/r.json\""
-wall "invisible squash settings are SKIP, not a pass" "squash commit settings not visible" "printf '{\"default_branch\":\"main\"}' > \"$api/repos/o/r.json\""
+wall "squash commits are the pull request title and description" "FC-E08 pass"
+wall "drifted squash settings are caught" "FC-E08 fail" "printf '{\"default_branch\":\"main\",\"squash_merge_commit_title\":\"COMMIT_OR_PR_TITLE\",\"squash_merge_commit_message\":\"COMMIT_MESSAGES\"}' > \"$api/repos/o/r.json\""
+wall "invisible squash settings are SKIP, not a pass" "FC-E08 unknown" "printf '{\"default_branch\":\"main\"}' > \"$api/repos/o/r.json\""
 # A repository the door damaged before #105: the default branch is the throwaway
 # probe, the whole wall stands on that branch, and `main` has no rules at all.
 # Following the default branch reports it as a wall standing -- the checker
 # telling someone `main` is guarded while anyone can force-push it (#107).
 damaged="mv \"$api/repos/o/r/rules/branches/main.json\" \"$api/repos/o/r/rules/branches/__push-probe.json\"; printf '{\"default_branch\":\"__push-probe\",\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
-wall "a default branch that is not main is reported, not passed over" "WARN  the default branch is __push-probe, not main" "$damaged"
-wall "the finding says main is the branch left unprotected" "main is unprotected" "$damaged"
-wall "the fix carries the one command that repairs it" "gh api repos/o/r -X PATCH -f default_branch=main" "$damaged"
+wall "a default branch that is not main is reported, not passed over" "FC-E07 warn" "$damaged"
+wall "the finding says main is the branch left unprotected" "FC-E07 warn" "$damaged"
+wall "the fix carries the one command that repairs it" "FC-E07 info" "$damaged"
 # Never a FAIL. `ci / floor-check` runs with --repo in every consumer's CI, so a
 # FAIL blocks their merges -- and a repository whose default is deliberately
 # `master` or `trunk` is not broken, it just is not what the door builds (#106).
@@ -443,7 +460,7 @@ if [ "$rc_db" = 0 ] && ! grep -q "FAIL.*default branch" <<<"$out_db"; then ok "a
 else bad "a wrong default branch changed the exit code (rc=$rc_db) or produced a FAIL"; printf '%s
 ' "$out_db" | grep -E 'FAIL' | sed 's/^/        /'; fi
 # Said once and plainly, not only as the prefix on each rule line.
-if grep -q "the wall is checked on __push-probe, the repository's default branch" <<<"$out_db"; then ok "the branch the wall was checked on is stated once, not only as a prefix"
+if is "$out_db" FC-E07 info; then ok "the branch the wall was checked on is stated once, not only as a prefix"
 else bad "the output never states which branch the wall was checked on"; fi
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '%s' "$good_meta" > "$api/repos/o/r.json"
@@ -452,16 +469,16 @@ rm -f "$api/repos/o/r/rules/branches/__push-probe.json"
 # not report it must not be read as "main, fine": not verified, like every other
 # API-backed check here.
 wall "a default branch the API does not report is not verified rather than passed" \
-  "SKIP  default branch not verified" \
+  "FC-E07 unknown" \
   "printf '{\"squash_merge_commit_title\":\"PR_TITLE\",\"squash_merge_commit_message\":\"PR_BODY\"}' > \"$api/repos/o/r.json\""
 wall "a repository whose default branch is main is unchanged: no warning, no new noise" "-- 0 failed"
-wall "a healthy repository still says which branch the wall was checked on" "the wall is checked on main, the repository's default branch"
-wall "dropped required check is caught" "required checks dropped: \['ci / b'\]" "sed -i.bak 's/,{\"context\":\"ci \/ b\",\"integration_id\":15368}//' \"$api/repos/o/r/rules/branches/main.json\""
-wall "a dropped required check comes with the one command that requires it again" "INFO  .*scripts/upgrade-ruleset.sh o/r 'ci / b:15368'" "sed -i.bak 's/,{\"context\":\"ci \/ b\",\"integration_id\":15368}//' \"$api/repos/o/r/rules/branches/main.json\""
-wall "widened merge methods are caught" "merge methods widened" "sed -i.bak 's/\[\"squash\"\]/[\"squash\",\"merge\"]/' \"$api/repos/o/r/rules/branches/main.json\""
-wall "bypass actor is caught" "bypass actors present" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
-wall "no rules at all is caught" "the wall is down" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
-wall "invisible bypass actors are SKIP, not a pass" "bypass actors not visible" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
+wall "a healthy repository still says which branch the wall was checked on" "FC-E07 info"
+wall "dropped required check is caught" "FC-E19 fail" "sed -i.bak 's/,{\"context\":\"ci \/ b\",\"integration_id\":15368}//' \"$api/repos/o/r/rules/branches/main.json\""
+wall "a dropped required check comes with the one command that requires it again" "FC-E19 info" "sed -i.bak 's/,{\"context\":\"ci \/ b\",\"integration_id\":15368}//' \"$api/repos/o/r/rules/branches/main.json\""
+wall "widened merge methods are caught" "FC-E17 fail" "sed -i.bak 's/\[\"squash\"\]/[\"squash\",\"merge\"]/' \"$api/repos/o/r/rules/branches/main.json\""
+wall "bypass actor is caught" "FC-E24 fail" "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\"}]}' > \"$api/repos/o/r/rulesets/1.json\""
+wall "no rules at all is caught" "FC-E12 fail" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
+wall "invisible bypass actors are SKIP, not a pass" "FC-E24 unknown" "printf '{}' > \"$api/repos/o/r/rulesets/1.json\""
 # Labels have no fixture yet at this point, so that read is the one SKIP of an
 # intact wall; the invisible bypass actors are the second.
 wall "an intact wall against the fixture counts only the label read as not verified" "-- 0 failed, 1 not verified"
@@ -485,7 +502,7 @@ oldstyle() { # <description> <protection body> [checker args...]
   local desc="$1" out rc; printf '%s' "$2" > "$oapi/repos/o/r/branches/main/protection.json"; shift 2
   out="$(FLOOR_CHECK_API_DIR="$oapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" \
          --expect-checks "ci / a, ci / b" "$@" 2>&1)"; rc=$?
-  if [ "$rc" = 1 ] && grep -qx '  FAIL  no rules govern main: the wall is down' <<<"$out" \
+  if [ "$rc" = 1 ] && is "$out" FC-E12 fail \
      && ! grep -qiE 'protected|branch protection' <<<"$out"; then ok "$desc"
   else bad "$desc (rc=$rc)"; grep -E 'FAIL|wall|protect' <<<"$out" | sed 's/^/        /'; fi
 }
@@ -505,17 +522,17 @@ merge_wall() { # <description> <expected regex> [shell that edits $mapi first] [
   [ -n "$edit" ] && eval "$edit"
   out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" \
          --expect-checks "ci / a, ci / b" "$@" 2>&1)"
-  if grep -qE -- "$want" <<<"$out"; then ok "$desc"
+  if sees "$out" "$want" -E -- "$want"; then ok "$desc"
   else bad "$desc (expected /$want/)"; grep -E 'FAIL|SKIP|WARN|merge|bypass|failed' <<<"$out" | sed 's/^/        /'; fi
 }
 M=(--merge-ruleset "$root/ruleset-merge.json")
-merge_wall "the merge ruleset in its shape passes" '^  PASS  ruleset 2: the merge is reserved to the repository admin' "" "${M[@]}"
+merge_wall "the merge ruleset in its shape passes" "FC-E25 pass" "" "${M[@]}"
 merge_wall "the merge ruleset's admin bypass is not a bypass FAIL" '^-- 0 failed' "" "${M[@]}"
-merge_wall "the first ruleset is still held to no bypass actor beside it" '^  PASS  ruleset 1: no bypass actors$' "" "${M[@]}"
+merge_wall "the first ruleset is still held to no bypass actor beside it" "FC-E24 pass" "" "${M[@]}"
 merge_wall "a missing merge ruleset is a WARN with the command that adds it" \
-  '^  WARN  main: no ruleset reserves the merge to an admin' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+  "FC-E25 warn" "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
 merge_wall "a missing merge ruleset names the upgrade command" \
-  'scripts/with-admin-token.sh scripts/create-merge-ruleset.sh o/r' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+  "FC-E25 info" "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
 merge_wall "a missing merge ruleset fails nothing (consumer CI keeps merging)" \
   '^-- 0 failed' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
 # Not in effect is not absent: GitHub leaves a disabled, evaluate-mode or
@@ -524,43 +541,43 @@ merge_wall "a missing merge ruleset fails nothing (consumer CI keeps merging)" \
 not_in_effect() { # <jq edit of B> -> shell for merge_wall: B listed but out of the branch's rules
   printf '%s' "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '[{\"id\":1,\"source_type\":\"Repository\"},{\"id\":2,\"source_type\":\"Repository\"}]' > \"$mapi/repos/o/r/rulesets?per_page=100.json\"; jq -c '$1' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\""
 }
-merge_wall "a disabled merge ruleset is a FAIL, not the missing WARN" '^  FAIL  main: the merge ruleset is not in effect: ruleset 2 \(disabled' "$(not_in_effect '.enforcement = "disabled"')" "${M[@]}"
-merge_wall "a merge ruleset in evaluate mode is a FAIL" '^  FAIL  main: the merge ruleset is not in effect: ruleset 2 \(evaluate' "$(not_in_effect '.enforcement = "evaluate"')" "${M[@]}"
-merge_wall "a merge ruleset scoped off the default branch is a FAIL" '^  FAIL  main: the merge ruleset is not in effect: ruleset 2 \(active, branch' "$(not_in_effect '.conditions.ref_name.include = ["refs/heads/other"]')" "${M[@]}"
+merge_wall "a disabled merge ruleset is a FAIL, not the missing WARN" "FC-E25 fail" "$(not_in_effect '.enforcement = "disabled"')" "${M[@]}"
+merge_wall "a merge ruleset in evaluate mode is a FAIL" "FC-E25 fail" "$(not_in_effect '.enforcement = "evaluate"')" "${M[@]}"
+merge_wall "a merge ruleset scoped off the default branch is a FAIL" "FC-E25 fail" "$(not_in_effect '.conditions.ref_name.include = ["refs/heads/other"]')" "${M[@]}"
 rm -f "$mapi/repos/o/r/rulesets?per_page=100.json"
-merge_wall "a list with no update rule anywhere is still the missing WARN" '^  WARN  main: no ruleset reserves the merge' \
+merge_wall "a list with no update rule anywhere is still the missing WARN" "FC-E25 warn" \
   "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '[{\"id\":1,\"source_type\":\"Repository\"}]' > \"$mapi/repos/o/r/rulesets?per_page=100.json\"" "${M[@]}"
-merge_wall "a list that cannot be read is not verified, not the missing WARN" '^  SKIP  main: the merge ruleset not verified: no ruleset in effect carries update' \
+merge_wall "a list that cannot be read is not verified, not the missing WARN" "FC-E25 unknown" \
   "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '{}' > \"$mapi/repos/o/r/rulesets?per_page=100.json\"" "${M[@]}"
 rm -f "$mapi/repos/o/r/rulesets?per_page=100.json"
-merge_wall "a merge ruleset bypassed through a pull request, not exempt, is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \
+merge_wall "a merge ruleset bypassed through a pull request, not exempt, is caught" "FC-E25 fail" \
   "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"pull_request\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
-merge_wall "a merge ruleset bypassed always is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \
+merge_wall "a merge ruleset bypassed always is caught" "FC-E25 fail" \
   "printf '{\"bypass_actors\":[{\"actor_id\":5,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"always\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
-merge_wall "a merge ruleset bypassed by the write role is caught" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are" \
+merge_wall "a merge ruleset bypassed by the write role is caught" "FC-E25 fail" \
   "printf '{\"bypass_actors\":[{\"actor_id\":4,\"actor_type\":\"RepositoryRole\",\"bypass_mode\":\"exempt\"}]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
-merge_wall "a merge ruleset with no bypass actor is caught (nobody could merge)" "^  FAIL  ruleset 2: the merge ruleset's bypass actors are \[\]" \
+merge_wall "a merge ruleset with no bypass actor is caught (nobody could merge)" "FC-E25 fail" \
   "printf '{\"bypass_actors\":[]}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
-merge_wall "update beside other rules in one ruleset is caught" '^  FAIL  main: ruleset 2 carries \[.deletion., .update.\]' \
+merge_wall "update beside other rules in one ruleset is caught" "FC-E25 fail" \
   "jq -c '. + [{\"type\":\"deletion\",\"ruleset_source_type\":\"Repository\",\"ruleset_id\":2}]' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
-merge_wall "...and its bypass actor is then a bypass FAIL as well" '^  FAIL  ruleset 2: bypass actors present' \
+merge_wall "...and its bypass actor is then a bypass FAIL as well" "FC-E24 fail" \
   "jq -c '. + [{\"type\":\"deletion\",\"ruleset_source_type\":\"Repository\",\"ruleset_id\":2}]' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
-merge_wall "a merge ruleset widened to every branch is caught (it would stop every branch push but the admin's)" "^  FAIL  ruleset 2: the merge ruleset applies to" \
+merge_wall "a merge ruleset widened to every branch is caught (it would stop every branch push but the admin's)" "FC-E25 fail" \
   "jq -c '.conditions.ref_name.include = [\"~ALL\"]' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
-merge_wall "a merge ruleset with its actor right and its scope unread is not verified, not passed" "^  SKIP  ruleset 2: the merge ruleset's scope \(target, enforcement, conditions\) not read" \
+merge_wall "a merge ruleset with its actor right and its scope unread is not verified, not passed" "FC-E25 unknown" \
   "jq -c '{bypass_actors}' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "...and then no PASS for it" '^-- 0 failed, 2 not verified' \
   "jq -c '{bypass_actors}' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
-merge_wall "a bypass actor on the first ruleset still fails beside a good merge ruleset" '^  FAIL  ruleset 1: bypass actors present' \
+merge_wall "a bypass actor on the first ruleset still fails beside a good merge ruleset" "FC-E24 fail" \
   "printf '%s' \"\$b_actors\" > \"$mapi/repos/o/r/rulesets/1.json\"" "${M[@]}"
-merge_wall "unreadable merge bypass actors are SKIP, never PASS" "^  SKIP  ruleset 2: the merge ruleset's bypass actors not visible" \
+merge_wall "unreadable merge bypass actors are SKIP, never PASS" "FC-E25 unknown" \
   "printf '{}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "unreadable merge bypass actors are counted as not verified" '^-- 0 failed, 2 not verified' \
   "printf '{}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "with the Actions token they are left to /plinth:floor-check" \
-  "^  INFO  ruleset 2: the merge ruleset's bypass actors not visible with this token; /plinth:floor-check reads them" \
+  "FC-E25 review" \
   "printf '{}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}" --actions-token
-merge_wall "an update rule from an organization ruleset is not verified, not passed" '^  SKIP  main: the merge ruleset not verified: the update rule comes from a ruleset outside' \
+merge_wall "an update rule from an organization ruleset is not verified, not passed" "FC-E25 unknown" \
   "jq -c '. + [{\"type\":\"update\",\"ruleset_source_type\":\"Organization\",\"ruleset_id\":9}]' <<<\"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
 # Guidance or boundary (#569): the login's role on the repository decides,
 # since GitHub lets the admin role past the merge ruleset whatever the token.
@@ -571,45 +588,45 @@ as_login() { # <admin true|false|absent> -> shell for merge_wall: the repository
   esac
 }
 no_b="printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\""
-merge_wall "an admin login is guidance" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true)" "${M[@]}"
-merge_wall "an admin login is guidance with the merge ruleset missing too" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true); $no_b" "${M[@]}"
-merge_wall "a non-admin login with the merge ruleset standing is a boundary" '^  PASS  the merge: boundary\. This login is not the repository.s admin' "$(as_login false)" "${M[@]}"
+merge_wall "an admin login is guidance" "FC-E26 info" "$(as_login true)" "${M[@]}"
+merge_wall "an admin login is guidance with the merge ruleset missing too" "FC-E26 info" "$(as_login true); $no_b" "${M[@]}"
+merge_wall "a non-admin login with the merge ruleset standing is a boundary" "FC-E26 pass" "$(as_login false)" "${M[@]}"
 merge_wall "...and the boundary fails nothing" '^-- 0 failed, 1 not verified$' "$(as_login false)" "${M[@]}"
-merge_wall "a non-admin login with no merge ruleset is guidance, not a boundary" '^  INFO  the merge: guidance\. This login is not the repository.s admin, but no ruleset' "$(as_login false); $no_b" "${M[@]}"
-merge_wall "a non-admin login with an unreadable merge ruleset is not verified, never a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' \
+merge_wall "a non-admin login with no merge ruleset is guidance, not a boundary" "FC-E26 info" "$(as_login false); $no_b" "${M[@]}"
+merge_wall "a non-admin login with an unreadable merge ruleset is not verified, never a boundary" "FC-E26 unknown" \
   "$(as_login false); printf '{}' > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 # As a collaborator's token reads it (#569's run): scope, no actors, and GitHub's answer for this login.
 collab_b() { printf '%s' "jq -c 'del(.bypass_actors) + {current_user_can_bypass: \"$1\"}' <<<\"\$b_actors\" > \"$mapi/repos/o/r/rulesets/2.json\""; }
 merge_wall "a collaborator that can never bypass the merge ruleset is a boundary, its actors unread" \
-  '^  PASS  the merge: boundary\. This login is not the repository.s admin, and GitHub says it can never bypass' "$(as_login false); $(collab_b never)" "${M[@]}"
-merge_wall "...while the unread actors stay not verified" "^  SKIP  ruleset 2: the merge ruleset's bypass actors not visible" "$(as_login false); $(collab_b never)" "${M[@]}"
-merge_wall "a collaborator GitHub says can bypass it is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' "$(as_login false); $(collab_b exempt)" "${M[@]}"
-merge_wall "no answer for this login is not a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin' \
+  "FC-E26 pass" "$(as_login false); $(collab_b never)" "${M[@]}"
+merge_wall "...while the unread actors stay not verified" "FC-E25 unknown" "$(as_login false); $(collab_b never)" "${M[@]}"
+merge_wall "a collaborator GitHub says can bypass it is not a boundary" "FC-E26 unknown" "$(as_login false); $(collab_b exempt)" "${M[@]}"
+merge_wall "no answer for this login is not a boundary" "FC-E26 unknown" \
   "$(as_login false); printf '%s' \"\$(jq -c 'del(.bypass_actors)' <<<\"\$b_actors\")\" > \"$mapi/repos/o/r/rulesets/2.json\"" "${M[@]}"
 merge_wall "a read-only login with no merge ruleset is a boundary, not guidance (it cannot merge at all)" \
-  '^  PASS  the merge: boundary\. This login cannot write to the repository' "$(as_login false); jq -c '.permissions.push = false' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
+  "FC-E26 pass" "$(as_login false); jq -c '.permissions.push = false' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
 merge_wall "a non-admin login whose write access cannot be read is not verified" \
-  '^  SKIP  the merge: not verified: whether this login can write' "$(as_login false); jq -c 'del(.permissions.push)' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
-merge_wall "a role that cannot be read is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent)" "${M[@]}"
+  "FC-E26 unknown" "$(as_login false); jq -c 'del(.permissions.push)' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\"; $no_b" "${M[@]}"
+merge_wall "a role that cannot be read is not verified" "FC-E26 unknown" "$(as_login absent)" "${M[@]}"
 merge_wall "...and counted as not verified, not passed" '^-- 0 failed, 2 not verified$' "$(as_login absent)" "${M[@]}"
 # Without the branch's rules (#583): the wall's own SKIP or FAIL stands, and
 # the line is still printed, from the role alone.
 no_rules="printf '[]' > \"$mapi/repos/o/r/rules/branches/main.json\""
 bad_rules="printf 'not json' > \"$mapi/repos/o/r/rules/branches/main.json\""
 push_false="jq -c '.permissions.push = false' \"$mapi/repos/o/r.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r.json\""
-merge_wall "no rules: the wall's FAIL stands" '^  FAIL  no rules govern main: the wall is down' "$(as_login false); $no_rules" "${M[@]}"
-merge_wall "no rules: an admin login is guidance" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true); $no_rules" "${M[@]}"
-merge_wall "no rules: a login with write access is guidance" '^  INFO  the merge: guidance\. This login is not the repository.s admin, but no rules govern main' "$(as_login false); $no_rules" "${M[@]}"
-merge_wall "no rules: a login without write access is a boundary" '^  PASS  the merge: boundary\. This login cannot write to the repository' "$(as_login false); $push_false; $no_rules" "${M[@]}"
-merge_wall "no rules: an unread role is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent); $no_rules" "${M[@]}"
-merge_wall "unreadable rules: the wall's SKIP stands" '^  SKIP  could not read the rules of main \(API error\)' "$(as_login false); $bad_rules" "${M[@]}"
-merge_wall "unreadable rules: a login with write access is not verified, never a boundary" '^  SKIP  the merge: not verified: this login is not the repository.s admin, and the rules of main could not be read' "$(as_login false); $bad_rules" "${M[@]}"
-merge_wall "unreadable rules: an admin login is guidance" '^  INFO  the merge: guidance\. This login is the repository.s admin' "$(as_login true); $bad_rules" "${M[@]}"
-merge_wall "unreadable rules: a login without write access is a boundary" '^  PASS  the merge: boundary\. This login cannot write to the repository' "$(as_login false); $push_false; $bad_rules" "${M[@]}"
-merge_wall "unreadable rules: an unread role is not verified" '^  SKIP  the merge: not verified: whether this login is the repository.s admin could not be read' "$(as_login absent); $bad_rules" "${M[@]}"
-merge_wall "no rules, with the Actions token: not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false); $no_rules" "${M[@]}" --actions-token
-merge_wall "unreadable rules, with the Actions token: not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false); $bad_rules" "${M[@]}" --actions-token
-merge_wall "with the Actions token it is not decided" "^  INFO  the merge: not verified here: the Actions token is not the agent's login" "$(as_login false)" "${M[@]}" --actions-token
+merge_wall "no rules: the wall's FAIL stands" "FC-E12 fail" "$(as_login false); $no_rules" "${M[@]}"
+merge_wall "no rules: an admin login is guidance" "FC-E26 info" "$(as_login true); $no_rules" "${M[@]}"
+merge_wall "no rules: a login with write access is guidance" "FC-E26 info" "$(as_login false); $no_rules" "${M[@]}"
+merge_wall "no rules: a login without write access is a boundary" "FC-E26 pass" "$(as_login false); $push_false; $no_rules" "${M[@]}"
+merge_wall "no rules: an unread role is not verified" "FC-E26 unknown" "$(as_login absent); $no_rules" "${M[@]}"
+merge_wall "unreadable rules: the wall's SKIP stands" "FC-E12 unknown" "$(as_login false); $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: a login with write access is not verified, never a boundary" "FC-E26 unknown" "$(as_login false); $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: an admin login is guidance" "FC-E26 info" "$(as_login true); $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: a login without write access is a boundary" "FC-E26 pass" "$(as_login false); $push_false; $bad_rules" "${M[@]}"
+merge_wall "unreadable rules: an unread role is not verified" "FC-E26 unknown" "$(as_login absent); $bad_rules" "${M[@]}"
+merge_wall "no rules, with the Actions token: not decided" "FC-E26 review" "$(as_login false); $no_rules" "${M[@]}" --actions-token
+merge_wall "unreadable rules, with the Actions token: not decided" "FC-E26 review" "$(as_login false); $bad_rules" "${M[@]}" --actions-token
+merge_wall "with the Actions token it is not decided" "FC-E26 review" "$(as_login false)" "${M[@]}" --actions-token
 merge_wall "...and it is left to /plinth:floor-check, not passed" '^-- 0 failed, [0-9]+ not verified, [0-9]+ left to /plinth:floor-check$' "$(as_login false)" "${M[@]}" --actions-token
 for who in true false absent; do
   jq -c ". + [$b_rule]" <<<"$good_rules" > "$mapi/repos/o/r/rules/branches/main.json"
@@ -625,8 +642,8 @@ if FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --
   bad "without --merge-ruleset no merge line is printed"; else ok "without --merge-ruleset no merge line is printed"; fi
 # Without --merge-ruleset nothing says what B should be: its bypass actor is
 # held to the first ruleset's rule (fail-closed), and the gap is named.
-merge_wall "without --merge-ruleset the shape is said not compared" '^  INFO  main: the ruleset that reserves the merge to an admin is not compared \(no --merge-ruleset\)$'
-merge_wall "without --merge-ruleset its bypass actor is not let through" '^  FAIL  ruleset 2: bypass actors present'
+merge_wall "without --merge-ruleset the shape is said not compared" "FC-E25 info"
+merge_wall "without --merge-ruleset its bypass actor is not let through" "FC-E24 fail"
 # CodeQL: enforced by the code_scanning rule (the door since #41) or by
 # a `CodeQL` check name (repositories the door created before that). Either
 # holds the wall; neither does not. The fixture carries both.
@@ -639,10 +656,10 @@ rules_rule_only="$(jq -c "$strip_name" <<<"$good_rules")"
 rules_name_only="$(jq -c "$strip_rule" <<<"$good_rules")"
 rules_neither="$(jq -c "$strip_name | $strip_rule" <<<"$good_rules")"
 rules_other_tool="$(jq -c "$strip_name | $strip_rule + [\$r]" --argjson r "$(rule_for Semgrep)" <<<"$good_rules")"
-wall "CodeQL as a rule, not a name, passes" "CodeQL enforced (rule)" "printf '%s' \"\$rules_rule_only\" > \"$api/repos/o/r/rules/branches/main.json\""
-wall "CodeQL as a legacy check name passes" "CodeQL enforced (check name)" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
-wall "CodeQL neither rule nor name is caught" "CodeQL not enforced" "printf '%s' \"\$rules_neither\" > \"$api/repos/o/r/rules/branches/main.json\""
-wall "a code_scanning rule for another tool is caught" "CodeQL not enforced" "printf '%s' \"\$rules_other_tool\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "CodeQL as a rule, not a name, passes" "FC-E21 pass" "printf '%s' \"\$rules_rule_only\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "CodeQL as a legacy check name passes" "FC-E21 pass" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "CodeQL neither rule nor name is caught" "FC-E21 fail" "printf '%s' \"\$rules_neither\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "a code_scanning rule for another tool is caught" "FC-E21 fail" "printf '%s' \"\$rules_other_tool\" > \"$api/repos/o/r/rules/branches/main.json\""
 # The rule's alert thresholds are the policy: `none` on both is a rule that
 # blocks nothing, and it printed `CodeQL enforced (rule)` (#96). The live
 # policy is compared with --ruleset; equal or stricter passes, weaker fails,
@@ -651,37 +668,37 @@ wall "a code_scanning rule for another tool is caught" "CodeQL not enforced" "pr
 policy() { # <alerts_threshold> <security_alerts_threshold> -- the fixture with the rule's thresholds replaced
   jq -c "$strip_rule + [\$r]" --argjson r "$(rule_for CodeQL "$1" "$2")" <<<"$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 }
-wall "both thresholds weakened to none is caught" "FAIL  main: CodeQL alert thresholds weakened: alerts_threshold=none (expected errors), security_alerts_threshold=none (expected high_or_higher)" "policy none none"
-wall "the security threshold alone weakened is caught, and named alone" "weakened: security_alerts_threshold=critical (expected high_or_higher)$" "policy errors critical"
-wall "the alerts threshold alone weakened is caught, and named alone" "weakened: alerts_threshold=none (expected errors)$" "policy none high_or_higher"
+wall "both thresholds weakened to none is caught" "FC-E22 fail" "policy none none"
+wall "the security threshold alone weakened is caught, and named alone" "FC-E22 fail" "policy errors critical"
+wall "the alerts threshold alone weakened is caught, and named alone" "FC-E22 fail" "policy none high_or_higher"
 wall "a weakened rule fails the run" "-- 1 failed" "policy none none"
-wall "a weakened rule names where to repair it" "https://github.com/o/r/settings/rules/1" "policy none none"
-wall "a weakened rule is caught even with the legacy check name also required" "CodeQL alert thresholds weakened" "policy none none"
-wall "equal thresholds pass" "PASS  main: CodeQL alert thresholds errors / high_or_higher (expected errors / high_or_higher)" "policy errors high_or_higher"
-wall "stricter thresholds pass" "PASS  main: CodeQL alert thresholds errors_and_warnings / medium_or_higher" "policy errors_and_warnings medium_or_higher"
-wall "the strictest thresholds pass" "PASS  main: CodeQL alert thresholds all / all" "policy all all"
-wall "a missing threshold field is not verified, not passed" "SKIP  main: CodeQL alert thresholds not verified: security_alerts_threshold unreadable" "jq -c '$strip_rule + [{\"type\":\"code_scanning\",\"parameters\":{\"code_scanning_tools\":[{\"tool\":\"CodeQL\",\"alerts_threshold\":\"errors\"}]},\"ruleset_source_type\":\"Repository\",\"ruleset_id\":1}]' <<<\"\$good_rules\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "a weakened rule names where to repair it" "FC-E22 info" "policy none none"
+wall "a weakened rule is caught even with the legacy check name also required" "FC-E22 fail" "policy none none"
+wall "equal thresholds pass" "FC-E22 pass" "policy errors high_or_higher"
+wall "stricter thresholds pass" "FC-E22 pass" "policy errors_and_warnings medium_or_higher"
+wall "the strictest thresholds pass" "FC-E22 pass" "policy all all"
+wall "a missing threshold field is not verified, not passed" "FC-E22 unknown" "jq -c '$strip_rule + [{\"type\":\"code_scanning\",\"parameters\":{\"code_scanning_tools\":[{\"tool\":\"CodeQL\",\"alerts_threshold\":\"errors\"}]},\"ruleset_source_type\":\"Repository\",\"ruleset_id\":1}]' <<<\"\$good_rules\" > \"$api/repos/o/r/rules/branches/main.json\""
 wall "a missing threshold field is counted as not verified" "-- 0 failed, 2 not verified" "jq -c '$strip_rule + [{\"type\":\"code_scanning\",\"parameters\":{\"code_scanning_tools\":[{\"tool\":\"CodeQL\"}]},\"ruleset_source_type\":\"Repository\",\"ruleset_id\":1}]' <<<\"\$good_rules\" > \"$api/repos/o/r/rules/branches/main.json\""
-wall "a threshold value GitHub does not document is not verified" "SKIP  main: CodeQL alert thresholds not verified: alerts_threshold unreadable" "policy severe high_or_higher"
-wall "a legacy check name does not claim the thresholds" "SKIP  main: CodeQL alert thresholds not verified: a check name does not set them" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
+wall "a threshold value GitHub does not document is not verified" "FC-E22 unknown" "policy severe high_or_higher"
+wall "a legacy check name does not claim the thresholds" "FC-E22 unknown" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
 wall "a legacy check name counts the thresholds as not verified" "-- 0 failed, 2 not verified" "printf '%s' \"\$rules_name_only\" > \"$api/repos/o/r/rules/branches/main.json\""
 # Two rulesets both with a CodeQL rule: GitHub enforces every rule, so the
 # strictest governs. A second, weaker ruleset is not a weakening.
 # shellcheck disable=SC2016  # evaluated by wall(), where $r and $a expand
 two='jq -c ". + [\$r]" --argjson r "$(rule_for CodeQL none none 2)" <<<"$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf "{\"bypass_actors\":[]}" > "$api/repos/o/r/rulesets/2.json"'
-wall "a second ruleset with a weaker CodeQL rule is not a weakening" "PASS  main: CodeQL alert thresholds errors / high_or_higher" "$two"
+wall "a second ruleset with a weaker CodeQL rule is not a weakening" "FC-E22 pass" "$two"
 wall "two rulesets, the strict one holds: nothing failed" "-- 0 failed, 1 not verified" "$two"
 # shellcheck disable=SC2016  # evaluated by wall(), where $r and $a expand
 two_weak='jq -c "$strip_rule + [\$a, \$b]" --argjson a "$(rule_for CodeQL none critical)" --argjson b "$(rule_for CodeQL errors none 2)" <<<"$good_rules" > "$api/repos/o/r/rules/branches/main.json"; printf "{\"bypass_actors\":[]}" > "$api/repos/o/r/rulesets/2.json"'
-wall "two weak rulesets do not add up to the policy" "weakened: security_alerts_threshold=critical (expected high_or_higher)$" "$two_weak"
+wall "two weak rulesets do not add up to the policy" "FC-E22 fail" "$two_weak"
 # The rule is only as wide as the languages default setup analyses: enabled
 # before detection it analysed `actions` alone while the wall said enforced
 # (#120 finding I). Python missing is named with its fix; an unreadable setup
 # (the Actions token in CI) is not verified, never a pass.
-wall "the languages default setup analyses are reported" "PASS  CodeQL default setup analyses \['actions', 'python'\]"
-wall "default setup without python is caught, with the fix" "WARN  CodeQL default setup analyses \['actions'\], not the Python under src/" "printf '{\"state\":\"configured\",\"languages\":[\"actions\"]}' > \"$api/repos/o/r/code-scanning/default-setup.json\""
-wall "the fix for a missing language is the one PATCH" "gh api -X PATCH repos/o/r/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=python'" "printf '{\"state\":\"configured\",\"languages\":[\"actions\"]}' > \"$api/repos/o/r/code-scanning/default-setup.json\""
-wall "unreadable default setup is SKIP, not a pass" "SKIP  CodeQL default setup languages not verified" "rm \"$api/repos/o/r/code-scanning/default-setup.json\""
+wall "the languages default setup analyses are reported" "FC-E23 pass"
+wall "default setup without python is caught, with the fix" "FC-E23 warn" "printf '{\"state\":\"configured\",\"languages\":[\"actions\"]}' > \"$api/repos/o/r/code-scanning/default-setup.json\""
+wall "the fix for a missing language is the one PATCH" "FC-E23 info" "printf '{\"state\":\"configured\",\"languages\":[\"actions\"]}' > \"$api/repos/o/r/code-scanning/default-setup.json\""
+wall "unreadable default setup is SKIP, not a pass" "FC-E23 unknown" "rm \"$api/repos/o/r/code-scanning/default-setup.json\""
 wall "unreadable default setup is counted as not verified" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/code-scanning/default-setup.json\""
 # Push protection (#303): GitHub refuses a push carrying a secret in a format
 # it knows, where `ci / secrets` reports one only after it is on GitHub. The
@@ -694,20 +711,20 @@ security() { # <json for security_and_analysis, or nothing to leave the key out>
   printf '{%s%s}' "$repo_meta" "${1:+,\"security_and_analysis\":$1}" > "$api/repos/o/r.json"
 }
 pp_off='{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"disabled"}}'
-wall "push protection on is a PASS" "PASS  push protection is on"
-wall "push protection off is a WARN" "WARN  push protection is off" "security '$pp_off'"
-wall "push protection on says who can push past it" "PASS  push protection is on: GitHub refuses a push that carries a secret in a format it knows; anyone with write access can still push it past the block by giving a reason"
-wall "push protection off says who could push past it once on" "INFO    once on, anyone with write access can still push a secret past it by giving a reason, and GitHub records who and why" "security '$pp_off'"
+wall "push protection on is a PASS" "FC-E09 pass"
+wall "push protection off is a WARN" "FC-E09 warn" "security '$pp_off'"
+wall "push protection on says who can push past it" "FC-E09 pass"
+wall "push protection off says who could push past it once on" "FC-E09 info" "security '$pp_off'"
 wall "push protection off carries the call that turns it on, and says what the call needs" \
-  "INFO    gh api -X PATCH repos/o/r --input - <<<'{\"security_and_analysis\": {\"secret_scanning\": {\"status\": \"enabled\"}, \"secret_scanning_push_protection\": {\"status\": \"enabled\"}}}'   (needs repository administration; on a private repository, GitHub Secret Protection too)" "security '$pp_off'"
+  "FC-E09 info" "security '$pp_off'"
 wall "push protection off never fails the floor, and is not counted as not verified" "-- 0 failed, 1 not verified" "security '$pp_off'"
-wall "security settings the token does not get are SKIP, not a pass" "SKIP  push protection not verified (this token does not read the repository's security settings" "security"
+wall "security settings the token does not get are SKIP, not a pass" "FC-E09 unknown" "security"
 wall "security settings the token does not get are counted as not verified" "-- 0 failed, 2 not verified" "security"
-wall "security settings GitHub answers as null are SKIP" "SKIP  push protection not verified (this token does not read" "security null"
-wall "security settings without a push protection entry are SKIP, not read as off" "SKIP  push protection not verified (GitHub reports no push protection status for this repository)" "security '{\"secret_scanning\":{\"status\":\"enabled\"}}'"
-wall "a push protection status that is neither enabled nor disabled is SKIP" "SKIP  push protection not verified (GitHub reports no push protection status" "security '{\"secret_scanning_push_protection\":{\"status\":\"paused\"}}'"
-wall "security settings that are not an object are SKIP, and not blamed on the token" "SKIP  push protection not verified (GitHub reports no push protection status" "security '[]'"
-wall "a push protection entry that is not an object is SKIP, not a crash" "SKIP  push protection not verified (GitHub reports no push protection status" "security '{\"secret_scanning_push_protection\":\"enabled\"}'"
+wall "security settings GitHub answers as null are SKIP" "FC-E09 unknown" "security null"
+wall "security settings without a push protection entry are SKIP, not read as off" "FC-E09 unknown" "security '{\"secret_scanning\":{\"status\":\"enabled\"}}'"
+wall "a push protection status that is neither enabled nor disabled is SKIP" "FC-E09 unknown" "security '{\"secret_scanning_push_protection\":{\"status\":\"paused\"}}'"
+wall "security settings that are not an object are SKIP, and not blamed on the token" "FC-E09 unknown" "security '[]'"
+wall "a push protection entry that is not an object is SKIP, not a crash" "FC-E09 unknown" "security '{\"secret_scanning_push_protection\":\"enabled\"}'"
 for state in "$pp_off" "" null '{"secret_scanning":{"status":"enabled"}}'; do
   security "$state"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
@@ -717,22 +734,22 @@ done
 printf '%s' "$good_meta" > "$api/repos/o/r.json"
 # The item belongs to the repository, not to the rules: it is reported where no
 # rule governs the branch too.
-wall "push protection is reported when the wall is down" "PASS  push protection is on" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
+wall "push protection is reported when the wall is down" "FC-E09 pass" "printf '[]' > \"$api/repos/o/r/rules/branches/main.json\""
 # Private vulnerability reporting (#747): SECURITY.md names its form, which is
 # off until turned on. On is a PASS, off a WARN with the call, unread a SKIP;
 # a private repository is not offered it, and SECURITY.md names another route.
-wall "private vulnerability reporting on is a PASS" "PASS  private vulnerability reporting is on"
-wall "private vulnerability reporting off is a WARN" "WARN  private vulnerability reporting is off" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
-wall "private vulnerability reporting off carries the call that turns it on" "INFO    gh api -X PUT repos/o/r/private-vulnerability-reporting   (needs repository administration)" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
+wall "private vulnerability reporting on is a PASS" "FC-E11 pass"
+wall "private vulnerability reporting off is a WARN" "FC-E11 warn" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
+wall "private vulnerability reporting off carries the call that turns it on" "FC-E11 info" "printf '{\"enabled\":false}' > \"$api/repos/o/r/private-vulnerability-reporting.json\""
 wall "private vulnerability reporting unread is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
 # With the Actions token an unanswered setting is left to the skill (#1103:
 # every state a check declares is reached by a fixture).
 rm "$api/repos/o/r/private-vulnerability-reporting.json"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
-if grep -q "^  INFO  private vulnerability reporting is not read here: /plinth:floor-check reads it" <<<"$out"; then ok "private vulnerability reporting unread with the Actions token is left to the skill"
+if is "$out" FC-E11 review; then ok "private vulnerability reporting unread with the Actions token is left to the skill"
 else bad "private vulnerability reporting unread with the Actions token is left to the skill"; grep -i "vulnerability" <<<"$out" | sed 's/^/        /'; fi
 printf '{"enabled":true}' > "$api/repos/o/r/private-vulnerability-reporting.json"
-wall "private vulnerability reporting on a private repository is an INFO, not read" "INFO  private vulnerability reporting is not offered on a private repository" "jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\"; rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
+wall "private vulnerability reporting on a private repository is an INFO, not read" "FC-E11 info" "jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\"; rm \"$api/repos/o/r/private-vulnerability-reporting.json\""
 # SECURITY.md's route against the repository (#747): an instance rendered
 # before the template asked `visibility`, updated with --defaults, names the
 # form on a private repository too. The must-not-pass direction first.
@@ -741,14 +758,14 @@ form_md="printf '# Security\\n\\n**Do not open a public issue.** Use the reposit
 issue_md="printf '# Security\\n\\nOpen an issue in this repository. It is private, so only people with access\\n' > \"$sec\""
 private_meta="jq -c '. + {private: true}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
 route() { wall "$@"; cp "$work/SECURITY.md.keep" "$sec"; }
-route "must not pass: a private repository whose SECURITY.md names the form is a WARN" "WARN  SECURITY.md sends a reporter to Security → Report a vulnerability, which a private repository is not offered" "$form_md; $private_meta"
-route "...with the update that re-renders it" "INFO    re-render it with the issue route: copier update --defaults --data visibility=private" "$form_md; $private_meta"
-route "a public repository whose SECURITY.md names an issue is a WARN" "WARN  SECURITY.md tells a reporter to open an issue, and this repository is public" "$issue_md; jq -c '. + {private: false}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+route "must not pass: a private repository whose SECURITY.md names the form is a WARN" "FC-E10 warn" "$form_md; $private_meta"
+route "...with the update that re-renders it" "FC-E10 info" "$form_md; $private_meta"
+route "a public repository whose SECURITY.md names an issue is a WARN" "FC-E10 warn" "$issue_md; jq -c '. + {private: false}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
 route "a route mismatch never fails the floor" "-- 0 failed, 1 not verified" "$form_md; $private_meta"
 out="$(eval "$issue_md; $private_meta"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
 ! grep -q "WARN  SECURITY.md" <<<"$out" && ok "a private repository whose SECURITY.md names an issue is not warned" || bad "a matching private route was warned"
 out="$(eval "$form_md"; jq -c '. + {private: false}' <<<"$good_meta" > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
-! grep -q "WARN  SECURITY.md" <<<"$out" && grep -q "PASS  private vulnerability reporting is on" <<<"$out" && ok "a public repository whose SECURITY.md names the form is not warned" || bad "a matching public route was warned"
+! grep -q "WARN  SECURITY.md" <<<"$out" && is "$out" FC-E11 pass && ok "a public repository whose SECURITY.md names the form is not warned" || bad "a matching public route was warned"
 out="$(eval "$form_md"; printf '{"default_branch":"main"}' > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/SECURITY.md.keep" "$sec"; printf '%s' "$good_meta" > "$api/repos/o/r.json"
 ! grep -q "WARN  SECURITY.md" <<<"$out" && ok "visibility the API does not report is not judged" || bad "a route was judged with no visibility read"
 # The Actions allowlist (#747): a `uses:` the allowlist refuses ends its run in
@@ -759,48 +776,48 @@ rel="$good/.github/workflows/release.yml"; cp "$rel" "$work/release.yml.keep"
 uses_pypi="printf 'jobs:\n  publish:\n    steps:\n      - uses: actions/checkout@%040d\n      - uses: pypa/gh-action-pypi-publish@%040d # v1\n' 0 0 > \"$rel\""
 allow() { printf "printf '%%s' '{\"github_owned_allowed\":true,\"verified_allowed\":false,\"patterns_allowed\":%s}' > \"%s\"" "$1" "$api/repos/o/r/actions/permissions/selected-actions.json"; }
 allowlist() { wall "$@"; cp "$work/release.yml.keep" "$rel"; }
-allowlist "the door's allowlist lets the template's actions start" "PASS  the Actions allowlist lets every action the workflows use start (1 uses)"
+allowlist "the door's allowlist lets the template's actions start" "FC-E27 pass"
 out="$(eval "$uses_pypi"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/release.yml.keep" "$rel"
-if ! grep -q "PASS  the Actions allowlist" <<<"$out" && grep -q "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish\. A run that uses one ends in startup_failure" <<<"$out"
+if ! grep -q "PASS  the Actions allowlist" <<<"$out" && is "$out" FC-E27 warn
 then ok "must not pass: an allowlist missing one action is never reported as fine, and the action is named"
 else bad "an allowlist missing one action was reported as fine, or the action was not named"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
 allowlist "the refusal carries the one call that allows it, keeping what is allowed, and says it needs administration" \
-  "INFO    gh api -X PUT repos/o/r/actions/permissions/selected-actions --input - <<<'{\"github_owned_allowed\": true, \"verified_allowed\": false, \"patterns_allowed\": \[\"coolbress/plinth/\*\", \"pypa/gh-action-pypi-publish@\*\"\]}'   (needs repository administration)" "$uses_pypi"
+  "FC-E27 info" "$uses_pypi"
 allowlist "a refused action never fails the floor" "-- 0 failed, 1 not verified" "$uses_pypi"
-allowlist "an allowlist naming the action lets it start" "PASS  the Actions allowlist lets every action the workflows use start (3 uses)" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/gh-action-pypi-publish@*"]')"
-allowlist "a pattern naming another action does not cover it" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/other@*"]')"
-allowlist "a pattern pinned to another ref does not cover it" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/gh-action-pypi-publish@v1"]')"
-allowlist "GitHub-owned actions are refused when github_owned_allowed is off" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 4 actions/checkout" "$uses_pypi; printf '%s' '{\"github_owned_allowed\":false,\"patterns_allowed\":[\"coolbress/plinth/*\",\"pypa/gh-action-pypi-publish@*\"]}' > \"$api/repos/o/r/actions/permissions/selected-actions.json\""
-allowlist "a patterns list that is not a list allows nothing" "WARN  the Actions allowlist refuses: .github/workflows/ci.yml line 3 coolbress/plinth/.github/workflows/python-ci.yml" "$(allow '"coolbress/plinth/*"')"
-allowlist "allowed_actions all lets everything start" "PASS  the Actions allowlist lets every action" "$uses_pypi; printf '{\"enabled\":true,\"allowed_actions\":\"all\"}' > \"$api/repos/o/r/actions/permissions.json\""
-allowlist "allowed_actions local_only refuses every action from elsewhere" "WARN  the Actions allowlist refuses: .github/workflows/ci.yml line 3" "printf '{\"enabled\":true,\"allowed_actions\":\"local_only\"}' > \"$api/repos/o/r/actions/permissions.json\""
-allowlist "Actions turned off is a WARN" "WARN  GitHub Actions is turned off on this repository" "printf '{\"enabled\":false,\"allowed_actions\":\"selected\"}' > \"$api/repos/o/r/actions/permissions.json\""
-allowlist "Actions permissions the token does not read are a SKIP, not a pass" "SKIP  the Actions allowlist not verified" "rm \"$api/repos/o/r/actions/permissions.json\""
+allowlist "an allowlist naming the action lets it start" "FC-E27 pass" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/gh-action-pypi-publish@*"]')"
+allowlist "a pattern naming another action does not cover it" "FC-E27 warn" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/other@*"]')"
+allowlist "a pattern pinned to another ref does not cover it" "FC-E27 warn" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/gh-action-pypi-publish@v1"]')"
+allowlist "GitHub-owned actions are refused when github_owned_allowed is off" "FC-E27 warn" "$uses_pypi; printf '%s' '{\"github_owned_allowed\":false,\"patterns_allowed\":[\"coolbress/plinth/*\",\"pypa/gh-action-pypi-publish@*\"]}' > \"$api/repos/o/r/actions/permissions/selected-actions.json\""
+allowlist "a patterns list that is not a list allows nothing" "FC-E27 warn" "$(allow '"coolbress/plinth/*"')"
+allowlist "allowed_actions all lets everything start" "FC-E27 pass" "$uses_pypi; printf '{\"enabled\":true,\"allowed_actions\":\"all\"}' > \"$api/repos/o/r/actions/permissions.json\""
+allowlist "allowed_actions local_only refuses every action from elsewhere" "FC-E27 warn" "printf '{\"enabled\":true,\"allowed_actions\":\"local_only\"}' > \"$api/repos/o/r/actions/permissions.json\""
+allowlist "Actions turned off is a WARN" "FC-E27 warn" "printf '{\"enabled\":false,\"allowed_actions\":\"selected\"}' > \"$api/repos/o/r/actions/permissions.json\""
+allowlist "Actions permissions the token does not read are a SKIP, not a pass" "FC-E27 unknown" "rm \"$api/repos/o/r/actions/permissions.json\""
 allowlist "an allowlist the token does not read is a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$api/repos/o/r/actions/permissions/selected-actions.json\""
 # A `!` pattern blocks what it matches (#756). GitHub's page gives examples
 # but no order against the allowing patterns or github_owned_allowed, so a
 # policy that carries one is not verified, never a PASS.
 out="$(eval "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/*","!pypa/gh-action-pypi-publish@*"]')"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/release.yml.keep" "$rel"; printf '%s' "$good_allow" > "$api/repos/o/r/actions/permissions/selected-actions.json"
-if ! grep -q "PASS  the Actions allowlist" <<<"$out" && grep -q "SKIP  the Actions allowlist not verified: it carries the blocking pattern !pypa/gh-action-pypi-publish@\*" <<<"$out"
+if ! grep -q "PASS  the Actions allowlist" <<<"$out" && is "$out" FC-E27 unknown
 then ok "must not pass: an allowlist whose ! pattern blocks a used action is never reported as fine, and the pattern is named"
 else bad "an allowlist with a ! pattern was reported as fine, or the pattern was not named"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
 # Counted: the fixture's labels SKIP and the blocking pattern's.
 allowlist "a ! pattern is counted as not verified, never failed" "-- 0 failed, 2 not verified" "$uses_pypi; $(allow '["coolbress/plinth/*","pypa/*","!pypa/gh-action-pypi-publish@*"]')"
-allowlist "an action no pattern allows is still refused beside a ! pattern" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish" "$uses_pypi; $(allow '["coolbress/plinth/*","!octo/x@*"]')"
-allowlist "a docker image is not judged, a SKIP" "SKIP  .github/workflows/release.yml: line 4 docker://alpine@sha256:" "printf 'jobs:\n  a:\n    steps:\n      - uses: docker://alpine@sha256:%064d\n' 0 > \"$rel\""
+allowlist "an action no pattern allows is still refused beside a ! pattern" "FC-E27 warn" "$uses_pypi; $(allow '["coolbress/plinth/*","!octo/x@*"]')"
+allowlist "a docker image is not judged, a SKIP" "FC-E27 unknown" "printf 'jobs:\n  a:\n    steps:\n      - uses: docker://alpine@sha256:%064d\n' 0 > \"$rel\""
 # A `uses` the line pattern does not read (flow style) could name a refused
 # action: a SKIP naming the line, and never the all-actions PASS beside it.
 uses_flow="printf 'jobs:\n  publish:\n    steps:\n      - uses: actions/checkout@%040d\n      - {uses: pypa/gh-action-pypi-publish@%040d}\n' 0 0 > \"$rel\""
 out="$(eval "$uses_flow"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"; cp "$work/release.yml.keep" "$rel"
-if ! grep -q "PASS  the Actions allowlist" <<<"$out" && grep -q "SKIP  .github/workflows/release.yml: the Actions allowlist not verified for line 5: it mentions uses in a form this checker does not read" <<<"$out"
+if ! grep -q "PASS  the Actions allowlist" <<<"$out" && is "$out" FC-E27 unknown
 then ok "must not pass: a uses the checker does not read is a SKIP naming its line, never the all-actions PASS"
 else bad "a uses the checker does not read was passed over, or its line was not named"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
 # Counted: the allowlist's SKIP beside the pin check's and the plinth-pin lookup's on the same line, and the fixture's labels SKIP.
 allowlist "a uses the checker does not read is counted as not verified" "-- 0 failed, 4 not verified" "$uses_flow"
-allowlist "a readable refused action beside an unread one is still refused" "WARN  the Actions allowlist refuses: .github/workflows/release.yml line 5 pypa/gh-action-pypi-publish" "printf 'jobs:\n  publish:\n    steps:\n      - {uses: actions/checkout@%040d}\n      - uses: pypa/gh-action-pypi-publish@%040d\n' 0 0 > \"$rel\""
+allowlist "a readable refused action beside an unread one is still refused" "FC-E27 warn" "printf 'jobs:\n  publish:\n    steps:\n      - {uses: actions/checkout@%040d}\n      - uses: pypa/gh-action-pypi-publish@%040d\n' 0 0 > \"$rel\""
 out="$(rm "$api/repos/o/r/actions/permissions.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
 printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
-if grep -q "INFO  the Actions allowlist is not read here" <<<"$out" && ! grep -qE "(PASS|SKIP)  the Actions allowlist" <<<"$out"; then ok "--actions-token: an unread allowlist is an INFO left to the skill"
+if is "$out" FC-E27 review && ! grep -qE "(PASS|SKIP)  the Actions allowlist" <<<"$out"; then ok "--actions-token: an unread allowlist is an INFO left to the skill"
 else bad "--actions-token: an unread allowlist was not left to the skill"; grep 'Actions allowlist' <<<"$out" | sed 's/^/        /'; fi
 # `ci / floor-check` runs on the Actions token, which never gets the security
 # settings: a SKIP there is one no consumer can clear, in every run. The step
@@ -812,17 +829,17 @@ in_ci() { # <description> <expected substring> [json for security_and_analysis]
   security ${3+"$3"}
   local out; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
   local n want; n="$(grep -c '^  SKIP ' <<<"$out")"; want="${2##*failed, }"; want="${want%% *}"
-  if grep -q -- "$2" <<<"$out" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
+  if sees "$out" "$2" -- "$2" && { [[ "$2" != "-- "*"not verified"* ]] || [ "$n" = "$want" ]; }; then ok "$1"
   else bad "$1 (expected '$2', SKIP lines=$n)"; grep -E 'push protection|failed' <<<"$out" | sed 's/^/        /'; fi
   printf '%s' "$good_meta" > "$api/repos/o/r.json"
 }
 in_ci "--actions-token: security settings the token does not get are an INFO naming who reads them" \
-  "INFO  push protection is not read here: the Actions token does not get the repository's security settings; /plinth:floor-check reads it with a person's login"
+  "FC-E09 review"
 in_ci "--actions-token: that INFO is not counted as not verified" "-- 0 failed, 1 not verified"
-in_ci "--actions-token: null is the same unread answer" "INFO  push protection is not read here" null
-in_ci "--actions-token: off is still a WARN when the token does read it" "WARN  push protection is off" "$pp_off"
-in_ci "--actions-token: on is still a PASS when the token does read it" "PASS  push protection is on" '{"secret_scanning_push_protection":{"status":"enabled"}}'
-in_ci "--actions-token: settings read but with no status are still a SKIP" "SKIP  push protection not verified (GitHub reports no push protection status" '{"secret_scanning":{"status":"enabled"}}'
+in_ci "--actions-token: null is the same unread answer" "FC-E09 review" null
+in_ci "--actions-token: off is still a WARN when the token does read it" "FC-E09 warn" "$pp_off"
+in_ci "--actions-token: on is still a PASS when the token does read it" "FC-E09 pass" '{"secret_scanning_push_protection":{"status":"enabled"}}'
+in_ci "--actions-token: settings read but with no status are still a SKIP" "FC-E09 unknown" '{"secret_scanning":{"status":"enabled"}}'
 in_ci "--actions-token: that SKIP is still counted" "-- 0 failed, 2 not verified" '{"secret_scanning":{"status":"enabled"}}'
 security; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"
 printf '%s' "$good_meta" > "$api/repos/o/r.json"
@@ -854,7 +871,7 @@ private() { # <json for security_and_analysis, or nothing to leave the key out> 
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "$@" 2>&1)"; rc=$?
   printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 }
-has()  { if grep -qE -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$2')"; grep -E 'CodeQL|push protection|failed' <<<"$out" | sed 's/^/        /'; fi; }
+has()  { if sees "$out" "$2" -E -- "$2"; then ok "$1"; else bad "$1 (expected a line matching '$2')"; grep -E 'CodeQL|push protection|failed' <<<"$out" | sed 's/^/        /'; fi; }
 lacks() { if ! grep -qE -- "$2" <<<"$out"; then ok "$1"; else bad "$1 (a line matches '$2')"; grep -E -- "$2" <<<"$out" | sed 's/^/        /'; fi; }
 counted() { # <description> <fails> <not verified> <exit code>
   if [ "$rc" = "$4" ] && grep -q -- "^-- $2 failed, $3 not verified" <<<"$out" && [ "$(grep -c '^  SKIP ' <<<"$out")" = "$3" ] && [ "$(grep -c '^  FAIL ' <<<"$out")" = "$2" ]; then ok "$1"
@@ -867,22 +884,22 @@ sec() { # <code security status|-> <secret scanning status|-> <push protection s
 }
 # Without either product, and without the rule: the gaps are named, nothing fails.
 private "$(sec disabled disabled disabled)" "$rules_neither"
-has   "private, no Code Security, no rule: an INFO names the gap" '^  INFO  main: CodeQL is not expected here: GitHub Code Security is not enabled on this private repository'
-has   "private, no Code Security: the INFO names what stands in its place" "^  INFO  main: CodeQL is not expected here.*In its place: \`ci / lint\`'s security rules"
+has   "private, no Code Security, no rule: an INFO names the gap" "FC-E21 info"
+has   "private, no Code Security: the INFO names what stands in its place" "FC-E21 info"
 lacks "private, no Code Security, no rule: CodeQL gets neither a FAIL nor a PASS nor a SKIP" '^  (FAIL|PASS|SKIP|WARN) .*(CodeQL|code_scanning)'
-has   "private, no Secret Protection: an INFO names the gap and what stands in its place" '^  INFO  push protection is not expected here: GitHub Secret Protection is not enabled on this private repository.*In its place: `ci / secrets`'
+has   "private, no Secret Protection: an INFO names the gap and what stands in its place" "FC-E09 info"
 lacks "private, no Secret Protection: push protection gets neither a WARN nor a PASS nor a SKIP" '^  (FAIL|PASS|SKIP|WARN) +push protection'
 lacks "private, no Secret Protection: no call that would turn on a product that is not there" 'gh api -X PATCH repos/o/r --input'
 counted "private without either product: nothing fails, and the two gaps are not counted as not verified" 0 1 0
-has   "private: the required check names are expected as on a public repository" '^  PASS  main: all 2 expected checks are required'
-has   "private: the other rules are expected as on a public repository" '^  PASS  main: pull_request rule active'
+has   "private: the required check names are expected as on a public repository" "FC-E19 pass"
+has   "private: the other rules are expected as on a public repository" "FC-E15 pass"
 rm "$api/repos/o/r/code-scanning/default-setup.json"
 private "$(sec disabled disabled disabled)" "$rules_neither"
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 counted "private, no Code Security: default setup, which cannot exist there, is not read and not counted" 0 1 0
 # The rest of the wall is still a FAIL on a private repository.
 private "$(sec disabled disabled disabled)" "$(jq -c 'map(if .type=="required_status_checks" then .parameters.required_status_checks |= map(select(.context!="ci / a")) else . end)' <<<"$rules_neither")"
-has   "private: a dropped required check is still a FAIL" "^  FAIL  main: required checks dropped: \['ci / a'\]"
+has   "private: a dropped required check is still a FAIL" "FC-E19 fail"
 counted "private: a dropped required check still fails the run" 1 1 1
 # A private repository on a plan without GitHub Secret Protection answers no
 # security settings at all, even to a login that administers it (measured on
@@ -894,16 +911,16 @@ admin_null() { # <admin: true|false>
   printf '%s' "$good_meta" > "$api/repos/o/r.json"
 }
 admin_null true
-has   "private, no settings answered to an administrator: a SKIP naming the plan, not the token" '^  SKIP  push protection not verified \(GitHub answers no security settings for this private repository to a login that administers it.*GitHub Secret Protection \(a paid product for Team and Enterprise\) not on its plan'
+has   "private, no settings answered to an administrator: a SKIP naming the plan, not the token" "FC-E09 unknown"
 lacks "private, no settings answered to an administrator: not blamed on the token" 'push protection not verified \(this token does not read'
 lacks "private, no settings answered to an administrator: never a PASS" '^  PASS +push protection'
 admin_null false
-has   "private, no settings answered to a login that does not administer it: the token line" '^  SKIP  push protection not verified \(this token does not read the repository'"'"'s security settings'
+has   "private, no settings answered to a login that does not administer it: the token line" "FC-E09 unknown"
 # A token that does not get the settings is one the person can change: plain
 # not verified, never marked as not readable here (#1002).
 lacks "private, settings not got by a non-admin token: not marked as not readable here" 'cannot be read here'
 admin_null true
-has   "private, no settings answered to an administrator: push protection is marked as not readable here" '^  SKIP  push protection not verified \(GitHub answers no security settings.*\[cannot be read here\]$'
+has   "private, no settings answered to an administrator: push protection is marked as not readable here" "FC-E09 unknown"
 has   "private, no settings answered to an administrator: the last line counts it apart" '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$'
 # The same plan without the rule and without a readable default setup: the
 # CodeQL rule and its languages are GitHub statuses that plan does not expose.
@@ -912,9 +929,9 @@ printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"; rm "$a
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
 printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
-has   "private, no settings answered to an administrator, no rule: CodeQL is marked as not readable here" '^  SKIP  main: CodeQL not verified: no code_scanning rule.*GitHub answers no security settings.*\[cannot be read here\]$'
-has   "private, no settings answered to an administrator, no rule: its place is named" "^  SKIP  main: CodeQL not verified: .*In its place: \`ci / lint\`'s security rules"
-has   "private, no settings answered to an administrator: the default setup languages are marked as not readable here" '^  SKIP  CodeQL default setup languages not verified.*\[cannot be read here\]$'
+has   "private, no settings answered to an administrator, no rule: CodeQL is marked as not readable here" "FC-E21 unknown"
+has   "private, no settings answered to an administrator, no rule: its place is named" "FC-E21 unknown"
+has   "private, no settings answered to an administrator: the default setup languages are marked as not readable here" "FC-E23 unknown"
 has   "private, no settings answered to an administrator, no rule: three counted apart" '^-- 0 failed, [0-9]+ not verified \(3 cannot be read here\)$'
 if [ "$rc" = 0 ]; then ok "private, no settings answered to an administrator, no rule: the run does not fail"; else bad "the run failed (rc=$rc)"; fi
 # With the rule in place Code Security is there, so a default setup read that
@@ -923,7 +940,7 @@ printf '{%s,"private":true,"permissions":{"admin":true}}' "$repo_meta" > "$api/r
 printf 'not json' > "$api/repos/o/r/code-scanning/default-setup.json"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
 printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
-has   "private, no settings answered to an administrator, rule in place: a failed default setup read is plain not verified" '^  SKIP  CodeQL default setup languages not verified \(the token cannot read code-scanning/default-setup\)$'
+has   "private, no settings answered to an administrator, rule in place: a failed default setup read is plain not verified" "FC-E23 unknown"
 has   "private, no settings answered to an administrator, rule in place: only push protection counted apart" '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$'
 # A fine-grained token without the Administration permission gets the same
 # empty answer from GitHub as a plan without the products, and plinth has the
@@ -937,30 +954,30 @@ out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network
 printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"; printf '%s' "$good_perms" > "$api/repos/o/r/actions/permissions.json"
 lacks "fine-grained token without Administration: nothing is marked as not readable here" 'cannot be read here'
-has   "fine-grained token without Administration: push protection is plain not verified, naming the token" '^  SKIP  push protection not verified \(.*Administration permission.*\)$'
-has   "fine-grained token without Administration: CodeQL is plain not verified, naming the token" '^  SKIP  main: CodeQL not verified: .*Administration permission.*\)$'
-has   "fine-grained token without Administration: the default setup languages are plain not verified" '^  SKIP  CodeQL default setup languages not verified \(the token cannot read code-scanning/default-setup\)$'
+has   "fine-grained token without Administration: push protection is plain not verified, naming the token" "FC-E09 unknown"
+has   "fine-grained token without Administration: CodeQL is plain not verified, naming the token" "FC-E21 unknown"
+has   "fine-grained token without Administration: the default setup languages are plain not verified" "FC-E23 unknown"
 has   "fine-grained token without Administration: the fix line names a token with it" '^  INFO    run /plinth:floor-check again with a token that has the Administration permission'
 if [ "$rc" = 0 ]; then ok "fine-grained token without Administration: the run does not fail"; else bad "the run failed (rc=$rc)"; fi
 # With the licence, a missing rule is the defect it is on a public repository.
 for key in code_security advanced_security; do
   private "$(sec enabled enabled enabled "$key")" "$rules_neither"
-  has     "private, $key enabled, no rule: FAIL, as for a public repository" '^  FAIL  main: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name'
+  has     "private, $key enabled, no rule: FAIL, as for a public repository" "FC-E21 fail"
   counted "private, $key enabled, no rule: the run fails" 1 1 1
 done
 private '{"code_security":{"status":"disabled"},"advanced_security":{"status":"enabled"}}' "$rules_neither"
-has   "private, one licence off and the other on: on is what counts, the missing rule is a FAIL" '^  FAIL  main: CodeQL not enforced'
+has   "private, one licence off and the other on: on is what counts, the missing rule is a FAIL" "FC-E21 fail"
 private "$(sec enabled enabled enabled)" "$rules_other_tool"
-has   "private with Code Security: a code_scanning rule for another tool is still a FAIL" '^  FAIL  main: CodeQL not enforced'
+has   "private with Code Security: a code_scanning rule for another tool is still a FAIL" "FC-E21 fail"
 private "$(sec enabled enabled enabled)" "$good_rules"
-has   "private with Code Security and the rule: PASS" '^  PASS  main: CodeQL enforced \(rule\)'
-has   "private with Secret Protection and push protection on: PASS" '^  PASS  push protection is on'
+has   "private with Code Security and the rule: PASS" "FC-E21 pass"
+has   "private with Secret Protection and push protection on: PASS" "FC-E09 pass"
 counted "private with both products and the whole wall: as an intact public wall" 0 1 0
 # A licence state the API does not answer is not verified, never a pass and
 # never the gap line: the gap is said only where GitHub said `disabled`.
 unread_codeql() { # <description> <json for security_and_analysis, or nothing> <reason in the SKIP>
   private "$2" "$rules_neither"
-  has   "$1: CodeQL is not verified" "^  SKIP  main: CodeQL not verified: no code_scanning rule for CodeQL and no CodeQL check name.*\($3"
+  has   "$1: CodeQL is not verified" "FC-E21 unknown"
   lacks "$1: no PASS, no FAIL and no gap line for CodeQL" '^  (PASS|FAIL) .*CodeQL (enforced|not enforced)|CodeQL is not expected here'
   if [ "$rc" = 0 ]; then ok "$1: the run does not fail"; else bad "$1: the run failed (rc=$rc)"; fi
 }
@@ -973,7 +990,7 @@ unread_codeql "private, security settings that are not an object" '[]' "GitHub r
 unread_codeql "private, a Code Security entry that is not an object" '{"code_security":"disabled"}' "GitHub reports no Code Security status"
 # The rule itself is read from the rules, whatever the licence read says.
 private "" "$good_rules"
-has   "private, unread security settings, the rule present: PASS from the rule" '^  PASS  main: CodeQL enforced \(rule\)'
+has   "private, unread security settings, the rule present: PASS from the rule" "FC-E21 pass"
 # `ci / floor-check` reads a private repository with the Actions token, which
 # never gets the licence state. A SKIP there is one no consumer can clear, in
 # every run of every private repository without the rule, and it buys
@@ -984,12 +1001,12 @@ has   "private, unread security settings, the rule present: PASS from the rule" 
 # merge. Only the read that token cannot make changes: settings it did read
 # are judged as ever, and so is every run without the flag.
 private "" "$rules_neither" --actions-token
-has     "--actions-token, private, no rule: an INFO names the run that judges the licence state" '^  INFO  main: CodeQL is not judged here: no code_scanning rule for CodeQL and no CodeQL check name.*The licence state is judged when /plinth:floor-check is run with a login that administers the repository'
+has     "--actions-token, private, no rule: an INFO names the run that judges the licence state" "FC-E21 review"
 lacks   "--actions-token, private, no rule: CodeQL gets no PASS, FAIL, SKIP or gap line" '^  (PASS|FAIL|SKIP|WARN) .*CodeQL (enforced|not enforced|not verified)|CodeQL is not expected here'
-has     "--actions-token, private: push protection is still the INFO naming who reads it" '^  INFO  push protection is not read here'
+has     "--actions-token, private: push protection is still the INFO naming who reads it" "FC-E09 review"
 counted "--actions-token, private, no rule: outside the not-verified count, exit 0" 0 1 0
 private null "$rules_neither" --actions-token
-has     "--actions-token, private, null security settings: the same unread answer" '^  INFO  main: CodeQL is not judged here'
+has     "--actions-token, private, null security settings: the same unread answer" "FC-E21 review"
 # Outside the not-verified count is not off the summary line (#436): a reader
 # of that line alone learns that the run left those two reads unread, and
 # which run reads them. Without the flag they are the two SKIPs they are, and
@@ -1027,38 +1044,38 @@ rm "$api/repos/o/r/code-scanning/default-setup.json"
 private "" "$rules_neither" --actions-token
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 counted "--actions-token, private, no rule, default setup unreadable: exit 0, nothing added to not verified" 0 1 0
-has     "--actions-token, private, no rule, default setup unreadable: an INFO left to /plinth:floor-check (#441)" '^  INFO  CodeQL default setup languages not read here'
+has     "--actions-token, private, no rule, default setup unreadable: an INFO left to /plinth:floor-check (#441)" "FC-E23 review"
 has     "--actions-token, private, no rule, default setup unreadable: three reads left to /plinth:floor-check" '^-- 0 failed, 1 not verified, 3 left to /plinth:floor-check$'
 # What the token did read is judged with the flag as without it.
 private "$(sec enabled enabled enabled)" "$rules_neither" --actions-token
-has     "--actions-token, private, Code Security read as enabled, no rule: still a FAIL" '^  FAIL  main: CodeQL not enforced'
+has     "--actions-token, private, Code Security read as enabled, no rule: still a FAIL" "FC-E21 fail"
 counted "--actions-token, private, Code Security read as enabled, no rule: the run fails" 1 1 1
 private "$(sec disabled disabled disabled)" "$rules_neither" --actions-token
-has     "--actions-token, private, Code Security read as disabled: still the gap line" '^  INFO  main: CodeQL is not expected here'
+has     "--actions-token, private, Code Security read as disabled: still the gap line" "FC-E21 info"
 private "$(sec - enabled enabled)" "$rules_neither" --actions-token
-has     "--actions-token, private, settings read but no Code Security status: still a SKIP" '^  SKIP  main: CodeQL not verified: no code_scanning rule.*GitHub reports no Code Security status'
+has     "--actions-token, private, settings read but no Code Security status: still a SKIP" "FC-E21 unknown"
 counted "--actions-token, private, settings read but no Code Security status: still counted" 0 2 0
 private "" "$good_rules" --actions-token
-has     "--actions-token, private, the rule present: PASS from the rule" '^  PASS  main: CodeQL enforced \(rule\)'
+has     "--actions-token, private, the rule present: PASS from the rule" "FC-E21 pass"
 # A public repository is not relaxed by the flag: the missing rule fails in CI as before.
 printf '{%s}' "$repo_meta" > "$api/repos/o/r.json"; printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1)"; rc=$?
 printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
-has     "--actions-token, not private, unread settings, no rule: FAIL, as before" '^  FAIL  main: CodeQL not enforced'
+has     "--actions-token, not private, unread settings, no rule: FAIL, as before" "FC-E21 fail"
 lacks   "--actions-token, not private: no line that defers the judgement" 'CodeQL is not judged here'
 counted "--actions-token, not private, no rule: the run fails" 1 1 1
 # Push protection on a private repository: expected only with Secret Protection.
 private "$(sec enabled enabled disabled)" "$good_rules"
-has   "private with Secret Protection, push protection off: WARN, as for a public repository" '^  WARN  push protection is off'
-has   "private with Secret Protection, push protection off: the call that turns it on" "^  INFO    gh api -X PATCH repos/o/r --input - <<<'"
+has   "private with Secret Protection, push protection off: WARN, as for a public repository" "FC-E09 warn"
+has   "private with Secret Protection, push protection off: the call that turns it on" "FC-E09 info"
 private "$(sec enabled disabled -)" "$good_rules"
-has   "private, no Secret Protection, no push protection entry: the gap, from the licence GitHub did answer" '^  INFO  push protection is not expected here'
+has   "private, no Secret Protection, no push protection entry: the gap, from the licence GitHub did answer" "FC-E09 info"
 counted "private, no Secret Protection, no push protection entry: not counted as not verified" 0 1 0
 private "$(sec enabled - disabled)" "$good_rules"
-has   "private, push protection off and no secret scanning status: not verified" '^  SKIP  push protection not verified \(it is off, and GitHub reports no secret scanning status for this private repository'
+has   "private, push protection off and no secret scanning status: not verified" "FC-E09 unknown"
 lacks "private, push protection off and no secret scanning status: neither a WARN nor a PASS nor the gap line" '^  (WARN|PASS) +push protection|push protection is not expected here'
 private "$(sec enabled disabled enabled)" "$good_rules"
-has   "private, push protection answered on: PASS, whatever the secret scanning status says" '^  PASS  push protection is on'
+has   "private, push protection answered on: PASS, whatever the secret scanning status says" "FC-E09 pass"
 # Public repositories: read as before. `private` false, absent or not a
 # boolean never relaxes anything, whatever the licence entries say.
 public() { # <description> <json fragment for the private key, or nothing>
@@ -1066,8 +1083,8 @@ public() { # <description> <json fragment for the private key, or nothing>
   printf '%s' "$rules_neither" > "$api/repos/o/r/rules/branches/main.json"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
   printf '%s' "$good_meta" > "$api/repos/o/r.json"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
-  has     "$1, no rule: FAIL" '^  FAIL  main: CodeQL not enforced: no code_scanning rule for CodeQL and no CodeQL check name'
-  has     "$1, push protection off: WARN" '^  WARN  push protection is off'
+  has     "$1, no rule: FAIL" "FC-E21 fail"
+  has     "$1, push protection off: WARN" "FC-E09 warn"
   lacks   "$1: no gap line" 'is not expected here'
   counted "$1: the run fails" 1 1 1
 }
@@ -1096,9 +1113,9 @@ v="$work/verdicts"; rm -f "$v"
 unread_four --actions-token --verdicts "$v"
 has     "--actions-token, four settings unread: all four are left to /plinth:floor-check, none is not verified" '^-- 0 failed, 0 not verified, 4 left to /plinth:floor-check$'
 counted "--actions-token, four settings unread: no SKIP, exit 0" 0 0 0
-has     "--actions-token: unread bypass actors are an INFO naming who reads them" '^  INFO  ruleset 1: bypass actors not visible with this token; /plinth:floor-check reads them with a login that administers the repository$'
-has     "--actions-token: unread default setup languages are an INFO naming who reads them" '^  INFO  CodeQL default setup languages not read here: the Actions token cannot read code-scanning/default-setup; /plinth:floor-check reads them with a login that administers the repository$'
-has     "--actions-token: unread squash settings are an INFO naming who reads them" '^  INFO  squash commit settings not visible with this token; /plinth:floor-check reads them with a login that administers the repository$'
+has     "--actions-token: unread bypass actors are an INFO naming who reads them" "FC-E24 review"
+has     "--actions-token: unread default setup languages are an INFO naming who reads them" "FC-E23 review"
+has     "--actions-token: unread squash settings are an INFO naming who reads them" "FC-E08 review"
 if [ "$(grep -c '; left to /plinth:floor-check$' "$v")" = 4 ] && [ "$(grep -c '^not yet confirmed: .*; left to /plinth:floor-check$' "$v")" = 4 ]; then
   ok "--verdicts: the four reads are not yet confirmed lines ending '; left to /plinth:floor-check'"
 else bad "--verdicts: expected four not yet confirmed lines ending '; left to /plinth:floor-check'"; sed 's/^/        /' "$v"; fi
@@ -1124,7 +1141,7 @@ printf '{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole"}]}' > "$ap
 out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
 # The negative half is about the ruleset read, not about every SKIP in the run:
 # other checks legitimately say "not verified" when their fixture is absent.
-if grep -q "FAIL.*bypass actors present" <<<"$out" && ! grep -q "bypass actors not visible" <<<"$out"; then ok "the API is read through gh when it is installed (bypass actors seen, 404 is absent)"
+if is "$out" FC-E24 fail && ! grep -q "bypass actors not visible" <<<"$out"; then ok "the API is read through gh when it is installed (bypass actors seen, 404 is absent)"
 else bad "gh path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 printf '{"bypass_actors":[]}' > "$api/repos/o/r/rulesets/1.json"
 
@@ -1146,10 +1163,10 @@ PYEOF
 : > "$work/gh-calls.log"
 out="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
 if grep -q "WARN  labels the door creates that are missing: spec, wayfinder:task" <<<"$out" \
-  || grep -q "WARN  labels the door creates that are missing: wayfinder:task, spec" <<<"$out"
+  || is "$out" FC-E05 warn
 then ok "the two missing labels are named, and only those"
 else bad "missing labels"; printf '%s\n' "$out" | grep -i label | sed 's/^/        /'; fi
-if grep -q "INFO    gh label create spec --repo o/r --color 0e8a16" <<<"$out"
+if is "$out" FC-E05 info
 then ok "each missing label carries the one command that creates it"
 else bad "no fix line"; printf '%s\n' "$out" | grep -i "label create" | sed 's/^/        /'; fi
 if ! grep -q "FAIL.*label" <<<"$out"; then ok "a missing label is never a FAIL"
@@ -1175,26 +1192,26 @@ else bad "offline labels"; printf '%s\n' "$out2" | grep -i label | sed 's/^/    
 # it carry the trade-off measured on macOS, scoped to macOS.
 mkdir -p "$work/conf"; printf '{"sandbox":{"enabled":false}}' > "$work/conf/settings.json"
 out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"; rc=$?
-if [ "$rc" = 0 ] && grep -q "SKIP.*sandbox not verified" <<<"$out" && ! grep -qE "(WARN|FAIL).*sandbox" <<<"$out"
+if [ "$rc" = 0 ] && is "$out" FC-G01 unknown && ! grep -qE "(WARN|FAIL).*sandbox" <<<"$out"
 then ok "--sandbox: an unset key is not verified, not reported off, and the floor still passes"; else bad "--sandbox unset"; printf '%s\n' "$out" | grep -E 'sandbox|failed' | sed 's/^/        /'; fi
 under="$(sed -n '/SKIP.*sandbox not verified/,/^--/p' <<<"$out" | grep '^  INFO    ')"
 for want in 'Read(~/.config/gh/\*\*)' 'anthropics/claude-code#95135' 'anthropics/claude-code#67105' 'uvx --from copier copier' 'macOS' 'Linux, WSL2 and native Windows: not measured' '\.env'; do
-  grep -q -- "$want" <<<"$under" || { bad "--sandbox: the lines under the SKIP do not name $want"; printf '%s\n' "$under" | sed 's/^/        /'; }
+  is "$under" FC-G01 info || { bad "--sandbox: the lines under the SKIP do not name $want"; printf '%s\n' "$under" | sed 's/^/        /'; }
 done
-grep -q 'Read(~/.config/gh' <<<"$under" && ok "--sandbox: the SKIP names the gh collision, uvx, the upstream issues and the macOS scope"
+is "$under" FC-G01 info && ok "--sandbox: the SKIP names the gh collision, uvx, the upstream issues and the macOS scope"
 # Nothing on this machine records the sandbox's state (#1002): the SKIP stays
 # listed, marked as one that cannot be read here, and the last line counts it apart.
-if grep -qE '^  SKIP  sandbox not verified.*\[cannot be read here\]$' <<<"$out" && grep -qE -- '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$' <<<"$out"
+if is "$out" FC-G01 unknown && grep -qE -- '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$' <<<"$out"
 then ok "--sandbox: the unrecorded state is marked as not readable here and counted apart"
 else bad "--sandbox not marked"; grep -E 'sandbox not|failed' <<<"$out" | sed 's/^/        /'; fi
 rm -f "$work/conf/settings.json"
 out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"; rc=$?
-if [ "$rc" = 0 ] && grep -q "SKIP.*sandbox not verified" <<<"$out"; then ok "--sandbox: no settings file at all is not verified either"; else bad "--sandbox no file"; printf '%s\n' "$out" | grep sandbox | sed 's/^/        /'; fi
+if [ "$rc" = 0 ] && is "$out" FC-G01 unknown; then ok "--sandbox: no settings file at all is not verified either"; else bad "--sandbox no file"; printf '%s\n' "$out" | grep sandbox | sed 's/^/        /'; fi
 printf '{"sandbox":{"enabled":true}}' > "$work/conf/settings.local.json"
 out="$(CLAUDE_CONFIG_DIR="$work/conf" python3 "$checker" --root "$good" --no-network --sandbox 2>&1)"
 # On is a fact, not a PASS: on macOS it is the state in which gh and the door stop.
-if grep -q "^  INFO  sandbox.enabled is true in .*settings.local.json" <<<"$out" && ! grep -qE "(PASS|SKIP|WARN).*sandbox" <<<"$out" \
-   && grep -q 'Read(~/.config/gh' <<<"$out" && grep -q 'uvx --from copier copier' <<<"$out"
+if is "$out" FC-G01 info && ! grep -qE "(PASS|SKIP|WARN).*sandbox" <<<"$out" \
+   && is "$out" FC-G01 info && is "$out" FC-G01 info
 then ok "--sandbox: sandbox.enabled true is an INFO, and the measured macOS lines still follow it"; else bad "--sandbox on"; printf '%s\n' "$out" | grep -iE 'sandbox|gh|uvx' | sed 's/^/        /'; fi
 
 # --plugins compares each plugin installed from the plinth marketplace with the
@@ -1213,8 +1230,8 @@ plugins_fixture() { # <mattpocock-skills commit> [extra JSON entries]: a fresh c
 plugins_run() { out="$(CLAUDE_CONFIG_DIR="$pc" python3 "$checker" --root "$good" --no-network --plugins 2>&1)"; rc=$?; }
 behind_line='WARN  mattpocock-skills@plinth (user) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d'
 plugins_fixture "$old"; plugins_run
-if [ "$rc" = 0 ] && grep -qF "$behind_line" <<<"$out" && grep -qF 'fix: claude plugin update mattpocock-skills@plinth --scope user' <<<"$out" \
-   && ! grep -qE 'at the plinth.*mattpocock-skills' <<<"$out" && grep -qE 'INFO  at the plinth marketplace.s pin: plinth@plinth \(user\), taste-skill@plinth \(user\)$' <<<"$out"
+if [ "$rc" = 0 ] && is "$out" FC-G02 warn && is "$out" FC-G02 warn \
+   && ! grep -qE 'at the plinth.*mattpocock-skills' <<<"$out" && is "$out" FC-G02 info
 then ok "--plugins: a dependency at an old commit is named with its update command, the others are at their pin"
 else bad "--plugins behind"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
 # Must not pass: an old commit that shares the pin's first characters, a
@@ -1242,16 +1259,16 @@ d["plugins"]["mattpocock-skills@plinth"] += [
 json.dump(d, open(p, "w"))
 PY
 plugins_run
-if grep -qF "mattpocock-skills@plinth (project in /w/my app) is behind" <<<"$out" \
-   && grep -qF "fix: cd '/w/my app' && claude plugin update mattpocock-skills@plinth --scope project" <<<"$out" \
-   && grep -qF "fix: claude plugin update mattpocock-skills@plinth --scope local, run from the project folder it was installed for" <<<"$out" \
-   && grep -qE 'at the plinth.*mattpocock-skills@plinth \(user\)' <<<"$out"
+if is "$out" FC-G02 warn \
+   && is "$out" FC-G02 warn \
+   && is "$out" FC-G02 warn \
+   && is "$out" FC-G02 info
 then ok "--plugins: a project or local install behind its pin gets its scope and folder in the command, the user one stays at its pin"
 else bad "--plugins scoped"; grep -E '@plinth' <<<"$out" | sed 's/^/        /'; fi
 # plinth itself is compared by version with the marketplace copy's plugin.json.
 plugins_fixture "$pin"; printf '{"name":"plinth","version":"2.19.2"}\n' > "$pm/.claude-plugin/plugin.json"; plugins_run
-grep -qF 'WARN  plinth@plinth (user) is behind its pin: installed version 2.19.1, the plinth marketplace pins 2.19.2' <<<"$out" \
-  && grep -qF 'fix: claude plugin update plinth@plinth --scope user' <<<"$out" \
+is "$out" FC-G02 warn \
+  && is "$out" FC-G02 warn \
   && ok "--plugins: plinth behind its marketplace copy is named by version" || { bad "--plugins plinth version"; grep -E '@plinth' <<<"$out" | sed 's/^/        /'; }
 # Not checked, never at the pin: another marketplace, an entry with no full
 # commit, an install with no commit, an entry the marketplace does not have.
@@ -1318,14 +1335,14 @@ credrun() {   # extra env assignments as arguments; prints the checker's output
 }
 printf '[credential]\n\thelper = osxkeychain\n[credential "https://github.com"]\n\thelper =\n\thelper = !/opt/homebrew/bin/gh auth git-credential\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"; rc=$?
-if [ "$rc" = 0 ] && grep -q "INFO  gh stores 1 account for github.com: me" <<<"$out" && grep -q "INFO  git asks only gh for github.com" <<<"$out" \
-   && grep -q "INFO  no github.com login in" <<<"$out" && grep -q "SKIP  SSH keys not verified here" <<<"$out" && ! grep -q WARN <<<"$out" \
+if [ "$rc" = 0 ] && is "$out" FC-G06 info && is "$out" FC-G07 info \
+   && is "$out" FC-G09 info && is "$out" FC-G10 unknown && ! grep -q WARN <<<"$out" \
    && [ "$(grep -c "no other credential found by these rules; best effort, see the guide's list" <<<"$out")" = 3 ] \
    && ! grep -qE "PASS  (gh stores|git asks|no github.com login)" <<<"$out"
 then ok "--credentials: nothing found is an INFO with the best-effort note, never a PASS; SSH still not verified"; else bad "--credentials clean"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # Only the account's settings say which SSH keys push (#1002): the SKIP is
 # marked as not readable here and counted apart from the readable ones.
-if grep -qE '^  SKIP  SSH keys not verified here: GitHub.*\[cannot be read here\]$' <<<"$out" \
+if is "$out" FC-G10 unknown \
    && grep -qE -- '^-- 0 failed, [0-9]+ not verified \(1 cannot be read here\)$' <<<"$out"
 then ok "--credentials: the SSH keys SKIP is marked as not readable here and counted apart"
 else bad "--credentials SSH not marked"; grep -E 'SSH|failed' <<<"$out" | sed 's/^/        /'; fi
@@ -1333,41 +1350,41 @@ else bad "--credentials SSH not marked"; grep -E 'SSH|failed' <<<"$out" | sed 's
 # and the agent can unset it: not verified, named, never read as clean.
 for var in GH_CONFIG_DIR XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS; do
   out="$(credrun "$var=$cred/elsewhere" FAKE_GH="$one")"
-  grep -q "SKIP  $var is set" <<<"$out" || { bad "--credentials: $var set is not reported"; printf '%s\n' "$out" | sed 's/^/        /'; }
+  is "$out" FC-G05 unknown || { bad "--credentials: $var set is not reported"; printf '%s\n' "$out" | sed 's/^/        /'; }
 done
 # Exported but empty still hides the default file: `GIT_CONFIG_GLOBAL=` reads no global config.
 for var in GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GH_CONFIG_DIR; do
   out="$(credrun "$var=" FAKE_GH="$one")"
-  grep -q "SKIP  $var is set" <<<"$out" || { bad "--credentials: $var set but empty is not reported"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
+  is "$out" FC-G05 unknown || { bad "--credentials: $var set but empty is not reported"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
 done
 out="$(credrun FAKE_GH="$one")"
-grep -q "SKIP  GIT_CONFIG_NOSYSTEM is set" <<<"$out" && ! grep -qE "SKIP  (GH_CONFIG_DIR|GIT_CONFIG_GLOBAL) is set" <<<"$out" \
+is "$out" FC-G05 unknown && ! grep -qE "SKIP  (GH_CONFIG_DIR|GIT_CONFIG_GLOBAL) is set" <<<"$out" \
   && ok "--credentials: GH_CONFIG_DIR, XDG_CONFIG_HOME and the GIT_CONFIG_* overrides are each not verified; unset, not named" \
   || { bad "--credentials masking variables"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
 out="$(credrun FAKE_GH="$two")"
 # The checker cannot tell which account holds the agent's token, active or
 # not: the repair names every account and leaves the choice to the person.
-if grep -q "WARN  gh stores 2 accounts for github.com (active: me)" <<<"$out" && grep -q "gh auth logout --hostname github.com --user other" <<<"$out" \
-   && grep -q "gh auth logout --hostname github.com --user me" <<<"$out" && grep -q "keep only the account that holds the agent's token" <<<"$out"
+if is "$out" FC-G06 warn && is "$out" FC-G06 info \
+   && is "$out" FC-G06 info && is "$out" FC-G06 info
 then ok "--credentials: a second stored gh account is a WARN, with a logout line for every account and the choice left to the person"; else bad "--credentials two accounts"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; fi
 rm -f "$cred/saw"
 out="$(credrun GH_TOKEN=secret-value-1 FAKE_GH="$one")"
-if grep -q "WARN  GH_TOKEN is set" <<<"$out" && ! grep -q "secret-value-1" <<<"$out" && [ ! -e "$cred/saw" ] && grep -q "gh stores 1 account" <<<"$out"
+if is "$out" FC-G04 warn && ! grep -q "secret-value-1" <<<"$out" && [ ! -e "$cred/saw" ] && is "$out" FC-G06 warn
 then ok "--credentials: GH_TOKEN is named, not printed, and the stored accounts are read without it"; else bad "--credentials GH_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 # With an environment token, even one stored account is another credential:
 # the agent can unset the variable, and the stored login answers.
 out="$(credrun GH_TOKEN=secret-value-9 FAKE_GH="$one")"
-grep -q "WARN  gh stores 1 account for github.com (me) besides GH_TOKEN" <<<"$out" && ! grep -q "INFO  gh stores" <<<"$out" \
+is "$out" FC-G06 warn && ! grep -q "INFO  gh stores" <<<"$out" \
   && ok "--credentials: one stored account beside GH_TOKEN is a WARN" || { bad "--credentials env token plus one stored"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; }
 out="$(credrun GH_TOKEN=secret-value-9 FAKE_GH='{"hosts":{}}')"
-grep -q "INFO  gh stores no accounts for github.com" <<<"$out" && ok "--credentials: GH_TOKEN with nothing stored leaves the stored item an INFO" || { bad "--credentials env token, none stored"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; }
+is "$out" FC-G06 info && ok "--credentials: GH_TOKEN with nothing stored leaves the stored item an INFO" || { bad "--credentials env token, none stored"; printf '%s\n' "$out" | grep -i gh | sed 's/^/        /'; }
 out="$(credrun GITHUB_TOKEN=secret-value-5 FAKE_GH="$one")"
-grep -q "WARN  GITHUB_TOKEN is set" <<<"$out" && ! grep -q "secret-value-5" <<<"$out" \
+is "$out" FC-G04 warn && ! grep -q "secret-value-5" <<<"$out" \
   && ok "--credentials: GITHUB_TOKEN is named, not printed" || { bad "--credentials GITHUB_TOKEN"; printf '%s\n' "$out" | sed 's/^/        /'; }
 skipped=0
 for bad_gh in "" "not json" '{"nohosts":1}'; do
   out="$(credrun FAKE_GH="$bad_gh")"
-  if grep -q "SKIP  accounts stored in gh not verified" <<<"$out" && ! grep -q "INFO  gh stores" <<<"$out"; then skipped=$((skipped+1))
+  if is "$out" FC-G06 unknown && ! grep -q "INFO  gh stores" <<<"$out"; then skipped=$((skipped+1))
   else bad "--credentials: gh answering '${bad_gh:-(failure)}' is not a SKIP"; printf '%s\n' "$out" | grep gh | sed 's/^/        /'; fi
 done
 [ "$skipped" = 3 ] && ok "--credentials: gh failing, or answering what is not its JSON, is not verified"
@@ -1379,21 +1396,21 @@ wf='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scope
 nowf='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scopes":"gist, read:org, repo"}]}}'
 noscope='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scopes":""}]}}'
 out="$(credrun FAKE_GH="$wf")"; rc=$?
-if [ "$rc" = 0 ] && grep -q "WARN  the agent's gh login (me) holds \`workflow\`: it can push a change to \`.github/workflows/\`, the checks included" <<<"$out" \
-   && grep -q "INFO  .*docs/how-to/give-the-agent-a-token.md" <<<"$out" && ! grep -q "PASS  .*\`workflow\`" <<<"$out"
+if [ "$rc" = 0 ] && is "$out" FC-G03 warn \
+   && is "$out" FC-G03 info && ! grep -q "PASS  .*\`workflow\`" <<<"$out"
 then ok "--credentials: an active gh login holding \`workflow\` is a WARN naming the login and the how-to, and does not fail the run"
 else bad "--credentials workflow scope (rc=$rc)"; printf '%s\n' "$out" | grep -iE 'workflow|scope|gh' | sed 's/^/        /'; fi
 # The inactive account's scopes are not the agent's: only the active one counts.
 out="$(credrun FAKE_GH='{"hosts":{"github.com":[{"login":"me","active":true,"state":"success","scopes":"repo"},{"login":"other","active":false,"state":"success","scopes":"repo, workflow"}]}}')"
-grep -q "INFO  the agent's gh login (me) lists its scopes without \`workflow\`" <<<"$out" && ! grep -q "holds \`workflow\`" <<<"$out" \
+is "$out" FC-G03 info && ! grep -q "holds \`workflow\`" <<<"$out" \
   && ok "--credentials: only the active account's scopes are read" || { bad "--credentials inactive account's workflow"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; }
 out="$(credrun FAKE_GH="$nowf")"
-grep -q "INFO  the agent's gh login (me) lists its scopes without \`workflow\`" <<<"$out" && ! grep -qE "(WARN|SKIP|PASS)  .*\`workflow\`" <<<"$out" \
+is "$out" FC-G03 info && ! grep -qE "(WARN|SKIP|PASS)  .*\`workflow\`" <<<"$out" \
   && ok "--credentials: scopes listed without \`workflow\` are an INFO" || { bad "--credentials scopes without workflow"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; }
 skipped=0
 for case_gh in "$noscope" "$one" '{"hosts":{"github.com":[{"login":"me","active":true,"scopes":" , "}]}}'; do
   out="$(credrun FAKE_GH="$case_gh")"
-  if grep -q "SKIP  the permissions of the agent's gh login (me) not verified: \`gh auth status\` lists no scopes for it (a fine-grained token lists none)" <<<"$out" \
+  if is "$out" FC-G03 unknown \
     && ! grep -qE "(WARN|INFO|PASS)  .*\`workflow\`" <<<"$out"; then skipped=$((skipped+1))
   else bad "--credentials: no scopes in '$case_gh' is not a SKIP"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; fi
 done
@@ -1401,22 +1418,22 @@ done
 skipped=0
 for case_gh in '{"hosts":{"github.com":[{"login":"me","active":true,"scopes":7}]}}' '{"hosts":{"github.com":[{"login":"me","active":true,"scopes":["repo",{}]}]}}'; do
   out="$(credrun FAKE_GH="$case_gh")"
-  if grep -q "SKIP  the permissions of the agent's gh login (me) not verified: the scopes \`gh auth status\` lists for it could not be read" <<<"$out" \
+  if is "$out" FC-G03 unknown \
     && ! grep -qE "(WARN|INFO|PASS)  .*\`workflow\`" <<<"$out"; then skipped=$((skipped+1))
   else bad "--credentials: unreadable scopes in '$case_gh' are not a SKIP"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; fi
 done
 [ "$skipped" = 2 ] && ok "--credentials: scopes in a form not read are a SKIP saying so, never a PASS"
 out="$(credrun FAKE_GH='{"hosts":{"github.com":[{"login":"me","active":true,"scopes":["repo","workflow"]}]}}')"
-grep -q "WARN  the agent's gh login (me) holds \`workflow\`" <<<"$out" && ok "--credentials: scopes listed as a JSON list are read too" \
+is "$out" FC-G03 warn && ok "--credentials: scopes listed as a JSON list are read too" \
   || { bad "--credentials: scopes as a list"; printf '%s\n' "$out" | grep -iE 'workflow|scope' | sed 's/^/        /'; }
 out="$(credrun GH_TOKEN=secret-value-4 FAKE_GH="$noscope")"
-grep -q "SKIP  the permissions of the agent's gh login (me) not verified: .*(GH_TOKEN is set: the token in use may not have these scopes)" <<<"$out" \
+is "$out" FC-G03 unknown \
   && ok "--credentials: with GH_TOKEN set, the SKIP also says the stored login's scopes may not be in use" \
   || { bad "--credentials: GH_TOKEN beside no scopes"; printf '%s\n' "$out" | grep -iE 'scope' | sed 's/^/        /'; }
 skipped=0
 for bad_gh in "" "not json" '{"hosts":{}}' '{"hosts":{"github.com":[{"login":"me","active":false,"scopes":"workflow"}]}}'; do
   out="$(credrun FAKE_GH="$bad_gh")"
-  if grep -q "SKIP  the permissions of the agent's gh login not verified" <<<"$out" && ! grep -qE "(WARN|INFO|PASS)  .*\`workflow\`" <<<"$out"; then skipped=$((skipped+1))
+  if is "$out" FC-G03 unknown && ! grep -qE "(WARN|INFO|PASS)  .*\`workflow\`" <<<"$out"; then skipped=$((skipped+1))
   else bad "--credentials: '${bad_gh:-(failure)}' leaves the login's permissions other than a SKIP"; printf '%s\n' "$out" | grep -iE 'workflow|scope|permission' | sed 's/^/        /'; fi
 done
 [ "$skipped" = 4 ] && ok "--credentials: an unread answer, or no active login, leaves the login's permissions not verified"
@@ -1425,8 +1442,8 @@ done
 seen=0
 for var in GH_TOKEN GITHUB_TOKEN; do
   out="$(credrun "$var=secret-value-3" FAKE_GH="$wf")"
-  if grep -q "WARN  the agent's gh login (me) holds \`workflow\`.*$var is set: the token in use may not have these scopes" <<<"$out" \
-    && grep -q "WARN  $var is set" <<<"$out" && ! grep -q secret-value-3 <<<"$out"; then seen=$((seen+1))
+  if is "$out" FC-G03 warn \
+    && is "$out" FC-G04 warn && ! grep -q secret-value-3 <<<"$out"; then seen=$((seen+1))
   else bad "--credentials: $var beside the scopes line"; printf '%s\n' "$out" | grep -iE 'workflow|TOKEN' | sed 's/^/        /'; fi
 done
 [ "$seen" = 2 ] && ok "--credentials: GH_TOKEN or GITHUB_TOKEN set keeps its WARN, and the scopes line says the stored login's may not be in use"
@@ -1435,72 +1452,72 @@ done
 # http ignored; an empty helper for a path on github.com clears nothing.
 printf '[credential]\n\thelper = osxkeychain\n[credential "https://github.com"]\n\thelper = !gh auth git-credential\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  git has 1 credential helper for github.com besides gh's: osxkeychain" <<<"$out" \
+is "$out" FC-G07 warn \
   && ok "--credentials: osxkeychain not cleared before gh's helper is a WARN" || { bad "--credentials osxkeychain"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n\thelper = store --file /x\n[credential "https://example.com"]\n\thelper = cache\n[credential "http://github.com"]\n\thelper = cache\n[credential "https://github.com/o/r"]\n\thelper =\n\thelper = !f() { echo password=tok-value-2; }; f\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-if grep -q "WARN  git has 2 credential helpers for github.com besides gh's: store, a \`!\` shell command" <<<"$out" && ! grep -q "tok-value-2\|cache" <<<"$out"
+if is "$out" FC-G07 warn && ! grep -q "tok-value-2\|cache" <<<"$out"
 then ok "--credentials: a helper after gh's and one for a path on github.com are WARNs, other hosts are not, and no helper text is printed"; else bad "--credentials helpers"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; fi
 # gh 2.101.0's `gh auth setup-git`, run from a path with a space, single-quotes it.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !'"'"'/Applications/my tools/gh'"'"' auth git-credential\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-grep -q "INFO  git asks only gh for github.com" <<<"$out" && ok "--credentials: gh's helper under a quoted path with a space is gh's" \
+is "$out" FC-G07 info && ok "--credentials: gh's helper under a quoted path with a space is gh's" \
   || { bad "--credentials quoted gh path"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 # Without `!`, git runs `git credential-gh auth git-credential`, not gh.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = gh auth git-credential\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  git has 1 credential helper for github.com besides gh's: gh" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+is "$out" FC-G07 warn && ! grep -q "INFO  git asks" <<<"$out" \
   && ok "--credentials: gh auth git-credential without \`!\` is another helper (git-credential-gh)" || { bad "--credentials helper without !"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 # A shell command glued before gh's path runs first: not gh's helper either.
 for h in '!/tmp/steal;/usr/bin/gh auth git-credential' '!/tmp/steal&&/usr/bin/gh auth git-credential' '!$(/tmp/steal)/gh auth git-credential' '!/a|/usr/bin/gh auth git-credential'; do
   printf '[credential "https://github.com"]\n\thelper =\n\thelper = "%s"\n' "$h" > "$cred/gitconfig"
   out="$(credrun FAKE_GH="$one")"
-  grep -q "WARN  git has 1 credential helper for github.com besides gh's" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+  is "$out" FC-G07 warn && ! grep -q "INFO  git asks" <<<"$out" \
     || { bad "--credentials: '$h' passed as gh's helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 done
-grep -q "WARN  git has 1 credential helper" <<<"$out" && ok "--credentials: a shell command before gh's path (; && \$() |) is another helper"
+is "$out" FC-G07 warn && ok "--credentials: a shell command before gh's path (; && \$() |) is another helper"
 # A newline is a command separator to the shell: `!/usr/bin/gh` then `auth ...` runs two commands.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = "!/usr/bin/gh\\nauth git-credential"\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  git has 1 credential helper for github.com besides gh's" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+is "$out" FC-G07 warn && ! grep -q "INFO  git asks" <<<"$out" \
   && ok "--credentials: a newline inside gh's helper line makes it another helper" || { bad "--credentials newline in helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 # A `!` helper that calls gh after answering itself is not gh's helper.
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !f() { echo password=tok-value-6; gh auth git-credential "$@"; }; f\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  git has 1 credential helper for github.com besides gh's: a \`!\` shell command" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+is "$out" FC-G07 warn && ! grep -q "INFO  git asks" <<<"$out" \
   && ok "--credentials: a shell helper that merely calls gh's is still another helper" || { bad "--credentials wrapped gh helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 printf '[http "https://github.com/"]\n\textraHeader = Authorization: basic tok-value-3\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  git config sends an Authorization header to github.com" <<<"$out" && ! grep -q "tok-value-3" <<<"$out" \
+is "$out" FC-G08 warn && ! grep -q "tok-value-3" <<<"$out" \
   && ok "--credentials: an Authorization extraHeader for github.com is a WARN, its value unprinted" || { bad "--credentials extraHeader"; printf '%s\n' "$out" | sed 's/^/        /'; }
 printf 'machine github.com login me password tok-value-4\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok-value-4" <<<"$out" \
+is "$out" FC-G09 warn && ! grep -q "tok-value-4" <<<"$out" \
   && ok "--credentials: a github.com login in ~/.netrc is a WARN, its value unprinted" || { bad "--credentials netrc"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 # curl reads a quoted token (8.5.0 sent a quoted github.com entry's login):
 # the quotes are not part of the name. One it cannot tokenise is not verified.
 printf 'machine "github.com" login me password "tok value-8"\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok value-8" <<<"$out" \
+is "$out" FC-G09 warn && ! grep -q "tok value-8" <<<"$out" \
   && ok "--credentials: a quoted github.com in ~/.netrc is a WARN" || { bad "--credentials netrc quoted"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 printf 'machine GitHub.COM login me password x\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" \
+is "$out" FC-G09 warn \
   && ok "--credentials: github.com in ~/.netrc in any case is a WARN" || { bad "--credentials netrc case"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 printf 'machine "github.com login me password x\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ! grep -q "INFO  no github.com login" <<<"$out" \
+is "$out" FC-G09 unknown && ! grep -q "INFO  no github.com login" <<<"$out" \
   && ok "--credentials: an unterminated quote in ~/.netrc is not verified" || { bad "--credentials netrc unterminated"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 printf '# machine github.com login old password tok-value-7\nmachine example.com login me password x\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "INFO  no github.com login in" <<<"$out" && ok "--credentials: a .netrc for another host, and a commented github.com line, are not a WARN" || bad "--credentials netrc other host or comment"
+is "$out" FC-G09 info && ok "--credentials: a .netrc for another host, and a commented github.com line, are not a WARN" || bad "--credentials netrc other host or comment"
 if [ "$(id -u)" != 0 ]; then
   chmod 000 "$cred/home/.netrc"; out="$(credrun FAKE_GH="$one")"; chmod 600 "$cred/home/.netrc"
-  grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ok "--credentials: an unreadable .netrc is not verified" || { bad "--credentials netrc unreadable"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
+  is "$out" FC-G09 unknown && ok "--credentials: an unreadable .netrc is not verified" || { bad "--credentials netrc unreadable"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 fi
 printf '#!/bin/sh\nexit 128\n' > "$cred/bin/git"; chmod +x "$cred/bin/git"
 out="$(credrun FAKE_GH="$one")"; rm -f "$cred/bin/git"
-grep -q "SKIP  git credential helpers not verified" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+is "$out" FC-G07 unknown && ! grep -q "INFO  git asks" <<<"$out" \
   && ok "--credentials: git config failing is not verified" || { bad "--credentials git failing"; printf '%s\n' "$out" | grep -i git | sed 's/^/        /'; }
 # git matches a credential.<url> entry on username and port too (#349): one
 # scoped to either does not apply to a plain https://github.com push, so its
@@ -1509,29 +1526,29 @@ grep -q "SKIP  git credential helpers not verified" <<<"$out" && ! grep -q "INFO
 for scope in 'https://restricted@github.com' 'https://github.com:8443'; do
   printf '[credential]\n\thelper = store\n[credential "%s"]\n\thelper =\n[credential "https://github.com"]\n\thelper = !gh auth git-credential\n' "$scope" > "$cred/gitconfig"
   out="$(credrun FAKE_GH="$one")"
-  grep -q "WARN  git has 1 credential helper for github.com besides gh's: store" <<<"$out" && ! grep -q "INFO  git asks" <<<"$out" \
+  is "$out" FC-G07 warn && ! grep -q "INFO  git asks" <<<"$out" \
     || { bad "--credentials: an empty helper under $scope cleared the list"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 done
-grep -q "WARN  git has 1 credential helper" <<<"$out" && ok "--credentials: an empty helper scoped by a username or a port does not clear the list"
+is "$out" FC-G07 warn && ok "--credentials: an empty helper scoped by a username or a port does not clear the list"
 printf '[credential]\n\thelper = store\n[credential "https://github.com:443"]\n\thelper =\n\thelper = !gh auth git-credential\n[credential "https://me@github.com"]\n\thelper = cache\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  git has 1 credential helper for github.com besides gh's: cache" <<<"$out" \
+is "$out" FC-G07 warn \
   && ok "--credentials: an empty helper at :443 clears the list, and a username-scoped helper is counted" || { bad "--credentials :443 and username helper"; printf '%s\n' "$out" | grep -i helper | sed 's/^/        /'; }
 # A subsection URL urlsplit rejects is named (userinfo hidden) and not
 # verified; the rest of the report and the summary still print.
 printf '[credential "https://u:tok-value-10@[bad"]\n\thelper = cache\n[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-credential\n' > "$cred/gitconfig"
 out="$(credrun FAKE_GH="$one")"; rc=$?
-if [ "$rc" = 0 ] && grep -q 'SKIP  git config \[credential "…@\[bad"\] not verified' <<<"$out" && ! grep -q "tok-value-10\|Traceback" <<<"$out" \
-   && grep -q "INFO  no github.com login in" <<<"$out" && grep -q "SKIP  SSH keys not verified here" <<<"$out" && grep -q "^-- [0-9]* failed, [0-9]* not verified" <<<"$out"
+if [ "$rc" = 0 ] && is "$out" FC-G07 unknown && ! grep -q "tok-value-10\|Traceback" <<<"$out" \
+   && is "$out" FC-G09 info && is "$out" FC-G10 unknown && grep -q "^-- [0-9]* failed, [0-9]* not verified" <<<"$out"
 then ok "--credentials: a credential subsection URL that cannot be parsed is a SKIP naming it, and the run goes on"; else bad "--credentials unparseable subsection"; printf '%s\n' "$out" | tail -n 12 | sed 's/^/        /'; fi
 for sub in 'user:tok-value-12@[bad' 'https://u:tok-value-13@github.com:abc' 'https://github.com:abc'; do
   printf '[credential "%s"]\n\thelper = cache\n' "$sub" > "$cred/gitconfig"
   out="$(credrun FAKE_GH="$one")"; rc=$?
-  [ "$rc" = 0 ] && grep -q "SKIP  git config \[credential \"\(…@\[bad\|…@github.com:abc\|https://github.com:abc\)\"\] not verified" <<<"$out" \
+  [ "$rc" = 0 ] && is "$out" FC-G07 unknown \
     && ! grep -q "tok-value-1[23]" <<<"$out" && grep -q "^-- [0-9]* failed" <<<"$out" \
     || { bad "--credentials: unparseable '$sub'"; printf '%s\n' "$out" | grep -v PASS | tail -n 8 | sed 's/^/        /'; }
 done
-grep -q "SKIP  git config" <<<"$out" && ok "--credentials: an unparseable subsection, with or without a scheme or a user, is a SKIP that prints no user or password"
+is "$out" FC-G07 unknown && ok "--credentials: an unparseable subsection, with or without a scheme or a user, is a SKIP that prints no user or password"
 # The same reading, checked against git itself: `git credential fill` for a
 # push to https://github.com/o/r, with a harmless `!echo` helper, shows which
 # entries git applies. Wherever git runs a helper, the checker must count one:
@@ -1560,26 +1577,26 @@ printf '[credential "https://github.com"]\n\thelper =\n\thelper = !gh auth git-c
 # a value. A sequence the reader cannot place is not verified.
 printf 'machine example.com login default password x\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "INFO  no github.com login in" <<<"$out" && ok "--credentials: \`default\` as a .netrc value is not a default entry" \
+is "$out" FC-G09 info && ok "--credentials: \`default\` as a .netrc value is not a default entry" \
   || { bad "--credentials netrc default as value"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 printf 'machine example.com login me password x\ndefault\n  login me password tok-value-11\n' > "$cred/home/.netrc"
 out="$(credrun FAKE_GH="$one")"
-grep -q "WARN  .*\.netrc holds a login for github.com" <<<"$out" && ! grep -q "tok-value-11" <<<"$out" \
+is "$out" FC-G09 warn && ! grep -q "tok-value-11" <<<"$out" \
   && ok "--credentials: \`default\` where a keyword stands is a default entry" || { bad "--credentials netrc default entry"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 for n in 'machine example.com login me stray x' 'machine example.com login' 'login me machine example.com' 'machine example.com macdef m'; do
   printf '%s\n' "$n" > "$cred/home/.netrc"
   out="$(credrun FAKE_GH="$one")"
-  grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ! grep -q "INFO  no github.com login" <<<"$out" \
+  is "$out" FC-G09 unknown && ! grep -q "INFO  no github.com login" <<<"$out" \
     || { bad "--credentials: .netrc '$n' was placed"; printf '%s\n' "$out" | grep netrc | sed 's/^/        /'; }
 done
-grep -q "SKIP  .*\.netrc not verified" <<<"$out" && ok "--credentials: a .netrc token sequence that cannot be placed is not verified"
+is "$out" FC-G09 unknown && ok "--credentials: a .netrc token sequence that cannot be placed is not verified"
 rm -f "$cred/home/.netrc"
 # GIT_CONFIG makes git read that file instead of the repository's .git/config.
 for v in "$cred/elsewhere" ''; do
   out="$(credrun GIT_CONFIG="$v" FAKE_GH="$one")"
-  grep -q "SKIP  GIT_CONFIG is set" <<<"$out" || { bad "--credentials: GIT_CONFIG='$v' is not named"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
+  is "$out" FC-G05 unknown || { bad "--credentials: GIT_CONFIG='$v' is not named"; printf '%s\n' "$out" | grep SKIP | sed 's/^/        /'; }
 done
-grep -q "SKIP  GIT_CONFIG is set" <<<"$out" && ok "--credentials: GIT_CONFIG, set or empty, is named as hiding a configuration"
+is "$out" FC-G05 unknown && ok "--credentials: GIT_CONFIG, set or empty, is named as hiding a configuration"
 
 # --credentials also names a production database URL within the agent's reach
 # (#648): this environment, .env* files under --root (tracked or not), and the
@@ -1590,20 +1607,18 @@ grep -q "SKIP  GIT_CONFIG is set" <<<"$out" && ok "--credentials: GIT_CONFIG, se
 dbr="$work/dbroot"; dbu="$work/dbuser"
 dbreset() { rm -rf "$dbr" "$dbu"; cp -R "$good" "$dbr"; mkdir -p "$dbu"; }
 dbrun() {   # extra env assignments as arguments; prints the checker's output
-  env -i PATH="$cred/bin:$PATH" HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 CLAUDE_CONFIG_DIR="$dbu" FAKE_GH_SAW="$cred/saw" "$@" \
+  env -i PATH="$cred/bin:$PATH" HOME="$cred/home" GIT_CONFIG_NOSYSTEM=1 CLAUDE_CONFIG_DIR="$dbu" FAKE_GH_SAW="$cred/saw" FLOOR_CHECK_TRACE="$FLOOR_CHECK_TRACE" "$@" \
     python3 "$checker" --root "$dbr" --no-network --credentials 2>&1
 }
 db_lines() { grep -i "database" <<<"$out"; }
 leaks() { grep -qE "FAKE648|acme648" <<<"$out"; }
 prod='postgres://app:FAKE648@db.acme648.net:5432/app'
-dbquiet() { # <description>: no database WARN or SKIP, the limit INFO, no PASS, no value
-  if ! grep -qE "(WARN|SKIP|PASS)  .*database" <<<"$out" && grep -q "INFO  no production database URL found in this environment" <<<"$out" \
-     && grep -q "best effort: shell profile files, other files and schemes other than postgres:// and postgresql:// are not read" <<<"$out" && ! leaks
+dbquiet() { # <description>: no database WARN or SKIP, its INFO (the limit), no PASS, no value
+  if ! grep -qE "(WARN|SKIP|PASS)  .*database" <<<"$out" && is "$out" FC-G11 info && ! leaks
   then ok "$1"; else bad "$1"; db_lines | sed 's/^/        /'; fi
 }
-dbwarn() { # <description> <ERE for the WARN's place>: a WARN naming the place, its fix line, no limit INFO, no value
-  if grep -qE "WARN  a production database URL is within the agent's reach: $2" <<<"$out" \
-     && grep -q "the template's SQLite default" <<<"$out" && ! grep -q "INFO  no production database URL found" <<<"$out" && ! leaks
+dbwarn() { # <description>: the WARN, its fix line, no limit INFO, no value
+  if is "$out" FC-G11 warn && is "$out" FC-G11 info && ! grep -q "INFO  no production database URL found" <<<"$out" && ! leaks
   then ok "$1"; else bad "$1"; db_lines | sed 's/^/        /'; fi
 }
 
@@ -1635,67 +1650,67 @@ dbquiet "--credentials, database: a directory named .env (a virtualenv) is not e
 
 # What warns: each place, named, the value never printed.
 dbreset; out="$(dbrun DATABASE_URL="$prod")"; rc=$?
-dbwarn "--credentials, database: DATABASE_URL in this environment is a WARN naming the variable" "DATABASE_URL in this environment$"
-[ "$rc" = 0 ] && grep -q "INFO    remove it where it is set (a shell startup file), then restart Claude Code" <<<"$out" \
+dbwarn "--credentials, database: DATABASE_URL in this environment is a WARN naming the variable"
+[ "$rc" = 0 ] && is "$out" FC-G11 info \
   && ok "--credentials, database: a WARN does not fail the run, and the fix says where to remove it" || bad "--credentials, database: exit $rc or the environment fix line"
 dbreset; out="$(dbrun REPORTING_DB='POSTGRESQL+psycopg://app:FAKE648@db.acme648.net/app')"
-dbwarn "--credentials, database: any variable holding a postgresql+driver URL, in any case, is a WARN" "REPORTING_DB in this environment$"
+dbwarn "--credentials, database: any variable holding a postgresql+driver URL, in any case, is a WARN"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@localhost,db.acme648.net:5433/app')"
-dbwarn "--credentials, database: a local host beside a remote one is a WARN" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: a local host beside a remote one is a WARN"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@127.acme648.net/app')"
-dbwarn "--credentials, database: a host name that starts with 127. is not loopback" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: a host name that starts with 127. is not loopback"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@localhost/app?host=db.acme648.net')"
-dbwarn "--credentials, database: a remote host= in the query warns beside a local authority" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: a remote host= in the query warns beside a local authority"
 dbreset; out="$(dbrun DATABASE_URL='postgresql:///app?host=/var/run/postgresql,db.acme648.net')"
-dbwarn "--credentials, database: every host of a comma-separated host= list is judged" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: every host of a comma-separated host= list is judged"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@/app?hostaddr=203.0.113.5')"
-dbwarn "--credentials, database: a remote hostaddr= is a destination, whatever host says" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: a remote hostaddr= is a destination, whatever host says"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@db.acme648.net/app?dbname=test&dbname=production')"
-dbwarn "--credentials, database: the last dbname= is the database, as libpq reads it" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: the last dbname= is the database, as libpq reads it"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@db.acme648.net/app_test?dbname=prod')"
-dbwarn "--credentials, database: a test path beside a dbname= that is not one warns" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: a test path beside a dbname= that is not one warns"
 dbreset; out="$(dbrun DATABASE_URL='postgresql:///app?service=main')"
-dbwarn "--credentials, database: service= takes its host from a file not read, so it warns" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: service= takes its host from a file not read, so it warns"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@db.acme648.net/app?dbname=app_test')"
 dbquiet "--credentials, database: a dbname= naming a test database replaces the path"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@localhost/app?host=localhost&hostaddr=127.0.0.1')"
 dbquiet "--credentials, database: a local hostaddr= beside a local host does not warn"
 dbreset; out="$(dbrun DATABASE_URL='postgresql://app:FAKE648@[db.acme648.net/app')"
-dbwarn "--credentials, database: a URL that cannot be parsed is a WARN, not passed over" "DATABASE_URL in this environment$"
+dbwarn "--credentials, database: a URL that cannot be parsed is a WARN, not passed over"
 dbreset; printf 'APP_PORT=8000\nDATABASE_URL=%s\n' "$prod" > "$dbr/.env.production"; git -C "$dbr" add .env.production; out="$(dbrun)"
-dbwarn "--credentials, database: a tracked .env.production names its file, line and variable" "\.env\.production line 2 \(DATABASE_URL\)$"
-grep -q "INFO    delete the line; keep the production URL only in the host's settings" <<<"$out" \
+dbwarn "--credentials, database: a tracked .env.production names its file, line and variable"
+is "$out" FC-G11 info \
   && ok "--credentials, database: the file's fix line" || bad "--credentials, database: the file's fix line"
 dbreset; printf '.env\n' >> "$dbr/.gitignore"; printf 'export DATABASE_URL="%s"\n' "$prod" > "$dbr/.env"; out="$(dbrun)"
-dbwarn "--credentials, database: an ignored, untracked .env with export and quotes is a WARN" "\.env line 1 \(DATABASE_URL\)$"
+dbwarn "--credentials, database: an ignored, untracked .env with export and quotes is a WARN"
 dbreset; mkdir -p "$dbr/apps/web"; printf "DB='%s'\n" "$prod" > "$dbr/apps/web/.env.local"; out="$(dbrun)"
-dbwarn "--credentials, database: a .env.local in a subdirectory is a WARN" "apps/web/\.env\.local line 1 \(DB\)$"
+dbwarn "--credentials, database: a .env.local in a subdirectory is a WARN"
 dbreset; printf '%s/db=x\n' "$prod" > "$dbr/.env"; out="$(dbrun)"
-dbwarn "--credentials, database: a line with no variable name prints only its file and line" "\.env line 1$"
+dbwarn "--credentials, database: a line with no variable name prints only its file and line"
 dbreset; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbr/.claude/settings.local.json"; out="$(dbrun)"
-dbwarn "--credentials, database: the env of the repository's .claude/settings.local.json is a WARN" "DATABASE_URL in the env of \.claude/settings\.local\.json$"
+dbwarn "--credentials, database: the env of the repository's .claude/settings.local.json is a WARN"
 dbreset; python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["env"]={"DATABASE_URL":sys.argv[2]}; json.dump(d,open(p,"w"))' "$dbr/.claude/settings.json" "$prod"; out="$(dbrun)"
-dbwarn "--credentials, database: the env of the repository's .claude/settings.json is a WARN" "DATABASE_URL in the env of \.claude/settings\.json$"
+dbwarn "--credentials, database: the env of the repository's .claude/settings.json is a WARN"
 dbreset; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun)"
-dbwarn "--credentials, database: the env of the user's settings.json is a WARN" "DATABASE_URL in the env of .*/dbuser/settings\.json$"
+dbwarn "--credentials, database: the env of the user's settings.json is a WARN"
 dbreset; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbu/settings.local.json"; out="$(dbrun)"
-dbwarn "--credentials, database: the env of the user's settings.local.json is a WARN" "DATABASE_URL in the env of .*/dbuser/settings\.local\.json$"
+dbwarn "--credentials, database: the env of the user's settings.local.json is a WARN"
 dbreset; printf '{"env":{"postgres://x:FAKE648@acme648.net/a":"%s"}}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun)"
-dbwarn "--credentials, database: an env key that is not a name is not printed" "an entry in the env of .*/dbuser/settings\.json$"
+dbwarn "--credentials, database: an env key that is not a name is not printed"
 dbreset; printf 'DATABASE_URL=%s\n' "$prod" > "$dbr/.env"; printf '{"env":{"DATABASE_URL":"%s"}}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun DATABASE_URL="$prod")"
 [ "$(grep -c "WARN  a production database URL is within the agent's reach" <<<"$out")" = 3 ] && ! leaks \
   && ok "--credentials, database: three places hold it, three WARNs" || { bad "--credentials, database: three places"; db_lines | sed 's/^/        /'; }
 
 # What cannot be read is a SKIP naming it.
 dbreset; printf '{"env":' > "$dbu/settings.json"; out="$(dbrun)"
-grep -qE "SKIP  .*/dbuser/settings\.json not verified: it could not be read as JSON" <<<"$out" \
+is "$out" FC-G11 unknown \
   && ok "--credentials, database: unreadable settings JSON is a SKIP" || { bad "--credentials, database: bad JSON"; db_lines | sed 's/^/        /'; }
 dbreset; printf '{"env":["%s"]}\n' "$prod" > "$dbu/settings.json"; out="$(dbrun)"
-grep -qE "SKIP  .*/dbuser/settings\.json not verified: its env is not an object" <<<"$out" && ! leaks \
+is "$out" FC-G11 unknown && ! leaks \
   && ok "--credentials, database: an env that is not an object is a SKIP" || { bad "--credentials, database: env list"; db_lines | sed 's/^/        /'; }
 if [ "$(id -u)" != 0 ]; then
   dbreset; printf 'DATABASE_URL=%s\n' "$prod" > "$dbr/.env"; chmod 000 "$dbr/.env"; out="$(dbrun)"; chmod 600 "$dbr/.env"
-  grep -q "SKIP  .env not verified: it could not be read" <<<"$out" && ! leaks \
+  is "$out" FC-G11 unknown && ! leaks \
     && ok "--credentials, database: an unreadable .env is a SKIP" || { bad "--credentials, database: unreadable .env"; db_lines | sed 's/^/        /'; }
 fi
 # ci / floor-check never passes --credentials: its own service URLs are not this item's question.
@@ -1706,27 +1721,28 @@ dbreset; out="$(env -i PATH="$PATH" HOME="$cred/home" CLAUDE_CONFIG_DIR="$dbu" D
 # `ci / test` with no integration_id is satisfied by a commit status anyone
 # with write access can post. The shipped ruleset pins GitHub Actions (15368);
 # a live rule that lost or changed that pin is a weakened wall.
-wall "a required check with its source pin removed is a FAIL" "accepts a status from any source" \
+wall "a required check with its source pin removed is a FAIL" "FC-E20 fail" \
   "printf '%s' '$(printf '%s' "$good_rules" | sed 's/{"context":"ci \/ a","integration_id":15368}/{"context":"ci \/ a"}/')' > \"\$api/repos/o/r/rules/branches/main.json\""
-wall "a required check pinned to another app is a FAIL" "comes from app 999, not 15368" \
+wall "a required check pinned to another app is a FAIL" "FC-E20 fail" \
   "printf '%s' '$(printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"context":"ci \/ b","integration_id":999/')' > \"\$api/repos/o/r/rules/branches/main.json\""
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
-wall "the source pins as shipped pass" "required checks come from the expected app (15368)"
+wall "the source pins as shipped pass" "FC-E20 pass"
 # Two active rulesets: GitHub enforces both, so a check is required when
 # either requires it and pinned when either pins it.
-wall "a check carried by a second ruleset is not dropped" "all 2 expected checks are required" \
+wall "a check carried by a second ruleset is not dropped" "FC-E19 pass" \
   "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["required_status_checks"]=[{"context":"ci / a","integration_id":15368}]; a["ruleset_id"]=2; b=json.loads(json.dumps(rsc)); b["parameters"]["required_status_checks"]=[c for c in b["parameters"]["required_status_checks"] if c["context"]!="ci / a"]; print(json.dumps([x for x in r if x["type"]!="required_status_checks"]+[b,a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
-wall "an unpinned duplicate beside a pinned one is not a source FAIL" "required checks come from the expected app (15368)" \
+wall "an unpinned duplicate beside a pinned one is not a source FAIL" "FC-E20 pass" \
   "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["required_status_checks"]=[{"context":"ci / a"}]; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
-wall "a strict rule beside a loose one is still strict" "required checks are strict" \
+wall "a strict rule beside a loose one is still strict" "FC-E18 pass" \
   "printf '%s' '$(printf '%s' "$good_rules" | python3 -c 'import json,sys; r=json.load(sys.stdin); rsc=[x for x in r if x["type"]=="required_status_checks"][0]; a=json.loads(json.dumps(rsc)); a["parameters"]["strict_required_status_checks_policy"]=False; a["ruleset_id"]=2; print(json.dumps(r+[a]))')' > \"\$api/repos/o/r/rules/branches/main.json\""
 # Each rule of the wall missing, and a required-checks rule that is not
 # strict, each once (#1103: every state a check declares is reached).
-for t in non_fast_forward pull_request required_status_checks; do
-  wall "a missing $t rule is caught" "FAIL  main: $t rule missing" \
+for t in non_fast_forward:FC-E14 pull_request:FC-E15 required_status_checks:FC-E16; do
+  id="${t#*:}"; t="${t%%:*}"
+  wall "a missing $t rule is caught" "$id fail" \
     "jq -c 'map(select(.type != \"$t\"))' <<<\"\$good_rules\" > \"\$api/repos/o/r/rules/branches/main.json\""
 done
-wall "a required-checks rule that is not strict is caught" "FAIL  main: required checks are not strict" \
+wall "a required-checks rule that is not strict is caught" "FC-E18 fail" \
   "jq -c 'map(if .type == \"required_status_checks\" then .parameters.strict_required_status_checks_policy = false else . end)' <<<\"\$good_rules\" > \"\$api/repos/o/r/rules/branches/main.json\""
 # A ruleset that pins its checks to different apps is compared check by
 # check; it does not switch the comparison off.
@@ -1747,19 +1763,19 @@ if [ "$(grep -c 'accepts a status from any source' <<<"$out")" = 2 ]; then ok "m
 else bad "mixed-app ruleset: unpinned checks not both caught"; grep -E 'FAIL|INFO|SKIP|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
 printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"context":"ci \/ b","integration_id":999/' > "$api/repos/o/r/rules/branches/main.json"
 out="$(mixed_out)"
-if grep -qF "required checks come from the expected apps (999, 15368)" <<<"$out"; then ok "mixed-app ruleset: each check on its own app passes"
+if is "$out" FC-E20 pass; then ok "mixed-app ruleset: each check on its own app passes"
 else bad "mixed-app ruleset: correct pins not passed"; grep -E 'FAIL|INFO|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
 # A dropped check withholds the aggregate PASS too.
 printf '%s' "$good_rules" | sed 's/,{"context":"ci \/ b","integration_id":15368}//' > "$api/repos/o/r/rules/branches/main.json"
 out="$(mixed_out)"
-if grep -q "required checks dropped" <<<"$out" && ! grep -q "required checks come from the expected apps" <<<"$out"; then
+if is "$out" FC-E19 fail && ! grep -q "required checks come from the expected apps" <<<"$out"; then
   ok "a dropped check withholds the aggregate source PASS"
 else bad "a dropped check still produced the aggregate source PASS"; grep -E 'FAIL|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
 printf '%s' "$good_rules" | sed 's/"context":"ci \/ b","integration_id":15368/"context":"ci \/ b","integration_id":999/' > "$api/repos/o/r/rules/branches/main.json"
 # A check only --expect-checks names, with no shared app to assume, is not
 # compared; the aggregate PASS must not claim it.
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$mixed" --expect-checks "ci / a, ci / b, CodeQL" 2>&1)"
-if grep -q "expected app for required check CodeQL is not known" <<<"$out" && ! grep -q "required checks come from the expected apps" <<<"$out"; then
+if is "$out" FC-E20 unknown && ! grep -q "required checks come from the expected apps" <<<"$out"; then
   ok "an uncompared check (SKIP) withholds the aggregate source PASS"
 else bad "an uncompared check still produced the aggregate source PASS"; grep -E 'SKIP|PASS  main: required' <<<"$out" | sed 's/^/        /'; fi
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
@@ -1767,7 +1783,7 @@ printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 # --project separate from --root, expectations from --ruleset
 sub="$work/sub"; rm -rf "$sub"; cp -R "$good" "$sub"; mkdir -p "$sub/app"; mv "$sub/pyproject.toml" "$sub/uv.lock" "$sub/.copier-answers.yml" "$sub/Dockerfile" "$sub/.dockerignore" "$sub/.env.example" "$sub/app/"; mv "$sub/src" "$sub/app/src"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$sub" --project app --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
-if grep -q "required checks dropped" <<<"$out" && grep -q "uv.lock committed" <<<"$out"; then ok "--project and --ruleset are honoured (ruleset's nine checks expected, project files found under app/)"
+if is "$out" FC-E19 fail && is "$out" FC-C02 pass; then ok "--project and --ruleset are honoured (ruleset's nine checks expected, project files found under app/)"
 else bad "--project/--ruleset path"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 
 # The web archetype (#615), as plinth-template v1.20.0 renders it: a service
@@ -1781,18 +1797,18 @@ printf 'services: []\n' > "$web/render.yaml"
 printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n    with:\n      web: true\n  image:\n    steps:\n      - run: docker build -t t .\n      - run: docker run --rm t\n' 0 > "$web/.github/workflows/ci.yml"
 git -C "$web" add -A
 out="$(python3 "$checker" --root "$web" --no-network 2>&1)"; rc=$?
-if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && grep -q '^  PASS  render.yaml present$' <<<"$out" && grep -q '^  PASS  ci.yml carries the image job' <<<"$out" \
-   && grep -q '^  PASS  .env.example present$' <<<"$out"; then ok "a complete web instance passes offline, render.yaml, the image job and .env.example read"
+if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && is "$out" FC-C12 pass && is "$out" FC-D06 pass \
+   && is "$out" FC-C27 pass; then ok "a complete web instance passes offline, render.yaml, the image job and .env.example read"
 else bad "a complete web instance should pass"; printf '%s\n' "$out" | grep -E 'FAIL|render|image' | sed 's/^/        /'; fi
 rm "$web/render.yaml"; git -C "$web" add -A
 out="$(python3 "$checker" --root "$web" --no-network 2>&1)"
-if grep -q '^  FAIL  render.yaml missing' <<<"$out" && grep -qF 'INFO    restore it from the default branch: git restore --source=origin/main -- render.yaml' <<<"$out" \
+if is "$out" FC-C12 fail && is "$out" FC-C12 info \
    && grep -q -- '-- 1 failed' <<<"$out"; then ok "a web instance without render.yaml: one FAIL, with its fix"
 else bad "a web instance without render.yaml is not one FAIL with its fix"; printf '%s\n' "$out" | grep -E 'FAIL|INFO.*render' | sed 's/^/        /'; fi
 printf 'services: []\n' > "$web/render.yaml"; git -C "$web" add -A
 rm -rf "$web.empty"; cp -R "$web" "$web.empty"; sed -i.bak 's/^archetype: web$/archetype: cli/' "$web.empty/.copier-answers.yml"; rm "$web.empty/render.yaml"
 git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
-if grep -q '^  INFO  archetype cli: ' <<<"$out" && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "another archetype is not asked for render.yaml"
+if is "$out" FC-C03 info && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "another archetype is not asked for render.yaml"
 else bad "a cli instance was asked for render.yaml"; fi
 # What render.yaml says (#811), read when the file is there: each web
 # service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
@@ -1830,49 +1846,34 @@ cp "$work/render-complete.yaml" "$rb/render.yaml"
 blueprint_out() { git -C "$rb" add -A; python3 "$checker" --root "$rb" --no-network 2>&1; }
 out="$(blueprint_out)"; rc=$?
 if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && ! grep -qE '^  (WARN|SKIP) +render.yaml' <<<"$out" \
-   && grep -qF 'PASS  render.yaml: web service app has a health check (healthCheckPath: /healthz)' <<<"$out" \
-   && grep -qF 'PASS  render.yaml: web service app deploys only after the checks pass (autoDeployTrigger: checksPass)' <<<"$out" \
-   && grep -qF 'PASS  render.yaml: database app-db is on a paid plan (0.1c-256mb)' <<<"$out" \
-   && grep -qF 'PASS  render.yaml: no secret-named envVars entry carries a literal value' <<<"$out"; then
+   && is "$out" FC-C14 pass \
+   && is "$out" FC-C15 pass \
+   && is "$out" FC-C16 pass \
+   && is "$out" FC-C17 pass; then
   ok "a render.yaml with all four settings: four PASS lines, no WARN"
 else bad "a render.yaml with all four settings"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
-gap() { # <name> <sed expression on the complete file> <WARN line> <fix line>
+gap() { # <name> <sed expression on the complete file> <id of the WARN and its fix line>
   sed -e "$2" "$work/render-complete.yaml" > "$rb/render.yaml"
   out="$(blueprint_out)"; rc=$?
-  if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && grep -qF "WARN  $3" <<<"$out" && grep -qF "INFO    $4" <<<"$out" \
+  if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && is "$out" "$3" warn && is "$out" "$3" info \
      && [ "$(grep -c '^  WARN  render.yaml' <<<"$out")" = 1 ]; then ok "render.yaml $1: one WARN with its fix, no FAIL"
   else bad "render.yaml $1"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
 }
-gap "without healthCheckPath" '/healthCheckPath/d' \
-  "render.yaml: web service app has no healthCheckPath: Render sends traffic to a new deploy without asking it whether it started" \
-  "add healthCheckPath: /healthz to the service"
-gap "deploying on every commit" 's/autoDeployTrigger: checksPass/autoDeployTrigger: commit/' \
-  "render.yaml: web service app deploys without waiting for the checks (autoDeployTrigger: commit)" \
-  "set autoDeployTrigger: checksPass on the service"
-gap "without autoDeployTrigger" '/autoDeployTrigger/d' \
-  "render.yaml: web service app deploys without waiting for the checks (no autoDeployTrigger)" \
-  "set autoDeployTrigger: checksPass on the service"
-gap "with a free database" 's/plan: 0.1c-256mb/plan: free/' \
-  "render.yaml: database app-db is on plan free: Render deletes a free Postgres after 30 days, and it has no backups" \
-  "set plan: to a paid one, as the template's plan: 0.1c-256mb"
-gap "with a database naming no plan" '/plan: 0.1c-256mb/d' \
-  "render.yaml: database app-db names no plan, so it is not read as a paid one" \
-  "set plan: to a paid one"
-gap "with a free database behind a comment holding a quote" "s/plan: 0.1c-256mb/plan: free # don't/" \
-  "render.yaml: database app-db is on plan free" "set plan: to a paid one"
-gap "with a free database spelled Free" 's/plan: 0.1c-256mb/plan: Free/' \
-  "render.yaml: database app-db is on plan Free" "set plan: to a paid one"
-gap "with its web service behind a comment holding a quote" "s/  - type: web/  - type: web # it's the app/;/healthCheckPath/d" \
-  "render.yaml: web service app has no healthCheckPath" "add healthCheckPath: /healthz to the service"
-gap "with a secret as a literal value" 's/generateValue: true/value: "not-so-secret"/' \
-  "render.yaml: secret-named envVars set with a literal value (DJANGO_SECRET_KEY): the value sits in the repository" \
-  "set each with sync: false (typed in Render's dashboard), generateValue: true or fromDatabase instead"
+gap "without healthCheckPath" '/healthCheckPath/d' FC-C14
+gap "deploying on every commit" 's/autoDeployTrigger: checksPass/autoDeployTrigger: commit/' FC-C15
+gap "without autoDeployTrigger" '/autoDeployTrigger/d' FC-C15
+gap "with a free database" 's/plan: 0.1c-256mb/plan: free/' FC-C16
+gap "with a database naming no plan" '/plan: 0.1c-256mb/d' FC-C16
+gap "with a free database behind a comment holding a quote" "s/plan: 0.1c-256mb/plan: free # don't/" FC-C16
+gap "with a free database spelled Free" 's/plan: 0.1c-256mb/plan: Free/' FC-C16
+gap "with its web service behind a comment holding a quote" "s/  - type: web/  - type: web # it's the app/;/healthCheckPath/d" FC-C14
+gap "with a secret as a literal value" 's/generateValue: true/value: "not-so-secret"/' FC-C17
 # A literal value for a name that holds no secret stays a PASS (the settings
 # module), and so does a secret-named one set another way.
 awk '{print} /DJANGO_ALLOWED_HOSTS/{getline; print; print "      - key: SENTRY_DSN"; print "        sync: false"}' \
   "$work/render-complete.yaml" > "$rb/render.yaml"
 out="$(blueprint_out)"
-if grep -qF 'PASS  render.yaml: no secret-named envVars entry carries a literal value' <<<"$out" && ! grep -q '^  WARN  render.yaml' <<<"$out" \
+if is "$out" FC-C17 pass && ! grep -q '^  WARN  render.yaml' <<<"$out" \
    && grep -q 'SENTRY_DSN' "$rb/render.yaml"; then
   ok "render.yaml: plain values and secrets set another way are not a WARN"
 else bad "render.yaml: plain values or non-literal secrets were a WARN"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
@@ -1890,7 +1891,7 @@ read_count="$(blueprint_out | sed -nE 's/^-- 0 failed, ([0-9]+) not verified.*/\
 for form in 'services: [{type: web, name: app}]' $'databases:\n  - name: db\n    plan: "fr\\u0065e"' $'services:\n  - &web\n    type: web' $'services:\n  - type: web\n    name: app\n    buildCommand: |\n      make'; do
   printf '%s\n' "$form" > "$rb/render.yaml"
   out="$(blueprint_out)"
-  if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out" \
+  if is "$out" FC-C13 unknown && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out" \
      && grep -q -- "-- 0 failed, $((read_count + 1)) not verified" <<<"$out"; then ok "render.yaml in a form not read ($(head -1 <<<"$form" | cut -c1-30)...): one SKIP, no PASS"
   else bad "render.yaml in a form not read ($(head -1 <<<"$form"))"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
 done
@@ -1900,7 +1901,7 @@ for form in $'envVarGroups:\n  - name: shared\n    envVars:\n      - key: LOG_LE
             $'ungrouped:\n  - type: web\n    name: app'; do
   printf '%s\n' "$form" > "$rb/render.yaml"
   out="$(blueprint_out)"
-  if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out"; then ok "render.yaml with $(grep -oE '^(projects|ungrouped)' <<<"$form"): a SKIP, no PASS"
+  if is "$out" FC-C13 unknown && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out"; then ok "render.yaml with $(grep -oE '^(projects|ungrouped)' <<<"$form"): a SKIP, no PASS"
   else bad "render.yaml with $(grep -oE '^(projects|ungrouped)' <<<"$form")"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
 done
 # A backslash escape in double quotes, in a key as in a value, is a SKIP;
@@ -1911,27 +1912,27 @@ for form in $'services:\n  - type: web\n    name: app\n    envVars:\n      - key
             $'services:\n  - type: web\n    name: app: hunter2secret'; do
   printf '%s\n' "$form" > "$rb/render.yaml"
   out="$(blueprint_out)"
-  if grep -qE '^  SKIP  render.yaml not read \(line [0-9]+: ' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out" \
+  if is "$out" FC-C13 unknown && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out" \
      && ! grep -q 'hunter2secret' <<<"$out"; then ok "render.yaml line $(tail -1 <<<"$form" | sed 's/^ *//' | cut -c1-24)...: a SKIP naming the line, not its content"
   else bad "render.yaml line $(tail -1 <<<"$form" | cut -c1-40)"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
 done
 # An empty file, or one with no envVars at all, reads nothing to pass.
 printf '# nothing here yet\n' > "$rb/render.yaml"
 out="$(blueprint_out)"
-if ! grep -q '^  PASS  render.yaml:' <<<"$out" && grep -q '^  INFO  render.yaml declares no envVars' <<<"$out"; then ok "an empty render.yaml gets no PASS for what it does not say"
+if ! grep -q '^  PASS  render.yaml:' <<<"$out" && is "$out" FC-C17 info; then ok "an empty render.yaml gets no PASS for what it does not say"
 else bad "an empty render.yaml"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
 # A nested list or a plain value holding ': ' is not read as a string.
 for form in $'services:\n  - - type: web' $'services:\n  - type: web\n    name: a: b'; do
   printf '%s\n' "$form" > "$rb/render.yaml"
   out="$(blueprint_out)"
-  if grep -q '^  SKIP  render.yaml not read (' <<<"$out" && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out"; then ok "render.yaml with $(tail -1 <<<"$form" | sed 's/^ *//'): a SKIP"
+  if is "$out" FC-C13 unknown && ! grep -qE '^  (PASS|WARN)  render.yaml:' <<<"$out"; then ok "render.yaml with $(tail -1 <<<"$form" | sed 's/^ *//'): a SKIP"
   else bad "render.yaml with $(tail -1 <<<"$form")"; grep -E 'render' <<<"$out" | sed 's/^/        /'; fi
 done
 # A repository not made as a web instance still has its render.yaml read;
 # without one, nothing is said (the cli case above).
 sed 's/plan: 0.1c-256mb/plan: free/' "$work/render-complete.yaml" > "$web.empty/render.yaml"
 git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
-if grep -qF 'WARN  render.yaml: database app-db is on plan free' <<<"$out" && ! grep -q 'render.yaml present' <<<"$out" \
+if is "$out" FC-C16 warn && ! grep -q 'render.yaml present' <<<"$out" \
    && grep -q -- '-- 0 failed' <<<"$out"; then ok "a cli instance carrying render.yaml has it read, as a WARN, not asked for it"
 else bad "a cli instance carrying render.yaml"; grep -E 'render|failed' <<<"$out" | sed 's/^/        /'; fi
 rm -f "$web.empty/render.yaml"; git -C "$web.empty" add -A
@@ -1965,12 +1966,12 @@ for place in railway digitalocean fly vps home; do
   out="$(hosted_out "$web" web "hosting: elsewhere\nhosting_elsewhere: $place\n" drop)"; rc=$?
   if [ "$rc" = 0 ] && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q '^  FAIL  render.yaml' <<<"$out" \
      && ! grep -q '^  PASS .*render.yaml' <<<"$out" \
-     && grep -qF "INFO  render.yaml not required: hosting is elsewhere ($place), and only Render reads that file" <<<"$out"; then
+     && is "$out" FC-C18 info; then
     ok "web with hosting: elsewhere ($place) and no render.yaml: no FAIL, one INFO naming $place"
   else bad "web with hosting: elsewhere ($place) and no render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render|elsewhere' | sed 's/^/        /'; fi
   case "$place" in
     vps|home)
-      if grep -qF "INFO  not checked by plinth: on $place, HTTPS, backups and keeping the app's and the database's ports closed are a person's to set up" <<<"$out" \
+      if is "$out" FC-C18 info \
          && ! grep -qE '^  PASS .*(HTTPS|backup|port)' <<<"$out"; then ok "hosting_elsewhere: $place says what plinth does not check, as an INFO"
       else bad "hosting_elsewhere: $place does not say what plinth does not check"; printf '%s\n' "$out" | grep -E 'HTTPS|not checked' | sed 's/^/        /'; fi ;;
     *)
@@ -1979,7 +1980,7 @@ for place in railway digitalocean fly vps home; do
   esac
 done
 out="$(hosted_out "$web" web 'hosting: elsewhere\n' drop)"
-if grep -q -- '-- 0 failed' <<<"$out" && grep -qF 'INFO  render.yaml not required: hosting is elsewhere (no hosting_elsewhere answer), and only Render reads that file' <<<"$out"; then
+if grep -q -- '-- 0 failed' <<<"$out" && is "$out" FC-C18 info; then
   ok "hosting: elsewhere with no hosting_elsewhere answer says that none is recorded"
 else bad "hosting: elsewhere with no hosting_elsewhere answer"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
 rm -rf "$web_hosted"
@@ -1990,16 +1991,16 @@ pkg="$work/pkg"; rm -rf "$pkg"; cp -R "$web.empty" "$pkg"; rm -f "$pkg/.github/w
 release_out() { git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network 2>&1; }
 rel=.github/workflows/release.yml
 out="$(release_out)"
-if grep -qF "WARN  $rel missing: a version tag does not publish this package to PyPI" <<<"$out" \
-   && grep -qF 'INFO    plinth-template 1.29.0 adds it, with its steps in docs/how-to/publish-a-release.md' <<<"$out" \
+if is "$out" FC-C08 warn \
+   && is "$out" FC-C08 info \
    && grep -q -- '-- 0 failed' <<<"$out"; then ok "a cli instance without release.yml: a WARN with its fix, 0 failed"
 else bad "a cli instance without release.yml"; printf '%s\n' "$out" | grep -E 'FAIL|release' | sed 's/^/        /'; fi
 printf '# on: pull_request in a comment is not a trigger\nname: Release\non:\n  push:\n    tags: ["v*"]  # a version tag\npermissions: {}\njobs:\n  publish:\n    environment: pypi\n    permissions:\n      id-token: write\n    steps:\n      - uses: pypa/gh-action-pypi-publish@%040d\n      - run: gh release create "$GITHUB_REF_NAME"\n        env:\n          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n' 0 > "$pkg/$rel"
 for a in cli library; do
   sed -i.bak "s/^archetype: .*/archetype: $a/" "$pkg/.copier-answers.yml"; rm "$pkg/.copier-answers.yml.bak"
   out="$(release_out)"
-  if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" \
-     && grep -qF "PASS  $rel reads no stored secret" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "$a: the template's shape of release.yml passes its three items"
+  if is "$out" FC-C08 pass && is "$out" FC-C09 pass \
+     && is "$out" FC-C10 pass && ! grep -q "WARN  $rel" <<<"$out"; then ok "$a: the template's shape of release.yml passes its three items"
   else bad "$a: the template's shape of release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 done
 cp "$pkg/$rel" "$pkg/release.good"
@@ -2014,7 +2015,7 @@ for case in "pull_request|  pull_request:" "branches|    branches: [main]" "work
 done
 sed 's/^      - run: gh release create.*/      - uses: pypa\/gh-action-pypi-publish@0000000000000000000000000000000000000000\n        with:\n          password: ${{ secrets.PYPI_API_TOKEN }}/' "$pkg/release.good" > "$pkg/$rel"
 out="$(release_out)"
-if grep -qF "WARN  $rel reads a stored secret (password:, secrets.PYPI_API_TOKEN)" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "release.yml with a stored PyPI token: a WARN naming it"
+if is "$out" FC-C10 warn && grep -q -- '-- 0 failed' <<<"$out"; then ok "release.yml with a stored PyPI token: a WARN naming it"
 else bad "release.yml with a stored PyPI token was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 # --project: the project one directory down, the workflow at the root,
 # where GitHub reads it (#720 review).
@@ -2023,21 +2024,21 @@ sub_pkg="$work/pkg-sub"; rm -rf "$sub_pkg"; mkdir -p "$sub_pkg/app"; cp -R "$pkg
 for f in pyproject.toml uv.lock .copier-answers.yml src; do cp -R "$pkg/$f" "$sub_pkg/app/"; done
 git -C "$sub_pkg" init -q; git -C "$sub_pkg" add -A
 out="$(python3 "$checker" --root "$sub_pkg" --project app --no-network 2>&1)"
-if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then
+if is "$out" FC-C08 pass && is "$out" FC-C09 pass && ! grep -q "WARN  $rel" <<<"$out"; then
   ok "--project app: release.yml read at the repository root"
 else bad "--project app: release.yml not read at the root"; printf '%s\n' "$out" | grep -E 'release|FAIL' | sed 's/^/        /'; fi
 rm -rf "$sub_pkg"
 # --host wins over the answers, as for every other host-dependent item (#720 review).
 out="$(git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network --host gitlab 2>&1)"
-if grep -qF "INFO  $rel not required: on GitLab" <<<"$out" && ! grep -q "PASS  $rel" <<<"$out"; then ok "--host gitlab over a GitHub answer: release.yml not asked"
+if is "$out" FC-C08 info && ! grep -q "PASS  $rel" <<<"$out"; then ok "--host gitlab over a GitHub answer: release.yml not asked"
 else bad "--host gitlab did not reach the release item"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm "$pkg/$rel"; printf 'host: gitlab\n' >> "$pkg/.copier-answers.yml"
 out="$(release_out)"
-if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab library is not asked for release.yml"
+if is "$out" FC-C08 info && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab library is not asked for release.yml"
 else bad "a GitLab library was asked for release.yml"; fi
 cp "$pkg/release.good" "$pkg/$rel"
 out="$(git -C "$pkg" add -A; python3 "$checker" --root "$pkg" --no-network --host github 2>&1)"
-if grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" && ! grep -q "not required: on GitLab" <<<"$out"; then ok "--host github over a GitLab answer: release.yml read"
+if is "$out" FC-C09 pass && ! grep -q "not required: on GitLab" <<<"$out"; then ok "--host github over a GitLab answer: release.yml read"
 else bad "--host github did not reach the release item"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm "$pkg/$rel"
 rm -rf "$pkg"
@@ -2046,27 +2047,27 @@ rm -rf "$pkg"
 img="$work/img"; rm -rf "$img"; cp -R "$good" "$img"; rm "$img/$rel"
 img_out() { git -C "$img" add -A; python3 "$checker" --root "$img" --no-network 2>&1; }
 out="$(img_out)"
-if grep -qF "WARN  $rel missing: a version tag does not publish this image to GHCR" <<<"$out" \
-   && grep -qF 'INFO    plinth-template 1.30.0 adds it, with its steps in docs/how-to/publish-a-release.md' <<<"$out" \
+if is "$out" FC-C08 warn \
+   && is "$out" FC-C08 info \
    && grep -q -- '-- 0 failed' <<<"$out"; then ok "a backend instance without release.yml: a WARN with its fix, 0 failed"
 else bad "a backend instance without release.yml"; printf '%s\n' "$out" | grep -E 'FAIL|release' | sed 's/^/        /'; fi
 printf 'name: Release\non:\n  push:\n    tags: ["v*"]\npermissions: {}\njobs:\n  image:\n    permissions:\n      packages: write\n    steps:\n      - name: Log in to GHCR with this run'"'"'s token\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: printf '"'"'%%s\\n'"'"' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin\n      - uses: docker/build-push-action@%040d\n        with:\n          push: true\n' 0 > "$img/$rel"
 out="$(img_out)"
-if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" \
-   && grep -qF "PASS  $rel reads no stored secret" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "backend: the template's shape of release.yml passes its three items"
+if is "$out" FC-C08 pass && is "$out" FC-C09 pass \
+   && is "$out" FC-C10 pass && ! grep -q "WARN  $rel" <<<"$out"; then ok "backend: the template's shape of release.yml passes its three items"
 else bad "backend: the template's shape of release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 cp "$img/$rel" "$img/release.good"
 awk '{print} /^    tags:/ {print "  pull_request:"}' "$img/release.good" > "$img/$rel"
 out="$(img_out)"
-if grep -qF "WARN  $rel is not read as tag-only (first line not read: pull_request:)" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "backend release.yml started by a pull request as well: a WARN naming the line"
+if is "$out" FC-C09 warn && grep -q -- '-- 0 failed' <<<"$out"; then ok "backend release.yml started by a pull request as well: a WARN naming the line"
 else bad "backend release.yml started by a pull request was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 sed 's/\${{ github.token }}/${{ secrets.GHCR_TOKEN }}/' "$img/release.good" > "$img/$rel"
 out="$(img_out)"
-if grep -qF "WARN  $rel reads a stored secret (secrets.GHCR_TOKEN): the run's own token pushes the image" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "backend release.yml with a stored registry token: a WARN naming it"
+if is "$out" FC-C10 warn && grep -q -- '-- 0 failed' <<<"$out"; then ok "backend release.yml with a stored registry token: a WARN naming it"
 else bad "backend release.yml with a stored registry token was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm "$img/$rel"; printf 'host: gitlab\n' >> "$img/.copier-answers.yml"
 out="$(img_out)"
-if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab backend is not asked for release.yml"
+if is "$out" FC-C08 info && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab backend is not asked for release.yml"
 else bad "a GitLab backend was asked for release.yml"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm -rf "$img"
 # A data-ml project publishes its model, metrics and card to a GitHub Release
@@ -2076,28 +2077,28 @@ ml="$work/ml"; rm -rf "$ml"; cp -R "$good" "$ml"; rm "$ml/$rel"
 sed -i.bak "s/^archetype: .*/archetype: data-ml/" "$ml/.copier-answers.yml"; rm "$ml/.copier-answers.yml.bak"
 ml_out() { git -C "$ml" add -A; python3 "$checker" --root "$ml" --no-network 2>&1; }
 out="$(ml_out)"
-if grep -qF "WARN  $rel missing: a version tag does not publish this model to a GitHub Release" <<<"$out" \
-   && grep -qF 'INFO    plinth-template 1.31.0 adds it, with its steps in docs/how-to/publish-a-release.md' <<<"$out" \
-   && grep -qF 'WARN  MODEL_CARD.md missing: a release publishes the model without saying what it was trained on' <<<"$out" \
-   && grep -qF 'INFO    plinth-template 1.31.0 adds it with the training run: copier update' <<<"$out" \
+if is "$out" FC-C08 warn \
+   && is "$out" FC-C08 info \
+   && is "$out" FC-C07 warn \
+   && is "$out" FC-C07 info \
    && grep -q -- '-- 0 failed' <<<"$out"; then ok "a data-ml instance from before 1.31.0: two WARNs with their fixes, 0 failed"
 else bad "a data-ml instance from before 1.31.0"; printf '%s\n' "$out" | grep -E 'FAIL|release|MODEL_CARD' | sed 's/^/        /'; fi
 printf '# Model card\n' > "$ml/MODEL_CARD.md"
 printf 'name: Release\non:\n  push:\n    tags: ["v*"]\npermissions: {}\n# Never a pickle (`.pkl`, `.pickle`, `.joblib`, `.pt`).\nenv:\n  ASSETS: model.skops metrics.json MODEL_CARD.md\njobs:\n  publish:\n    permissions:\n      contents: write\n    steps:\n      - run: |\n          case "$f" in *.pkl | *.pickle | *.joblib | *.pt) exit 1 ;; esac\n      - env:\n          GH_TOKEN: ${{ github.token }}\n        run: gh release create "$GITHUB_REF_NAME" --verify-tag $ASSETS SHA256SUMS\n' > "$ml/$rel"
 out="$(ml_out)"
-if grep -qF "PASS  $rel present" <<<"$out" && grep -qF "PASS  $rel runs on a pushed tag only" <<<"$out" \
-   && grep -qF "PASS  $rel reads no stored secret" <<<"$out" \
-   && grep -qF "PASS  $rel uploads no pickle (ASSETS: model.skops metrics.json MODEL_CARD.md)" <<<"$out" \
-   && grep -qF "PASS  MODEL_CARD.md present" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "data-ml: the template's shape of release.yml and the card pass"
+if is "$out" FC-C08 pass && is "$out" FC-C09 pass \
+   && is "$out" FC-C10 pass \
+   && is "$out" FC-C11 pass \
+   && is "$out" FC-C07 pass && ! grep -q "WARN  $rel" <<<"$out"; then ok "data-ml: the template's shape of release.yml and the card pass"
 else bad "data-ml: the template's shape of release.yml and the card"; printf '%s\n' "$out" | grep -E 'release|MODEL_CARD' | sed 's/^/        /'; fi
 cp "$ml/$rel" "$ml/release.good"
 sed 's/ASSETS: model.skops/ASSETS: model.pkl/' "$ml/release.good" > "$ml/$rel"
 out="$(ml_out)"
-if grep -qF "WARN  $rel uploads a pickle (model.pkl): loading one runs whatever code it holds" <<<"$out" && grep -q -- '-- 0 failed' <<<"$out"; then ok "data-ml release.yml that uploads a pickle: a WARN naming it"
+if is "$out" FC-C11 warn && grep -q -- '-- 0 failed' <<<"$out"; then ok "data-ml release.yml that uploads a pickle: a WARN naming it"
 else bad "data-ml release.yml that uploads a pickle was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 sed 's/ASSETS: model.skops metrics.json/ASSETS: "model.skops weights.PT/' "$ml/release.good" | sed 's/MODEL_CARD.md$/MODEL_CARD.md"/' > "$ml/$rel"
 out="$(ml_out)"
-if grep -qF "WARN  $rel uploads a pickle (weights.PT)" <<<"$out"; then ok "a quoted ASSETS line with an upper-case .PT: still a pickle"
+if is "$out" FC-C11 warn; then ok "a quoted ASSETS line with an upper-case .PT: still a pickle"
 else bad "a quoted ASSETS line with an upper-case .PT was not warned"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 for value in '>-\n    model.pkl' 'model.skops\n    model.pkl' '${{ vars.ASSETS }}' 'model.skops (and a second ASSETS: model.pkl)'; do
   case "$value" in
@@ -2105,17 +2106,17 @@ for value in '>-\n    model.pkl' 'model.skops\n    model.pkl' '${{ vars.ASSETS }
     *) sed "s/ASSETS: .*/ASSETS: $value/" "$ml/release.good" > "$ml/$rel" ;;
   esac
   out="$(ml_out)"
-  if grep -qF "SKIP  $rel: ASSETS is not a one-line list of file names this checker reads" <<<"$out" && ! grep -q "PASS  $rel uploads no pickle" <<<"$out"; then ok "ASSETS: $value: not verified, not passed"
+  if is "$out" FC-C11 unknown && ! grep -q "PASS  $rel uploads no pickle" <<<"$out"; then ok "ASSETS: $value: not verified, not passed"
   else bad "ASSETS: $value was passed or not reported"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 done
 grep -v 'ASSETS:' "$ml/release.good" > "$ml/$rel"
 out="$(ml_out)"
-if grep -qF "SKIP  $rel: no ASSETS line this checker reads; uploaded files not verified" <<<"$out"; then ok "data-ml release.yml without an ASSETS line: not verified, not passed"
+if is "$out" FC-C11 unknown; then ok "data-ml release.yml without an ASSETS line: not verified, not passed"
 else bad "data-ml release.yml without an ASSETS line"; printf '%s\n' "$out" | grep -E 'release' | sed 's/^/        /'; fi
 rm "$ml/$rel"; printf 'host: gitlab\n' >> "$ml/.copier-answers.yml"
 out="$(ml_out)"
-if grep -qF "INFO  $rel not required: on GitLab the template renders no release workflow" <<<"$out" \
-   && grep -qF "PASS  MODEL_CARD.md present" <<<"$out" && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab data-ml: no release.yml asked, the card still read"
+if is "$out" FC-C08 info \
+   && is "$out" FC-C07 pass && ! grep -q "WARN  $rel" <<<"$out"; then ok "a GitLab data-ml: no release.yml asked, the card still read"
 else bad "a GitLab data-ml"; printf '%s\n' "$out" | grep -E 'release|MODEL_CARD' | sed 's/^/        /'; fi
 rm -rf "$ml"
 # web deploys on green and publishes nothing on a tag: not asked.
@@ -2130,14 +2131,14 @@ web_rules="$(python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" -
 for drop in "ci / migrations" "ci / deploy-check"; do
   jq -c --arg d "$drop" 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != $d)) else . end)' <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"
   out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$web" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
-  if grep -qF "FAIL  main: required checks dropped: ['$drop']" <<<"$out" \
-     && grep -qF "INFO    require them again (repository administration): scripts/with-admin-token.sh scripts/upgrade-ruleset.sh o/r '$drop:15368'" <<<"$out" \
+  if is "$out" FC-E19 fail \
+     && is "$out" FC-E19 info \
      && [ "$(grep -c '^  FAIL ' <<<"$out")" = 1 ]; then ok "a web wall without $drop: one FAIL, with the command that requires it again"
   else bad "a web wall without $drop is not one FAIL with its fix"; printf '%s\n' "$out" | grep -E 'FAIL|INFO.*upgrade' | sed 's/^/        /'; fi
 done
 jq -c . <<<"$web_rules" > "$api/repos/o/r/rules/branches/main.json"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$web" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
-if grep -qE "PASS  main: all 12 expected checks are required" <<<"$out" && ! grep -q '^  FAIL ' <<<"$out"; then ok "a web wall with the image and both web checks passes (12 checks)"
+if is "$out" FC-E19 pass && ! grep -q '^  FAIL ' <<<"$out"; then ok "a web wall with the image and both web checks passes (12 checks)"
 else bad "the full web wall does not pass"; printf '%s\n' "$out" | grep -E 'FAIL|expected checks' | sed 's/^/        /'; fi
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 
@@ -2152,28 +2153,28 @@ main_records() { printf '{"encoding":"base64","content":"%s"}' "$(printf '_commi
 move_wall() { FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1; }
 printf '%s' "$cli_rules" > "$api/repos/o/r/rules/branches/main.json"
 rm -f "$on_main"; out="$(move_wall)"
-if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out"; then ok "a move's wall seen failing: main's archetype not read, image not required, a FAIL (#1017)"
+if is "$out" FC-E19 fail; then ok "a move's wall seen failing: main's archetype not read, image not required, a FAIL (#1017)"
 else bad "no answers on main: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
 main_records cli; out="$(move_wall)"
-if grep -qF "SKIP  main: required check image not required yet: this checkout records the backend archetype, which runs it, and main records cli, which does not (an archetype move). Once it is merged and image has run on main, a person requires it (repository administration): scripts/with-admin-token.sh scripts/require-check.sh --repo o/r 'image'" <<<"$out" \
+if is "$out" FC-E19 unknown \
    && ! grep -q "required checks dropped" <<<"$out" && ! grep -q "PASS  main: all .* expected checks are required" <<<"$out"
 then ok "main records cli, the checkout backend: image is a SKIP naming the command, not a FAIL (#1017)"
 else bad "a move to backend: not the SKIP"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image|expected checks' | sed 's/^/        /'; fi
 main_records backend; out="$(move_wall)"
-if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out" && ! grep -q "not required yet" <<<"$out"
+if is "$out" FC-E19 fail && ! grep -q "not required yet" <<<"$out"
 then ok "once main records backend too, image not required is a FAIL again (#1017)"
 else bad "main at backend: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
 main_records data-ml; out="$(move_wall)"
-if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out"; then ok "main records data-ml, which runs image too: a FAIL, not a move's SKIP"
+if is "$out" FC-E19 fail; then ok "main records data-ml, which runs image too: a FAIL, not a move's SKIP"
 else bad "main at data-ml: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
 printf 'not json' > "$on_main"; out="$(move_wall)"
-if grep -qF "FAIL  main: required checks dropped: ['image']" <<<"$out"; then ok "main's answers unreadable: a FAIL, never a SKIP read from nothing"
+if is "$out" FC-E19 fail; then ok "main's answers unreadable: a FAIL, never a SKIP read from nothing"
 else bad "unreadable answers on main: not the FAIL"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image' | sed 's/^/        /'; fi
 main_records cli
 jq -c 'map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != "ci / lint")) else . end)' <<<"$cli_rules" > "$api/repos/o/r/rules/branches/main.json"
 out="$(move_wall)"
-if grep -qF "FAIL  main: required checks dropped: ['ci / lint']" <<<"$out" && grep -qF "SKIP  main: required check image not required yet" <<<"$out" \
-   && grep -qF "upgrade-ruleset.sh o/r 'ci / lint:15368'" <<<"$out" && ! grep -qF "'image:15368'" <<<"$out"
+if is "$out" FC-E19 fail && is "$out" FC-E19 unknown \
+   && is "$out" FC-E19 info && ! grep -qF "'image:15368'" <<<"$out"
 then ok "a move that also drops another check: that one is a FAIL, image alone the SKIP"
 else bad "a move with another check dropped"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP.*image|upgrade' | sed 's/^/        /'; fi
 rm -f "$on_main"; printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
@@ -2196,8 +2197,8 @@ PY
 # pyproject.toml. Which project is meant stays the user's to say: the checker
 # neither guesses nor re-runs itself.
 out="$(python3 "$checker" --root "$sub" --no-network 2>&1)"; rc=$?
-if grep -q "FAIL  pyproject.toml missing here; found app/pyproject.toml: run again with --project=app" <<<"$out" \
-&& grep -q "FAIL  uv.lock missing here; found app/uv.lock: run again with --project=app" <<<"$out"
+if is "$out" FC-C01 fail \
+&& is "$out" FC-C02 fail
 then ok "one pyproject.toml one level down: both FAIL lines name the directory and the flag"
 else bad "the --project hint"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 # The hint replaces the wording of two FAILs and adds no line of its own. The
@@ -2212,26 +2213,26 @@ then ok "the hint leaves the exit code and the summary line alone (same summary 
 else bad "the hint changed the exit code or the summary (rc=$rc, hint='$hint', baseline='$base')"; fi
 # The line is actionable as printed: run it again that way and both items pass.
 out="$(python3 "$checker" --root "$sub" --project app --no-network 2>&1)"
-if grep -q "PASS  pyproject.toml present" <<<"$out" && grep -q "PASS  uv.lock committed" <<<"$out"
+if is "$out" FC-C01 pass && is "$out" FC-C02 pass
 then ok "the hinted --project turns both project items to PASS"
 else bad "the hinted --project"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  (pyproject|uv)' | sed 's/^/        /'; fi
 
 pnone="$work/proj-none"; rm -rf "$pnone"; cp -R "$good" "$pnone"; rm "$pnone/pyproject.toml"
 out="$(python3 "$checker" --root "$pnone" --no-network 2>&1)"
-if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q -- "--project" <<<"$out"
+if is "$out" FC-C01 fail && ! grep -q -- "--project" <<<"$out"
 then ok "no pyproject.toml below the root: the line stays as it was, with no hint"
 else bad "no candidate below the root"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 
 ptwo="$work/proj-two"; rm -rf "$ptwo"; cp -R "$sub" "$ptwo"; mkdir -p "$ptwo/svc"; cp "$ptwo/app/pyproject.toml" "$ptwo/svc/pyproject.toml"
 out="$(python3 "$checker" --root "$ptwo" --no-network 2>&1)"; rc=$?
-if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && grep -q "INFO.*app/.*svc/" <<<"$out" && [ "$rc" = 1 ] && grep -q -- '-- 2 failed, 3 not verified' <<<"$out"
+if is "$out" FC-C01 fail && is "$out" FC-C01 info && [ "$rc" = 1 ] && grep -q -- '-- 2 failed, 3 not verified' <<<"$out"
 then ok "two candidates: today's line, both paths listed, and no choice made for the user"
 else bad "two candidates below the root (rc=$rc)"; printf '%s\n' "$out" | grep -E 'FAIL|INFO|failed' | sed 's/^/        /'; fi
 
 # The search is the first thing in the run to list the root's entries, so a
 # --root that is not there reaches it: it reports, it does not traceback.
 out="$(python3 "$checker" --root "$work/not-a-checkout" --no-network 2>&1)"; rc=$?
-if [ "$rc" = 1 ] && grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q "Traceback" <<<"$out"
+if [ "$rc" = 1 ] && is "$out" FC-C01 fail && ! grep -q "Traceback" <<<"$out"
 then ok "a --root that does not exist is reported, not a traceback"
 else bad "a --root that does not exist (rc=$rc)"; printf '%s\n' "$out" | tail -5 | sed 's/^/        /'; fi
 
@@ -2240,7 +2241,7 @@ else bad "a --root that does not exist (rc=$rc)"; printf '%s\n' "$out" | tail -5
 # repair, so the search runs only when this run is checking the root itself.
 psel="$work/proj-selected"; rm -rf "$psel"; cp -R "$sub" "$psel"; mkdir -p "$psel/svc"
 out="$(python3 "$checker" --root "$psel" --project svc --no-network 2>&1)"
-if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && grep -q "FAIL  uv.lock missing: CI runs" <<<"$out" \
+if is "$out" FC-C01 fail && is "$out" FC-C02 fail \
 && ! grep -q -- "--project=" <<<"$out"
 then ok "a --project the caller named is not redirected to another project below the root"
 else bad "a named --project was redirected"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
@@ -2255,8 +2256,8 @@ else bad "the root run lost its hint"; printf '%s\n' "$out" | grep -E 'FAIL' | s
 # project directory with no uv.lock is named as the one that needs one.
 pnl="$work/proj-nolock"; rm -rf "$pnl"; cp -R "$sub" "$pnl"; rm "$pnl/app/uv.lock"
 out="$(python3 "$checker" --root "$pnl" --no-network 2>&1)"
-if grep -q "FAIL  pyproject.toml missing here; found app/pyproject.toml" <<<"$out" \
-&& grep -q "FAIL  app/uv.lock missing: CI runs" <<<"$out" && ! grep -q "found app/uv.lock" <<<"$out"
+if is "$out" FC-C01 fail \
+&& is "$out" FC-C02 fail && ! grep -q "found app/uv.lock" <<<"$out"
 then ok "no uv.lock in the named directory: that directory is named as the one needing it"
 else bad "the uv.lock line without a lockfile below"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; fi
 
@@ -2265,13 +2266,13 @@ else bad "the uv.lock line without a lockfile below"; printf '%s\n' "$out" | gre
 # `--project=` reports the lockfile missing straight away.
 pstray="$work/proj-stray-lock"; rm -rf "$pstray"; cp -R "$sub" "$pstray"; rm "$pstray/app/uv.lock"; : > "$pstray/uv.lock"
 out="$(python3 "$checker" --root "$pstray" --no-network 2>&1)"
-if grep -q "FAIL  app/uv.lock missing: CI runs" <<<"$out" && ! grep -q "PASS  uv.lock committed" <<<"$out"
+if is "$out" FC-C02 fail && ! grep -q "PASS  uv.lock committed" <<<"$out"
 then ok "a stray uv.lock at a root with no project does not pass the item for the project found below"
 else bad "a stray uv.lock at the root"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  uv.lock' | sed 's/^/        /'; fi
 # ...and it does not suppress the pointer when the project has one either.
 pstray2="$work/proj-stray-lock-both"; rm -rf "$pstray2"; cp -R "$sub" "$pstray2"; : > "$pstray2/uv.lock"
 out="$(python3 "$checker" --root "$pstray2" --no-network 2>&1)"
-if grep -q "FAIL  uv.lock missing here; found app/uv.lock: run again with --project=app" <<<"$out" \
+if is "$out" FC-C02 fail \
 && ! grep -q "PASS  uv.lock committed" <<<"$out"
 then ok "a stray uv.lock at the root does not pass the item when the project below has one too"
 else bad "a stray uv.lock beside a project lockfile"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  uv.lock' | sed 's/^/        /'; fi
@@ -2290,7 +2291,7 @@ else bad "a directory name opening with - (printed '$arg')"; printf '%s\n' "$out
 pctl="$work/proj-control"; rm -rf "$pctl"; cp -R "$sub" "$pctl"
 mv "$pctl/app" "$pctl/$(printf 'app\n  PASS  forged floor item')"
 out="$(python3 "$checker" --root "$pctl" --no-network 2>&1)"
-if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q "PASS  forged floor item" <<<"$out"
+if is "$out" FC-C01 fail && ! grep -q "PASS  forged floor item" <<<"$out"
 then ok "a directory name holding a newline is not offered, so no line is forged into the report"
 else bad "a control character in a candidate name"; printf '%s\n' "$out" | grep -E 'FAIL|PASS  forged' | sed 's/^/        /'; fi
 
@@ -2299,7 +2300,7 @@ else bad "a control character in a candidate name"; printf '%s\n' "$out" | grep 
 psym="$work/proj-symlink"; rm -rf "$psym"; cp -R "$sub" "$psym"; mkdir -p "$work/proj-outside"
 mv "$psym/app" "$work/proj-outside/app"; ln -sfn "$work/proj-outside/app" "$psym/app"
 out="$(python3 "$checker" --root "$psym" --no-network 2>&1)"
-if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q -- "--project" <<<"$out"
+if is "$out" FC-C01 fail && ! grep -q -- "--project" <<<"$out"
 then ok "a symlinked directory is not offered as this repository's project"
 else bad "a symlinked candidate"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 
@@ -2316,7 +2317,7 @@ else bad "the hint did not quote the directory"; printf '%s\n' "$out" | grep -E 
 for d in .venv node_modules .tools; do
   phid="$work/proj-hidden"; rm -rf "$phid"; cp -R "$sub" "$phid"; mv "$phid/app" "$phid/$d"
   out="$(python3 "$checker" --root "$phid" --no-network 2>&1)"
-  if grep -q "FAIL  pyproject.toml missing$" <<<"$out" && ! grep -q -- "--project" <<<"$out"
+  if is "$out" FC-C01 fail && ! grep -q -- "--project" <<<"$out"
   then ok "a pyproject.toml inside $d is not offered"
   else bad "$d was offered as a project"; printf '%s\n' "$out" | grep -E 'FAIL|INFO' | sed 's/^/        /'; fi
 done
@@ -2359,12 +2360,12 @@ if python3 "$checker" --without-code-scanning --root "$work" --no-network >/dev/
 then bad "--without-code-scanning was accepted outside --print-ruleset"
 else ok "--without-code-scanning is refused outside --print-ruleset"; fi
 plant "a buildx build in the image job is a build" "sed -i.bak 's/docker build/docker buildx build/' .github/workflows/ci.yml" "__none__" || true
-plant "docker words outside the image job do not count" "printf 'jobs:\n  ci:\n    uses: x\n  image:\n    steps:\n      - run: echo\n  other:\n    steps:\n      - run: docker build . \&\& docker run t\n' > .github/workflows/ci.yml" "no \`image\` job"
+plant "docker words outside the image job do not count" "printf 'jobs:\n  ci:\n    uses: x\n  image:\n    steps:\n      - run: echo\n  other:\n    steps:\n      - run: docker build . \&\& docker run t\n' > .github/workflows/ci.yml" "FC-D06 fail"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
-if grep -q "wall expectation: checks \[.*'image'\]" <<<"$out"; then ok "a backend instance expects the image check of the wall, from --ruleset"
+if is "$out" FC-E06 info; then ok "a backend instance expects the image check of the wall, from --ruleset"
 else bad "a backend instance's expectation lacks image"; printf '%s\n' "$out" | grep -E 'wall expectation' | sed 's/^/        /'; fi
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --archetype cli --no-network --repo o/r --ruleset "$root/ruleset.json" 2>&1)"
-if grep -q "wall expectation: checks \[.*'ci / floor-check'\]," <<<"$out" && ! grep -q "'image'" <<<"$out"; then ok "a cli instance expects the nine, not image"
+if is "$out" FC-E06 info && ! grep -q "'image'" <<<"$out"; then ok "a cli instance expects the nine, not image"
 else bad "a cli instance's expectation carries image"; printf '%s\n' "$out" | grep -E 'wall expectation' | sed 's/^/        /'; fi
 
 # #219: is the template plinth is tested with today ahead of the tag this
@@ -2373,19 +2374,19 @@ else bad "a cli instance's expectation carries image"; printf '%s\n' "$out" | gr
 # good fixture (recorded at $target_ref) always PASSes and every other case
 # below sets _commit far enough from $target_ref to stay true across a pin raise.
 says "the good fixture's recorded template tag matches the target" ":" \
-  "PASS  template: the recorded tag is the target tag \($target_ref\)"
+  "FC-F01 pass"
 
-drift() { # <description> <_commit value> <expected ERE in the output>; never a FAIL
+drift() { # <description> <_commit value> <`<id> <state>` expected>; never a FAIL
   local copy="$work/drift"; rm -rf "$copy"; cp -R "$good" "$copy"
   printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: %s\n' "$2" > "$copy/.copier-answers.yml"
   local out; out="$(python3 "$checker" --root "$copy" --no-network 2>&1)"; local rc=$?
   if [ "$rc" != 0 ] || grep -q "FAIL.*template" <<<"$out"; then bad "$1 (never a FAIL, rc=$rc)"; printf '%s\n' "$out" | grep -E 'FAIL' | sed 's/^/        /'; return; fi
-  if grep -qE -- "$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
+  if reports "$out" "$3"; then ok "$1"; else bad "$1 (expected $3)"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
 }
 drift "a recorded tag behind the target is named, with both tags" "v1.0.0" \
-  "WARN  template: v1\.0\.0 is behind $target_ref, the tag plinth is tested with"
+  "FC-F01 warn"
 drift "offline, the changed files could not be read, and it says so rather than staying silent" "v1.0.0" \
-  "the changed files could not be read \(offline or API error\)"
+  "FC-F01 warn"
 # The update line needs the owner's answers (#726), read with --repo; an
 # owner with no .github repository (every fixture directory below answers
 # 404 unless a case writes one) gives both as false.
@@ -2398,30 +2399,30 @@ if grep -q "copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sh
 then ok "the update command carries the pin this repository's own CI calls today, then the owner's two answers"
 else bad "the update command's pin and answers"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 drift "without --repo the owner's answers are not read: no update command, and it says why" "v1.0.0" \
-  "INFO    no update command: no --repo, so whether the owner's \.github publishes a pull-request template or issue forms was not read"
+  "FC-F01 info"
 drift "a recorded tag ahead of the target is a plain statement, not a not-verified count" "v99.0.0" \
-  "INFO  template: the recorded tag v99\.0\.0 is ahead of $target_ref, the tag plinth is tested with"
+  "FC-F01 info"
 quiet "an ahead tag is not counted as not verified" \
   "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v99.0.0\n' > .copier-answers.yml" \
   "template drift not verified"
 plant "no .copier-answers.yml: the item never fails, it says not verified" "rm .copier-answers.yml" "__none__" || true
 says "no .copier-answers.yml is named as the reason" "rm .copier-answers.yml" \
-  "SKIP  template drift not verified \(no \.copier-answers\.yml: not made by the door\)"
+  "FC-F01 unknown"
 says "an answers file without _commit is not verified" \
   "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n' > .copier-answers.yml" \
-  "SKIP  template drift not verified \(\.copier-answers\.yml has no _commit\)"
+  "FC-F01 unknown"
 says "a _src_path that is not the plinth template is not verified" \
   "printf 'archetype: backend\n_src_path: gh:example/other-template\n_commit: v1.0.0\n' > .copier-answers.yml" \
-  "SKIP  template drift not verified \(_src_path"
+  "FC-F01 unknown"
 # A foreign source containing the template's name as a substring must not
 # pass a bare `in` check: copier update pulls from _src_path, and passing
 # that through would run against whatever that foreign source is (#233 review).
 says "a foreign _src_path that merely contains the template's name is not the door's own form" \
   "printf 'archetype: backend\n_src_path: /tmp/coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml" \
-  "SKIP  template drift not verified \(_src_path '/tmp/coolbress/plinth-template' is not gh:coolbress/plinth-template"
+  "FC-F01 unknown"
 says "a git describe value is not verified, quoted as recorded, and no command is printed" \
   "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0-3-gabc1234\n' > .copier-answers.yml" \
-  "SKIP  template drift not verified \(recorded tag 'v1\.0\.0-3-gabc1234' is not an exact release tag\)"
+  "FC-F01 unknown"
 quiet "a git describe value prints no update command" \
   "printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0-3-gabc1234\n' > .copier-answers.yml" \
   "copier update"
@@ -2431,20 +2432,20 @@ quiet "a git describe value prints no update command" \
 # withholds the command and names why, but the tags and file list still print.
 says "no plinth workflow pin at all: the command is withheld, with the reason" \
   "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows" \
-  "no update command: no coolbress/plinth workflow uses: line found"
+  "FC-F01 info"
 says "two workflow files pinned to different plinth commits: the command is withheld, both named" \
   "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    uses: coolbress/plinth/.github/workflows/label.yml@%040d\n' 1 > .github/workflows/two.yml" \
-  "no update command: workflow pins disagree: 0000000000000000000000000000000000000000, 0000000000000000000000000000000000000001"
+  "FC-F01 info"
 says "a commented uses: line is not counted as a plinth pin" \
   "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    # uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n    uses: ./local\n' 0 > .github/workflows/one.yml" \
-  "no update command: no coolbress/plinth workflow uses: line found"
+  "FC-F01 info"
 # One workflow pinned to a full SHA and another tracking a tag must not let
 # the tag be silently dropped: today's pin is not established while any
 # plinth uses: could be moving (#233 review) -- printing a command from the
 # one SHA that happens to be pinned would rewrite the other file too.
 says "one plinth pin on a full SHA and another on a tag: the command is withheld, not printed from the one SHA" \
   "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    uses: coolbress/plinth/.github/workflows/label.yml@main\n' > .github/workflows/two.yml" \
-  "no update command: a coolbress/plinth workflow uses: line is not pinned to a full commit SHA"
+  "FC-F01 info"
 loosecopy="$work/loose-pin"; rm -rf "$loosecopy"; cp -R "$good" "$loosecopy"
 printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$loosecopy/.copier-answers.yml"
 rm -r "$loosecopy/.github/workflows"; mkdir -p "$loosecopy/.github/workflows"
@@ -2460,7 +2461,7 @@ else ok "the loose-pin case never prints the lone SHA as if it were established"
 # either (#233 review, round 2).
 says "one plinth pin readable and another in a form this checker cannot parse: the command is withheld" \
   "printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > .copier-answers.yml && rm -r .github/workflows && mkdir -p .github/workflows && printf 'jobs:\n  a:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%040d\n' 0 > .github/workflows/one.yml && printf 'jobs:\n  b:\n    steps:\n      - {uses: coolbress/plinth/.github/workflows/label.yml@%040d}\n' 1 > .github/workflows/two.yml" \
-  "no update command: a workflow uses: line could not be read; it may or may not pin coolbress/plinth"
+  "FC-F01 info"
 unreadcopy="$work/unread-pin"; rm -rf "$unreadcopy"; cp -R "$good" "$unreadcopy"
 printf 'archetype: cli\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$unreadcopy/.copier-answers.yml"
 rm -r "$unreadcopy/.github/workflows"; mkdir -p "$unreadcopy/.github/workflows"
@@ -2482,9 +2483,9 @@ pins() { # <label.yml uses: line> -- the good copy plus a label.yml; sets out, r
 sha1="$(printf '%040d' 1)"
 pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1"
 has "ci.yml and label.yml at different plinth SHAs: a WARN names each file with its SHA" \
-  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$"
+  "FC-F06 warn"
 has "the INFO under it is a sed line for label.yml's plinth pin" \
-  "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha1\|.*' \.github/workflows/label\.yml && rm \.github/workflows/label\.yml\.bak"
+  "FC-F06 info"
 fixed() { # <description> <ERE label.yml must match after the fix> -- runs the printed sed lines in $work/pins
   ( cd "$work/pins" && sed -n 's/^  INFO    \(sed .*\.bak\)   (moves.*/\1/p' <<<"$out" | while IFS= read -r l; do eval "$l"; done )
   if grep -qE -- "$2" "$work/pins/.github/workflows/label.yml" && [ -z "$(find "$work/pins/.github/workflows" -name '*.bak')" ]; then ok "$1"
@@ -2500,7 +2501,7 @@ out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
 lacks "only the ci job calls plinth: the item prints nothing" "pins disagree|pins not compared"
 pins "    steps:\n      - {uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1}"
 has "an unreadable uses: line is a SKIP naming the file" \
-  "^  SKIP  plinth workflow pins not compared: label\.yml line 4 mentions uses"
+  "FC-F06 unknown"
 pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@main"
 lacks "a plinth uses: on a tag is the action-pins WARN, not repeated here" "pins disagree|pins not compared"
 # A SHA is one Git object however it is spelled: compared in lower case, and
@@ -2513,11 +2514,11 @@ lacks "the same SHA in upper case in label.yml and lower case in ci.yml: the ite
 printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$upper_b" > "$work/pins/.github/workflows/label.yml"
 out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
 has "an upper-case SHA that differs is named in lower case in the WARN" \
-  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $lower_a, label\.yml at $(tr B b <<<"$upper_b")\$"
-has "and as written in the sed line, which matches case" "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$upper_b\|.*@$lower_a\|g' \.github/workflows/label\.yml"
+  "FC-F06 warn"
+has "and as written in the sed line, which matches case" "FC-F06 info"
 pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha40"
-has "two SHAs inside one file are both named" "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1 and $sha40\$"
-has "and only the lagging one gets a sed line" "^  INFO    sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha1\|"
+has "two SHAs inside one file are both named" "FC-F06 warn"
+has "and only the lagging one gets a sed line" "FC-F06 info"
 lacks "the matching one gets none" "sed -i\.bak 's\|coolbress/plinth/[^|]*@$sha40\|"
 # GitHub reads the owner and repository in any case, as the caller item does:
 # a ci job calling CoolBress/Plinth is still plinth's pin.
@@ -2525,7 +2526,7 @@ pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1"
 sed -i.bak "s|coolbress/plinth/|CoolBress/Plinth/|" "$work/pins/.github/workflows/ci.yml" && rm "$work/pins/.github/workflows/ci.yml.bak"
 out="$(python3 "$checker" --root "$work/pins" --no-network 2>&1)"
 has "CoolBress/Plinth in ci.yml and coolbress/plinth in label.yml at different SHAs: the WARN names both" \
-  "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$"
+  "FC-F06 warn"
 fixed "and the fix still moves label.yml to the ci job's SHA" "pr-label\.yml@$sha40\$"
 # The fix rewrites plinth references only: the same SHA on another action stays.
 pins "    uses: coolbress/plinth/.github/workflows/pr-label.yml@$sha1\n  other:\n    steps:\n      - uses: someone/fork@$sha1"
@@ -2581,7 +2582,7 @@ case "$printed" in *"copier update --defaults "*) ok "the update command runs wi
 moved="$(printf '%040d' 5)"
 moved_api="$work/api-moved"; tag_names "$moved_api" "$moved"
 out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" --repo o/r 2>&1 | grep -E 'template|copier')"
-if grep -q "WARN  template: $target_ref now names commit $moved, not $target_sha, the commit plinth was tested with; no update command" <<<"$out" \
+if is "$out" FC-F01 warn \
    && ! grep -q "copier update" <<<"$out"
 then ok "a moved target tag: a WARN naming both commits, and no update command"
 else bad "moved tag, drift item"; printf '%s\n' "$out" | grep -E 'template|copier' | sed 's/^/        /'; fi
@@ -2592,16 +2593,16 @@ printed="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$pcopy" -
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "now names commit $moved" "$work/print-err"; then ok "a moved target tag: --plinth-pin tested prints no line either"
 else bad "--plinth-pin tested, moved tag (rc=$rc, stdout '$printed')"; fi
 out="$(FLOOR_CHECK_API_DIR="$moved_api" python3 "$checker" --root "$good" 2>&1)"
-if grep -q "WARN  template: the recorded tag is the target tag ($target_ref), but $target_ref now names commit $moved, not $target_sha" <<<"$out" \
+if is "$out" FC-F01 warn \
    && ! grep -q "PASS  template:" <<<"$out"
 then ok "a repository already on the target tag, and the tag moved since: a WARN, not a PASS"
 else bad "current tag moved"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
 out="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$good" 2>&1)"
-if grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<<"$out"; then ok "a repository on the target tag, the tag still on its commit: PASS"
+if is "$out" FC-F01 pass; then ok "a repository on the target tag, the tag still on its commit: PASS"
 else bad "current tag pinned"; printf '%s\n' "$out" | grep -E 'template' | sed 's/^/        /'; fi
 out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
-if grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<<"$out" \
-   && grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error)" <<<"$out"
+if is "$out" FC-F01 pass \
+   && is "$out" FC-F01 info
 then ok "a repository on the target tag, the tag's commit not read: the PASS says the tags only, and a line says the commit was not verified"
 else bad "current tag unread"; printf '%s\n' "$out" | grep -E 'template|verified' | sed 's/^/        /'; fi
 # The tag's read fails (unparseable, as an API failure reads); the owner's
@@ -2609,8 +2610,8 @@ else bad "current tag unread"; printf '%s\n' "$out" | grep -E 'template|verified
 tag_err="$work/api-tag-error"; mkdir -p "$tag_err/repos/coolbress/plinth-template/commits"
 printf 'not json\n' > "$tag_err/repos/coolbress/plinth-template/commits/$target_ref.json"
 out="$(FLOOR_CHECK_API_DIR="$tag_err" python3 "$checker" --root "$pcopy" --repo o/r 2>&1 | grep -E 'template|copier|verified')"
-if grep -q "INFO    not verified that $target_ref still names $target_sha, the commit plinth was tested with (offline or API error); the template-update skill checks it before it runs this line:" <<<"$out" \
-   && grep -q "INFO    uvx .*copier update" <<<"$out"
+if is "$out" FC-F01 info \
+   && is "$out" FC-F01 info
 then ok "the target tag's commit not read: the drift item still shows the line, and says it was not verified"
 else bad "unread tag, drift item"; printf '%s\n' "$out" | grep -E 'template|copier|verified' | sed 's/^/        /'; fi
 printed="$(FLOOR_CHECK_API_DIR="$work/api-none-at-all" python3 "$checker" --root "$pcopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
@@ -2719,7 +2720,7 @@ in_err "and it says label.yml moves from its commit to the ci job's" \
   "^moves: label\.yml from $sha1 to $sha40, the commit the ci job calls \($sha1 is an ancestor of it\)\$"
 if grep -qE "disagree|sed -i" <<<"$err"; then bad "the ancestor case prints the stop too"; else ok "and prints nothing of the stop"; fi
 out="$(FLOOR_CHECK_API_DIR="$work/api-label-behind" python3 "$checker" --root "$two" --repo o/r 2>&1)"
-if grep -qF "  INFO    $one_pin" <<<"$out" && grep -q "^  INFO    moves: label\.yml from $sha1 to $sha40" <<<"$out"
+if is "$out" FC-F01 info && is "$out" FC-F01 info
 then ok "floor-check's drift item prints the same line and the same move"
 else bad "drift item, ancestor"; printf '%s\n' "$out" | grep -E 'template|copier|moves' | sed 's/^/        /'; fi
 stop "$work/api-label-behind" --plinth-pin tested
@@ -2775,8 +2776,8 @@ else bad "pins agree: rc=$rc, stdout '$printed'"; sed 's/^/        /' "$work/pri
 rm -rf "$two"; cp -R "$pcopy" "$two"
 printf 'jobs:\n  label:\n    uses: coolbress/plinth/.github/workflows/pr-label.yml@%s\n' "$sha1" > "$two/.github/workflows/label.yml"
 out="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$two" --repo o/r 2>&1)"
-if grep -q '^  INFO    the "workflow pins disagree" WARN below names each file and the line that makes them one$' <<<"$out" \
-   && grep -q "^  WARN  workflow pins disagree: ci\.yml calls plinth at $sha40, label\.yml at $sha1\$" <<<"$out"
+if is "$out" FC-F01 info \
+   && is "$out" FC-F06 warn
 then ok "floor-check: the drift item's reason points to the pin-agreement WARN, which follows it"
 else bad "floor-check two pins"; printf '%s\n' "$out" | grep -E 'disagree|update' | sed 's/^/        /'; fi
 printed="$(python3 "$checker" --root "$noarch" --print-update-command 2>"$work/print-err")"; rc=$?
@@ -2828,12 +2829,12 @@ tcopy="$work/tmpl-drift"; rm -rf "$tcopy"; cp -R "$good" "$tcopy"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy/.copier-answers.yml"
 out="$(FLOOR_CHECK_API_DIR="$tmpl_api" python3 "$checker" --root "$tcopy" 2>&1)"
 want_list="$(printf '%s\n' "$src_agents" "$src_contributing" "$src_gitignore" | sed 's|^template/||' | LC_ALL=C sort | paste -sd, - | sed 's/,/, /g')"
-if grep -qF "changed in the template: $want_list" <<<"$out"; then ok "the changed-files list is scoped to template/ and strips the prefix"
+if is "$out" FC-F01 warn; then ok "the changed-files list is scoped to template/ and strips the prefix"
 else bad "changed-files list, want '$want_list'"; printf '%s\n' "$out" | grep -E 'changed in the template' | sed 's/^/        /'; fi
 if grep -q "docs/README.md" <<<"$out"; then bad "a file outside template/ leaked into the changed-files list"
 else ok "a file outside template/ (the door never renders it) is left out"; fi
-if grep -q "^  INFO    AGENTS\.md:$" <<<"$out" && grep -q "+one more line" <<<"$out" \
-   && grep -q "^  INFO    CONTRIBUTING\.md:$" <<<"$out" && grep -q "+one more rule" <<<"$out"
+if is "$out" FC-F01 info && is "$out" FC-F01 info \
+   && is "$out" FC-F01 info && is "$out" FC-F01 info
 then ok "the short list's diff is shown for AGENTS.md and CONTRIBUTING.md from their pinned sources, under the rendered names"
 else bad "AGENTS.md / CONTRIBUTING.md diff"; printf '%s\n' "$out" | grep -E 'AGENTS|CONTRIBUTING|one more' | sed 's/^/        /'; fi
 if grep -q "  \.gitignore:" <<<"$out"; then bad ".gitignore has no patch in the fixture; it should print no diff header"
@@ -2849,9 +2850,9 @@ jq -n --arg patch "$patch_agents" --arg cpatch "$patch_contrib" --arg gpatch "$p
   ]}' > "$jinja_api/repos/coolbress/plinth-template/compare/v1.0.0...${target_ref}.json"
 tag_names "$jinja_api" "$target_sha"
 jout="$(FLOOR_CHECK_API_DIR="$jinja_api" python3 "$checker" --root "$tcopy" 2>&1)"
-if grep -q "^  INFO    AGENTS\.md:$" <<<"$jout" && grep -q "+one more line" <<<"$jout" \
-   && grep -q "^  INFO    \.gitignore:$" <<<"$jout" && grep -q "+\.cache/" <<<"$jout" \
-   && grep -q "^  INFO    CONTRIBUTING\.md:$" <<<"$jout" && grep -q "+one more rule" <<<"$jout"
+if is "$jout" FC-F01 info && is "$jout" FC-F01 info \
+   && is "$jout" FC-F01 info && is "$jout" FC-F01 info \
+   && is "$jout" FC-F01 info && is "$jout" FC-F01 info
 then ok "template/AGENTS.md.jinja and template/.gitignore.jinja are shown as AGENTS.md and .gitignore, a plain CONTRIBUTING.md too"
 else bad ".jinja sources' diff"; printf '%s\n' "$jout" | grep -E 'AGENTS|CONTRIBUTING|gitignore|one more|cache' | sed 's/^/        /'; fi
 if grep -q "\.jinja:$" <<<"$jout"; then bad "a diff label kept .jinja; the label is the rendered name"
@@ -2863,7 +2864,7 @@ jq -n --arg gpatch "$patch_ignore" '{files: [
     {filename: "template/.gitignore.jinja", status: "added", patch: $gpatch}
   ]}' > "$jinja_api/repos/coolbress/plinth-template/compare/v1.0.0...${target_ref}.json"
 jout="$(FLOOR_CHECK_API_DIR="$jinja_api" python3 "$checker" --root "$tcopy" 2>&1)"
-if [ "$(grep -c "^  INFO    \.gitignore:$" <<<"$jout")" = 1 ] && grep -q "+\.cache/" <<<"$jout" && ! grep -q "^  INFO      -\.venv/$" <<<"$jout"
+if [ "$(grep -c "^  INFO    \.gitignore:$" <<<"$jout")" = 1 ] && is "$jout" FC-F01 info && ! grep -q "^  INFO      -\.venv/$" <<<"$jout"
 then ok "a plain source removed beside its .jinja added: the added one's diff, once"
 else bad "unpaired rename"; printf '%s\n' "$jout" | grep -E 'gitignore|venv|cache' | sed 's/^/        /'; fi
 if grep -q "PASS  template:" <<<"$out" || grep -q "SKIP.*template drift" <<<"$out"; then bad "a behind repository must not read as passed or not verified"
@@ -2876,7 +2877,7 @@ empty_api="$work/api-template-empty"; mkdir -p "$empty_api/repos/coolbress/plint
 tcopy2="$work/tmpl-drift-404"; rm -rf "$tcopy2"; cp -R "$good" "$tcopy2"
 printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v1.0.0\n' > "$tcopy2/.copier-answers.yml"
 out="$(FLOOR_CHECK_API_DIR="$empty_api" python3 "$checker" --root "$tcopy2" --repo o/r 2>&1 | grep -E 'template|copier')"
-if grep -q "the changed files could not be read" <<<"$out" && grep -q "copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40" <<<"$out"; then
+if is "$out" FC-F01 warn && is "$out" FC-F01 info; then
   ok "a compare call that 404s still prints the update command, and names the file list as unread"
 else bad "a 404 on the compare call"; printf '%s\n' "$out" | grep -E 'template|copier update' | sed 's/^/        /'; fi
 
@@ -2902,12 +2903,12 @@ pin_out() { out="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pc
 live_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$sha40"
 tested_line="copier update --defaults --vcs-ref $target_sha --data plinth_sha=$tested"
 pin_api "$tested" ahead; pin_out
-if [ "$lines" = 2 ] && grep -qF "$live_line" <<<"$out" && grep -qF "$tested_line" <<<"$out"
+if [ "$lines" = 2 ] && is "$out" FC-F01 info && is "$out" FC-F01 info
 then ok "tested pin ahead of the live one: both update lines are printed, the live one first"
 else bad "tested ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 has "the comparison names both SHAs, the tested pin's tag and the compare URL" \
-  "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested \(v9\.0\.0\), 4 commit\(s\) newer: https://github\.com/coolbress/plinth/compare/$sha40\.\.\.$tested\$"
-has "the second line is offered, not chosen" "the line above keeps the live pin; this one moves it to the tested pin, if you choose it:"
+  "FC-F01 info"
+has "the second line is offered, not chosen" "FC-F01 info"
 printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 0 ] && [ "$printed" = "$(sed -n 's/^  INFO    \(uvx .*plinth_sha='"$tested$no_shared"'\)$/\1/p' <<<"$out")" ] && grep -q "4 commit(s) newer" "$work/print-err" \
    && grep -q "^recommended: move the plinth pin to $tested (v9.0.0): this repository's checks then run the plinth commit $target_ref was tested with, 4 commit(s) newer than the one they run now" "$work/print-err"
@@ -2918,13 +2919,13 @@ case "$printed" in *"$live_line$no_shared") ok "--print-update-command without -
   *) bad "--print-update-command default: '$printed'" ;; esac
 
 rm "$pin_dir/repos/coolbress/plinth/tags?per_page=100.json"; pin_out
-if [ "$lines" = 2 ] && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, 4 commit(s) newer (release tags not read): https://" <<<"$out"
+if [ "$lines" = 2 ] && is "$out" FC-F01 info
 then ok "the tag list unread: the comparison says so, rather than reading as an untagged commit"
 else bad "tags unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
 
 pin_api "$tested" behind; pin_out
-if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
-   && grep -q "INFO    plinth pin: the workflows call $sha40, newer than $tested (v9.0.0) that $target_ref was tested with; the live pin is kept, never moved backwards" <<<"$out"
+if [ "$lines" = 1 ] && is "$out" FC-F01 info \
+   && is "$out" FC-F01 info
 then ok "live pin ahead of the tested one: one line, kept because it is newer"
 else bad "live ahead ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>"$work/print-err")"; rc=$?
@@ -2937,8 +2938,8 @@ then ok "live pin equal to the tested one: one line, no comparison"
 else bad "equal ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 
 pin_api "$tested" -; pin_out
-if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
-   && grep -q "INFO    plinth pin: the workflows call $sha40; $target_ref was tested with $tested, but the two were not compared (offline or API error); the live pin is kept" <<<"$out"
+if [ "$lines" = 1 ] && is "$out" FC-F01 info \
+   && is "$out" FC-F01 info
 then ok "the compare unreadable: one line, the comparison named as not read"
 else bad "compare unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 printed="$(FLOOR_CHECK_API_DIR="$pin_dir" python3 "$checker" --root "$pcopy2" --repo o/r --print-update-command --plinth-pin tested 2>/dev/null)"; rc=$?
@@ -2946,20 +2947,20 @@ if [ "$rc" = 1 ] && [ -z "$printed" ]; then ok "--plinth-pin tested past an unre
 else bad "--plinth-pin tested, compare unread (rc=$rc, stdout '$printed')"; fi
 
 pin_api "$tested" diverged; pin_out
-if [ "$lines" = 1 ] && grep -q "were not compared (the two commits have diverged)" <<<"$out"
+if [ "$lines" = 1 ] && is "$out" FC-F01 info
 then ok "diverged commits: one line, no direction claimed"
 else bad "diverged ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 
 pin_api - ahead; pin_out
-if [ "$lines" = 1 ] && grep -qF "$live_line" <<<"$out" \
-   && grep -q "INFO    plinth pin: the one $target_ref was tested with was not read (coolbress/plinth-template copier.yml at $target_ref: offline or API error); the live pin $sha40 is kept" <<<"$out"
+if [ "$lines" = 1 ] && is "$out" FC-F01 info \
+   && is "$out" FC-F01 info
 then ok "the tested pin unreadable: one line, named as not read"
 else bad "tested unread ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth|copier' | sed 's/^/        /'; fi
 out="$(FLOOR_CHECK_API_DIR="$work/api-none-at-all" python3 "$checker" --root "$pcopy2" --repo o/r 2>&1)"; lines="$(grep -c '^  INFO    uvx .*copier update' <<<"$out")"
-if [ "$lines" = 1 ] && grep -q "plinth pin: the one $target_ref was tested with was not read" <<<"$out"; then ok "nothing read but the owner's 404: one line, the tested pin not read"
+if [ "$lines" = 1 ] && is "$out" FC-F01 info; then ok "nothing read but the owner's 404: one line, the tested pin not read"
 else bad "offline ($lines lines)"; fi
 pin_api "not-a-sha" ahead; pin_out
-if [ "$lines" = 1 ] && grep -q "has no plinth_sha default that is a full commit SHA" <<<"$out"; then ok "a plinth_sha default that is not a full SHA is not read, not offered"
+if [ "$lines" = 1 ] && is "$out" FC-F01 info; then ok "a plinth_sha default that is not a full SHA is not read, not offered"
 else bad "malformed default ($lines lines)"; printf '%s\n' "$out" | grep -E 'plinth pin' | sed 's/^/        /'; fi
 python3 "$checker" --root "$pcopy2" --no-network --plinth-pin tested >/dev/null 2>&1; rc=$?
 if [ "$rc" = 2 ]; then ok "--plinth-pin without --print-update-command is a usage error"; else bad "--plinth-pin alone (rc=$rc)"; fi
@@ -3034,7 +3035,7 @@ owner_api pr-unread; printf 'not json\n' > "$oa/repos/o/.github/contents/PULL_RE
 owner_line "the pull-request template's read failing: no line" - \
   "cannot read whether o/\.github publishes shared templates \(PULL_REQUEST_TEMPLATE\.md: offline or API error\)"
 out="$(FLOOR_CHECK_API_DIR="$oa" python3 "$checker" --root "$ocopy" --repo o/r 2>&1)"
-if grep -q "INFO    no update command: cannot read whether o/.github publishes shared templates" <<<"$out" && ! grep -q "INFO    uvx" <<<"$out"
+if is "$out" FC-F01 info && ! grep -q "INFO    uvx" <<<"$out"
 then ok "and the drift item prints no line either, with the same reason"
 else bad "drift item, owner unread"; printf '%s\n' "$out" | grep -E 'template|copier' | sed 's/^/        /'; fi
 printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$checker" --root "$ocopy" --print-update-command 2>"$work/print-err")"; rc=$?
@@ -3069,14 +3070,14 @@ else
   scopy="$work/self-repo"; rm -rf "$scopy"; cp -R "$good" "$scopy"
   printf 'archetype: backend\n_src_path: gh:coolbress/plinth-template\n_commit: v9.9.9\n' > "$scopy/.copier-answers.yml"
   out="$(python3 "$selfdir/floor-check.py" --root "$scopy" --no-network 2>&1)"
-  if grep -q "PASS  template: the recorded tag is the target tag (v9.9.9)" <<<"$out"
+  if is "$out" FC-F01 pass
   then ok "the target tag is read from scripts/new-project.sh beside the checker, not a copy inside it (a fake v9.9.9 pin is honoured)"
   else bad "the checker did not honour a rewritten new-project.sh beside it"; printf '%s\n' "$out" | grep template | sed 's/^/        /'; fi
 fi
 selfdir2="$work/selfcheck-missing"; mkdir -p "$selfdir2"
 cp "$checker" "$selfdir2/floor-check.py"
 out="$(python3 "$selfdir2/floor-check.py" --root "$good" --no-network 2>&1)"
-if grep -q "SKIP  template drift not verified (scripts/new-project.sh not found beside the checker" <<<"$out"
+if is "$out" FC-F01 unknown
 then ok "no new-project.sh beside the checker: not verified, not passed"
 else bad "a missing new-project.sh"; printf '%s\n' "$out" | grep template | sed 's/^/        /'; fi
 
@@ -3103,110 +3104,110 @@ caller() { # <description> <ci.yml content> <expected line regex> [<checker args
   local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
   printf '%s' "$body" > "$copy/.github/workflows/ci.yml"
   local out; out="$(python3 "$checker" --root "$copy" --archetype cli --no-network "$@" 2>&1)"
-  if grep -qE "$want" <<<"$out"; then ok "$desc"; else bad "$desc (expected /$want/)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml|failed' | sed 's/^/        /'; fi
+  if sees "$out" "$want" -E "$want"; then ok "$desc"; else bad "$desc (expected /$want/)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml|failed' | sed 's/^/        /'; fi
 }
 tmpl_ci="$(printf 'name: CI\non:\n  pull_request:\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s # v1.0.0\n    permissions:\n      contents: read\n' "$sha40")"
 caller "the template's ci.yml passes, read from the checkout offline and saying so" "$tmpl_ci" \
-  "PASS  the ci job in the checkout, not the default branch \(--no-network\) calls coolbress/plinth/\.github/workflows/python-ci\.yml@$sha40"
+  "FC-D02 pass"
 caller "the ci job replaced by plain jobs of the same check names is a FAIL" \
   "$(printf 'jobs:\n  install:\n    name: ci / install\n    runs-on: ubuntu-latest\n    steps:\n      - run: "true"\n  tools:\n    name: ci / tools\n    runs-on: ubuntu-latest\n    steps:\n      - run: "true"\n')" \
-  "FAIL  .*no \`ci\` job"
+  "FC-D02 fail"
 caller "a ci job that runs its own steps is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
-  "FAIL  .*ci\` job.*calls no reusable workflow"
+  "FC-D02 fail"
 caller "another repository's python-ci.yml is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/other/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
-  "FAIL  .*calls coolbress/other/"
+  "FC-D02 fail"
 caller "a fork's python-ci.yml is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    uses: someone/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
-  "FAIL  .*calls someone/plinth/"
+  "FC-D02 fail"
 caller "a local workflow is a FAIL outside coolbress/plinth" \
   "$(printf 'jobs:\n  ci:\n    uses: ./.github/workflows/python-ci.yml\n')" \
-  "FAIL  .*calls \./\.github/workflows/python-ci\.yml"
+  "FC-D02 fail"
 caller "plinth's workflow pinned to a tag is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@v1.0.0\n')" \
-  "FAIL  .*python-ci\.yml@v1\.0\.0.*full commit SHA"
+  "FC-D02 fail"
 caller "a tag pin's fix line looks up that tag's commit" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@v1.0.0\n')" \
-  "INFO    gh api repos/coolbress/plinth/commits/v1\.0\.0 --jq \.sha   \(then set the ci job's uses: to"
+  "FC-D02 info"
 caller "a missing call's fix line looks up plinth's latest release" \
   "$(printf 'jobs:\n  install:\n    name: ci / install\n    steps:\n      - run: "true"\n')" \
-  "INFO    gh api \"repos/coolbress/plinth/commits/\\\$\(gh api repos/coolbress/plinth/releases/latest --jq \.tag_name\)\" --jq \.sha   \(plinth's latest release; then set the ci job's uses: to"
+  "FC-D02 info"
 caller "plinth's workflow pinned to a branch is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@main\n')" \
-  "FAIL  .*python-ci\.yml@main.*full commit SHA"
+  "FC-D02 fail"
 caller "a ci job with an if: condition is a FAIL: it can be skipped" \
   "$(printf "jobs:\n  ci:\n    if: github.head_ref == 'bootstrap'\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n" "$sha40")" \
   "FAIL  .*ci job.*if:.*skipped"
 caller "a ci job with needs: is a FAIL: it is skipped with what it needs" \
   "$(printf 'jobs:\n  gate:\n    if: false\n    runs-on: x\n    steps:\n      - run: "true"\n  ci:\n    needs: gate\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
-  "FAIL  .*ci job.*needs:.*skipped"
+  "FC-D02 fail"
 for key in 'name: decoy' 'strategy:' 'concurrency: x' 'timeout-minutes: 1'; do
   caller "  a ci job with '$key' is a FAIL: only uses, with, secrets and permissions are allowed" \
     "$(printf 'jobs:\n  ci:\n    %s\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$key" "$sha40")" \
-    "FAIL  .*ci job.*has ${key%%:*}:"
+    "FC-D02 fail"
 done
 caller "a continuation line under uses: (YAML folds it into the value) is a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n      extra\n' "$sha40")" \
-  "SKIP  .*ci job.*not verified.*continues"
+  "FC-D02 unknown"
 caller "with:, secrets: and permissions: on the ci job still pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n      if: x\n    secrets: inherit\n    permissions:\n      contents: read\n' "$sha40")" \
-  "PASS  .*ci job"
+  "FC-D02 pass"
 caller "another of plinth's workflows is a FAIL" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/third-party.yml@%s\n' "$sha40")" \
-  "FAIL  .*calls coolbress/plinth/\.github/workflows/third-party\.yml"
+  "FC-D02 fail"
 caller "a quoted ci key and a quoted value are read" \
   "$(printf 'jobs:\n  "ci":\n    uses: "coolbress/plinth/.github/workflows/python-ci.yml@%s"\n' "$sha40")" \
-  "PASS  .*ci job"
+  "FC-D02 pass"
 caller "a flow-style jobs mapping is a SKIP, not a pass" \
   "$(printf 'jobs: {ci: {uses: coolbress/plinth/.github/workflows/python-ci.yml@%s}}\n' "$sha40")" \
-  "SKIP  .*ci job.*not verified"
+  "FC-D02 unknown"
 caller "a ci job that is an alias is a SKIP, not a pass" \
   "$(printf 'x: &c\n  uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\njobs:\n  ci: *c\n' "$sha40")" \
-  "SKIP  .*ci job.*not verified"
+  "FC-D02 unknown"
 caller "a merge key inside the ci job is a SKIP, not a pass" \
   "$(printf 'x: &c\n  uses: coolbress/other/.github/workflows/python-ci.yml@%s\njobs:\n  ci:\n    <<: *c\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40" "$sha40")" \
-  "SKIP  .*ci job.*not verified"
+  "FC-D02 unknown"
 caller "an escaped quoted key (a second jobs YAML decodes) is a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n"jo\\u0062s":\n  install:\n    runs-on: x\n' "$sha40")" \
-  "SKIP  .*ci job.*not verified.*escape"
+  "FC-D02 unknown"
 caller "an escaped quoted ci key is a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  "c\\x69":\n    runs-on: x\n' "$sha40")" \
-  "SKIP  .*ci job.*not verified.*escape"
+  "FC-D02 unknown"
 caller "an alias as a top-level key (a second jobs) is a SKIP, not a pass" \
   "$(printf 'name: x\nrun-name:\n  - &j jobs\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n*j :\n  ci:\n    uses: someone/else/.github/workflows/x.yml@%s\n' "$sha40" "$sha40")" \
-  "SKIP  .*ci job.*not verified.*top-level"
+  "FC-D02 unknown"
 for top in '!!str jobs:' '? jobs' '<<: *base' '---'; do
   caller "  a top-level line written as '$top' is a SKIP" \
     "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n%s\n' "$sha40" "$top")" \
-    "SKIP  .*ci job.*not verified.*top-level"
+    "FC-D02 unknown"
 done
 # A document marker opening the file is what yamllint's document-start rule
 # asks for (#334); a second one starts another document and is still unread.
 caller "a ci.yml opening with --- reads like the same file without it" "$(printf -- '---\n%s\n' "$tmpl_ci")" \
-  "PASS  .*ci job.*calls coolbress/plinth/\.github/workflows/python-ci\.yml@$sha40"
+  "FC-D02 pass"
 caller "a --- with a comment, after a comment, also opens it" "$(printf -- '# c\n--- # start\n%s\n' "$tmpl_ci")" \
-  "PASS  .*ci job"
+  "FC-D02 pass"
 caller "a leading --- and a second one (two documents) is a SKIP, not a pass" \
   "$(printf -- '---\n%s\n---\njobs:\n  ci:\n    runs-on: x\n' "$tmpl_ci")" \
-  "SKIP  .*ci job.*not verified.*top-level.*---"
+  "FC-D02 unknown"
 caller "a --- carrying content on its line is a SKIP, not a pass" "$(printf -- '--- !!map\n%s\n' "$tmpl_ci")" \
-  "SKIP  .*ci job.*not verified.*top-level"
+  "FC-D02 unknown"
 # A `: |` in a trailing comment opens no block scalar (#334); a real one still does.
 for c in '# note: |' '# note: >' '# a: |-'; do
   caller "  a jobs: line whose comment ends '$c' still shows the jobs" \
     "$(printf 'jobs:  %s\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$c" "$sha40")" \
-    "PASS  .*ci job"
+    "FC-D02 pass"
 done
 caller "a run: | with a trailing comment is still a block scalar" \
   "$(printf 'jobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |  # note\n          uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
-  "FAIL  .*ci\` job.*calls no reusable workflow"
+  "FC-D02 fail"
 caller "a flow value on a top-level key (on: [push, pull_request]) still reads" \
   "$(printf 'on: [push, pull_request]\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n' "$sha40")" \
-  "PASS  .*ci job"
+  "FC-D02 pass"
 caller "two ci keys are a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n  ci:\n    runs-on: x\n' "$sha40")" \
-  "SKIP  .*ci job.*not verified"
+  "FC-D02 unknown"
 # Two inputs set how much a check holds (#435): a `with:` that loosens one
 # past plinth's default (max-diff-lines 0 or above 400, deps-fail-on-severity
 # critical) is a WARN every run, naming the input, its value and
@@ -3285,10 +3286,10 @@ web_input "web: an expression on the web archetype is a FAIL" web '      web: ${
 web_input "another archetype without web: says nothing about it" cli "      max-diff-lines: 400" none
 caller "two with: keys on the ci job are a SKIP, not a pass" \
   "$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s\n    with:\n      max-diff-lines: 0\n    with:\n      max-diff-lines: 200\n' "$sha40")" \
-  "SKIP  .*ci job.*not verified.*more than one with"
+  "FC-D02 unknown"
 caller "a loosened input on a workflow that is not plinth's is not judged (the call is the FAIL)" \
   "$(printf 'jobs:\n  ci:\n    uses: someone/else/.github/workflows/python-ci.yml@%s\n    with:\n      max-diff-lines: 0\n' "$sha40")" \
-  "FAIL  .*calls someone/else"
+  "FC-D02 fail"
 copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
 printf 'jobs:\n  ci:\n    uses: someone/else/.github/workflows/python-ci.yml@%s\n    with:\n      max-diff-lines: 0\n' "$sha40" > "$copy/.github/workflows/ci.yml"
 if python3 "$checker" --root "$copy" --archetype cli --no-network 2>&1 | grep -q 'max-diff-lines'; then bad "  and no max-diff-lines line"
@@ -3299,7 +3300,7 @@ else ok "  and no max-diff-lines line"; fi
 skipcount() { # <description> <expected not-verified count> <shell to change the copy>
   local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"; ( cd "$copy" && eval "$3" )
   local out; out="$(python3 "$checker" --root "$copy" --archetype cli --no-network 2>&1)"
-  if grep -q -- "-- 0 failed, $2 not verified" <<<"$out" && grep -q 'SKIP  .*ci job' <<<"$out"; then ok "$1"
+  if grep -q -- "-- 0 failed, $2 not verified" <<<"$out" && is "$out" FC-D02 unknown; then ok "$1"
   else bad "$1"; printf '%s\n' "$out" | grep -E 'SKIP|failed' | sed 's/^/        /'; fi
 }
 skipcount "an unreadable ci.yml is counted as not verified (with the action-pin and plinth-pin items' own SKIPs)" 4 \
@@ -3312,48 +3313,48 @@ skipcount "no ci.yml in the checkout under --no-network is a SKIP counted as not
 capi="$work/api-caller"; mkdir -p "$capi/repos/o/r/contents/.github/workflows" "$capi/repos/coolbress/plinth/contents/.github/workflows"
 printf '{"default_branch":"main"}' > "$capi/repos/o/r.json"
 contents() { jq -n --arg c "$(printf '%s' "$1" | base64 | tr -d '\n')" '{type: "file", encoding: "base64", content: $c}'; }
-from_api() { # <description> <default-branch ci.yml or __404__ or raw JSON after "json:"> <checkout ci.yml> <expected regex> [<repo>]
+from_api() { # <description> <default-branch ci.yml or __404__ or raw JSON after "json:"> <checkout ci.yml> <`<id> <state>` expected> [<repo>]
   local desc="$1" remote="$2" local_ci="$3" want="$4" repo="${5:-o/r}"
   local f="$capi/repos/$repo/contents/.github/workflows/ci.yml.json"; rm -f "$f"
   case "$remote" in __404__) ;; json:*) printf '%s' "${remote#json:}" > "$f" ;; *) contents "$remote" > "$f" ;; esac
   local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"
   printf '%s' "$local_ci" > "$copy/.github/workflows/ci.yml"
   local out; out="$(FLOOR_CHECK_API_DIR="$capi" python3 "$checker" --root "$copy" --archetype cli --repo "$repo" 2>&1)"
-  if grep -qE "$want" <<<"$out"; then ok "$desc"; else bad "$desc (expected /$want/)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml' | sed 's/^/        /'; fi
+  if reports "$out" "$want"; then ok "$desc"; else bad "$desc (expected $want)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml' | sed 's/^/        /'; fi
 }
 plain_ci="$(printf 'jobs:\n  install:\n    name: ci / install\n    steps:\n      - run: "true"\n')"
 from_api "a default branch without the call is a FAIL, though the checkout has it" "$plain_ci" "$tmpl_ci" \
-  "FAIL  .*default branch.*no \`ci\` job"
+  "FC-D02 fail"
 from_api "a default branch with the call passes, though the checkout lost it" "$tmpl_ci" "$plain_ci" \
-  "PASS  .*ci job.*default branch"
+  "FC-D02 pass"
 from_api "no ci.yml on the default branch is a FAIL" "__404__" "$tmpl_ci" \
-  "FAIL  .*no \.github/workflows/ci\.yml on the default branch"
+  "FC-D02 fail"
 from_api "a repository the API cannot see at all is a SKIP, not a missing ci.yml" "__404__" "$tmpl_ci" \
-  "SKIP  .*ci job.*not verified.*repos/x/gone" x/gone
+  "FC-D02 unknown" x/gone
 from_api "an API answer that is not a file is a SKIP, not a pass" "json:[]" "$tmpl_ci" \
-  "SKIP  .*ci job.*not verified"
+  "FC-D02 unknown"
 # ci / floor-check passes --caller-from-checkout: it reads the pull request's
 # own ci.yml, so a pull request that repairs a broken default branch can merge,
 # and one that keeps the call but weakens it fails before the merge.
-from_checkout() { # <description> <default-branch ci.yml> <checkout ci.yml> <expected regex>
+from_checkout() { # <description> <default-branch ci.yml> <checkout ci.yml> <`<id> <state>` expected>
   local f="$capi/repos/o/r/contents/.github/workflows/ci.yml.json"; contents "$2" > "$f"
   local copy="$work/caller"; rm -rf "$copy"; cp -R "$good" "$copy"; printf '%s' "$3" > "$copy/.github/workflows/ci.yml"
   local out; out="$(FLOOR_CHECK_API_DIR="$capi" python3 "$checker" --root "$copy" --archetype cli --repo o/r --caller-from-checkout 2>&1)"
-  if grep -qE "$4" <<<"$out"; then ok "$1"; else bad "$1 (expected /$4/)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml' | sed 's/^/        /'; fi
+  if reports "$out" "$4"; then ok "$1"; else bad "$1 (expected $4)"; printf '%s\n' "$out" | grep -iE 'ci job|ci\.yml' | sed 's/^/        /'; fi
 }
 tag_ci="$(printf 'jobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@v1.0.0\n')"
 from_checkout "--caller-from-checkout: a pull request repairing a broken default branch passes (no deadlock)" "$tag_ci" "$tmpl_ci" \
-  "PASS  the ci job in the checkout \(--caller-from-checkout\) calls coolbress/plinth/"
+  "FC-D02 pass"
 from_checkout "--caller-from-checkout: a pull request weakening the call fails before the merge" "$tmpl_ci" "$tag_ci" \
-  "FAIL  the ci job in the checkout \(--caller-from-checkout\) calls .*@v1\.0\.0"
+  "FC-D02 fail"
 own="$(cat "$root/.github/workflows/ci.yml")"
 from_api "coolbress/plinth's own ci.yml passes for coolbress/plinth" "$own" "$own" \
-  "PASS  .*ci job.*\./\.github/workflows/plinth-ci\.yml" coolbress/plinth
+  "FC-D02 pass" coolbress/plinth
 from_api "another local workflow is a FAIL even for coolbress/plinth" \
   "$(printf 'jobs:\n  ci:\n    uses: ./.github/workflows/no-checks.yml\n')" "$own" \
-  "FAIL  .*calls \./\.github/workflows/no-checks\.yml" coolbress/plinth
+  "FC-D02 fail" coolbress/plinth
 from_api "the same file under any other --repo is a FAIL" "$own" "$own" \
-  "FAIL  .*calls \./\.github/workflows/plinth-ci\.yml"
+  "FC-D02 fail"
 
 echo "-- a GitLab checkout is read as one (#543)"
 # The good backend fixture as plinth-template v1.13.0 renders it for
@@ -3380,7 +3381,7 @@ gl() { # <description> <shell to change the copy> <ERE one output line must matc
   local copy="$work/glcase"; rm -rf "$copy"; cp -R "$glgood" "$copy"
   ( cd "$copy" && eval "$edit" )
   out="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$copy" "$@" 2>&1)"; rc=$?
-  if grep -qE -- "$want" <<<"$out"; then ok "$desc"; else bad "$desc (expected a line matching '$want')"; printf '%s\n' "$out" | grep -E 'FAIL|WARN|SKIP|gitlab' | sed 's/^/        /'; fi
+  if sees "$out" "$want" -E -- "$want"; then ok "$desc"; else bad "$desc (expected a line matching '$want')"; printf '%s\n' "$out" | grep -E 'FAIL|WARN|SKIP|gitlab' | sed 's/^/        /'; fi
 }
 # host: github is today's reading, line for line.
 hgh="$work/hostgithub"; rm -rf "$hgh"; cp -R "$good" "$hgh"; printf 'host: github\n' >> "$hgh/.copier-answers.yml"
@@ -3391,27 +3392,28 @@ gl "a complete GitLab backend checkout has no FAIL offline" ":" "^-- 0 failed, [
 for gone in 'gh auth token' 'gh config reads' '\.github/dependabot\.yml' 'issue forms' 'the ci job'; do
   grep -qE -- "$gone" <<<"$out" && bad "GitHub-only item not read on GitLab: $gone" || ok "GitHub-only item not read on GitLab: $gone"
 done
-gl "Dependabot's absence is an INFO, not a FAIL" ":" "INFO  Dependabot does not run on GitLab" --no-network
+gl "Dependabot's absence is an INFO, not a FAIL" ":" "FC-A19 info" --no-network
 # Offline, the rule runs only with a PyYAML already here; without one, nothing is installed.
 if python3 -c 'import yaml' 2>/dev/null; then
   gl "--no-network with PyYAML here: the include is read" ":" "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA" --no-network
 else
-  gl "--no-network without PyYAML: the include is a SKIP, not a pass" ":" "SKIP  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA not verified: .*--no-network" --no-network
+  gl "--no-network without PyYAML: the include is a SKIP, not a pass" ":" "FC-D08 unknown" --no-network
 fi
 gl "the host comes from .copier-answers.yml" ":" "host=gitlab" --no-network
 gl "--host gitlab reads it without the answer" "sed -i.bak '/^host:/d' .copier-answers.yml" "^-- 0 failed" --no-network --host gitlab
-gl "--host github overrides the answer" ":" "FAIL  \.github/dependabot\.yml missing" --no-network --host github
-gl "an unknown host in the answers is a SKIP, read as github" "sed -i.bak 's/^host: gitlab/host: bitbucket/' .copier-answers.yml" "SKIP  \.copier-answers\.yml says host: bitbucket" --no-network
+gl "--host github overrides the answer" ":" "FC-A18 fail" --no-network --host github
+gl "an unknown host in the answers is a SKIP, read as github" "sed -i.bak 's/^host: gitlab/host: bitbucket/' .copier-answers.yml" "FC-F07 unknown" --no-network
 for d in 'glab auth status --show-token' 'glab auth status -t' 'glab config get token' 'glab-cli'; do
   case "$d" in glab-cli) what="glab config reads" ;; *) what="$d" ;; esac
+  case "$d" in *show-token) id=FC-B12 ;; *-t) id=FC-B13 ;; *get\ token) id=FC-B14 ;; *) id=FC-B15 ;; esac
   gl "a deny list without $what fails" "python3 -c 'import json,sys; p=\".claude/settings.json\"; j=json.load(open(p)); j[\"permissions\"][\"deny\"]=[x for x in j[\"permissions\"][\"deny\"] if sys.argv[1] not in x]; json.dump(j,open(p,\"w\"))' '$d'" \
-    "FAIL  \.claude/settings\.json does not deny $what" --no-network
+    "$id fail" --no-network
 done
-gl "no SECURITY.md fails on GitLab, with no inheritance to look for" "rm SECURITY.md" "FAIL  SECURITY\.md missing: on GitLab nothing is inherited" --no-network
-gl "no issue template fails" "rm -r .gitlab/issue_templates" "FAIL  no issue template under \.gitlab/issue_templates/" --no-network
-gl "no merge request template fails" "rm -r .gitlab/merge_request_templates" "FAIL  no merge request template under \.gitlab/merge_request_templates/" --no-network
-gl "an issue template without /label is a WARN" "printf '## What\n' > .gitlab/issue_templates/Bug.md" "WARN  Bug\.md has no \`/label ~name\` line" --no-network
-gl "a backend without the docker-image job fails" "printf 'include: []\n' > .gitlab-ci.yml" "FAIL  \.gitlab-ci\.yml has no \`docker-image\` job" --no-network
+gl "no SECURITY.md fails on GitLab, with no inheritance to look for" "rm SECURITY.md" "FC-A09 fail" --no-network
+gl "no issue template fails" "rm -r .gitlab/issue_templates" "FC-A20 fail" --no-network
+gl "no merge request template fails" "rm -r .gitlab/merge_request_templates" "FC-A21 fail" --no-network
+gl "an issue template without /label is a WARN" "printf '## What\n' > .gitlab/issue_templates/Bug.md" "FC-A22 warn" --no-network
+gl "a backend without the docker-image job fails" "printf 'include: []\n' > .gitlab-ci.yml" "FC-D07 fail" --no-network
 # The include rule is gitlab/python-ci.yml's own; these read it through the
 # checker. With no PyYAML here, the job's pinned PyYAML is installed from
 # PyPI, so these need the network, as tests/gitlab-ci-cases.sh does. A
@@ -3421,19 +3423,19 @@ if ! python3 -c 'import yaml' 2>/dev/null && ! python3 -c 'import sys; sys.exit(
   gl "no PyYAML on a python3 outside 3.11 to 3.14: a SKIP naming the range" ":" "SKIP  .*pinned for CPython 3\.11 to 3\.14 only"
   echo "  NOTE  the include rule's cases need a python3 with PyYAML, or 3.11 to 3.14: $(python3 --version 2>&1)"
 else
-gl "an include at a full SHA with a checksum passes" ":" "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA \($glsha\)"
-grep -q "PASS  the include names a checksum" <<<"$out" && ok "the checksum is a PASS" || bad "the checksum is a PASS"
+gl "an include at a full SHA with a checksum passes" ":" "FC-D08 pass"
+is "$out" FC-D08 pass && ok "the checksum is a PASS" || bad "the checksum is a PASS"
 gl "no checksum is a SKIP, not a pass" "glci 'include:
-  - remote: $glurl' > .gitlab-ci.yml" "SKIP  the bytes GitLab fetched are plinth's file, the include names no checksum"
+  - remote: $glurl' > .gitlab-ci.yml" "FC-D08 unknown"
 gl "an include at a tag fails" "glci 'include:
   - remote: https://raw.githubusercontent.com/coolbress/plinth/v1.16.0/gitlab/python-ci.yml' > .gitlab-ci.yml" \
-  "FAIL  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA, it includes it at v1\.16\.0"
+  "FC-D08 fail"
 gl "plinth by another URL fails" "glci 'include:
   - remote: https://github.com/coolbress/plinth/raw/$glsha/gitlab/python-ci.yml' > .gitlab-ci.yml" \
-  "FAIL  .*it includes plinth by a URL that is not"
-gl "no include fails" "glci 'include: []' > .gitlab-ci.yml" "FAIL  .*no include of https://raw\.githubusercontent\.com/coolbress/plinth/<commit-sha>/gitlab/python-ci\.yml was found"
+  "FC-D08 fail"
+gl "no include fails" "glci 'include: []' > .gitlab-ci.yml" "FC-D08 fail"
 gl "a yaml.py in the checkout is not imported in place of PyYAML" "printf 'print(\"pass: PLANTED\")\n' > yaml.py" \
-  "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline at a full commit SHA"
+  "FC-D08 pass"
 grep -q PLANTED <<<"$out" && bad "the planted yaml.py ran" || ok "the planted yaml.py did not run"
 fi
 
@@ -3447,24 +3449,24 @@ glcred() { # extra env assignments as arguments; sets out
 printf '[credential "https://gitlab.com"]\n\thelper =\n\thelper = !glab auth git-credential\n[credential "https://github.com"]\n\thelper = osxkeychain\n' > "$glc/gitconfig"
 printf 'machine github.com login me password x\n' > "$glc/home/.netrc"
 glcred
-has "only glab's helper for gitlab.com: an INFO, not a PASS" "INFO  git asks only glab for gitlab\.com; no other credential found"
-has "a github.com login in ~/.netrc is not gitlab.com's" "INFO  no gitlab\.com login in "
-has "the login glab stores is a SKIP" "SKIP  the login glab stores for gitlab\.com not verified"
-has "glab's token scopes are a SKIP (#986)" "SKIP  the permissions of the agent's glab login not verified"
+has "only glab's helper for gitlab.com: an INFO, not a PASS" "FC-G07 info"
+has "a github.com login in ~/.netrc is not gitlab.com's" "FC-G09 info"
+has "the login glab stores is a SKIP" "FC-G06 unknown"
+has "glab's token scopes are a SKIP (#986)" "FC-G03 unknown"
 lacks "no gh scopes line on GitLab" "gh login"
-has "SSH points at GitLab's keys" "SKIP  SSH keys not verified here: GitLab's Preferences"
+has "SSH points at GitLab's keys" "FC-G10 unknown"
 lacks "a helper for github.com alone is not reported on GitLab" "WARN"
 lacks "gh is not asked about on GitLab" "gh stores|accounts stored in gh"
 glcred GITLAB_TOKEN=x
-has "GITLAB_TOKEN set is a WARN" "WARN  GITLAB_TOKEN is set in this environment: glab"
+has "GITLAB_TOKEN set is a WARN" "FC-G04 warn"
 glcred GLAB_CONFIG_DIR=/elsewhere
-has "GLAB_CONFIG_DIR set is a SKIP" "SKIP  GLAB_CONFIG_DIR is set"
+has "GLAB_CONFIG_DIR set is a SKIP" "FC-G05 unknown"
 printf '[credential]\n\thelper = osxkeychain\n[credential "https://gitlab.com"]\n\thelper = !glab auth git-credential\n' > "$glc/gitconfig"
 glcred
-has "another helper that applies to gitlab.com is a WARN" "WARN  git has 1 credential helper for gitlab\.com besides glab's: osxkeychain"
+has "another helper that applies to gitlab.com is a WARN" "FC-G07 warn"
 printf 'machine gitlab.com login me password x\n' > "$glc/home/.netrc"
 glcred
-has "a gitlab.com login in ~/.netrc is a WARN" "WARN  .*\.netrc holds a login for gitlab\.com"
+has "a gitlab.com login in ~/.netrc is a WARN" "FC-G09 warn"
 
 echo "-- the update line on GitLab carries the include's checksum (#547 review)"
 glold="$work/glold"; rm -rf "$glold"; cp -R "$glgood" "$glold"
@@ -3489,7 +3491,7 @@ printed="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" 
 case "$printed" in *"--data plinth_gitlab_integrity=$glint") [ "$rc" = 0 ] && ok "--host gitlab without the answer: the update line reads the include" || bad "--host gitlab update rc=$rc" ;;
   *) bad "--host gitlab without the answer: '$printed'" ;; esac
 out="$(FLOOR_CHECK_API_DIR="$work/noapi" python3 "$checker" --root "$glold" --host gitlab --no-network 2>&1)"
-has "--host gitlab without the answer: the drift item carries the GitLab line" "INFO    uvx .*--data plinth_gitlab_integrity=$glint"
+has "--host gitlab without the answer: the drift item carries the GitLab line" "FC-F01 info"
 printf 'host: gitlab\n' >> "$glold/.copier-answers.yml"
 glpin_api() { # <plinth_gitlab_integrity default or "-"> → $work/api-glpin, the tested pin ahead of the live one
   local d="$work/api-glpin"; rm -rf "$d"; mkdir -p "$d/repos/coolbress/plinth-template/contents" "$d/repos/coolbress/plinth/compare"
@@ -3524,58 +3526,57 @@ glwall_api() { # -- writes the passing set to $work/glapi
 glw() { # <description> <shell run in $work/glapi/projects/o%2Fr> <ERE one output line must match>
   glwall_api; ( cd "$work/glapi/projects/o%2Fr" && eval "$2" )
   out="$(FLOOR_CHECK_API_DIR="$work/noapi" FLOOR_CHECK_GITLAB_API_DIR="$work/glapi" python3 "$checker" --root "$glgood" --repo o/r 2>&1)"; rc=$?
-  if grep -qE -- "$3" <<<"$out"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -vE '^  PASS  ' | sed 's/^/        /'; fi
+  if sees "$out" "$3" -E -- "$3"; then ok "$1"; else bad "$1 (expected a line matching '$3')"; printf '%s\n' "$out" | grep -vE '^  PASS  ' | sed 's/^/        /'; fi
 }
 setp() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); (d[0] if isinstance(d, list) else d).update(json.loads(sys.argv[2])); json.dump(d,open(p,"w"))' "$@"; }
 addrule() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.append(json.loads(sys.argv[2])); json.dump(d,open(p,"w"))' "$@"; }
 pb="protected_branches?per_page=100.json"
 glw "the door's wall passes, with nothing unverified" ":" "^-- 0 failed, 0 not verified$"
-for line in "PASS  main is protected on o/r: no one pushes, Maintainers merge, no force push" \
-  "PASS  o/r merges only on a green pipeline" "PASS  o/r squashes every merge request and fast-forwards" \
-  "PASS  \.gitlab-ci\.yml on main includes plinth's GitLab pipeline at a full commit SHA" "PASS  every label the door creates is present"; do
-  grep -qE -- "$line" <<<"$out" && ok "the passing wall: $line" || bad "the passing wall: missing $line"
+# main protected, merge on a green pipeline, squash and fast-forward, the include's pin, the labels
+for line in "FC-E01 pass" "FC-E02 pass" "FC-E03 pass" "FC-D08 pass" "FC-E05 pass"; do
+  reports "$out" "$line" && ok "the passing wall: $line" || bad "the passing wall: missing $line"
 done
-glw "an unprotected default branch fails, with the call that protects it" "printf [] > 'protected_branches?per_page=100.json'" "FAIL  main is not a protected branch on o/r"
-grep -q 'INFO    glab api --hostname gitlab.com -X POST projects/o%2Fr/protected_branches -f name=main -F push_access_level=0' <<<"$out" \
+glw "an unprotected default branch fails, with the call that protects it" "printf [] > 'protected_branches?per_page=100.json'" "FC-E01 fail"
+is "$out" FC-E01 info \
   && ok "the unprotected branch names the POST" || bad "the unprotected branch names the POST"
-glw "Developers allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  main's protection on o/r is weaker than the door's \(rules that apply: main\): push allowed"
-glw "a user allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":0},{\"access_level\":40,\"user_id\":7}]}'" "FAIL  .*push allowed"
-glw "Developers allowed to merge fails" "setp \"\$pb\" '{\"merge_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FAIL  .*merge allowed to \['Developers \+ Maintainers'\]"
+glw "Developers allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FC-E01 fail"
+glw "a user allowed to push fails" "setp \"\$pb\" '{\"push_access_levels\":[{\"access_level\":0},{\"access_level\":40,\"user_id\":7}]}'" "FC-E01 fail"
+glw "Developers allowed to merge fails" "setp \"\$pb\" '{\"merge_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}]}'" "FC-E01 fail"
 glw "a wildcard rule that lets Developers push opens main: FAIL" "addrule \"\$pb\" '{\"name\":\"*\",\"push_access_levels\":[{\"access_level\":30,\"access_level_description\":\"Developers + Maintainers\"}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":false}'" \
-  "FAIL  main's protection on o/r is weaker than the door's \(rules that apply: main, \*\): push allowed"
+  "FC-E01 fail"
 glw "a wildcard rule with force push opens main: FAIL" "addrule \"\$pb\" '{\"name\":\"ma*\",\"push_access_levels\":[{\"access_level\":0}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":true}'" \
-  "FAIL  .*rules that apply: main, ma\*.*force push True"
+  "FC-E01 fail"
 glw "a rule for other branches does not apply" "addrule \"\$pb\" '{\"name\":\"release/*\",\"push_access_levels\":[{\"access_level\":30}],\"merge_access_levels\":[{\"access_level\":30}],\"allow_force_push\":true}'" \
-  "PASS  main is protected on o/r: .*\(rules that apply: main\)"
+  "FC-E01 pass"
 glw "a wildcard rule alone protects main" "printf '[{\"name\":\"*\",\"push_access_levels\":[{\"access_level\":0}],\"merge_access_levels\":[{\"access_level\":40}],\"allow_force_push\":false}]' > \"\$pb\"" \
-  "PASS  main is protected on o/r: .*\(rules that apply: \*\)"
-glw "force push allowed fails" "setp \"\$pb\" '{\"allow_force_push\":true}'" "FAIL  .*force push True, want false"
-glw "an unreadable protection is a SKIP" "rm \"\$pb\"; : > 'protected_branches?per_page=100.error'" "SKIP  the protection of main not verified"
-glw "pipelines need not succeed: FAIL" "setp ../o%2Fr.json '{\"only_allow_merge_if_pipeline_succeeds\":false}'" "FAIL  the merge checks of o/r let a merge request merge without a green pipeline: only_allow_merge_if_pipeline_succeeds=False"
-glw "skipped pipelines counted: FAIL" "setp ../o%2Fr.json '{\"allow_merge_on_skipped_pipeline\":true}'" "FAIL  .*allow_merge_on_skipped_pipeline=True"
-glw "squash not required: FAIL" "setp ../o%2Fr.json '{\"squash_option\":\"default_on\"}'" "FAIL  o/r merges other than squash and fast-forward: squash_option='default_on'"
-glw "a merge commit method: FAIL" "setp ../o%2Fr.json '{\"merge_method\":\"merge\"}'" "FAIL  .*merge_method='merge'"
-glw "merge settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"squash_option\",\"merge_method\")]; json.dump(d,open(p,\"w\"))'" "SKIP  squash_option, merge_method of o/r not verified: GitLab did not return them"
-grep -q "PASS  o/r merges only on a green pipeline" <<<"$out" && ok "the merge checks returned are still judged" || bad "the merge checks returned are still judged"
-glw "pipeline settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"only_allow_merge_if_pipeline_succeeds\",\"allow_merge_on_skipped_pipeline\")]; json.dump(d,open(p,\"w\"))'" "SKIP  only_allow_merge_if_pipeline_succeeds, allow_merge_on_skipped_pipeline of o/r not verified"
+  "FC-E01 pass"
+glw "force push allowed fails" "setp \"\$pb\" '{\"allow_force_push\":true}'" "FC-E01 fail"
+glw "an unreadable protection is a SKIP" "rm \"\$pb\"; : > 'protected_branches?per_page=100.error'" "FC-E01 unknown"
+glw "pipelines need not succeed: FAIL" "setp ../o%2Fr.json '{\"only_allow_merge_if_pipeline_succeeds\":false}'" "FC-E02 fail"
+glw "skipped pipelines counted: FAIL" "setp ../o%2Fr.json '{\"allow_merge_on_skipped_pipeline\":true}'" "FC-E02 fail"
+glw "squash not required: FAIL" "setp ../o%2Fr.json '{\"squash_option\":\"default_on\"}'" "FC-E03 fail"
+glw "a merge commit method: FAIL" "setp ../o%2Fr.json '{\"merge_method\":\"merge\"}'" "FC-E03 fail"
+glw "merge settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"squash_option\",\"merge_method\")]; json.dump(d,open(p,\"w\"))'" "FC-E03 unknown"
+is "$out" FC-E02 pass && ok "the merge checks returned are still judged" || bad "the merge checks returned are still judged"
+glw "pipeline settings not returned are a SKIP" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); [d.pop(k) for k in (\"only_allow_merge_if_pipeline_succeeds\",\"allow_merge_on_skipped_pipeline\")]; json.dump(d,open(p,\"w\"))'" "FC-E02 unknown"
 glw "a readable mismatch fails beside a missing field" "python3 -c 'import json; p=\"../o%2Fr.json\"; d=json.load(open(p)); d.pop(\"squash_option\"); d[\"only_allow_merge_if_pipeline_succeeds\"]=False; d[\"merge_method\"]=\"merge\"; json.dump(d,open(p,\"w\"))'" \
-  "FAIL  the merge checks of o/r let a merge request merge without a green pipeline: only_allow_merge_if_pipeline_succeeds=False"
-grep -q "FAIL  o/r merges other than squash and fast-forward: merge_method='merge'" <<<"$out" && grep -q "SKIP  squash_option of o/r not verified: GitLab did not return it" <<<"$out" \
+  "FC-E02 fail"
+is "$out" FC-E03 fail && is "$out" FC-E03 unknown \
   && ok "the readable merge method fails and only the missing squash option is a SKIP" || { bad "partial merge shape"; printf '%s\n' "$out" | grep -E 'FAIL|SKIP' | sed 's/^/        /'; }
-glw "an unreadable project is a SKIP, and the checkout's include is read" "rm ../o%2Fr.json" "SKIP  the GitLab wall of o/r not verified: it was not found"
-grep -q "PASS  \.gitlab-ci\.yml includes plinth's GitLab pipeline" <<<"$out" && ok "the checkout's include stands in" || bad "the checkout's include stands in"
+glw "an unreadable project is a SKIP, and the checkout's include is read" "rm ../o%2Fr.json" "FC-E01 unknown"
+is "$out" FC-D08 pass && ok "the checkout's include stands in" || bad "the checkout's include stands in"
 glw "the include on the default branch is read, not the checkout's" "glci 'include:
   - remote: https://raw.githubusercontent.com/coolbress/plinth/main/gitlab/python-ci.yml' > 'repository/files/.gitlab-ci.yml/raw?ref=main'" \
-  "FAIL  \.gitlab-ci\.yml on main includes plinth's GitLab pipeline at a full commit SHA, it includes it at main"
-glw "no definition on the default branch fails" "rm 'repository/files/.gitlab-ci.yml/raw?ref=main'" "FAIL  no \.gitlab-ci\.yml on main of o/r"
+  "FC-D08 fail"
+glw "no definition on the default branch fails" "rm 'repository/files/.gitlab-ci.yml/raw?ref=main'" "FC-E04 fail"
 glw "ci_config_path is the definition read" "setp ../o%2Fr.json '{\"ci_config_path\":\"ci/main.yml\"}'; mkdir -p repository/files/ci%2Fmain.yml; cp 'repository/files/.gitlab-ci.yml/raw?ref=main' 'repository/files/ci%2Fmain.yml/raw?ref=main'" \
-  "PASS  ci/main\.yml on main includes plinth's GitLab pipeline"
-glw "a definition in another project is a SKIP" "setp ../o%2Fr.json '{\"ci_config_path\":\".gitlab-ci.yml@g/other\"}'" "SKIP  the include on main not verified: the pipeline definition is \.gitlab-ci\.yml@g/other"
-glw "a missing label is a WARN with glab's command" "printf '[]' > 'labels?per_page=100.json'" "WARN  labels the door creates that are missing: feat, "
-grep -q "INFO    glab label create --name feat --color '#ededed' --repo o/r" <<<"$out" && ok "the missing label names glab label create" || bad "the missing label names glab label create"
-glw "unreadable labels are a SKIP" "rm 'labels?per_page=100.json'; : > 'labels?per_page=100.error'" "SKIP  labels not verified"
+  "FC-D08 pass"
+glw "a definition in another project is a SKIP" "setp ../o%2Fr.json '{\"ci_config_path\":\".gitlab-ci.yml@g/other\"}'" "FC-E04 unknown"
+glw "a missing label is a WARN with glab's command" "printf '[]' > 'labels?per_page=100.json'" "FC-E05 warn"
+is "$out" FC-E05 info && ok "the missing label names glab label create" || bad "the missing label names glab label create"
+glw "unreadable labels are a SKIP" "rm 'labels?per_page=100.json'; : > 'labels?per_page=100.error'" "FC-E05 unknown"
 out="$(FLOOR_CHECK_API_DIR="$work/noapi" FLOOR_CHECK_GITLAB_API_DIR="$work/glapi" python3 "$checker" --root "$glgood" --repo o/r --no-network 2>&1)"
-grep -q "SKIP  --no-network: the GitLab wall not checked" <<<"$out" && ok "--no-network with --repo: the wall is a SKIP" || bad "--no-network with --repo: the wall is a SKIP"
+is "$out" FC-E01 unknown && ok "--no-network with --repo: the wall is a SKIP" || bad "--no-network with --repo: the wall is a SKIP"
 
 echo "-- a JavaScript or TypeScript repository (#681)"
 # What must not change comes first: a repository with pyproject.toml, with or
@@ -3599,7 +3600,7 @@ else bad "pyproject.toml and package.json changed the output"; diff <(printf '%s
 neither="$work/js-neither"; rm -rf "$neither"; cp -R "$good" "$neither"; rm "$neither/pyproject.toml" "$neither/uv.lock"
 js_run "$neither" --no-network
 lacks "neither file: no line of #681's" "$js_new"
-grep -q '^  FAIL  pyproject.toml missing$' <<<"$out" && grep -q '^  FAIL  uv.lock missing: CI runs `uv sync --locked`$' <<<"$out" \
+is "$out" FC-C01 fail && is "$out" FC-C02 fail \
   && ok "neither file: pyproject.toml and uv.lock still fail" || bad "neither file: pyproject.toml and uv.lock still fail"
 # A Python project one level down is the case --project names (#221), even
 # with a package.json at the root: that hint stands, nothing does not apply.
@@ -3607,7 +3608,7 @@ below="$work/js-below"; rm -rf "$below"; cp -R "$neither" "$below"; mkdir "$belo
 printf '[project]\nname = "api"\n' > "$below/api/pyproject.toml"; printf '{}\n' > "$below/package.json"
 js_run "$below" --no-network
 lacks "package.json at the root, pyproject.toml one level down: no line of #681's" "$js_new"
-grep -q "FAIL  pyproject.toml missing here; found api/pyproject.toml: run again with --project=api" <<<"$out" \
+is "$out" FC-C01 fail \
   && ok "package.json at the root, pyproject.toml one level down: the --project hint stands" || bad "the --project hint stands"
 # A GitLab checkout is read as before: #681 covers GitHub only.
 gljs="$work/js-gitlab"; rm -rf "$gljs"; cp -R "$neither" "$gljs"; printf '{}\n' > "$gljs/package.json"
@@ -3623,7 +3624,7 @@ js_wall "$py"; pyw_out="$out"
 js_wall "$both"
 [ "$out" = "$pyw_out" ] && ok "pyproject.toml and package.json: the wall reads as for Python only" \
   || { bad "pyproject.toml and package.json changed the wall"; diff <(printf '%s\n' "$pyw_out") <(printf '%s\n' "$out") | sed 's/^/        /'; }
-grep -q "FAIL  main: required checks dropped:" <<<"$out" && ok "Python with package.json: the ruleset's Python checks are still expected" \
+is "$out" FC-E19 fail && ok "Python with package.json: the ruleset's Python checks are still expected" \
   || bad "Python with package.json: the ruleset's Python checks are still expected"
 
 # Now what is shown: package.json and no pyproject.toml.
@@ -3638,7 +3639,7 @@ js_run "$js" --no-network
 # render.yaml does not depend on the language (#811): read here too.
 printf 'databases:\n  - name: db\n    plan: free\n' > "$js/render.yaml"; git -C "$js" add -A
 js_run "$js" --no-network
-grep -qF 'WARN  render.yaml: database db is on plan free' <<<"$out" && ok "JavaScript only: render.yaml is read" \
+is "$out" FC-C16 warn && ok "JavaScript only: render.yaml is read" \
   || { bad "JavaScript only: render.yaml is read"; grep -E 'render' <<<"$out" | sed 's/^/        /'; }
 rm "$js/render.yaml"; git -C "$js" add -A; js_run "$js" --no-network
 for want in '^  N/A   pyproject.toml does not apply: ' '^  N/A   uv.lock does not apply: ' \
@@ -3653,17 +3654,17 @@ grep -q -- '^-- 0 failed, 2 not verified, 4 do not apply$' <<<"$out" && [ "$rc" 
   || { bad "JavaScript only: summary"; grep -E '^  (FAIL|SKIP)|^--' <<<"$out" | sed 's/^/        /'; }
 lacks "JavaScript only with package-lock.json: no Bun line" 'bun\.lock|dependency review'
 # Items that do not depend on the language keep their verdicts.
-for want in 'PASS  README.md present' 'PASS  .claude/settings.json denies gh auth token' 'PASS  .gitattributes normalises line endings' \
-            'PASS  .github/dependabot.yml' 'PASS  no dotenv file is tracked' 'PASS  relative links in'; do
-  grep -qF -- "$want" <<<"$out" && ok "JavaScript only: $want" || bad "JavaScript only: expected '$want'"
+# README.md, the gh auth token deny, .gitattributes, dependabot.yml, no tracked dotenv file, relative links
+for want in 'FC-A02 pass' 'FC-B05 pass' 'FC-A24 pass' 'FC-A18 pass' 'FC-A28 pass' 'FC-A27 pass'; do
+  reports "$out" "$want" && ok "JavaScript only: $want" || bad "JavaScript only: expected '$want'"
 done
 jsb="$work/js-broken"; rm -rf "$jsb"; cp -R "$js" "$jsb"; rm "$jsb/AGENTS.md" "$jsb/.claude/settings.json"; printf '' > "$jsb/.gitattributes"
 printf 'jobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n' > "$jsb/.github/workflows/build.yml"
 printf 'X=1\n' > "$jsb/.env"; git -C "$jsb" add -A; git -C "$jsb" add -f .env
 js_run "$jsb" --no-network
-for want in 'FAIL  AGENTS.md missing or empty' 'FAIL  .claude/settings.json missing' 'FAIL  .gitattributes does not normalise' \
-            'WARN  .*\.env' 'WARN  .*actions/checkout@v4'; do
-  grep -qE -- "$want" <<<"$out" && ok "JavaScript only, broken: $want" || bad "JavaScript only, broken: expected '$want'"
+# AGENTS.md, .claude/settings.json, .gitattributes, the tracked .env, the unpinned actions/checkout@v4
+for want in 'FC-A04 fail' 'FC-B01 fail' 'FC-A24 fail' 'FC-A28 warn' 'FC-D01 warn'; do
+  reports "$out" "$want" && ok "JavaScript only, broken: $want" || bad "JavaScript only, broken: expected '$want'"
 done
 grep -q -- '^-- 3 failed, 2 not verified, 4 do not apply$' <<<"$out" && [ "$rc" = 1 ] \
   && ok "JavaScript only, broken: the failures still fail the run" || { bad "JavaScript only, broken: summary"; grep -E '^  FAIL|^--' <<<"$out" | sed 's/^/        /'; }
@@ -3684,48 +3685,48 @@ done
 # the root without it holds neither file, as before.
 mono="$work/js-mono"; rm -rf "$mono"; cp -R "$js" "$mono"; mkdir "$mono/web"; mv "$mono/package.json" "$mono/package-lock.json" "$mono/web/"
 js_run "$mono" --no-network --project web
-grep -q -- '^  N/A   pyproject.toml does not apply: ' <<<"$out" && grep -q -- ', 4 do not apply$' <<<"$out" \
+is "$out" FC-C05 not_applicable && grep -q -- ', 4 do not apply$' <<<"$out" \
   && ok "package.json one directory down, --project names it: read as JavaScript" || bad "--project web: read as JavaScript"
 js_run "$mono" --no-network
-grep -q '^  FAIL  pyproject.toml missing$' <<<"$out" && ! grep -qE "$js_new" <<<"$out" \
+is "$out" FC-C01 fail && ! grep -qE "$js_new" <<<"$out" \
   && ok "package.json one directory down, no --project: the root reads as before" || bad "no --project: the root reads as before"
 # The wall: the ruleset's Python-only required checks do not apply; every
 # other rule, push protection and CodeQL are judged as before.
 js_wall "$js"
-grep -qE "^  N/A   main: requiring ci / pr-title, ci / lint, ci / typecheck, ci / test, ci / build, ci / secrets, ci / deps, ci / diff-size, ci / floor-check does not apply: " <<<"$out" \
+is "$out" FC-E19 not_applicable \
   && ok "JavaScript only, wall: the Python-only required checks do not apply, named" || bad "JavaScript only, wall: the required checks line"
 lacks "JavaScript only, wall: no required-checks verdict" 'required checks (dropped|are|come)|required_status_checks rule|expected checks'
-grep -qF "N/A   the ci job's call to coolbress/plinth/.github/workflows/python-ci.yml does not apply" <<<"$out" \
+is "$out" FC-D02 not_applicable \
   && ok "JavaScript only, wall: the ci job is not read from the default branch either" || bad "JavaScript only, wall: the ci job line"
-for want in 'PASS  main: deletion rule active' 'PASS  main: merge methods within' 'PASS  ruleset 1: no bypass actors' \
-            'PASS  push protection' 'PASS  main: CodeQL enforced (rule)' 'PASS  squash commits carry'; do
-  grep -qF -- "$want" <<<"$out" && ok "JavaScript only, wall: $want" || bad "JavaScript only, wall: expected '$want'"
+# the deletion rule, merge methods, no bypass actors, push protection, CodeQL enforced, squash commit messages
+for want in 'FC-E13 pass' 'FC-E17 pass' 'FC-E24 pass' 'FC-E09 pass' 'FC-E21 pass' 'FC-E08 pass'; do
+  reports "$out" "$want" && ok "JavaScript only, wall: $want" || bad "JavaScript only, wall: expected '$want'"
 done
 grep -qE -- '^-- 0 failed, [0-9]+ not verified, 5 do not apply$' <<<"$out" && ok "JavaScript only, wall: five items do not apply" \
   || { bad "JavaScript only, wall: summary"; grep -E '^  (FAIL|N/A)|^--' <<<"$out" | sed 's/^/        /'; }
 # CodeQL's default setup is asked for the repository's language (#681 review):
 # Python alone leaves the JavaScript unscanned, and the fix names its language.
-grep -q "WARN  CodeQL default setup analyses \['actions', 'python'\], not the JavaScript or TypeScript code" <<<"$out" \
-  && grep -q "INFO    gh api -X PATCH repos/o/r/code-scanning/default-setup -f 'languages\[\]=actions' -f 'languages\[\]=javascript-typescript'" <<<"$out" \
+is "$out" FC-E23 warn \
+  && is "$out" FC-E23 info \
   && ok "JavaScript only, wall: CodeQL analysing Python alone is a WARN with the JavaScript fix" || bad "JavaScript only, wall: CodeQL languages WARN"
 for l in javascript-typescript javascript typescript; do
   printf '{"state":"configured","languages":["actions","%s"],"query_suite":"default"}' "$l" > "$api/repos/o/r/code-scanning/default-setup.json"
   js_wall "$js"
-  grep -q "PASS  CodeQL default setup analyses \['actions', '$l'\]" <<<"$out" && ok "JavaScript only, wall: CodeQL analysing $l passes" || bad "JavaScript only, wall: CodeQL analysing $l passes"
+  is "$out" FC-E23 pass && ok "JavaScript only, wall: CodeQL analysing $l passes" || bad "JavaScript only, wall: CodeQL analysing $l passes"
 done
 js_wall "$py"
-grep -q "WARN  CodeQL default setup analyses \['actions', 'typescript'\], not the Python under src/" <<<"$out" \
+is "$out" FC-E23 warn \
   && ok "Python only, wall: CodeQL analysing TypeScript alone still warns about the Python" || bad "Python only, wall: CodeQL languages WARN"
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
 # A rule the wall needs whatever the language still fails when it is gone.
 printf '%s' "$good_rules" | jq -c 'map(select(.type != "deletion" and .type != "required_status_checks"))' > "$api/repos/o/r/rules/branches/main.json"
 js_wall "$js"
-grep -q "FAIL  main: deletion rule missing" <<<"$out" && ok "JavaScript only, wall: a missing deletion rule still fails" || bad "JavaScript only, wall: deletion rule"
+is "$out" FC-E13 fail && ok "JavaScript only, wall: a missing deletion rule still fails" || bad "JavaScript only, wall: deletion rule"
 lacks "JavaScript only, wall: no required-checks rule is not a finding" 'required_status_checks'
 printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
 # --expect-checks names checks the door's ruleset does not; those are still judged.
 js_wall "$js" --expect-checks "ci / lint, CodeQL"
-grep -q "N/A   main: requiring ci / lint does not apply" <<<"$out" && grep -q "PASS  main: all 1 expected checks are required" <<<"$out" \
+is "$out" FC-E19 not_applicable && is "$out" FC-E19 pass \
   && ok "JavaScript only, wall: a non-Python expected check is still judged" || { bad "JavaScript only, wall: --expect-checks"; grep -E 'N/A|expected checks' <<<"$out" | sed 's/^/        /'; }
 
 echo "-- what the door sets beside the wall, and the project's own answers (#772)"
@@ -3734,78 +3735,78 @@ echo "-- what the door sets beside the wall, and the project's own answers (#772
 # disabled one, one for other tags, and none.
 tagrs="$api/repos/o/r/rulesets/3.json"
 wall "must not pass: a tag ruleset with non_fast_forward in place of update is a WARN" \
-  "WARN  the tag rulesets here leave v\\* tags open: no update rule" "jq -c '.rules = [{type:\"deletion\"},{type:\"non_fast_forward\"}]' <<<\"\$good_tags\" > \"$tagrs\""
+  "FC-E29 warn" "jq -c '.rules = [{type:\"deletion\"},{type:\"non_fast_forward\"}]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: a tag ruleset in evaluate mode is a WARN" \
-  "WARN  the tag rulesets here leave v\\* tags open: enforcement is evaluate" "jq -c '.enforcement = \"evaluate\"' <<<\"\$good_tags\" > \"$tagrs\""
+  "FC-E29 warn" "jq -c '.enforcement = \"evaluate\"' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: a tag ruleset for other tags is a WARN" \
-  "WARN  the tag rulesets here leave v\\* tags open: it includes \\['refs/tags/release-\\*'\\], not every v\\* tag" "jq -c '.conditions.ref_name.include = [\"refs/tags/release-*\"]' <<<\"\$good_tags\" > \"$tagrs\""
+  "FC-E29 warn" "jq -c '.conditions.ref_name.include = [\"refs/tags/release-*\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: no tag ruleset is a WARN naming why it matters" \
-  "WARN  no tag ruleset: for a backend, which releases from a v\* tag, anyone with write access can move or delete a released tag" \
+  "FC-E29 warn" \
   "printf '[{\"id\":1,\"target\":\"branch\"}]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "...with the call that adds the door's one, which needs administration" \
-  "INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{\"name\": \"tags: v\\* and \\*-v\\* not moved or deleted\"" \
+  "FC-E29 info" \
   "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 wall "a missing tag ruleset never fails the floor" "-- 0 failed, 1 not verified" "printf '[]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
-wall "the door's tag ruleset is a PASS" "PASS  the tag ruleset keeps v\\* tags from being moved or deleted, with no bypass actor (ruleset 3)"
+wall "the door's tag ruleset is a PASS" "FC-E29 pass"
 # Codex review on #779: one sample tag is not the namespace, and a bypass
 # actor is a way round it. Must-not-pass cases, each a WARN naming the gap.
 wall "must not pass: v* with v2* excluded is a WARN" \
-  "WARN  the tag rulesets here leave v\\* tags open: it excludes \\['refs/tags/v2\\*'\\], which can match a v\\* tag" \
+  "FC-E29 warn" \
   "jq -c '.conditions.ref_name.exclude = [\"refs/tags/v2*\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: a ruleset for v1.0.0 alone is a WARN" \
-  "WARN  the tag rulesets here leave v\\* tags open: it includes \\['refs/tags/v1.0.0'\\], not every v\\* tag" \
+  "FC-E29 warn" \
   "jq -c '.conditions.ref_name.include = [\"refs/tags/v1.0.0\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: a write role that always bypasses it is a WARN" \
-  "WARN  the tag rulesets here leave v\\* tags open: bypass actors present: RepositoryRole 4 (always)" \
+  "FC-E29 warn" \
   "jq -c '.bypass_actors = [{actor_id: 4, actor_type: \"RepositoryRole\", bypass_mode: \"always\"}]' <<<\"\$good_tags\" > \"$tagrs\""
-wall "an exclude that cannot match a v* tag is not a gap" "PASS  the tag ruleset keeps v\\* tags" \
+wall "an exclude that cannot match a v* tag is not a gap" "FC-E29 pass" \
   "jq -c '.conditions.ref_name.exclude = [\"refs/tags/nightly\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "bypass actors the token does not get are a SKIP, never a PASS" \
-  "SKIP  the tag ruleset (ruleset 3) covers v\\* tags, and its bypass actors are not read here" "jq -c 'del(.bypass_actors)' <<<\"\$good_tags\" > \"$tagrs\""
+  "FC-E29 unknown" "jq -c 'del(.bypass_actors)' <<<\"\$good_tags\" > \"$tagrs\""
 wall "...counted as not verified" "-- 0 failed, 2 not verified" "jq -c 'del(.bypass_actors)' <<<\"\$good_tags\" > \"$tagrs\""
 out="$(jq -c 'del(.bypass_actors)' <<<"$good_tags" > "$tagrs"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --actions-token --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_tags" > "$tagrs"
-if grep -q "INFO  the tag ruleset (ruleset 3) covers v\\* tags, and its bypass actors are not read here: /plinth:floor-check reads them" <<<"$out" && ! grep -q "PASS  the tag ruleset" <<<"$out"
+if is "$out" FC-E29 review && ! grep -q "PASS  the tag ruleset" <<<"$out"
 then ok "--actions-token: unread tag bypass actors are left to /plinth:floor-check, not passed"; else bad "--actions-token: unread tag bypass actors"; grep 'tag ruleset' <<<"$out" | sed 's/^/        /'; fi
-wall "~ALL with deletion and update is a PASS too" "PASS  the tag ruleset keeps v\* tags" "jq -c '.conditions.ref_name.include = [\"~ALL\"]' <<<\"\$good_tags\" > \"$tagrs\""
+wall "~ALL with deletion and update is a PASS too" "FC-E29 pass" "jq -c '.conditions.ref_name.include = [\"~ALL\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "a listing that cannot be read is a SKIP, counted" "-- 0 failed, 2 not verified" "printf 'not json' > \"$api/repos/o/r/rulesets?per_page=100.json\""
-wall "a listed tag ruleset that cannot be read is a SKIP" "SKIP  the tag ruleset not verified: a tag ruleset is listed and could not be read" "rm \"$tagrs\""
+wall "a listed tag ruleset that cannot be read is a SKIP" "FC-E29 unknown" "rm \"$tagrs\""
 # A uv workspace member released on its own tags (#931): each prefix that
 # pyproject.toml lists under [tool.plinth.release] own-tags is one more item.
 # The door's ruleset covers *-v*; one made before covers v* only.
 cp "$good/pyproject.toml" "$work/pyproject.saved"
 printf '\n[tool.plinth.release]\nown-tags = { "checker" = "checker-" }\n' >> "$good/pyproject.toml"
 wall "the door's tag ruleset covers a listed member's own tags" \
-  "PASS  the tag ruleset keeps checker-v\\* tags from being moved or deleted, with no bypass actor (ruleset 3)"
+  "FC-E29 pass"
 old_tags="jq -c '.conditions.ref_name.include = [\"refs/tags/v*\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: a v*-only tag ruleset leaves a listed prefix open, a WARN" \
-  "WARN  the tag rulesets here leave checker-v\\* tags open: it includes \\['refs/tags/v\\*'\\], not every checker-v\\* tag (refs/tags/checker-v\\*): \\[tool.plinth.release\\] own-tags in pyproject.toml releases checker" "$old_tags"
+  "FC-E29 warn" "$old_tags"
 wall "...and its fix adds a ruleset for that prefix alone" \
-  'gh api -X POST repos/o/r/rulesets --input - <<<.*"name": "tags: checker-v\* not moved or deleted".*"include": \["refs/tags/checker-v\*"\]' "$old_tags"
-wall "...while the v* item still passes" "PASS  the tag ruleset keeps v\\* tags from being moved or deleted" "$old_tags"
+  "FC-E29 info" "$old_tags"
+wall "...while the v* item still passes" "FC-E29 pass" "$old_tags"
 wall "...and never fails the floor" "-- 0 failed" "$old_tags"
 wall "must not pass: an exclude that can match a listed prefix's tag is a WARN" \
-  "WARN  the tag rulesets here leave checker-v\\* tags open: it excludes \\['refs/tags/checker-v0\\*'\\]" \
+  "FC-E29 warn" \
   "jq -c '.conditions.ref_name.exclude = [\"refs/tags/checker-v0*\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "must not pass: a sample tag of the prefix is not the prefix" \
-  "WARN  the tag rulesets here leave checker-v\\* tags open: it includes \\['refs/tags/v\\*', 'refs/tags/checker-v1.0.0'\\]" \
+  "FC-E29 warn" \
   "jq -c '.conditions.ref_name.include = [\"refs/tags/v*\", \"refs/tags/checker-v1.0.0\"]' <<<\"\$good_tags\" > \"$tagrs\""
-wall "an exclude for another prefix is not a gap" "PASS  the tag ruleset keeps checker-v\\* tags" \
+wall "an exclude for another prefix is not a gap" "FC-E29 pass" \
   "jq -c '.conditions.ref_name.exclude = [\"refs/tags/other-v*\"]' <<<\"\$good_tags\" > \"$tagrs\""
 wall "a second tag ruleset for the prefix alone is a PASS beside the v* one" \
-  "PASS  the tag ruleset keeps checker-v\\* tags from being moved or deleted, with no bypass actor (ruleset 4)" \
+  "FC-E29 pass" \
   "$old_tags; jq -c '.id = 4 | .conditions.ref_name.include = [\"refs/tags/checker-v*\"]' <<<\"\$good_tags\" > \"$api/repos/o/r/rulesets/4.json\"; printf '%s' '[{\"id\":1,\"target\":\"branch\",\"source_type\":\"Repository\"},{\"id\":3,\"target\":\"tag\",\"source_type\":\"Repository\"},{\"id\":4,\"target\":\"tag\",\"source_type\":\"Repository\"}]' > \"$api/repos/o/r/rulesets?per_page=100.json\""
 rm -f "$api/repos/o/r/rulesets/4.json"
 cp "$work/pyproject.saved" "$good/pyproject.toml"
 printf '\n[tool.plinth.release]\nown-tags = { "validator" = "validator-" }\n' >> "$good/pyproject.toml"
-wall "a prefix that starts with v is covered by v* alone" "PASS  the tag ruleset keeps validator-v\\* tags" "$old_tags"
+wall "a prefix that starts with v is covered by v* alone" "FC-E29 pass" "$old_tags"
 cp "$work/pyproject.saved" "$good/pyproject.toml"
 printf '\n[tool.plinth]\nrelease.own-tags = { "checker" = "checker-" }\n' >> "$good/pyproject.toml"
 wall "must not pass: the list spelled as a dotted key is read too, and a v*-only ruleset leaves it open" \
-  "WARN  the tag rulesets here leave checker-v\\* tags open" "$old_tags"
+  "FC-E29 warn" "$old_tags"
 cp "$work/pyproject.saved" "$good/pyproject.toml"
 printf '\n[tool.plinth.release]\nown-tags = "checker-"\n' >> "$good/pyproject.toml"
 wall "an own-tags list that cannot be read is a SKIP, counted" "-- 0 failed, 2 not verified"
-wall "...that says what it could not read" "SKIP  the tag ruleset for members released on their own tags not verified"
+wall "...that says what it could not read" "FC-E29 unknown"
 cp "$work/pyproject.saved" "$good/pyproject.toml"
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --expect-checks "ci / a, ci / b" 2>&1)"
 if [ "$(grep -c 'tag ruleset' <<<"$out")" = 1 ]; then ok "without own-tags, the tag ruleset is one item, as before"
@@ -3821,101 +3822,101 @@ sys.exit(0 if m.TAG_RULESET == json.load(open(f"{root}/ruleset-tags.json")) else
 PY
 then ok "the tag ruleset floor-check offers is ruleset-tags.json"; else bad "floor-check.py's TAG_RULESET differs from ruleset-tags.json"; fi
 out="$(printf '[]' > "$api/repos/o/r/rulesets?per_page=100.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --archetype data-ml --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_listing" > "$api/repos/o/r/rulesets?per_page=100.json"
-if grep -q "WARN  no tag ruleset: for a data-ml, which releases from a v\\* tag" <<<"$out"; then ok "data-ml, which releases its model from a tag, is held to the tag ruleset"; else bad "data-ml was not judged on a tag ruleset"; fi
+if is "$out" FC-E29 warn; then ok "data-ml, which releases its model from a tag, is held to the tag ruleset"; else bad "data-ml was not judged on a tag ruleset"; fi
 out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --archetype web --expect-checks "ci / a, ci / b" 2>&1)"
 if ! grep -q "tag ruleset" <<<"$out"; then ok "web, which deploys on green, is not held to a tag ruleset"; else bad "web was judged on a tag ruleset"; fi
 # The merge ruleset's search for one not in effect skips a tag ruleset, which
 # carries update too: before #772's fix this was a false FAIL.
 merge_wall "a tag ruleset is not taken for a merge ruleset out of effect" \
-  '^  WARN  main: no ruleset reserves the merge to an admin' \
+  "FC-E25 warn" \
   "printf '%s' \"\$good_rules\" > \"$mapi/repos/o/r/rules/branches/main.json\"; printf '%s' \"\$good_listing\" > \"$mapi/repos/o/r/rulesets?per_page=100.json\"; printf '%s' \"\$good_tags\" > \"$mapi/repos/o/r/rulesets/3.json\"" "${M[@]}"
 # The Actions token settings.
 wperms="$api/repos/o/r/actions/permissions/workflow.json"
 wall "must not pass: a token that writes by default is a WARN" \
-  "WARN  the Actions settings: a workflow that names no permissions gets a token that can write (default_workflow_permissions: write)" \
+  "FC-E28 warn" \
   "printf '{\"default_workflow_permissions\":\"write\",\"can_approve_pull_request_reviews\":false}' > \"$wperms\""
 wall "must not pass: a workflow that can approve is a WARN" \
-  "WARN  the Actions settings: a workflow can approve a pull request (can_approve_pull_request_reviews: true)" \
+  "FC-E28 warn" \
   "printf '{\"default_workflow_permissions\":\"read\",\"can_approve_pull_request_reviews\":true}' > \"$wperms\""
 wall "...with the call that sets both" \
-  "INFO    gh api -X PUT repos/o/r/actions/permissions/workflow -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false   (needs repository administration)" \
+  "FC-E28 info" \
   "printf '{\"default_workflow_permissions\":\"write\",\"can_approve_pull_request_reviews\":true}' > \"$wperms\""
-wall "the settings the door sets are a PASS" "PASS  the Actions token reads only by default and cannot approve a pull request"
+wall "the settings the door sets are a PASS" "FC-E28 pass"
 wall "settings the token does not read are a SKIP, counted" "-- 0 failed, 2 not verified" "rm \"$wperms\""
 out="$(rm -f "$wperms"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --actions-token --expect-checks "ci / a, ci / b" 2>&1)"; printf '%s' "$good_wperms" > "$wperms"
-if grep -q "INFO  the Actions token's default permissions are not read here" <<<"$out" && ! grep -q "SKIP  the Actions token" <<<"$out"
+if is "$out" FC-E28 review && ! grep -q "SKIP  the Actions token" <<<"$out"
 then ok "--actions-token: unread settings are left to /plinth:floor-check, not a SKIP"; else bad "--actions-token: unread settings"; fi
 # The description: said, never a miss.
-wall "a description is a PASS" "PASS  the repository has a description" "jq -c '. + {description: \"x\"}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
-wall "no description is an INFO with the command" "INFO  the repository has no description: GitHub's community profile counts one; set it with gh repo edit o/r --description" \
+wall "a description is a PASS" "FC-E30 pass" "jq -c '. + {description: \"x\"}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
+wall "no description is an INFO with the command" "FC-E30 info" \
   "jq -c '. + {description: null}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
 wall "no description fails nothing and is not counted" "-- 0 failed, 1 not verified" "jq -c '. + {description: \"\"}' <<<\"\$good_meta\" > \"$api/repos/o/r.json\""
 
 # The project's answers: each one that turns something on, against the file.
-answers() { # <description> <expected regex, or !regex for absent> <answers lines> [shell in the copy] [api dir]
+answers() { # <description> <`<id> <state>` expected, or !regex for absent> <answers lines> [shell in the copy] [api dir]
   local copy="$work/ans"; rm -rf "$copy"; cp -R "$good" "$copy"; printf '%b' "$3" >> "$copy/.copier-answers.yml"
   [ -n "${4:-}" ] && ( cd "$copy" && eval "$4" )
   local out want="$2" neg=0; [ "${want#!}" != "$want" ] && { neg=1; want="${want#!}"; }
   out="$(FLOOR_CHECK_API_DIR="${5:-$work/ans-none}" python3 "$checker" --root "$copy" --repo o/r 2>&1)"
-  if { [ "$neg" = 0 ] && grep -qE -- "$want" <<<"$out"; } || { [ "$neg" = 1 ] && ! grep -qE -- "$want" <<<"$out"; }; then ok "$1"
+  if { [ "$neg" = 0 ] && reports "$out" "$want"; } || { [ "$neg" = 1 ] && ! grep -qE -- "$want" <<<"$out"; }; then ok "$1"
   else bad "$1 (expected ${2})"; grep -E 'third_party|code_of_conduct|CODE_OF' <<<"$out" | sed 's/^/        /'; fi
 }
 mkdir -p "$work/ans-none"
 answers "must not pass: third_party_review: true without its caller is a WARN" \
-  '^  WARN  third_party_review: true, and .github/workflows/third-party.yml is missing' 'third_party_review: true\n'
-answers "...with how to bring it back or record false" 'git log --diff-filter=D -- .github/workflows/third-party.yml' 'third_party_review: true\n'
-answers "third_party_review: true with its caller is a PASS" '^  PASS  third_party_review: true, and .github/workflows/third-party.yml is there' \
+  "FC-F03 warn" 'third_party_review: true\n'
+answers "...with how to bring it back or record false" "FC-F03 info" 'third_party_review: true\n'
+answers "third_party_review: true with its caller is a PASS" "FC-F03 pass" \
   'third_party_review: true\n' "printf 'name: third-party\\n' > .github/workflows/third-party.yml"
 answers "third_party_review: false is not a miss" '!third_party_review' 'third_party_review: false\n'
-answers "must not pass: code_of_conduct: true without the file is a WARN" '^  WARN  code_of_conduct: true, and CODE_OF_CONDUCT.md is missing' \
+answers "must not pass: code_of_conduct: true without the file is a WARN" "FC-F04 warn" \
   'code_of_conduct: true\ncode_of_conduct_contact: a@b.c\n'
-answers "code_of_conduct: true with the file is a PASS" '^  PASS  code_of_conduct: true, and CODE_OF_CONDUCT.md is there' \
+answers "code_of_conduct: true with the file is a PASS" "FC-F04 pass" \
   'code_of_conduct: true\n' ": > CODE_OF_CONDUCT.md"
 answers "code_of_conduct: false is not a miss" '!CODE_OF_CONDUCT|code_of_conduct' 'code_of_conduct: false\n'
 coc_api="$work/ans-owner"; mkdir -p "$coc_api/repos/o/.github/contents/docs"
 printf '{"visibility":"public"}' > "$coc_api/repos/o/.github.json"
 jq -n --arg c "$(printf '# Code\n' | base64)" '{content: $c}' > "$coc_api/repos/o/.github/contents/docs/CODE_OF_CONDUCT.md.json"
 answers "owner_has_code_of_conduct: true and the owner publishes one (in docs/) is a PASS" \
-  "^  PASS  owner_has_code_of_conduct: true, and the owner's .github repository publishes CODE_OF_CONDUCT.md" 'owner_has_code_of_conduct: true\n' "" "$coc_api"
+  "FC-F05 pass" 'owner_has_code_of_conduct: true\n' "" "$coc_api"
 answers "must not pass: owner_has_code_of_conduct: true and the owner's .github gone is a WARN" \
-  "^  WARN  owner_has_code_of_conduct: true, and o/.github is private or gone" 'owner_has_code_of_conduct: true\n'
+  "FC-F05 warn" 'owner_has_code_of_conduct: true\n'
 gone_api="$work/ans-gone"; mkdir -p "$gone_api/repos/o"; printf '{"visibility":"public"}' > "$gone_api/repos/o/.github.json"
 answers "must not pass: owner_has_code_of_conduct: true, a public .github without the file, is a WARN" \
-  "^  WARN  owner_has_code_of_conduct: true, and the owner's .github repository no longer publishes CODE_OF_CONDUCT.md" 'owner_has_code_of_conduct: true\n' "" "$gone_api"
+  "FC-F05 warn" 'owner_has_code_of_conduct: true\n' "" "$gone_api"
 # Codex review on #779, round 2: GitHub inherits from a public .github only,
 # and an administrator's token still reads a private one's files.
 priv_api="$work/ans-private"; rm -rf "$priv_api"; cp -R "$coc_api" "$priv_api"; printf '{"visibility":"private"}' > "$priv_api/repos/o/.github.json"
 answers "must not pass: the owner's file readable in a private .github is a WARN, not a PASS" \
-  "^  WARN  owner_has_code_of_conduct: true, and o/.github is private or gone: GitHub inherits CODE_OF_CONDUCT.md only from a public .github repository" \
+  "FC-F05 warn" \
   'owner_has_code_of_conduct: true\n' "" "$priv_api"
 answers "...and it is never passed" "!PASS  owner_has_code_of_conduct" 'owner_has_code_of_conduct: true\n' "" "$priv_api"
 unvis_api="$work/ans-unvis"; rm -rf "$unvis_api"; cp -R "$coc_api" "$unvis_api"; printf 'not json' > "$unvis_api/repos/o/.github.json"
 answers "the .github's visibility unread is a SKIP, not a PASS" \
-  "^  SKIP  owner_has_code_of_conduct: true; whether o/.github is public not verified" 'owner_has_code_of_conduct: true\n' "" "$unvis_api"
+  "FC-F05 unknown" 'owner_has_code_of_conduct: true\n' "" "$unvis_api"
 answers "...and code_of_conduct: true beside it is not asked of the repository" '!WARN  code_of_conduct: true' \
   'owner_has_code_of_conduct: true\ncode_of_conduct: true\n' "" "$coc_api"
 bad_api="$work/ans-bad"; mkdir -p "$bad_api/repos/o/.github/contents"; printf 'not json' > "$bad_api/repos/o/.github/contents/CODE_OF_CONDUCT.md.json"; printf '{"visibility":"public"}' > "$bad_api/repos/o/.github.json"
-answers "an owner's file that cannot be read is a SKIP, not a WARN" "^  SKIP  owner_has_code_of_conduct: true; whether the owner's .github repository still publishes it not verified" \
+answers "an owner's file that cannot be read is a SKIP, not a WARN" "FC-F05 unknown" \
   'owner_has_code_of_conduct: true\n' "" "$bad_api"
 pr_api="$work/ans-owner-pr"; mkdir -p "$pr_api/repos/o/.github/contents/.github"; printf '{"visibility":"public"}' > "$pr_api/repos/o/.github.json"
 jq -n --arg c "$(printf '## What\n' | base64)" '{content: $c}' > "$pr_api/repos/o/.github/contents/.github/PULL_REQUEST_TEMPLATE.md.json"
 answers "owner_has_pr_template: true and the owner publishes one (in .github/) is a PASS" \
-  "^  PASS  owner_has_pr_template: true, and the owner's .github repository publishes PULL_REQUEST_TEMPLATE.md" 'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$pr_api"
+  "FC-F08 pass" 'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$pr_api"
 answers "must not pass: owner_has_pr_template: true and the owner's is gone is a WARN" \
-  "^  WARN  owner_has_pr_template: true, and the owner's .github repository no longer publishes PULL_REQUEST_TEMPLATE.md" \
+  "FC-F08 warn" \
   'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$gone_api"
 answers "owner_has_pr_template: false is not read" '!owner_has_pr_template' 'owner_has_pr_template: false\n'
 # Each owner copy is its own check (#1103): the pull-request template's
 # unreadable file is a SKIP too.
 bad_pr_api="$work/ans-bad-pr"; mkdir -p "$bad_pr_api/repos/o/.github/contents"; printf 'not json' > "$bad_pr_api/repos/o/.github/contents/PULL_REQUEST_TEMPLATE.md.json"; printf '{"visibility":"public"}' > "$bad_pr_api/repos/o/.github.json"
-answers "an owner's pull-request template that cannot be read is a SKIP, not a WARN" "^  SKIP  owner_has_pr_template: true; whether the owner's .github repository still publishes it not verified" \
+answers "an owner's pull-request template that cannot be read is a SKIP, not a WARN" "FC-F08 unknown" \
   'owner_has_pr_template: true\n' "rm -f .github/PULL_REQUEST_TEMPLATE.md" "$bad_pr_api"
 # The archetypes that get the tag ruleset: one list in the door, one in the checker.
 door_list="$(sed -n 's/^case "\$arch" in \([a-z|-]*\)) tag_ruleset=0.*/\1/p' "$root/scripts/new-project.sh")"
 checker_list="$(python3 -c "import importlib.util as u; s=u.spec_from_file_location('fc','$root/scripts/floor-check.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print('|'.join(m.TAG_NOT_RELEASING))")"
 if [ -n "$door_list" ] && [ "$door_list" = "$checker_list" ]; then ok "the door and the checker leave out the same archetypes from the tag ruleset ($door_list)"
 else bad "the door leaves out '$door_list' from the tag ruleset, the checker '$checker_list'"; fi
-answers "a repository's own code of conduct applies in place of the owner's" "^  PASS  CODE_OF_CONDUCT.md is the repository's own" \
+answers "a repository's own code of conduct applies in place of the owner's" "FC-F05 pass" \
   'owner_has_code_of_conduct: true\n' ": > CODE_OF_CONDUCT.md"
 
 # ── the installed plinth against the newest template tag (#843) ─────────
@@ -3930,11 +3931,11 @@ skew_steps='  INFO    claude plugin marketplace update plinth
   INFO    /reload-plugins (or start a new session)
   INFO    /plinth:template-update'
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$pcopy" --repo o/r 2>&1)"
-if grep -qF "$skew_head" <<<"$out" && grep -qF -- "$skew_steps" <<<"$out" && grep -q "WARN  template: v1.0.0 is behind $target_ref" <<<"$out"
+if grep -qF "$skew_head" <<<"$out" && grep -qF -- "$skew_steps" <<<"$out" && is "$out" FC-F01 warn
 then ok "a behind repository with an older plinth: the drift line stays, and the skew is named with the commands in order"
 else bad "skew, behind"; printf '%s\n' "$out" | grep -E 'template|plugin' | sed 's/^/        /'; fi
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$good" 2>&1)"
-if grep -qF "$skew_head" <<<"$out" && grep -qF -- "$skew_steps" <<<"$out" && grep -q "PASS  template: the recorded tag is the target tag ($target_ref)" <<<"$out"
+if grep -qF "$skew_head" <<<"$out" && grep -qF -- "$skew_steps" <<<"$out" && is "$out" FC-F01 pass
 then ok "a repository on the installed target: the PASS stays, and the skew is named beside it"
 else bad "skew, current"; printf '%s\n' "$out" | grep -E 'template|plugin' | sed 's/^/        /'; fi
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$good" --actions-token 2>&1)"
@@ -3954,7 +3955,7 @@ out="$(FLOOR_CHECK_API_DIR="$same_skew" python3 "$checker" --root "$good" 2>&1)"
 if ! grep -qE "claude plugin|plinth release|plinth pin $sha40 was tested" <<<"$out"; then ok "an installed target equal to the latest release's: no line"
 else bad "skew, equal"; printf '%s\n' "$out" | grep -E 'plugin|plinth release' | sed 's/^/        /'; fi
 out="$(python3 "$checker" --root "$good" --no-network 2>&1)"
-if grep -q "INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, $target_ref" <<<"$out"
+if is "$out" FC-F02 info
 then ok "the release not read: said beside the drift item, naming the installed target"
 else bad "skew, unread"; printf '%s\n' "$out" | grep -E 'template|plinth release' | sed 's/^/        /'; fi
 nocopy="$work/skew-foreign"; rm -rf "$nocopy"; cp -R "$good" "$nocopy"; rm "$nocopy/.copier-answers.yml"
@@ -3964,14 +3965,14 @@ else bad "skew, not door-made"; fi
 # GitLab: template-update.sh serves it (#1012), so the last step is the skill,
 # as on GitHub; the pin read is the include's.
 out="$(FLOOR_CHECK_API_DIR="$skew_api" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
-if grep -qF "$skew_head" <<<"$out" && grep -qF "  INFO    /plinth:template-update" <<<"$out" && ! grep -qF "  INFO    /plinth:floor-check" <<<"$out"
+if grep -qF "$skew_head" <<<"$out" && is "$out" FC-F02 info && ! grep -qF "  INFO    /plinth:floor-check" <<<"$out"
 then ok "GitLab: the skew's last step is /plinth:template-update, as on GitHub"
 else bad "skew, GitLab steps"; printf '%s\n' "$out" | grep -E 'plugin|/plinth:' | sed 's/^/        /'; fi
 gl_pin="$(sed -nE 's|.*coolbress/plinth/([0-9a-f]{40})/gitlab/python-ci\.yml.*|\1|p' "$glgood/.gitlab-ci.yml")"
 printf '{"content":"%s"}\n' "$(printf 'template_ref="v99.0.0"\n' | base64 | tr -d '\n')" \
   > "$same_skew/repos/coolbress/plinth/contents/scripts/new-project.sh?ref=$gl_pin.json"
 out="$(FLOOR_CHECK_API_DIR="$same_skew" python3 "$checker" --root "$glgood" --host gitlab 2>&1)"
-if [ -n "$gl_pin" ] && grep -qF "but v99.0.0 is out (the tag this repository's plinth pin $gl_pin was tested with)" <<<"$out"
+if [ -n "$gl_pin" ] && is "$out" FC-F02 warn
 then ok "GitLab: the include's pin is the one compared"
 else bad "skew, GitLab pin '$gl_pin'"; printf '%s\n' "$out" | grep -E 'plugin|plinth pin' | sed 's/^/        /'; fi
 
