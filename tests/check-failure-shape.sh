@@ -137,10 +137,12 @@ step lint Verdict "$work/lint-verdict.sh"
 step typecheck Verdict "$work/typecheck-verdict.sh"
 # job_verdict <job> [VAR=value...]: that job's Verdict with every step
 # passed, then the given outcomes; jpre leaves what the failed step left.
+# The run's directory is the workspace, as on the runner: a GITHUB_WORKSPACE
+# from the shell running this test (CI's own) would be another tree.
 job_verdict() {
   local job="$1"; shift
   rt="$work/rt-$((++n))"; mkdir -p "$rt"; : > "$rt/summary"
-  (cd "$rt" && env RUNNER_TEMP="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" \
+  (cd "$rt" && env RUNNER_TEMP="$rt" GITHUB_WORKSPACE="$rt" GITHUB_STEP_SUMMARY="$rt/summary" PLINTH_SHA="$SHA" \
      SYNC=success CHECK=success FORMAT=success ZIZMOR=success MYPY=success "$@" bash -e "$work/$job-verdict.sh") > "$rt/out" 2>&1
   rc=$?
 }
@@ -331,6 +333,24 @@ mkdir -p "$work/ws/app"; jpre mypy.rc 1 "$fxm/one.log" mypy.log; d="$work/rt-$((
 n=$((n + 1))
 grep -q '^::error file=app/src/m1.py,line=2::' "$d/out" && ok "under working-directory app, mypy's annotation file is from the repository's root" \
   || bad "mypy's annotation file ignores working-directory" "$(grep '^::' "$d/out")"
+# ruff's github format names the file by its absolute path: under
+# working-directory app it is app/... from the root; with a workspace that
+# does not hold it (CI's own, before #1172's fix), never the absolute path.
+mkdir -p "$work/ws2/app"; d="$work/rt-$((n + 1))"; mkdir -p "$d"; : > "$d/zizmor.kva"; echo 1 > "$d/ruff-check.rc"
+sed "s#@ROOT@#$(cd "$work/ws2/app" && pwd -P)#g" "$fxr/one.github" > "$d/ruff-check.github"; grep -q "file=/" "$d/ruff-check.github" || bad "the fixture's path is not absolute"
+(cd "$work/ws2/app" && env RUNNER_TEMP="$d" GITHUB_WORKSPACE="$work/ws2" GITHUB_STEP_SUMMARY="$d/summary" PLINTH_SHA="$SHA" \
+   SYNC=success CHECK=failure FORMAT=success ZIZMOR=success bash -e "$work/lint-verdict.sh") > "$d/out" 2>&1
+n=$((n + 1))
+grep -qx '::error file=app/src/one.py,line=1,col=8::F401 `os` imported but unused' "$d/out" && grep -qx 'failed: ruff check: 1 finding, the first F401 at app/src/one.py:1' "$d/out" \
+  && ok "ruff's absolute path under working-directory app: app/src/one.py from the root, in the annotation and in failed:" || bad "ruff's absolute path under app" "$(grep -E '^(::|failed:)' "$d/out")"
+d="$work/rt-$((n + 1))"; mkdir -p "$d"; : > "$d/zizmor.kva"; echo 1 > "$d/ruff-check.rc"
+sed "s#@ROOT@#$(cd "$d" && pwd -P)#g" "$fxr/one.github" > "$d/ruff-check.github"
+(cd "$d" && env RUNNER_TEMP="$d" GITHUB_WORKSPACE="$work/ws2" GITHUB_STEP_SUMMARY="$d/summary" PLINTH_SHA="$SHA" \
+   SYNC=success CHECK=failure FORMAT=success ZIZMOR=success bash -e "$work/lint-verdict.sh") > "$d/out" 2>&1
+n=$((n + 1))
+if grep -q '^::error file=src/one.py,line=1' "$d/out" && ! grep -qE '^(::error file=|failed: .* at )/' "$d/out"; then ok "an absolute path outside the workspace: from the working directory, never absolute"
+else bad "an absolute path outside the workspace" "$(grep -E '^(::|failed:)' "$d/out")"; fi
+
 for j in lint typecheck; do
   jpre; job_verdict "$j"
   if [ "$rc" = 0 ] && ! grep -qE '^(::error|failed:|next:|more:)' "$rt/out"; then ok "ci / $j passing: no block, no ::error"

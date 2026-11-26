@@ -285,9 +285,13 @@ jobs:
           except OSError:
               lines = []
           cwd = os.getcwd(); base = os.path.realpath(os.environ.get("GITHUB_WORKSPACE") or cwd)
-          def rel(p):   # from the repository's root, as an annotation wants it
-              r = os.path.relpath(os.path.realpath(os.path.join(cwd, p)), base)
-              return p if r.startswith("..") else r
+          def rel(p):   # from the repository's root, as an annotation wants it; ruff's github format gives absolute paths
+              a = os.path.realpath(os.path.join(cwd, p))
+              for b in (base, os.path.realpath(cwd)):   # never an absolute path: outside the root, from here
+                  r = os.path.relpath(a, b)
+                  if not r.startswith(".."):
+                      return r
+              return p
           def esc(s, prop=False):
               s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               return s.replace(":", "%3A").replace(",", "%2C") if prop else s
@@ -421,9 +425,13 @@ jobs:
           except OSError:
               lines = []
           cwd = os.getcwd(); base = os.path.realpath(os.environ.get("GITHUB_WORKSPACE") or cwd)
-          def rel(p):   # from the repository's root, as an annotation wants it
-              r = os.path.relpath(os.path.realpath(os.path.join(cwd, p)), base)
-              return p if r.startswith("..") else r
+          def rel(p):   # from the repository's root, as an annotation wants it; ruff's github format gives absolute paths
+              a = os.path.realpath(os.path.join(cwd, p))
+              for b in (base, os.path.realpath(cwd)):   # never an absolute path: outside the root, from here
+                  r = os.path.relpath(a, b)
+                  if not r.startswith(".."):
+                      return r
+              return p
           def esc(s, prop=False):
               s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               return s.replace(":", "%3A").replace(",", "%2C") if prop else s
