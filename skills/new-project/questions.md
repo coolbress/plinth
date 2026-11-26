@@ -373,7 +373,7 @@ In text (a `claude -p` run, or a call with no answer), show the same
 numbered table, then: "Create `VISIBILITY` repository `owner/name`? Type 0
 to create it as shown, or the numbers of the rows to change,
 comma-separated." Do not number `Create` and `Change some` as choices in text:
-the numbers are the rows', and only 0 creates. Each number asks its
+the numbers are the rows', and only 0 creates. "Stop" ends it, with nothing created. Each number asks its
 row's question in text, rows 1 to 3 going back to their question as
 above; then the table again, the changed rows marked.
 
