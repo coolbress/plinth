@@ -104,7 +104,10 @@ see these: guidance only.
   pull request; anything bigger starts here.
 - **Next:** type `/grilling` with the idea. The agent interviews you,
   looks up facts itself and brings you only decisions, then opens an issue
-  saying what "done" means (several sessions' work: step 3 first).
+  saying what "done" means (several sessions' work: step 3 first). When the
+  idea is a page people look at, such as a landing page, `/design` (built
+  in) sketches it as screen mockups on a canvas, before or beside the
+  interview; `/grilling` still writes the issue.
 - **Look at:** that you both mean the same thing. Have it put the agreed
   words into `GLOSSARY.md`, and a hard-to-reverse trade-off under `docs/adr/`
   (`domain-modeling`; `/grill-with-docs`,
@@ -257,9 +260,9 @@ see these: guidance only.
 
   `/rewind` (built in) takes back what the agent just did in this session,
   files and conversation; it does not undo a merge, which is already on
-  `main`. Issues someone else opened: `/triage` sorts them (ready for the
-  agent, needs you, needs more information, will not do); not for tickets
-  your own plan made.
+  `main`. Issues someone else opened, and what users report: write it as an
+  issue, then `/triage` sorts them (ready for the agent, needs you, needs
+  more information, will not do); not for tickets your own plan made.
 - **Look at:** the revert's checks when you undid a merge; the command or
   test failing before the fix, passing after.
 - **Yours:** say no to a fix that switches off or weakens a check instead of
