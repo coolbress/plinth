@@ -19,7 +19,7 @@ python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
 
 # The plinth commit a link names: the steps read it as job.workflow_sha.
 PLINTH_SHA=0123456789abcdef0123456789abcdef01234567; export PLINTH_SHA
-work="$(mktemp -d "${TMPDIR:-/tmp}/check-messages.XXXXXX")"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d "${TMPDIR:-/tmp}/check-messages.XXXXXX")" || { echo "check-messages: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  PASS  %s\n' "$1"; }

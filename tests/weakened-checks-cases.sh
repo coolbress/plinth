@@ -9,7 +9,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
 step="Name changes to the checks the description does not"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/weakened.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/weakened.XXXXXX")" || { echo "weakened-checks-cases: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 # The step's `run: |` block, dedented. A missing step is a FAIL, not a pass.
@@ -201,6 +201,13 @@ new_repo; printf 'set -e\necho a\n' > "$r/tests/run.sh"; git -C "$r" add -A; git
 printf 'echo b\n' > "$r/tests/run.sh"; commit
 run "Refactor."
 expect "a shell file under tests/ that lost lines: no WARN (.py only)" 0
+
+# plinth's own size caps sit in a Python file for this listing (#1138):
+# the real tests/size_caps.py, one cap raised.
+new_repo; cp "$root/tests/size_caps.py" "$r/tests/size_caps.py"; git -C "$r" add -A; git -C "$r" commit -qm caps; base="$(git -C "$r" rev-parse HEAD)"
+sed 's/^AGENTS_MAX_LINES = [0-9]*$/AGENTS_MAX_LINES = 140/' "$root/tests/size_caps.py" > "$r/tests/size_caps.py"; commit
+run "Adds a rule to AGENTS.md."
+expect "a raised cap in plinth's tests/size_caps.py: WARN" 1 "tests/size_caps.py" "a test file lost lines"
 
 new_repo; git -C "$r" mv tests/test_b.py tests/test_bb.py; printf 'def test_b():\n    pass\n' > "$r/tests/test_bb.py"; commit
 run "Rename."

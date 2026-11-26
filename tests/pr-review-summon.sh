@@ -23,7 +23,7 @@ set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/pr-review.yml"
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d)" || { echo "pr-review-summon: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 
 python3 - "$wf" "$tmp" <<'PY'

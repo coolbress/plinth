@@ -268,6 +268,13 @@ release needs a green run on the commit it tags, or on a commit with its tree
    `CHANGELOG.md`, or the page under `docs/` that covers it. Not every change
    needs a README edit.
 
+   A pull request that implements or changes a decision in force updates its
+   line on [decisions in force](docs/reference/decisions-in-force.md) in the
+   same pull request, adding one when the decision is one later work has to
+   follow and the page has none. A decision recorded only in an issue gets its
+   line when the issue's Decision is written, in a small pull request of its
+   own. That page says how a line and a reversal are written.
+
    A change's changelog line goes in its own file, a fragment:
    `changelog.d/<branch-slug>.md`, starting with the Keep a Changelog section
    it belongs to, then the line:
@@ -364,6 +371,21 @@ release needs a green run on the commit it tags, or on a commit with its tree
    the criteria the change met and write the ending, whether or not the issue
    closed ([closing an issue](docs/agents/issue-tracker.md#closing-an-issue)). It only reads; an issue it cannot read is printed as
    "not read", and the exit status does not change.
+
+## After something goes wrong
+
+An incident yields a check or nothing. The fix is a check that fails on what
+went wrong (a test under `tests/`, a CI step, or a script that stops), or only
+the record of what happened, in its issue; no new sentence of rule text goes
+into `AGENTS.md` (`CLAUDE.md`) or a shipped skill unless a check cannot hold
+it. Then the pull request says why: the check it considered, and what that
+check could not see (a judgement no file or command output shows, say).
+`tests/skill-size.sh` holds the sizes, `AGENTS.md` at most 110 lines and
+7,500 bytes and each `skills/*/SKILL.md` at most 500 lines and 20,000 bytes.
+Text that needs more raises its cap in `tests/size_caps.py` in the same pull
+request; `ci / diff-size` lists that file as a change to the checks (here
+`canary / diff-size`, which runs the same step), so an admin approves the
+raise, or decides it by pushing it.
 
 ## Cut a release
 

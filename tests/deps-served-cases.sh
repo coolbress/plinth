@@ -10,7 +10,7 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "deps-served-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 fails=0
 ok()  { echo "  PASS  $1"; }
 bad() { echo "  FAIL  $1" >&2; fails=$((fails+1)); }

@@ -8,7 +8,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d)" || { echo "security-setting: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 
 # Mock: a server that accepts the PATCH and keeps its state, exactly what happened.

@@ -6,6 +6,24 @@ promises, see [About pins](../explanation/concepts.md#about-pins).
 
 ## Before you start
 
+plinth releases on a weekly train: at most one release a week, while pull
+requests stay small and merge as often as they are ready. Each train carries
+one template pin raise (step 1) and at most one eval-suite run (step 2).
+Decided 2026-11-25 (#1132): every release costs an `e2e` run, a smoke run and
+an update on each consumer, so the releases are batched and the merges are not.
+
+A hotfix releases outside the train, only when:
+
+- a published advisory reaches something plinth ships or pins;
+- installing plinth as the README says fails; or
+- a consumer's required check fails because of plinth.
+
+The why-file then carries one line, `hotfix: <reason>`, and the release's
+`CHANGELOG.md` section and GitHub Release say it. Run 1 holds the train:
+when origin's highest `vX.Y.Z` tag is less than 7 days old and the why-file
+has no `hotfix:` line, it stops before changing anything and names the tag
+and its age. A `hotfix:` line with no reason always stops.
+
 You need a clone whose `main` equals `origin/main` with no uncommitted changes
 to tracked files, and `gh` logged in with write access to the repository.
 
@@ -43,7 +61,9 @@ the move changes what a new project's agent reads, and then asks for
 2. Write the why in a file outside the repository, for example
    `${TMPDIR:-/tmp}/why.md`: a short paragraph on why this release exists, and one
    line `tested with plinth-template <tag>` with the tag from step 1. Use no
-   heading lines. When it tells a consumer to raise its plinth pin, name every
+   heading lines. A hotfix (see [Before you start](#before-you-start)) adds
+   one line, `hotfix: <reason>`. When it tells a consumer to raise its plinth
+   pin, name every
    `coolbress/plinth` `uses:` line (`ci.yml` and `label.yml`): one raised
    alone leaves two pins, and `/plinth:template-update` stops on them (#793).
 

@@ -29,7 +29,7 @@ py="$(command -v python3)" || { echo "  FAIL  no python3"; exit 1; }
 "$py" -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
   || { echo "  FAIL  needs python3 3.11 or later, as the runner has; got $("$py" --version 2>&1)"; exit 1; }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/floor-golden.XXXXXX")"; trap 'rm -rf "$work"' EXIT
+work="$(mktemp -d "${TMPDIR:-/tmp}/floor-golden.XXXXXX")" || { echo "floor-check-golden: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 work="$(cd "$work" && pwd -P)"
 mkdir -p "$work/bin" "$work/records" "$work/tmp"
 pass=0; fail=0

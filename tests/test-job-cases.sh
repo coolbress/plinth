@@ -18,7 +18,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 wf="$root/.github/workflows/python-ci.yml"
 command -v timeout >/dev/null || { echo "  FAIL  coreutils timeout is needed (brew install coreutils)"; exit 1; }
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/test-job.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/test-job.XXXXXX")" || { echo "test-job-cases: could not make a temp folder" >&2; exit 1; }
 trap 'rm -rf "$tmp"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  PASS  %s\n' "$1"; }

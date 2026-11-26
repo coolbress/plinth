@@ -36,7 +36,7 @@ cleanup() {
   done
 }
 if [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
-  CLAUDE_CONFIG_DIR="$(mktemp -d)"; trap cleanup EXIT; fresh=yes
+  CLAUDE_CONFIG_DIR="$(mktemp -d)" || { echo "install-smoke: could not make a temp folder" >&2; exit 1; }; trap cleanup EXIT; fresh=yes
 fi
 # claude catches Ctrl-C and ends without a signal status, so bash would go on
 # to the next line; the trap runs once that claude returns and stops here.
