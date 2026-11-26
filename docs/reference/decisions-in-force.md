@@ -88,6 +88,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - `third-party / review` passes a Dependabot pull request unsummoned only when the activity log shows every push was Dependabot's; a commit's author never decides it. 2026-09-18, #167
 - `ci / diff-size` recognises Dependabot by account id, not login. 2026-10-18, #518
 - A release pull request passes unsummoned only behind `pass-release-pull-requests`, default false. 2026-09-18, #167
+- A template pin raise pull request is reviewed like any other; `third-party / review` gives it no pass, unlike a release pull request. 2026-11-25, #1132
 - `ci / diff-size` lists changes to checks, tests and the agent's own rules, and fails a row only when the pusher is not an admin and no admin approved; the workflow kind stays a WARN. 2026-10-18, #518
 - Changed-line coverage is report-only and never fails `ci / test`. 2026-10-12, #503
 - Mutation testing and extra Ruff rules (C901, ERA001, ARG001) are not added until their stated conditions are met. 2026-10-06, #406
@@ -134,7 +135,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 ## Template and archetypes
 
-- plinth and plinth-template stay separate repositories. 2026-11-18, #953
+- plinth and plinth-template stay separate repositories. 2026-11-18, #953. Reconsider when Copier filters a repository's tags by a prefix (copier-org/copier#2119) or reads a template from a subdirectory of a repository (copier-org/copier#1571), when the template is given plinth's version number, or when cross-repository incidents continue after the pinned `canary-template` render; look again on 2027-05-25, with no scheduled watcher. 2026-11-25, #1132
 - Web is Django on its LTS, and Render is the one hosting path built (about $13 a month, no free Postgres, no spending cap promised). 2026-10-20, #604
 - Other hosts are listed with the date they were read; no second host is built until a stated condition is met. 2026-10-27, #639
 - One new archetype, dashboard (#1069), and three options on existing archetypes, in this order: a scheduled run on `cli` (#1070), calling Claude on `cli`, `dashboard` and `backend` (#1071), and a Render background worker on `backend` for bots (#1072). 2026-11-25, #1069 (decided; not built yet: #1069, #1070, #1071, #1072)
