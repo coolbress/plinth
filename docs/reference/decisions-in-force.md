@@ -57,6 +57,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - The start-of-project lines on the agent's reach are guidance, not gates. 2026-10-06, #412
 - Paid services are never in the default set; error tracking, uptime and previews are listed with their free tiers. 2026-10-28, #702
 - The arsenal says not to use `/ship` in a plinth project until a trial shows it keeps the pull-request rules. 2026-11-24, #1085 (decided; not built yet: #1085)
+- The arsenal's "Not used with plinth" line lists only a tool an agent reaches without installing anything (a built-in, or a skill plinth installs) whose use breaks a plinth rule, with its class and the rule; tools that need installing are not listed. 2026-11-26, #1086 (decided; not built yet: #1086)
 
 ## floor-check and records
 
